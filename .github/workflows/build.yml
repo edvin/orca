@@ -115,7 +115,7 @@ jobs:
             target/${{ matrix.platform.target }}/release/orca-daemon
             target/${{ matrix.platform.target }}/release/orca-daemon.exe
 
-  # Build Tauri desktop app (Linux only for now — macOS/Windows need signing setup)
+  # Build Tauri desktop app (unsigned, all platforms)
   build-app:
     name: Tauri App (${{ matrix.platform.name }})
     needs: [check, frontend]
@@ -130,6 +130,9 @@ jobs:
           - name: macOS (Apple Silicon)
             os: macos-latest
             target: aarch64-apple-darwin
+          - name: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v6
 
