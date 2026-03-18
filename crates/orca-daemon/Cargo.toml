@@ -28,3 +28,4 @@ subtle = "2"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 urlencoding.workspace = true
+reqwest.workspace = true

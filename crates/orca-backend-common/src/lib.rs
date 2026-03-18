@@ -13,7 +13,9 @@ pub mod events;
 pub mod compose;
 pub mod k8s;
 pub mod environment;
+pub mod export;
 pub mod search;
+pub mod templates;
 
 /// Shared container runtime client backed by bollard.
 /// Each platform backend embeds this and delegates trait impls to it.

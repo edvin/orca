@@ -1,7 +1,41 @@
 use std::process::Stdio;
 use tokio::process::Command;
+use tokio::sync::OnceCell;
 use orca_core::environment::*;
 use serde::Deserialize as SerdeDeserialize;
+
+/// Cached container CLI detection result.
+static CLI_CELL: OnceCell<&'static str> = OnceCell::const_new();
+
+/// Detect the container CLI command — prefers docker, falls back to podman.
+/// The result is cached after the first call.
+async fn detect_cli() -> &'static str {
+    CLI_CELL
+        .get_or_init(|| async {
+            if Command::new("docker")
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await
+                .is_ok_and(|s| s.success())
+            {
+                return "docker";
+            }
+            if Command::new("podman")
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await
+                .is_ok_and(|s| s.success())
+            {
+                return "podman";
+            }
+            "docker" // default
+        })
+        .await
+}
 
 /// Detect the current platform.
 fn detect_platform() -> String {
@@ -103,21 +137,29 @@ async fn check_docker_socket() -> HealthCheck {
 }
 
 async fn check_docker_running() -> HealthCheck {
-    match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
+    let cli = detect_cli().await;
+    match run_cmd(cli, &["info", "--format", "{{.ServerVersion}}"]).await {
         Ok(version) => HealthCheck {
-            name: "Docker Daemon".to_string(),
-            description: "Docker daemon is running and responsive".to_string(),
+            name: "Container Daemon".to_string(),
+            description: format!("{cli} daemon is running and responsive"),
             status: CheckStatus::Pass,
             fix_action: None,
             details: Some(format!("Server version: {version}")),
         },
-        Err(e) => HealthCheck {
-            name: "Docker Daemon".to_string(),
-            description: "Docker daemon is running and responsive".to_string(),
-            status: CheckStatus::Fail,
-            fix_action: Some("start_docker".to_string()),
-            details: Some(format!("Daemon not responding: {e}")),
-        },
+        Err(e) => {
+            let fix = if cli == "podman" {
+                "start_podman".to_string()
+            } else {
+                "start_docker".to_string()
+            };
+            HealthCheck {
+                name: "Container Daemon".to_string(),
+                description: format!("{cli} daemon is running and responsive"),
+                status: CheckStatus::Fail,
+                fix_action: Some(fix),
+                details: Some(format!("Daemon not responding: {e}")),
+            }
+        }
     }
 }
 
@@ -283,6 +325,45 @@ async fn check_docker_desktop() -> HealthCheck {
     }
 }
 
+async fn check_podman_socket() -> HealthCheck {
+    // Check rootless socket first, then root socket
+    let uid = std::env::var("UID")
+        .or_else(|_| {
+            std::fs::read_to_string("/proc/self/loginuid")
+                .map(|s| s.trim().to_string())
+        })
+        .unwrap_or_default();
+
+    let rootless = format!("/run/user/{uid}/podman/podman.sock");
+    let root = "/run/podman/podman.sock";
+
+    let (found, path) = if std::path::Path::new(&rootless).exists() {
+        (true, rootless)
+    } else if std::path::Path::new(root).exists() {
+        (true, root.to_string())
+    } else {
+        (false, String::new())
+    };
+
+    if found {
+        HealthCheck {
+            name: "Podman Socket".to_string(),
+            description: "Podman API socket is available".to_string(),
+            status: CheckStatus::Pass,
+            fix_action: None,
+            details: Some(path),
+        }
+    } else {
+        HealthCheck {
+            name: "Podman Socket".to_string(),
+            description: "Podman API socket for container management".to_string(),
+            status: CheckStatus::Warning,
+            fix_action: Some("start_podman".to_string()),
+            details: Some("Podman socket not found — try: systemctl --user start podman.socket".to_string()),
+        }
+    }
+}
+
 /// Run all environment checks for the current platform.
 pub async fn check_environment() -> EnvironmentStatus {
     let platform = detect_platform();
@@ -293,6 +374,7 @@ pub async fn check_environment() -> EnvironmentStatus {
             checks.push(check_docker_installed().await);
             checks.push(check_podman_installed().await);
             checks.push(check_docker_socket().await);
+            checks.push(check_podman_socket().await);
             checks.push(check_docker_running().await);
             checks.push(check_docker_group().await);
         }
@@ -379,6 +461,30 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 }
             ))
         }
+        "start_podman" => {
+            // Try rootless socket first, fall back to root
+            let output = run_cmd("systemctl", &["--user", "start", "podman.socket"])
+                .await
+                .or_else(|_| {
+                    // Synchronous fallback not possible; try the root variant
+                    Err("rootless failed".to_string())
+                });
+            match output {
+                Ok(out) => Ok(format!(
+                    "Podman socket started (rootless).{}",
+                    if out.is_empty() { String::new() } else { format!("\n{out}") }
+                )),
+                Err(_) => {
+                    let out = run_cmd("sudo", &["systemctl", "start", "podman.socket"])
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to start Podman socket: {e}"))?;
+                    Ok(format!(
+                        "Podman socket started (root).{}",
+                        if out.is_empty() { String::new() } else { format!("\n{out}") }
+                    ))
+                }
+            }
+        }
         "add_docker_group" => {
             let user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
             let output = run_cmd("sudo", &["usermod", "-aG", "docker", &user])
@@ -411,7 +517,8 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
 
 /// Check if Docker/Podman is currently reachable.
 pub async fn check_docker_connection() -> bool {
-    Command::new("docker")
+    let cli = detect_cli().await;
+    Command::new(cli)
         .args(["info"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -465,9 +572,10 @@ fn parse_reclaimable_size(s: &str) -> u64 {
     parse_docker_size(size_part)
 }
 
-/// Get Docker disk usage (docker system df).
+/// Get Docker/Podman disk usage (system df).
 pub async fn get_disk_usage() -> Option<DiskUsage> {
-    let output = Command::new("docker")
+    let cli = detect_cli().await;
+    let output = Command::new(cli)
         .args(["system", "df", "--format", "{{json .}}"])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -613,8 +721,9 @@ pub async fn get_system_resources() -> Option<SystemResources> {
 pub async fn check_system_health() -> SystemHealth {
     let connected = check_docker_connection().await;
 
+    let cli = detect_cli().await;
     let version = if connected {
-        run_cmd("docker", &["version", "--format", "{{.Server.Version}}"])
+        run_cmd(cli, &["version", "--format", "{{.Server.Version}}"])
             .await
             .ok()
     } else {
@@ -631,7 +740,7 @@ pub async fn check_system_health() -> SystemHealth {
 
     let mut warnings = Vec::new();
     if !connected {
-        warnings.push("Docker is not running or not reachable".to_string());
+        warnings.push(format!("{} is not running or not reachable", if cli == "podman" { "Podman" } else { "Docker" }));
     }
     if let Some(ref res) = resources {
         if res.disk_usage_percent > 90.0 {

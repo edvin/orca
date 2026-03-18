@@ -100,6 +100,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}/stats", get(container_stats))
         .route("/containers/{id}/logs", get(container_logs_sse))
         .route("/containers/{id}/exec", post(exec_container))
+        .route("/containers/{id}/export/run", get(export_docker_run))
+        .route("/containers/{id}/export/compose", get(export_compose))
         // Registries
         .route("/registries", get(list_registries).post(add_registry))
         .route("/registries/{server}", delete(remove_registry_handler))
@@ -154,6 +156,11 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/environment/fix", post(env_fix))
         // System health
         .route("/system/health", get(system_health))
+        // Templates
+        .route("/templates", get(list_templates))
+        .route("/templates/{id}/deploy", post(deploy_template))
+        // AI
+        .route("/ai/ask", post(ai_ask))
 }
 
 // --- Health ---
@@ -445,6 +452,27 @@ async fn exec_container(
 
     let result = state.runtime.exec(opts).await?;
     Ok(Json(result))
+}
+
+// --- Container Export ---
+
+async fn export_docker_run(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let container = state.runtime.inspect_container(&id).await?;
+    let cmd = orca_backend_common::export::container_to_docker_run(&container);
+    Ok(Json(serde_json::json!({ "command": cmd })))
+}
+
+async fn export_compose(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let container = state.runtime.inspect_container(&id).await?;
+    let project_name = container.name.replace('/', "").replace('-', "_");
+    let yaml = orca_backend_common::export::containers_to_compose(&[container], &project_name);
+    Ok(Json(serde_json::json!({ "yaml": yaml })))
 }
 
 // --- Container Logs (SSE) ---
@@ -1212,4 +1240,232 @@ async fn system_health(
 ) -> Result<impl IntoResponse, ApiError> {
     let health = orca_backend_common::environment::check_system_health().await;
     Ok(Json(health))
+}
+
+// --- Templates ---
+
+async fn list_templates() -> Json<Vec<orca_core::templates::AppTemplate>> {
+    Json(orca_backend_common::templates::builtin_templates())
+}
+
+#[derive(Deserialize)]
+struct DeployTemplateOverrides {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    ports: Option<Vec<String>>,
+    #[serde(default)]
+    env: Option<Vec<String>>,
+    #[serde(default)]
+    volumes: Option<Vec<String>>,
+}
+
+async fn deploy_template(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(overrides): Json<DeployTemplateOverrides>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::runtime::ContainerCreateOpts;
+
+    let templates = orca_backend_common::templates::builtin_templates();
+    let template = templates
+        .iter()
+        .find(|t| t.id == id)
+        .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", id))?;
+
+    let container_name = overrides
+        .name
+        .unwrap_or_else(|| format!("orca-{}", template.id));
+
+    let ports_str = overrides.ports.unwrap_or_else(|| template.default_ports.clone());
+    let ports: Vec<orca_core::runtime::PortMapping> = ports_str
+        .iter()
+        .filter_map(|s| {
+            let parts: Vec<&str> = s.split(':').collect();
+            if parts.len() == 2 {
+                Some(orca_core::runtime::PortMapping {
+                    host_ip: None,
+                    host_port: parts[0].parse().ok()?,
+                    container_port: parts[1].parse().ok()?,
+                    protocol: "tcp".to_string(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let env_list = overrides.env.unwrap_or_else(|| template.default_env.clone());
+    let env: std::collections::HashMap<String, String> = env_list
+        .iter()
+        .filter_map(|s| {
+            let mut parts = s.splitn(2, '=');
+            let key = parts.next()?.to_string();
+            let val = parts.next().unwrap_or("").to_string();
+            Some((key, val))
+        })
+        .collect();
+
+    let vol_list = overrides.volumes.unwrap_or_else(|| template.default_volumes.clone());
+    let volumes: Vec<orca_core::runtime::VolumeMount> = vol_list
+        .iter()
+        .filter_map(|s| {
+            let parts: Vec<&str> = s.splitn(2, ':').collect();
+            if parts.len() == 2 {
+                Some(orca_core::runtime::VolumeMount {
+                    source: parts[0].to_string(),
+                    target: parts[1].to_string(),
+                    read_only: false,
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let opts = ContainerCreateOpts {
+        image: template.image.clone(),
+        name: Some(container_name.clone()),
+        command: vec![],
+        env,
+        ports,
+        volumes,
+        labels: std::collections::HashMap::new(),
+        restart_policy: Some(template.restart_policy.clone()),
+        network: None,
+        detach: true,
+        remove_on_exit: false,
+        cpu_limit: None,
+        memory_limit: None,
+        memory_swap: None,
+    };
+
+    let container_id = state.runtime.create_container(opts).await?;
+
+    // Start the container
+    state.runtime.start_container(&container_id).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": container_id,
+            "name": container_name,
+            "notes": template.notes,
+        })),
+    ))
+}
+
+// --- AI Assistant ---
+
+#[derive(Deserialize)]
+struct AiAskRequest {
+    query: String,
+    #[serde(default)]
+    context: Option<orca_core::ai::AiContext>,
+}
+
+async fn ai_ask(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AiAskRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    // Check for API key: env var first, then config
+    let api_key = std::env::var("ANTHROPIC_API_KEY").ok().or_else(|| {
+        let config = state.config.blocking_lock();
+        config.anthropic_api_key.clone()
+    });
+
+    let api_key = match api_key {
+        Some(key) if !key.is_empty() => key,
+        _ => {
+            return Ok(Json(orca_core::ai::AiResponse {
+                answer: "No Anthropic API key configured. To enable AI features, set the \
+                         ANTHROPIC_API_KEY environment variable or add it in Settings."
+                    .to_string(),
+                suggestions: vec![orca_core::ai::AiSuggestion {
+                    label: "Open Settings".to_string(),
+                    action: "navigate".to_string(),
+                    detail: "settings".to_string(),
+                }],
+            }));
+        }
+    };
+
+    // Build context-enriched prompt
+    let mut system_prompt = String::from(
+        "You are Orca AI, an assistant built into the Orca container management desktop app. \
+         You help users with Docker containers, images, networking, volumes, and troubleshooting. \
+         Keep responses concise and actionable. Use markdown formatting. \
+         When suggesting fixes, be specific with commands. \
+         You can suggest actions the user can take in the Orca UI."
+    );
+
+    let mut user_message = body.query.clone();
+
+    if let Some(ctx) = &body.context {
+        system_prompt.push_str("\n\nThe user is asking about a specific container context:");
+        if let Some(name) = &ctx.container_name {
+            system_prompt.push_str(&format!("\nContainer name: {name}"));
+        }
+        if let Some(image) = &ctx.image {
+            system_prompt.push_str(&format!("\nImage: {image}"));
+        }
+        if let Some(exit_code) = ctx.exit_code {
+            system_prompt.push_str(&format!("\nExit code: {exit_code}"));
+        }
+        if let Some(error) = &ctx.error {
+            system_prompt.push_str(&format!("\nError: {error}"));
+        }
+        if let Some(logs) = &ctx.container_logs {
+            // Truncate logs to last 50 lines to stay within token limits
+            let log_lines: Vec<&str> = logs.lines().collect();
+            let recent_logs: String = if log_lines.len() > 50 {
+                log_lines[log_lines.len() - 50..].join("\n")
+            } else {
+                logs.clone()
+            };
+            system_prompt.push_str(&format!("\n\nRecent container logs:\n```\n{recent_logs}\n```"));
+        }
+    }
+
+    // Call Claude API
+    let http_client = reqwest::Client::new();
+    let api_resp = http_client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&serde_json::json!({
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 1024,
+            "system": system_prompt,
+            "messages": [
+                { "role": "user", "content": user_message }
+            ]
+        }))
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to call Claude API: {e}"))?;
+
+    if !api_resp.status().is_success() {
+        let status = api_resp.status();
+        let err_body = api_resp.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!("Claude API error ({}): {}", status, err_body).into());
+    }
+
+    let resp_json: serde_json::Value = api_resp
+        .json()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to parse Claude API response: {e}"))?;
+
+    let answer = resp_json["content"]
+        .as_array()
+        .and_then(|arr| arr.first())
+        .and_then(|block| block["text"].as_str())
+        .unwrap_or("No response received from AI.")
+        .to_string();
+
+    Ok(Json(orca_core::ai::AiResponse {
+        answer,
+        suggestions: vec![],
+    }))
 }

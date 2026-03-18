@@ -61,6 +61,9 @@ pub struct OrcaConfig {
     /// Saved registry credentials (passwords are base64-encoded, not encrypted).
     #[serde(default)]
     pub registries: Vec<RegistryCredential>,
+    /// Anthropic API key for AI assistant features.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anthropic_api_key: Option<String>,
 }
 
 impl Default for OrcaConfig {
@@ -77,6 +80,7 @@ impl Default for OrcaConfig {
             telemetry: false,
             api_token: None,
             registries: Vec::new(),
+            anthropic_api_key: None,
         }
     }
 }

@@ -11,6 +11,7 @@ import Spinner from "../components/Spinner";
 import ResourceBar from "../components/ResourceBar";
 import Sparkline from "../components/Sparkline";
 import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
+import { copyToClipboard } from "../lib/clipboard";
 
 export default function ContainersPage() {
   const [containers, setContainers] = createSignal<Container[]>([]);
@@ -624,6 +625,41 @@ export default function ContainersPage() {
                                       </div>
                                     </div>
                                   </Show>
+
+                                  {/* Export actions */}
+                                  <div class="card-label">Export</div>
+                                  <div class="card-value">
+                                    <div class="btn-group" style={{ gap: "8px" }}>
+                                      <button
+                                        class="btn btn-sm"
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          try {
+                                            const cmd = await invoke("export_docker_run", { id: c.id }) as string;
+                                            await copyToClipboard(cmd);
+                                          } catch (err) {
+                                            showToast(`Export failed: ${err}`, "error");
+                                          }
+                                        }}
+                                      >
+                                        Copy as docker run
+                                      </button>
+                                      <button
+                                        class="btn btn-sm"
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          try {
+                                            const yaml = await invoke("export_compose", { id: c.id }) as string;
+                                            await copyToClipboard(yaml);
+                                          } catch (err) {
+                                            showToast(`Export failed: ${err}`, "error");
+                                          }
+                                        }}
+                                      >
+                                        Export as Compose
+                                      </button>
+                                    </div>
+                                  </div>
 
                                 </div>
                               </div>

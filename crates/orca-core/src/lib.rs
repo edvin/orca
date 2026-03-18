@@ -8,3 +8,5 @@ pub mod config;
 pub mod compose;
 pub mod kubernetes;
 pub mod environment;
+pub mod templates;
+pub mod ai;

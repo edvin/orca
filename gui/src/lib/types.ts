@@ -222,6 +222,49 @@ export interface SystemResources {
   disk_usage_percent: number;
 }
 
+// --- Templates ---
+
+export interface AppTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  image: string;
+  default_ports: string[];
+  default_env: string[];
+  default_volumes: string[];
+  restart_policy: string;
+  notes: string;
+}
+
+// --- AI ---
+
+export interface AiQuery {
+  query: string;
+  context?: AiContext;
+}
+
+export interface AiContext {
+  container_id?: string;
+  container_name?: string;
+  container_logs?: string;
+  exit_code?: number;
+  error?: string;
+  image?: string;
+}
+
+export interface AiResponse {
+  answer: string;
+  suggestions: AiSuggestion[];
+}
+
+export interface AiSuggestion {
+  label: string;
+  action: string;
+  detail: string;
+}
+
 // --- Environment ---
 
 export interface EnvironmentStatus {

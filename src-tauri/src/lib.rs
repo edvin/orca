@@ -20,6 +20,8 @@ pub fn run() {
             commands::stop_container,
             commands::exec_container,
             commands::remove_container,
+            commands::export_docker_run,
+            commands::export_compose,
             commands::create_and_run_container,
             commands::container_logs,
             commands::list_registries,
@@ -68,6 +70,9 @@ pub fn run() {
             commands::system_health,
             commands::env_status,
             commands::env_fix,
+            commands::list_templates,
+            commands::deploy_template,
+            commands::ai_ask,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

@@ -149,6 +149,26 @@ pub async fn remove_container(id: String) -> Result<(), String> {
     delete(&format!("/containers/{id}")).await
 }
 
+// --- Container Export ---
+
+#[tauri::command]
+pub async fn export_docker_run(id: String) -> Result<String, String> {
+    let resp: serde_json::Value = get_json(&format!("/containers/{id}/export/run")).await?;
+    resp.get("command")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Missing command in response".to_string())
+}
+
+#[tauri::command]
+pub async fn export_compose(id: String) -> Result<String, String> {
+    let resp: serde_json::Value = get_json(&format!("/containers/{id}/export/compose")).await?;
+    resp.get("yaml")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Missing yaml in response".to_string())
+}
+
 // --- Container Logs ---
 
 #[tauri::command]
@@ -758,6 +778,58 @@ pub async fn env_fix(action: String) -> Result<serde_json::Value, String> {
         .send()
         .await
         .map_err(|e| format!("Fix action failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+// --- Templates ---
+
+#[tauri::command]
+pub async fn list_templates() -> Result<serde_json::Value, String> {
+    get_json("/templates").await
+}
+
+#[tauri::command]
+pub async fn deploy_template(
+    id: String,
+    name: Option<String>,
+    ports: Option<Vec<String>>,
+    env: Option<Vec<String>>,
+    volumes: Option<Vec<String>>,
+) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/templates/{id}/deploy"))
+        .json(&serde_json::json!({
+            "name": name,
+            "ports": ports,
+            "env": env,
+            "volumes": volumes,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Deploy failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+// --- AI Assistant ---
+
+#[tauri::command]
+pub async fn ai_ask(
+    query: String,
+    context: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/ai/ask"))
+        .json(&serde_json::json!({
+            "query": query,
+            "context": context,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("AI request failed: {e}"))?
         .json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))

@@ -16,10 +16,12 @@ import SettingsPage from "./pages/SettingsPage";
 import EnvironmentPage from "./pages/EnvironmentPage";
 import ActivityPage from "./pages/ActivityPage";
 import DashboardPage from "./pages/DashboardPage";
+import TemplatesPage from "./pages/TemplatesPage";
 import CommandPalette from "./components/CommandPalette";
+import AiAssistant from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "dashboard" | "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
+export type Page = "dashboard" | "templates" | "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
@@ -137,6 +139,7 @@ export default function App() {
         />
         <main class="app-main">
           {page() === "dashboard" && <DashboardPage />}
+          {page() === "templates" && <TemplatesPage />}
           {page() === "stacks" && <StacksPage />}
           {page() === "containers" && <ContainersPage />}
           {page() === "images" && <ImagesPage />}
@@ -156,6 +159,7 @@ export default function App() {
         />
       )}
       <ToastContainer />
+      <AiAssistant onNavigate={(p) => setPage(p as Page)} />
     </div>
   );
 }
