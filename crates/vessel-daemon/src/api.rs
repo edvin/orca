@@ -9,6 +9,7 @@ use axum::{
 };
 use serde::Serialize;
 
+use vessel_core::compose;
 use vessel_core::image::ImageManager;
 use vessel_core::machine::MachineManager;
 use vessel_core::network::NetworkManager;
@@ -67,6 +68,12 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Networks
         .route("/networks", get(list_networks))
         .route("/networks/{name}", get(inspect_network))
+        // Stacks (compose projects)
+        .route("/stacks", get(list_stacks))
+        .route("/stacks/{name}", get(get_stack))
+        .route("/stacks/{name}/start", post(start_stack))
+        .route("/stacks/{name}/stop", post(stop_stack))
+        .route("/stacks/{name}/restart", post(restart_stack))
 }
 
 // --- Health ---
@@ -223,4 +230,135 @@ async fn inspect_network(
 ) -> Result<impl IntoResponse, ApiError> {
     let network = NetworkManager::inspect(state.backend.as_ref(), &name).await?;
     Ok(Json(network))
+}
+
+// --- Stacks (Compose Projects) ---
+
+async fn get_stacks(
+    state: &AppState,
+) -> Result<Vec<compose::ComposeProject>, ApiError> {
+    let containers = state.backend.list_containers(true).await?;
+    Ok(compose::extract_projects(&containers))
+}
+
+async fn list_stacks(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let stacks = get_stacks(&state).await?;
+    Ok(Json(stacks))
+}
+
+async fn get_stack(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let stacks = get_stacks(&state).await?;
+    let stack = stacks
+        .into_iter()
+        .find(|s| s.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Stack '{name}' not found"))?;
+    Ok(Json(stack))
+}
+
+async fn start_stack(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let stacks = get_stacks(&state).await?;
+    let stack = stacks
+        .iter()
+        .find(|s| s.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Stack '{name}' not found"))?;
+
+    let mut errors = Vec::new();
+    for service in &stack.services {
+        if service.state != vessel_core::runtime::ContainerState::Running {
+            if let Err(e) = state.backend.start_container(&service.container_id).await {
+                errors.push(format!("{}: {e}", service.name));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(StatusCode::NO_CONTENT.into_response())
+    } else {
+        Ok((
+            StatusCode::MULTI_STATUS,
+            Json(serde_json::json!({
+                "partial_errors": errors,
+            })),
+        )
+            .into_response())
+    }
+}
+
+async fn stop_stack(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let stacks = get_stacks(&state).await?;
+    let stack = stacks
+        .iter()
+        .find(|s| s.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Stack '{name}' not found"))?;
+
+    let mut errors = Vec::new();
+    for service in &stack.services {
+        if service.state == vessel_core::runtime::ContainerState::Running {
+            if let Err(e) = state.backend.stop_container(&service.container_id, 10).await {
+                errors.push(format!("{}: {e}", service.name));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(StatusCode::NO_CONTENT.into_response())
+    } else {
+        Ok((
+            StatusCode::MULTI_STATUS,
+            Json(serde_json::json!({
+                "partial_errors": errors,
+            })),
+        )
+            .into_response())
+    }
+}
+
+async fn restart_stack(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let stacks = get_stacks(&state).await?;
+    let stack = stacks
+        .iter()
+        .find(|s| s.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Stack '{name}' not found"))?;
+
+    let mut errors = Vec::new();
+    // Stop all running
+    for service in &stack.services {
+        if service.state == vessel_core::runtime::ContainerState::Running {
+            if let Err(e) = state.backend.stop_container(&service.container_id, 10).await {
+                errors.push(format!("stop {}: {e}", service.name));
+            }
+        }
+    }
+    // Start all
+    for service in &stack.services {
+        if let Err(e) = state.backend.start_container(&service.container_id).await {
+            errors.push(format!("start {}: {e}", service.name));
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(StatusCode::NO_CONTENT.into_response())
+    } else {
+        Ok((
+            StatusCode::MULTI_STATUS,
+            Json(serde_json::json!({
+                "partial_errors": errors,
+            })),
+        )
+            .into_response())
+    }
 }

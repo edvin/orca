@@ -5,3 +5,4 @@ pub mod volume;
 pub mod image;
 pub mod event;
 pub mod config;
+pub mod compose;

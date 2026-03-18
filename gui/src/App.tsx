@@ -1,16 +1,17 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "./components/Sidebar";
+import StacksPage from "./pages/StacksPage";
 import ContainersPage from "./pages/ContainersPage";
 import ImagesPage from "./pages/ImagesPage";
 import VolumesPage from "./pages/VolumesPage";
 import NetworksPage from "./pages/NetworksPage";
 import MachinePage from "./pages/MachinePage";
 
-export type Page = "containers" | "images" | "volumes" | "networks" | "machine";
+export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "machine";
 
 export default function App() {
-  const [page, setPage] = createSignal<Page>("containers");
+  const [page, setPage] = createSignal<Page>("stacks");
   const [daemonStatus, setDaemonStatus] = createSignal<string>("connecting");
 
   const checkDaemon = async () => {
@@ -43,6 +44,7 @@ export default function App() {
           background: "#0d1117",
         }}
       >
+        {page() === "stacks" && <StacksPage />}
         {page() === "containers" && <ContainersPage />}
         {page() === "images" && <ImagesPage />}
         {page() === "volumes" && <VolumesPage />}

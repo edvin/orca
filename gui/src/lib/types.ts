@@ -50,6 +50,23 @@ export interface Network {
   labels: Record<string, string>;
 }
 
+export interface ComposeProject {
+  name: string;
+  working_dir: string | null;
+  config_file: string | null;
+  services: ComposeService[];
+  status: "Running" | "Partial" | "Stopped" | "Empty";
+}
+
+export interface ComposeService {
+  name: string;
+  container_id: string;
+  container_name: string;
+  image: string;
+  state: string;
+  ports: PortMapping[];
+}
+
 export interface MachineInfo {
   name: string;
   state: string;

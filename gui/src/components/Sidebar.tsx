@@ -7,6 +7,7 @@ interface SidebarProps {
 }
 
 const navItems: { id: Page; label: string }[] = [
+  { id: "stacks", label: "Stacks" },
   { id: "containers", label: "Containers" },
   { id: "images", label: "Images" },
   { id: "volumes", label: "Volumes" },

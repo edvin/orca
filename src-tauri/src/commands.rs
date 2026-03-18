@@ -129,6 +129,33 @@ pub async fn list_networks() -> Result<serde_json::Value, String> {
     get_json("/networks").await
 }
 
+// --- Stacks (Compose Projects) ---
+
+#[tauri::command]
+pub async fn list_stacks() -> Result<serde_json::Value, String> {
+    get_json("/stacks").await
+}
+
+#[tauri::command]
+pub async fn get_stack(name: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/stacks/{name}")).await
+}
+
+#[tauri::command]
+pub async fn start_stack(name: String) -> Result<(), String> {
+    post_empty(&format!("/stacks/{name}/start")).await
+}
+
+#[tauri::command]
+pub async fn stop_stack(name: String) -> Result<(), String> {
+    post_empty(&format!("/stacks/{name}/stop")).await
+}
+
+#[tauri::command]
+pub async fn restart_stack(name: String) -> Result<(), String> {
+    post_empty(&format!("/stacks/{name}/restart")).await
+}
+
 // --- Machine ---
 
 #[tauri::command]

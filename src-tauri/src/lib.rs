@@ -16,6 +16,11 @@ pub fn run() {
             commands::list_volumes,
             commands::remove_volume,
             commands::list_networks,
+            commands::list_stacks,
+            commands::get_stack,
+            commands::start_stack,
+            commands::stop_stack,
+            commands::restart_stack,
             commands::get_machine_info,
         ])
         .run(tauri::generate_context!())
