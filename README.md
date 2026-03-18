@@ -394,6 +394,39 @@ The daemon exposes a REST API at `http://127.0.0.1:9477/api/v1/`:
 
 See the full API in [`crates/orca-daemon/src/api.rs`](crates/orca-daemon/src/api.rs).
 
+## Releasing
+
+Releases are fully automated. To publish a new version:
+
+```bash
+# 1. Update the version in tauri.conf.json and Cargo.toml
+# 2. Commit the version bump
+git add -A && git commit -m "Release v0.2.0"
+
+# 3. Tag and push
+git tag v0.2.0
+git push && git push --tags
+```
+
+This triggers the release workflow which:
+
+1. Creates a draft GitHub Release with auto-generated release notes
+2. Builds signed Tauri apps for **Linux** (AppImage, deb), **macOS** (dmg), and **Windows** (exe, msi) in parallel
+3. Bundles the daemon binary as a sidecar inside each app
+4. Signs all update artifacts with the project's signing key
+5. Uploads `latest.json` for the Tauri auto-updater
+6. Publishes the release
+
+**Auto-updates:** Users with Orca installed receive update notifications automatically. The app checks `https://github.com/edvin/orca/releases/latest/download/latest.json` on startup and can download + install updates with signature verification.
+
+### Release artifacts
+
+| Platform | Installer | Auto-update |
+|----------|-----------|-------------|
+| Linux | `.AppImage`, `.deb` | AppImage self-updates |
+| macOS | `.dmg` | App bundle updates |
+| Windows | `.exe` (NSIS), `.msi` | Exe self-updates |
+
 ## Contributing
 
 Contributions welcome! Please open an issue first to discuss what you'd like to change.
