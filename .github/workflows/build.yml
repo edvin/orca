@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Rust workspace check (fast, catches compile errors early)
+  # Rust workspace check — excludes Tauri GUI crate (needs system deps)
   check:
     name: Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -41,8 +41,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
 
-      - name: Check workspace
-        run: cargo check --workspace
+      - name: Check workspace (excluding Tauri GUI)
+        run: cargo check --workspace --exclude orca-gui
 
   # Frontend type check and build
   frontend:
@@ -65,9 +65,9 @@ jobs:
           npx tsc --noEmit
           npx vite build
 
-  # Build Tauri desktop app for all platforms (unsigned)
-  build-app:
-    name: Build App (${{ matrix.platform.name }})
+  # Build standalone daemon for all platforms
+  build-daemon:
+    name: Daemon (${{ matrix.platform.name }})
     needs: [check, frontend]
     runs-on: ${{ matrix.platform.os }}
     strategy:
@@ -104,6 +104,50 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.platform.target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.platform.target }}-cargo-build-
 
+      - name: Build daemon
+        run: cargo build --release --bin orca-daemon --target ${{ matrix.platform.target }}
+
+      - name: Upload daemon binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: orca-daemon-${{ matrix.platform.target }}
+          path: |
+            target/${{ matrix.platform.target }}/release/orca-daemon
+            target/${{ matrix.platform.target }}/release/orca-daemon.exe
+
+  # Build Tauri desktop app (Linux only for now — macOS/Windows need signing setup)
+  build-app:
+    name: Tauri App (${{ matrix.platform.name }})
+    needs: [check, frontend]
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - name: macOS (Apple Silicon)
+            os: macos-latest
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.platform.target }}-tauri-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.platform.target }}-tauri-
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -130,24 +174,11 @@ jobs:
 
       - name: Build Tauri app (unsigned)
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          # Skip signing on macOS
+          # Skip code signing
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: cargo tauri build --target ${{ matrix.platform.target }} -- --no-default-features
+          APPLE_SIGNING_IDENTITY: ""
+        run: cargo tauri build --target ${{ matrix.platform.target }}
         continue-on-error: true
-
-      # Also build the standalone daemon binary
-      - name: Build daemon
-        run: cargo build --release --bin orca-daemon --target ${{ matrix.platform.target }}
-
-      - name: Upload daemon binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: orca-daemon-${{ matrix.platform.target }}
-          path: |
-            target/${{ matrix.platform.target }}/release/orca-daemon
-            target/${{ matrix.platform.target }}/release/orca-daemon.exe
 
       - name: Upload Tauri bundles
         uses: actions/upload-artifact@v4

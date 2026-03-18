@@ -446,10 +446,13 @@ pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
 
     tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
+        use tokio_stream::StreamExt;
+
         let stream = resp.bytes_stream();
-        let reader = tokio_util::io::StreamReader::new(
-            stream.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))),
-        );
+        let mapped = stream.map(|r| {
+            r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        });
+        let reader = tokio_util::io::StreamReader::new(mapped);
         let mut lines = reader.lines();
 
         while let Ok(Some(line)) = lines.next_line().await {
