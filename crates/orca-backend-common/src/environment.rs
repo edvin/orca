@@ -242,8 +242,8 @@ async fn check_brew_installed() -> HealthCheck {
             name: "Homebrew".to_string(),
             description: "Homebrew package manager (needed to install dependencies)".to_string(),
             status: CheckStatus::Warning,
-            fix_action: None,
-            details: Some(format!("Not found: {e}")),
+            fix_action: Some("install_brew".to_string()),
+            details: Some(format!("Not found — install from https://brew.sh")),
         },
     }
 }
@@ -494,6 +494,31 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 "Added {user} to docker group. You may need to log out and back in for this to take effect.{}",
                 if output.is_empty() { String::new() } else { format!("\n{output}") }
             ))
+        }
+        "install_docker" => {
+            // On Windows: install Docker inside the default WSL2 distro
+            #[cfg(target_os = "windows")]
+            {
+                let output = run_cmd("wsl", &["-d", "Ubuntu", "--", "bash", "-c",
+                    "curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER"])
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Docker install in WSL2 failed: {e}"))?;
+                Ok(format!("Docker installed in WSL2:\n{output}"))
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                // Same as install_docker_linux
+                let output = run_cmd("bash", &["-c", "curl -fsSL https://get.docker.com | sh"])
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Docker install failed: {e}"))?;
+                Ok(format!("Docker installed:\n{output}"))
+            }
+        }
+        "install_brew" => {
+            let output = run_cmd("bash", &["-c", "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""])
+                .await
+                .map_err(|e| anyhow::anyhow!("Homebrew install failed: {e}"))?;
+            Ok(format!("Homebrew installed:\n{output}"))
         }
         "install_lima" => {
             let output = run_cmd("brew", &["install", "lima"])
