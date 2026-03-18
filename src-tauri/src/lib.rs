@@ -26,6 +26,7 @@ pub fn run() {
             commands::compose_up,
             commands::compose_down,
             commands::compose_pull,
+            commands::subscribe_events,
             commands::get_machine_info,
         ])
         .run(tauri::generate_context!())

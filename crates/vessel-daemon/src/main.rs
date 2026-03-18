@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
+use tokio::sync::broadcast;
 use tracing_subscriber::EnvFilter;
 
 mod api;
@@ -21,14 +22,22 @@ async fn main() -> anyhow::Result<()> {
     let runtime_kind = backend.detect_runtime().await;
     tracing::info!("Connected to {runtime_kind:?} runtime");
 
-    let state = Arc::new(AppState::new(config, backend));
+    // Start the Docker event listener
+    let (events_tx, _) = broadcast::channel(256);
+    let mut events_rx = backend.subscribe_events();
+    let events_tx_clone = events_tx.clone();
+    tokio::spawn(async move {
+        while let Ok(event) = events_rx.recv().await {
+            let _ = events_tx_clone.send(event);
+        }
+    });
+
+    let state = Arc::new(AppState::new(config, backend, events_tx));
 
     let app = Router::new()
         .nest("/api/v1", api::routes())
         .with_state(state);
 
-    // TODO: On production, listen on a Unix socket instead of TCP.
-    // TCP is convenient for development.
     let addr = SocketAddr::from(([127, 0, 0, 1], 9477));
     tracing::info!("Vessel daemon listening on {addr}");
 

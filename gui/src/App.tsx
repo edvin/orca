@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { startEventSubscription } from "./lib/events";
 import Sidebar from "./components/Sidebar";
 import StacksPage from "./pages/StacksPage";
 import ContainersPage from "./pages/ContainersPage";
@@ -25,6 +26,7 @@ export default function App() {
 
   onMount(() => {
     checkDaemon();
+    startEventSubscription();
     const interval = setInterval(checkDaemon, 5000);
     onCleanup(() => clearInterval(interval));
   });

@@ -238,6 +238,40 @@ pub async fn compose_pull(name: String) -> Result<serde_json::Value, String> {
     post_json(&format!("/stacks/{name}/pull")).await
 }
 
+// --- Events ---
+
+/// Subscribe to daemon events. Returns recent events and triggers
+/// Tauri event emissions for real-time updates.
+#[tauri::command]
+pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
+
+    let resp = client()
+        .get(format!("{DAEMON_URL}/events"))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to event stream: {e}"))?;
+
+    tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt;
+        let stream = resp.bytes_stream();
+        let reader = tokio_util::io::StreamReader::new(
+            stream.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))),
+        );
+        let mut lines = reader.lines();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            if let Some(data) = line.strip_prefix("data:") {
+                if let Ok(event) = serde_json::from_str::<serde_json::Value>(data) {
+                    let _ = app.emit("vessel-event", &event);
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
 // --- Machine ---
 
 #[tauri::command]

@@ -8,7 +8,7 @@ use axum::{
     http::StatusCode,
     response::{
         IntoResponse,
-        sse::{Event, KeepAlive, Sse},
+        sse::{Event as SseEvent, KeepAlive, Sse},
     },
     routing::{delete, get, post},
 };
@@ -50,6 +50,7 @@ impl From<anyhow::Error> for ApiError {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(health))
+        .route("/events", get(events_stream))
         // Machines
         .route("/machines", get(list_machines))
         .route("/machines/{name}", get(inspect_machine))
@@ -98,6 +99,48 @@ async fn health() -> Json<HealthResponse> {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
     })
+}
+
+// --- Events (SSE) ---
+
+async fn events_stream(
+    State(state): State<Arc<AppState>>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>> {
+    let mut rx = state.events_tx.subscribe();
+
+    let stream = async_stream::stream! {
+        while let Ok(event) = rx.recv().await {
+            if let Ok(json) = serde_json::to_string(&event) {
+                yield Ok(SseEvent::default()
+                    .event(event_type_name(&event.kind))
+                    .data(json));
+            }
+        }
+    };
+
+    Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keepalive"),
+    )
+}
+
+fn event_type_name(kind: &vessel_core::event::EventKind) -> &'static str {
+    use vessel_core::event::EventKind::*;
+    match kind {
+        ContainerCreated { .. } => "container.created",
+        ContainerStarted { .. } => "container.started",
+        ContainerStopped { .. } => "container.stopped",
+        ContainerRemoved { .. } => "container.removed",
+        ContainerDied { .. } => "container.died",
+        MachineStarted { .. } => "machine.started",
+        MachineStopped { .. } => "machine.stopped",
+        MachineError { .. } => "machine.error",
+        ImagePulled { .. } => "image.pulled",
+        ImageRemoved { .. } => "image.removed",
+        VolumeCreated { .. } => "volume.created",
+        VolumeRemoved { .. } => "volume.removed",
+    }
 }
 
 // --- Machines ---
@@ -186,7 +229,7 @@ async fn container_logs_sse(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Query(query): Query<LogsQuery>,
-) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+) -> Result<Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
     let follow = query.follow.unwrap_or(true);
     let tail = query.tail.or(Some(200));
 
@@ -194,7 +237,7 @@ async fn container_logs_sse(
 
     let stream = async_stream::stream! {
         while let Some(line) = rx.recv().await {
-            yield Ok(Event::default().data(line));
+            yield Ok(SseEvent::default().data(line));
         }
     };
 
@@ -238,17 +281,17 @@ struct PullRequest {
 async fn pull_image(
     State(state): State<Arc<AppState>>,
     Json(body): Json<PullRequest>,
-) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+) -> Result<Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
     let mut rx = ImageManager::pull(state.backend.as_ref(), &body.reference).await?;
 
     let stream = async_stream::stream! {
         while let Some(progress) = rx.recv().await {
             if let Ok(json) = serde_json::to_string(&progress) {
-                yield Ok(Event::default().data(json));
+                yield Ok(SseEvent::default().data(json));
             }
         }
         // Signal completion
-        yield Ok(Event::default().event("done").data("{}"));
+        yield Ok(SseEvent::default().event("done").data("{}"));
     };
 
     Ok(Sse::new(stream).keep_alive(

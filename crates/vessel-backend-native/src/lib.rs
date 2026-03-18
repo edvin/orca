@@ -1,5 +1,6 @@
 mod compose;
 mod containers;
+mod events;
 mod images;
 mod volumes;
 mod networks;
