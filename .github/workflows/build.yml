@@ -172,6 +172,9 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
+      - name: Verify icons exist
+        run: ls -la src-tauri/icons/
+
       - name: Build Tauri app (unsigned)
         env:
           # Skip code signing

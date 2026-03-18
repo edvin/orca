@@ -1,0 +1,5 @@
+# Ensure binary files aren't mangled by git
+*.png binary
+*.ico binary
+*.icns binary
+*.svg text
