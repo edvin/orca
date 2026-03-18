@@ -40,7 +40,7 @@ impl MacOSBackend {
         }
 
         let docker = bollard::Docker::connect_with_unix(
-            socket_path.to_str().unwrap(),
+            socket_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid socket path"))?,
             120,
             bollard::API_DEFAULT_VERSION,
         )?;

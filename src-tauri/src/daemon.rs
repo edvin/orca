@@ -36,7 +36,7 @@ impl DaemonManager {
             .spawn()
             .map_err(|e| format!("Failed to start daemon: {e}"))?;
 
-        *self.child.lock().unwrap() = Some(child);
+        *self.child.lock().map_err(|e| format!("Lock poisoned: {e}"))? = Some(child);
 
         // Wait for daemon to become ready
         for _ in 0..20 {
@@ -52,7 +52,7 @@ impl DaemonManager {
 
     /// Stop the daemon process.
     pub fn stop(&self) {
-        if let Some(mut child) = self.child.lock().unwrap().take() {
+        if let Some(mut child) = self.child.lock().ok().and_then(|mut guard| guard.take()) {
             tracing::info!("Stopping orca-daemon");
             // kill_on_drop handles cleanup, but let's be explicit
             let _ = child.start_kill();
@@ -78,9 +78,11 @@ impl Drop for DaemonManager {
 /// Find the daemon binary — check next to current exe first, then PATH.
 fn find_daemon_binary() -> String {
     if let Ok(exe) = std::env::current_exe() {
-        let sibling = exe.parent().unwrap().join("orca-daemon");
-        if sibling.exists() {
-            return sibling.to_string_lossy().to_string();
+        if let Some(parent) = exe.parent() {
+            let sibling = parent.join("orca-daemon");
+            if sibling.exists() {
+                return sibling.to_string_lossy().to_string();
+            }
         }
     }
     "orca-daemon".to_string()

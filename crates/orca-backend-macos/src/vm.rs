@@ -65,7 +65,7 @@ portForwards:
         tokio::fs::write(&config_path, &lima_config).await?;
 
         let output = Command::new("limactl")
-            .args(["create", "--name", &config.name, config_path.to_str().unwrap()])
+            .args(["create", "--name", &config.name, config_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid config path"))?])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()

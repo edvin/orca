@@ -43,7 +43,7 @@ impl NativeBackend {
             if podman_sock.exists() {
                 tracing::info!("Connecting to Podman socket at {}", podman_sock.display());
                 let docker = bollard::Docker::connect_with_unix(
-                    podman_sock.to_str().unwrap(),
+                    podman_sock.to_str().ok_or_else(|| anyhow::anyhow!("Invalid socket path"))?,
                     120,
                     bollard::API_DEFAULT_VERSION,
                 )?;
@@ -58,7 +58,7 @@ impl NativeBackend {
         if podman_sock.exists() {
             tracing::info!("Connecting to Podman socket at {}", podman_sock.display());
             let docker = bollard::Docker::connect_with_unix(
-                podman_sock.to_str().unwrap(),
+                podman_sock.to_str().ok_or_else(|| anyhow::anyhow!("Invalid socket path"))?,
                 120,
                 bollard::API_DEFAULT_VERSION,
             )?;

@@ -31,7 +31,7 @@ impl MachineManager for WindowsBackend {
             .args([
                 "--import",
                 &config.name,
-                install_path.to_str().unwrap(),
+                install_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid install path"))?,
                 "orca-rootfs.tar.gz", // TODO: bundle this or download it
                 "--version",
                 "2",
