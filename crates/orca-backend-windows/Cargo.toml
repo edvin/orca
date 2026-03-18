@@ -1,0 +1,18 @@
+[package]
+name = "orca-backend-windows"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Windows backend for Orca — manages WSL2 distro with Docker/Podman inside"
+
+[dependencies]
+orca-core.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+bollard = "0.18"
+tokio-stream.workspace = true
+chrono.workspace = true
+dirs.workspace = true

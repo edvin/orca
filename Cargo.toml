@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "crates/orca-core",
     "crates/orca-backend-native",
+    "crates/orca-backend-macos",
+    "crates/orca-backend-windows",
     "crates/orca-daemon",
     "crates/orca-cli",
     "src-tauri",

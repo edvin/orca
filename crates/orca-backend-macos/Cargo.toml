@@ -1,0 +1,18 @@
+[package]
+name = "orca-backend-macos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "macOS backend for Orca — manages Lima/vfkit VMs with Docker/Podman inside"
+
+[dependencies]
+orca-core.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+bollard = "0.18"
+tokio-stream.workspace = true
+chrono.workspace = true
+dirs.workspace = true
