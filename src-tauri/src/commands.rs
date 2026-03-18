@@ -98,11 +98,67 @@ pub async fn remove_container(id: String) -> Result<(), String> {
     delete(&format!("/containers/{id}")).await
 }
 
+// --- Container Logs ---
+
+#[tauri::command]
+pub async fn container_logs(
+    id: String,
+    tail: Option<u32>,
+) -> Result<Vec<String>, String> {
+    // Fetch logs as SSE, collect lines (non-streaming for Tauri command).
+    // For follow mode we'd use Tauri events, but batch fetch is fine for initial view.
+    let resp = client()
+        .get(format!(
+            "{DAEMON_URL}/containers/{id}/logs?follow=false&tail={}",
+            tail.unwrap_or(500)
+        ))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read logs: {e}"))?;
+
+    // Parse SSE format: lines starting with "data:" contain the log lines
+    let lines: Vec<String> = resp
+        .lines()
+        .filter_map(|line| line.strip_prefix("data:"))
+        .map(|s| s.to_string())
+        .collect();
+
+    Ok(lines)
+}
+
 // --- Images ---
 
 #[tauri::command]
 pub async fn list_images() -> Result<serde_json::Value, String> {
     get_json("/images").await
+}
+
+#[tauri::command]
+pub async fn pull_image(reference: String) -> Result<serde_json::Value, String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}/images/pull"))
+        .json(&serde_json::json!({ "reference": reference }))
+        .send()
+        .await
+        .map_err(|e| format!("Pull failed: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read pull response: {e}"))?;
+
+    // Parse SSE events and return the last status
+    let events: Vec<serde_json::Value> = resp
+        .lines()
+        .filter_map(|line| line.strip_prefix("data:"))
+        .filter_map(|s| serde_json::from_str(s).ok())
+        .collect();
+
+    Ok(serde_json::json!({
+        "events": events,
+        "success": true,
+    }))
 }
 
 #[tauri::command]

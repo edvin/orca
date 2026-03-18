@@ -1,14 +1,18 @@
+use std::convert::Infallible;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{
+        IntoResponse,
+        sse::{Event, KeepAlive, Sse},
+    },
     routing::{delete, get, post},
 };
-use serde::Serialize;
-
+use serde::{Deserialize, Serialize};
 use vessel_core::compose;
 use vessel_core::image::ImageManager;
 use vessel_core::machine::MachineManager;
@@ -57,10 +61,12 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}/kill", post(kill_container))
         .route("/containers/{id}", delete(remove_container))
         .route("/containers/{id}/stats", get(container_stats))
+        .route("/containers/{id}/logs", get(container_logs_sse))
         // Images
         .route("/images", get(list_images))
         .route("/images/{id}", get(inspect_image))
         .route("/images/{id}", delete(remove_image))
+        .route("/images/pull", post(pull_image))
         // Volumes
         .route("/volumes", get(list_volumes))
         .route("/volumes/{name}", get(inspect_volume))
@@ -165,6 +171,37 @@ async fn container_stats(
     Ok(Json(stats))
 }
 
+// --- Container Logs (SSE) ---
+
+#[derive(Deserialize)]
+struct LogsQuery {
+    tail: Option<u32>,
+    follow: Option<bool>,
+}
+
+async fn container_logs_sse(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(query): Query<LogsQuery>,
+) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let follow = query.follow.unwrap_or(true);
+    let tail = query.tail.or(Some(200));
+
+    let mut rx = state.backend.container_logs(&id, follow, tail).await?;
+
+    let stream = async_stream::stream! {
+        while let Some(line) = rx.recv().await {
+            yield Ok(Event::default().data(line));
+        }
+    };
+
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keepalive"),
+    ))
+}
+
 // --- Images ---
 
 async fn list_images(
@@ -188,6 +225,34 @@ async fn remove_image(
 ) -> Result<impl IntoResponse, ApiError> {
     ImageManager::remove(state.backend.as_ref(), &id, false).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct PullRequest {
+    reference: String,
+}
+
+async fn pull_image(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<PullRequest>,
+) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let mut rx = ImageManager::pull(state.backend.as_ref(), &body.reference).await?;
+
+    let stream = async_stream::stream! {
+        while let Some(progress) = rx.recv().await {
+            if let Ok(json) = serde_json::to_string(&progress) {
+                yield Ok(Event::default().data(json));
+            }
+        }
+        // Signal completion
+        yield Ok(Event::default().event("done").data("{}"));
+    };
+
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keepalive"),
+    ))
 }
 
 // --- Volumes ---

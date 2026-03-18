@@ -6,6 +6,9 @@ import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 export default function ImagesPage() {
   const [images, setImages] = createSignal<Image[]>([]);
   const [search, setSearch] = createSignal("");
+  const [pullRef, setPullRef] = createSignal("");
+  const [pulling, setPulling] = createSignal(false);
+  const [pullStatus, setPullStatus] = createSignal("");
 
   const refresh = async () => {
     try {
@@ -34,6 +37,28 @@ export default function ImagesPage() {
       await refresh();
     } catch (e) {
       console.error("Failed to remove image:", e);
+    }
+  };
+
+  const doPull = async () => {
+    const ref = pullRef().trim();
+    if (!ref) return;
+    setPulling(true);
+    setPullStatus(`Pulling ${ref}...`);
+    try {
+      await invoke("pull_image", { reference: ref });
+      setPullStatus(`Successfully pulled ${ref}`);
+      setPullRef("");
+      await refresh();
+    } catch (e) {
+      setPullStatus(`Pull failed: ${e}`);
+    }
+    setPulling(false);
+  };
+
+  const handlePullKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Enter" && !pulling()) {
+      doPull();
     }
   };
 
@@ -68,6 +93,31 @@ export default function ImagesPage() {
             Refresh
           </button>
         </div>
+      </div>
+
+      {/* Pull bar */}
+      <div style={{ "margin-bottom": "16px" }}>
+        <div class="pull-bar">
+          <input
+            class="pull-input"
+            type="text"
+            placeholder="Pull image (e.g. nginx:latest, postgres:16-alpine)"
+            value={pullRef()}
+            onInput={(e) => setPullRef(e.currentTarget.value)}
+            onKeyDown={handlePullKeyDown}
+            disabled={pulling()}
+          />
+          <button
+            class="btn btn-primary"
+            onClick={doPull}
+            disabled={pulling() || !pullRef().trim()}
+          >
+            {pulling() ? "Pulling..." : "Pull"}
+          </button>
+        </div>
+        <Show when={pullStatus()}>
+          <div class="pull-status">{pullStatus()}</div>
+        </Show>
       </div>
 
       <Show
