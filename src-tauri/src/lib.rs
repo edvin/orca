@@ -1,9 +1,16 @@
 mod commands;
+mod daemon;
 mod tray;
 
+use std::sync::Arc;
+
 pub fn run() {
+    let daemon_manager = Arc::new(daemon::DaemonManager::new());
+    let dm = daemon_manager.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .manage(daemon_manager)
         .invoke_handler(tauri::generate_handler![
             commands::get_status,
             commands::list_containers,
@@ -31,8 +38,17 @@ pub fn run() {
             commands::subscribe_events,
             commands::get_machine_info,
         ])
-        .setup(|app| {
+        .setup(move |app| {
             tray::setup_tray(app.handle())?;
+
+            // Auto-start daemon in background
+            let dm_setup = dm.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = dm_setup.start().await {
+                    tracing::warn!("Failed to auto-start daemon: {e}");
+                }
+            });
+
             Ok(())
         })
         .run(tauri::generate_context!())
