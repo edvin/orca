@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/vessel-core",
+    "crates/vessel-backend-native",
     "crates/vessel-daemon",
     "crates/vessel-cli",
     "src-tauri",
@@ -15,6 +16,8 @@ repository = "https://github.com/TODO/vessel"
 
 [workspace.dependencies]
 vessel-core = { path = "crates/vessel-core" }
+vessel-backend-native = { path = "crates/vessel-backend-native" }
+tokio-stream = "0.1"
 anyhow = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }

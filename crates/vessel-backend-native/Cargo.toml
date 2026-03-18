@@ -1,0 +1,16 @@
+[package]
+name = "vessel-backend-native"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native Linux backend for Vessel — talks to Docker/Podman over Unix socket"
+
+[dependencies]
+vessel-core.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+bollard = "0.18"
+tokio-stream.workspace = true

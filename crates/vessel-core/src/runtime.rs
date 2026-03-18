@@ -4,7 +4,6 @@
 //! The API surface is intentionally docker-compatible since podman mirrors it.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 

@@ -16,7 +16,12 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = vessel_core::config::VesselConfig::load()?;
-    let state = Arc::new(AppState::new(config));
+
+    let backend = Arc::new(vessel_backend_native::NativeBackend::connect()?);
+    let runtime_kind = backend.detect_runtime().await;
+    tracing::info!("Connected to {runtime_kind:?} runtime");
+
+    let state = Arc::new(AppState::new(config, backend));
 
     let app = Router::new()
         .nest("/api/v1", api::routes())

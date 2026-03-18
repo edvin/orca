@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 vessel-core.workspace = true
+vessel-backend-native.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 serde.workspace = true
