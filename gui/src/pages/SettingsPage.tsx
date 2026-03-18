@@ -13,6 +13,11 @@ export default function SettingsPage() {
   const [regUsername, setRegUsername] = createSignal("");
   const [regPassword, setRegPassword] = createSignal("");
 
+  // General settings
+  const [startOnLogin, setStartOnLogin] = createSignal(false);
+  const [showTrayIcon, setShowTrayIcon] = createSignal(true);
+  const [telemetry, setTelemetry] = createSignal(false);
+
   // AI settings
   const [aiProvider, setAiProvider] = createSignal<"anthropic" | "openai">("anthropic");
   const [aiApiKey, setAiApiKey] = createSignal("");
@@ -87,6 +92,47 @@ export default function SettingsPage() {
   const applyPreset = (preset: typeof REGISTRY_PRESETS[number]) => {
     setRegServer(preset.server);
     setRegName(preset.name);
+  };
+
+  const refreshGeneralSettings = async () => {
+    try {
+      const settings = (await invoke("get_general_settings")) as {
+        start_on_login: boolean;
+        show_tray_icon: boolean;
+        telemetry: boolean;
+      };
+      setStartOnLogin(settings.start_on_login);
+      setShowTrayIcon(settings.show_tray_icon);
+      setTelemetry(settings.telemetry);
+    } catch (e) {
+      console.error("Failed to load general settings:", e);
+    }
+  };
+
+  const saveGeneralSetting = async (
+    field: "start_on_login" | "show_tray_icon" | "telemetry",
+    value: boolean,
+  ) => {
+    // Optimistic update
+    const prev = { start_on_login: startOnLogin(), show_tray_icon: showTrayIcon(), telemetry: telemetry() };
+    if (field === "start_on_login") setStartOnLogin(value);
+    else if (field === "show_tray_icon") setShowTrayIcon(value);
+    else if (field === "telemetry") setTelemetry(value);
+
+    try {
+      await invoke("save_general_settings", {
+        startOnLogin: field === "start_on_login" ? value : startOnLogin(),
+        showTrayIcon: field === "show_tray_icon" ? value : showTrayIcon(),
+        telemetry: field === "telemetry" ? value : telemetry(),
+      });
+      showToast("Settings saved", "success");
+    } catch (e) {
+      // Revert on failure
+      setStartOnLogin(prev.start_on_login);
+      setShowTrayIcon(prev.show_tray_icon);
+      setTelemetry(prev.telemetry);
+      showToast(`Failed to save settings: ${e}`, "error");
+    }
   };
 
   const refreshAiSettings = async () => {
@@ -184,6 +230,7 @@ export default function SettingsPage() {
   onMount(() => {
     refresh();
     refreshRegistries();
+    refreshGeneralSettings();
     refreshAiSettings();
   });
 
@@ -209,8 +256,11 @@ export default function SettingsPage() {
                 <span class="settings-label">Start on Login</span>
                 <span class="settings-description">Automatically launch Orca when you log in</span>
               </div>
-              <div class="settings-toggle disabled">
-                <div class="toggle-track">
+              <div
+                class="settings-toggle"
+                onClick={() => saveGeneralSetting("start_on_login", !startOnLogin())}
+              >
+                <div class={`toggle-track${startOnLogin() ? " toggle-on" : ""}`}>
                   <div class="toggle-thumb" />
                 </div>
               </div>
@@ -221,16 +271,31 @@ export default function SettingsPage() {
                 <span class="settings-label">Show Tray Icon</span>
                 <span class="settings-description">Display Orca in the system tray</span>
               </div>
-              <div class="settings-toggle disabled">
-                <div class="toggle-track toggle-on">
+              <div
+                class="settings-toggle"
+                onClick={() => saveGeneralSetting("show_tray_icon", !showTrayIcon())}
+              >
+                <div class={`toggle-track${showTrayIcon() ? " toggle-on" : ""}`}>
+                  <div class="toggle-thumb" />
+                </div>
+              </div>
+            </div>
+            <div class="settings-divider" />
+            <div class="settings-row">
+              <div class="settings-row-left">
+                <span class="settings-label">Telemetry</span>
+                <span class="settings-description">Send anonymous usage statistics</span>
+              </div>
+              <div
+                class="settings-toggle"
+                onClick={() => saveGeneralSetting("telemetry", !telemetry())}
+              >
+                <div class={`toggle-track${telemetry() ? " toggle-on" : ""}`}>
                   <div class="toggle-thumb" />
                 </div>
               </div>
             </div>
           </div>
-          <p class="settings-note">
-            These settings are read-only for now. Edit the config file directly to change them.
-          </p>
         </div>
 
         {/* Runtime Section */}

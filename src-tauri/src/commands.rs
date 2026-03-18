@@ -835,6 +835,38 @@ pub async fn ai_ask(
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+// --- General Settings ---
+
+#[tauri::command]
+pub async fn get_general_settings() -> Result<serde_json::Value, String> {
+    get_json("/settings/general").await
+}
+
+#[tauri::command]
+pub async fn save_general_settings(
+    start_on_login: bool,
+    show_tray_icon: bool,
+    telemetry: bool,
+) -> Result<(), String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}/settings/general"))
+        .json(&serde_json::json!({
+            "start_on_login": start_on_login,
+            "show_tray_icon": show_tray_icon,
+            "telemetry": telemetry,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to save general settings: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Failed to save general settings: {body}"))
+    }
+}
+
 #[tauri::command]
 pub async fn save_ai_settings(
     provider: String,

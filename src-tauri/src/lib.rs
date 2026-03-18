@@ -73,6 +73,8 @@ pub fn run() {
             commands::list_templates,
             commands::deploy_template,
             commands::ai_ask,
+            commands::get_general_settings,
+            commands::save_general_settings,
             commands::save_ai_settings,
             commands::get_ai_settings,
         ])

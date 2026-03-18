@@ -15,40 +15,51 @@ use crate::WindowsBackend;
 
 impl MachineManager for WindowsBackend {
     async fn create(&self, config: MachineConfig) -> anyhow::Result<MachineInfo> {
-        // Import a minimal Linux rootfs as a WSL2 distro
-        // The rootfs tarball should be bundled with Orca or downloaded
-        let install_path = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Default\\AppData\\Local"))
-            .join("Orca")
-            .join(&config.name);
+        // Strategy: Use wsl --install -d Ubuntu-24.04 for a pre-built distro.
+        // This is much simpler than importing a custom rootfs — no tarball needed,
+        // downloads directly from Microsoft's servers, and gives us a full Ubuntu with apt.
 
-        tokio::fs::create_dir_all(&install_path).await?;
+        let distro_name = &config.name;
 
-        // For now, assume the distro is already imported or use wsl --install
+        // Check if distro already exists
+        let existing = self.list().await?;
+        if existing.iter().any(|m| m.name == *distro_name) {
+            anyhow::bail!("WSL2 distro '{distro_name}' already exists");
+        }
+
+        // Install Ubuntu as the base distro
+        // wsl --install -d Ubuntu-24.04 --no-launch
+        tracing::info!("Installing WSL2 distro '{distro_name}'...");
         let output = Command::new("wsl.exe")
-            .args([
-                "--import",
-                &config.name,
-                install_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid install path"))?,
-                "orca-rootfs.tar.gz", // TODO: bundle this or download it
-                "--version",
-                "2",
-            ])
+            .args(["--install", "-d", "Ubuntu-24.04", "--no-launch"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
             .await?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Failed to create WSL2 distro: {stderr}");
+            // Fallback: try without version
+            let output2 = Command::new("wsl.exe")
+                .args(["--install", "-d", "Ubuntu", "--no-launch"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+                .await?;
+
+            if !output2.status.success() {
+                let stderr = String::from_utf8_lossy(&output2.stderr);
+                anyhow::bail!("Failed to install WSL2 distro: {stderr}");
+            }
         }
 
         // Configure memory and CPU limits via .wslconfig
         // (WSL2 uses a global config, not per-distro — this is a limitation)
         self.configure_wsl_resources(&config).await?;
 
-        // Install container runtime and configure DNS inside the distro
+        // Start the distro and install container runtime
+        wsl_exec(distro_name, "echo 'Distro started'").await?;
+
+        // Install container runtime
         let runtime_install = match config.runtime {
             RuntimeKind::Podman => {
                 "apt-get update -qq && apt-get install -y -qq podman"
@@ -57,12 +68,12 @@ impl MachineManager for WindowsBackend {
                 "curl -fsSL https://get.docker.com | sh"
             }
         };
-        wsl_exec(&config.name, runtime_install).await?;
+        wsl_exec(distro_name, runtime_install).await?;
 
         // Set up host.docker.internal DNS
         // WSL2 provides the host IP via /etc/resolv.conf nameserver
         wsl_exec(
-            &config.name,
+            distro_name,
             r#"HOST_IP=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}')
             if ! grep -q host.docker.internal /etc/hosts; then
                 echo "$HOST_IP host.docker.internal" >> /etc/hosts
@@ -72,19 +83,19 @@ impl MachineManager for WindowsBackend {
 
         // Configure Docker daemon for DNS and port forwarding
         wsl_exec(
-            &config.name,
+            distro_name,
             r#"mkdir -p /etc/docker
-            cat > /etc/docker/daemon.json << 'DAEMONEOF'
+            cat > /etc/docker/daemon.json << 'EOF'
             {
                 "iptables": true,
                 "ip-forward": true,
                 "dns": ["8.8.8.8", "8.8.4.4"]
             }
-            DAEMONEOF"#,
+            EOF"#,
         )
         .await?;
 
-        self.inspect(&config.name).await
+        self.inspect(distro_name).await
     }
 
     async fn start(&self, name: &str) -> anyhow::Result<()> {

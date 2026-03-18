@@ -161,6 +161,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/templates/{id}/deploy", post(deploy_template))
         // AI
         .route("/ai/ask", post(ai_ask))
+        .route("/settings/general", get(get_general_settings).post(save_general_settings))
         .route("/settings/ai", post(save_ai_settings))
         .route("/settings/ai", get(get_ai_settings))
         // Agent APIs (MCP + OpenAI-compatible)
@@ -1526,6 +1527,38 @@ async fn ai_ask(
         answer,
         suggestions: vec![],
     }))
+}
+
+// --- General Settings ---
+
+#[derive(Deserialize)]
+struct GeneralSettingsRequest {
+    start_on_login: bool,
+    show_tray_icon: bool,
+    telemetry: bool,
+}
+
+async fn get_general_settings(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.blocking_lock();
+    Ok(Json(serde_json::json!({
+        "start_on_login": config.start_on_login,
+        "show_tray_icon": config.show_tray_icon,
+        "telemetry": config.telemetry,
+    })))
+}
+
+async fn save_general_settings(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<GeneralSettingsRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.blocking_lock();
+    config.start_on_login = body.start_on_login;
+    config.show_tray_icon = body.show_tray_icon;
+    config.telemetry = body.telemetry;
+    config.save().map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 // --- AI Settings ---
