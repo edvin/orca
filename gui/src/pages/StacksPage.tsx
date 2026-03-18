@@ -206,8 +206,12 @@ export default function StacksPage() {
               const runningCount = () =>
                 stack.services.filter((s) => s.state === "Running").length;
 
+              const allRunning = () =>
+                stack.services.length > 0 &&
+                runningCount() === stack.services.length;
+
               return (
-                <div class="stack-card">
+                <div class={`stack-card ${allRunning() ? "stack-card-healthy" : ""}`}>
                   <div
                     class="stack-header"
                     onClick={() => toggleExpand(stack.name)}
@@ -219,7 +223,26 @@ export default function StacksPage() {
                         &#9654;
                       </span>
                       <div>
-                        <div class="stack-name">{stack.name}</div>
+                        <div class="stack-name">
+                          {stack.name}
+                          {/* Service health dots */}
+                          <span class="service-dots" style={{ "margin-left": "10px", display: "inline-flex" }}>
+                            <For each={stack.services}>
+                              {(svc) => (
+                                <span
+                                  class={`service-dot ${
+                                    svc.state === "Running"
+                                      ? "service-dot-running"
+                                      : svc.state === "Exited"
+                                      ? "service-dot-stopped"
+                                      : "service-dot-other"
+                                  }`}
+                                  title={`${svc.name}: ${svc.state}`}
+                                />
+                              )}
+                            </For>
+                          </span>
+                        </div>
                         <div class="stack-meta">
                           {runningCount()}/{stack.services.length} services
                           running

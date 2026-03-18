@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show, createEffect } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../components/Toast";
+import Spinner from "../components/Spinner";
 import type {
   ClusterStatus,
   Pod,
@@ -77,7 +78,6 @@ export default function KubernetesPage() {
   };
 
   createEffect(() => {
-    // Re-fetch when namespace or tab changes
     selectedNs();
     tab();
     refreshWorkloads();
@@ -201,13 +201,21 @@ export default function KubernetesPage() {
     }
   };
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "pods", label: "Pods" },
-    { id: "deployments", label: "Deployments" },
-    { id: "services", label: "Services" },
-    { id: "ingresses", label: "Ingresses" },
-    { id: "storage", label: "Storage" },
+  const tabs: { id: Tab; label: string; icon: string }[] = [
+    { id: "pods", label: "Pods", icon: "\u2B22" },
+    { id: "deployments", label: "Deployments", icon: "\u25A6" },
+    { id: "services", label: "Services", icon: "\u29BF" },
+    { id: "ingresses", label: "Ingresses", icon: "\u21C4" },
+    { id: "storage", label: "Storage", icon: "\u25A8" },
   ];
+
+  const emptyMessages: Record<Tab, { title: string; desc: string }> = {
+    pods: { title: "No pods in this namespace", desc: "Pods will appear here when you deploy workloads to this namespace." },
+    deployments: { title: "No deployments in this namespace", desc: "Create a deployment to manage replicated pods." },
+    services: { title: "No services in this namespace", desc: "Services provide stable networking endpoints for your pods." },
+    ingresses: { title: "No ingresses in this namespace", desc: "Ingresses route external HTTP traffic to your services via Traefik." },
+    storage: { title: "No storage resources", desc: "Persistent Volume Claims will appear when workloads request storage." },
+  };
 
   return (
     <div>
@@ -218,162 +226,158 @@ export default function KubernetesPage() {
         </button>
       </div>
 
-      {/* Cluster Status Card */}
-      <div style={{
-        background: "#161b22",
-        border: "1px solid #30363d",
-        "border-radius": "8px",
-        padding: "20px",
-        "margin-bottom": "20px",
-      }}>
-        <div style={{
-          display: "flex",
-          "align-items": "center",
-          "justify-content": "space-between",
-          "margin-bottom": "16px",
-        }}>
-          <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-            <span style={{
-              width: "10px",
-              height: "10px",
-              "border-radius": "50%",
-              background: status()?.running ? "#3fb950" : status()?.enabled ? "#d29922" : "#484f58",
-              display: "inline-block",
-            }} />
-            <span style={{ "font-size": "16px", "font-weight": "600", color: "#e6edf3" }}>
-              Cluster Status
-            </span>
-            <span style={{ color: "#8b949e", "font-size": "13px" }}>
-              {status()?.running ? "Running" : status()?.enabled ? "Stopped" : "Not installed"}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <Show when={status()?.running && status()?.traefik_dashboard}>
-              <a
-                href={status()!.traefik_dashboard!}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="btn"
-                style={{ "text-decoration": "none" }}
-              >
-                Traefik Dashboard
-              </a>
-            </Show>
-            <Show when={!status()?.running}>
+      {/* Hero Card: Not installed / Enabling */}
+      <Show when={status() && !status()!.running}>
+        <div class="hero-card">
+          <Show when={enabling()}>
+            <div class="hero-spinner">
+              <Spinner />
+              <div class="hero-title" style={{ "font-size": "20px" }}>Setting up cluster...</div>
+              <div class="hero-subtitle" style={{ "margin-bottom": "0" }}>
+                Installing k3s and configuring Traefik ingress. This may take a minute.
+              </div>
+            </div>
+          </Show>
+          <Show when={!enabling()}>
+            <div style={{ position: "relative" }}>
+              <div style={{ "font-size": "48px", "margin-bottom": "16px", opacity: "0.6" }}>{"\u2638"}</div>
+              <div class="hero-title">Kubernetes</div>
+              <div class="hero-subtitle">
+                Run a local Kubernetes cluster powered by k3s with Traefik ingress.
+                Deploy, scale, and manage containerized workloads with a production-grade orchestrator.
+              </div>
               <button
-                class="btn btn-primary"
+                class="btn btn-primary btn-hero"
                 onClick={handleEnable}
-                disabled={enabling()}
               >
-                {enabling() ? "Enabling..." : "Enable Kubernetes"}
+                Enable Kubernetes
               </button>
-            </Show>
-            <Show when={status()?.running}>
+            </div>
+          </Show>
+        </div>
+      </Show>
+
+      {/* Hero Card: Running */}
+      <Show when={status()?.running}>
+        <div class="hero-card hero-card-running">
+          <div style={{
+            display: "flex",
+            "align-items": "center",
+            "justify-content": "space-between",
+            "margin-bottom": "20px",
+            position: "relative",
+          }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+              <span style={{
+                width: "10px",
+                height: "10px",
+                "border-radius": "50%",
+                background: "#3fb950",
+                display: "inline-block",
+                "box-shadow": "0 0 8px #3fb95044",
+              }} />
+              <span style={{ "font-size": "18px", "font-weight": "600", color: "#e6edf3" }}>
+                Cluster Running
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Show when={status()?.traefik_dashboard}>
+                <a
+                  href={status()!.traefik_dashboard!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn"
+                  style={{ "text-decoration": "none" }}
+                >
+                  Traefik Dashboard
+                </a>
+              </Show>
               <button class="btn btn-danger" onClick={handleReset}>
                 Reset
               </button>
               <button class="btn btn-danger" onClick={handleDisable}>
                 Disable
               </button>
-            </Show>
+            </div>
           </div>
-        </div>
 
-        <Show when={status()?.running}>
-          <div style={{
-            display: "grid",
-            "grid-template-columns": "repeat(4, 1fr)",
-            gap: "16px",
-          }}>
-            <div style={statCardStyle()}>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>
-                Version
-              </div>
-              <div style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>
-                {status()?.version || "-"}
-              </div>
+          <div class="hero-status-grid">
+            <div class="hero-stat">
+              <div class="hero-stat-label">Version</div>
+              <div class="hero-stat-value">{status()?.version || "-"}</div>
             </div>
-            <div style={statCardStyle()}>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>
-                Node
-              </div>
-              <div style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>
-                {status()?.node_name || "-"}
-              </div>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>
-                {status()?.node_status || ""}
-              </div>
+            <div class="hero-stat">
+              <div class="hero-stat-label">Node</div>
+              <div class="hero-stat-value">{status()?.node_name || "-"}</div>
+              <div class="hero-stat-sub">{status()?.node_status || ""}</div>
             </div>
-            <div style={statCardStyle()}>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>
-                Pods Running
-              </div>
-              <div style={{ color: "#3fb950", "font-size": "18px", "font-weight": "600" }}>
+            <div class="hero-stat">
+              <div class="hero-stat-label">Pods Running</div>
+              <div class="hero-stat-value" style={{ color: "#3fb950" }}>
                 {status()?.pods_running}
-                <span style={{ color: "#8b949e", "font-size": "13px", "font-weight": "400" }}>
+                <span style={{ color: "#8b949e", "font-size": "14px", "font-weight": "400" }}>
                   {" / "}{status()?.pods_total}
                 </span>
               </div>
             </div>
-            <div style={statCardStyle()}>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>
-                Namespaces
-              </div>
-              <div style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>
-                {namespaces().length}
-              </div>
+            <div class="hero-stat">
+              <div class="hero-stat-label">Namespaces</div>
+              <div class="hero-stat-value">{namespaces().length}</div>
             </div>
           </div>
-        </Show>
-      </div>
+        </div>
+      </Show>
 
-      {/* Workload area — only when running */}
+      {/* Status loading state */}
+      <Show when={!status()}>
+        <div class="hero-card">
+          <div class="hero-spinner">
+            <Spinner />
+            <div style={{ color: "#8b949e", "font-size": "14px" }}>Loading cluster status...</div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Workload area */}
       <Show when={status()?.running}>
         {/* Namespace selector + Tabs */}
         <div style={{
           display: "flex",
           "align-items": "center",
           gap: "16px",
-          "margin-bottom": "16px",
+          "margin-bottom": "0",
         }}>
           <label style={{ color: "#8b949e", "font-size": "13px" }}>Namespace:</label>
           <select
             value={selectedNs()}
             onChange={(e) => setSelectedNs(e.currentTarget.value)}
-            style={{
-              background: "#0d1117",
-              color: "#e6edf3",
-              border: "1px solid #30363d",
-              "border-radius": "6px",
-              padding: "6px 10px",
-              "font-size": "13px",
-              outline: "none",
-            }}
+            class="form-select"
+            style={{ padding: "6px 28px 6px 10px", "font-size": "13px", "min-width": "140px" }}
           >
             <For each={namespaces()}>
               {(ns) => <option value={ns.name}>{ns.name}</option>}
             </For>
           </select>
+        </div>
 
-          <div style={{ display: "flex", gap: "4px", "margin-left": "auto" }}>
-            <For each={tabs}>
-              {(t) => (
-                <button
-                  class={`btn ${tab() === t.id ? "btn-primary" : ""}`}
-                  style={{ "font-size": "12px", padding: "5px 12px" }}
-                  onClick={() => setTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              )}
-            </For>
-          </div>
+        {/* Tab bar */}
+        <div class="tab-bar" style={{ "margin-top": "16px" }}>
+          <For each={tabs}>
+            {(t) => (
+              <button
+                class={`tab-item ${tab() === t.id ? "active" : ""}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.label}
+              </button>
+            )}
+          </For>
         </div>
 
         {/* Loading indicator */}
         <Show when={loading()}>
           <div style={{ color: "#8b949e", "text-align": "center", padding: "20px" }}>
-            Loading...
+            <Spinner />
           </div>
         </Show>
 
@@ -381,7 +385,12 @@ export default function KubernetesPage() {
         <Show when={tab() === "pods" && !loading()}>
           <Show
             when={pods().length > 0}
-            fallback={<div class="empty"><p class="empty-title">No pods in this namespace</p></div>}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.pods.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.pods.desc}</div>
+              </div>
+            }
           >
             <table class="table">
               <thead>
@@ -440,7 +449,12 @@ export default function KubernetesPage() {
         <Show when={tab() === "deployments" && !loading()}>
           <Show
             when={deployments().length > 0}
-            fallback={<div class="empty"><p class="empty-title">No deployments in this namespace</p></div>}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.deployments.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.deployments.desc}</div>
+              </div>
+            }
           >
             <table class="table">
               <thead>
@@ -509,7 +523,12 @@ export default function KubernetesPage() {
         <Show when={tab() === "services" && !loading()}>
           <Show
             when={services().length > 0}
-            fallback={<div class="empty"><p class="empty-title">No services in this namespace</p></div>}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.services.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.services.desc}</div>
+              </div>
+            }
           >
             <table class="table">
               <thead>
@@ -562,7 +581,12 @@ export default function KubernetesPage() {
         <Show when={tab() === "ingresses" && !loading()}>
           <Show
             when={ingresses().length > 0}
-            fallback={<div class="empty"><p class="empty-title">No ingresses in this namespace</p></div>}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.ingresses.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.ingresses.desc}</div>
+              </div>
+            }
           >
             <table class="table">
               <thead>
@@ -596,7 +620,12 @@ export default function KubernetesPage() {
           </h3>
           <Show
             when={pvcs().length > 0}
-            fallback={<div class="empty" style={{ "margin-bottom": "24px" }}><p class="empty-title">No PVCs in this namespace</p></div>}
+            fallback={
+              <div class="empty-state-tab" style={{ "margin-bottom": "24px", padding: "32px 20px" }}>
+                <div class="empty-state-tab-title">No PVCs in this namespace</div>
+                <div class="empty-state-tab-desc">{emptyMessages.storage.desc}</div>
+              </div>
+            }
           >
             <table class="table" style={{ "margin-bottom": "24px" }}>
               <thead>
@@ -649,7 +678,11 @@ export default function KubernetesPage() {
           </h3>
           <Show
             when={pvs().length > 0}
-            fallback={<div class="empty"><p class="empty-title">No persistent volumes</p></div>}
+            fallback={
+              <div class="empty-state-tab" style={{ padding: "32px 20px" }}>
+                <div class="empty-state-tab-title">No persistent volumes</div>
+              </div>
+            }
           >
             <table class="table">
               <thead>
@@ -751,13 +784,4 @@ export default function KubernetesPage() {
       </Show>
     </div>
   );
-}
-
-function statCardStyle() {
-  return {
-    background: "#0d1117",
-    border: "1px solid #30363d",
-    "border-radius": "6px",
-    padding: "12px 16px",
-  };
 }

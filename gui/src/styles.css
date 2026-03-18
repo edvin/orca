@@ -1246,3 +1246,307 @@ body {
   font-family: inherit;
   cursor: pointer;
 }
+
+/* ==================== Premium Button Variants ==================== */
+.btn-lg {
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.btn-hero {
+  padding: 14px 36px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 10px;
+  letter-spacing: 0.2px;
+  box-shadow: 0 4px 16px rgba(35, 134, 54, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-hero:hover {
+  box-shadow: 0 6px 24px rgba(35, 134, 54, 0.45);
+  transform: translateY(-1px);
+}
+
+/* ==================== Resource Bars ==================== */
+.resource-bar {
+  height: 4px;
+  background: #21262d;
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.resource-bar-md {
+  height: 8px;
+  min-width: 100px;
+  border-radius: 4px;
+}
+
+.resource-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.resource-bar-fill-green { background: linear-gradient(90deg, #238636, #3fb950); }
+.resource-bar-fill-yellow { background: linear-gradient(90deg, #9e6a03, #d29922); }
+.resource-bar-fill-red { background: linear-gradient(90deg, #da3633, #f85149); }
+
+.resource-bar-label {
+  font-size: 11px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+/* ==================== Tab Bar Redesign ==================== */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid #21262d;
+  gap: 0;
+  margin-bottom: 16px;
+}
+
+.tab-item {
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  color: #8b949e;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+.tab-item:hover {
+  color: #c9d1d9;
+}
+
+.tab-item.active {
+  color: #58a6ff;
+  border-bottom-color: #58a6ff;
+}
+
+/* ==================== Hero Card (K8s) ==================== */
+.hero-card {
+  background: linear-gradient(135deg, #161b22 0%, #1a2332 50%, #161b22 100%);
+  border: 1px solid #21262d;
+  border-radius: 12px;
+  padding: 48px 40px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, #1f6feb08 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.hero-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #1f6feb22, transparent);
+}
+
+.hero-card-running {
+  background: linear-gradient(135deg, #0d1117 0%, #0f1d15 50%, #0d1117 100%);
+  border-color: #23883622;
+}
+
+.hero-card-running::before {
+  background: radial-gradient(circle, #3fb95008 0%, transparent 60%);
+}
+
+.hero-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #f0f6fc;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+  position: relative;
+}
+
+.hero-subtitle {
+  font-size: 15px;
+  color: #8b949e;
+  margin-bottom: 32px;
+  line-height: 1.5;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  position: relative;
+}
+
+.hero-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+  position: relative;
+}
+
+.hero-stat {
+  background: #0d111780;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 16px;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hero-stat:hover {
+  border-color: #30363d;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.hero-stat-label {
+  font-size: 11px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.hero-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #e6edf3;
+}
+
+.hero-stat-sub {
+  font-size: 12px;
+  color: #8b949e;
+  margin-top: 2px;
+}
+
+.hero-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+}
+
+.hero-spinner .spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+/* ==================== Service Health Dots ==================== */
+.service-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.service-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transition: background 0.3s;
+}
+
+.service-dot-running { background: #3fb950; }
+.service-dot-stopped { background: #f85149; }
+.service-dot-other { background: #d29922; }
+
+/* ==================== Stack Card Glow ==================== */
+.stack-card-healthy {
+  border-color: #23883644;
+  box-shadow: 0 0 12px #3fb95008;
+}
+
+.stack-card-healthy:hover {
+  border-color: #23883666;
+  box-shadow: 0 0 20px #3fb95012;
+}
+
+/* ==================== Inline Resource Display ==================== */
+.inline-resources {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 11px;
+  color: #8b949e;
+}
+
+.inline-resource {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ==================== K8s Empty States ==================== */
+.empty-state-tab {
+  text-align: center;
+  padding: 48px 20px;
+  color: #8b949e;
+}
+
+.empty-state-tab-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-state-tab-title {
+  font-size: 15px;
+  color: #c9d1d9;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.empty-state-tab-desc {
+  font-size: 13px;
+  color: #8b949e;
+  max-width: 360px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+/* ==================== Stats Panel Progress Bars ==================== */
+.stat-card-bar {
+  margin-top: 10px;
+}
+
+.stat-card-bar .resource-bar {
+  height: 6px;
+  min-width: unset;
+  border-radius: 3px;
+}
+
+.stat-card-bar .resource-bar-fill {
+  border-radius: 3px;
+}
+
+/* ==================== Animated shimmer for loading stats ==================== */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.stat-shimmer {
+  background: linear-gradient(90deg, #21262d 25%, #30363d 50%, #21262d 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+  height: 20px;
+  width: 80px;
+}
