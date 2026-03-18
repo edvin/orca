@@ -917,3 +917,20 @@ pub async fn get_daemon_info() -> Result<serde_json::Value, String> {
         "config_path": "~/.config/orca/config.json",
     }))
 }
+
+#[tauri::command]
+pub async fn check_for_updates(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let updater = app.updater().map_err(|e| format!("Updater not available: {e}"))?;
+
+    match updater.check().await {
+        Ok(Some(update)) => Ok(serde_json::json!({
+            "available": true,
+            "version": update.version,
+            "body": update.body,
+        })),
+        Ok(None) => Ok(serde_json::json!({
+            "available": false,
+        })),
+        Err(e) => Err(format!("Update check failed: {e}")),
+    }
+}

@@ -10,6 +10,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(daemon_manager)
         .invoke_handler(tauri::generate_handler![
             commands::get_status,
@@ -79,6 +80,7 @@ pub fn run() {
             commands::get_ai_settings,
             commands::start_daemon,
             commands::get_daemon_info,
+            commands::check_for_updates,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;
@@ -88,6 +90,24 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = dm_setup.start().await {
                     tracing::warn!("Failed to auto-start daemon: {e}");
+                }
+            });
+
+            // Check for updates in background
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Wait a bit before checking
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                match app_handle.updater().expect("updater not configured").check().await {
+                    Ok(Some(update)) => {
+                        tracing::info!("Update available: v{}", update.version);
+                    }
+                    Ok(None) => {
+                        tracing::debug!("No updates available");
+                    }
+                    Err(e) => {
+                        tracing::debug!("Update check failed (expected on dev): {e}");
+                    }
                 }
             });
 
