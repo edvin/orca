@@ -6,3 +6,4 @@ gui/dist/
 *.swo
 .DS_Store
 .claude/worktrees/
+src-tauri/gen/
