@@ -76,6 +76,9 @@ impl ContainerRuntime for BollardRuntime {
                 }),
                 network_mode: opts.network.clone(),
                 auto_remove: Some(opts.remove_on_exit),
+                nano_cpus: opts.cpu_limit.map(|c| (c * 1_000_000_000.0) as i64),
+                memory: opts.memory_limit.map(|m| m as i64),
+                memory_swap: opts.memory_swap,
                 ..Default::default()
             }),
             ..Default::default()

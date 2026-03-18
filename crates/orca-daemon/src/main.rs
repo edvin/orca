@@ -5,6 +5,7 @@ use std::sync::Arc;
 use axum::Router;
 use clap::Parser;
 use tokio::sync::broadcast;
+use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
 mod api;
@@ -65,6 +66,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .nest("/api/v1", api::routes())
+        .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     #[cfg(unix)]

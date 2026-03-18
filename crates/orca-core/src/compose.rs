@@ -141,3 +141,213 @@ pub trait ComposeRunner {
     /// Run `docker compose pull` in the project directory.
     async fn compose_pull(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    /// Helper: build a Container with compose labels.
+    fn make_container(
+        id: &str,
+        name: &str,
+        image: &str,
+        state: ContainerState,
+        project: Option<&str>,
+        service: Option<&str>,
+        working_dir: Option<&str>,
+        config_file: Option<&str>,
+    ) -> Container {
+        let mut labels = HashMap::new();
+        if let Some(p) = project {
+            labels.insert("com.docker.compose.project".into(), p.into());
+        }
+        if let Some(s) = service {
+            labels.insert("com.docker.compose.service".into(), s.into());
+        }
+        if let Some(w) = working_dir {
+            labels.insert("com.docker.compose.project.working_dir".into(), w.into());
+        }
+        if let Some(c) = config_file {
+            labels.insert("com.docker.compose.project.config_files".into(), c.into());
+        }
+
+        Container {
+            id: id.into(),
+            name: name.into(),
+            image: image.into(),
+            state,
+            ports: vec![],
+            labels,
+            created_at: "2025-01-01T00:00:00Z".into(),
+            exit_code: None,
+            error: None,
+            oom_killed: None,
+            started_at: None,
+            finished_at: None,
+            command: None,
+            env: None,
+            mounts: None,
+        }
+    }
+
+    /// Shorthand: compose-labeled container with common defaults.
+    fn compose_container(
+        id: &str,
+        project: &str,
+        service: &str,
+        state: ContainerState,
+    ) -> Container {
+        make_container(
+            id,
+            &format!("{}-{}-1", project, service),
+            &format!("{}:latest", service),
+            state,
+            Some(project),
+            Some(service),
+            Some(&format!("/home/user/{}", project)),
+            Some(&format!("/home/user/{}/docker-compose.yml", project)),
+        )
+    }
+
+    #[test]
+    fn empty_container_list_returns_empty_projects() {
+        let projects = extract_projects(&[]);
+        assert!(projects.is_empty());
+    }
+
+    #[test]
+    fn containers_without_compose_labels_are_ignored() {
+        let containers = vec![
+            make_container("c1", "nginx", "nginx:latest", ContainerState::Running, None, None, None, None),
+            make_container("c2", "redis", "redis:latest", ContainerState::Running, None, None, None, None),
+        ];
+        let projects = extract_projects(&containers);
+        assert!(projects.is_empty());
+    }
+
+    #[test]
+    fn containers_with_same_project_are_grouped() {
+        let containers = vec![
+            compose_container("c1", "myapp", "web", ContainerState::Running),
+            compose_container("c2", "myapp", "db", ContainerState::Running),
+        ];
+        let projects = extract_projects(&containers);
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "myapp");
+        assert_eq!(projects[0].services.len(), 2);
+    }
+
+    #[test]
+    fn multiple_projects_are_separated() {
+        let containers = vec![
+            compose_container("c1", "app1", "web", ContainerState::Running),
+            compose_container("c2", "app2", "api", ContainerState::Exited),
+        ];
+        let projects = extract_projects(&containers);
+        assert_eq!(projects.len(), 2);
+        // BTreeMap ensures alphabetical order
+        assert_eq!(projects[0].name, "app1");
+        assert_eq!(projects[1].name, "app2");
+    }
+
+    #[test]
+    fn status_running_when_all_services_running() {
+        let containers = vec![
+            compose_container("c1", "proj", "web", ContainerState::Running),
+            compose_container("c2", "proj", "db", ContainerState::Running),
+            compose_container("c3", "proj", "cache", ContainerState::Running),
+        ];
+        let projects = extract_projects(&containers);
+        assert_eq!(projects[0].status, ProjectStatus::Running);
+    }
+
+    #[test]
+    fn status_partial_when_some_running() {
+        let containers = vec![
+            compose_container("c1", "proj", "web", ContainerState::Running),
+            compose_container("c2", "proj", "db", ContainerState::Exited),
+        ];
+        let projects = extract_projects(&containers);
+        assert_eq!(projects[0].status, ProjectStatus::Partial);
+    }
+
+    #[test]
+    fn status_stopped_when_none_running() {
+        let containers = vec![
+            compose_container("c1", "proj", "web", ContainerState::Exited),
+            compose_container("c2", "proj", "db", ContainerState::Exited),
+        ];
+        let projects = extract_projects(&containers);
+        assert_eq!(projects[0].status, ProjectStatus::Stopped);
+    }
+
+    #[test]
+    fn working_dir_and_config_file_extracted_from_labels() {
+        let containers = vec![
+            compose_container("c1", "myproj", "web", ContainerState::Running),
+        ];
+        let projects = extract_projects(&containers);
+        assert_eq!(projects[0].working_dir.as_deref(), Some("/home/user/myproj"));
+        assert_eq!(
+            projects[0].config_file.as_deref(),
+            Some("/home/user/myproj/docker-compose.yml")
+        );
+    }
+
+    #[test]
+    fn working_dir_none_when_label_missing() {
+        let containers = vec![
+            make_container("c1", "web-1", "nginx:latest", ContainerState::Running, Some("proj"), Some("web"), None, None),
+        ];
+        let projects = extract_projects(&containers);
+        assert!(projects[0].working_dir.is_none());
+        assert!(projects[0].config_file.is_none());
+    }
+
+    #[test]
+    fn service_names_extracted_from_label() {
+        let containers = vec![
+            compose_container("c1", "proj", "frontend", ContainerState::Running),
+            compose_container("c2", "proj", "backend", ContainerState::Running),
+        ];
+        let projects = extract_projects(&containers);
+        let service_names: Vec<&str> = projects[0].services.iter().map(|s| s.name.as_str()).collect();
+        assert!(service_names.contains(&"frontend"));
+        assert!(service_names.contains(&"backend"));
+    }
+
+    #[test]
+    fn service_name_falls_back_to_container_name_without_label() {
+        let containers = vec![
+            make_container("c1", "my-container", "nginx:latest", ContainerState::Running, Some("proj"), None, None, None),
+        ];
+        let projects = extract_projects(&containers);
+        assert_eq!(projects[0].services[0].name, "my-container");
+    }
+
+    #[test]
+    fn mixed_compose_and_standalone_containers() {
+        let containers = vec![
+            compose_container("c1", "proj", "web", ContainerState::Running),
+            make_container("c2", "standalone", "redis:latest", ContainerState::Running, None, None, None, None),
+            compose_container("c3", "proj", "db", ContainerState::Running),
+        ];
+        let projects = extract_projects(&containers);
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].services.len(), 2);
+    }
+
+    #[test]
+    fn service_fields_match_container_data() {
+        let containers = vec![
+            compose_container("abc123", "proj", "web", ContainerState::Running),
+        ];
+        let projects = extract_projects(&containers);
+        let svc = &projects[0].services[0];
+        assert_eq!(svc.container_id, "abc123");
+        assert_eq!(svc.container_name, "proj-web-1");
+        assert_eq!(svc.image, "web:latest");
+        assert_eq!(svc.state, ContainerState::Running);
+    }
+}

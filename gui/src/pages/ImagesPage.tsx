@@ -4,6 +4,8 @@ import type { Image } from "../lib/types";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 import { showToast } from "../components/Toast";
 import RunContainerDialog from "../components/RunContainerDialog";
+import CopyButton from "../components/CopyButton";
+import Spinner from "../components/Spinner";
 
 export default function ImagesPage() {
   const [images, setImages] = createSignal<Image[]>([]);
@@ -18,6 +20,9 @@ export default function ImagesPage() {
   const [buildTag, setBuildTag] = createSignal("");
   const [building, setBuilding] = createSignal(false);
   const [buildLog, setBuildLog] = createSignal<string[]>([]);
+  const [showAuth, setShowAuth] = createSignal(false);
+  const [authUsername, setAuthUsername] = createSignal("");
+  const [authPassword, setAuthPassword] = createSignal("");
   const [runImage, setRunImage] = createSignal<string | null>(null);
   const [inspecting, setInspecting] = createSignal<string | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
@@ -109,9 +114,16 @@ export default function ImagesPage() {
     setPulling(true);
     setPullStatus(`Pulling ${ref_}...`);
     try {
-      await invoke("pull_image", { reference: ref_ });
+      const pullArgs: Record<string, any> = { reference: ref_ };
+      if (showAuth() && authUsername().trim() && authPassword().trim()) {
+        pullArgs.username = authUsername().trim();
+        pullArgs.password = authPassword().trim();
+      }
+      await invoke("pull_image", pullArgs);
       setPullStatus("");
       setPullRef("");
+      setAuthUsername("");
+      setAuthPassword("");
       showToast(`Pulled ${ref_}`, "success");
       await refresh();
     } catch (e) {
@@ -214,9 +226,36 @@ export default function ImagesPage() {
             onClick={doPull}
             disabled={pulling() || !pullRef().trim()}
           >
-            {pulling() ? "Pulling..." : "Pull"}
+            {pulling() ? (<><Spinner size={12} />{" Pulling..."}</>) : "Pull"}
+          </button>
+          <button
+            class="btn"
+            onClick={() => setShowAuth(!showAuth())}
+            style={{ "min-width": "60px" }}
+          >
+            {showAuth() ? "Auth \u25B2" : "Auth \u25BC"}
           </button>
         </div>
+        <Show when={showAuth()}>
+          <div style={{ display: "flex", gap: "8px", "margin-top": "8px" }}>
+            <input
+              class="form-input"
+              type="text"
+              placeholder="Username"
+              value={authUsername()}
+              onInput={(e) => setAuthUsername(e.currentTarget.value)}
+              style={{ flex: 1 }}
+            />
+            <input
+              class="form-input"
+              type="password"
+              placeholder="Password"
+              value={authPassword()}
+              onInput={(e) => setAuthPassword(e.currentTarget.value)}
+              style={{ flex: 1 }}
+            />
+          </div>
+        </Show>
         <Show when={pullStatus()}>
           <div class="pull-status">{pullStatus()}</div>
         </Show>
@@ -265,7 +304,7 @@ export default function ImagesPage() {
                 onClick={doBuild}
                 disabled={building() || !buildPath().trim()}
               >
-                {building() ? "Building..." : "Build"}
+                {building() ? (<><Spinner size={12} />{" Building..."}</>) : "Build"}
               </button>
               <button class="btn" onClick={() => setShowBuild(false)}>
                 Cancel
@@ -367,15 +406,19 @@ export default function ImagesPage() {
                       >
                         <For each={img.repo_tags}>
                           {(tag) => (
-                            <div class="mono" style={{ "line-height": "1.6" }}>
+                            <div class="mono" style={{ "line-height": "1.6", display: "flex", "align-items": "center", gap: "4px" }}>
                               {tag}
+                              <CopyButton text={tag} label="Copy image tag" />
                             </div>
                           )}
                         </For>
                       </Show>
                     </td>
                     <td class="mono" style={{ color: "#8b949e" }}>
-                      {shortId(img.id)}
+                      <span style={{ display: "inline-flex", "align-items": "center", gap: "4px" }}>
+                        {shortId(img.id)}
+                        <CopyButton text={img.id} label="Copy image ID" />
+                      </span>
                     </td>
                     <td>{formatBytes(img.size_bytes)}</td>
                     <td style={{ color: "#8b949e" }}>
@@ -407,7 +450,7 @@ export default function ImagesPage() {
                           <Show
                             when={inspectData()}
                             fallback={
-                              <span style={{ color: "#8b949e" }}>Loading image details...</span>
+                              <span style={{ color: "#8b949e" }}><Spinner size={12} />{" "}Loading image details...</span>
                             }
                           >
                             {(data) => {
@@ -420,7 +463,10 @@ export default function ImagesPage() {
                               return (
                                 <div class="card-grid">
                                   <div class="card-label">Image ID</div>
-                                  <div class="card-value mono" style={{ "font-size": "11px" }}>{imageId}</div>
+                                  <div class="card-value mono" style={{ "font-size": "11px", display: "flex", "align-items": "center", gap: "6px" }}>
+                                    {imageId}
+                                    <CopyButton text={imageId} label="Copy image ID" />
+                                  </div>
 
                                   <div class="card-label">Tags</div>
                                   <div class="card-value">

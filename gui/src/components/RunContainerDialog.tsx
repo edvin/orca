@@ -16,6 +16,8 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
   const [ports, setPorts] = createSignal("");
   const [volumes, setVolumes] = createSignal("");
   const [restartPolicy, setRestartPolicy] = createSignal("no");
+  const [cpuLimit, setCpuLimit] = createSignal("");
+  const [memoryLimit, setMemoryLimit] = createSignal("");
   const [loading, setLoading] = createSignal(false);
 
   const handleSubmit = async (e: Event) => {
@@ -45,6 +47,8 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
         ports: portLines.length > 0 ? portLines : null,
         volumes: volumeLines.length > 0 ? volumeLines : null,
         restartPolicy: restartPolicy() !== "no" ? restartPolicy() : null,
+        cpuLimit: cpuLimit().trim() ? parseFloat(cpuLimit().trim()) : null,
+        memoryLimit: memoryLimit().trim() || null,
       });
 
       showToast("Container created and started", "success");
@@ -159,6 +163,34 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                 <option value="unless-stopped">Unless Stopped</option>
                 <option value="on-failure">On Failure</option>
               </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style={{ flex: 1 }}>
+                <label class="form-label">CPU Limit</label>
+                <input
+                  class="form-input"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder="0.5"
+                  value={cpuLimit()}
+                  onInput={(e) => setCpuLimit(e.currentTarget.value)}
+                />
+                <span class="form-hint">Number of CPU cores</span>
+              </div>
+
+              <div class="form-group" style={{ flex: 1 }}>
+                <label class="form-label">Memory Limit</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="512m"
+                  value={memoryLimit()}
+                  onInput={(e) => setMemoryLimit(e.currentTarget.value)}
+                />
+                <span class="form-hint">e.g. 256m, 1g, 2g</span>
+              </div>
             </div>
           </div>
 

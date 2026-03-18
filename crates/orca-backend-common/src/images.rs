@@ -156,6 +156,59 @@ impl ImageManager for BollardRuntime {
     }
 }
 
+impl BollardRuntime {
+    /// Pull an image with registry authentication credentials.
+    pub async fn pull_with_auth(
+        &self,
+        reference: &str,
+        auth: &orca_core::image::RegistryAuth,
+    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<PullProgress>> {
+        let reference = reference.to_string();
+        let options = CreateImageOptions {
+            from_image: reference.as_str(),
+            ..Default::default()
+        };
+        let credentials = bollard::auth::DockerCredentials {
+            username: Some(auth.username.clone()),
+            password: Some(auth.password.clone()),
+            serveraddress: auth.server.clone(),
+            ..Default::default()
+        };
+        let stream = self
+            .docker
+            .create_image(Some(options), None, Some(credentials));
+        let items: Vec<_> = stream.collect().await;
+        let items: Vec<_> = items.into_iter().filter_map(|r| r.ok()).collect();
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+
+        tokio::spawn(async move {
+            for info in items {
+                let progress = PullProgress {
+                    layer: info.id.unwrap_or_default(),
+                    status: info.status.unwrap_or_default(),
+                    current: info
+                        .progress_detail
+                        .as_ref()
+                        .and_then(|d| d.current)
+                        .map(|c| c as u64)
+                        .unwrap_or(0),
+                    total: info
+                        .progress_detail
+                        .as_ref()
+                        .and_then(|d| d.total)
+                        .map(|t| t as u64)
+                        .unwrap_or(0),
+                };
+                if tx.send(progress).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+}
+
 /// Create a tar archive of the build context directory.
 async fn create_build_context(path: &str) -> anyhow::Result<Vec<u8>> {
     use std::path::Path;

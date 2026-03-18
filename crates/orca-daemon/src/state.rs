@@ -12,6 +12,7 @@ use orca_core::event::Event;
 /// for all platforms since the bollard API is the same regardless of
 /// whether the runtime is native, in a Lima VM, or in WSL2.
 pub struct AppState {
+    #[allow(dead_code)] // Will be used for settings persistence
     pub config: OrcaConfig,
     pub runtime: Arc<BollardRuntime>,
     pub k8s: Arc<K3sManager>,

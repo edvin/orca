@@ -6,6 +6,8 @@ import { showToast } from "../components/Toast";
 import LogViewer from "../components/LogViewer";
 import ExecTerminal from "../components/ExecTerminal";
 import RunContainerDialog from "../components/RunContainerDialog";
+import CopyButton from "../components/CopyButton";
+import Spinner from "../components/Spinner";
 
 export default function ContainersPage() {
   const [containers, setContainers] = createSignal<Container[]>([]);
@@ -15,6 +17,7 @@ export default function ContainersPage() {
   const [inspectData, setInspectData] = createSignal<any>(null);
   const [activeTab, setActiveTab] = createSignal<string>("stats");
   const [loading, setLoading] = createSignal(false);
+  const [actionInProgress, setActionInProgress] = createSignal<string | null>(null);
   const [showRunDialog, setShowRunDialog] = createSignal(false);
 
   const refresh = async () => {
@@ -70,6 +73,7 @@ export default function ContainersPage() {
   const doAction = async (action: string, id: string, e: MouseEvent) => {
     e.stopPropagation();
     setLoading(true);
+    setActionInProgress(id);
     try {
       await invoke(action, { id });
       showToast(`Container ${action.replace("_container", "")} successful`, "success");
@@ -78,6 +82,23 @@ export default function ContainersPage() {
       showToast(`${action} failed: ${err}`, "error");
     }
     setLoading(false);
+    setActionInProgress(null);
+  };
+
+  const doRestart = async (id: string, e: MouseEvent) => {
+    e.stopPropagation();
+    setLoading(true);
+    setActionInProgress(id);
+    try {
+      await invoke("stop_container", { id });
+      await invoke("start_container", { id });
+      showToast("Container restart successful", "success");
+      await refresh();
+    } catch (err) {
+      showToast(`Restart failed: ${err}`, "error");
+    }
+    setLoading(false);
+    setActionInProgress(null);
   };
 
   const stateClass = (state: string) => {
@@ -186,8 +207,9 @@ export default function ContainersPage() {
                     <td>
                       <span style={{ "font-weight": "500" }}>{c.name}</span>
                       <br />
-                      <span class="mono" style={{ color: "#8b949e" }}>
+                      <span class="mono" style={{ color: "#8b949e", display: "inline-flex", "align-items": "center", gap: "4px" }}>
                         {shortId(c.id)}
+                        <CopyButton text={c.id} label="Copy container ID" />
                       </span>
                     </td>
                     <td class="mono">{c.image}</td>
@@ -205,6 +227,9 @@ export default function ContainersPage() {
                         class="btn-group"
                         style={{ "justify-content": "flex-end" }}
                       >
+                        <Show when={actionInProgress() === c.id}>
+                          <Spinner />
+                        </Show>
                         <Show when={c.state !== "Running"}>
                           <button
                             class="btn btn-sm btn-primary"
@@ -225,6 +250,13 @@ export default function ContainersPage() {
                             disabled={loading()}
                           >
                             Stop
+                          </button>
+                          <button
+                            class="btn btn-sm"
+                            onClick={(e) => doRestart(c.id, e)}
+                            disabled={loading()}
+                          >
+                            Restart
                           </button>
                         </Show>
                       </div>
@@ -328,7 +360,10 @@ export default function ContainersPage() {
                             <div class="detail-body">
                               <div class="card-grid">
                                 <div class="card-label">Container ID</div>
-                                <div class="card-value mono">{c.id}</div>
+                                <div class="card-value mono" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                                  {c.id}
+                                  <CopyButton text={c.id} label="Copy full container ID" />
+                                </div>
 
                                 <div class="card-label">Image</div>
                                 <div class="card-value mono">{c.image}</div>
@@ -417,7 +452,7 @@ export default function ContainersPage() {
                                           <For each={inspectData()?.mounts || []}>
                                             {(m: any) => (
                                               <div class="mono" style={{ "font-size": "11px", "margin-left": "8px" }}>
-                                                {m.source} {"→"} {m.destination} ({m.rw ? "rw" : "ro"})
+                                                {m.source} {"\u2192"} {m.destination} ({m.rw ? "rw" : "ro"})
                                               </div>
                                             )}
                                           </For>

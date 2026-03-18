@@ -82,6 +82,12 @@ pub struct ContainerCreateOpts {
     pub network: Option<String>,
     pub detach: bool,
     pub remove_on_exit: bool,
+    /// CPU cores limit (e.g., 0.5, 2.0).
+    pub cpu_limit: Option<f64>,
+    /// Memory limit in bytes.
+    pub memory_limit: Option<u64>,
+    /// Swap limit in bytes (-1 for unlimited).
+    pub memory_swap: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

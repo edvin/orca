@@ -47,6 +47,14 @@ pub struct PruneResult {
     pub space_reclaimed: u64,
 }
 
+/// Credentials for authenticating with a container registry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistryAuth {
+    pub username: String,
+    pub password: String,
+    pub server: Option<String>,
+}
+
 #[trait_variant::make(Send)]
 pub trait ImageManager {
     async fn list(&self) -> anyhow::Result<Vec<Image>>;

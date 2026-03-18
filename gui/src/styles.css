@@ -1081,3 +1081,25 @@ body {
   color: #8b949e;
   font-style: italic;
 }
+
+/* ==================== Spinner ==================== */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #30363d;
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==================== Copy Button ==================== */
+.copy-btn {
+  font-family: inherit;
+  cursor: pointer;
+}

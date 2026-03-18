@@ -171,6 +171,8 @@ pub async fn create_and_run_container(
     ports: Option<Vec<String>>,
     volumes: Option<Vec<String>>,
     restart_policy: Option<String>,
+    cpu_limit: Option<f64>,
+    memory_limit: Option<String>,
 ) -> Result<serde_json::Value, String> {
     // Build the create request body
     let mut body = serde_json::json!({
@@ -243,6 +245,12 @@ pub async fn create_and_run_container(
     if let Some(policy) = restart_policy {
         body["restart_policy"] = serde_json::json!(policy);
     }
+    if let Some(cpu) = cpu_limit {
+        body["cpu_limit"] = serde_json::json!(cpu);
+    }
+    if let Some(mem) = memory_limit {
+        body["memory_limit"] = serde_json::json!(mem);
+    }
 
     // Create the container
     let create_resp = client()
@@ -281,10 +289,22 @@ pub async fn list_images() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn pull_image(reference: String) -> Result<serde_json::Value, String> {
+pub async fn pull_image(
+    reference: String,
+    username: Option<String>,
+    password: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::json!({ "reference": reference });
+    if let (Some(user), Some(pass)) = (username, password) {
+        body["auth"] = serde_json::json!({
+            "username": user,
+            "password": pass,
+        });
+    }
+
     let resp = client()
         .post(format!("{DAEMON_URL}/images/pull"))
-        .json(&serde_json::json!({ "reference": reference }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| format!("Pull failed: {e}"))?

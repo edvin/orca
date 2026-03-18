@@ -283,6 +283,48 @@ struct CreateContainerRequest {
     restart_policy: Option<String>,
     #[serde(default)]
     network: Option<String>,
+    /// CPU cores limit (e.g. 0.5, 2.0).
+    #[serde(default)]
+    cpu_limit: Option<f64>,
+    /// Memory limit as a human-readable string (e.g. "512m", "1g") or raw bytes.
+    #[serde(default)]
+    memory_limit: Option<String>,
+}
+
+/// Parse a human-readable memory string (e.g. "512m", "1g", "256k") into bytes.
+fn parse_memory_string(s: &str) -> anyhow::Result<u64> {
+    let s = s.trim().to_lowercase();
+    if s.is_empty() {
+        anyhow::bail!("empty memory string");
+    }
+
+    // Try parsing as raw bytes first
+    if let Ok(bytes) = s.parse::<u64>() {
+        return Ok(bytes);
+    }
+
+    let (num_str, multiplier) = if let Some(n) = s.strip_suffix("gi") {
+        (n, 1024u64 * 1024 * 1024)
+    } else if let Some(n) = s.strip_suffix("mi") {
+        (n, 1024u64 * 1024)
+    } else if let Some(n) = s.strip_suffix("ki") {
+        (n, 1024u64)
+    } else if let Some(n) = s.strip_suffix('g') {
+        (n, 1_000_000_000u64)
+    } else if let Some(n) = s.strip_suffix('m') {
+        (n, 1_000_000u64)
+    } else if let Some(n) = s.strip_suffix('k') {
+        (n, 1_000u64)
+    } else if let Some(n) = s.strip_suffix('b') {
+        (n, 1u64)
+    } else {
+        anyhow::bail!("invalid memory format: '{s}' (use e.g. 512m, 1g, 256k)");
+    };
+
+    let num: f64 = num_str
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid number in memory string: '{s}'"))?;
+    Ok((num * multiplier as f64) as u64)
 }
 
 async fn create_container(
@@ -290,6 +332,12 @@ async fn create_container(
     Json(body): Json<CreateContainerRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     use orca_core::runtime::ContainerCreateOpts;
+
+    let memory_limit = body
+        .memory_limit
+        .as_deref()
+        .map(parse_memory_string)
+        .transpose()?;
 
     let opts = ContainerCreateOpts {
         image: body.image,
@@ -303,6 +351,9 @@ async fn create_container(
         network: body.network,
         detach: true,
         remove_on_exit: false,
+        cpu_limit: body.cpu_limit,
+        memory_limit,
+        memory_swap: None,
     };
 
     let id = state.runtime.create_container(opts).await?;
@@ -409,15 +460,35 @@ async fn remove_image(
 }
 
 #[derive(Deserialize)]
+struct RegistryAuthRequest {
+    username: String,
+    password: String,
+}
+
+#[derive(Deserialize)]
 struct PullRequest {
     reference: String,
+    #[serde(default)]
+    auth: Option<RegistryAuthRequest>,
 }
 
 async fn pull_image(
     State(state): State<Arc<AppState>>,
     Json(body): Json<PullRequest>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
-    let mut rx = ImageManager::pull(state.runtime.as_ref(), &body.reference).await?;
+    let mut rx = if let Some(auth) = &body.auth {
+        let registry_auth = orca_core::image::RegistryAuth {
+            username: auth.username.clone(),
+            password: auth.password.clone(),
+            server: None,
+        };
+        state
+            .runtime
+            .pull_with_auth(&body.reference, &registry_auth)
+            .await?
+    } else {
+        ImageManager::pull(state.runtime.as_ref(), &body.reference).await?
+    };
 
     let stream = async_stream::stream! {
         while let Some(progress) = rx.recv().await {
