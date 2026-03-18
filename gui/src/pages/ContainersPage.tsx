@@ -10,13 +10,22 @@ import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
 import ResourceBar from "../components/ResourceBar";
 import Sparkline from "../components/Sparkline";
+import LastUpdated from "../components/LastUpdated";
 import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
 import { copyToClipboard } from "../lib/clipboard";
 
-export default function ContainersPage() {
+interface ContainersPageProps {
+  onNavigate?: (page: string) => void;
+}
+
+export default function ContainersPage(props: ContainersPageProps) {
   const [containers, setContainers] = createSignal<Container[]>([]);
   const [search, setSearch] = createSignal("");
   const [selected, setSelected] = createSignal<string | null>(null);
+  const [stateFilter, setStateFilter] = createSignal<"all" | "running" | "stopped">("all");
+  const [checkedIds, setCheckedIds] = createSignal<Set<string>>(new Set());
+  const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
+  const [bulkInProgress, setBulkInProgress] = createSignal(false);
   const [stats, setStats] = createSignal<ContainerStats | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
   const [activeTab, setActiveTab] = createSignal<string>("stats");
@@ -30,6 +39,7 @@ export default function ContainersPage() {
     try {
       const result = (await invoke("list_containers")) as Container[];
       setContainers(result);
+      setLastUpdated(new Date());
     } catch (e) {
       console.error("Failed to list containers:", e);
     }
@@ -96,14 +106,68 @@ export default function ContainersPage() {
   });
 
   const filtered = () => {
+    let list = containers();
+    const sf = stateFilter();
+    if (sf === "running") {
+      list = list.filter((c) => c.state === "Running");
+    } else if (sf === "stopped") {
+      list = list.filter((c) => c.state !== "Running");
+    }
     const q = search().toLowerCase();
-    if (!q) return containers();
-    return containers().filter(
+    if (!q) return list;
+    return list.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.image.toLowerCase().includes(q) ||
         c.id.includes(q)
     );
+  };
+
+  const runningCount = () => containers().filter((c) => c.state === "Running").length;
+  const stoppedCount = () => containers().filter((c) => c.state !== "Running").length;
+
+  const toggleCheck = (id: string, e: MouseEvent) => {
+    e.stopPropagation();
+    const next = new Set(checkedIds());
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setCheckedIds(next);
+  };
+
+  const selectAllChecked = () => {
+    if (checkedIds().size === filtered().length) {
+      setCheckedIds(new Set<string>());
+    } else {
+      setCheckedIds(new Set<string>(filtered().map((c) => c.id)));
+    }
+  };
+
+  const bulkAction = async (action: string) => {
+    const ids = Array.from(checkedIds());
+    if (ids.length === 0) return;
+    setBulkInProgress(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const id of ids) {
+      try {
+        if (action === "remove") {
+          await invoke("remove_container", { id });
+        } else {
+          await invoke(`${action}_container`, { id });
+        }
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    const label = action === "remove" ? "removed" : action === "start" ? "started" : "stopped";
+    showToast(
+      `${successCount} container${successCount !== 1 ? "s" : ""} ${label}${failCount ? `, ${failCount} failed` : ""}`,
+      failCount ? "error" : "success"
+    );
+    setCheckedIds(new Set<string>());
+    setBulkInProgress(false);
+    await refresh();
   };
 
   const selectContainer = async (id: string) => {
@@ -226,8 +290,29 @@ export default function ContainersPage() {
           >
             {filtered().length}
           </span>
+          <LastUpdated timestamp={lastUpdated()} />
         </h1>
         <div class="page-actions">
+          <div class="filter-pills">
+            <button
+              class={`filter-pill ${stateFilter() === "all" ? "active" : ""}`}
+              onClick={() => setStateFilter("all")}
+            >
+              All ({containers().length})
+            </button>
+            <button
+              class={`filter-pill ${stateFilter() === "running" ? "active" : ""}`}
+              onClick={() => setStateFilter("running")}
+            >
+              Running ({runningCount()})
+            </button>
+            <button
+              class={`filter-pill ${stateFilter() === "stopped" ? "active" : ""}`}
+              onClick={() => setStateFilter("stopped")}
+            >
+              Stopped ({stoppedCount()})
+            </button>
+          </div>
           <input
             class="search-input"
             type="text"
@@ -244,18 +329,61 @@ export default function ContainersPage() {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      <Show when={checkedIds().size > 0}>
+        <div class="bulk-action-bar">
+          <span>
+            {checkedIds().size} selected
+          </span>
+          <button class="btn btn-sm btn-primary" onClick={() => bulkAction("start")} disabled={bulkInProgress()}>
+            Start
+          </button>
+          <button class="btn btn-sm" onClick={() => bulkAction("stop")} disabled={bulkInProgress()}>
+            Stop
+          </button>
+          <button
+            class="btn btn-sm btn-danger"
+            onClick={() => {
+              if (window.confirm(`Remove ${checkedIds().size} container(s)? This cannot be undone.`)) {
+                bulkAction("remove");
+              }
+            }}
+            disabled={bulkInProgress()}
+          >
+            Remove
+          </button>
+          <button class="btn btn-sm" onClick={() => setCheckedIds(new Set())}>
+            Clear
+          </button>
+        </div>
+      </Show>
+
       <Show
         when={filtered().length > 0}
         fallback={
           <div class="empty">
-            <p class="empty-title">No containers found</p>
-            <p>Start a container to see it here.</p>
+            <div class="empty-icon">{"📦"}</div>
+            <p class="empty-title">No containers yet</p>
+            <p>Run a container from the Images page or use a template</p>
+            <div class="empty-actions">
+              <button class="btn btn-primary" onClick={() => props.onNavigate?.("templates")}>
+                Browse Templates
+              </button>
+            </div>
           </div>
         }
       >
         <table class="table">
           <thead>
             <tr>
+              <th style={{ width: "36px" }}>
+                <input
+                  type="checkbox"
+                  checked={checkedIds().size === filtered().length && filtered().length > 0}
+                  onChange={selectAllChecked}
+                  style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
+                />
+              </th>
               <th>Name</th>
               <th>Image</th>
               <th>State</th>
@@ -274,8 +402,20 @@ export default function ContainersPage() {
                   <>
                     <tr
                       onClick={() => selectContainer(c.id)}
-                      style={{ cursor: "pointer" }}
+                      style={{
+                        cursor: "pointer",
+                        background: checkedIds().has(c.id) ? "#1f6feb11" : undefined,
+                      }}
                     >
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={checkedIds().has(c.id)}
+                          onChange={(e) => toggleCheck(c.id, e as any)}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
+                        />
+                      </td>
                       <td>
                         <span style={{ "font-weight": "500" }}>{c.name}</span>
                         <br />
@@ -398,7 +538,7 @@ export default function ContainersPage() {
                     </tr>
                     <Show when={selected() === c.id}>
                       <tr>
-                        <td colspan="8" style={{ padding: 0 }}>
+                        <td colspan="9" style={{ padding: 0 }}>
                           {/* Tab bar */}
                           <div class="tab-bar" style={{ padding: "0 16px", background: "#1c2128" }}>
                             <button

@@ -501,10 +501,23 @@ body {
   color: #8b949e;
 }
 
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
 .empty-title {
   font-size: 16px;
   margin-bottom: 6px;
   color: #c9d1d9;
+}
+
+.empty-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
 }
 
 /* ==================== Mono ==================== */
@@ -2228,4 +2241,56 @@ body {
   align-items: center;
   justify-content: center;
   gap: 12px;
+}
+
+/* ==================== Filter Pills ==================== */
+.filter-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.filter-pill {
+  padding: 4px 12px;
+  border: 1px solid #30363d;
+  border-radius: 16px;
+  background: transparent;
+  color: #8b949e;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.filter-pill:hover {
+  border-color: #484f58;
+  color: #c9d1d9;
+}
+
+.filter-pill.active {
+  background: #1f6feb22;
+  border-color: #1f6feb44;
+  color: #58a6ff;
+}
+
+/* ==================== Last Updated ==================== */
+.last-updated {
+  font-size: 11px;
+  color: #484f58;
+  font-weight: 400;
+}
+
+/* ==================== Bulk Selection Bar ==================== */
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.bulk-action-bar span {
+  font-size: 13px;
 }

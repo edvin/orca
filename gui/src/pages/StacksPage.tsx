@@ -5,6 +5,7 @@ import { formatPorts } from "../lib/format";
 import { showToast } from "../components/Toast";
 import LogViewer from "../components/LogViewer";
 import Spinner from "../components/Spinner";
+import LastUpdated from "../components/LastUpdated";
 
 export default function StacksPage() {
   const [stacks, setStacks] = createSignal<ComposeProject[]>([]);
@@ -19,6 +20,7 @@ export default function StacksPage() {
     name: string;
   } | null>(null);
   const [serviceLoading, setServiceLoading] = createSignal<string | null>(null);
+  const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
 
   const restartService = async (containerId: string) => {
     setServiceLoading(containerId);
@@ -37,6 +39,7 @@ export default function StacksPage() {
     try {
       const result = (await invoke("list_stacks")) as ComposeProject[];
       setStacks(result);
+      setLastUpdated(new Date());
     } catch (e) {
       console.error("Failed to list stacks:", e);
     }
@@ -122,6 +125,7 @@ export default function StacksPage() {
           >
             {stacks().length} project{stacks().length !== 1 ? "s" : ""}
           </span>
+          <LastUpdated timestamp={lastUpdated()} />
         </h1>
         <button class="btn" onClick={refresh}>
           Refresh
@@ -188,11 +192,12 @@ export default function StacksPage() {
         when={stacks().length > 0}
         fallback={
           <div class="empty">
-            <p class="empty-title">No compose stacks found</p>
+            <div class="empty-icon">{"📋"}</div>
+            <p class="empty-title">No compose stacks detected</p>
             <p>
               Run{" "}
-              <code style={{ color: "#c9d1d9" }}>docker compose up</code> to
-              create a stack.
+              <code style={{ color: "#c9d1d9" }}>docker compose up</code> in
+              a project directory to see it here
             </p>
           </div>
         }

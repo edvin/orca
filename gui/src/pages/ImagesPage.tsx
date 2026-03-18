@@ -6,6 +6,7 @@ import { showToast } from "../components/Toast";
 import RunContainerDialog from "../components/RunContainerDialog";
 import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
+import LastUpdated from "../components/LastUpdated";
 
 export default function ImagesPage() {
   const [images, setImages] = createSignal<Image[]>([]);
@@ -29,12 +30,14 @@ export default function ImagesPage() {
   const [searchResults, setSearchResults] = createSignal<ImageSearchResult[]>([]);
   const [searching, setSearching] = createSignal(false);
   const [showSearchDropdown, setShowSearchDropdown] = createSignal(false);
+  const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   const refresh = async () => {
     try {
       const result = (await invoke("list_images")) as Image[];
       setImages(result);
+      setLastUpdated(new Date());
     } catch (e) {
       console.error("Failed to list images:", e);
     }
@@ -224,6 +227,7 @@ export default function ImagesPage() {
           <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": "400", "margin-left": "8px" }}>
             {filtered().length} &middot; {formatBytes(totalSize())}
           </span>
+          <LastUpdated timestamp={lastUpdated()} />
         </h1>
         <div class="page-actions">
           <input

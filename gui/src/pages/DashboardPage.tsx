@@ -4,13 +4,19 @@ import type { Container, ContainerStats, Image, ComposeProject, SystemHealth } f
 import { formatBytes } from "../lib/format";
 import { recordMetrics, getCpuHistory, getMemoryHistory, getAggregatedCpuHistory, getAggregatedMemoryHistory } from "../lib/metricsStore";
 import Sparkline from "../components/Sparkline";
+import LastUpdated from "../components/LastUpdated";
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+  onNavigate?: (page: string) => void;
+}
+
+export default function DashboardPage(props: DashboardPageProps) {
   const [containers, setContainers] = createSignal<Container[]>([]);
   const [images, setImages] = createSignal<Image[]>([]);
   const [stacks, setStacks] = createSignal<ComposeProject[]>([]);
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
   const [containerStats, setContainerStats] = createSignal<Record<string, ContainerStats>>({});
+  const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
 
   const fetchAll = async () => {
     const [cRes, iRes, sRes, hRes] = await Promise.allSettled([
@@ -23,6 +29,7 @@ export default function DashboardPage() {
     if (iRes.status === "fulfilled") setImages(iRes.value as Image[]);
     if (sRes.status === "fulfilled") setStacks(sRes.value as ComposeProject[]);
     if (hRes.status === "fulfilled") setHealth(hRes.value as SystemHealth);
+    setLastUpdated(new Date());
   };
 
   const fetchStats = async () => {
@@ -95,8 +102,27 @@ export default function DashboardPage() {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">Dashboard</h1>
+        <h1 class="page-title">
+          Dashboard
+          <LastUpdated timestamp={lastUpdated()} />
+        </h1>
       </div>
+
+      <Show when={containers().length === 0 && images().length === 0 && stacks().length === 0 && lastUpdated()}>
+        <div class="empty">
+          <div class="empty-icon">{"🐳"}</div>
+          <p class="empty-title">Welcome to Orca</p>
+          <p>Get started by pulling an image, deploying a template, or running docker compose</p>
+          <div class="empty-actions">
+            <button class="btn btn-primary" onClick={() => props.onNavigate?.("templates")}>
+              Browse Templates
+            </button>
+            <button class="btn" onClick={() => props.onNavigate?.("images")}>
+              Pull Image
+            </button>
+          </div>
+        </div>
+      </Show>
 
       {/* Summary cards */}
       <div class="dashboard-grid">

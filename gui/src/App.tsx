@@ -138,10 +138,10 @@ export default function App() {
           daemonStatus={daemonStatus()}
         />
         <main class="app-main">
-          {page() === "dashboard" && <DashboardPage />}
+          {page() === "dashboard" && <DashboardPage onNavigate={(p) => setPage(p as Page)} />}
           {page() === "templates" && <TemplatesPage />}
           {page() === "stacks" && <StacksPage />}
-          {page() === "containers" && <ContainersPage />}
+          {page() === "containers" && <ContainersPage onNavigate={(p) => setPage(p as Page)} />}
           {page() === "images" && <ImagesPage />}
           {page() === "volumes" && <VolumesPage />}
           {page() === "networks" && <NetworksPage />}

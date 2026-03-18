@@ -86,7 +86,9 @@ export default function NetworksPage() {
         when={networks().length > 0}
         fallback={
           <div class="empty">
-            <p class="empty-title">No networks</p>
+            <div class="empty-icon">{"🌐"}</div>
+            <p class="empty-title">No custom networks</p>
+            <p>The default bridge, host, and none networks are managed by Docker</p>
           </div>
         }
       >

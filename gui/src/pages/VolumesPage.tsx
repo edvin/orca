@@ -97,8 +97,9 @@ export default function VolumesPage() {
         when={volumes().length > 0}
         fallback={
           <div class="empty">
+            <div class="empty-icon">{"💾"}</div>
             <p class="empty-title">No volumes</p>
-            <p>Volumes will appear here when containers create them.</p>
+            <p>Volumes are created when containers need persistent storage</p>
           </div>
         }
       >
