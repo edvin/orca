@@ -1,0 +1,16 @@
+[package]
+name = "vessel-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core abstractions for Vessel — container runtime and machine management"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+dirs.workspace = true
+trait-variant.workspace = true

@@ -1,0 +1,28 @@
+[package]
+name = "vessel-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Vessel GUI — Tauri-based desktop app"
+
+[lib]
+name = "vessel_gui_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "vessel-gui"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+vessel-core.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+reqwest = { version = "0.12", features = ["json"] }
