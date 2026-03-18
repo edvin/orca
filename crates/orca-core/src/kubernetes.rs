@@ -1,6 +1,5 @@
 //! Kubernetes cluster management — k3s lifecycle and workload types.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};

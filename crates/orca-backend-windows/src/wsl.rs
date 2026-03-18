@@ -13,8 +13,6 @@ use orca_core::runtime::RuntimeKind;
 
 use crate::WindowsBackend;
 
-const DEFAULT_DISTRO: &str = "orca";
-
 impl MachineManager for WindowsBackend {
     async fn create(&self, config: MachineConfig) -> anyhow::Result<MachineInfo> {
         // Import a minimal Linux rootfs as a WSL2 distro

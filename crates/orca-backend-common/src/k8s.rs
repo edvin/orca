@@ -17,7 +17,7 @@ use orca_core::kubernetes::*;
 /// k3s-based Kubernetes manager.
 pub struct K3sManager {
     /// Path to k3s data directory.
-    data_dir: PathBuf,
+    _data_dir: PathBuf,
     /// Cached kube client (created on first use).
     client: tokio::sync::OnceCell<Client>,
 }
@@ -30,7 +30,7 @@ impl K3sManager {
             .join("k3s");
 
         Self {
-            data_dir,
+            _data_dir: data_dir,
             client: tokio::sync::OnceCell::new(),
         }
     }

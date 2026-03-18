@@ -158,7 +158,6 @@ impl ImageManager for BollardRuntime {
 
 /// Create a tar archive of the build context directory.
 async fn create_build_context(path: &str) -> anyhow::Result<Vec<u8>> {
-    use std::io::Write;
     use std::path::Path;
 
     let context_path = Path::new(path);
