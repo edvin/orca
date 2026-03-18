@@ -1623,3 +1623,165 @@ body {
   height: 20px;
   width: 80px;
 }
+
+/* ==================== Toast Action Button ==================== */
+.toast-action {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+  padding: 0;
+  margin-left: 4px;
+  opacity: 0.9;
+}
+
+.toast-action:hover {
+  opacity: 1;
+}
+
+/* ==================== Activity Timeline ==================== */
+.activity-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activity-event {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.activity-event:hover {
+  background: #161b22;
+}
+
+.activity-event-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.activity-icon-success { background: #23883622; color: #3fb950; }
+.activity-icon-error { background: #da363322; color: #f85149; }
+.activity-icon-info { background: #1f6feb22; color: #58a6ff; }
+.activity-icon-warning { background: #d2910022; color: #d29922; }
+
+.activity-event-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-event-title {
+  font-size: 13px;
+  color: #e6edf3;
+}
+
+.activity-event-time {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+/* ==================== Notification Bell Dropdown ==================== */
+.notification-bell {
+  position: relative;
+}
+
+.notification-btn {
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.notification-btn:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  background: #da3633;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  pointer-events: none;
+}
+
+.notification-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 320px;
+  max-height: 400px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  z-index: 100;
+  animation: modal-scale-in 0.1s ease-out;
+}
+
+.notification-dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #21262d;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.notification-dropdown-body {
+  overflow-y: auto;
+  max-height: 320px;
+}
+
+.notification-dropdown-footer {
+  padding: 8px 14px;
+  border-top: 1px solid #21262d;
+  text-align: center;
+}
+
+.notification-view-all {
+  background: none;
+  border: none;
+  color: #58a6ff;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.notification-view-all:hover {
+  text-decoration: underline;
+}

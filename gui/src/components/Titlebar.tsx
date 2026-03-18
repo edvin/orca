@@ -1,10 +1,25 @@
-import { createSignal, onMount, onCleanup, Show } from "solid-js";
+import { createSignal, onMount, onCleanup, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
+import { getEvents, getUnreadCount, markAllRead } from "../lib/activityStore";
 import type { SystemHealth } from "../lib/types";
 
 interface TitlebarProps {
   daemonStatus: string;
+  onNavigate?: (page: string) => void;
+}
+
+function relativeTime(date: Date): string {
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 export default function Titlebar(props: TitlebarProps) {
@@ -13,6 +28,7 @@ export default function Titlebar(props: TitlebarProps) {
   const [wasDisconnected, setWasDisconnected] = createSignal(false);
   const [warningCount, setWarningCount] = createSignal(0);
   const [runtimeInfo, setRuntimeInfo] = createSignal<string | null>(null);
+  const [bellOpen, setBellOpen] = createSignal(false);
 
   const pollHealth = async () => {
     try {
@@ -113,6 +129,69 @@ export default function Titlebar(props: TitlebarProps) {
         </div>
       </div>
       <div class="titlebar-controls">
+        <div class="notification-bell">
+          <button
+            class="notification-btn"
+            title="Notifications"
+            onClick={() => {
+              const opening = !bellOpen();
+              setBellOpen(opening);
+              if (opening) markAllRead();
+            }}
+          >
+            {"\u{1F514}"}
+            <Show when={getUnreadCount() > 0}>
+              <span class="notification-badge">
+                {getUnreadCount() > 99 ? "99+" : getUnreadCount()}
+              </span>
+            </Show>
+          </button>
+          <Show when={bellOpen()}>
+            <div class="notification-dropdown">
+              <div class="notification-dropdown-header">
+                <span>Notifications</span>
+                <span style={{ color: "#8b949e", "font-weight": "400" }}>
+                  {getEvents().length} events
+                </span>
+              </div>
+              <div class="notification-dropdown-body">
+                <Show
+                  when={getEvents().length > 0}
+                  fallback={
+                    <div style={{ padding: "20px", "text-align": "center", color: "#8b949e", "font-size": "12px" }}>
+                      No events yet
+                    </div>
+                  }
+                >
+                  <For each={getEvents().slice(0, 10)}>
+                    {(event) => (
+                      <div class="activity-event">
+                        <div class={`activity-event-icon activity-icon-${event.severity}`}>
+                          {event.type.startsWith("container") ? "\u25a3" : event.type.startsWith("image") ? "\u25ce" : "\u2139"}
+                        </div>
+                        <div class="activity-event-body">
+                          <div class="activity-event-title">{event.title}</div>
+                          <div class="activity-event-time">{relativeTime(event.timestamp)}</div>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </div>
+              <div class="notification-dropdown-footer">
+                <button
+                  class="notification-view-all"
+                  onClick={() => {
+                    setBellOpen(false);
+                    if (props.onNavigate) props.onNavigate("activity");
+                  }}
+                >
+                  View All
+                </button>
+              </div>
+            </div>
+          </Show>
+        </div>
         <button class="titlebar-btn" onClick={minimize} title="Minimize">
           <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
         </button>

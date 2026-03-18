@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import { startEventSubscription } from "./lib/events";
+import { startEventSubscription, onOrcaEvent } from "./lib/events";
+import { addEvent } from "./lib/activityStore";
 import Titlebar from "./components/Titlebar";
 import Sidebar from "./components/Sidebar";
 import ToastContainer, { showToast } from "./components/Toast";
@@ -13,9 +14,10 @@ import KubernetesPage from "./pages/KubernetesPage";
 import MachinePage from "./pages/MachinePage";
 import SettingsPage from "./pages/SettingsPage";
 import EnvironmentPage from "./pages/EnvironmentPage";
+import ActivityPage from "./pages/ActivityPage";
 import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "settings";
+export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("stacks");
@@ -69,6 +71,47 @@ export default function App() {
 
   onMount(() => {
     startEventSubscription();
+
+    const unsubEvents = onOrcaEvent((payload: any) => {
+      const eventType = payload?.type || payload?.Action || "";
+      const name = payload?.name || payload?.Actor?.Attributes?.name || "";
+      const reference = payload?.reference || payload?.Actor?.Attributes?.name || "";
+
+      if (eventType === "container.died" || eventType === "die") {
+        addEvent({
+          type: "container.died",
+          title: `Container '${name}' exited`,
+          severity: "error",
+        });
+        showToast(`Container '${name}' exited`, "error", {
+          label: "View Logs",
+          onClick: () => setPage("containers"),
+        });
+      } else if (eventType === "container.started" || eventType === "start") {
+        addEvent({
+          type: "container.started",
+          title: `Container '${name}' started`,
+          severity: "success",
+        });
+        showToast(`Container '${name}' started`, "info");
+      } else if (eventType === "image.pulled" || eventType === "pull") {
+        addEvent({
+          type: "image.pulled",
+          title: `Image pulled: ${reference}`,
+          severity: "success",
+        });
+        showToast(`Image pulled: ${reference}`, "success");
+      } else if (eventType) {
+        // Store other events in the activity feed without toasting
+        addEvent({
+          type: eventType,
+          title: `${eventType}: ${name || reference || "unknown"}`,
+          detail: JSON.stringify(payload),
+          severity: "info",
+        });
+      }
+    });
+
     // Initial daemon check, then verify environment readiness
     checkDaemon().then(() => {
       if (daemonStatus() === "running") {
@@ -80,12 +123,13 @@ export default function App() {
     onCleanup(() => {
       clearInterval(interval);
       document.removeEventListener("keydown", handleGlobalKeyDown);
+      unsubEvents();
     });
   });
 
   return (
     <div class="app-root">
-      <Titlebar daemonStatus={daemonStatus()} />
+      <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => setPage(p as Page)} />
       <div class="app-body">
         <Sidebar
           currentPage={page()}
@@ -101,6 +145,7 @@ export default function App() {
           {page() === "kubernetes" && <KubernetesPage />}
           {page() === "machine" && <MachinePage />}
           {page() === "environment" && <EnvironmentPage />}
+          {page() === "activity" && <ActivityPage />}
           {page() === "settings" && <SettingsPage />}
         </main>
       </div>
