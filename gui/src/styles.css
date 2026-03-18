@@ -1141,6 +1141,41 @@ body {
   color: #8b949e;
 }
 
+/* ==================== Run Progress Steps ==================== */
+.run-progress-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  font-size: 12px;
+}
+
+.run-step {
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: #21262d;
+  color: #8b949e;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.run-step.active {
+  background: #1f6feb33;
+  color: #58a6ff;
+  box-shadow: 0 0 8px #1f6feb22;
+}
+
+.run-step.done {
+  background: #23883622;
+  color: #3fb950;
+}
+
+.run-step-arrow {
+  color: #30363d;
+  font-size: 10px;
+}
+
 .advanced-toggle {
   display: flex;
   align-items: center;
