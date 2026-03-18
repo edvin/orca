@@ -1,9 +1,16 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Network } from "../lib/types";
+import { showToast } from "../components/Toast";
+
+const DEFAULT_NETWORKS = ["bridge", "host", "none"];
 
 export default function NetworksPage() {
   const [networks, setNetworks] = createSignal<Network[]>([]);
+  const [showCreate, setShowCreate] = createSignal(false);
+  const [createName, setCreateName] = createSignal("");
+  const [createDriver, setCreateDriver] = createSignal("bridge");
+  const [creating, setCreating] = createSignal(false);
 
   const refresh = async () => {
     try {
@@ -16,6 +23,48 @@ export default function NetworksPage() {
 
   onMount(refresh);
 
+  const removeNetwork = async (name: string, e: MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Remove network "${name}"?`)) return;
+    try {
+      await invoke("remove_network", { name });
+      showToast(`Network "${name}" removed`, "success");
+      await refresh();
+    } catch (err) {
+      showToast(`Failed to remove network: ${err}`, "error");
+    }
+  };
+
+  const handleCreate = async (e: Event) => {
+    e.preventDefault();
+    const name = createName().trim();
+    if (!name) return;
+
+    setCreating(true);
+    try {
+      await invoke("create_network", {
+        name,
+        driver: createDriver().trim() || null,
+      });
+      showToast(`Network "${name}" created`, "success");
+      setCreateName("");
+      setCreateDriver("bridge");
+      setShowCreate(false);
+      await refresh();
+    } catch (err) {
+      showToast(`Failed to create network: ${err}`, "error");
+    }
+    setCreating(false);
+  };
+
+  const handleOverlayClick = (e: MouseEvent) => {
+    if ((e.target as HTMLElement).classList.contains("modal-overlay")) {
+      setShowCreate(false);
+    }
+  };
+
+  const isDefaultNetwork = (name: string) => DEFAULT_NETWORKS.includes(name);
+
   return (
     <div>
       <div class="page-header">
@@ -25,7 +74,12 @@ export default function NetworksPage() {
             {networks().length}
           </span>
         </h1>
-        <button class="btn" onClick={refresh}>Refresh</button>
+        <div class="page-actions">
+          <button class="btn btn-primary" onClick={() => setShowCreate(true)}>
+            Create
+          </button>
+          <button class="btn" onClick={refresh}>Refresh</button>
+        </div>
       </div>
 
       <Show
@@ -44,6 +98,7 @@ export default function NetworksPage() {
               <th>Driver</th>
               <th>Subnet</th>
               <th>Gateway</th>
+              <th style={{ "text-align": "right" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -55,11 +110,80 @@ export default function NetworksPage() {
                   <td>{n.driver}</td>
                   <td class="mono">{n.subnet || "-"}</td>
                   <td class="mono">{n.gateway || "-"}</td>
+                  <td style={{ "text-align": "right" }}>
+                    <Show when={!isDefaultNetwork(n.name)}>
+                      <button
+                        class="btn btn-sm btn-danger"
+                        onClick={(e) => removeNetwork(n.name, e)}
+                      >
+                        Remove
+                      </button>
+                    </Show>
+                  </td>
                 </tr>
               )}
             </For>
           </tbody>
         </table>
+      </Show>
+
+      {/* Create Network Dialog */}
+      <Show when={showCreate()}>
+        <div class="modal-overlay" onClick={handleOverlayClick}>
+          <div class="modal-dialog">
+            <div class="modal-header">
+              <h2 class="modal-title">Create Network</h2>
+              <button class="modal-close" onClick={() => setShowCreate(false)}>
+                {"\u00d7"}
+              </button>
+            </div>
+            <form onSubmit={handleCreate}>
+              <div class="modal-body">
+                <div class="form-group">
+                  <label class="form-label">
+                    Name <span style={{ color: "#f85149" }}>*</span>
+                  </label>
+                  <input
+                    class="form-input"
+                    type="text"
+                    placeholder="my-network"
+                    value={createName()}
+                    onInput={(e) => setCreateName(e.currentTarget.value)}
+                    autofocus
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Driver</label>
+                  <select
+                    class="form-select"
+                    value={createDriver()}
+                    onChange={(e) => setCreateDriver(e.currentTarget.value)}
+                  >
+                    <option value="bridge">bridge</option>
+                    <option value="host">host</option>
+                    <option value="macvlan">macvlan</option>
+                    <option value="ipvlan">ipvlan</option>
+                    <option value="none">none</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn" onClick={() => setShowCreate(false)} disabled={creating()}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  class="btn btn-primary"
+                  disabled={creating() || !createName().trim()}
+                >
+                  {creating() ? "Creating..." : "Create"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       </Show>
     </div>
   );

@@ -381,11 +381,56 @@ pub async fn remove_volume(name: String) -> Result<(), String> {
     delete(&format!("/volumes/{name}")).await
 }
 
+#[tauri::command]
+pub async fn create_volume(name: String, driver: Option<String>, labels: Option<Vec<String>>) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/volumes"))
+        .json(&serde_json::json!({
+            "name": name,
+            "driver": driver.unwrap_or_else(|| "local".to_string()),
+            "labels": labels.unwrap_or_default(),
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to create volume: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+// --- Images (inspect) ---
+
+#[tauri::command]
+pub async fn inspect_image(id: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/images/{id}")).await
+}
+
 // --- Networks ---
 
 #[tauri::command]
 pub async fn list_networks() -> Result<serde_json::Value, String> {
     get_json("/networks").await
+}
+
+#[tauri::command]
+pub async fn create_network(name: String, driver: Option<String>) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/networks"))
+        .json(&serde_json::json!({
+            "name": name,
+            "driver": driver.unwrap_or_else(|| "bridge".to_string()),
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to create network: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn remove_network(name: String) -> Result<(), String> {
+    delete(&format!("/networks/{name}")).await
 }
 
 // --- Stacks (Compose Projects) ---

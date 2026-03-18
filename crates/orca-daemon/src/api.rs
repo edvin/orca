@@ -75,12 +75,13 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/batch-delete", post(batch_delete_images))
         .route("/images/{source}/tag", post(tag_image))
         // Volumes
-        .route("/volumes", get(list_volumes))
+        .route("/volumes", get(list_volumes).post(create_volume_handler))
         .route("/volumes/{name}", get(inspect_volume))
         .route("/volumes/{name}", delete(remove_volume))
         // Networks
-        .route("/networks", get(list_networks))
+        .route("/networks", get(list_networks).post(create_network_handler))
         .route("/networks/{name}", get(inspect_network))
+        .route("/networks/{name}", delete(remove_network_handler))
         // Stacks (compose projects)
         .route("/stacks", get(list_stacks))
         .route("/stacks/{name}", get(get_stack))
@@ -544,6 +545,46 @@ async fn remove_volume(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+struct CreateVolumeRequest {
+    name: String,
+    #[serde(default = "default_local_driver")]
+    driver: String,
+    #[serde(default)]
+    labels: serde_json::Value,
+}
+
+fn default_local_driver() -> String {
+    "local".to_string()
+}
+
+async fn create_volume_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CreateVolumeRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    // Accept labels as either Vec<String> (KEY=value) or HashMap
+    let labels: std::collections::HashMap<String, String> = match &body.labels {
+        serde_json::Value::Array(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str())
+            .filter_map(|s| {
+                let mut parts = s.splitn(2, '=');
+                let key = parts.next()?.to_string();
+                let val = parts.next().unwrap_or("").to_string();
+                Some((key, val))
+            })
+            .collect(),
+        serde_json::Value::Object(map) => map
+            .iter()
+            .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+            .collect(),
+        _ => std::collections::HashMap::new(),
+    };
+
+    let volume = VolumeManager::create(state.runtime.as_ref(), &body.name, labels).await?;
+    Ok((StatusCode::CREATED, Json(volume)))
+}
+
 // --- Networks ---
 
 async fn list_networks(
@@ -559,6 +600,33 @@ async fn inspect_network(
 ) -> Result<impl IntoResponse, ApiError> {
     let network = NetworkManager::inspect(state.runtime.as_ref(), &name).await?;
     Ok(Json(network))
+}
+
+#[derive(Deserialize)]
+struct CreateNetworkRequest {
+    name: String,
+    #[serde(default = "default_bridge_driver")]
+    driver: String,
+}
+
+fn default_bridge_driver() -> String {
+    "bridge".to_string()
+}
+
+async fn create_network_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CreateNetworkRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let network = NetworkManager::create(state.runtime.as_ref(), &body.name, &body.driver).await?;
+    Ok((StatusCode::CREATED, Json(network)))
+}
+
+async fn remove_network_handler(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    NetworkManager::remove(state.runtime.as_ref(), &name).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // --- Stacks (Compose Projects) ---

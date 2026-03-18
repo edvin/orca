@@ -19,6 +19,8 @@ export default function ImagesPage() {
   const [building, setBuilding] = createSignal(false);
   const [buildLog, setBuildLog] = createSignal<string[]>([]);
   const [runImage, setRunImage] = createSignal<string | null>(null);
+  const [inspecting, setInspecting] = createSignal<string | null>(null);
+  const [inspectData, setInspectData] = createSignal<any>(null);
 
   const refresh = async () => {
     try {
@@ -41,7 +43,8 @@ export default function ImagesPage() {
     );
   };
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (id: string, e: MouseEvent) => {
+    e.stopPropagation();
     const next = new Set(selected());
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -56,7 +59,8 @@ export default function ImagesPage() {
     }
   };
 
-  const removeImage = async (id: string) => {
+  const removeImage = async (id: string, e: MouseEvent) => {
+    e.stopPropagation();
     try {
       await invoke("remove_image", { id });
       showToast("Image removed", "success");
@@ -133,7 +137,7 @@ export default function ImagesPage() {
         showToast("Image built successfully", "success");
         await refresh();
       } else {
-        showToast("Build failed — check build log", "error");
+        showToast("Build failed -- check build log", "error");
       }
     } catch (e) {
       showToast(`Build error: ${e}`, "error");
@@ -147,6 +151,22 @@ export default function ImagesPage() {
 
   const totalSize = () =>
     filtered().reduce((sum, img) => sum + img.size_bytes, 0);
+
+  const toggleInspect = async (id: string) => {
+    if (inspecting() === id) {
+      setInspecting(null);
+      setInspectData(null);
+      return;
+    }
+    setInspecting(id);
+    setInspectData(null);
+    try {
+      const data = await invoke("inspect_image", { id });
+      setInspectData(data);
+    } catch (e) {
+      console.error("Failed to inspect image:", e);
+    }
+  };
 
   return (
     <div>
@@ -321,59 +341,117 @@ export default function ImagesPage() {
           <tbody>
             <For each={filtered()}>
               {(img) => (
-                <tr style={{
-                  background: selected().has(img.id) ? "#1f6feb11" : undefined,
-                }}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selected().has(img.id)}
-                      onChange={() => toggleSelect(img.id)}
-                      style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
-                    />
-                  </td>
-                  <td>
-                    <Show
-                      when={img.repo_tags.length > 0}
-                      fallback={
-                        <span style={{ color: "#8b949e" }}>&lt;untagged&gt;</span>
-                      }
-                    >
-                      <For each={img.repo_tags}>
-                        {(tag) => (
-                          <div class="mono" style={{ "line-height": "1.6" }}>
-                            {tag}
-                          </div>
-                        )}
-                      </For>
-                    </Show>
-                  </td>
-                  <td class="mono" style={{ color: "#8b949e" }}>
-                    {shortId(img.id)}
-                  </td>
-                  <td>{formatBytes(img.size_bytes)}</td>
-                  <td style={{ color: "#8b949e" }}>
-                    {formatTimestamp(img.created_at)}
-                  </td>
-                  <td style={{ "text-align": "right" }}>
-                    <div class="btn-group" style={{ "justify-content": "flex-end" }}>
-                      <Show when={img.repo_tags.length > 0}>
-                        <button
-                          class="btn btn-sm btn-primary"
-                          onClick={() => setRunImage(img.repo_tags[0])}
-                        >
-                          Run
-                        </button>
-                      </Show>
-                      <button
-                        class="btn btn-sm btn-danger"
-                        onClick={() => removeImage(img.id)}
+                <>
+                  <tr
+                    onClick={() => toggleInspect(img.id)}
+                    style={{
+                      cursor: "pointer",
+                      background: selected().has(img.id) ? "#1f6feb11" : undefined,
+                    }}
+                  >
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected().has(img.id)}
+                        onChange={(e) => toggleSelect(img.id, e as any)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
+                      />
+                    </td>
+                    <td>
+                      <Show
+                        when={img.repo_tags.length > 0}
+                        fallback={
+                          <span style={{ color: "#8b949e" }}>&lt;untagged&gt;</span>
+                        }
                       >
-                        Remove
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                        <For each={img.repo_tags}>
+                          {(tag) => (
+                            <div class="mono" style={{ "line-height": "1.6" }}>
+                              {tag}
+                            </div>
+                          )}
+                        </For>
+                      </Show>
+                    </td>
+                    <td class="mono" style={{ color: "#8b949e" }}>
+                      {shortId(img.id)}
+                    </td>
+                    <td>{formatBytes(img.size_bytes)}</td>
+                    <td style={{ color: "#8b949e" }}>
+                      {formatTimestamp(img.created_at)}
+                    </td>
+                    <td style={{ "text-align": "right" }}>
+                      <div class="btn-group" style={{ "justify-content": "flex-end" }}>
+                        <Show when={img.repo_tags.length > 0}>
+                          <button
+                            class="btn btn-sm btn-primary"
+                            onClick={(e) => { e.stopPropagation(); setRunImage(img.repo_tags[0]); }}
+                          >
+                            Run
+                          </button>
+                        </Show>
+                        <button
+                          class="btn btn-sm btn-danger"
+                          onClick={(e) => removeImage(img.id, e)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <Show when={inspecting() === img.id}>
+                    <tr>
+                      <td colspan="6" style={{ padding: 0 }}>
+                        <div class="detail-body">
+                          <Show
+                            when={inspectData()}
+                            fallback={
+                              <span style={{ color: "#8b949e" }}>Loading image details...</span>
+                            }
+                          >
+                            {(data) => {
+                              const d = data();
+                              const tags = d?.repo_tags || d?.RepoTags || img.repo_tags || [];
+                              const imageId = d?.id || d?.Id || img.id;
+                              const created = d?.created_at || d?.Created || img.created_at;
+                              const size = d?.size_bytes || d?.Size || img.size_bytes;
+                              const layers = d?.rootfs?.Layers || d?.rootfs?.layers || d?.layers || [];
+                              return (
+                                <div class="card-grid">
+                                  <div class="card-label">Image ID</div>
+                                  <div class="card-value mono" style={{ "font-size": "11px" }}>{imageId}</div>
+
+                                  <div class="card-label">Tags</div>
+                                  <div class="card-value">
+                                    <Show when={tags.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
+                                      <For each={tags}>
+                                        {(tag: string) => (
+                                          <div class="mono" style={{ "line-height": "1.6" }}>{tag}</div>
+                                        )}
+                                      </For>
+                                    </Show>
+                                  </div>
+
+                                  <div class="card-label">Size</div>
+                                  <div class="card-value">{formatBytes(typeof size === "number" ? size : 0)}</div>
+
+                                  <div class="card-label">Created</div>
+                                  <div class="card-value">{formatTimestamp(created)}</div>
+
+                                  <div class="card-label">Layers</div>
+                                  <div class="card-value">
+                                    {Array.isArray(layers) ? layers.length : 0} layer{Array.isArray(layers) && layers.length !== 1 ? "s" : ""}
+                                  </div>
+                                </div>
+                              );
+                            }}
+                          </Show>
+                        </div>
+                      </td>
+                    </tr>
+                  </Show>
+                </>
               )}
             </For>
           </tbody>
