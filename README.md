@@ -5,7 +5,7 @@
 <h1 align="center">Orca</h1>
 
 <p align="center">
-  <strong>A beautiful, blazing-fast container management desktop app with built-in AI.</strong><br>
+  <strong>A beautiful, lightweight container management desktop app with built-in AI.</strong><br>
   Containers, images, compose stacks, Kubernetes, AI assistant, and agent APIs — all in one place.
 </p>
 
