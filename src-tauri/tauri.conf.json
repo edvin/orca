@@ -5,7 +5,8 @@
   "identifier": "com.orca.app",
   "build": {
     "frontendDist": "../gui/dist",
-    "devUrl": "http://localhost:5173"
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": ""
   },
   "app": {
     "windows": [
@@ -32,6 +33,9 @@
       "icons/128x128@2x.png",
       "icons/icon.png",
       "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/orca-daemon"
     ]
   }
 }

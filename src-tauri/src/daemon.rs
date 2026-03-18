@@ -1,5 +1,6 @@
 //! Daemon lifecycle management — start/stop the orca-daemon process.
 
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Mutex;
 
@@ -18,10 +19,6 @@ impl DaemonManager {
     }
 
     /// Start the daemon if not already running.
-    /// Looks for orca-daemon next to the current executable, or in PATH.
-    /// After the daemon starts, its API token will be available in the
-    /// shared config file (~/.config/orca/config.json) and is read by
-    /// the commands module on each request.
     pub async fn start(&self) -> Result<(), String> {
         // Check if daemon is already responding
         if self.health_check().await {
@@ -42,25 +39,21 @@ impl DaemonManager {
         *self.child.lock().map_err(|e| format!("Lock poisoned: {e}"))? = Some(child);
 
         // Wait for daemon to become ready
-        for _ in 0..20 {
+        for _ in 0..30 {
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
             if self.health_check().await {
                 tracing::info!("Orca daemon is ready");
-                // The daemon generates an API token on first start and saves
-                // it to the config file. The commands module reads it from
-                // there for each request.
                 return Ok(());
             }
         }
 
-        Err("Daemon started but failed to respond within 5 seconds".into())
+        Err("Daemon started but failed to respond within 7.5 seconds".into())
     }
 
     /// Stop the daemon process.
     pub fn stop(&self) {
         if let Some(mut child) = self.child.lock().ok().and_then(|mut guard| guard.take()) {
             tracing::info!("Stopping orca-daemon");
-            // kill_on_drop handles cleanup, but let's be explicit
             let _ = child.start_kill();
         }
     }
@@ -68,7 +61,7 @@ impl DaemonManager {
     async fn health_check(&self) -> bool {
         reqwest::Client::new()
             .get("http://127.0.0.1:9477/api/v1/health")
-            .timeout(std::time::Duration::from_secs(1))
+            .timeout(std::time::Duration::from_secs(2))
             .send()
             .await
             .is_ok()
@@ -81,34 +74,65 @@ impl Drop for DaemonManager {
     }
 }
 
-/// Find the daemon binary — check next to current exe, development paths, then PATH.
+/// Find the daemon binary. Search order:
+/// 1. Tauri sidecar location (bundled with the app)
+/// 2. Next to the current executable
+/// 3. Development build paths
+/// 4. System PATH
 pub fn find_daemon_binary() -> String {
-    // Check next to current executable
+    let bin_name = daemon_binary_name();
+
+    // 1. Tauri sidecar: the binary is bundled alongside the app
+    //    Tauri puts sidecars next to the exe with target triple suffix,
+    //    but also copies without suffix
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            let sibling = parent.join(daemon_binary_name());
-            if sibling.exists() {
-                return sibling.to_string_lossy().to_string();
+            // Check with no suffix first (how Tauri 2 resolves externalBin)
+            let sidecar = parent.join(bin_name);
+            if sidecar.exists() {
+                return sidecar.to_string_lossy().to_string();
+            }
+
+            // Check in a binaries/ subdirectory
+            let sidecar_sub = parent.join("binaries").join(bin_name);
+            if sidecar_sub.exists() {
+                return sidecar_sub.to_string_lossy().to_string();
+            }
+
+            // Check Tauri resource directory patterns
+            // On macOS: ../Resources/binaries/
+            if let Some(grandparent) = parent.parent() {
+                let macos_resource = grandparent.join("Resources").join("binaries").join(bin_name);
+                if macos_resource.exists() {
+                    return macos_resource.to_string_lossy().to_string();
+                }
             }
         }
     }
 
-    // Check development build paths
-    let dev_paths = [
-        "./target/debug/orca-daemon",
-        "./target/release/orca-daemon",
-    ];
+    // 2. Development build paths
+    let dev_paths = if cfg!(windows) {
+        vec![
+            PathBuf::from("./target/debug/orca-daemon.exe"),
+            PathBuf::from("./target/release/orca-daemon.exe"),
+        ]
+    } else {
+        vec![
+            PathBuf::from("./target/debug/orca-daemon"),
+            PathBuf::from("./target/release/orca-daemon"),
+        ]
+    };
+
     for path in &dev_paths {
-        let p = std::path::Path::new(path);
-        if p.exists() {
-            return p.canonicalize()
+        if path.exists() {
+            return path.canonicalize()
                 .map(|c| c.to_string_lossy().to_string())
-                .unwrap_or_else(|_| path.to_string());
+                .unwrap_or_else(|_| path.to_string_lossy().to_string());
         }
     }
 
-    // Fall back to PATH
-    daemon_binary_name().to_string()
+    // 3. Fall back to PATH
+    bin_name.to_string()
 }
 
 fn daemon_binary_name() -> &'static str {

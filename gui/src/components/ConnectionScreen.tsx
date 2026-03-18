@@ -69,25 +69,26 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
               Failed to start daemon
             </div>
             <div style={{ "margin-bottom": "8px" }}>{error()}</div>
-            <ul style={{ margin: "0", "padding-left": "16px", "line-height": "1.8" }}>
-              <li>
-                Make sure <code>orca-daemon</code> is installed and in your PATH
-              </li>
-              <li>
+            <div style={{ "margin-top": "8px", "line-height": "1.8", "font-size": "12px" }}>
+              <p style={{ "margin-bottom": "8px" }}>The daemon binary (<code>orca-daemon</code>) was not found. To fix this:</p>
+              <ol style={{ margin: "0", "padding-left": "18px" }}>
+                <li>
+                  <a href="https://github.com/edvin/orca/actions" target="_blank" style={{ color: "#58a6ff" }}>
+                    Download orca-daemon
+                  </a>{" "}
+                  from GitHub Actions artifacts
+                </li>
+                <li>
+                  Place it in your PATH or next to the Orca app
+                </li>
+                <li>
+                  Click <strong>Retry Connection</strong> below
+                </li>
+              </ol>
+              <p style={{ "margin-top": "8px", color: "#8b949e" }}>
                 Or start it manually: <code>orca-daemon</code>
-              </li>
-              <li>
-                Check the{" "}
-                <a
-                  href="https://github.com/edvin/orca"
-                  target="_blank"
-                  style={{ color: "#58a6ff" }}
-                >
-                  documentation
-                </a>{" "}
-                for setup instructions
-              </li>
-            </ul>
+              </p>
+            </div>
           </div>
         </Show>
 
