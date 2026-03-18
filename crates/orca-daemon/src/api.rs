@@ -69,6 +69,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/{id}", get(inspect_image))
         .route("/images/{id}", delete(remove_image))
         .route("/images/pull", post(pull_image))
+        .route("/images/build", post(build_image))
+        .route("/images/prune", post(prune_images))
+        .route("/images/batch-delete", post(batch_delete_images))
+        .route("/images/{source}/tag", post(tag_image))
         // Volumes
         .route("/volumes", get(list_volumes))
         .route("/volumes/{name}", get(inspect_volume))
@@ -409,6 +413,90 @@ async fn pull_image(
             .interval(Duration::from_secs(15))
             .text("keepalive"),
     ))
+}
+
+#[derive(Deserialize)]
+struct BuildRequest {
+    context_path: String,
+    dockerfile: Option<String>,
+    tag: Option<String>,
+}
+
+async fn build_image(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<BuildRequest>,
+) -> Result<Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
+    let mut rx = ImageManager::build(
+        state.runtime.as_ref(),
+        &body.context_path,
+        body.dockerfile.as_deref(),
+        body.tag.as_deref(),
+    )
+    .await?;
+
+    let stream = async_stream::stream! {
+        while let Some(progress) = rx.recv().await {
+            if let Ok(json) = serde_json::to_string(&progress) {
+                yield Ok(SseEvent::default().data(json));
+            }
+        }
+        yield Ok(SseEvent::default().event("done").data("{}"));
+    };
+
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keepalive"),
+    ))
+}
+
+async fn prune_images(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let result = ImageManager::prune(state.runtime.as_ref()).await?;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+struct BatchDeleteRequest {
+    ids: Vec<String>,
+    #[serde(default)]
+    force: bool,
+}
+
+async fn batch_delete_images(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<BatchDeleteRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut deleted = Vec::new();
+    let mut errors = Vec::new();
+
+    for id in &body.ids {
+        match ImageManager::remove(state.runtime.as_ref(), id, body.force).await {
+            Ok(()) => deleted.push(id.clone()),
+            Err(e) => errors.push(format!("{}: {e}", &id[..12.min(id.len())])),
+        }
+    }
+
+    Ok(Json(serde_json::json!({
+        "deleted": deleted,
+        "errors": errors,
+    })))
+}
+
+#[derive(Deserialize)]
+struct TagRequest {
+    repo: String,
+    tag: String,
+}
+
+async fn tag_image(
+    State(state): State<Arc<AppState>>,
+    Path(source): Path<String>,
+    Json(body): Json<TagRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    ImageManager::tag(state.runtime.as_ref(), &source, &body.repo, &body.tag).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // --- Volumes ---

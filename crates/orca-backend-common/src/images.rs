@@ -1,4 +1,6 @@
-use bollard::image::{CreateImageOptions, ListImagesOptions, RemoveImageOptions};
+use bollard::image::{
+    BuildImageOptions, CreateImageOptions, ListImagesOptions, RemoveImageOptions, TagImageOptions,
+};
 use tokio_stream::StreamExt;
 
 use orca_core::image::*;
@@ -34,7 +36,6 @@ impl ImageManager for BollardRuntime {
             ..Default::default()
         };
         let stream = self.docker.create_image(Some(options), None, None);
-        // Collect the stream into a vec first to avoid lifetime issues with the spawned task
         let items: Vec<_> = stream.collect().await;
         let items: Vec<_> = items.into_iter().filter_map(|r| r.ok()).collect();
         let (tx, rx) = tokio::sync::mpsc::channel(64);
@@ -70,7 +71,10 @@ impl ImageManager for BollardRuntime {
         self.docker
             .remove_image(
                 id,
-                Some(RemoveImageOptions { force, ..Default::default() }),
+                Some(RemoveImageOptions {
+                    force,
+                    ..Default::default()
+                }),
                 None,
             )
             .await?;
@@ -87,10 +91,156 @@ impl ImageManager for BollardRuntime {
         })
     }
 
-    async fn prune(&self) -> anyhow::Result<u64> {
+    async fn prune(&self) -> anyhow::Result<PruneResult> {
         let result = self.docker.prune_images::<String>(None).await?;
-        Ok(result
-            .space_reclaimed
-            .unwrap_or(0) as u64)
+        let images_deleted = result
+            .images_deleted
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|item| item.deleted.clone().or(item.untagged.clone()))
+            .collect();
+        Ok(PruneResult {
+            images_deleted,
+            space_reclaimed: result.space_reclaimed.unwrap_or(0) as u64,
+        })
     }
+
+    async fn tag(&self, source: &str, repo: &str, tag: &str) -> anyhow::Result<()> {
+        self.docker
+            .tag_image(
+                source,
+                Some(TagImageOptions { repo, tag }),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn build(
+        &self,
+        context_path: &str,
+        dockerfile: Option<&str>,
+        tag: Option<&str>,
+    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<BuildProgress>> {
+        let tar_bytes = create_build_context(context_path).await?;
+
+        let dockerfile = dockerfile.unwrap_or("Dockerfile").to_string();
+        let tag = tag.map(|t| t.to_string()).unwrap_or_default();
+
+        let options = BuildImageOptions::<String> {
+            dockerfile,
+            rm: true,
+            t: tag,
+            ..Default::default()
+        };
+
+        // Collect stream to avoid lifetime issues with the spawned task
+        let stream = self.docker.build_image(options, None, Some(tar_bytes.into()));
+        let items: Vec<_> = stream.collect().await;
+        let items: Vec<_> = items.into_iter().filter_map(|r| r.ok()).collect();
+
+        let (tx, rx) = tokio::sync::mpsc::channel(256);
+
+        tokio::spawn(async move {
+            for output in items {
+                let progress = BuildProgress {
+                    stream: output.stream.unwrap_or_default(),
+                    error: output.error,
+                };
+                if tx.send(progress).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+}
+
+/// Create a tar archive of the build context directory.
+async fn create_build_context(path: &str) -> anyhow::Result<Vec<u8>> {
+    use std::io::Write;
+    use std::path::Path;
+
+    let context_path = Path::new(path);
+    if !context_path.is_dir() {
+        anyhow::bail!("Build context '{path}' is not a directory");
+    }
+
+    let buf = Vec::new();
+    let mut archive = tar::Builder::new(buf);
+
+    // Respect .dockerignore if present
+    let ignore_patterns = load_dockerignore(context_path).await;
+
+    add_dir_to_tar(&mut archive, context_path, context_path, &ignore_patterns)?;
+    let bytes = archive.into_inner()?;
+    Ok(bytes)
+}
+
+fn add_dir_to_tar(
+    archive: &mut tar::Builder<Vec<u8>>,
+    base: &std::path::Path,
+    dir: &std::path::Path,
+    ignore: &[String],
+) -> anyhow::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(base)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .to_string();
+
+        // Skip .git and .dockerignore patterns
+        if relative == ".git" || relative.starts_with(".git/") {
+            continue;
+        }
+        if should_ignore(&relative, ignore) {
+            continue;
+        }
+
+        if path.is_dir() {
+            add_dir_to_tar(archive, base, &path, ignore)?;
+        } else if path.is_file() {
+            archive.append_path_with_name(&path, &relative)?;
+        }
+    }
+    Ok(())
+}
+
+async fn load_dockerignore(context: &std::path::Path) -> Vec<String> {
+    let ignore_path = context.join(".dockerignore");
+    match tokio::fs::read_to_string(&ignore_path).await {
+        Ok(contents) => contents
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect(),
+        Err(_) => vec![],
+    }
+}
+
+fn should_ignore(path: &str, patterns: &[String]) -> bool {
+    for pattern in patterns {
+        // Simple glob matching — handles "node_modules", "*.tmp", "target/"
+        if pattern.ends_with('/') {
+            let dir_pattern = pattern.trim_end_matches('/');
+            if path == dir_pattern || path.starts_with(&format!("{dir_pattern}/")) {
+                return true;
+            }
+        } else if pattern.contains('*') {
+            let parts: Vec<&str> = pattern.split('*').collect();
+            if parts.len() == 2 {
+                let (prefix, suffix) = (parts[0], parts[1]);
+                let filename = path.rsplit('/').next().unwrap_or(path);
+                if filename.starts_with(prefix) && filename.ends_with(suffix) {
+                    return true;
+                }
+            }
+        } else if path == pattern || path.starts_with(&format!("{pattern}/")) {
+            return true;
+        }
+    }
+    false
 }

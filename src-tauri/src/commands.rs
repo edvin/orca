@@ -310,6 +310,65 @@ pub async fn remove_image(id: String) -> Result<(), String> {
     delete(&format!("/images/{id}")).await
 }
 
+#[tauri::command]
+pub async fn batch_delete_images(ids: Vec<String>, force: bool) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/images/batch-delete"))
+        .json(&serde_json::json!({ "ids": ids, "force": force }))
+        .send()
+        .await
+        .map_err(|e| format!("Batch delete failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn prune_images() -> Result<serde_json::Value, String> {
+    post_json("/images/prune").await
+}
+
+#[tauri::command]
+pub async fn build_image(
+    context_path: String,
+    dockerfile: Option<String>,
+    tag: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}/images/build"))
+        .json(&serde_json::json!({
+            "context_path": context_path,
+            "dockerfile": dockerfile,
+            "tag": tag,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Build failed: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read build response: {e}"))?;
+
+    // Parse SSE build log
+    let logs: Vec<String> = resp
+        .lines()
+        .filter_map(|line| line.strip_prefix("data:"))
+        .filter_map(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .filter_map(|v| {
+            if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+                Some(format!("ERROR: {err}"))
+            } else {
+                v.get("stream").and_then(|s| s.as_str()).map(|s| s.to_string())
+            }
+        })
+        .collect();
+
+    let has_error = logs.iter().any(|l| l.starts_with("ERROR:"));
+    Ok(serde_json::json!({
+        "success": !has_error,
+        "logs": logs,
+    }))
+}
+
 // --- Volumes ---
 
 #[tauri::command]

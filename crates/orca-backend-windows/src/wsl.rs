@@ -50,19 +50,41 @@ impl MachineManager for WindowsBackend {
         // (WSL2 uses a global config, not per-distro — this is a limitation)
         self.configure_wsl_resources(&config).await?;
 
-        // Install container runtime inside the distro
-        let runtime_script = match config.runtime {
+        // Install container runtime and configure DNS inside the distro
+        let runtime_install = match config.runtime {
             RuntimeKind::Podman => {
-                "apt-get update -qq && apt-get install -y -qq podman && \
-                 podman system service --time=0 unix:///var/run/docker.sock &"
+                "apt-get update -qq && apt-get install -y -qq podman"
             }
             RuntimeKind::Docker => {
-                "curl -fsSL https://get.docker.com | sh && \
-                 dockerd &"
+                "curl -fsSL https://get.docker.com | sh"
             }
         };
+        wsl_exec(&config.name, runtime_install).await?;
 
-        wsl_exec(&config.name, runtime_script).await?;
+        // Set up host.docker.internal DNS
+        // WSL2 provides the host IP via /etc/resolv.conf nameserver
+        wsl_exec(
+            &config.name,
+            r#"HOST_IP=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}')
+            if ! grep -q host.docker.internal /etc/hosts; then
+                echo "$HOST_IP host.docker.internal" >> /etc/hosts
+            fi"#,
+        )
+        .await?;
+
+        // Configure Docker daemon for DNS and port forwarding
+        wsl_exec(
+            &config.name,
+            r#"mkdir -p /etc/docker
+            cat > /etc/docker/daemon.json << 'DAEMONEOF'
+            {
+                "iptables": true,
+                "ip-forward": true,
+                "dns": ["8.8.8.8", "8.8.4.4"]
+            }
+            DAEMONEOF"#,
+        )
+        .await?;
 
         self.inspect(&config.name).await
     }
@@ -188,8 +210,16 @@ impl WindowsBackend {
             .unwrap_or_default()
             .join(".wslconfig");
 
+        // Enable mirrored networking for automatic port forwarding to host
+        // and DNS resolution. Requires Windows 11 22H2+.
         let content = format!(
-            "[wsl2]\nmemory={memory}MB\nprocessors={cpus}\nswap=0\n",
+            "[wsl2]\n\
+             memory={memory}MB\n\
+             processors={cpus}\n\
+             swap=0\n\
+             networkingMode=mirrored\n\
+             dnsTunneling=true\n\
+             autoProxy=true\n",
             memory = config.memory_mb,
             cpus = config.cpus,
         );

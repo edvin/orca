@@ -43,6 +43,9 @@ provision:
   - mode: system
     script: |
       #!/bin/bash
+      set -eu
+
+      # Install container runtime
       if ! command -v {runtime_pkg} &> /dev/null; then
         if [ "{runtime_pkg}" = "podman" ]; then
           apt-get update -qq && apt-get install -y -qq podman
@@ -51,9 +54,27 @@ provision:
           usermod -aG docker $LIMA_CIDATA_USER
         fi
       fi
+
+      # Set up host.docker.internal DNS
+      # Lima provides the host gateway at 192.168.5.2
+      HOST_IP=$(ip route | awk '/default/{{print $3}}')
+      if ! grep -q host.docker.internal /etc/hosts; then
+        echo "$HOST_IP host.docker.internal host.lima.internal" >> /etc/hosts
+      fi
 portForwards:
+  # Forward the Docker/Podman socket
   - guestSocket: "/var/run/docker.sock"
     hostSocket: "{{{{.Dir}}}}/sock/docker.sock"
+  # Forward all container ports (1-65535) from guest to host
+  # Lima uses SSH port forwarding — this range covers typical container ports
+  - guestIPMustBeZero: true
+    guestPortRange: [1, 65535]
+    hostIP: "127.0.0.1"
+    ignore: true
+hostResolver:
+  enabled: true
+  hosts:
+    host.docker.internal: host.lima.internal
 "#,
             cpus = config.cpus,
             memory = config.memory_mb / 1024,
