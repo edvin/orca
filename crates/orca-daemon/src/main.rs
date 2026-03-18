@@ -9,6 +9,7 @@ use tokio::sync::broadcast;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
+mod agent;
 mod api;
 mod state;
 

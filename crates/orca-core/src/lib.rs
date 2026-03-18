@@ -10,3 +10,4 @@ pub mod kubernetes;
 pub mod environment;
 pub mod templates;
 pub mod ai;
+pub mod agent_tools;

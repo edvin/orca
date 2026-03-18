@@ -161,6 +161,11 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/templates/{id}/deploy", post(deploy_template))
         // AI
         .route("/ai/ask", post(ai_ask))
+        // Agent APIs (MCP + OpenAI-compatible)
+        .route("/agent/tools", get(agent_list_tools))
+        .route("/agent/execute", post(agent_execute_tool))
+        .route("/agent/openai/chat/completions", post(agent_openai_proxy))
+        .route("/agent/mcp", post(agent_mcp))
 }
 
 // --- Health ---
@@ -1468,4 +1473,282 @@ async fn ai_ask(
         answer,
         suggestions: vec![],
     }))
+}
+
+// --- Agent APIs (MCP + OpenAI-compatible) ---
+
+/// List all available agent tools in OpenAI function calling format.
+async fn agent_list_tools() -> Json<serde_json::Value> {
+    let catalog = orca_core::agent_tools::tool_catalog();
+    let tools: Vec<serde_json::Value> = catalog
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.parameters,
+                }
+            })
+        })
+        .collect();
+    Json(serde_json::json!({ "tools": tools }))
+}
+
+#[derive(Deserialize)]
+struct AgentExecuteRequest {
+    tool: String,
+    #[serde(default)]
+    arguments: serde_json::Value,
+}
+
+/// Execute a single agent tool directly.
+async fn agent_execute_tool(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AgentExecuteRequest>,
+) -> impl IntoResponse {
+    match crate::agent::execute_tool(&state, &body.tool, body.arguments).await {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "result": result })),
+        ),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": err })),
+        ),
+    }
+}
+
+/// OpenAI-compatible chat completions endpoint that executes tool calls.
+///
+/// Accepts requests with tool_calls in messages (as OpenAI sends them)
+/// and executes each tool call, returning results in OpenAI response format.
+async fn agent_openai_proxy(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Extract tool calls from the last assistant message, or from top-level
+    let tool_calls = body
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .and_then(|msgs| {
+            msgs.iter()
+                .rev()
+                .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("assistant"))
+        })
+        .and_then(|msg| msg.get("tool_calls"))
+        .and_then(|tc| tc.as_array())
+        .cloned();
+
+    // Also support direct tool_calls at top level for simpler usage
+    let tool_calls = tool_calls.or_else(|| {
+        body.get("tool_calls")
+            .and_then(|tc| tc.as_array())
+            .cloned()
+    });
+
+    let tool_calls = match tool_calls {
+        Some(tc) => tc,
+        None => {
+            // No tool calls — return the available tools so the caller can use them
+            let catalog = orca_core::agent_tools::tool_catalog();
+            let tools: Vec<serde_json::Value> = catalog
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.parameters,
+                        }
+                    })
+                })
+                .collect();
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "id": format!("chatcmpl-orca-{}", uuid_v4()),
+                    "object": "chat.completion",
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "No tool calls found in request. Available tools returned.",
+                        },
+                        "finish_reason": "stop",
+                    }],
+                    "tools": tools,
+                })),
+            );
+        }
+    };
+
+    // Execute each tool call
+    let mut tool_results = Vec::new();
+    for tc in &tool_calls {
+        let tool_call_id = tc
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let function = tc.get("function").cloned().unwrap_or_default();
+        let name = function
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let arguments: serde_json::Value = function
+            .get("arguments")
+            .and_then(|v| {
+                // Arguments can be a JSON string or object
+                if let Some(s) = v.as_str() {
+                    serde_json::from_str(s).ok()
+                } else {
+                    Some(v.clone())
+                }
+            })
+            .unwrap_or(serde_json::json!({}));
+
+        let result = crate::agent::execute_tool(&state, name, arguments).await;
+
+        tool_results.push(serde_json::json!({
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": match &result {
+                Ok(v) => serde_json::to_string(v).unwrap_or_default(),
+                Err(e) => serde_json::json!({ "error": e }).to_string(),
+            },
+        }));
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "id": format!("chatcmpl-orca-{}", uuid_v4()),
+            "object": "chat.completion",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": null,
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "tool_results": tool_results,
+        })),
+    )
+}
+
+/// MCP (Model Context Protocol) JSON-RPC endpoint.
+///
+/// Handles:
+/// - `initialize` — server info
+/// - `tools/list` — tool catalog in MCP format
+/// - `tools/call` — execute a tool
+async fn agent_mcp(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let jsonrpc = "2.0";
+    let id = body.get("id").cloned().unwrap_or(serde_json::json!(null));
+    let method = body
+        .get("method")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    match method {
+        "initialize" => Json(serde_json::json!({
+            "jsonrpc": jsonrpc,
+            "id": id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": { "listChanged": false },
+                },
+                "serverInfo": {
+                    "name": "orca-daemon",
+                    "version": env!("CARGO_PKG_VERSION"),
+                },
+            }
+        })),
+
+        "tools/list" => {
+            let catalog = orca_core::agent_tools::tool_catalog();
+            let tools: Vec<serde_json::Value> = catalog
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "name": t.name,
+                        "description": t.description,
+                        "inputSchema": t.parameters,
+                    })
+                })
+                .collect();
+            Json(serde_json::json!({
+                "jsonrpc": jsonrpc,
+                "id": id,
+                "result": { "tools": tools }
+            }))
+        }
+
+        "tools/call" => {
+            let params = body.get("params").cloned().unwrap_or_default();
+            let tool_name = params
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let arguments = params
+                .get("arguments")
+                .cloned()
+                .unwrap_or(serde_json::json!({}));
+
+            match crate::agent::execute_tool(&state, tool_name, arguments).await {
+                Ok(result) => {
+                    let text = serde_json::to_string_pretty(&result).unwrap_or_default();
+                    Json(serde_json::json!({
+                        "jsonrpc": jsonrpc,
+                        "id": id,
+                        "result": {
+                            "content": [{
+                                "type": "text",
+                                "text": text,
+                            }],
+                            "isError": false,
+                        }
+                    }))
+                }
+                Err(err) => Json(serde_json::json!({
+                    "jsonrpc": jsonrpc,
+                    "id": id,
+                    "result": {
+                        "content": [{
+                            "type": "text",
+                            "text": err,
+                        }],
+                        "isError": true,
+                    }
+                })),
+            }
+        }
+
+        _ => Json(serde_json::json!({
+            "jsonrpc": jsonrpc,
+            "id": id,
+            "error": {
+                "code": -32601,
+                "message": format!("Method not found: {method}"),
+            }
+        })),
+    }
+}
+
+/// Generate a simple UUID v4 (random) without pulling in the uuid crate.
+fn uuid_v4() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{:032x}", nanos)
 }
