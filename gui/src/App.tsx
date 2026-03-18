@@ -2,14 +2,16 @@ import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { startEventSubscription } from "./lib/events";
 import Sidebar from "./components/Sidebar";
+import ToastContainer from "./components/Toast";
 import StacksPage from "./pages/StacksPage";
 import ContainersPage from "./pages/ContainersPage";
 import ImagesPage from "./pages/ImagesPage";
 import VolumesPage from "./pages/VolumesPage";
 import NetworksPage from "./pages/NetworksPage";
 import MachinePage from "./pages/MachinePage";
+import SettingsPage from "./pages/SettingsPage";
 
-export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "machine";
+export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "machine" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("stacks");
@@ -52,7 +54,9 @@ export default function App() {
         {page() === "volumes" && <VolumesPage />}
         {page() === "networks" && <NetworksPage />}
         {page() === "machine" && <MachinePage />}
+        {page() === "settings" && <SettingsPage />}
       </main>
+      <ToastContainer />
     </div>
   );
 }

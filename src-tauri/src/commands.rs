@@ -160,6 +160,119 @@ pub async fn container_logs(
     Ok(lines)
 }
 
+// --- Container Create & Run ---
+
+#[tauri::command]
+pub async fn create_and_run_container(
+    image: String,
+    name: Option<String>,
+    command: Option<String>,
+    env: Option<Vec<String>>,
+    ports: Option<Vec<String>>,
+    volumes: Option<Vec<String>>,
+    restart_policy: Option<String>,
+) -> Result<serde_json::Value, String> {
+    // Build the create request body
+    let mut body = serde_json::json!({
+        "image": image,
+    });
+
+    if let Some(n) = name {
+        body["name"] = serde_json::json!(n);
+    }
+    if let Some(cmd) = command {
+        // Split command string into parts
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        if !parts.is_empty() {
+            body["command"] = serde_json::json!(parts);
+        }
+    }
+    if let Some(env_vars) = env {
+        // Convert KEY=value strings to a map
+        let env_map: serde_json::Map<String, serde_json::Value> = env_vars
+            .iter()
+            .filter_map(|s| {
+                let mut parts = s.splitn(2, '=');
+                let key = parts.next()?.to_string();
+                let val = parts.next().unwrap_or("").to_string();
+                Some((key, serde_json::json!(val)))
+            })
+            .collect();
+        body["env"] = serde_json::json!(env_map);
+    }
+    if let Some(port_mappings) = ports {
+        // Parse host:container format
+        let parsed: Vec<serde_json::Value> = port_mappings
+            .iter()
+            .filter_map(|s| {
+                let parts: Vec<&str> = s.split(':').collect();
+                if parts.len() == 2 {
+                    let host_port: u16 = parts[0].parse().ok()?;
+                    let container_port: u16 = parts[1].parse().ok()?;
+                    Some(serde_json::json!({
+                        "host_port": host_port,
+                        "container_port": container_port,
+                        "protocol": "tcp"
+                    }))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        body["ports"] = serde_json::json!(parsed);
+    }
+    if let Some(vol_mounts) = volumes {
+        // Parse host:container format
+        let parsed: Vec<serde_json::Value> = vol_mounts
+            .iter()
+            .filter_map(|s| {
+                let parts: Vec<&str> = s.splitn(2, ':').collect();
+                if parts.len() == 2 {
+                    Some(serde_json::json!({
+                        "source": parts[0],
+                        "target": parts[1],
+                        "read_only": false
+                    }))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        body["volumes"] = serde_json::json!(parsed);
+    }
+    if let Some(policy) = restart_policy {
+        body["restart_policy"] = serde_json::json!(policy);
+    }
+
+    // Create the container
+    let create_resp = client()
+        .post(format!("{DAEMON_URL}/containers"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to create container: {e}"))?;
+
+    if !create_resp.status().is_success() {
+        let err_body = create_resp.text().await.unwrap_or_default();
+        return Err(format!("Failed to create container: {err_body}"));
+    }
+
+    let create_result: serde_json::Value = create_resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid create response: {e}"))?;
+
+    let container_id = create_result
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "No container ID in response".to_string())?;
+
+    // Start the container
+    post_empty(&format!("/containers/{container_id}/start")).await?;
+
+    Ok(create_result)
+}
+
 // --- Images ---
 
 #[tauri::command]

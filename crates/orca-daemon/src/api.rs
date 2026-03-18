@@ -55,7 +55,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/machines", get(list_machines))
         .route("/machines/{name}", get(inspect_machine))
         // Containers
-        .route("/containers", get(list_containers))
+        .route("/containers", get(list_containers).post(create_container))
         .route("/containers/{id}", get(inspect_container))
         .route("/containers/{id}/start", post(start_container))
         .route("/containers/{id}/stop", post(stop_container))
@@ -235,6 +235,57 @@ async fn remove_container(
 ) -> Result<impl IntoResponse, ApiError> {
     state.runtime.remove_container(&id, false).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// --- Container Create ---
+
+#[derive(Deserialize)]
+struct CreateContainerRequest {
+    image: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    command: Vec<String>,
+    #[serde(default)]
+    env: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    ports: Vec<orca_core::runtime::PortMapping>,
+    #[serde(default)]
+    volumes: Vec<orca_core::runtime::VolumeMount>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    restart_policy: Option<String>,
+    #[serde(default)]
+    network: Option<String>,
+}
+
+async fn create_container(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CreateContainerRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::runtime::ContainerCreateOpts;
+
+    let opts = ContainerCreateOpts {
+        image: body.image,
+        name: body.name,
+        command: body.command,
+        env: body.env,
+        ports: body.ports,
+        volumes: body.volumes,
+        labels: body.labels,
+        restart_policy: body.restart_policy,
+        network: body.network,
+        detach: true,
+        remove_on_exit: false,
+    };
+
+    let id = state.runtime.create_container(opts).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({ "id": id })),
+    ))
 }
 
 async fn container_stats(

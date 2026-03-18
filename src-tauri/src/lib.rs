@@ -20,6 +20,7 @@ pub fn run() {
             commands::stop_container,
             commands::exec_container,
             commands::remove_container,
+            commands::create_and_run_container,
             commands::container_logs,
             commands::list_images,
             commands::pull_image,

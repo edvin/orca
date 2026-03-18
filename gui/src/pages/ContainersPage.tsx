@@ -4,6 +4,7 @@ import type { Container, ContainerStats } from "../lib/types";
 import { formatPorts, formatTimestamp, shortId, formatBytes } from "../lib/format";
 import LogViewer from "../components/LogViewer";
 import ExecTerminal from "../components/ExecTerminal";
+import RunContainerDialog from "../components/RunContainerDialog";
 
 export default function ContainersPage() {
   const [containers, setContainers] = createSignal<Container[]>([]);
@@ -13,6 +14,7 @@ export default function ContainersPage() {
   const [logsFor, setLogsFor] = createSignal<Container | null>(null);
   const [execFor, setExecFor] = createSignal<Container | null>(null);
   const [loading, setLoading] = createSignal(false);
+  const [showRunDialog, setShowRunDialog] = createSignal(false);
 
   const refresh = async () => {
     try {
@@ -117,6 +119,9 @@ export default function ContainersPage() {
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
           />
+          <button class="btn btn-primary" onClick={() => setShowRunDialog(true)}>
+            Run
+          </button>
           <button class="btn" onClick={refresh}>
             Refresh
           </button>
@@ -298,6 +303,13 @@ export default function ContainersPage() {
             </For>
           </tbody>
         </table>
+      </Show>
+
+      <Show when={showRunDialog()}>
+        <RunContainerDialog
+          onClose={() => setShowRunDialog(false)}
+          onCreated={refresh}
+        />
       </Show>
     </div>
   );
