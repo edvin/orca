@@ -105,6 +105,26 @@ pub async fn stop_container(id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn exec_container(
+    id: String,
+    command: Vec<String>,
+    workdir: Option<String>,
+) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/containers/{id}/exec"))
+        .json(&serde_json::json!({
+            "command": command,
+            "workdir": workdir,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Exec failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
 pub async fn remove_container(id: String) -> Result<(), String> {
     delete(&format!("/containers/{id}")).await
 }

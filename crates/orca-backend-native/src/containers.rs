@@ -226,7 +226,7 @@ impl ContainerRuntime for NativeBackend {
         })
     }
 
-    async fn exec(&self, opts: ExecOpts) -> anyhow::Result<i32> {
+    async fn exec(&self, opts: ExecOpts) -> anyhow::Result<ExecResult> {
         let exec = self
             .docker
             .create_exec(
@@ -248,18 +248,22 @@ impl ContainerRuntime for NativeBackend {
             )
             .await?;
 
-        let output = self.docker.start_exec(&exec.id, None).await?;
-        match output {
+        let mut collected = String::new();
+        let started = self.docker.start_exec(&exec.id, None).await?;
+        match started {
             StartExecResults::Attached { mut output, .. } => {
                 while let Some(Ok(msg)) = output.next().await {
-                    print!("{msg}");
+                    collected.push_str(&msg.to_string());
                 }
             }
             StartExecResults::Detached => {}
         }
 
         let inspect = self.docker.inspect_exec(&exec.id).await?;
-        Ok(inspect.exit_code.unwrap_or(-1) as i32)
+        Ok(ExecResult {
+            exit_code: inspect.exit_code.unwrap_or(-1) as i32,
+            output: collected,
+        })
     }
 }
 

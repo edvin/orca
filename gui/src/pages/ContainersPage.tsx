@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats } from "../lib/types";
 import { formatPorts, formatTimestamp, shortId, formatBytes } from "../lib/format";
 import LogViewer from "../components/LogViewer";
+import ExecTerminal from "../components/ExecTerminal";
 
 export default function ContainersPage() {
   const [containers, setContainers] = createSignal<Container[]>([]);
@@ -10,6 +11,7 @@ export default function ContainersPage() {
   const [selected, setSelected] = createSignal<string | null>(null);
   const [stats, setStats] = createSignal<ContainerStats | null>(null);
   const [logsFor, setLogsFor] = createSignal<Container | null>(null);
+  const [execFor, setExecFor] = createSignal<Container | null>(null);
   const [loading, setLoading] = createSignal(false);
 
   const refresh = async () => {
@@ -71,6 +73,11 @@ export default function ContainersPage() {
     setLogsFor(c);
   };
 
+  const openExec = (c: Container, e: MouseEvent) => {
+    e.stopPropagation();
+    setExecFor(c);
+  };
+
   const stateClass = (state: string) => {
     switch (state) {
       case "Running":
@@ -124,6 +131,19 @@ export default function ContainersPage() {
               containerId={c().id}
               containerName={c().name}
               onClose={() => setLogsFor(null)}
+            />
+          </div>
+        )}
+      </Show>
+
+      {/* Exec Terminal Panel */}
+      <Show when={execFor()}>
+        {(c) => (
+          <div style={{ "margin-bottom": "16px" }}>
+            <ExecTerminal
+              containerId={c().id}
+              containerName={c().name}
+              onClose={() => setExecFor(null)}
             />
           </div>
         )}
@@ -185,6 +205,14 @@ export default function ContainersPage() {
                         >
                           Logs
                         </button>
+                        <Show when={c.state === "Running"}>
+                          <button
+                            class="btn btn-sm"
+                            onClick={(e) => openExec(c, e)}
+                          >
+                            Exec
+                          </button>
+                        </Show>
                         <Show when={c.state !== "Running"}>
                           <button
                             class="btn btn-sm btn-primary"

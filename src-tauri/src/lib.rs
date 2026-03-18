@@ -11,6 +11,7 @@ pub fn run() {
             commands::container_stats,
             commands::start_container,
             commands::stop_container,
+            commands::exec_container,
             commands::remove_container,
             commands::container_logs,
             commands::list_images,

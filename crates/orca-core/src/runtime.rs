@@ -111,5 +111,12 @@ pub trait ContainerRuntime {
     async fn container_stats(&self, id: &str) -> anyhow::Result<ContainerStats>;
 
     // Exec
-    async fn exec(&self, opts: ExecOpts) -> anyhow::Result<i32>;
+    async fn exec(&self, opts: ExecOpts) -> anyhow::Result<ExecResult>;
+}
+
+/// Result from executing a command inside a container.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecResult {
+    pub exit_code: i32,
+    pub output: String,
 }

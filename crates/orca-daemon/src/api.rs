@@ -63,6 +63,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}", delete(remove_container))
         .route("/containers/{id}/stats", get(container_stats))
         .route("/containers/{id}/logs", get(container_logs_sse))
+        .route("/containers/{id}/exec", post(exec_container))
         // Images
         .route("/images", get(list_images))
         .route("/images/{id}", get(inspect_image))
@@ -215,6 +216,37 @@ async fn container_stats(
 ) -> Result<Json<ContainerStats>, ApiError> {
     let stats = state.backend.container_stats(&id).await?;
     Ok(Json(stats))
+}
+
+// --- Container Exec ---
+
+#[derive(Deserialize)]
+struct ExecRequest {
+    command: Vec<String>,
+    #[serde(default)]
+    workdir: Option<String>,
+    #[serde(default)]
+    env: Option<std::collections::HashMap<String, String>>,
+}
+
+async fn exec_container(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<ExecRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::runtime::ExecOpts;
+
+    let opts = ExecOpts {
+        container: id,
+        command: body.command,
+        interactive: false,
+        tty: false,
+        env: body.env.unwrap_or_default(),
+        workdir: body.workdir,
+    };
+
+    let result = state.backend.exec(opts).await?;
+    Ok(Json(result))
 }
 
 // --- Container Logs (SSE) ---

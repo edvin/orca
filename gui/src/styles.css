@@ -339,6 +339,89 @@ body {
   font-weight: 600;
 }
 
+/* Exec Terminal */
+.exec-terminal {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 350px;
+}
+
+.exec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+  flex-shrink: 0;
+}
+
+.exec-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.exec-output {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.exec-entry {
+  margin-bottom: 12px;
+}
+
+.exec-prompt {
+  color: #58a6ff;
+  margin-bottom: 2px;
+}
+
+.exec-prompt-char {
+  color: #3fb950;
+  margin-right: 6px;
+  user-select: none;
+}
+
+.exec-result {
+  color: #c9d1d9;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.exec-exit-code {
+  color: #f85149;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.exec-input-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid #21262d;
+  background: #161b22;
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-size: 12px;
+}
+
+.exec-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #c9d1d9;
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+}
+
 /* Stacks */
 .stack-list {
   display: flex;
