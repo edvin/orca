@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orca — Container Management Desktop App</title>
+  <meta name="description" content="A beautiful, blazing-fast container management desktop app with built-in AI. Manage Docker, Podman, Compose, and Kubernetes from one place.">
+  <meta property="og:title" content="Orca — Container Management Desktop App">
+  <meta property="og:description" content="Open source Docker Desktop alternative with built-in AI assistant and agent APIs.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png">
+  <meta property="og:url" content="https://edvin.github.io/orca">
+  <link rel="icon" href="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-icon-whale.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Hero */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, #1f6feb15 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-logo {
+      width: 140px;
+      height: auto;
+      margin-bottom: 32px;
+      position: relative;
+      filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.3));
+    }
+
+    .hero h1 {
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      margin-bottom: 16px;
+      position: relative;
+      background: linear-gradient(135deg, #f0f6fc 0%, #8b949e 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-tagline {
+      font-size: 22px;
+      color: #8b949e;
+      max-width: 600px;
+      line-height: 1.5;
+      margin-bottom: 40px;
+      position: relative;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 48px;
+      position: relative;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 14px 32px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: #2da44e;
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(45, 164, 78, 0.3);
+    }
+    .btn-primary:hover {
+      background: #3fb950;
+      box-shadow: 0 6px 24px rgba(63, 185, 80, 0.4);
+      transform: translateY(-2px);
+      text-decoration: none;
+    }
+
+    .btn-secondary {
+      background: #21262d;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+    }
+    .btn-secondary:hover {
+      background: #30363d;
+      border-color: #484f58;
+      transform: translateY(-2px);
+      text-decoration: none;
+    }
+
+    .hero-badges {
+      display: flex;
+      gap: 8px;
+      position: relative;
+    }
+
+    /* Features */
+    .features {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 80px 20px;
+    }
+
+    .features h2 {
+      font-size: 36px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 16px;
+      letter-spacing: -0.5px;
+    }
+
+    .features-subtitle {
+      text-align: center;
+      color: #8b949e;
+      font-size: 18px;
+      margin-bottom: 60px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      padding: 28px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: #30363d;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .feature-icon {
+      font-size: 32px;
+      margin-bottom: 16px;
+    }
+
+    .feature-card h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: #8b949e;
+      line-height: 1.6;
+    }
+
+    /* Tech */
+    .tech {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+      text-align: center;
+    }
+
+    .tech h2 {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .tech-subtitle {
+      color: #8b949e;
+      font-size: 18px;
+      margin-bottom: 40px;
+    }
+
+    .tech-logos {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+
+    .tech-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      color: #8b949e;
+      font-size: 13px;
+    }
+
+    .tech-item span {
+      font-size: 28px;
+    }
+
+    /* Agent */
+    .agent {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    .agent h2 {
+      font-size: 36px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .agent-subtitle {
+      text-align: center;
+      color: #8b949e;
+      font-size: 18px;
+      margin-bottom: 40px;
+    }
+
+    .code-block {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 20px;
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      overflow-x: auto;
+      color: #c9d1d9;
+    }
+
+    /* Footer */
+    .footer {
+      border-top: 1px solid #21262d;
+      padding: 40px 20px;
+      text-align: center;
+      color: #484f58;
+      font-size: 14px;
+    }
+
+    .footer a { color: #8b949e; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 36px; }
+      .hero-tagline { font-size: 18px; }
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<section class="hero">
+  <img src="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png" alt="Orca" class="hero-logo">
+  <h1>Orca</h1>
+  <p class="hero-tagline">
+    A beautiful, blazing-fast container management desktop app with built-in AI.
+    Open source. Works with Docker and Podman.
+  </p>
+  <div class="hero-buttons">
+    <a href="https://github.com/edvin/orca/releases" class="btn btn-primary">Download</a>
+    <a href="https://github.com/edvin/orca" class="btn btn-secondary">View on GitHub</a>
+  </div>
+  <div class="hero-badges">
+    <img src="https://github.com/edvin/orca/actions/workflows/build.yml/badge.svg" alt="Build">
+    <img src="https://img.shields.io/github/license/edvin/orca" alt="License">
+    <img src="https://img.shields.io/github/stars/edvin/orca" alt="Stars">
+  </div>
+</section>
+
+<section class="features">
+  <h2>Everything you need</h2>
+  <p class="features-subtitle">Containers, images, compose stacks, Kubernetes, AI — all in one place.</p>
+
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon">📦</div>
+      <h3>Container Management</h3>
+      <p>Full lifecycle management with live CPU/memory sparklines, exec terminal, log viewer with search, and one-click diagnostics for failed containers.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🖼️</div>
+      <h3>Image Management</h3>
+      <p>Pull with Docker Hub search autocomplete, build from Dockerfile, batch delete, prune unused images, and authenticate with private registries.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📋</div>
+      <h3>Compose Stacks</h3>
+      <p>Auto-detects compose projects from container labels. Run compose up/down/pull with full output. Service health dots at a glance.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">☸️</div>
+      <h3>Kubernetes</h3>
+      <p>One-click k3s cluster with Traefik ingress. Manage pods, deployments, services, PVCs. Scale, restart, apply YAML manifests.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🤖</div>
+      <h3>AI Assistant</h3>
+      <p>Built-in chat powered by Claude or GPT. One-click crash diagnosis with pre-filled context. Actionable fix suggestions.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔌</div>
+      <h3>Agent APIs</h3>
+      <p>MCP server for Claude Code, OpenAI-compatible function calling, and direct tool execution. 27 tools across 8 categories.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🚀</div>
+      <h3>App Templates</h3>
+      <p>12 one-click deployable apps — PostgreSQL, Redis, Nginx, Grafana, Prometheus, MinIO, and more. Pre-configured with sensible defaults.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📊</div>
+      <h3>Dashboard</h3>
+      <p>System overview with sparkline charts, top resource consumers, container/image/stack counts. Command palette for power users.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <h3>Security</h3>
+      <p>Mandatory API token authentication with constant-time comparison. Unix socket mode. Network exposure warnings. Signed auto-updates.</p>
+    </div>
+  </div>
+</section>
+
+<section class="agent">
+  <h2>AI agents welcome</h2>
+  <p class="agent-subtitle">Let AI manage your containers. Connect Claude Code, OpenAI agents, or any MCP client.</p>
+  <div class="code-block">
+<span style="color: #8b949e">// Claude Code MCP config</span>
+{
+  "<span style="color: #a5d6ff">mcpServers</span>": {
+    "<span style="color: #a5d6ff">orca</span>": {
+      "<span style="color: #a5d6ff">url</span>": "<span style="color: #a5d6ff">http://127.0.0.1:9477/api/v1/agent/mcp</span>",
+      "<span style="color: #a5d6ff">headers</span>": {
+        "<span style="color: #a5d6ff">Authorization</span>": "<span style="color: #a5d6ff">Bearer YOUR_TOKEN</span>"
+      }
+    }
+  }
+}
+  </div>
+</section>
+
+<section class="tech">
+  <h2>Built with</h2>
+  <p class="tech-subtitle">Fast, native, cross-platform.</p>
+  <div class="tech-logos">
+    <div class="tech-item"><span>🦀</span> Rust</div>
+    <div class="tech-item"><span>⚡</span> Tauri 2</div>
+    <div class="tech-item"><span>💎</span> SolidJS</div>
+    <div class="tech-item"><span>🐳</span> Docker</div>
+    <div class="tech-item"><span>🦭</span> Podman</div>
+    <div class="tech-item"><span>☸️</span> k3s</div>
+  </div>
+</section>
+
+<footer class="footer">
+  <p>
+    <a href="https://github.com/edvin/orca">GitHub</a> ·
+    <a href="https://github.com/edvin/orca/releases">Releases</a> ·
+    <a href="https://github.com/edvin/orca/blob/main/LICENSE">MIT License</a> ·
+    <a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md">Contributing</a>
+  </p>
+  <p style="margin-top: 12px;">Made by <a href="https://github.com/edvin">Edvin Syse</a></p>
+</footer>
+
+</body>
+</html>
