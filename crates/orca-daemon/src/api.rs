@@ -15,6 +15,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use orca_core::compose::{self, ComposeRunner};
 use orca_core::image::ImageManager;
+use orca_core::kubernetes::K8sManager;
 use orca_core::machine::{MachineBackend, MachineConfig, MachineInfo, MachineState};
 use orca_core::network::NetworkManager;
 use orca_core::runtime::{ContainerRuntime, ContainerStats};
@@ -89,6 +90,25 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/{name}/up", post(compose_up))
         .route("/stacks/{name}/down", post(compose_down))
         .route("/stacks/{name}/pull", post(compose_pull))
+        // Kubernetes
+        .route("/k8s/status", get(k8s_status))
+        .route("/k8s/enable", post(k8s_enable))
+        .route("/k8s/disable", post(k8s_disable))
+        .route("/k8s/reset", post(k8s_reset))
+        .route("/k8s/kubeconfig", get(k8s_kubeconfig))
+        .route("/k8s/namespaces", get(k8s_namespaces))
+        .route("/k8s/pods/{namespace}", get(k8s_pods))
+        .route("/k8s/deployments/{namespace}", get(k8s_deployments))
+        .route("/k8s/services/{namespace}", get(k8s_services))
+        .route("/k8s/ingresses/{namespace}", get(k8s_ingresses))
+        .route("/k8s/pvcs/{namespace}", get(k8s_pvcs))
+        .route("/k8s/pvs", get(k8s_pvs))
+        .route("/k8s/pods/{namespace}/{name}", delete(k8s_delete_pod))
+        .route("/k8s/deployments/{namespace}/{name}/scale", post(k8s_scale))
+        .route("/k8s/deployments/{namespace}/{name}/restart", post(k8s_restart))
+        .route("/k8s/pvcs/{namespace}/{name}", delete(k8s_delete_pvc))
+        .route("/k8s/pods/{namespace}/{name}/logs", get(k8s_pod_logs))
+        .route("/k8s/apply", post(k8s_apply))
 }
 
 // --- Health ---
@@ -726,4 +746,167 @@ async fn compose_pull(
         .compose_pull(&dir, config.as_deref())
         .await?;
     Ok(Json(output))
+}
+
+// --- Kubernetes ---
+
+async fn k8s_status(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let status = state.k8s.status().await?;
+    Ok(Json(status))
+}
+
+async fn k8s_enable(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.enable().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_disable(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.disable().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_reset(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.reset().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_kubeconfig(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let kubeconfig = state.k8s.kubeconfig().await?;
+    Ok(Json(serde_json::json!({ "kubeconfig": kubeconfig })))
+}
+
+async fn k8s_namespaces(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let namespaces = state.k8s.list_namespaces().await?;
+    Ok(Json(namespaces))
+}
+
+async fn k8s_pods(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let pods = state.k8s.list_pods(&namespace).await?;
+    Ok(Json(pods))
+}
+
+async fn k8s_deployments(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let deployments = state.k8s.list_deployments(&namespace).await?;
+    Ok(Json(deployments))
+}
+
+async fn k8s_services(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let services = state.k8s.list_services(&namespace).await?;
+    Ok(Json(services))
+}
+
+async fn k8s_ingresses(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let ingresses = state.k8s.list_ingresses(&namespace).await?;
+    Ok(Json(ingresses))
+}
+
+async fn k8s_pvcs(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let pvcs = state.k8s.list_pvcs(&namespace).await?;
+    Ok(Json(pvcs))
+}
+
+async fn k8s_pvs(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let pvs = state.k8s.list_pvs().await?;
+    Ok(Json(pvs))
+}
+
+async fn k8s_delete_pod(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_pod(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct ScaleRequest {
+    replicas: u32,
+}
+
+async fn k8s_scale(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+    Json(body): Json<ScaleRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    state
+        .k8s
+        .scale_deployment(&namespace, &name, body.replicas)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_restart(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.restart_deployment(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_delete_pvc(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_pvc(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct PodLogsQuery {
+    container: Option<String>,
+    tail: Option<u32>,
+}
+
+async fn k8s_pod_logs(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+    Query(query): Query<PodLogsQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let logs = state
+        .k8s
+        .pod_logs(&namespace, &name, query.container.as_deref(), query.tail)
+        .await?;
+    Ok(Json(logs))
+}
+
+#[derive(Deserialize)]
+struct ApplyYamlRequest {
+    yaml: String,
+}
+
+async fn k8s_apply(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ApplyYamlRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let output = state.k8s.apply_yaml(&body.yaml).await?;
+    Ok(Json(serde_json::json!({ "output": output })))
 }

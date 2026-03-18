@@ -8,10 +8,11 @@ import ContainersPage from "./pages/ContainersPage";
 import ImagesPage from "./pages/ImagesPage";
 import VolumesPage from "./pages/VolumesPage";
 import NetworksPage from "./pages/NetworksPage";
+import KubernetesPage from "./pages/KubernetesPage";
 import MachinePage from "./pages/MachinePage";
 import SettingsPage from "./pages/SettingsPage";
 
-export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "machine" | "settings";
+export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("stacks");
@@ -53,6 +54,7 @@ export default function App() {
         {page() === "images" && <ImagesPage />}
         {page() === "volumes" && <VolumesPage />}
         {page() === "networks" && <NetworksPage />}
+        {page() === "kubernetes" && <KubernetesPage />}
         {page() === "machine" && <MachinePage />}
         {page() === "settings" && <SettingsPage />}
       </main>

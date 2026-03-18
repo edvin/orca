@@ -474,3 +474,127 @@ pub async fn get_machine_info() -> Result<serde_json::Value, String> {
         .next()
         .ok_or_else(|| "No machine found".to_string())
 }
+
+// --- Kubernetes ---
+
+#[tauri::command]
+pub async fn k8s_status() -> Result<serde_json::Value, String> {
+    get_json("/k8s/status").await
+}
+
+#[tauri::command]
+pub async fn k8s_enable() -> Result<serde_json::Value, String> {
+    post_json("/k8s/enable").await
+}
+
+#[tauri::command]
+pub async fn k8s_disable() -> Result<(), String> {
+    post_empty("/k8s/disable").await
+}
+
+#[tauri::command]
+pub async fn k8s_namespaces() -> Result<serde_json::Value, String> {
+    get_json("/k8s/namespaces").await
+}
+
+#[tauri::command]
+pub async fn k8s_pods(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/pods/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_deployments(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/deployments/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_services(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/services/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_ingresses(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/ingresses/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_pvcs(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/pvcs/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_pvs() -> Result<serde_json::Value, String> {
+    get_json("/k8s/pvs").await
+}
+
+#[tauri::command]
+pub async fn k8s_delete_pod(namespace: String, name: String) -> Result<(), String> {
+    delete(&format!("/k8s/pods/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_delete_pvc(namespace: String, name: String) -> Result<(), String> {
+    delete(&format!("/k8s/pvcs/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_scale_deployment(
+    namespace: String,
+    name: String,
+    replicas: u32,
+) -> Result<(), String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}/k8s/deployments/{namespace}/{name}/scale"))
+        .json(&serde_json::json!({ "replicas": replicas }))
+        .send()
+        .await
+        .map_err(|e| format!("Scale failed: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Scale failed: {body}"))
+    }
+}
+
+#[tauri::command]
+pub async fn k8s_restart_deployment(namespace: String, name: String) -> Result<(), String> {
+    post_empty(&format!("/k8s/deployments/{namespace}/{name}/restart")).await
+}
+
+#[tauri::command]
+pub async fn k8s_pod_logs(
+    namespace: String,
+    name: String,
+    container: Option<String>,
+    tail: Option<u32>,
+) -> Result<Vec<String>, String> {
+    let mut query_parts = Vec::new();
+    if let Some(c) = &container {
+        query_parts.push(format!("container={c}"));
+    }
+    if let Some(t) = tail {
+        query_parts.push(format!("tail={t}"));
+    }
+    let query = if query_parts.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", query_parts.join("&"))
+    };
+
+    get_json(&format!("/k8s/pods/{namespace}/{name}/logs{query}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/k8s/apply"))
+        .json(&serde_json::json!({ "yaml": yaml }))
+        .send()
+        .await
+        .map_err(|e| format!("Apply failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}

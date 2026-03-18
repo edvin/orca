@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use orca_backend_common::BollardRuntime;
+use orca_backend_common::k8s::K3sManager;
 use orca_core::config::OrcaConfig;
 use orca_core::event::Event;
 
@@ -13,6 +14,7 @@ use orca_core::event::Event;
 pub struct AppState {
     pub config: OrcaConfig,
     pub runtime: Arc<BollardRuntime>,
+    pub k8s: Arc<K3sManager>,
     pub events_tx: broadcast::Sender<Event>,
 }
 
@@ -20,11 +22,13 @@ impl AppState {
     pub fn new(
         config: OrcaConfig,
         runtime: Arc<BollardRuntime>,
+        k8s: Arc<K3sManager>,
         events_tx: broadcast::Sender<Event>,
     ) -> Self {
         Self {
             config,
             runtime,
+            k8s,
             events_tx,
         }
     }

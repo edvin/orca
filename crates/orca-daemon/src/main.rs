@@ -60,7 +60,8 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let state = Arc::new(AppState::new(config, runtime, events_tx));
+    let k8s = Arc::new(orca_backend_common::k8s::K3sManager::new());
+    let state = Arc::new(AppState::new(config, runtime, k8s, events_tx));
 
     let app = Router::new()
         .nest("/api/v1", api::routes())

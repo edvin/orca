@@ -41,6 +41,22 @@ pub fn run() {
             commands::compose_pull,
             commands::subscribe_events,
             commands::get_machine_info,
+            commands::k8s_status,
+            commands::k8s_enable,
+            commands::k8s_disable,
+            commands::k8s_namespaces,
+            commands::k8s_pods,
+            commands::k8s_deployments,
+            commands::k8s_services,
+            commands::k8s_ingresses,
+            commands::k8s_pvcs,
+            commands::k8s_pvs,
+            commands::k8s_delete_pod,
+            commands::k8s_delete_pvc,
+            commands::k8s_scale_deployment,
+            commands::k8s_restart_deployment,
+            commands::k8s_pod_logs,
+            commands::k8s_apply_yaml,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

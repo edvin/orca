@@ -80,3 +80,99 @@ export interface MachineInfo {
   };
   backend: string;
 }
+
+// --- Kubernetes ---
+
+export interface ClusterStatus {
+  enabled: boolean;
+  running: boolean;
+  version: string | null;
+  node_name: string | null;
+  node_status: string | null;
+  pods_running: number;
+  pods_total: number;
+  traefik_dashboard: string | null;
+}
+
+export interface Pod {
+  name: string;
+  namespace: string;
+  status: string;
+  ready: string;
+  restarts: number;
+  age: string;
+  node: string | null;
+  ip: string | null;
+  containers: PodContainer[];
+}
+
+export interface PodContainer {
+  name: string;
+  image: string;
+  ready: boolean;
+  restart_count: number;
+  state: string;
+}
+
+export interface Deployment {
+  name: string;
+  namespace: string;
+  replicas_ready: number;
+  replicas_desired: number;
+  age: string;
+  images: string[];
+}
+
+export interface K8sService {
+  name: string;
+  namespace: string;
+  service_type: string;
+  cluster_ip: string | null;
+  external_ip: string | null;
+  ports: ServicePort[];
+  age: string;
+}
+
+export interface ServicePort {
+  name: string | null;
+  port: number;
+  target_port: string;
+  node_port: number | null;
+  protocol: string;
+}
+
+export interface Ingress {
+  name: string;
+  namespace: string;
+  hosts: string[];
+  address: string | null;
+  age: string;
+}
+
+export interface Namespace {
+  name: string;
+  status: string;
+  age: string;
+}
+
+export interface PersistentVolumeClaim {
+  name: string;
+  namespace: string;
+  status: string;
+  volume: string | null;
+  capacity: string | null;
+  access_modes: string[];
+  storage_class: string | null;
+  age: string;
+}
+
+export interface PersistentVolume {
+  name: string;
+  capacity: string | null;
+  access_modes: string[];
+  reclaim_policy: string | null;
+  status: string;
+  claim: string | null;
+  storage_class: string | null;
+  age: string;
+}

@@ -15,4 +15,7 @@ tracing.workspace = true
 bollard = "0.18"
 tokio-stream.workspace = true
 chrono.workspace = true
+dirs.workspace = true
 tar = "0.4"
+kube = { version = "0.98", features = ["client", "runtime", "derive"] }
+k8s-openapi = { version = "0.24", features = ["latest"] }

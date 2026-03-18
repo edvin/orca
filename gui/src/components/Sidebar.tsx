@@ -14,6 +14,7 @@ const mainNavItems: { id: Page; label: string; icon: string }[] = [
   { id: "images", label: "Images", icon: "\u25ce" },
   { id: "volumes", label: "Volumes", icon: "\u25c8" },
   { id: "networks", label: "Networks", icon: "\u25cc" },
+  { id: "kubernetes", label: "Kubernetes", icon: "\u2388" },
   { id: "machine", label: "Machine", icon: "\u2318" },
 ];
 
