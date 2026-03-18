@@ -1,33 +1,52 @@
-import { createSignal, onMount } from "solid-js";
+import { createSignal, onMount, onCleanup } from "solid-js";
+import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "./components/Sidebar";
 import ContainersPage from "./pages/ContainersPage";
 import ImagesPage from "./pages/ImagesPage";
 import VolumesPage from "./pages/VolumesPage";
+import NetworksPage from "./pages/NetworksPage";
 import MachinePage from "./pages/MachinePage";
 
-type Page = "containers" | "images" | "volumes" | "machine";
+export type Page = "containers" | "images" | "volumes" | "networks" | "machine";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("containers");
-  const [daemonStatus, setDaemonStatus] = createSignal<string>("checking...");
+  const [daemonStatus, setDaemonStatus] = createSignal<string>("connecting");
 
-  onMount(async () => {
+  const checkDaemon = async () => {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const status = await invoke("get_status") as any;
+      const status = (await invoke("get_status")) as any;
       setDaemonStatus(status.daemon_running ? "running" : "stopped");
     } catch {
       setDaemonStatus("disconnected");
     }
+  };
+
+  onMount(() => {
+    checkDaemon();
+    const interval = setInterval(checkDaemon, 5000);
+    onCleanup(() => clearInterval(interval));
   });
 
   return (
     <div style={{ display: "flex", height: "100vh" }}>
-      <Sidebar currentPage={page()} onNavigate={setPage} daemonStatus={daemonStatus()} />
-      <main style={{ flex: 1, padding: "24px", overflow: "auto" }}>
+      <Sidebar
+        currentPage={page()}
+        onNavigate={setPage}
+        daemonStatus={daemonStatus()}
+      />
+      <main
+        style={{
+          flex: 1,
+          padding: "24px",
+          overflow: "auto",
+          background: "#0d1117",
+        }}
+      >
         {page() === "containers" && <ContainersPage />}
         {page() === "images" && <ImagesPage />}
         {page() === "volumes" && <VolumesPage />}
+        {page() === "networks" && <NetworksPage />}
         {page() === "machine" && <MachinePage />}
       </main>
     </div>

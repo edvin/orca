@@ -1,51 +1,141 @@
 //! Tauri commands — callable from the frontend via `invoke()`.
+//! These proxy to the Vessel daemon's HTTP API.
 
-use serde::Serialize;
+use serde::Deserialize;
 
-#[derive(Debug, Serialize)]
-pub struct StatusInfo {
-    pub daemon_running: bool,
-    pub daemon_version: Option<String>,
-    pub machine_name: Option<String>,
-    pub machine_state: Option<String>,
-    pub runtime: Option<String>,
+const DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
+
+fn client() -> reqwest::Client {
+    reqwest::Client::new()
+}
+
+async fn get_json<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, String> {
+    client()
+        .get(format!("{DAEMON_URL}{path}"))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?
+        .json::<T>()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+async fn post_empty(path: &str) -> Result<(), String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}{path}"))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Request failed: {body}"))
+    }
+}
+
+async fn delete(path: &str) -> Result<(), String> {
+    let resp = client()
+        .delete(format!("{DAEMON_URL}{path}"))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Request failed: {body}"))
+    }
+}
+
+// --- Status ---
+
+#[tauri::command]
+pub async fn get_status() -> Result<serde_json::Value, String> {
+    match get_json::<serde_json::Value>("/health").await {
+        Ok(health) => Ok(serde_json::json!({
+            "daemon_running": true,
+            "daemon_version": health.get("version").and_then(|v| v.as_str()).unwrap_or("unknown"),
+        })),
+        Err(_) => Ok(serde_json::json!({
+            "daemon_running": false,
+            "daemon_version": null,
+        })),
+    }
+}
+
+// --- Containers ---
+
+#[tauri::command]
+pub async fn list_containers() -> Result<serde_json::Value, String> {
+    get_json("/containers").await
 }
 
 #[tauri::command]
-pub async fn get_status() -> Result<StatusInfo, String> {
-    // TODO: Query the daemon
-    Ok(StatusInfo {
-        daemon_running: false,
-        daemon_version: None,
-        machine_name: None,
-        machine_state: None,
-        runtime: None,
-    })
+pub async fn inspect_container(id: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/containers/{id}")).await
 }
 
 #[tauri::command]
-pub async fn list_containers() -> Result<Vec<serde_json::Value>, String> {
-    Ok(vec![])
+pub async fn container_stats(id: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/containers/{id}/stats")).await
 }
 
 #[tauri::command]
-pub async fn list_images() -> Result<Vec<serde_json::Value>, String> {
-    Ok(vec![])
+pub async fn start_container(id: String) -> Result<(), String> {
+    post_empty(&format!("/containers/{id}/start")).await
 }
 
 #[tauri::command]
-pub async fn list_volumes() -> Result<Vec<serde_json::Value>, String> {
-    Ok(vec![])
+pub async fn stop_container(id: String) -> Result<(), String> {
+    post_empty(&format!("/containers/{id}/stop")).await
 }
+
+#[tauri::command]
+pub async fn remove_container(id: String) -> Result<(), String> {
+    delete(&format!("/containers/{id}")).await
+}
+
+// --- Images ---
+
+#[tauri::command]
+pub async fn list_images() -> Result<serde_json::Value, String> {
+    get_json("/images").await
+}
+
+#[tauri::command]
+pub async fn remove_image(id: String) -> Result<(), String> {
+    delete(&format!("/images/{id}")).await
+}
+
+// --- Volumes ---
+
+#[tauri::command]
+pub async fn list_volumes() -> Result<serde_json::Value, String> {
+    get_json("/volumes").await
+}
+
+#[tauri::command]
+pub async fn remove_volume(name: String) -> Result<(), String> {
+    delete(&format!("/volumes/{name}")).await
+}
+
+// --- Networks ---
+
+#[tauri::command]
+pub async fn list_networks() -> Result<serde_json::Value, String> {
+    get_json("/networks").await
+}
+
+// --- Machine ---
 
 #[tauri::command]
 pub async fn get_machine_info() -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({
-        "name": "default",
-        "state": "stopped",
-        "cpus": 2,
-        "memory_mb": 4096,
-        "disk_gb": 60,
-        "runtime": "podman"
-    }))
+    let machines: Vec<serde_json::Value> = get_json("/machines").await?;
+    machines
+        .into_iter()
+        .next()
+        .ok_or_else(|| "No machine found".to_string())
 }

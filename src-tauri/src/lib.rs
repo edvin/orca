@@ -1,13 +1,4 @@
-use serde::Serialize;
-use tauri::Manager;
-
 mod commands;
-
-#[derive(Debug, Serialize, Clone)]
-struct DaemonStatus {
-    connected: bool,
-    version: Option<String>,
-}
 
 pub fn run() {
     tauri::Builder::default()
@@ -15,17 +6,18 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_status,
             commands::list_containers,
+            commands::inspect_container,
+            commands::container_stats,
+            commands::start_container,
+            commands::stop_container,
+            commands::remove_container,
             commands::list_images,
+            commands::remove_image,
             commands::list_volumes,
+            commands::remove_volume,
+            commands::list_networks,
             commands::get_machine_info,
         ])
-        .setup(|app| {
-            // TODO: Start the daemon process if not already running.
-            // TODO: Set up system tray icon.
-            let _window = app.get_webview_window("main").unwrap();
-            tracing::info!("Vessel GUI started");
-            Ok(())
-        })
         .run(tauri::generate_context!())
         .expect("error while running vessel");
 }

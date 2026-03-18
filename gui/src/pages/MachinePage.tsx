@@ -1,76 +1,75 @@
-import { createSignal, onMount } from "solid-js";
+import { createSignal, onMount, Show } from "solid-js";
+import { invoke } from "@tauri-apps/api/core";
+import type { MachineInfo } from "../lib/types";
+import { formatBytes } from "../lib/format";
 
 export default function MachinePage() {
-  const [machine, setMachine] = createSignal<any>(null);
+  const [machine, setMachine] = createSignal<MachineInfo | null>(null);
+  const [error, setError] = createSignal<string | null>(null);
 
-  onMount(async () => {
+  const refresh = async () => {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const info = await invoke("get_machine_info");
+      const info = (await invoke("get_machine_info")) as MachineInfo;
       setMachine(info);
+      setError(null);
     } catch (e) {
-      console.error("Failed to get machine info:", e);
+      setError(String(e));
     }
-  });
+  };
 
-  const m = () => machine();
+  onMount(refresh);
 
   return (
     <div>
-      <h1 style={{ "font-size": "24px", "margin-bottom": "20px" }}>Machine</h1>
+      <div class="page-header">
+        <h1 class="page-title">Machine</h1>
+        <button class="btn" onClick={refresh}>Refresh</button>
+      </div>
 
-      {m() ? (
-        <div style={{
-          background: "#161b22",
-          border: "1px solid #30363d",
-          "border-radius": "8px",
-          padding: "24px",
-          "max-width": "600px",
-        }}>
-          <div style={{ display: "grid", "grid-template-columns": "120px 1fr", gap: "12px", "font-size": "14px" }}>
-            <span style={{ color: "#848d97" }}>Name</span>
-            <span>{m().name}</span>
-            <span style={{ color: "#848d97" }}>State</span>
-            <span style={{
-              color: m().state === "running" ? "#3fb950" : "#f85149",
-              "font-weight": "bold",
-            }}>{m().state}</span>
-            <span style={{ color: "#848d97" }}>CPUs</span>
-            <span>{m().cpus}</span>
-            <span style={{ color: "#848d97" }}>Memory</span>
-            <span>{m().memory_mb} MB</span>
-            <span style={{ color: "#848d97" }}>Disk</span>
-            <span>{m().disk_gb} GB</span>
-            <span style={{ color: "#848d97" }}>Runtime</span>
-            <span>{m().runtime}</span>
-          </div>
-
-          <div style={{ "margin-top": "24px", display: "flex", gap: "8px" }}>
-            <button style={{
-              padding: "8px 16px",
-              background: "#238636",
-              color: "white",
-              border: "none",
-              "border-radius": "6px",
-              cursor: "pointer",
-            }}>
-              Start
-            </button>
-            <button style={{
-              padding: "8px 16px",
-              background: "#da3633",
-              color: "white",
-              border: "none",
-              "border-radius": "6px",
-              cursor: "pointer",
-            }}>
-              Stop
-            </button>
-          </div>
+      <Show when={error()}>
+        <div class="card" style={{ "border-color": "#da3633", "margin-bottom": "16px" }}>
+          <span style={{ color: "#f85149" }}>{error()}</span>
         </div>
-      ) : (
-        <p style={{ color: "#848d97" }}>Loading machine info...</p>
-      )}
+      </Show>
+
+      <Show when={machine()} fallback={
+        <div class="empty">
+          <p class="empty-title">Loading machine info...</p>
+        </div>
+      }>
+        {(m) => (
+          <div style={{ "max-width": "600px" }}>
+            <div class="card">
+              <div class="card-grid">
+                <span class="card-label">Name</span>
+                <span class="card-value">{m().name}</span>
+
+                <span class="card-label">Backend</span>
+                <span class="card-value">{m().backend}</span>
+
+                <span class="card-label">State</span>
+                <span class={`state-badge ${m().state === "Running" ? "state-running" : "state-stopped"}`}>
+                  {m().state}
+                </span>
+
+                <span class="card-label">Runtime</span>
+                <span class="card-value">{m().config.runtime}</span>
+
+                <span class="card-label">CPUs</span>
+                <span class="card-value">{m().config.cpus}</span>
+
+                <span class="card-label">Memory</span>
+                <span class="card-value">{formatBytes(m().config.memory_mb * 1024 * 1024)}</span>
+
+                <Show when={m().config.disk_gb > 0}>
+                  <span class="card-label">Disk</span>
+                  <span class="card-value">{m().config.disk_gb} GB</span>
+                </Show>
+              </div>
+            </div>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }
