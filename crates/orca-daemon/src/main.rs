@@ -67,8 +67,9 @@ async fn main() -> anyhow::Result<()> {
         .nest("/api/v1", api::routes())
         .with_state(state);
 
+    #[cfg(unix)]
     if let Some(socket_arg) = args.socket {
-        // Unix socket mode
+        // Unix socket mode (Linux/macOS only)
         let socket_path = if socket_arg == "auto" {
             default_socket_path()
         } else {
@@ -83,8 +84,6 @@ async fn main() -> anyhow::Result<()> {
 
         let listener = tokio::net::UnixListener::bind(&socket_path)?;
 
-        // Make socket group-accessible
-        #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o660))?;
@@ -92,15 +91,15 @@ async fn main() -> anyhow::Result<()> {
 
         axum::serve(listener, app).await?;
 
-        // Cleanup socket on exit
         let _ = std::fs::remove_file(&socket_path);
-    } else {
-        // TCP mode (development)
-        let addr: SocketAddr = format!("{}:{}", args.bind, args.port).parse()?;
-        tracing::info!("Orca daemon listening on {addr}");
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        axum::serve(listener, app).await?;
+        return Ok(());
     }
+
+    // TCP mode (default, works on all platforms)
+    let addr: SocketAddr = format!("{}:{}", args.bind, args.port).parse()?;
+    tracing::info!("Orca daemon listening on {addr}");
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
