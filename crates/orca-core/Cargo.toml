@@ -14,3 +14,4 @@ serde_json.workspace = true
 tracing.workspace = true
 dirs.workspace = true
 trait-variant.workspace = true
+base64.workspace = true

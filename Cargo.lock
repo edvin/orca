@@ -2977,12 +2977,14 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "orca-core",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tar",
  "tokio",
  "tokio-stream",
  "tracing",
+ "urlencoding",
 ]
 
 [[package]]
@@ -3046,6 +3048,7 @@ name = "orca-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "dirs",
  "serde",
  "serde_json",
@@ -3076,6 +3079,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
 ]
 
 [[package]]
@@ -3094,6 +3098,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tracing",
+ "urlencoding",
 ]
 
 [[package]]
@@ -5629,6 +5634,12 @@ dependencies = [
  "serde",
  "serde_derive",
 ]
+
+[[package]]
+name = "urlencoding"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "urlpattern"

@@ -100,6 +100,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}/stats", get(container_stats))
         .route("/containers/{id}/logs", get(container_logs_sse))
         .route("/containers/{id}/exec", post(exec_container))
+        // Registries
+        .route("/registries", get(list_registries).post(add_registry))
+        .route("/registries/{server}", delete(remove_registry_handler))
         // Images
         .route("/images", get(list_images))
         .route("/images/{id}", get(inspect_image))
@@ -108,6 +111,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/build", post(build_image))
         .route("/images/prune", post(prune_images))
         .route("/images/batch-delete", post(batch_delete_images))
+        .route("/images/search", get(search_images))
         .route("/images/{source}/tag", post(tag_image))
         // Volumes
         .route("/volumes", get(list_volumes).post(create_volume_handler))
@@ -517,6 +521,7 @@ async fn pull_image(
     Json(body): Json<PullRequest>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
     let mut rx = if let Some(auth) = &body.auth {
+        // Explicit auth provided in request
         let registry_auth = orca_core::image::RegistryAuth {
             username: auth.username.clone(),
             password: auth.password.clone(),
@@ -527,7 +532,23 @@ async fn pull_image(
             .pull_with_auth(&body.reference, &registry_auth)
             .await?
     } else {
-        ImageManager::pull(state.runtime.as_ref(), &body.reference).await?
+        // Auto-lookup saved credentials for this registry
+        let config = state.config.lock().await;
+        if let Some(cred) = config.find_credentials(&body.reference) {
+            let registry_auth = orca_core::image::RegistryAuth {
+                username: cred.username.clone(),
+                password: cred.password(),
+                server: Some(cred.server.clone()),
+            };
+            drop(config);
+            state
+                .runtime
+                .pull_with_auth(&body.reference, &registry_auth)
+                .await?
+        } else {
+            drop(config);
+            ImageManager::pull(state.runtime.as_ref(), &body.reference).await?
+        }
     };
 
     let stream = async_stream::stream! {
@@ -629,6 +650,78 @@ async fn tag_image(
 ) -> Result<impl IntoResponse, ApiError> {
     ImageManager::tag(state.runtime.as_ref(), &source, &body.repo, &body.tag).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// --- Registries ---
+
+async fn list_registries(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    // Never return passwords to the frontend — mask them
+    let masked: Vec<serde_json::Value> = config
+        .registries
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "server": r.server,
+                "name": r.name,
+                "username": r.username,
+            })
+        })
+        .collect();
+    Ok(Json(masked))
+}
+
+#[derive(Deserialize)]
+struct AddRegistryRequest {
+    server: String,
+    name: String,
+    username: String,
+    password: String,
+}
+
+async fn add_registry(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AddRegistryRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let cred =
+        orca_core::config::RegistryCredential::new(&body.server, &body.name, &body.username, &body.password);
+    let mut config = state.config.lock().await;
+    config.add_registry(cred)?;
+    Ok(StatusCode::CREATED)
+}
+
+async fn remove_registry_handler(
+    State(state): State<Arc<AppState>>,
+    Path(server): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let decoded = urlencoding::decode(&server)
+        .map(|s: std::borrow::Cow<'_, str>| s.into_owned())
+        .unwrap_or(server);
+    let mut config = state.config.lock().await;
+    config.remove_registry(&decoded)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- Image Search ---
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
+    #[serde(default = "default_search_limit")]
+    limit: u32,
+}
+
+fn default_search_limit() -> u32 {
+    20
+}
+
+async fn search_images(
+    Query(query): Query<SearchQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let results = orca_backend_common::search::search_docker_hub(&query.q, query.limit).await?;
+    Ok(Json(results))
 }
 
 // --- Volumes ---

@@ -177,6 +177,23 @@ export interface PersistentVolume {
   age: string;
 }
 
+// --- Registries ---
+
+export interface RegistryCredential {
+  server: string;
+  name: string;
+  username: string;
+  // password is never sent to frontend for security
+}
+
+export interface ImageSearchResult {
+  name: string;
+  description: string;
+  stars: number;
+  official: boolean;
+  pulls: string | null;
+}
+
 // --- System Health ---
 
 export interface SystemHealth {

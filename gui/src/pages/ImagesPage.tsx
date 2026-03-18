@@ -1,6 +1,6 @@
-import { createSignal, onMount, For, Show } from "solid-js";
+import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { Image } from "../lib/types";
+import type { Image, ImageSearchResult } from "../lib/types";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 import { showToast } from "../components/Toast";
 import RunContainerDialog from "../components/RunContainerDialog";
@@ -26,6 +26,10 @@ export default function ImagesPage() {
   const [runImage, setRunImage] = createSignal<string | null>(null);
   const [inspecting, setInspecting] = createSignal<string | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
+  const [searchResults, setSearchResults] = createSignal<ImageSearchResult[]>([]);
+  const [searching, setSearching] = createSignal(false);
+  const [showSearchDropdown, setShowSearchDropdown] = createSignal(false);
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   const refresh = async () => {
     try {
@@ -37,6 +41,37 @@ export default function ImagesPage() {
   };
 
   onMount(refresh);
+  onCleanup(() => { if (searchTimer) clearTimeout(searchTimer); });
+
+  const doSearch = async (q: string) => {
+    if (q.length < 2) {
+      setSearchResults([]);
+      setShowSearchDropdown(false);
+      return;
+    }
+    setSearching(true);
+    setShowSearchDropdown(true);
+    try {
+      const results = (await invoke("search_images", { query: q })) as ImageSearchResult[];
+      setSearchResults(results);
+    } catch (e) {
+      console.error("Search failed:", e);
+      setSearchResults([]);
+    }
+    setSearching(false);
+  };
+
+  const onPullInput = (value: string) => {
+    setPullRef(value);
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => doSearch(value.trim()), 500);
+  };
+
+  const selectSearchResult = (name: string) => {
+    setPullRef(name);
+    setShowSearchDropdown(false);
+    setSearchResults([]);
+  };
 
   const filtered = () => {
     const q = search().toLowerCase();
@@ -213,15 +248,89 @@ export default function ImagesPage() {
       {/* Pull bar */}
       <div style={{ "margin-bottom": "16px" }}>
         <div class="pull-bar">
-          <input
-            class="pull-input"
-            type="text"
-            placeholder="Pull image (e.g. nginx:latest, postgres:16-alpine)"
-            value={pullRef()}
-            onInput={(e) => setPullRef(e.currentTarget.value)}
-            onKeyDown={handlePullKeyDown}
-            disabled={pulling()}
-          />
+          <div style={{ position: "relative", flex: 1 }}>
+            <div style={{ position: "relative" }}>
+              <svg
+                style={{
+                  position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)",
+                  width: "14px", height: "14px", color: "#8b949e", "pointer-events": "none",
+                }}
+                viewBox="0 0 16 16" fill="currentColor"
+              >
+                <path fill-rule="evenodd" d="M11.5 7a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zm-.82 4.74a6 6 0 111.06-1.06l3.04 3.04a.75.75 0 11-1.06 1.06l-3.04-3.04z" />
+              </svg>
+              <input
+                class="pull-input"
+                type="text"
+                placeholder="Search & pull image (e.g. nginx, postgres)"
+                value={pullRef()}
+                onInput={(e) => onPullInput(e.currentTarget.value)}
+                onKeyDown={handlePullKeyDown}
+                onFocus={() => { if (searchResults().length > 0) setShowSearchDropdown(true); }}
+                onBlur={() => { setTimeout(() => setShowSearchDropdown(false), 200); }}
+                disabled={pulling()}
+                style={{ "padding-left": "32px" }}
+              />
+            </div>
+            <Show when={showSearchDropdown()}>
+              <div style={{
+                position: "absolute", top: "100%", left: 0, right: 0,
+                background: "#161b22", border: "1px solid #30363d", "border-radius": "0 0 8px 8px",
+                "max-height": "320px", "overflow-y": "auto", "z-index": "100",
+                "box-shadow": "0 8px 24px rgba(0,0,0,0.4)",
+              }}>
+                <Show when={searching()}>
+                  <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
+                    <Spinner size={12} />{" "}Searching...
+                  </div>
+                </Show>
+                <Show when={!searching() && searchResults().length === 0 && pullRef().trim().length >= 2}>
+                  <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
+                    No results found
+                  </div>
+                </Show>
+                <For each={searchResults()}>
+                  {(result) => (
+                    <div
+                      style={{
+                        padding: "8px 14px", cursor: "pointer", "border-bottom": "1px solid #21262d",
+                        display: "flex", "align-items": "center", gap: "8px",
+                      }}
+                      onMouseDown={() => selectSearchResult(result.name)}
+                    >
+                      <div style={{ flex: 1, "min-width": 0 }}>
+                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                          <span class="mono" style={{ "font-weight": "600", "font-size": "13px" }}>
+                            {result.name}
+                          </span>
+                          <Show when={result.official}>
+                            <span style={{
+                              background: "#1f6feb", color: "#fff", "font-size": "10px",
+                              padding: "1px 6px", "border-radius": "4px", "font-weight": "600",
+                            }}>
+                              OFFICIAL
+                            </span>
+                          </Show>
+                        </div>
+                        <div style={{
+                          color: "#8b949e", "font-size": "12px",
+                          "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis",
+                        }}>
+                          {result.description || "No description"}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: "12px", "font-size": "11px", color: "#8b949e", "flex-shrink": 0 }}>
+                        <Show when={result.pulls}>
+                          <span title="Downloads">{result.pulls}</span>
+                        </Show>
+                        <span title="Stars">{"\u2605"} {result.stars}</span>
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
           <button
             class="btn btn-primary"
             onClick={doPull}

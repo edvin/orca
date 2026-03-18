@@ -301,6 +301,55 @@ pub async fn create_and_run_container(
     Ok(create_result)
 }
 
+// --- Registries ---
+
+#[tauri::command]
+pub async fn list_registries() -> Result<serde_json::Value, String> {
+    get_json("/registries").await
+}
+
+#[tauri::command]
+pub async fn add_registry(
+    server: String,
+    name: String,
+    username: String,
+    password: String,
+) -> Result<(), String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}/registries"))
+        .json(&serde_json::json!({
+            "server": server,
+            "name": name,
+            "username": username,
+            "password": password,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to add registry: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Failed to add registry: {body}"))
+    }
+}
+
+#[tauri::command]
+pub async fn remove_registry(server: String) -> Result<(), String> {
+    let encoded = urlencoding::encode(&server);
+    delete(&format!("/registries/{encoded}")).await
+}
+
+#[tauri::command]
+pub async fn search_images(query: String) -> Result<serde_json::Value, String> {
+    get_json(&format!(
+        "/images/search?q={}&limit=20",
+        urlencoding::encode(&query)
+    ))
+    .await
+}
+
 // --- Images ---
 
 #[tauri::command]

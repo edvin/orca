@@ -6,6 +6,43 @@ use serde::{Deserialize, Serialize};
 
 use crate::machine::MachineConfig;
 
+/// Saved registry credentials.
+/// Passwords are stored as base64-encoded strings in the config file.
+/// This is NOT encryption — it simply avoids plaintext passwords in the JSON.
+/// In production, OS keychain integration (e.g., libsecret / macOS Keychain) should be used.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistryCredential {
+    /// Registry URL (e.g., "https://ghcr.io", "https://index.docker.io/v1/")
+    pub server: String,
+    /// Display name (e.g., "GitHub Container Registry")
+    pub name: String,
+    pub username: String,
+    /// Base64-encoded password (not truly encrypted, but not plaintext)
+    pub password_b64: String,
+}
+
+impl RegistryCredential {
+    pub fn new(server: &str, name: &str, username: &str, password: &str) -> Self {
+        use base64::Engine;
+        Self {
+            server: server.to_string(),
+            name: name.to_string(),
+            username: username.to_string(),
+            password_b64: base64::engine::general_purpose::STANDARD.encode(password),
+        }
+    }
+
+    pub fn password(&self) -> String {
+        use base64::Engine;
+        String::from_utf8(
+            base64::engine::general_purpose::STANDARD
+                .decode(&self.password_b64)
+                .unwrap_or_default(),
+        )
+        .unwrap_or_default()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrcaConfig {
     /// Where Orca stores its data (VMs, caches, etc).
@@ -21,6 +58,9 @@ pub struct OrcaConfig {
     /// API authentication token. Auto-generated on first daemon start.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_token: Option<String>,
+    /// Saved registry credentials (passwords are base64-encoded, not encrypted).
+    #[serde(default)]
+    pub registries: Vec<RegistryCredential>,
 }
 
 impl Default for OrcaConfig {
@@ -36,6 +76,7 @@ impl Default for OrcaConfig {
             show_tray_icon: true,
             telemetry: false,
             api_token: None,
+            registries: Vec::new(),
         }
     }
 }
@@ -71,6 +112,45 @@ impl OrcaConfig {
             self.save()?;
         }
         Ok(self.api_token.as_ref().unwrap())
+    }
+
+    pub fn add_registry(&mut self, cred: RegistryCredential) -> anyhow::Result<()> {
+        // Replace if same server already exists
+        self.registries.retain(|r| r.server != cred.server);
+        self.registries.push(cred);
+        self.save()
+    }
+
+    pub fn remove_registry(&mut self, server: &str) -> anyhow::Result<()> {
+        self.registries.retain(|r| r.server != server);
+        self.save()
+    }
+
+    /// Find credentials matching an image reference.
+    /// "ghcr.io/user/repo:tag" -> look for "ghcr.io" or "https://ghcr.io"
+    /// "nginx:latest" -> look for "docker.io" or "https://index.docker.io/v1/"
+    pub fn find_credentials(&self, image_ref: &str) -> Option<&RegistryCredential> {
+        let registry = if image_ref.contains('/')
+            && image_ref
+                .split('/')
+                .next()
+                .map(|s| s.contains('.'))
+                .unwrap_or(false)
+        {
+            image_ref.split('/').next().unwrap_or("")
+        } else {
+            "docker.io"
+        };
+
+        self.registries.iter().find(|r| {
+            let normalized = r
+                .server
+                .replace("https://", "")
+                .replace("http://", "")
+                .trim_end_matches('/')
+                .to_string();
+            normalized.contains(registry) || registry.contains(&normalized)
+        })
     }
 
     pub fn save(&self) -> anyhow::Result<()> {

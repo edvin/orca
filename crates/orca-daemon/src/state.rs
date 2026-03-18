@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::broadcast;
+use tokio::sync::{Mutex, broadcast};
 
 use orca_backend_common::BollardRuntime;
 use orca_backend_common::k8s::K3sManager;
@@ -12,8 +12,7 @@ use orca_core::event::Event;
 /// for all platforms since the bollard API is the same regardless of
 /// whether the runtime is native, in a Lima VM, or in WSL2.
 pub struct AppState {
-    #[allow(dead_code)] // Will be used for settings persistence
-    pub config: OrcaConfig,
+    pub config: Mutex<OrcaConfig>,
     pub runtime: Arc<BollardRuntime>,
     pub k8s: Arc<K3sManager>,
     pub events_tx: broadcast::Sender<Event>,
@@ -30,7 +29,7 @@ impl AppState {
         api_token: String,
     ) -> Self {
         Self {
-            config,
+            config: Mutex::new(config),
             runtime,
             k8s,
             events_tx,
