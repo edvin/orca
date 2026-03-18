@@ -35,6 +35,17 @@ async fn post_empty(path: &str) -> Result<(), String> {
     }
 }
 
+async fn post_json(path: &str) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}{path}"))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
 async fn delete(path: &str) -> Result<(), String> {
     let resp = client()
         .delete(format!("{DAEMON_URL}{path}"))
@@ -210,6 +221,21 @@ pub async fn stop_stack(name: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn restart_stack(name: String) -> Result<(), String> {
     post_empty(&format!("/stacks/{name}/restart")).await
+}
+
+#[tauri::command]
+pub async fn compose_up(name: String) -> Result<serde_json::Value, String> {
+    post_json(&format!("/stacks/{name}/up")).await
+}
+
+#[tauri::command]
+pub async fn compose_down(name: String) -> Result<serde_json::Value, String> {
+    post_json(&format!("/stacks/{name}/down")).await
+}
+
+#[tauri::command]
+pub async fn compose_pull(name: String) -> Result<serde_json::Value, String> {
+    post_json(&format!("/stacks/{name}/pull")).await
 }
 
 // --- Machine ---

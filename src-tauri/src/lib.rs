@@ -23,6 +23,9 @@ pub fn run() {
             commands::start_stack,
             commands::stop_stack,
             commands::restart_stack,
+            commands::compose_up,
+            commands::compose_down,
+            commands::compose_pull,
             commands::get_machine_info,
         ])
         .run(tauri::generate_context!())

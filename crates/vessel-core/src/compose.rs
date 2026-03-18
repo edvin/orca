@@ -1,4 +1,5 @@
-//! Compose project awareness — detects and groups containers by compose project.
+//! Compose project awareness — detects and groups containers by compose project,
+//! and provides compose CLI operations (up/down/restart).
 
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +38,15 @@ pub enum ProjectStatus {
     Stopped,
     /// No services found (shouldn't happen).
     Empty,
+}
+
+/// Output from a compose CLI operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComposeOutput {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
 }
 
 const LABEL_PROJECT: &str = "com.docker.compose.project";
@@ -114,4 +124,20 @@ pub fn extract_projects(containers: &[Container]) -> Vec<ComposeProject> {
             }
         })
         .collect()
+}
+
+/// Trait for running compose CLI operations.
+#[trait_variant::make(Send)]
+pub trait ComposeRunner {
+    /// Run `docker compose up -d` in the project directory.
+    async fn compose_up(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput>;
+
+    /// Run `docker compose down` in the project directory.
+    async fn compose_down(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput>;
+
+    /// Run `docker compose restart` in the project directory.
+    async fn compose_restart(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput>;
+
+    /// Run `docker compose pull` in the project directory.
+    async fn compose_pull(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput>;
 }

@@ -1,3 +1,4 @@
+mod compose;
 mod containers;
 mod images;
 mod volumes;

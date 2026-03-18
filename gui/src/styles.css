@@ -206,6 +206,14 @@ body {
 .btn-group {
   display: flex;
   gap: 4px;
+  align-items: center;
+}
+
+.btn-separator {
+  width: 1px;
+  height: 18px;
+  background: #30363d;
+  margin: 0 4px;
 }
 
 /* Cards */

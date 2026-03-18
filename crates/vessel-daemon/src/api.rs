@@ -13,7 +13,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use serde::{Deserialize, Serialize};
-use vessel_core::compose;
+use vessel_core::compose::{self, ComposeRunner};
 use vessel_core::image::ImageManager;
 use vessel_core::machine::MachineManager;
 use vessel_core::network::NetworkManager;
@@ -80,6 +80,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/{name}/start", post(start_stack))
         .route("/stacks/{name}/stop", post(stop_stack))
         .route("/stacks/{name}/restart", post(restart_stack))
+        .route("/stacks/{name}/up", post(compose_up))
+        .route("/stacks/{name}/down", post(compose_down))
+        .route("/stacks/{name}/pull", post(compose_pull))
 }
 
 // --- Health ---
@@ -426,4 +429,60 @@ async fn restart_stack(
         )
             .into_response())
     }
+}
+
+// --- Compose CLI operations ---
+
+/// Resolve a stack by name and return its working_dir + config_file.
+async fn resolve_stack_dir(
+    state: &AppState,
+    name: &str,
+) -> Result<(String, Option<String>), ApiError> {
+    let stacks = get_stacks(state).await?;
+    let stack = stacks
+        .into_iter()
+        .find(|s| s.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Stack '{name}' not found"))?;
+
+    let working_dir = stack
+        .working_dir
+        .ok_or_else(|| anyhow::anyhow!("Stack '{name}' has no working directory"))?;
+
+    Ok((working_dir, stack.config_file))
+}
+
+async fn compose_up(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let (dir, config) = resolve_stack_dir(&state, &name).await?;
+    let output = state
+        .backend
+        .compose_up(&dir, config.as_deref())
+        .await?;
+    Ok(Json(output))
+}
+
+async fn compose_down(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let (dir, config) = resolve_stack_dir(&state, &name).await?;
+    let output = state
+        .backend
+        .compose_down(&dir, config.as_deref())
+        .await?;
+    Ok(Json(output))
+}
+
+async fn compose_pull(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let (dir, config) = resolve_stack_dir(&state, &name).await?;
+    let output = state
+        .backend
+        .compose_pull(&dir, config.as_deref())
+        .await?;
+    Ok(Json(output))
 }
