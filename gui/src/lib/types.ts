@@ -176,3 +176,20 @@ export interface PersistentVolume {
   storage_class: string | null;
   age: string;
 }
+
+// --- Environment ---
+
+export interface EnvironmentStatus {
+  ready: boolean;
+  platform: string;
+  checks: HealthCheck[];
+  suggested_runtime: string;
+}
+
+export interface HealthCheck {
+  name: string;
+  description: string;
+  status: "Pass" | "Warning" | "Fail";
+  fix_action: string | null;
+  details: string | null;
+}

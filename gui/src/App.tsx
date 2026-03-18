@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { startEventSubscription } from "./lib/events";
 import Titlebar from "./components/Titlebar";
 import Sidebar from "./components/Sidebar";
-import ToastContainer from "./components/Toast";
+import ToastContainer, { showToast } from "./components/Toast";
 import StacksPage from "./pages/StacksPage";
 import ContainersPage from "./pages/ContainersPage";
 import ImagesPage from "./pages/ImagesPage";
@@ -12,8 +12,10 @@ import NetworksPage from "./pages/NetworksPage";
 import KubernetesPage from "./pages/KubernetesPage";
 import MachinePage from "./pages/MachinePage";
 import SettingsPage from "./pages/SettingsPage";
+import EnvironmentPage from "./pages/EnvironmentPage";
+import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "settings";
+export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("stacks");
@@ -46,9 +48,33 @@ export default function App() {
     }
   };
 
+  const checkEnvironment = async () => {
+    try {
+      const envStatus = (await invoke("env_status")) as EnvironmentStatus;
+      if (!envStatus.ready) {
+        setPage("environment");
+      } else {
+        const warnings = envStatus.checks.filter((c) => c.status === "Warning");
+        if (warnings.length > 0) {
+          showToast(
+            `Environment has ${warnings.length} warning${warnings.length > 1 ? "s" : ""} \u2014 check Environment page`,
+            "info"
+          );
+        }
+      }
+    } catch {
+      // Daemon not ready yet, ignore
+    }
+  };
+
   onMount(() => {
-    checkDaemon();
     startEventSubscription();
+    // Initial daemon check, then verify environment readiness
+    checkDaemon().then(() => {
+      if (daemonStatus() === "running") {
+        checkEnvironment();
+      }
+    });
     const interval = setInterval(checkDaemon, 5000);
     document.addEventListener("keydown", handleGlobalKeyDown);
     onCleanup(() => {
@@ -74,6 +100,7 @@ export default function App() {
           {page() === "networks" && <NetworksPage />}
           {page() === "kubernetes" && <KubernetesPage />}
           {page() === "machine" && <MachinePage />}
+          {page() === "environment" && <EnvironmentPage />}
           {page() === "settings" && <SettingsPage />}
         </main>
       </div>

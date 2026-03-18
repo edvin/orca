@@ -16,6 +16,7 @@ const mainNavItems: { id: Page; label: string; icon: string }[] = [
   { id: "networks", label: "Networks", icon: "\u25cc" },
   { id: "kubernetes", label: "Kubernetes", icon: "\u2388" },
   { id: "machine", label: "Machine", icon: "\u2318" },
+  { id: "environment", label: "Environment", icon: "\u2661" },
 ];
 
 export default function Sidebar(props: SidebarProps) {

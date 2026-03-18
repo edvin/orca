@@ -686,3 +686,23 @@ pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
         .await
         .map_err(|e| format!("Invalid response: {e}"))
 }
+
+// --- Environment ---
+
+#[tauri::command]
+pub async fn env_status() -> Result<serde_json::Value, String> {
+    get_json("/environment/status").await
+}
+
+#[tauri::command]
+pub async fn env_fix(action: String) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/environment/fix"))
+        .json(&serde_json::json!({ "action": action }))
+        .send()
+        .await
+        .map_err(|e| format!("Fix action failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}

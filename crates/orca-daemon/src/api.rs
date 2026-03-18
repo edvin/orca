@@ -145,6 +145,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/pvcs/{namespace}/{name}", delete(k8s_delete_pvc))
         .route("/k8s/pods/{namespace}/{name}/logs", get(k8s_pod_logs))
         .route("/k8s/apply", post(k8s_apply))
+        // Environment
+        .route("/environment/status", get(env_status))
+        .route("/environment/fix", post(env_fix))
 }
 
 // --- Health ---
@@ -1082,5 +1085,27 @@ async fn k8s_apply(
     Json(body): Json<ApplyYamlRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let output = state.k8s.apply_yaml(&body.yaml).await?;
+    Ok(Json(serde_json::json!({ "output": output })))
+}
+
+// --- Environment ---
+
+async fn env_status(
+    State(_state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let status = orca_backend_common::environment::check_environment().await;
+    Ok(Json(status))
+}
+
+#[derive(Deserialize)]
+struct FixRequest {
+    action: String,
+}
+
+async fn env_fix(
+    State(_state): State<Arc<AppState>>,
+    Json(body): Json<FixRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let output = orca_backend_common::environment::run_fix(&body.action).await?;
     Ok(Json(serde_json::json!({ "output": output })))
 }

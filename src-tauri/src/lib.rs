@@ -61,6 +61,8 @@ pub fn run() {
             commands::k8s_restart_deployment,
             commands::k8s_pod_logs,
             commands::k8s_apply_yaml,
+            commands::env_status,
+            commands::env_fix,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;
