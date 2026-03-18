@@ -3104,6 +3104,7 @@ dependencies = [
  "anyhow",
  "async-stream",
  "axum",
+ "bollard",
  "clap",
  "hyper-util",
  "orca-backend-common",

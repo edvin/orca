@@ -88,6 +88,37 @@ fn default_anthropic_model() -> String {
     "claude-sonnet-4-20250514".into()
 }
 
+/// Generate a 32-character hex token using platform-appropriate randomness.
+fn generate_random_token() -> anyhow::Result<String> {
+    let mut bytes = [0u8; 16];
+
+    // Try /dev/urandom (Linux/macOS)
+    #[cfg(unix)]
+    {
+        let mut f = std::fs::File::open("/dev/urandom")?;
+        std::io::Read::read_exact(&mut f, &mut bytes)?;
+    }
+
+    // Windows: use the system RNG via std
+    #[cfg(windows)]
+    {
+        use std::collections::hash_map::RandomState;
+        use std::hash::{BuildHasher, Hasher};
+        // Use multiple random hashers to gather entropy
+        for chunk in bytes.chunks_mut(8) {
+            let s = RandomState::new();
+            let val = s.build_hasher().finish().to_le_bytes();
+            for (i, b) in chunk.iter_mut().enumerate() {
+                if i < val.len() {
+                    *b = val[i];
+                }
+            }
+        }
+    }
+
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
 impl Default for OrcaConfig {
     fn default() -> Self {
         let data_dir = dirs::data_dir()
@@ -123,7 +154,21 @@ impl OrcaConfig {
         let path = Self::config_path();
         if path.exists() {
             let contents = std::fs::read_to_string(&path)?;
-            Ok(serde_json::from_str(&contents)?)
+            match serde_json::from_str(&contents) {
+                Ok(config) => Ok(config),
+                Err(e) => {
+                    // Config file is corrupted — back it up and start fresh
+                    let backup = path.with_extension("json.bak");
+                    let _ = std::fs::copy(&path, &backup);
+                    tracing::warn!(
+                        "Config file was corrupted ({}), backed up to {}, using defaults",
+                        e, backup.display()
+                    );
+                    let config = Self::default();
+                    config.save()?;
+                    Ok(config)
+                }
+            }
         } else {
             Ok(Self::default())
         }
@@ -134,14 +179,11 @@ impl OrcaConfig {
     /// a reference to the token.
     pub fn ensure_token(&mut self) -> anyhow::Result<&str> {
         if self.api_token.is_none() {
-            let mut bytes = [0u8; 16];
-            let mut f = std::fs::File::open("/dev/urandom")?;
-            std::io::Read::read_exact(&mut f, &mut bytes)?;
-            let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            let token = generate_random_token()?;
             self.api_token = Some(token);
             self.save()?;
         }
-        Ok(self.api_token.as_ref().unwrap())
+        Ok(self.api_token.as_ref().expect("token was just set"))
     }
 
     pub fn add_registry(&mut self, cred: RegistryCredential) -> anyhow::Result<()> {

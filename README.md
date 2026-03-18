@@ -142,11 +142,21 @@ The daemon talks to Docker/Podman via the standard API (bollard). On macOS it ma
 
 ## Quick Start
 
-### Prerequisites
+### Install and Run
 
-- **Linux**: Docker or Podman installed
-- **macOS**: [Lima](https://lima-vm.io/) installed (`brew install lima`)
-- **Windows**: WSL2 enabled with Docker or Podman inside
+Just download and launch Orca — it handles everything else:
+
+1. **Download** from [Releases](https://github.com/edvin/orca/releases)
+2. **Run** the installer (Windows: exe/msi, macOS: dmg, Linux: AppImage/deb)
+3. **Orca checks your environment** and installs anything missing:
+
+| Platform | What Orca sets up for you |
+|----------|--------------------------|
+| **Linux** | Installs Docker or Podman if not found |
+| **macOS** | Installs Homebrew → Lima → creates a Linux VM with Docker |
+| **Windows** | Enables WSL2 → installs Ubuntu → installs Docker inside it |
+
+No manual setup required. The Environment page guides you through any needed steps with one-click fix buttons.
 
 ### Run the daemon
 

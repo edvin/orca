@@ -21,6 +21,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 async-stream.workspace = true
 axum = "0.8"
+bollard = "0.18"
 clap = { version = "4", features = ["derive"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 tokio-stream.workspace = true

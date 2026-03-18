@@ -63,10 +63,29 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    let native = orca_backend_native::NativeBackend::connect()?;
-    let runtime = Arc::new(native.runtime);
-    let runtime_kind = runtime.detect_runtime().await;
-    tracing::info!("Connected to {runtime_kind:?} runtime");
+    // Try to connect to container runtime, but don't fail if unavailable.
+    // The daemon must start even without Docker/Podman so the GUI can
+    // show the Environment page and help the user install prerequisites.
+    let runtime = match orca_backend_native::NativeBackend::connect() {
+        Ok(native) => {
+            let rt = Arc::new(native.runtime);
+            let kind = rt.detect_runtime().await;
+            tracing::info!("Connected to {kind:?} runtime");
+            rt
+        }
+        Err(e) => {
+            tracing::warn!("No container runtime available: {e}");
+            tracing::warn!("Daemon will start without runtime — Environment page will guide setup");
+            // Create a dummy connection that will fail gracefully on API calls
+            Arc::new(orca_backend_common::BollardRuntime::new(
+                bollard::Docker::connect_with_local_defaults()
+                    .unwrap_or_else(|_| bollard::Docker::connect_with_defaults().unwrap_or_else(|_| {
+                        // Last resort — create a connection that will error on use
+                        bollard::Docker::connect_with_http_defaults().expect("failed to create fallback Docker client")
+                    }))
+            ))
+        }
+    };
 
     // Start the Docker event listener
     let (events_tx, _) = broadcast::channel(256);
@@ -118,7 +137,29 @@ async fn main() -> anyhow::Result<()> {
     // TCP mode (default, works on all platforms)
     let addr: SocketAddr = format!("{}:{}", args.bind, args.port).parse()?;
     tracing::info!("Orca daemon listening on {addr}");
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            // Check if another daemon is already running
+            let client = reqwest::Client::new();
+            if let Ok(resp) = client
+                .get(format!("http://{addr}/api/v1/health"))
+                .timeout(std::time::Duration::from_secs(2))
+                .send()
+                .await
+            {
+                if resp.status().is_success() {
+                    tracing::info!("Another Orca daemon is already running on {addr}");
+                    return Ok(());
+                }
+            }
+            anyhow::bail!(
+                "Port {addr} is already in use by another process. \
+                 Try a different port with --port or stop the other process."
+            );
+        }
+        Err(e) => return Err(e.into()),
+    };
     axum::serve(listener, app).await?;
 
     Ok(())
