@@ -63,7 +63,9 @@ export default function Titlebar(props: TitlebarProps) {
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       await getCurrentWindow().minimize();
-    } catch {}
+    } catch (e) {
+      console.error("Minimize failed:", e);
+    }
   };
 
   const toggleMaximize = async () => {
@@ -77,14 +79,18 @@ export default function Titlebar(props: TitlebarProps) {
         await win.maximize();
         setMaximized(true);
       }
-    } catch {}
+    } catch (e) {
+      console.error("Maximize toggle failed:", e);
+    }
   };
 
   const close = async () => {
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       await getCurrentWindow().hide();
-    } catch {}
+    } catch (e) {
+      console.error("Close/hide failed:", e);
+    }
   };
 
   const statusColor = () => {
