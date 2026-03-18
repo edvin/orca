@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Image } from "../lib/types";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 import { showToast } from "../components/Toast";
+import RunContainerDialog from "../components/RunContainerDialog";
 
 export default function ImagesPage() {
   const [images, setImages] = createSignal<Image[]>([]);
@@ -17,6 +18,7 @@ export default function ImagesPage() {
   const [buildTag, setBuildTag] = createSignal("");
   const [building, setBuilding] = createSignal(false);
   const [buildLog, setBuildLog] = createSignal<string[]>([]);
+  const [runImage, setRunImage] = createSignal<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -354,18 +356,36 @@ export default function ImagesPage() {
                     {formatTimestamp(img.created_at)}
                   </td>
                   <td style={{ "text-align": "right" }}>
-                    <button
-                      class="btn btn-sm btn-danger"
-                      onClick={() => removeImage(img.id)}
-                    >
-                      Remove
-                    </button>
+                    <div class="btn-group" style={{ "justify-content": "flex-end" }}>
+                      <Show when={img.repo_tags.length > 0}>
+                        <button
+                          class="btn btn-sm btn-primary"
+                          onClick={() => setRunImage(img.repo_tags[0])}
+                        >
+                          Run
+                        </button>
+                      </Show>
+                      <button
+                        class="btn btn-sm btn-danger"
+                        onClick={() => removeImage(img.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )}
             </For>
           </tbody>
         </table>
+      </Show>
+
+      <Show when={runImage()}>
+        <RunContainerDialog
+          initialImage={runImage()!}
+          onClose={() => setRunImage(null)}
+          onCreated={refresh}
+        />
       </Show>
     </div>
   );

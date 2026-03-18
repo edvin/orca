@@ -5,10 +5,11 @@ import { showToast } from "./Toast";
 interface RunContainerDialogProps {
   onClose: () => void;
   onCreated: () => void;
+  initialImage?: string;
 }
 
 export default function RunContainerDialog(props: RunContainerDialogProps) {
-  const [image, setImage] = createSignal("");
+  const [image, setImage] = createSignal(props.initialImage || "");
   const [name, setName] = createSignal("");
   const [command, setCommand] = createSignal("");
   const [env, setEnv] = createSignal("");
