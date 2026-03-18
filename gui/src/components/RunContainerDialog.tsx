@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 
@@ -9,6 +9,13 @@ interface RunContainerDialogProps {
 }
 
 export default function RunContainerDialog(props: RunContainerDialogProps) {
+  // Escape key to close
+  const handleEscape = (e: KeyboardEvent) => {
+    if (e.key === "Escape") props.onClose();
+  };
+  onMount(() => document.addEventListener("keydown", handleEscape));
+  onCleanup(() => document.removeEventListener("keydown", handleEscape));
+
   const [image, setImage] = createSignal(props.initialImage || "");
   const [name, setName] = createSignal("");
   const [command, setCommand] = createSignal("");

@@ -2,7 +2,9 @@ import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { ComposeProject } from "../lib/types";
 import { formatPorts } from "../lib/format";
+import { showToast } from "../components/Toast";
 import LogViewer from "../components/LogViewer";
+import Spinner from "../components/Spinner";
 
 export default function StacksPage() {
   const [stacks, setStacks] = createSignal<ComposeProject[]>([]);
@@ -16,6 +18,20 @@ export default function StacksPage() {
     id: string;
     name: string;
   } | null>(null);
+  const [serviceLoading, setServiceLoading] = createSignal<string | null>(null);
+
+  const restartService = async (containerId: string) => {
+    setServiceLoading(containerId);
+    try {
+      await invoke("stop_container", { id: containerId });
+      await invoke("start_container", { id: containerId });
+      showToast("Service restarted", "success");
+      await refresh();
+    } catch (err) {
+      showToast(`Restart failed: ${err}`, "error");
+    }
+    setServiceLoading(null);
+  };
 
   const refresh = async () => {
     try {
@@ -255,7 +271,7 @@ export default function StacksPage() {
                             disabled={isLoading()}
                             title="docker compose up -d"
                           >
-                            {isLoading() ? "..." : "Up"}
+                            {isLoading() ? (<><Spinner size={12} />{" ..."}</>) : "Up"}
                           </button>
                           <button
                             class="btn btn-sm btn-danger"
@@ -340,14 +356,19 @@ export default function StacksPage() {
                                     >
                                       Logs
                                     </button>
+                                    <Show when={serviceLoading() === svc.container_id}>
+                                      <Spinner />
+                                    </Show>
                                     <Show when={svc.state !== "Running"}>
                                       <button
                                         class="btn btn-sm btn-primary"
-                                        onClick={() =>
+                                        onClick={() => {
+                                          setServiceLoading(svc.container_id);
                                           invoke("start_container", {
                                             id: svc.container_id,
-                                          }).then(refresh)
-                                        }
+                                          }).then(refresh).finally(() => setServiceLoading(null));
+                                        }}
+                                        disabled={serviceLoading() === svc.container_id}
                                       >
                                         Start
                                       </button>
@@ -355,13 +376,22 @@ export default function StacksPage() {
                                     <Show when={svc.state === "Running"}>
                                       <button
                                         class="btn btn-sm"
-                                        onClick={() =>
+                                        onClick={() => {
+                                          setServiceLoading(svc.container_id);
                                           invoke("stop_container", {
                                             id: svc.container_id,
-                                          }).then(refresh)
-                                        }
+                                          }).then(refresh).finally(() => setServiceLoading(null));
+                                        }}
+                                        disabled={serviceLoading() === svc.container_id}
                                       >
                                         Stop
+                                      </button>
+                                      <button
+                                        class="btn btn-sm"
+                                        onClick={() => restartService(svc.container_id)}
+                                        disabled={serviceLoading() === svc.container_id}
+                                      >
+                                        Restart
                                       </button>
                                     </Show>
                                   </div>

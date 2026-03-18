@@ -1,11 +1,22 @@
-# Orca
+<p align="center">
+  <img src="assets/orca-logo-full.png" alt="Orca" width="200" />
+</p>
 
-**Open source Docker Desktop alternative** — manage containers, images, compose stacks, and Kubernetes from a single desktop app.
+<h1 align="center">Orca</h1>
 
-Built with Rust, Tauri, and SolidJS. Works with Docker and Podman.
+<p align="center">
+  <strong>Open source Docker Desktop alternative</strong><br>
+  Manage containers, images, compose stacks, and Kubernetes from a single desktop app.
+</p>
 
-![Build](https://github.com/edvin/orca/actions/workflows/build.yml/badge.svg)
-![License](https://img.shields.io/github/license/edvin/orca)
+<p align="center">
+  <img src="https://github.com/edvin/orca/actions/workflows/build.yml/badge.svg" alt="Build" />
+  <img src="https://img.shields.io/github/license/edvin/orca" alt="License" />
+</p>
+
+<p align="center">
+  Built with Rust, Tauri, and SolidJS. Works with Docker and Podman.
+</p>
 
 ## Features
 

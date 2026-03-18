@@ -27,11 +27,39 @@ export default function App() {
     }
   };
 
+  const handleGlobalKeyDown = (e: KeyboardEvent) => {
+    // Escape: close any open modal overlay
+    if (e.key === "Escape") {
+      const overlay = document.querySelector(".modal-overlay") as HTMLElement | null;
+      if (overlay) {
+        // Find and click the modal close button
+        const closeBtn = overlay.querySelector(".modal-close") as HTMLElement | null;
+        if (closeBtn) {
+          closeBtn.click();
+        }
+      }
+    }
+
+    // Ctrl+K / Cmd+K: focus the search input on the current page
+    if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      e.preventDefault();
+      const searchInput = document.querySelector(".search-input") as HTMLInputElement | null;
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
+      }
+    }
+  };
+
   onMount(() => {
     checkDaemon();
     startEventSubscription();
     const interval = setInterval(checkDaemon, 5000);
-    onCleanup(() => clearInterval(interval));
+    document.addEventListener("keydown", handleGlobalKeyDown);
+    onCleanup(() => {
+      clearInterval(interval);
+      document.removeEventListener("keydown", handleGlobalKeyDown);
+    });
   });
 
   return (

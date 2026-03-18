@@ -1,5 +1,6 @@
 import { createSignal, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { copyToClipboard } from "../lib/clipboard";
 
 interface ExecTerminalProps {
   containerId: string;
@@ -89,13 +90,30 @@ export default function ExecTerminal(props: ExecTerminalProps) {
     }
   };
 
+  const copyLastOutput = () => {
+    const hist = history();
+    if (hist.length === 0) return;
+    const last = hist[hist.length - 1];
+    copyToClipboard(last.output);
+  };
+
   return (
     <div class="exec-terminal">
       <div class="exec-header">
         <span class="exec-title">Exec: {props.containerName}</span>
-        <button class="btn btn-sm" onClick={props.onClose}>
-          Close
-        </button>
+        <div class="btn-group">
+          <button
+            class="btn btn-sm"
+            onClick={copyLastOutput}
+            disabled={history().length === 0}
+            title="Copy last command output"
+          >
+            Copy Output
+          </button>
+          <button class="btn btn-sm" onClick={props.onClose}>
+            Close
+          </button>
+        </div>
       </div>
       <div class="exec-output" ref={outputEl}>
         <For each={history()}>

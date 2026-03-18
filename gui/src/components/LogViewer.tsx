@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup, Show, createEffect } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { copyToClipboard } from "../lib/clipboard";
 
 interface LogViewerProps {
   containerId: string;
@@ -61,6 +62,28 @@ export default function LogViewer(props: LogViewerProps) {
     setAutoScroll(scrollHeight - scrollTop - clientHeight < 50);
   };
 
+  const copyAll = () => {
+    const text = filtered().join("\n");
+    copyToClipboard(text);
+  };
+
+  const downloadLogs = () => {
+    const text = filtered().join("\n");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const safeName = props.containerName.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const filename = `${safeName}-${timestamp}.log`;
+
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div class="log-viewer">
       <div class="log-header">
@@ -100,6 +123,12 @@ export default function LogViewer(props: LogViewerProps) {
             }}
           >
             Auto-scroll
+          </button>
+          <button class="btn btn-sm" onClick={copyAll} title="Copy all visible log lines">
+            Copy All
+          </button>
+          <button class="btn btn-sm" onClick={downloadLogs} title="Download logs as .log file">
+            Download
           </button>
           <button class="btn btn-sm" onClick={fetchLogs}>
             Refresh

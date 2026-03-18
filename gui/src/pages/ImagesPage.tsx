@@ -257,7 +257,7 @@ export default function ImagesPage() {
           </div>
         </Show>
         <Show when={pullStatus()}>
-          <div class="pull-status">{pullStatus()}</div>
+          <div class="pull-status"><Spinner size={12} />{" "}{pullStatus()}</div>
         </Show>
       </div>
 
@@ -473,7 +473,10 @@ export default function ImagesPage() {
                                     <Show when={tags.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
                                       <For each={tags}>
                                         {(tag: string) => (
-                                          <div class="mono" style={{ "line-height": "1.6" }}>{tag}</div>
+                                          <div class="mono" style={{ "line-height": "1.6", display: "flex", "align-items": "center", gap: "4px" }}>
+                                            {tag}
+                                            <CopyButton text={tag} label="Copy tag" />
+                                          </div>
                                         )}
                                       </For>
                                     </Show>
