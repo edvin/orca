@@ -5,8 +5,8 @@
 <h1 align="center">Orca</h1>
 
 <p align="center">
-  <strong>Open source Docker Desktop alternative</strong><br>
-  Manage containers, images, compose stacks, and Kubernetes from a single desktop app.
+  <strong>A beautiful, blazing-fast container management desktop app.</strong><br>
+  Containers, images, compose stacks, and Kubernetes — all in one place.
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  Built with Rust, Tauri, and SolidJS. Works with Docker and Podman.
+  Open source. Built with Rust, Tauri, and SolidJS. Works with Docker and Podman.
 </p>
 
 ## Features
