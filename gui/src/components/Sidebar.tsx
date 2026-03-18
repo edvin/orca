@@ -45,24 +45,8 @@ export default function Sidebar(props: SidebarProps) {
     return null;
   };
 
-  const statusColor = () => {
-    switch (props.daemonStatus) {
-      case "running":
-        return "#3fb950";
-      case "stopped":
-        return "#f85149";
-      default:
-        return "#848d97";
-    }
-  };
-
   return (
     <aside class="sidebar">
-      <div class="sidebar-brand">
-        <span class="brand-icon">{"\u{1F433}"}</span>
-        Orca
-      </div>
-
       <nav class="sidebar-nav">
         <For each={mainNavItems}>
           {(item) => (
@@ -90,12 +74,8 @@ export default function Sidebar(props: SidebarProps) {
         </button>
       </nav>
 
-      <div class="sidebar-footer">
-        <span
-          class="status-dot"
-          style={{ background: statusColor() }}
-        />
-        Engine: {props.daemonStatus}
+      <div class="sidebar-version">
+        v0.1.0
       </div>
     </aside>
   );

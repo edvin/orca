@@ -12,6 +12,120 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  overflow: hidden;
+}
+
+/* ==================== App Layout ==================== */
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  padding: 24px;
+  overflow: auto;
+  background: #0d1117;
+}
+
+/* ==================== Custom Titlebar ==================== */
+.titlebar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 38px;
+  background: linear-gradient(90deg, #0d1117 0%, #111820 100%);
+  border-bottom: 1px solid #21262d;
+  padding: 0 8px 0 12px;
+  user-select: none;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.titlebar-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.titlebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6edf3;
+  letter-spacing: -0.2px;
+}
+
+.titlebar-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  padding: 2px 8px 2px 6px;
+  background: #161b22;
+  border-radius: 10px;
+  border: 1px solid #21262d;
+}
+
+.titlebar-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 4px currentColor;
+}
+
+.titlebar-status-text {
+  font-size: 10px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+  width: 36px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.titlebar-btn:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.titlebar-btn-close:hover {
+  background: #da3633;
+  color: #fff;
 }
 
 /* Scrollbar */
@@ -40,7 +154,7 @@ body {
 
 /* ==================== Sidebar ==================== */
 .sidebar {
-  width: 210px;
+  width: 200px;
   background: linear-gradient(180deg, #161b22 0%, #12171e 100%);
   border-right: 1px solid #21262d;
   display: flex;
@@ -49,28 +163,19 @@ body {
   flex-shrink: 0;
 }
 
-.sidebar-brand {
-  padding: 20px 16px 18px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #f0f6fc;
-  letter-spacing: -0.3px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.brand-icon {
-  font-size: 22px;
-  line-height: 1;
-}
-
 .sidebar-nav {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 8px;
+  padding: 10px 8px 0;
+}
+
+.sidebar-version {
+  padding: 10px 16px;
+  font-size: 10px;
+  color: #484f58;
+  letter-spacing: 0.3px;
 }
 
 .nav-item {

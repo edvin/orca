@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { startEventSubscription } from "./lib/events";
+import Titlebar from "./components/Titlebar";
 import Sidebar from "./components/Sidebar";
 import ToastContainer from "./components/Toast";
 import StacksPage from "./pages/StacksPage";
@@ -28,19 +29,13 @@ export default function App() {
   };
 
   const handleGlobalKeyDown = (e: KeyboardEvent) => {
-    // Escape: close any open modal overlay
     if (e.key === "Escape") {
       const overlay = document.querySelector(".modal-overlay") as HTMLElement | null;
       if (overlay) {
-        // Find and click the modal close button
         const closeBtn = overlay.querySelector(".modal-close") as HTMLElement | null;
-        if (closeBtn) {
-          closeBtn.click();
-        }
+        if (closeBtn) closeBtn.click();
       }
     }
-
-    // Ctrl+K / Cmd+K: focus the search input on the current page
     if ((e.ctrlKey || e.metaKey) && e.key === "k") {
       e.preventDefault();
       const searchInput = document.querySelector(".search-input") as HTMLInputElement | null;
@@ -63,29 +58,25 @@ export default function App() {
   });
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
-      <Sidebar
-        currentPage={page()}
-        onNavigate={setPage}
-        daemonStatus={daemonStatus()}
-      />
-      <main
-        style={{
-          flex: 1,
-          padding: "24px",
-          overflow: "auto",
-          background: "#0d1117",
-        }}
-      >
-        {page() === "stacks" && <StacksPage />}
-        {page() === "containers" && <ContainersPage />}
-        {page() === "images" && <ImagesPage />}
-        {page() === "volumes" && <VolumesPage />}
-        {page() === "networks" && <NetworksPage />}
-        {page() === "kubernetes" && <KubernetesPage />}
-        {page() === "machine" && <MachinePage />}
-        {page() === "settings" && <SettingsPage />}
-      </main>
+    <div class="app-root">
+      <Titlebar daemonStatus={daemonStatus()} />
+      <div class="app-body">
+        <Sidebar
+          currentPage={page()}
+          onNavigate={setPage}
+          daemonStatus={daemonStatus()}
+        />
+        <main class="app-main">
+          {page() === "stacks" && <StacksPage />}
+          {page() === "containers" && <ContainersPage />}
+          {page() === "images" && <ImagesPage />}
+          {page() === "volumes" && <VolumesPage />}
+          {page() === "networks" && <NetworksPage />}
+          {page() === "kubernetes" && <KubernetesPage />}
+          {page() === "machine" && <MachinePage />}
+          {page() === "settings" && <SettingsPage />}
+        </main>
+      </div>
       <ToastContainer />
     </div>
   );
