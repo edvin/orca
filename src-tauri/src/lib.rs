@@ -1,4 +1,5 @@
 mod commands;
+mod tray;
 
 pub fn run() {
     tauri::Builder::default()
@@ -29,6 +30,10 @@ pub fn run() {
             commands::subscribe_events,
             commands::get_machine_info,
         ])
+        .setup(|app| {
+            tray::setup_tray(app.handle())?;
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running vessel");
 }
