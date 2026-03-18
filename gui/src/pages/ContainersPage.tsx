@@ -259,6 +259,20 @@ export default function ContainersPage() {
                             Restart
                           </button>
                         </Show>
+                        <Show when={c.state !== "Running"}>
+                          <button
+                            class="btn btn-sm btn-danger"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Remove container '${c.name}'? This cannot be undone.`)) {
+                                doAction("remove_container", c.id, e);
+                              }
+                            }}
+                            disabled={loading()}
+                          >
+                            Remove
+                          </button>
+                        </Show>
                       </div>
                     </td>
                   </tr>

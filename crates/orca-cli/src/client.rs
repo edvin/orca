@@ -13,22 +13,320 @@ pub struct HealthResponse {
     pub version: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct Container {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub state: String,
+    pub ports: Vec<PortMapping>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PortMapping {
+    pub host_port: u16,
+    pub container_port: u16,
+    pub protocol: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Image {
+    pub id: String,
+    pub repo_tags: Vec<String>,
+    pub size_bytes: u64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PruneResult {
+    pub images_deleted: Vec<String>,
+    pub space_reclaimed: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ComposeProject {
+    pub name: String,
+    pub status: String,
+    pub services: Vec<ComposeService>,
+    pub working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ComposeService {
+    pub name: String,
+    pub container_name: String,
+    pub image: String,
+    pub state: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClusterStatus {
+    pub enabled: bool,
+    pub running: bool,
+    pub version: Option<String>,
+    pub node_name: Option<String>,
+    pub node_status: Option<String>,
+    pub pods_running: u32,
+    pub pods_total: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MachineInfo {
+    pub name: String,
+    pub state: String,
+    pub config: MachineConfig,
+    pub backend: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MachineConfig {
+    pub name: String,
+    pub cpus: u32,
+    pub memory_mb: u64,
+    pub disk_gb: u64,
+    pub runtime: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExecResult {
+    pub exit_code: i32,
+    pub output: String,
+}
+
 impl DaemonClient {
-    pub fn new(base_url: &str) -> Self {
+    /// Create a new client. If `token` is provided it will be used for auth;
+    /// otherwise the token is read from the Orca config file.
+    pub fn new(base_url: &str, token: Option<String>) -> Self {
+        let token = token.or_else(|| {
+            orca_core::config::OrcaConfig::load()
+                .ok()
+                .and_then(|c| c.api_token)
+        });
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(t) = token {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {t}")) {
+                headers.insert(reqwest::header::AUTHORIZATION, val);
+            }
+        }
+
+        let http = reqwest::Client::builder()
+            .default_headers(headers)
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
             base_url: base_url.to_string(),
-            http: reqwest::Client::new(),
+            http,
         }
     }
 
+    fn url(&self, path: &str) -> String {
+        format!("{}/api/v1{}", self.base_url, path)
+    }
+
+    // --- Health ---
+
     pub async fn health(&self) -> anyhow::Result<HealthResponse> {
+        let resp = self.http.get(self.url("/health")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    // --- Containers ---
+
+    pub async fn list_containers(&self) -> anyhow::Result<Vec<Container>> {
+        let resp = self.http.get(self.url("/containers")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn start_container(&self, id: &str) -> anyhow::Result<()> {
         let resp = self
             .http
-            .get(format!("{}/api/v1/health", self.base_url))
+            .post(self.url(&format!("/containers/{id}/start")))
             .send()
-            .await?
-            .json()
             .await?;
-        Ok(resp)
+        check_status(&resp)?;
+        Ok(())
     }
+
+    pub async fn stop_container(&self, id: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .post(self.url(&format!("/containers/{id}/stop")))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    pub async fn remove_container(&self, id: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .delete(self.url(&format!("/containers/{id}")))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    pub async fn container_logs(
+        &self,
+        id: &str,
+        tail: Option<u32>,
+    ) -> anyhow::Result<Vec<String>> {
+        let mut url = format!("{}/api/v1/containers/{id}/logs?follow=false", self.base_url);
+        if let Some(n) = tail {
+            url.push_str(&format!("&tail={n}"));
+        }
+        let resp = self.http.get(&url).send().await?;
+        check_status(&resp)?;
+        // The logs endpoint is SSE — read the body as text and extract data lines.
+        let body = resp.text().await?;
+        let lines: Vec<String> = body
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:"))
+            .map(|s| s.to_string())
+            .collect();
+        Ok(lines)
+    }
+
+    pub async fn exec_container(
+        &self,
+        id: &str,
+        command: Vec<String>,
+    ) -> anyhow::Result<ExecResult> {
+        let resp = self
+            .http
+            .post(self.url(&format!("/containers/{id}/exec")))
+            .json(&serde_json::json!({ "command": command }))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    // --- Images ---
+
+    pub async fn list_images(&self) -> anyhow::Result<Vec<Image>> {
+        let resp = self.http.get(self.url("/images")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn pull_image(&self, reference: &str) -> anyhow::Result<String> {
+        let resp = self
+            .http
+            .post(self.url("/images/pull"))
+            .json(&serde_json::json!({ "reference": reference }))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        // SSE stream — collect all progress lines and return final body
+        Ok(resp.text().await?)
+    }
+
+    pub async fn remove_image(&self, id: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .delete(self.url(&format!("/images/{id}")))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    pub async fn prune_images(&self) -> anyhow::Result<PruneResult> {
+        let resp = self.http.post(self.url("/images/prune")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    // --- Stacks ---
+
+    pub async fn list_stacks(&self) -> anyhow::Result<Vec<ComposeProject>> {
+        let resp = self.http.get(self.url("/stacks")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn stack_up(&self, name: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .post(self.url(&format!("/stacks/{name}/up")))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    pub async fn stack_down(&self, name: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .post(self.url(&format!("/stacks/{name}/down")))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    // --- Kubernetes ---
+
+    pub async fn k8s_status(&self) -> anyhow::Result<ClusterStatus> {
+        let resp = self.http.get(self.url("/k8s/status")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn k8s_enable(&self) -> anyhow::Result<()> {
+        let resp = self.http.post(self.url("/k8s/enable")).send().await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    pub async fn k8s_disable(&self) -> anyhow::Result<()> {
+        let resp = self.http.post(self.url("/k8s/disable")).send().await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    // --- Machines ---
+
+    pub async fn list_machines(&self) -> anyhow::Result<Vec<MachineInfo>> {
+        let resp = self.http.get(self.url("/machines")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn start_machine(&self, name: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .post(self.url(&format!("/machines/{name}/start")))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    pub async fn stop_machine(&self, name: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .post(self.url(&format!("/machines/{name}/stop")))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+}
+
+fn check_status(resp: &reqwest::Response) -> anyhow::Result<()> {
+    if !resp.status().is_success() && !resp.status().is_informational() {
+        anyhow::bail!(
+            "API request failed: {} {}",
+            resp.status().as_u16(),
+            resp.status().canonical_reason().unwrap_or("Unknown")
+        );
+    }
+    Ok(())
 }

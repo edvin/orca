@@ -17,6 +17,8 @@ pub struct AppState {
     pub runtime: Arc<BollardRuntime>,
     pub k8s: Arc<K3sManager>,
     pub events_tx: broadcast::Sender<Event>,
+    /// API authentication token. Empty string means auth is disabled (--no-auth).
+    pub api_token: String,
 }
 
 impl AppState {
@@ -25,12 +27,14 @@ impl AppState {
         runtime: Arc<BollardRuntime>,
         k8s: Arc<K3sManager>,
         events_tx: broadcast::Sender<Event>,
+        api_token: String,
     ) -> Self {
         Self {
             config,
             runtime,
             k8s,
             events_tx,
+            api_token,
         }
     }
 }

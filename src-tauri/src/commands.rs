@@ -5,8 +5,28 @@ use serde::Deserialize;
 
 const DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
 
+/// Build a reqwest client with the API auth token pre-configured.
+fn authed_client() -> reqwest::Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = load_api_token() {
+        if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+            headers.insert(reqwest::header::AUTHORIZATION, val);
+        }
+    }
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+/// Read the API token from the Orca config file.
+fn load_api_token() -> Option<String> {
+    let config = orca_core::config::OrcaConfig::load().ok()?;
+    config.api_token
+}
+
 fn client() -> reqwest::Client {
-    reqwest::Client::new()
+    authed_client()
 }
 
 async fn get_json<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, String> {

@@ -115,7 +115,19 @@ export default function KubernetesPage() {
     }
   };
 
+  const handleReset = async () => {
+    if (!window.confirm("Reset Kubernetes cluster? This will delete ALL workloads and data.")) return;
+    try {
+      await invoke("k8s_reset");
+      showToast("Kubernetes cluster reset", "success");
+      await refreshStatus();
+    } catch (e) {
+      showToast(`Failed to reset: ${e}`, "error");
+    }
+  };
+
   const handleDeletePod = async (namespace: string, name: string) => {
+    if (!window.confirm(`Delete pod '${name}'?`)) return;
     try {
       await invoke("k8s_delete_pod", { namespace, name });
       showToast(`Pod ${name} deleted`, "success");
@@ -153,6 +165,7 @@ export default function KubernetesPage() {
   };
 
   const handleDeletePvc = async (namespace: string, name: string) => {
+    if (!window.confirm(`Delete PVC '${name}'? Associated data may be lost.`)) return;
     try {
       await invoke("k8s_delete_pvc", { namespace, name });
       showToast(`PVC ${name} deleted`, "success");
@@ -256,6 +269,9 @@ export default function KubernetesPage() {
               </button>
             </Show>
             <Show when={status()?.running}>
+              <button class="btn btn-danger" onClick={handleReset}>
+                Reset
+              </button>
               <button class="btn btn-danger" onClick={handleDisable}>
                 Disable
               </button>

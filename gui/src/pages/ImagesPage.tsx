@@ -64,8 +64,9 @@ export default function ImagesPage() {
     }
   };
 
-  const removeImage = async (id: string, e: MouseEvent) => {
+  const removeImage = async (id: string, tag: string, e: MouseEvent) => {
     e.stopPropagation();
+    if (!window.confirm(`Remove image '${tag}'?`)) return;
     try {
       await invoke("remove_image", { id });
       showToast("Image removed", "success");
@@ -436,7 +437,7 @@ export default function ImagesPage() {
                         </Show>
                         <button
                           class="btn btn-sm btn-danger"
-                          onClick={(e) => removeImage(img.id, e)}
+                          onClick={(e) => removeImage(img.id, img.repo_tags[0] || img.id, e)}
                         >
                           Remove
                         </button>

@@ -18,6 +18,9 @@ pub struct OrcaConfig {
     pub show_tray_icon: bool,
     /// Telemetry opt-in (off by default, obviously).
     pub telemetry: bool,
+    /// API authentication token. Auto-generated on first daemon start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_token: Option<String>,
 }
 
 impl Default for OrcaConfig {
@@ -32,6 +35,7 @@ impl Default for OrcaConfig {
             start_on_login: false,
             show_tray_icon: true,
             telemetry: false,
+            api_token: None,
         }
     }
 }
@@ -52,6 +56,21 @@ impl OrcaConfig {
         } else {
             Ok(Self::default())
         }
+    }
+
+    /// Ensure an API token exists. Generates a cryptographically random
+    /// 32-character hex token if none is set, saves the config, and returns
+    /// a reference to the token.
+    pub fn ensure_token(&mut self) -> anyhow::Result<&str> {
+        if self.api_token.is_none() {
+            let mut bytes = [0u8; 16];
+            let mut f = std::fs::File::open("/dev/urandom")?;
+            std::io::Read::read_exact(&mut f, &mut bytes)?;
+            let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            self.api_token = Some(token);
+            self.save()?;
+        }
+        Ok(self.api_token.as_ref().unwrap())
     }
 
     pub fn save(&self) -> anyhow::Result<()> {

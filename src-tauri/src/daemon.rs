@@ -19,6 +19,9 @@ impl DaemonManager {
 
     /// Start the daemon if not already running.
     /// Looks for orca-daemon next to the current executable, or in PATH.
+    /// After the daemon starts, its API token will be available in the
+    /// shared config file (~/.config/orca/config.json) and is read by
+    /// the commands module on each request.
     pub async fn start(&self) -> Result<(), String> {
         // Check if daemon is already responding
         if self.health_check().await {
@@ -43,6 +46,9 @@ impl DaemonManager {
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
             if self.health_check().await {
                 tracing::info!("Orca daemon is ready");
+                // The daemon generates an API token on first start and saves
+                // it to the config file. The commands module reads it from
+                // there for each request.
                 return Ok(());
             }
         }

@@ -58,6 +58,13 @@
 - Settings page with runtime info
 - Auto-starts the daemon on launch
 
+### Security
+- **Mandatory API token authentication** — auto-generated on first run, required on every request
+- Constant-time token comparison (prevents timing attacks)
+- Health endpoint is the only unauthenticated route
+- Unix socket mode with file permissions (recommended for production)
+- Network exposure warnings when binding to non-localhost addresses
+
 ## Architecture
 
 ```
@@ -104,22 +111,25 @@ cargo build --release --bin orca-daemon
 ./target/release/orca-daemon --socket auto
 ```
 
-The daemon listens on `http://127.0.0.1:9477` by default.
+The daemon listens on `http://127.0.0.1:9477` by default. On first run, it generates an API token and stores it in `~/.config/orca/config.json`.
 
 ### Test with curl
 
 ```bash
-# Health check
+# Health check (no auth required)
 curl http://127.0.0.1:9477/api/v1/health
 
-# List containers
-curl http://127.0.0.1:9477/api/v1/containers
+# Read the API token
+TOKEN=$(cat ~/.config/orca/config.json | grep api_token | cut -d'"' -f4)
+
+# List containers (auth required)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9477/api/v1/containers
 
 # List images
-curl http://127.0.0.1:9477/api/v1/images
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9477/api/v1/images
 
 # List compose stacks
-curl http://127.0.0.1:9477/api/v1/stacks
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9477/api/v1/stacks
 
 # Container stats
 curl http://127.0.0.1:9477/api/v1/containers/<id>/stats

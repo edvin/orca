@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Path, Query, Request, State},
     http::StatusCode,
+    middleware::Next,
     response::{
         IntoResponse,
         sse::{Event as SseEvent, KeepAlive, Sse},
@@ -46,6 +47,40 @@ impl From<anyhow::Error> for ApiError {
     fn from(err: anyhow::Error) -> Self {
         Self(err)
     }
+}
+
+/// Authentication middleware. Checks for a valid Bearer token on all
+/// routes except /health. Uses constant-time comparison to prevent
+/// timing attacks.
+pub async fn auth_middleware(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Result<axum::response::Response, StatusCode> {
+    // Allow health endpoint without auth
+    if req.uri().path() == "/api/v1/health" || req.uri().path() == "/health" {
+        return Ok(next.run(req).await);
+    }
+
+    let auth_header = req
+        .headers()
+        .get("authorization")
+        .and_then(|v| v.to_str().ok());
+
+    let provided_token = match auth_header {
+        Some(h) if h.starts_with("Bearer ") => &h[7..],
+        _ => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    // Constant-time comparison to prevent timing attacks
+    use subtle::ConstantTimeEq;
+    let expected = state.api_token.as_bytes();
+    let provided = provided_token.as_bytes();
+    if expected.len() != provided.len() || expected.ct_eq(provided).unwrap_u8() != 1 {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    Ok(next.run(req).await)
 }
 
 pub fn routes() -> Router<Arc<AppState>> {

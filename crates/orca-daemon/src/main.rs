@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
+use axum::middleware;
 use clap::Parser;
 use tokio::sync::broadcast;
 use tower_http::trace::TraceLayer;
@@ -28,6 +29,7 @@ struct Args {
     /// Bind address for TCP mode.
     #[arg(long, default_value = "127.0.0.1")]
     bind: String,
+
 }
 
 fn default_socket_path() -> PathBuf {
@@ -44,7 +46,21 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let args = Args::parse();
-    let config = orca_core::config::OrcaConfig::load()?;
+    let mut config = orca_core::config::OrcaConfig::load()?;
+
+    // Generate or load API token (mandatory)
+    let token = config.ensure_token()?.to_string();
+    let config_path = orca_core::config::OrcaConfig::config_path();
+    tracing::info!("API token stored in {}", config_path.display());
+    let api_token = token;
+
+    // Warn if binding to a non-loopback address
+    if args.bind != "127.0.0.1" && args.bind != "localhost" {
+        tracing::warn!(
+            "WARNING: Daemon binding to {} — the API will be network-accessible!",
+            args.bind
+        );
+    }
 
     let native = orca_backend_native::NativeBackend::connect()?;
     let runtime = Arc::new(native.runtime);
@@ -62,12 +78,13 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let k8s = Arc::new(orca_backend_common::k8s::K3sManager::from_env());
-    let state = Arc::new(AppState::new(config, runtime, k8s, events_tx));
+    let state = Arc::new(AppState::new(config, runtime, k8s, events_tx, api_token));
 
     let app = Router::new()
         .nest("/api/v1", api::routes())
         .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(state.clone())
+        .layer(middleware::from_fn_with_state(state, api::auth_middleware));
 
     #[cfg(unix)]
     if let Some(socket_arg) = args.socket {

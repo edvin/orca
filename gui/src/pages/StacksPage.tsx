@@ -275,9 +275,11 @@ export default function StacksPage() {
                           </button>
                           <button
                             class="btn btn-sm btn-danger"
-                            onClick={(e) =>
-                              doStackAction("compose_down", stack.name, e)
-                            }
+                            onClick={(e) => {
+                              if (window.confirm(`Run docker compose down for '${stack.name}'? This will stop and remove all containers in the stack.`)) {
+                                doStackAction("compose_down", stack.name, e);
+                              }
+                            }}
                             disabled={isLoading()}
                             title="docker compose down"
                           >
