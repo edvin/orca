@@ -16,26 +16,67 @@ use orca_core::kubernetes::*;
 
 /// k3s-based Kubernetes manager.
 pub struct K3sManager {
-    /// Path to k3s data directory.
-    _data_dir: PathBuf,
+    /// Override kubeconfig path (if None, uses default k3s location).
+    kubeconfig_override: Option<PathBuf>,
     /// Cached kube client (created on first use).
     client: tokio::sync::OnceCell<Client>,
 }
 
 impl K3sManager {
     pub fn new() -> Self {
-        let data_dir = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("/var/lib"))
-            .join("orca")
-            .join("k3s");
-
         Self {
-            _data_dir: data_dir,
+            kubeconfig_override: None,
             client: tokio::sync::OnceCell::new(),
         }
     }
 
+    /// Create a K3sManager that uses a specific kubeconfig file.
+    /// Useful for k3d clusters and testing.
+    pub fn with_kubeconfig(path: PathBuf) -> Self {
+        Self {
+            kubeconfig_override: Some(path),
+            client: tokio::sync::OnceCell::new(),
+        }
+    }
+
+    /// Create from KUBECONFIG environment variable, falling back to default.
+    pub fn from_env() -> Self {
+        if let Ok(path) = std::env::var("KUBECONFIG") {
+            Self::with_kubeconfig(PathBuf::from(path))
+        } else {
+            Self::new()
+        }
+    }
+
+    /// Get the kubeconfig path (public for testing).
+    pub fn kubeconfig_path_for_test(&self) -> PathBuf {
+        self.kubeconfig_path()
+    }
+
+    /// Find the kubectl binary — prefer `k3s kubectl`, fall back to `kubectl`.
+    fn kubectl_bin(&self) -> String {
+        // Check for k3s first (direct install)
+        if std::process::Command::new("k3s")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok()
+        {
+            return "k3s kubectl".to_string();
+        }
+        "kubectl".to_string()
+    }
+
     fn kubeconfig_path(&self) -> PathBuf {
+        if let Some(path) = &self.kubeconfig_override {
+            return path.clone();
+        }
+        // Check KUBECONFIG env var
+        if let Ok(path) = std::env::var("KUBECONFIG") {
+            return PathBuf::from(path);
+        }
+        // Default k3s location
         PathBuf::from("/etc/rancher/k3s/k3s.yaml")
     }
 
@@ -166,12 +207,13 @@ impl K8sManager for K3sManager {
     }
 
     async fn status(&self) -> anyhow::Result<ClusterStatus> {
-        let installed = self.is_k3s_installed().await;
         let kubeconfig_exists = self.kubeconfig_path().exists();
 
-        if !installed || !kubeconfig_exists {
+        if !kubeconfig_exists {
+            // Check if k3s is installed (for direct installs)
+            let installed = self.is_k3s_installed().await;
             return Ok(ClusterStatus {
-                enabled: false,
+                enabled: installed,
                 running: false,
                 version: None,
                 node_name: None,
@@ -657,8 +699,10 @@ impl K8sManager for K3sManager {
     }
 
     async fn apply_yaml(&self, yaml: &str) -> anyhow::Result<String> {
+        let kubectl = self.kubectl_bin();
         let output = Command::new("sh")
-            .args(["-c", &format!("echo '{}' | k3s kubectl apply -f -", yaml.replace('\'', "'\\''"))])
+            .args(["-c", &format!("echo '{}' | {} apply -f -", yaml.replace('\'', "'\\''"), kubectl)])
+            .env("KUBECONFIG", self.kubeconfig_path())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -675,8 +719,10 @@ impl K8sManager for K3sManager {
     }
 
     async fn delete_yaml(&self, yaml: &str) -> anyhow::Result<String> {
+        let kubectl = self.kubectl_bin();
         let output = Command::new("sh")
-            .args(["-c", &format!("echo '{}' | k3s kubectl delete -f -", yaml.replace('\'', "'\\''"))])
+            .args(["-c", &format!("echo '{}' | {} delete -f -", yaml.replace('\'', "'\\''"), kubectl)])
+            .env("KUBECONFIG", self.kubeconfig_path())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()

@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let k8s = Arc::new(orca_backend_common::k8s::K3sManager::new());
+    let k8s = Arc::new(orca_backend_common::k8s::K3sManager::from_env());
     let state = Arc::new(AppState::new(config, runtime, k8s, events_tx));
 
     let app = Router::new()
