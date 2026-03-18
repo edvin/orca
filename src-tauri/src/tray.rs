@@ -14,6 +14,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let _tray = TrayIconBuilder::new()
         .tooltip("Orca — Container Desktop")
+        .icon(app.default_window_icon().cloned().expect("no window icon"))
+        .icon_as_template(false)
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
