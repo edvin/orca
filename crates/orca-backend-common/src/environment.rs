@@ -1,6 +1,7 @@
 use std::process::Stdio;
 use tokio::process::Command;
 use orca_core::environment::*;
+use serde::Deserialize as SerdeDeserialize;
 
 /// Detect the current platform.
 fn detect_platform() -> String {
@@ -403,5 +404,257 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             ))
         }
         _ => anyhow::bail!("Unknown fix action: {action}"),
+    }
+}
+
+// ==================== System Health ====================
+
+/// Check if Docker/Podman is currently reachable.
+pub async fn check_docker_connection() -> bool {
+    Command::new("docker")
+        .args(["info"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await
+        .is_ok_and(|s| s.success())
+}
+
+/// JSON shape returned by `docker system df --format '{{json .}}'`.
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "PascalCase")]
+struct DockerDfRow {
+    #[serde(rename = "Type")]
+    type_name: String,
+    size: String,
+    reclaimable: String,
+}
+
+/// Parse a Docker human-readable size string (e.g. "1.234GB", "45.6kB") into bytes.
+fn parse_docker_size(s: &str) -> u64 {
+    let s = s.trim();
+    // Find where the numeric part ends and the unit begins
+    let (num_str, unit) = match s.find(|c: char| c.is_alphabetic()) {
+        Some(idx) => (&s[..idx], s[idx..].to_uppercase()),
+        None => return s.parse::<u64>().unwrap_or(0),
+    };
+    let num: f64 = num_str.parse().unwrap_or(0.0);
+    let multiplier: f64 = match unit.as_str() {
+        "B" => 1.0,
+        "KB" => 1_000.0,
+        "MB" => 1_000_000.0,
+        "GB" => 1_000_000_000.0,
+        "TB" => 1_000_000_000_000.0,
+        "KIB" => 1_024.0,
+        "MIB" => 1_048_576.0,
+        "GIB" => 1_073_741_824.0,
+        "TIB" => 1_099_511_627_776.0,
+        _ => 1.0,
+    };
+    (num * multiplier) as u64
+}
+
+/// Parse reclaimable string like "1.234GB (45%)" — extract just the size portion.
+fn parse_reclaimable_size(s: &str) -> u64 {
+    // Strip any parenthesized percentage at the end
+    let size_part = if let Some(idx) = s.find('(') {
+        s[..idx].trim()
+    } else {
+        s.trim()
+    };
+    parse_docker_size(size_part)
+}
+
+/// Get Docker disk usage (docker system df).
+pub async fn get_disk_usage() -> Option<DiskUsage> {
+    let output = Command::new("docker")
+        .args(["system", "df", "--format", "{{json .}}"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .await
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut images_size: u64 = 0;
+    let mut containers_size: u64 = 0;
+    let mut volumes_size: u64 = 0;
+    let mut build_cache_size: u64 = 0;
+    let mut total_reclaimable: u64 = 0;
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(row) = serde_json::from_str::<DockerDfRow>(line) {
+            let size = parse_docker_size(&row.size);
+            let reclaimable = parse_reclaimable_size(&row.reclaimable);
+            match row.type_name.as_str() {
+                "Images" => images_size = size,
+                "Containers" => containers_size = size,
+                "Volumes" | "Local Volumes" => volumes_size = size,
+                "Build Cache" => build_cache_size = size,
+                _ => {}
+            }
+            total_reclaimable += reclaimable;
+        }
+    }
+
+    let total = images_size + containers_size + volumes_size + build_cache_size;
+
+    Some(DiskUsage {
+        images_size_bytes: images_size,
+        containers_size_bytes: containers_size,
+        volumes_size_bytes: volumes_size,
+        build_cache_size_bytes: build_cache_size,
+        total_size_bytes: total,
+        reclaimable_bytes: total_reclaimable,
+    })
+}
+
+/// Parse a value in kB from /proc/meminfo.
+fn parse_meminfo_kb(meminfo: &str, key: &str) -> Option<u64> {
+    for line in meminfo.lines() {
+        if line.starts_with(key) {
+            // Format: "MemTotal:       16384000 kB"
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                return parts[1].parse::<u64>().ok();
+            }
+        }
+    }
+    None
+}
+
+/// Get system resource info.
+pub async fn get_system_resources() -> Option<SystemResources> {
+    let cpu_count = std::thread::available_parallelism()
+        .map(|p| p.get() as u32)
+        .unwrap_or(1);
+
+    // Memory from /proc/meminfo (Linux)
+    let (memory_total, memory_available) = if cfg!(target_os = "linux") {
+        if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
+            let total = parse_meminfo_kb(&meminfo, "MemTotal:")
+                .map(|kb| kb * 1024)
+                .unwrap_or(0);
+            let available = parse_meminfo_kb(&meminfo, "MemAvailable:")
+                .map(|kb| kb * 1024)
+                .unwrap_or(0);
+            (total, available)
+        } else {
+            (0, 0)
+        }
+    } else {
+        // Fallback: try to get from `free` command
+        match run_cmd("free", &["-b"]).await {
+            Ok(output) => {
+                let mut total = 0u64;
+                let mut available = 0u64;
+                for line in output.lines() {
+                    if line.starts_with("Mem:") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 7 {
+                            total = parts[1].parse().unwrap_or(0);
+                            available = parts[6].parse().unwrap_or(0);
+                        }
+                    }
+                }
+                (total, available)
+            }
+            Err(_) => (0, 0),
+        }
+    };
+
+    // Disk usage: parse `df` output for the root filesystem
+    let (disk_total, disk_free) = match run_cmd("df", &["-B1", "/"]).await {
+        Ok(output) => {
+            // Second line has: Filesystem 1B-blocks Used Available Use% Mounted
+            let mut total = 0u64;
+            let mut free = 0u64;
+            for (i, line) in output.lines().enumerate() {
+                if i == 0 {
+                    continue; // header
+                }
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 4 {
+                    total = parts[1].parse().unwrap_or(0);
+                    free = parts[3].parse().unwrap_or(0);
+                }
+                break;
+            }
+            (total, free)
+        }
+        Err(_) => (0, 0),
+    };
+
+    let disk_usage_percent = if disk_total > 0 {
+        ((disk_total - disk_free) as f64 / disk_total as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    Some(SystemResources {
+        cpu_count,
+        memory_total_bytes: memory_total,
+        memory_available_bytes: memory_available,
+        disk_total_bytes: disk_total,
+        disk_free_bytes: disk_free,
+        disk_usage_percent,
+    })
+}
+
+/// Full system health check.
+pub async fn check_system_health() -> SystemHealth {
+    let connected = check_docker_connection().await;
+
+    let version = if connected {
+        run_cmd("docker", &["version", "--format", "{{.Server.Version}}"])
+            .await
+            .ok()
+    } else {
+        None
+    };
+
+    let disk = if connected {
+        get_disk_usage().await
+    } else {
+        None
+    };
+
+    let resources = get_system_resources().await;
+
+    let mut warnings = Vec::new();
+    if !connected {
+        warnings.push("Docker is not running or not reachable".to_string());
+    }
+    if let Some(ref res) = resources {
+        if res.disk_usage_percent > 90.0 {
+            warnings.push("Disk usage is above 90% — consider pruning images".to_string());
+        }
+        if res.memory_available_bytes < 512 * 1024 * 1024 {
+            warnings.push("Less than 512MB memory available".to_string());
+        }
+    }
+    if let Some(ref du) = disk {
+        if du.reclaimable_bytes > 5 * 1024 * 1024 * 1024 {
+            let gb = du.reclaimable_bytes / (1024 * 1024 * 1024);
+            warnings.push(format!(
+                "{gb}GB of Docker storage is reclaimable — consider pruning"
+            ));
+        }
+    }
+
+    SystemHealth {
+        docker_connected: connected,
+        docker_version: version,
+        disk_usage: disk,
+        system_resources: resources,
+        warnings,
     }
 }

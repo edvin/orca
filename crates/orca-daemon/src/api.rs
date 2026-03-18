@@ -148,6 +148,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Environment
         .route("/environment/status", get(env_status))
         .route("/environment/fix", post(env_fix))
+        // System health
+        .route("/system/health", get(system_health))
 }
 
 // --- Health ---
@@ -1108,4 +1110,13 @@ async fn env_fix(
 ) -> Result<impl IntoResponse, ApiError> {
     let output = orca_backend_common::environment::run_fix(&body.action).await?;
     Ok(Json(serde_json::json!({ "output": output })))
+}
+
+// --- System Health ---
+
+async fn system_health(
+    State(_state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let health = orca_backend_common::environment::check_system_health().await;
+    Ok(Json(health))
 }

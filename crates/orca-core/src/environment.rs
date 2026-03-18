@@ -30,3 +30,33 @@ pub enum CheckStatus {
     Warning,
     Fail,
 }
+
+/// System-level health metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemHealth {
+    pub docker_connected: bool,
+    pub docker_version: Option<String>,
+    pub disk_usage: Option<DiskUsage>,
+    pub system_resources: Option<SystemResources>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiskUsage {
+    pub images_size_bytes: u64,
+    pub containers_size_bytes: u64,
+    pub volumes_size_bytes: u64,
+    pub build_cache_size_bytes: u64,
+    pub total_size_bytes: u64,
+    pub reclaimable_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemResources {
+    pub cpu_count: u32,
+    pub memory_total_bytes: u64,
+    pub memory_available_bytes: u64,
+    pub disk_total_bytes: u64,
+    pub disk_free_bytes: u64,
+    pub disk_usage_percent: f64,
+}

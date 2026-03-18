@@ -97,6 +97,34 @@ body {
   font-weight: 500;
 }
 
+.titlebar-reconnecting {
+  font-size: 9px;
+  color: #f0883e;
+  margin-left: 6px;
+  animation: titlebar-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes titlebar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.titlebar-warning-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #0d1117;
+  background: #d29922;
+  border-radius: 8px;
+  cursor: default;
+}
+
 .titlebar-controls {
   display: flex;
   align-items: center;

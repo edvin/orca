@@ -687,6 +687,13 @@ pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+// --- System Health ---
+
+#[tauri::command]
+pub async fn system_health() -> Result<serde_json::Value, String> {
+    get_json("/system/health").await
+}
+
 // --- Environment ---
 
 #[tauri::command]

@@ -1,4 +1,7 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, onMount, onCleanup, Show } from "solid-js";
+import { invoke } from "@tauri-apps/api/core";
+import { showToast } from "./Toast";
+import type { SystemHealth } from "../lib/types";
 
 interface TitlebarProps {
   daemonStatus: string;
@@ -6,6 +9,37 @@ interface TitlebarProps {
 
 export default function Titlebar(props: TitlebarProps) {
   const [maximized, setMaximized] = createSignal(false);
+  const [dockerConnected, setDockerConnected] = createSignal<boolean | null>(null);
+  const [wasDisconnected, setWasDisconnected] = createSignal(false);
+  const [warningCount, setWarningCount] = createSignal(0);
+
+  const pollHealth = async () => {
+    try {
+      const health = (await invoke("system_health")) as SystemHealth;
+      const prevConnected = dockerConnected();
+      setDockerConnected(health.docker_connected);
+      setWarningCount(health.warnings.length);
+
+      // Detect reconnection
+      if (prevConnected === false && health.docker_connected) {
+        setWasDisconnected(false);
+        showToast("Docker connection restored", "success");
+      }
+      if (!health.docker_connected && prevConnected !== false) {
+        setWasDisconnected(true);
+      }
+    } catch {
+      // Daemon not reachable — docker status unknown
+      setDockerConnected(null);
+      setWarningCount(0);
+    }
+  };
+
+  onMount(() => {
+    pollHealth();
+    const interval = setInterval(pollHealth, 10_000);
+    onCleanup(() => clearInterval(interval));
+  });
 
   const minimize = async () => {
     try {
@@ -36,11 +70,23 @@ export default function Titlebar(props: TitlebarProps) {
   };
 
   const statusColor = () => {
+    // Docker connection status takes priority when daemon is running
+    if (props.daemonStatus === "running") {
+      if (dockerConnected() === false) return "#f85149";
+      return "#3fb950";
+    }
     switch (props.daemonStatus) {
-      case "running": return "#3fb950";
       case "stopped": return "#f85149";
       default: return "#848d97";
     }
+  };
+
+  const statusText = () => {
+    if (props.daemonStatus === "running") {
+      if (dockerConnected() === false) return "disconnected";
+      return "running";
+    }
+    return props.daemonStatus;
   };
 
   return (
@@ -50,7 +96,15 @@ export default function Titlebar(props: TitlebarProps) {
         <span class="titlebar-title" data-tauri-drag-region>Orca</span>
         <div class="titlebar-status" data-tauri-drag-region>
           <span class="titlebar-status-dot" style={{ background: statusColor() }} />
-          <span class="titlebar-status-text">{props.daemonStatus}</span>
+          <span class="titlebar-status-text">{statusText()}</span>
+          <Show when={dockerConnected() === false && props.daemonStatus === "running"}>
+            <span class="titlebar-reconnecting">Reconnecting...</span>
+          </Show>
+          <Show when={warningCount() > 0}>
+            <span class="titlebar-warning-badge" title={`${warningCount()} warning${warningCount() > 1 ? "s" : ""}`}>
+              {warningCount()}
+            </span>
+          </Show>
         </div>
       </div>
       <div class="titlebar-controls">

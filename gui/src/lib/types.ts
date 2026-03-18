@@ -177,6 +177,34 @@ export interface PersistentVolume {
   age: string;
 }
 
+// --- System Health ---
+
+export interface SystemHealth {
+  docker_connected: boolean;
+  docker_version: string | null;
+  disk_usage: DiskUsage | null;
+  system_resources: SystemResources | null;
+  warnings: string[];
+}
+
+export interface DiskUsage {
+  images_size_bytes: number;
+  containers_size_bytes: number;
+  volumes_size_bytes: number;
+  build_cache_size_bytes: number;
+  total_size_bytes: number;
+  reclaimable_bytes: number;
+}
+
+export interface SystemResources {
+  cpu_count: number;
+  memory_total_bytes: number;
+  memory_available_bytes: number;
+  disk_total_bytes: number;
+  disk_free_bytes: number;
+  disk_usage_percent: number;
+}
+
 // --- Environment ---
 
 export interface EnvironmentStatus {
