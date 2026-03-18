@@ -315,6 +315,14 @@ fn summary_to_container(c: &bollard::models::ContainerSummary) -> Container {
         ports,
         labels: c.labels.clone().unwrap_or_default(),
         created_at: c.created.map(|t| t.to_string()).unwrap_or_default(),
+        exit_code: None,
+        error: None,
+        oom_killed: None,
+        started_at: None,
+        finished_at: None,
+        command: None,
+        env: None,
+        mounts: None,
     }
 }
 
@@ -356,6 +364,22 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
         })
         .unwrap_or_default();
 
+    let state_info = info.state.as_ref();
+
+    let mounts = info
+        .mounts
+        .as_ref()
+        .map(|ms| {
+            ms.iter()
+                .map(|m| ContainerMount {
+                    source: m.source.clone().unwrap_or_default(),
+                    destination: m.destination.clone().unwrap_or_default(),
+                    mode: m.mode.clone().unwrap_or_default(),
+                    rw: m.rw.unwrap_or(false),
+                })
+                .collect()
+        });
+
     Container {
         id: info.id.clone().unwrap_or_default(),
         name: info
@@ -372,5 +396,13 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
             .and_then(|c| c.labels.clone())
             .unwrap_or_default(),
         created_at: info.created.clone().unwrap_or_default(),
+        exit_code: state_info.and_then(|s| s.exit_code),
+        error: state_info.and_then(|s| s.error.clone()).filter(|e| !e.is_empty()),
+        oom_killed: state_info.and_then(|s| s.oom_killed),
+        started_at: state_info.and_then(|s| s.started_at.clone()).filter(|s| !s.starts_with("0001")),
+        finished_at: state_info.and_then(|s| s.finished_at.clone()).filter(|s| !s.starts_with("0001")),
+        command: info.config.as_ref().and_then(|c| c.cmd.clone()),
+        env: info.config.as_ref().and_then(|c| c.env.clone()),
+        mounts,
     }
 }

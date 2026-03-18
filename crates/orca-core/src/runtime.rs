@@ -23,6 +23,32 @@ pub struct Container {
     pub ports: Vec<PortMapping>,
     pub labels: HashMap<String, String>,
     pub created_at: String,
+    /// Debug info — populated from inspect for failed/exited containers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oom_killed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mounts: Option<Vec<ContainerMount>>,
+}
+
+/// A bind mount or volume mount on a container.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerMount {
+    pub source: String,
+    pub destination: String,
+    pub mode: String,
+    pub rw: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

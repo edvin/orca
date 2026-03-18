@@ -388,6 +388,50 @@ export default function ContainersPage() {
                                     </div>
                                   </Show>
                                 </div>
+                                {/* Debug info for non-running containers */}
+                                <Show when={inspectData() && (c.state === "Exited" || c.state === "Dead" || c.state === "Created")}>
+                                  <div class="card-label" style={{ color: "#f85149", "font-weight": "600" }}>Diagnostics</div>
+                                  <div class="card-value">
+                                    <div style={{ background: "#da363311", border: "1px solid #da363333", "border-radius": "6px", padding: "10px", "font-size": "12px" }}>
+                                      <Show when={inspectData()?.exit_code !== undefined && inspectData()?.exit_code !== null}>
+                                        <div><span style={{ color: "#8b949e" }}>Exit Code:</span> <span class="mono" style={{ color: inspectData()?.exit_code === 0 ? "#3fb950" : "#f85149" }}>{inspectData()?.exit_code}</span></div>
+                                      </Show>
+                                      <Show when={inspectData()?.error}>
+                                        <div style={{ "margin-top": "4px" }}><span style={{ color: "#8b949e" }}>Error:</span> <span class="mono" style={{ color: "#f85149" }}>{inspectData()?.error}</span></div>
+                                      </Show>
+                                      <Show when={inspectData()?.oom_killed}>
+                                        <div style={{ "margin-top": "4px", color: "#f85149", "font-weight": "600" }}>Container was killed due to out-of-memory (OOM)</div>
+                                      </Show>
+                                      <Show when={inspectData()?.started_at}>
+                                        <div style={{ "margin-top": "4px" }}><span style={{ color: "#8b949e" }}>Started:</span> <span class="mono">{inspectData()?.started_at}</span></div>
+                                      </Show>
+                                      <Show when={inspectData()?.finished_at}>
+                                        <div style={{ "margin-top": "4px" }}><span style={{ color: "#8b949e" }}>Finished:</span> <span class="mono">{inspectData()?.finished_at}</span></div>
+                                      </Show>
+                                      <Show when={inspectData()?.command}>
+                                        <div style={{ "margin-top": "4px" }}><span style={{ color: "#8b949e" }}>Command:</span> <span class="mono">{(inspectData()?.command || []).join(" ")}</span></div>
+                                      </Show>
+                                      <Show when={inspectData()?.mounts && inspectData()?.mounts.length > 0}>
+                                        <div style={{ "margin-top": "8px" }}>
+                                          <span style={{ color: "#8b949e" }}>Mounts:</span>
+                                          <For each={inspectData()?.mounts || []}>
+                                            {(m: any) => (
+                                              <div class="mono" style={{ "font-size": "11px", "margin-left": "8px" }}>
+                                                {m.source} {"→"} {m.destination} ({m.rw ? "rw" : "ro"})
+                                              </div>
+                                            )}
+                                          </For>
+                                        </div>
+                                      </Show>
+                                      <Show when={!inspectData()?.error && inspectData()?.exit_code !== 0 && inspectData()?.exit_code !== undefined}>
+                                        <div style={{ "margin-top": "8px", color: "#8b949e", "font-style": "italic" }}>
+                                          Tip: Check the Logs tab for more details about why this container exited.
+                                        </div>
+                                      </Show>
+                                    </div>
+                                  </div>
+                                </Show>
+
                               </div>
                             </div>
                           </Show>
