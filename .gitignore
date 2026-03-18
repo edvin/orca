@@ -5,3 +5,4 @@ gui/dist/
 *.swp
 *.swo
 .DS_Store
+.claude/worktrees/
