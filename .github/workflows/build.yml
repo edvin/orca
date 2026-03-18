@@ -193,9 +193,10 @@ jobs:
         shell: bash
         run: ls -la src-tauri/icons/
 
-      - name: Build Tauri app (unsigned)
+      - name: Build Tauri app
         env:
-          # Skip code signing
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           APPLE_SIGNING_IDENTITY: ""
         run: cargo tauri build --target ${{ matrix.platform.target }}
