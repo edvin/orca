@@ -7,12 +7,11 @@ description = "macOS backend for Orca — manages Lima/vfkit VMs with Docker/Pod
 
 [dependencies]
 orca-core.workspace = true
+orca-backend-common.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 bollard = "0.18"
-tokio-stream.workspace = true
-chrono.workspace = true
 dirs.workspace = true

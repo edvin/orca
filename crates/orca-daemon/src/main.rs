@@ -45,13 +45,14 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let config = orca_core::config::OrcaConfig::load()?;
 
-    let backend = Arc::new(orca_backend_native::NativeBackend::connect()?);
-    let runtime_kind = backend.detect_runtime().await;
+    let native = orca_backend_native::NativeBackend::connect()?;
+    let runtime = Arc::new(native.runtime);
+    let runtime_kind = runtime.detect_runtime().await;
     tracing::info!("Connected to {runtime_kind:?} runtime");
 
     // Start the Docker event listener
     let (events_tx, _) = broadcast::channel(256);
-    let mut events_rx = backend.subscribe_events();
+    let mut events_rx = runtime.subscribe_events();
     let events_tx_clone = events_tx.clone();
     tokio::spawn(async move {
         while let Ok(event) = events_rx.recv().await {
@@ -59,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let state = Arc::new(AppState::new(config, backend, events_tx));
+    let state = Arc::new(AppState::new(config, runtime, events_tx));
 
     let app = Router::new()
         .nest("/api/v1", api::routes())

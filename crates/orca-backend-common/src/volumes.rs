@@ -4,9 +4,9 @@ use bollard::volume::CreateVolumeOptions;
 
 use orca_core::volume::*;
 
-use crate::NativeBackend;
+use crate::BollardRuntime;
 
-impl VolumeManager for NativeBackend {
+impl VolumeManager for BollardRuntime {
     async fn list(&self) -> anyhow::Result<Vec<Volume>> {
         let result = self.docker.list_volumes::<String>(None).await?;
         let volumes = result.volumes.unwrap_or_default();

@@ -3,9 +3,9 @@ use tokio_stream::StreamExt;
 
 use orca_core::image::*;
 
-use crate::NativeBackend;
+use crate::BollardRuntime;
 
-impl ImageManager for NativeBackend {
+impl ImageManager for BollardRuntime {
     async fn list(&self) -> anyhow::Result<Vec<Image>> {
         let options = ListImagesOptions::<String> {
             all: false,

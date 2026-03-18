@@ -3,9 +3,9 @@ use bollard::models::EndpointSettings;
 
 use orca_core::network::*;
 
-use crate::NativeBackend;
+use crate::BollardRuntime;
 
-impl NetworkManager for NativeBackend {
+impl NetworkManager for BollardRuntime {
     async fn list(&self) -> anyhow::Result<Vec<Network>> {
         let networks = self.docker.list_networks::<String>(None).await?;
 

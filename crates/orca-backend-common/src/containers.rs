@@ -10,9 +10,9 @@ use tokio_stream::StreamExt;
 
 use orca_core::runtime::*;
 
-use crate::NativeBackend;
+use crate::BollardRuntime;
 
-impl ContainerRuntime for NativeBackend {
+impl ContainerRuntime for BollardRuntime {
     fn kind(&self) -> RuntimeKind {
         // Will be overridden by detect_runtime() at startup, but default to Docker
         RuntimeKind::Docker

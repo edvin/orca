@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/orca-core",
+    "crates/orca-backend-common",
     "crates/orca-backend-native",
     "crates/orca-backend-macos",
     "crates/orca-backend-windows",
@@ -18,6 +19,7 @@ repository = "https://github.com/edvin/orca"
 
 [workspace.dependencies]
 orca-core = { path = "crates/orca-core" }
+orca-backend-common = { path = "crates/orca-backend-common" }
 orca-backend-native = { path = "crates/orca-backend-native" }
 tokio-stream = "0.1"
 anyhow = "1"

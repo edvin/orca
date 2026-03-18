@@ -4,9 +4,9 @@ use tokio::process::Command;
 use orca_core::compose::{ComposeOutput, ComposeRunner};
 use orca_core::runtime::RuntimeKind;
 
-use crate::NativeBackend;
+use crate::BollardRuntime;
 
-impl ComposeRunner for NativeBackend {
+impl ComposeRunner for BollardRuntime {
     async fn compose_up(
         &self,
         working_dir: &str,
@@ -41,7 +41,7 @@ impl ComposeRunner for NativeBackend {
 }
 
 async fn run_compose(
-    backend: &NativeBackend,
+    backend: &BollardRuntime,
     working_dir: &str,
     config_file: Option<&str>,
     args: &[&str],

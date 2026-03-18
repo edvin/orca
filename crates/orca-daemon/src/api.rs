@@ -15,7 +15,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use orca_core::compose::{self, ComposeRunner};
 use orca_core::image::ImageManager;
-use orca_core::machine::MachineManager;
+use orca_core::machine::{MachineBackend, MachineConfig, MachineInfo, MachineState};
 use orca_core::network::NetworkManager;
 use orca_core::runtime::{ContainerRuntime, ContainerStats};
 use orca_core::volume::VolumeManager;
@@ -147,18 +147,45 @@ fn event_type_name(kind: &orca_core::event::EventKind) -> &'static str {
 // --- Machines ---
 
 async fn list_machines(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let machines = MachineManager::list(state.backend.as_ref()).await?;
-    Ok(Json(machines))
+    Ok(Json(vec![native_machine_info()]))
 }
 
 async fn inspect_machine(
-    State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    State(_state): State<Arc<AppState>>,
+    Path(_name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let machine = MachineManager::inspect(state.backend.as_ref(), &name).await?;
-    Ok(Json(machine))
+    Ok(Json(native_machine_info()))
+}
+
+fn native_machine_info() -> MachineInfo {
+    let cpus = std::thread::available_parallelism()
+        .map(|p| p.get() as u32)
+        .unwrap_or(1);
+    let memory_mb = std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|c| {
+            c.lines()
+                .find(|l| l.starts_with("MemTotal:"))
+                .and_then(|l| l.split_whitespace().nth(1)?.parse::<u64>().ok())
+        })
+        .map(|kb| kb / 1024)
+        .unwrap_or(0);
+
+    MachineInfo {
+        name: "native".into(),
+        state: MachineState::Running,
+        config: MachineConfig {
+            name: "native".into(),
+            cpus,
+            memory_mb,
+            disk_gb: 0,
+            runtime: orca_core::runtime::RuntimeKind::Docker,
+            mounts: vec![],
+        },
+        backend: MachineBackend::Native,
+    }
 }
 
 // --- Containers ---
@@ -166,7 +193,7 @@ async fn inspect_machine(
 async fn list_containers(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let containers = state.backend.list_containers(true).await?;
+    let containers = state.runtime.list_containers(true).await?;
     Ok(Json(containers))
 }
 
@@ -174,7 +201,7 @@ async fn inspect_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let container = state.backend.inspect_container(&id).await?;
+    let container = state.runtime.inspect_container(&id).await?;
     Ok(Json(container))
 }
 
@@ -182,7 +209,7 @@ async fn start_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.backend.start_container(&id).await?;
+    state.runtime.start_container(&id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -190,7 +217,7 @@ async fn stop_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.backend.stop_container(&id, 10).await?;
+    state.runtime.stop_container(&id, 10).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -198,7 +225,7 @@ async fn kill_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.backend.kill_container(&id, "SIGKILL").await?;
+    state.runtime.kill_container(&id, "SIGKILL").await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -206,7 +233,7 @@ async fn remove_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.backend.remove_container(&id, false).await?;
+    state.runtime.remove_container(&id, false).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -214,7 +241,7 @@ async fn container_stats(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<ContainerStats>, ApiError> {
-    let stats = state.backend.container_stats(&id).await?;
+    let stats = state.runtime.container_stats(&id).await?;
     Ok(Json(stats))
 }
 
@@ -245,7 +272,7 @@ async fn exec_container(
         workdir: body.workdir,
     };
 
-    let result = state.backend.exec(opts).await?;
+    let result = state.runtime.exec(opts).await?;
     Ok(Json(result))
 }
 
@@ -265,7 +292,7 @@ async fn container_logs_sse(
     let follow = query.follow.unwrap_or(true);
     let tail = query.tail.or(Some(200));
 
-    let mut rx = state.backend.container_logs(&id, follow, tail).await?;
+    let mut rx = state.runtime.container_logs(&id, follow, tail).await?;
 
     let stream = async_stream::stream! {
         while let Some(line) = rx.recv().await {
@@ -285,7 +312,7 @@ async fn container_logs_sse(
 async fn list_images(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let images = ImageManager::list(state.backend.as_ref()).await?;
+    let images = ImageManager::list(state.runtime.as_ref()).await?;
     Ok(Json(images))
 }
 
@@ -293,7 +320,7 @@ async fn inspect_image(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let image = ImageManager::inspect(state.backend.as_ref(), &id).await?;
+    let image = ImageManager::inspect(state.runtime.as_ref(), &id).await?;
     Ok(Json(image))
 }
 
@@ -301,7 +328,7 @@ async fn remove_image(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    ImageManager::remove(state.backend.as_ref(), &id, false).await?;
+    ImageManager::remove(state.runtime.as_ref(), &id, false).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -314,7 +341,7 @@ async fn pull_image(
     State(state): State<Arc<AppState>>,
     Json(body): Json<PullRequest>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
-    let mut rx = ImageManager::pull(state.backend.as_ref(), &body.reference).await?;
+    let mut rx = ImageManager::pull(state.runtime.as_ref(), &body.reference).await?;
 
     let stream = async_stream::stream! {
         while let Some(progress) = rx.recv().await {
@@ -338,7 +365,7 @@ async fn pull_image(
 async fn list_volumes(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let volumes = VolumeManager::list(state.backend.as_ref()).await?;
+    let volumes = VolumeManager::list(state.runtime.as_ref()).await?;
     Ok(Json(volumes))
 }
 
@@ -346,7 +373,7 @@ async fn inspect_volume(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let volume = VolumeManager::inspect(state.backend.as_ref(), &name).await?;
+    let volume = VolumeManager::inspect(state.runtime.as_ref(), &name).await?;
     Ok(Json(volume))
 }
 
@@ -354,7 +381,7 @@ async fn remove_volume(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    VolumeManager::remove(state.backend.as_ref(), &name, false).await?;
+    VolumeManager::remove(state.runtime.as_ref(), &name, false).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -363,7 +390,7 @@ async fn remove_volume(
 async fn list_networks(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let networks = NetworkManager::list(state.backend.as_ref()).await?;
+    let networks = NetworkManager::list(state.runtime.as_ref()).await?;
     Ok(Json(networks))
 }
 
@@ -371,7 +398,7 @@ async fn inspect_network(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let network = NetworkManager::inspect(state.backend.as_ref(), &name).await?;
+    let network = NetworkManager::inspect(state.runtime.as_ref(), &name).await?;
     Ok(Json(network))
 }
 
@@ -380,7 +407,7 @@ async fn inspect_network(
 async fn get_stacks(
     state: &AppState,
 ) -> Result<Vec<compose::ComposeProject>, ApiError> {
-    let containers = state.backend.list_containers(true).await?;
+    let containers = state.runtime.list_containers(true).await?;
     Ok(compose::extract_projects(&containers))
 }
 
@@ -416,7 +443,7 @@ async fn start_stack(
     let mut errors = Vec::new();
     for service in &stack.services {
         if service.state != orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.backend.start_container(&service.container_id).await {
+            if let Err(e) = state.runtime.start_container(&service.container_id).await {
                 errors.push(format!("{}: {e}", service.name));
             }
         }
@@ -448,7 +475,7 @@ async fn stop_stack(
     let mut errors = Vec::new();
     for service in &stack.services {
         if service.state == orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.backend.stop_container(&service.container_id, 10).await {
+            if let Err(e) = state.runtime.stop_container(&service.container_id, 10).await {
                 errors.push(format!("{}: {e}", service.name));
             }
         }
@@ -481,14 +508,14 @@ async fn restart_stack(
     // Stop all running
     for service in &stack.services {
         if service.state == orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.backend.stop_container(&service.container_id, 10).await {
+            if let Err(e) = state.runtime.stop_container(&service.container_id, 10).await {
                 errors.push(format!("stop {}: {e}", service.name));
             }
         }
     }
     // Start all
     for service in &stack.services {
-        if let Err(e) = state.backend.start_container(&service.container_id).await {
+        if let Err(e) = state.runtime.start_container(&service.container_id).await {
             errors.push(format!("start {}: {e}", service.name));
         }
     }
@@ -532,7 +559,7 @@ async fn compose_up(
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
     let output = state
-        .backend
+        .runtime
         .compose_up(&dir, config.as_deref())
         .await?;
     Ok(Json(output))
@@ -544,7 +571,7 @@ async fn compose_down(
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
     let output = state
-        .backend
+        .runtime
         .compose_down(&dir, config.as_deref())
         .await?;
     Ok(Json(output))
@@ -556,7 +583,7 @@ async fn compose_pull(
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
     let output = state
-        .backend
+        .runtime
         .compose_pull(&dir, config.as_deref())
         .await?;
     Ok(Json(output))

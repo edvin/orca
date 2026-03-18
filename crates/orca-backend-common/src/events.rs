@@ -6,9 +6,9 @@ use tokio_stream::StreamExt;
 
 use orca_core::event::{Event, EventKind};
 
-use crate::NativeBackend;
+use crate::BollardRuntime;
 
-impl NativeBackend {
+impl BollardRuntime {
     /// Start listening to Docker events and broadcast them as Orca events.
     /// Returns a broadcast receiver that the daemon can subscribe to.
     pub fn subscribe_events(&self) -> broadcast::Receiver<Event> {

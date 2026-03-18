@@ -7,11 +7,8 @@ description = "Native Linux backend for Orca — talks to Docker/Podman over Uni
 
 [dependencies]
 orca-core.workspace = true
+orca-backend-common.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 tracing.workspace = true
 bollard = "0.18"
-tokio-stream.workspace = true
-chrono.workspace = true
