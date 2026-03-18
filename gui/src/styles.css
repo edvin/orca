@@ -97,6 +97,16 @@ body {
   font-weight: 500;
 }
 
+.titlebar-runtime {
+  font-size: 9px;
+  color: #58a6ff;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: #1f6feb18;
+  border-radius: 8px;
+  letter-spacing: 0.2px;
+}
+
 .titlebar-reconnecting {
   font-size: 9px;
   color: #f0883e;

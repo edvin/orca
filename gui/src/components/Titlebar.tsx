@@ -12,6 +12,7 @@ export default function Titlebar(props: TitlebarProps) {
   const [dockerConnected, setDockerConnected] = createSignal<boolean | null>(null);
   const [wasDisconnected, setWasDisconnected] = createSignal(false);
   const [warningCount, setWarningCount] = createSignal(0);
+  const [runtimeInfo, setRuntimeInfo] = createSignal<string | null>(null);
 
   const pollHealth = async () => {
     try {
@@ -19,6 +20,7 @@ export default function Titlebar(props: TitlebarProps) {
       const prevConnected = dockerConnected();
       setDockerConnected(health.docker_connected);
       setWarningCount(health.warnings.length);
+      setRuntimeInfo(health.docker_version ? `Docker ${health.docker_version}` : null);
 
       // Detect reconnection
       if (prevConnected === false && health.docker_connected) {
@@ -97,6 +99,9 @@ export default function Titlebar(props: TitlebarProps) {
         <div class="titlebar-status" data-tauri-drag-region>
           <span class="titlebar-status-dot" style={{ background: statusColor() }} />
           <span class="titlebar-status-text">{statusText()}</span>
+          <Show when={runtimeInfo() && dockerConnected()}>
+            <span class="titlebar-runtime">{runtimeInfo()}</span>
+          </Show>
           <Show when={dockerConnected() === false && props.daemonStatus === "running"}>
             <span class="titlebar-reconnecting">Reconnecting...</span>
           </Show>
