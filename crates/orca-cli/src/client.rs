@@ -1,4 +1,4 @@
-//! HTTP client for talking to the Vessel daemon.
+//! HTTP client for talking to the Orca daemon.
 
 use serde::Deserialize;
 

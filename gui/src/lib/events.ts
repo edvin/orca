@@ -4,8 +4,8 @@ export type EventCallback = (event: any) => void;
 
 const listeners: EventCallback[] = [];
 
-/** Register a callback for vessel events. Returns an unsubscribe function. */
-export function onVesselEvent(callback: EventCallback): () => void {
+/** Register a callback for orca events. Returns an unsubscribe function. */
+export function onOrcaEvent(callback: EventCallback): () => void {
   listeners.push(callback);
   return () => {
     const idx = listeners.indexOf(callback);
@@ -18,7 +18,7 @@ export async function startEventSubscription() {
   try {
     // Dynamic import to avoid issues when running outside Tauri
     const { listen } = await import("@tauri-apps/api/event");
-    await listen("vessel-event", (event) => {
+    await listen("orca-event", (event) => {
       for (const cb of listeners) {
         try {
           cb(event.payload);

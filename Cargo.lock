@@ -2548,6 +2548,86 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "orca-backend-native"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bollard",
+ "chrono",
+ "orca-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "orca-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "orca-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tabled",
+ "tokio",
+]
+
+[[package]]
+name = "orca-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "trait-variant",
+]
+
+[[package]]
+name = "orca-daemon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "axum",
+ "orca-backend-native",
+ "orca-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "orca-gui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "orca-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-shell",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "os_pipe"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4924,86 +5004,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vessel-backend-native"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bollard",
- "chrono",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tracing",
- "vessel-core",
-]
-
-[[package]]
-name = "vessel-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tabled",
- "tokio",
- "vessel-core",
-]
-
-[[package]]
-name = "vessel-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dirs",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "trait-variant",
-]
-
-[[package]]
-name = "vessel-daemon"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-stream",
- "axum",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "vessel-backend-native",
- "vessel-core",
-]
-
-[[package]]
-name = "vessel-gui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-shell",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
- "vessel-core",
-]
 
 [[package]]
 name = "vswhom"

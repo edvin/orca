@@ -1,7 +1,7 @@
 use bollard::image::{CreateImageOptions, ListImagesOptions, RemoveImageOptions};
 use tokio_stream::StreamExt;
 
-use vessel_core::image::*;
+use orca_core::image::*;
 
 use crate::NativeBackend;
 

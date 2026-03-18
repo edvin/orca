@@ -1,9 +1,9 @@
 [package]
-name = "vessel-core"
+name = "orca-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Core abstractions for Vessel — container runtime and machine management"
+description = "Core abstractions for Orca — container runtime and machine management"
 
 [dependencies]
 anyhow.workspace = true

@@ -13,12 +13,12 @@ use axum::{
     routing::{delete, get, post},
 };
 use serde::{Deserialize, Serialize};
-use vessel_core::compose::{self, ComposeRunner};
-use vessel_core::image::ImageManager;
-use vessel_core::machine::MachineManager;
-use vessel_core::network::NetworkManager;
-use vessel_core::runtime::{ContainerRuntime, ContainerStats};
-use vessel_core::volume::VolumeManager;
+use orca_core::compose::{self, ComposeRunner};
+use orca_core::image::ImageManager;
+use orca_core::machine::MachineManager;
+use orca_core::network::NetworkManager;
+use orca_core::runtime::{ContainerRuntime, ContainerStats};
+use orca_core::volume::VolumeManager;
 
 use crate::state::AppState;
 
@@ -125,8 +125,8 @@ async fn events_stream(
     )
 }
 
-fn event_type_name(kind: &vessel_core::event::EventKind) -> &'static str {
-    use vessel_core::event::EventKind::*;
+fn event_type_name(kind: &orca_core::event::EventKind) -> &'static str {
+    use orca_core::event::EventKind::*;
     match kind {
         ContainerCreated { .. } => "container.created",
         ContainerStarted { .. } => "container.started",
@@ -383,7 +383,7 @@ async fn start_stack(
 
     let mut errors = Vec::new();
     for service in &stack.services {
-        if service.state != vessel_core::runtime::ContainerState::Running {
+        if service.state != orca_core::runtime::ContainerState::Running {
             if let Err(e) = state.backend.start_container(&service.container_id).await {
                 errors.push(format!("{}: {e}", service.name));
             }
@@ -415,7 +415,7 @@ async fn stop_stack(
 
     let mut errors = Vec::new();
     for service in &stack.services {
-        if service.state == vessel_core::runtime::ContainerState::Running {
+        if service.state == orca_core::runtime::ContainerState::Running {
             if let Err(e) = state.backend.stop_container(&service.container_id, 10).await {
                 errors.push(format!("{}: {e}", service.name));
             }
@@ -448,7 +448,7 @@ async fn restart_stack(
     let mut errors = Vec::new();
     // Stop all running
     for service in &stack.services {
-        if service.state == vessel_core::runtime::ContainerState::Running {
+        if service.state == orca_core::runtime::ContainerState::Running {
             if let Err(e) = state.backend.stop_container(&service.container_id, 10).await {
                 errors.push(format!("stop {}: {e}", service.name));
             }

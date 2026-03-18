@@ -29,7 +29,7 @@ export default function Sidebar(props: SidebarProps) {
 
   return (
     <aside class="sidebar">
-      <div class="sidebar-brand">Vessel</div>
+      <div class="sidebar-brand">Orca</div>
 
       <nav class="sidebar-nav">
         {navItems.map((item) => (

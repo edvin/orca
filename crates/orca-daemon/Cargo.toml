@@ -1,17 +1,17 @@
 [package]
-name = "vessel-daemon"
+name = "orca-daemon"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Vessel API daemon — bridges the GUI/CLI to the container runtime"
+description = "Orca API daemon — bridges the GUI/CLI to the container runtime"
 
 [[bin]]
-name = "vessel-daemon"
+name = "orca-daemon"
 path = "src/main.rs"
 
 [dependencies]
-vessel-core.workspace = true
-vessel-backend-native.workspace = true
+orca-core.workspace = true
+orca-backend-native.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 serde.workspace = true

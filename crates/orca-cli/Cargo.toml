@@ -1,16 +1,16 @@
 [package]
-name = "vessel-cli"
+name = "orca-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Vessel CLI — manage machines and settings"
+description = "Orca CLI — manage machines and settings"
 
 [[bin]]
-name = "vessel"
+name = "orca"
 path = "src/main.rs"
 
 [dependencies]
-vessel-core.workspace = true
+orca-core.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 serde.workspace = true

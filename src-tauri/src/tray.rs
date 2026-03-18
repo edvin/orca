@@ -5,15 +5,15 @@ use tauri::{
 };
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show Vessel", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show Orca", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "hide", "Hide Window", true, None::<&str>)?;
     let separator = MenuItem::with_id(app, "sep", "────────────", false, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Vessel", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Orca", true, None::<&str>)?;
 
     let menu = Menu::with_items(app, &[&show, &hide, &separator, &quit])?;
 
     let _tray = TrayIconBuilder::new()
-        .tooltip("Vessel — Container Desktop")
+        .tooltip("Orca — Container Desktop")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {

@@ -35,5 +35,5 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running vessel");
+        .expect("error while running orca");
 }

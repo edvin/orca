@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/vessel-core",
-    "crates/vessel-backend-native",
-    "crates/vessel-daemon",
-    "crates/vessel-cli",
+    "crates/orca-core",
+    "crates/orca-backend-native",
+    "crates/orca-daemon",
+    "crates/orca-cli",
     "src-tauri",
 ]
 
@@ -12,11 +12,11 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/TODO/vessel"
+repository = "https://github.com/edvin/orca"
 
 [workspace.dependencies]
-vessel-core = { path = "crates/vessel-core" }
-vessel-backend-native = { path = "crates/vessel-backend-native" }
+orca-core = { path = "crates/orca-core" }
+orca-backend-native = { path = "crates/orca-backend-native" }
 tokio-stream = "0.1"
 anyhow = "1"
 thiserror = "2"

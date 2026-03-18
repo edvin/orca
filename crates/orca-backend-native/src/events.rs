@@ -1,15 +1,15 @@
-//! Bridge Docker/Podman events to Vessel events.
+//! Bridge Docker/Podman events to Orca events.
 
 use bollard::system::EventsOptions;
 use tokio::sync::broadcast;
 use tokio_stream::StreamExt;
 
-use vessel_core::event::{Event, EventKind};
+use orca_core::event::{Event, EventKind};
 
 use crate::NativeBackend;
 
 impl NativeBackend {
-    /// Start listening to Docker events and broadcast them as Vessel events.
+    /// Start listening to Docker events and broadcast them as Orca events.
     /// Returns a broadcast receiver that the daemon can subscribe to.
     pub fn subscribe_events(&self) -> broadcast::Receiver<Event> {
         let (tx, rx) = broadcast::channel(256);

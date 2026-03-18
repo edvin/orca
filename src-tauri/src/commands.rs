@@ -1,5 +1,5 @@
 //! Tauri commands — callable from the frontend via `invoke()`.
-//! These proxy to the Vessel daemon's HTTP API.
+//! These proxy to the Orca daemon's HTTP API.
 
 use serde::Deserialize;
 
@@ -263,7 +263,7 @@ pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
         while let Ok(Some(line)) = lines.next_line().await {
             if let Some(data) = line.strip_prefix("data:") {
                 if let Ok(event) = serde_json::from_str::<serde_json::Value>(data) {
-                    let _ = app.emit("vessel-event", &event);
+                    let _ = app.emit("orca-event", &event);
                 }
             }
         }

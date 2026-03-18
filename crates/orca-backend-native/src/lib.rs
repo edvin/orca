@@ -83,16 +83,16 @@ impl NativeBackend {
     }
 
     /// Detect whether we're talking to Docker or Podman.
-    pub async fn detect_runtime(&self) -> vessel_core::runtime::RuntimeKind {
+    pub async fn detect_runtime(&self) -> orca_core::runtime::RuntimeKind {
         if let Ok(version) = self.docker.version().await {
             if let Some(components) = version.components {
                 for c in &components {
                     if c.name.to_lowercase().contains("podman") {
-                        return vessel_core::runtime::RuntimeKind::Podman;
+                        return orca_core::runtime::RuntimeKind::Podman;
                     }
                 }
             }
         }
-        vessel_core::runtime::RuntimeKind::Docker
+        orca_core::runtime::RuntimeKind::Docker
     }
 }

@@ -1,4 +1,4 @@
-//! Global Vessel configuration.
+//! Global Orca configuration.
 
 use std::path::PathBuf;
 
@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::machine::MachineConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VesselConfig {
-    /// Where Vessel stores its data (VMs, caches, etc).
+pub struct OrcaConfig {
+    /// Where Orca stores its data (VMs, caches, etc).
     pub data_dir: PathBuf,
     /// Default machine configuration for new machines.
     pub default_machine: MachineConfig,
@@ -20,11 +20,11 @@ pub struct VesselConfig {
     pub telemetry: bool,
 }
 
-impl Default for VesselConfig {
+impl Default for OrcaConfig {
     fn default() -> Self {
         let data_dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("~/.local/share"))
-            .join("vessel");
+            .join("orca");
 
         Self {
             data_dir,
@@ -36,11 +36,11 @@ impl Default for VesselConfig {
     }
 }
 
-impl VesselConfig {
+impl OrcaConfig {
     pub fn config_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("~/.config"))
-            .join("vessel")
+            .join("orca")
             .join("config.json")
     }
 

@@ -1,12 +1,12 @@
 [package]
-name = "vessel-backend-native"
+name = "orca-backend-native"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Native Linux backend for Vessel — talks to Docker/Podman over Unix socket"
+description = "Native Linux backend for Orca — talks to Docker/Podman over Unix socket"
 
 [dependencies]
-vessel-core.workspace = true
+orca-core.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 serde.workspace = true

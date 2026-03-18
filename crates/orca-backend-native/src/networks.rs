@@ -1,7 +1,7 @@
 use bollard::network::{ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions};
 use bollard::models::EndpointSettings;
 
-use vessel_core::network::*;
+use orca_core::network::*;
 
 use crate::NativeBackend;
 

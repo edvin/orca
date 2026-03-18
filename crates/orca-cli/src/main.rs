@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 mod client;
 
 #[derive(Parser)]
-#[command(name = "vessel", about = "Vessel — open source container desktop")]
+#[command(name = "orca", about = "Orca — open source container desktop")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -61,7 +61,7 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Status => {
             let health = client.health().await?;
-            println!("Vessel daemon: {} (v{})", health.status, health.version);
+            println!("Orca daemon: {} (v{})", health.status, health.version);
         }
         Commands::Machine { action } => match action {
             MachineAction::List => {

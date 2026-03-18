@@ -1,8 +1,8 @@
 use std::process::Stdio;
 
 use tokio::process::Command;
-use vessel_core::compose::{ComposeOutput, ComposeRunner};
-use vessel_core::runtime::RuntimeKind;
+use orca_core::compose::{ComposeOutput, ComposeRunner};
+use orca_core::runtime::RuntimeKind;
 
 use crate::NativeBackend;
 

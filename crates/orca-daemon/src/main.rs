@@ -13,12 +13,12 @@ use state::AppState;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("vessel=debug".parse()?))
+        .with_env_filter(EnvFilter::from_default_env().add_directive("orca=debug".parse()?))
         .init();
 
-    let config = vessel_core::config::VesselConfig::load()?;
+    let config = orca_core::config::OrcaConfig::load()?;
 
-    let backend = Arc::new(vessel_backend_native::NativeBackend::connect()?);
+    let backend = Arc::new(orca_backend_native::NativeBackend::connect()?);
     let runtime_kind = backend.detect_runtime().await;
     tracing::info!("Connected to {runtime_kind:?} runtime");
 
@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 9477));
-    tracing::info!("Vessel daemon listening on {addr}");
+    tracing::info!("Orca daemon listening on {addr}");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
