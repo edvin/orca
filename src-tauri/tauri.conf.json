@@ -57,7 +57,7 @@
     "category": "DeveloperTool",
     "shortDescription": "Container management desktop app with built-in AI",
     "longDescription": "Orca is an open source container management app. Manage Docker and Podman containers, images, compose stacks, and Kubernetes from a beautiful desktop UI with built-in AI assistant.",
-    "createUpdaterArtifacts": "v2Compatible"
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "updater": {
