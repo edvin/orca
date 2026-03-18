@@ -15,13 +15,16 @@ import MachinePage from "./pages/MachinePage";
 import SettingsPage from "./pages/SettingsPage";
 import EnvironmentPage from "./pages/EnvironmentPage";
 import ActivityPage from "./pages/ActivityPage";
+import DashboardPage from "./pages/DashboardPage";
+import CommandPalette from "./components/CommandPalette";
 import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
+export type Page = "dashboard" | "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
 
 export default function App() {
-  const [page, setPage] = createSignal<Page>("stacks");
+  const [page, setPage] = createSignal<Page>("dashboard");
   const [daemonStatus, setDaemonStatus] = createSignal<string>("connecting");
+  const [showCommandPalette, setShowCommandPalette] = createSignal(false);
 
   const checkDaemon = async () => {
     try {
@@ -42,11 +45,7 @@ export default function App() {
     }
     if ((e.ctrlKey || e.metaKey) && e.key === "k") {
       e.preventDefault();
-      const searchInput = document.querySelector(".search-input") as HTMLInputElement | null;
-      if (searchInput) {
-        searchInput.focus();
-        searchInput.select();
-      }
+      setShowCommandPalette((v) => !v);
     }
   };
 
@@ -137,6 +136,7 @@ export default function App() {
           daemonStatus={daemonStatus()}
         />
         <main class="app-main">
+          {page() === "dashboard" && <DashboardPage />}
           {page() === "stacks" && <StacksPage />}
           {page() === "containers" && <ContainersPage />}
           {page() === "images" && <ImagesPage />}
@@ -149,6 +149,12 @@ export default function App() {
           {page() === "settings" && <SettingsPage />}
         </main>
       </div>
+      {showCommandPalette() && (
+        <CommandPalette
+          onClose={() => setShowCommandPalette(false)}
+          onNavigate={(p) => setPage(p)}
+        />
+      )}
       <ToastContainer />
     </div>
   );

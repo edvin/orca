@@ -9,6 +9,8 @@ import RunContainerDialog from "../components/RunContainerDialog";
 import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
 import ResourceBar from "../components/ResourceBar";
+import Sparkline from "../components/Sparkline";
+import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
 
 export default function ContainersPage() {
   const [containers, setContainers] = createSignal<Container[]>([]);
@@ -41,7 +43,16 @@ export default function ContainersPage() {
     const newStats: Record<string, ContainerStats> = { ...inlineStats() };
     results.forEach((r, i) => {
       if (r.status === "fulfilled") {
-        newStats[running[i].id] = r.value as ContainerStats;
+        const s = r.value as ContainerStats;
+        newStats[running[i].id] = s;
+        recordMetrics(running[i].id, {
+          timestamp: Date.now(),
+          cpu: s.cpu_percent,
+          memory: s.memory_usage_bytes,
+          memoryLimit: s.memory_limit_bytes,
+          networkRx: s.network_rx_bytes,
+          networkTx: s.network_tx_bytes,
+        });
       }
     });
     setInlineStats(newStats);
@@ -286,10 +297,17 @@ export default function ContainersPage() {
                           </span>
                         }>
                           {(s) => (
-                            <div class="inline-resources">
+                            <div class="inline-resources" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
                               <ResourceBar
                                 value={s().cpu_percent}
                                 label={`${s().cpu_percent.toFixed(1)}%`}
+                              />
+                              <Sparkline
+                                data={getCpuHistory(c.id)}
+                                width={50}
+                                height={18}
+                                color="#58a6ff"
+                                max={100}
                               />
                             </div>
                           )}
@@ -303,10 +321,17 @@ export default function ContainersPage() {
                           </span>
                         }>
                           {(s) => (
-                            <div class="inline-resources">
+                            <div class="inline-resources" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
                               <ResourceBar
                                 value={memPercent(s())}
                                 label={formatBytes(s().memory_usage_bytes)}
+                              />
+                              <Sparkline
+                                data={getMemoryHistory(c.id)}
+                                width={50}
+                                height={18}
+                                color="#a371f7"
+                                max={100}
                               />
                             </div>
                           )}
