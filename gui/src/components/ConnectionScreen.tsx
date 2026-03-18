@@ -79,7 +79,7 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
               <li>
                 Check the{" "}
                 <a
-                  href="https://github.com/orca-app/orca"
+                  href="https://github.com/edvin/orca"
                   target="_blank"
                   style={{ color: "#58a6ff" }}
                 >

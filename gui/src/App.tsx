@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { startEventSubscription, onOrcaEvent } from "./lib/events";
 import { addEvent } from "./lib/activityStore";
@@ -28,6 +28,7 @@ export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
   const [daemonStatus, setDaemonStatus] = createSignal<string>("connecting");
   const [showCommandPalette, setShowCommandPalette] = createSignal(false);
+  const [environmentChecked, setEnvironmentChecked] = createSignal(false);
 
   const checkDaemon = async () => {
     try {
@@ -53,74 +54,67 @@ export default function App() {
   };
 
   const checkEnvironment = async () => {
+    if (environmentChecked()) return;
     try {
       const envStatus = (await invoke("env_status")) as EnvironmentStatus;
+      setEnvironmentChecked(true);
       if (!envStatus.ready) {
         setPage("environment");
+        showToast("Setup required — follow the steps to get started", "info");
       } else {
         const warnings = envStatus.checks.filter((c) => c.status === "Warning");
         if (warnings.length > 0) {
           showToast(
-            `Environment has ${warnings.length} warning${warnings.length > 1 ? "s" : ""} \u2014 check Environment page`,
+            `Environment has ${warnings.length} warning${warnings.length > 1 ? "s" : ""} — check Environment page`,
             "info"
           );
         }
       }
     } catch {
-      // Daemon not ready yet, ignore
+      // Daemon returned error, will retry next time
     }
   };
 
-  onMount(() => {
-    startEventSubscription();
+  // React to daemon status changes — when it becomes "running",
+  // immediately check the environment
+  createEffect(() => {
+    if (daemonStatus() === "running" && !environmentChecked()) {
+      checkEnvironment();
+      startEventSubscription();
+    }
+  });
 
+  onMount(() => {
     const unsubEvents = onOrcaEvent((payload: any) => {
       const eventType = payload?.type || payload?.Action || "";
       const name = payload?.name || payload?.Actor?.Attributes?.name || "";
       const reference = payload?.reference || payload?.Actor?.Attributes?.name || "";
 
       if (eventType === "container.died" || eventType === "die") {
-        addEvent({
-          type: "container.died",
-          title: `Container '${name}' exited`,
-          severity: "error",
-        });
+        addEvent({ type: "container.died", title: `Container '${name}' exited`, severity: "error" });
         showToast(`Container '${name}' exited`, "error", {
           label: "View Logs",
           onClick: () => setPage("containers"),
         });
       } else if (eventType === "container.started" || eventType === "start") {
-        addEvent({
-          type: "container.started",
-          title: `Container '${name}' started`,
-          severity: "success",
-        });
-        showToast(`Container '${name}' started`, "info");
+        addEvent({ type: "container.started", title: `Container '${name}' started`, severity: "success" });
       } else if (eventType === "image.pulled" || eventType === "pull") {
-        addEvent({
-          type: "image.pulled",
-          title: `Image pulled: ${reference}`,
-          severity: "success",
-        });
+        addEvent({ type: "image.pulled", title: `Image pulled: ${reference}`, severity: "success" });
         showToast(`Image pulled: ${reference}`, "success");
-      } else if (eventType) {
-        // Store other events in the activity feed without toasting
-        addEvent({
-          type: eventType,
-          title: `${eventType}: ${name || reference || "unknown"}`,
-          detail: JSON.stringify(payload),
-          severity: "info",
-        });
       }
     });
 
-    // Initial daemon check, then verify environment readiness
-    checkDaemon().then(() => {
-      if (daemonStatus() === "running") {
-        checkEnvironment();
-      }
+    // Try to auto-start daemon, then check status
+    invoke("start_daemon").catch(() => {}).finally(() => {
+      checkDaemon();
     });
-    const interval = setInterval(checkDaemon, 5000);
+
+    const interval = setInterval(() => {
+      if (daemonStatus() !== "running") {
+        checkDaemon();
+      }
+    }, 3000);
+
     document.addEventListener("keydown", handleGlobalKeyDown);
     onCleanup(() => {
       clearInterval(interval);
