@@ -834,3 +834,33 @@ pub async fn ai_ask(
         .await
         .map_err(|e| format!("Invalid response: {e}"))
 }
+
+#[tauri::command]
+pub async fn save_ai_settings(
+    provider: String,
+    api_key: String,
+    model: String,
+) -> Result<(), String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}/settings/ai"))
+        .json(&serde_json::json!({
+            "provider": provider,
+            "api_key": api_key,
+            "model": model,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to save AI settings: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Failed to save AI settings: {body}"))
+    }
+}
+
+#[tauri::command]
+pub async fn get_ai_settings() -> Result<serde_json::Value, String> {
+    get_json("/settings/ai").await
+}

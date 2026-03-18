@@ -161,6 +161,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/templates/{id}/deploy", post(deploy_template))
         // AI
         .route("/ai/ask", post(ai_ask))
+        .route("/settings/ai", post(save_ai_settings))
+        .route("/settings/ai", get(get_ai_settings))
         // Agent APIs (MCP + OpenAI-compatible)
         .route("/agent/tools", get(agent_list_tools))
         .route("/agent/execute", post(agent_execute_tool))
@@ -1373,19 +1375,33 @@ async fn ai_ask(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AiAskRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Check for API key: env var first, then config
-    let api_key = std::env::var("ANTHROPIC_API_KEY").ok().or_else(|| {
+    // Read provider settings from config
+    let (provider, api_key, model) = {
         let config = state.config.blocking_lock();
-        config.anthropic_api_key.clone()
-    });
+        let provider = config.ai_provider.clone();
+        let (key, model) = if provider == "openai" {
+            let key = std::env::var("OPENAI_API_KEY")
+                .ok()
+                .or_else(|| config.openai_api_key.clone());
+            (key, config.openai_model.clone())
+        } else {
+            let key = std::env::var("ANTHROPIC_API_KEY")
+                .ok()
+                .or_else(|| config.anthropic_api_key.clone());
+            (key, config.anthropic_model.clone())
+        };
+        (provider, key, model)
+    };
 
     let api_key = match api_key {
         Some(key) if !key.is_empty() => key,
         _ => {
+            let provider_name = if provider == "openai" { "OpenAI" } else { "Anthropic" };
             return Ok(Json(orca_core::ai::AiResponse {
-                answer: "No Anthropic API key configured. To enable AI features, set the \
-                         ANTHROPIC_API_KEY environment variable or add it in Settings."
-                    .to_string(),
+                answer: format!(
+                    "No {provider_name} API key configured. To enable AI features, set the \
+                     appropriate API key environment variable or configure it in Settings."
+                ),
                 suggestions: vec![orca_core::ai::AiSuggestion {
                     label: "Open Settings".to_string(),
                     action: "navigate".to_string(),
@@ -1404,7 +1420,7 @@ async fn ai_ask(
          You can suggest actions the user can take in the Orca UI."
     );
 
-    let mut user_message = body.query.clone();
+    let user_message = body.query.clone();
 
     if let Some(ctx) = &body.context {
         system_prompt.push_str("\n\nThe user is asking about a specific container context:");
@@ -1421,7 +1437,6 @@ async fn ai_ask(
             system_prompt.push_str(&format!("\nError: {error}"));
         }
         if let Some(logs) = &ctx.container_logs {
-            // Truncate logs to last 50 lines to stay within token limits
             let log_lines: Vec<&str> = logs.lines().collect();
             let recent_logs: String = if log_lines.len() > 50 {
                 log_lines[log_lines.len() - 50..].join("\n")
@@ -1432,47 +1447,133 @@ async fn ai_ask(
         }
     }
 
-    // Call Claude API
     let http_client = reqwest::Client::new();
-    let api_resp = http_client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", &api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&serde_json::json!({
-            "model": "claude-sonnet-4-20250514",
-            "max_tokens": 1024,
-            "system": system_prompt,
-            "messages": [
-                { "role": "user", "content": user_message }
-            ]
-        }))
-        .send()
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to call Claude API: {e}"))?;
 
-    if !api_resp.status().is_success() {
-        let status = api_resp.status();
-        let err_body = api_resp.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!("Claude API error ({}): {}", status, err_body).into());
-    }
+    let answer = if provider == "openai" {
+        // Call OpenAI API
+        let api_resp = http_client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("content-type", "application/json")
+            .json(&serde_json::json!({
+                "model": model,
+                "max_tokens": 1024,
+                "messages": [
+                    { "role": "system", "content": system_prompt },
+                    { "role": "user", "content": user_message }
+                ]
+            }))
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to call OpenAI API: {e}"))?;
 
-    let resp_json: serde_json::Value = api_resp
-        .json()
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to parse Claude API response: {e}"))?;
+        if !api_resp.status().is_success() {
+            let status = api_resp.status();
+            let err_body = api_resp.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("OpenAI API error ({}): {}", status, err_body).into());
+        }
 
-    let answer = resp_json["content"]
-        .as_array()
-        .and_then(|arr| arr.first())
-        .and_then(|block| block["text"].as_str())
-        .unwrap_or("No response received from AI.")
-        .to_string();
+        let resp_json: serde_json::Value = api_resp
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse OpenAI API response: {e}"))?;
+
+        resp_json["choices"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|choice| choice["message"]["content"].as_str())
+            .unwrap_or("No response received from AI.")
+            .to_string()
+    } else {
+        // Call Anthropic (Claude) API
+        let api_resp = http_client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&serde_json::json!({
+                "model": model,
+                "max_tokens": 1024,
+                "system": system_prompt,
+                "messages": [
+                    { "role": "user", "content": user_message }
+                ]
+            }))
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to call Claude API: {e}"))?;
+
+        if !api_resp.status().is_success() {
+            let status = api_resp.status();
+            let err_body = api_resp.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("Claude API error ({}): {}", status, err_body).into());
+        }
+
+        let resp_json: serde_json::Value = api_resp
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse Claude API response: {e}"))?;
+
+        resp_json["content"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|block| block["text"].as_str())
+            .unwrap_or("No response received from AI.")
+            .to_string()
+    };
 
     Ok(Json(orca_core::ai::AiResponse {
         answer,
         suggestions: vec![],
     }))
+}
+
+// --- AI Settings ---
+
+#[derive(Deserialize)]
+struct AiSettingsRequest {
+    provider: String,
+    api_key: String,
+    model: String,
+}
+
+async fn save_ai_settings(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AiSettingsRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.blocking_lock();
+    config.ai_provider = body.provider.clone();
+    if body.provider == "openai" {
+        config.openai_api_key = if body.api_key.is_empty() {
+            None
+        } else {
+            Some(body.api_key)
+        };
+        config.openai_model = body.model;
+    } else {
+        config.anthropic_api_key = if body.api_key.is_empty() {
+            None
+        } else {
+            Some(body.api_key)
+        };
+        config.anthropic_model = body.model;
+    }
+    config.save().map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+async fn get_ai_settings(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.blocking_lock();
+    Ok(Json(serde_json::json!({
+        "provider": config.ai_provider,
+        "has_anthropic_key": config.anthropic_api_key.as_ref().map(|k| !k.is_empty()).unwrap_or(false),
+        "has_openai_key": config.openai_api_key.as_ref().map(|k| !k.is_empty()).unwrap_or(false),
+        "anthropic_model": config.anthropic_model,
+        "openai_model": config.openai_model,
+        "api_token": config.api_token.clone().unwrap_or_default(),
+    })))
 }
 
 // --- Agent APIs (MCP + OpenAI-compatible) ---

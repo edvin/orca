@@ -64,6 +64,28 @@ pub struct OrcaConfig {
     /// Anthropic API key for AI assistant features.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anthropic_api_key: Option<String>,
+    /// AI provider: "anthropic" or "openai"
+    #[serde(default = "default_ai_provider")]
+    pub ai_provider: String,
+    /// OpenAI API key (alternative to Anthropic)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openai_api_key: Option<String>,
+    /// OpenAI model to use (default: gpt-4o)
+    #[serde(default = "default_openai_model")]
+    pub openai_model: String,
+    /// Anthropic model to use (default: claude-sonnet-4-20250514)
+    #[serde(default = "default_anthropic_model")]
+    pub anthropic_model: String,
+}
+
+fn default_ai_provider() -> String {
+    "anthropic".into()
+}
+fn default_openai_model() -> String {
+    "gpt-4o".into()
+}
+fn default_anthropic_model() -> String {
+    "claude-sonnet-4-20250514".into()
 }
 
 impl Default for OrcaConfig {
@@ -81,6 +103,10 @@ impl Default for OrcaConfig {
             api_token: None,
             registries: Vec::new(),
             anthropic_api_key: None,
+            ai_provider: default_ai_provider(),
+            openai_api_key: None,
+            openai_model: default_openai_model(),
+            anthropic_model: default_anthropic_model(),
         }
     }
 }

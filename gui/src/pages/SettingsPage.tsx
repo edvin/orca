@@ -13,6 +13,20 @@ export default function SettingsPage() {
   const [regUsername, setRegUsername] = createSignal("");
   const [regPassword, setRegPassword] = createSignal("");
 
+  // AI settings
+  const [aiProvider, setAiProvider] = createSignal<"anthropic" | "openai">("anthropic");
+  const [aiApiKey, setAiApiKey] = createSignal("");
+  const [aiModel, setAiModel] = createSignal("");
+  const [aiSaving, setAiSaving] = createSignal(false);
+  const [aiTesting, setAiTesting] = createSignal(false);
+  const [aiTestResult, setAiTestResult] = createSignal<string | null>(null);
+  const [hasAnthropicKey, setHasAnthropicKey] = createSignal(false);
+  const [hasOpenaiKey, setHasOpenaiKey] = createSignal(false);
+  const [apiToken, setApiToken] = createSignal("");
+  const [mcpCopied, setMcpCopied] = createSignal(false);
+  const [endpointCopied, setEndpointCopied] = createSignal(false);
+  const [tokenCopied, setTokenCopied] = createSignal(false);
+
   const REGISTRY_PRESETS = [
     { label: "Docker Hub", server: "https://index.docker.io/v1/", name: "Docker Hub" },
     { label: "GitHub", server: "https://ghcr.io", name: "GitHub Container Registry" },
@@ -75,9 +89,102 @@ export default function SettingsPage() {
     setRegName(preset.name);
   };
 
+  const refreshAiSettings = async () => {
+    try {
+      const settings = (await invoke("get_ai_settings")) as {
+        provider: string;
+        has_anthropic_key: boolean;
+        has_openai_key: boolean;
+        anthropic_model: string;
+        openai_model: string;
+        api_token: string;
+      };
+      setAiProvider(settings.provider as "anthropic" | "openai");
+      setHasAnthropicKey(settings.has_anthropic_key);
+      setHasOpenaiKey(settings.has_openai_key);
+      setAiModel(
+        settings.provider === "openai" ? settings.openai_model : settings.anthropic_model
+      );
+      setApiToken(settings.api_token);
+      // Clear the key input — we never send stored keys back to the frontend
+      setAiApiKey("");
+    } catch (e) {
+      console.error("Failed to load AI settings:", e);
+    }
+  };
+
+  const saveAiSettings = async () => {
+    setAiSaving(true);
+    try {
+      await invoke("save_ai_settings", {
+        provider: aiProvider(),
+        apiKey: aiApiKey(),
+        model: aiModel(),
+      });
+      showToast("AI settings saved", "success");
+      await refreshAiSettings();
+    } catch (e) {
+      showToast(`Failed to save AI settings: ${e}`, "error");
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const testAi = async () => {
+    setAiTesting(true);
+    setAiTestResult(null);
+    try {
+      const result = (await invoke("ai_ask", {
+        query: "Say 'AI connection successful!' in exactly those words.",
+        context: null,
+      })) as { answer: string };
+      if (result.answer.toLowerCase().includes("successful")) {
+        setAiTestResult("success");
+        showToast("AI connection test passed", "success");
+      } else {
+        setAiTestResult("success");
+        showToast("AI responded successfully", "success");
+      }
+    } catch (e) {
+      setAiTestResult("error");
+      showToast(`AI test failed: ${e}`, "error");
+    } finally {
+      setAiTesting(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, setter: (v: boolean) => void) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setter(true);
+      setTimeout(() => setter(false), 2000);
+    } catch {
+      showToast("Failed to copy to clipboard", "error");
+    }
+  };
+
+  const mcpConfig = () =>
+    JSON.stringify(
+      {
+        mcpServers: {
+          orca: {
+            url: "http://127.0.0.1:9477/api/v1/agent/mcp",
+            headers: {
+              Authorization: `Bearer ${apiToken() || "YOUR_TOKEN_HERE"}`,
+            },
+          },
+        },
+      },
+      null,
+      2
+    );
+
+  const openaiEndpoint = "http://127.0.0.1:9477/api/v1/agent/openai/chat/completions";
+
   onMount(() => {
     refresh();
     refreshRegistries();
+    refreshAiSettings();
   });
 
   return (
@@ -288,6 +395,190 @@ export default function SettingsPage() {
                 </div>
               </div>
             </Show>
+          </div>
+        </div>
+
+        {/* AI Assistant Section */}
+        <div class="settings-section">
+          <h2 class="settings-section-title">AI Assistant</h2>
+          <div class="card">
+            <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
+              {/* Provider selector */}
+              <div class="form-group">
+                <label class="form-label">Provider</label>
+                <div style={{ display: "flex", gap: "16px", "margin-top": "4px" }}>
+                  <label style={{ display: "flex", "align-items": "center", gap: "6px", cursor: "pointer", color: "#e6edf3" }}>
+                    <input
+                      type="radio"
+                      name="ai-provider"
+                      checked={aiProvider() === "anthropic"}
+                      onChange={() => {
+                        setAiProvider("anthropic");
+                        setAiModel("claude-sonnet-4-20250514");
+                        setAiApiKey("");
+                        setAiTestResult(null);
+                      }}
+                    />
+                    Anthropic (Claude)
+                  </label>
+                  <label style={{ display: "flex", "align-items": "center", gap: "6px", cursor: "pointer", color: "#e6edf3" }}>
+                    <input
+                      type="radio"
+                      name="ai-provider"
+                      checked={aiProvider() === "openai"}
+                      onChange={() => {
+                        setAiProvider("openai");
+                        setAiModel("gpt-4o");
+                        setAiApiKey("");
+                        setAiTestResult(null);
+                      }}
+                    />
+                    OpenAI (GPT)
+                  </label>
+                </div>
+              </div>
+
+              {/* API Key */}
+              <div class="form-group">
+                <label class="form-label">
+                  {aiProvider() === "openai" ? "OpenAI" : "Anthropic"} API Key
+                  <Show when={
+                    (aiProvider() === "anthropic" && hasAnthropicKey()) ||
+                    (aiProvider() === "openai" && hasOpenaiKey())
+                  }>
+                    <span style={{ color: "#3fb950", "font-size": "11px", "margin-left": "8px" }}>
+                      (configured)
+                    </span>
+                  </Show>
+                </label>
+                <input
+                  class="form-input"
+                  type="password"
+                  placeholder={
+                    (aiProvider() === "anthropic" && hasAnthropicKey()) ||
+                    (aiProvider() === "openai" && hasOpenaiKey())
+                      ? "Key is set — enter a new key to replace"
+                      : aiProvider() === "openai"
+                      ? "sk-..."
+                      : "sk-ant-..."
+                  }
+                  value={aiApiKey()}
+                  onInput={(e) => setAiApiKey(e.currentTarget.value)}
+                />
+              </div>
+
+              {/* Model */}
+              <div class="form-group">
+                <label class="form-label">Model</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder={aiProvider() === "openai" ? "gpt-4o" : "claude-sonnet-4-20250514"}
+                  value={aiModel()}
+                  onInput={(e) => setAiModel(e.currentTarget.value)}
+                />
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                <button
+                  class="btn btn-primary"
+                  onClick={saveAiSettings}
+                  disabled={aiSaving()}
+                >
+                  {aiSaving() ? "Saving..." : "Save"}
+                </button>
+                <button
+                  class="btn"
+                  onClick={testAi}
+                  disabled={aiTesting()}
+                >
+                  {aiTesting() ? "Testing..." : "Test"}
+                </button>
+                <Show when={aiTestResult() === "success"}>
+                  <span style={{ color: "#3fb950", "font-size": "12px" }}>Connection OK</span>
+                </Show>
+                <Show when={aiTestResult() === "error"}>
+                  <span style={{ color: "#f85149", "font-size": "12px" }}>Test failed</span>
+                </Show>
+              </div>
+            </div>
+          </div>
+          <p class="settings-note">
+            API keys are stored locally and never shared. Used only for the built-in AI chat.
+          </p>
+        </div>
+
+        {/* Agent Integration Section */}
+        <div class="settings-section">
+          <h2 class="settings-section-title">Agent Integration</h2>
+          <div class="card">
+            <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
+              {/* MCP Config */}
+              <div>
+                <div style={{ "font-size": "13px", "font-weight": 600, color: "#e6edf3", "margin-bottom": "6px" }}>
+                  MCP Server Config
+                </div>
+                <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 8px 0", "line-height": "1.5" }}>
+                  Add this to your Claude Code or Claude Desktop MCP configuration.
+                </p>
+                <pre
+                  style={{
+                    background: "#161b22",
+                    border: "1px solid #21262d",
+                    "border-radius": "6px",
+                    padding: "12px",
+                    "font-size": "12px",
+                    "line-height": "1.5",
+                    overflow: "auto",
+                    color: "#e6edf3",
+                    margin: 0,
+                  }}
+                >
+                  {mcpConfig()}
+                </pre>
+                <button
+                  class="btn btn-sm"
+                  style={{ "margin-top": "8px" }}
+                  onClick={() => copyToClipboard(mcpConfig(), setMcpCopied)}
+                >
+                  {mcpCopied() ? "Copied!" : "Copy Config"}
+                </button>
+              </div>
+
+              <div style={{ "border-top": "1px solid #21262d", "padding-top": "16px" }}>
+                <div style={{ "font-size": "13px", "font-weight": 600, color: "#e6edf3", "margin-bottom": "6px" }}>
+                  OpenAI-Compatible Endpoint
+                </div>
+                <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 8px 0", "line-height": "1.5" }}>
+                  Use this endpoint with any OpenAI-compatible agent or tool.
+                </p>
+                <div class="card-grid" style={{ "font-size": "12px" }}>
+                  <span class="card-label">Endpoint</span>
+                  <span class="card-value mono" style={{ "font-size": "11px", "word-break": "break-all" }}>
+                    {openaiEndpoint}
+                  </span>
+                  <span class="card-label">Auth</span>
+                  <span class="card-value mono" style={{ "font-size": "11px" }}>
+                    Bearer {apiToken() || "YOUR_TOKEN_HERE"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "8px", "margin-top": "8px" }}>
+                  <button
+                    class="btn btn-sm"
+                    onClick={() => copyToClipboard(openaiEndpoint, setEndpointCopied)}
+                  >
+                    {endpointCopied() ? "Copied!" : "Copy Endpoint"}
+                  </button>
+                  <button
+                    class="btn btn-sm"
+                    onClick={() => copyToClipboard(apiToken(), setTokenCopied)}
+                  >
+                    {tokenCopied() ? "Copied!" : "Copy Token"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
