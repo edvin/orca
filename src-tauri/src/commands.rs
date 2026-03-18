@@ -1,7 +1,12 @@
 //! Tauri commands — callable from the frontend via `invoke()`.
 //! These proxy to the Orca daemon's HTTP API.
 
+use std::sync::Arc;
+
 use serde::Deserialize;
+use tauri::Manager;
+
+use crate::daemon;
 
 const DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
 
@@ -895,4 +900,20 @@ pub async fn save_ai_settings(
 #[tauri::command]
 pub async fn get_ai_settings() -> Result<serde_json::Value, String> {
     get_json("/settings/ai").await
+}
+
+#[tauri::command]
+pub async fn start_daemon(app: tauri::AppHandle) -> Result<String, String> {
+    let dm = app.state::<Arc<daemon::DaemonManager>>();
+    dm.start().await?;
+    Ok("Daemon started".into())
+}
+
+#[tauri::command]
+pub async fn get_daemon_info() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "binary_path": daemon::find_daemon_binary(),
+        "port": 9477,
+        "config_path": "~/.config/orca/config.json",
+    }))
 }

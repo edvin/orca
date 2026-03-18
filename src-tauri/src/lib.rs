@@ -77,6 +77,8 @@ pub fn run() {
             commands::save_general_settings,
             commands::save_ai_settings,
             commands::get_ai_settings,
+            commands::start_daemon,
+            commands::get_daemon_info,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

@@ -6,6 +6,7 @@ import { showToast } from "../components/Toast";
 export default function SettingsPage() {
   const [machine, setMachine] = createSignal<MachineInfo | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  const [daemonConnected, setDaemonConnected] = createSignal(true);
   const [registries, setRegistries] = createSignal<RegistryCredential[]>([]);
   const [showAddRegistry, setShowAddRegistry] = createSignal(false);
   const [regServer, setRegServer] = createSignal("");
@@ -44,8 +45,10 @@ export default function SettingsPage() {
       const info = (await invoke("get_machine_info")) as MachineInfo;
       setMachine(info);
       setError(null);
+      setDaemonConnected(true);
     } catch (e) {
-      setError(String(e));
+      setDaemonConnected(false);
+      setError(null); // Don't show raw error — handled gracefully
     }
   };
 
@@ -104,6 +107,7 @@ export default function SettingsPage() {
       setStartOnLogin(settings.start_on_login);
       setShowTrayIcon(settings.show_tray_icon);
       setTelemetry(settings.telemetry);
+      setDaemonConnected(true);
     } catch (e) {
       console.error("Failed to load general settings:", e);
     }
@@ -251,14 +255,20 @@ export default function SettingsPage() {
         <div class="settings-section">
           <h2 class="settings-section-title">General</h2>
           <div class="card">
-            <div class="settings-row">
+            <Show when={!daemonConnected()}>
+              <div style={{ padding: "6px 0 10px", color: "#8b949e", "font-size": "12px" }}>
+                Connect to daemon to change settings
+              </div>
+            </Show>
+            <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
               <div class="settings-row-left">
                 <span class="settings-label">Start on Login</span>
                 <span class="settings-description">Automatically launch Orca when you log in</span>
               </div>
               <div
                 class="settings-toggle"
-                onClick={() => saveGeneralSetting("start_on_login", !startOnLogin())}
+                onClick={() => daemonConnected() && saveGeneralSetting("start_on_login", !startOnLogin())}
+                style={{ cursor: daemonConnected() ? "pointer" : "not-allowed" }}
               >
                 <div class={`toggle-track${startOnLogin() ? " toggle-on" : ""}`}>
                   <div class="toggle-thumb" />
@@ -266,14 +276,15 @@ export default function SettingsPage() {
               </div>
             </div>
             <div class="settings-divider" />
-            <div class="settings-row">
+            <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
               <div class="settings-row-left">
                 <span class="settings-label">Show Tray Icon</span>
                 <span class="settings-description">Display Orca in the system tray</span>
               </div>
               <div
                 class="settings-toggle"
-                onClick={() => saveGeneralSetting("show_tray_icon", !showTrayIcon())}
+                onClick={() => daemonConnected() && saveGeneralSetting("show_tray_icon", !showTrayIcon())}
+                style={{ cursor: daemonConnected() ? "pointer" : "not-allowed" }}
               >
                 <div class={`toggle-track${showTrayIcon() ? " toggle-on" : ""}`}>
                   <div class="toggle-thumb" />
@@ -281,14 +292,15 @@ export default function SettingsPage() {
               </div>
             </div>
             <div class="settings-divider" />
-            <div class="settings-row">
+            <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
               <div class="settings-row-left">
                 <span class="settings-label">Telemetry</span>
                 <span class="settings-description">Send anonymous usage statistics</span>
               </div>
               <div
                 class="settings-toggle"
-                onClick={() => saveGeneralSetting("telemetry", !telemetry())}
+                onClick={() => daemonConnected() && saveGeneralSetting("telemetry", !telemetry())}
+                style={{ cursor: daemonConnected() ? "pointer" : "not-allowed" }}
               >
                 <div class={`toggle-track${telemetry() ? " toggle-on" : ""}`}>
                   <div class="toggle-thumb" />
@@ -303,7 +315,9 @@ export default function SettingsPage() {
           <h2 class="settings-section-title">Container Runtime</h2>
           <div class="card">
             <Show when={machine()} fallback={
-              <div style={{ padding: "8px 0", color: "#8b949e" }}>Loading runtime info...</div>
+              <div style={{ padding: "8px 0", color: "#8b949e" }}>
+                {daemonConnected() ? "Loading runtime info..." : "Daemon not connected"}
+              </div>
             }>
               {(m) => (
                 <div class="card-grid">

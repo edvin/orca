@@ -81,15 +81,40 @@ impl Drop for DaemonManager {
     }
 }
 
-/// Find the daemon binary — check next to current exe first, then PATH.
-fn find_daemon_binary() -> String {
+/// Find the daemon binary — check next to current exe, development paths, then PATH.
+pub fn find_daemon_binary() -> String {
+    // Check next to current executable
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            let sibling = parent.join("orca-daemon");
+            let sibling = parent.join(daemon_binary_name());
             if sibling.exists() {
                 return sibling.to_string_lossy().to_string();
             }
         }
     }
-    "orca-daemon".to_string()
+
+    // Check development build paths
+    let dev_paths = [
+        "./target/debug/orca-daemon",
+        "./target/release/orca-daemon",
+    ];
+    for path in &dev_paths {
+        let p = std::path::Path::new(path);
+        if p.exists() {
+            return p.canonicalize()
+                .map(|c| c.to_string_lossy().to_string())
+                .unwrap_or_else(|_| path.to_string());
+        }
+    }
+
+    // Fall back to PATH
+    daemon_binary_name().to_string()
+}
+
+fn daemon_binary_name() -> &'static str {
+    if cfg!(windows) {
+        "orca-daemon.exe"
+    } else {
+        "orca-daemon"
+    }
 }

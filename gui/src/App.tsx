@@ -17,6 +17,7 @@ import EnvironmentPage from "./pages/EnvironmentPage";
 import ActivityPage from "./pages/ActivityPage";
 import DashboardPage from "./pages/DashboardPage";
 import TemplatesPage from "./pages/TemplatesPage";
+import ConnectionScreen from "./components/ConnectionScreen";
 import CommandPalette from "./components/CommandPalette";
 import AiAssistant from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
@@ -131,35 +132,41 @@ export default function App() {
   return (
     <div class="app-root">
       <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => setPage(p as Page)} />
-      <div class="app-body">
-        <Sidebar
-          currentPage={page()}
-          onNavigate={setPage}
-          daemonStatus={daemonStatus()}
-        />
-        <main class="app-main">
-          {page() === "dashboard" && <DashboardPage onNavigate={(p) => setPage(p as Page)} />}
-          {page() === "templates" && <TemplatesPage />}
-          {page() === "stacks" && <StacksPage />}
-          {page() === "containers" && <ContainersPage onNavigate={(p) => setPage(p as Page)} />}
-          {page() === "images" && <ImagesPage />}
-          {page() === "volumes" && <VolumesPage />}
-          {page() === "networks" && <NetworksPage />}
-          {page() === "kubernetes" && <KubernetesPage />}
-          {page() === "machine" && <MachinePage />}
-          {page() === "environment" && <EnvironmentPage />}
-          {page() === "activity" && <ActivityPage />}
-          {page() === "settings" && <SettingsPage />}
-        </main>
-      </div>
-      {showCommandPalette() && (
-        <CommandPalette
-          onClose={() => setShowCommandPalette(false)}
-          onNavigate={(p) => setPage(p)}
-        />
+      {daemonStatus() !== "running" ? (
+        <ConnectionScreen status={daemonStatus()} onRetry={checkDaemon} />
+      ) : (
+        <>
+          <div class="app-body">
+            <Sidebar
+              currentPage={page()}
+              onNavigate={setPage}
+              daemonStatus={daemonStatus()}
+            />
+            <main class="app-main">
+              {page() === "dashboard" && <DashboardPage onNavigate={(p) => setPage(p as Page)} />}
+              {page() === "templates" && <TemplatesPage />}
+              {page() === "stacks" && <StacksPage />}
+              {page() === "containers" && <ContainersPage onNavigate={(p) => setPage(p as Page)} />}
+              {page() === "images" && <ImagesPage />}
+              {page() === "volumes" && <VolumesPage />}
+              {page() === "networks" && <NetworksPage />}
+              {page() === "kubernetes" && <KubernetesPage />}
+              {page() === "machine" && <MachinePage />}
+              {page() === "environment" && <EnvironmentPage />}
+              {page() === "activity" && <ActivityPage />}
+              {page() === "settings" && <SettingsPage />}
+            </main>
+          </div>
+          {showCommandPalette() && (
+            <CommandPalette
+              onClose={() => setShowCommandPalette(false)}
+              onNavigate={(p) => setPage(p)}
+            />
+          )}
+          <AiAssistant onNavigate={(p) => setPage(p as Page)} />
+        </>
       )}
       <ToastContainer />
-      <AiAssistant onNavigate={(p) => setPage(p as Page)} />
     </div>
   );
 }
