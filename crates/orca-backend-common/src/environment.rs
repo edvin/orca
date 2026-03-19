@@ -434,8 +434,6 @@ pub async fn check_environment() -> EnvironmentStatus {
 
             if has_docker_desktop {
                 // Docker Desktop is installed — it provides everything needed.
-                // Don't check for docker CLI (it's in a non-standard path inside Docker.app).
-                // Don't show Lima/Homebrew (not needed with Docker Desktop).
                 let mut docker_check = HealthCheck {
                     name: "Docker Runtime".to_string(),
                     description: "Provided by Docker Desktop".to_string(),
@@ -443,19 +441,17 @@ pub async fn check_environment() -> EnvironmentStatus {
                     fix_action: None,
                     details: Some("Docker Desktop provides the Docker runtime".to_string()),
                 };
-                // Try to get the actual version
                 if let Ok(version) = run_cmd("docker", &["--version"]).await {
                     docker_check.details = Some(version);
                 }
                 checks.push(docker_check);
                 checks.push(docker_desktop_check);
             } else {
-                // No Docker Desktop — check for standalone Docker CLI and show alternatives
+                // No Docker Desktop — don't show it (Orca is the replacement).
+                // Check for standalone Docker CLI and show alternatives.
                 let docker_check = check_docker_installed().await;
                 checks.push(docker_check);
-                checks.push(docker_desktop_check);
 
-                // Show Lima/Homebrew as optional alternatives
                 checks.push(check_brew_installed().await);
                 let mut lima = check_lima_installed().await;
                 lima.name = "Lima (optional)".to_string();
@@ -469,7 +465,11 @@ pub async fn check_environment() -> EnvironmentStatus {
         "windows" => {
             checks.push(check_wsl2_enabled().await);
             checks.push(check_docker_installed().await);
-            checks.push(check_docker_desktop().await);
+            // Only show Docker Desktop if it's actually installed
+            let dd = check_docker_desktop().await;
+            if dd.details.is_some() {
+                checks.push(dd);
+            }
         }
         _ => {}
     }
