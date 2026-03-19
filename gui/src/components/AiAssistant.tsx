@@ -1,6 +1,7 @@
 import { createSignal, For, Show, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiResponse, AiContext } from "../lib/types";
+import { showToast } from "./Toast";
 
 interface AiMessage {
   role: "user" | "ai";
@@ -17,6 +18,11 @@ export default function AiAssistant(props: AiAssistantProps) {
   const [messages, setMessages] = createSignal<AiMessage[]>([]);
   const [input, setInput] = createSignal("");
   const [loading, setLoading] = createSignal(false);
+  const [hasCredentials, setHasCredentials] = createSignal<boolean | null>(null);
+  const [showInlineSetup, setShowInlineSetup] = createSignal(false);
+  const [setupProvider, setSetupProvider] = createSignal<"anthropic" | "openai">("anthropic");
+  const [setupApiKey, setSetupApiKey] = createSignal("");
+  const [setupSaving, setSetupSaving] = createSignal(false);
   let messagesEnd: HTMLDivElement | undefined;
 
   const scrollToBottom = () => {
@@ -25,9 +31,49 @@ export default function AiAssistant(props: AiAssistantProps) {
     }, 50);
   };
 
+  const checkCredentials = async () => {
+    try {
+      const settings = (await invoke("get_ai_settings")) as {
+        has_anthropic_key: boolean;
+        has_openai_key: boolean;
+      };
+      setHasCredentials(settings.has_anthropic_key || settings.has_openai_key);
+    } catch {
+      setHasCredentials(false);
+    }
+  };
+
+  const saveInlineKey = async () => {
+    const key = setupApiKey().trim();
+    if (!key) return;
+    setSetupSaving(true);
+    try {
+      await invoke("save_ai_settings", {
+        provider: setupProvider(),
+        apiKey: key,
+        model: "",
+      });
+      showToast("AI settings saved", "success");
+      setShowInlineSetup(false);
+      setSetupApiKey("");
+      await checkCredentials();
+    } catch (e) {
+      showToast(`Failed to save AI settings: ${e}`, "error");
+    }
+    setSetupSaving(false);
+  };
+
   const sendMessage = async (query?: string) => {
     const text = query || input().trim();
     if (!text || loading()) return;
+
+    // Check credentials before sending
+    if (!hasCredentials()) {
+      await checkCredentials();
+      if (!hasCredentials()) {
+        return;
+      }
+    }
 
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: text }]);
@@ -96,7 +142,11 @@ export default function AiAssistant(props: AiAssistantProps) {
       {/* Floating Action Button */}
       <button
         class="ai-fab"
-        onClick={() => setOpen(!open())}
+        onClick={() => {
+          const willOpen = !open();
+          setOpen(willOpen);
+          if (willOpen) checkCredentials();
+        }}
         title="AI Assistant"
       >
         {open() ? "\u2715" : "\u2728"}
@@ -117,7 +167,66 @@ export default function AiAssistant(props: AiAssistantProps) {
           </div>
 
           <div class="ai-messages">
-            <Show when={messages().length === 0}>
+            <Show when={hasCredentials() === false}>
+              <div class="ai-setup">
+                <div style="font-size: 32px; opacity: 0.5">{"\u2728"}</div>
+                <div style="font-size: 14px; color: #e6edf3; font-weight: 600">
+                  Set up your AI provider to get started
+                </div>
+                <div style="font-size: 12px; color: #8b949e; line-height: 1.5; margin-bottom: 12px">
+                  An API key from Anthropic or OpenAI is required to use the AI assistant.
+                </div>
+                <Show when={!showInlineSetup()}>
+                  <div style="display: flex; gap: 8px; justify-content: center">
+                    <button
+                      class="btn btn-sm btn-primary"
+                      onClick={() => props.onNavigate?.("settings")}
+                    >
+                      Configure in Settings
+                    </button>
+                    <button
+                      class="btn btn-sm"
+                      onClick={() => setShowInlineSetup(true)}
+                    >
+                      Enter API Key
+                    </button>
+                  </div>
+                </Show>
+                <Show when={showInlineSetup()}>
+                  <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 280px">
+                    <select
+                      style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 8px; border-radius: 6px; font-size: 13px; font-family: inherit"
+                      value={setupProvider()}
+                      onChange={(e) => setSetupProvider(e.currentTarget.value as "anthropic" | "openai")}
+                    >
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                    </select>
+                    <input
+                      type="password"
+                      placeholder="API Key"
+                      style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 8px; border-radius: 6px; font-size: 13px; font-family: inherit"
+                      value={setupApiKey()}
+                      onInput={(e) => setSetupApiKey(e.currentTarget.value)}
+                    />
+                    <div style="display: flex; gap: 6px; justify-content: flex-end">
+                      <button class="btn btn-sm" onClick={() => setShowInlineSetup(false)}>
+                        Cancel
+                      </button>
+                      <button
+                        class="btn btn-sm btn-primary"
+                        onClick={saveInlineKey}
+                        disabled={setupSaving() || !setupApiKey().trim()}
+                      >
+                        {setupSaving() ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+              </div>
+            </Show>
+
+            <Show when={hasCredentials() !== false && messages().length === 0}>
               <div class="ai-setup">
                 <div style="font-size: 32px; opacity: 0.5">{"\u2728"}</div>
                 <div style="font-size: 14px; color: #e6edf3; font-weight: 600">
@@ -193,13 +302,13 @@ export default function AiAssistant(props: AiAssistantProps) {
               value={input()}
               onInput={(e) => setInput(e.currentTarget.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Orca AI..."
-              disabled={loading()}
+              placeholder={hasCredentials() === false ? "Configure AI provider first..." : "Ask Orca AI..."}
+              disabled={loading() || hasCredentials() === false}
             />
             <button
               class="ai-send"
               onClick={() => sendMessage()}
-              disabled={loading() || !input().trim()}
+              disabled={loading() || !input().trim() || hasCredentials() === false}
             >
               Send
             </button>

@@ -22,7 +22,6 @@ export default function StackDetailPage(props: StackDetailPageProps) {
   const [serviceLoading, setServiceLoading] = createSignal<string | null>(null);
   const [logsFor, setLogsFor] = createSignal<{ id: string; name: string } | null>(null);
   const [composeContent, setComposeContent] = createSignal<string | null>(null);
-  const [composeOutput, setComposeOutput] = createSignal<{ output: any } | null>(null);
   const [logServiceFilter, setLogServiceFilter] = createSignal<string | null>(null);
 
   const fetchStack = async () => {
@@ -53,13 +52,18 @@ export default function StackDetailPage(props: StackDetailPageProps) {
 
   const doStackAction = async (action: string) => {
     setActionInProgress(true);
-    setComposeOutput(null);
     try {
       const result = await invoke(action, { name: props.stackName });
       if (result && typeof result === "object") {
-        setComposeOutput({ output: result as any });
+        const output = result as any;
+        if (!output.success) {
+          showToast(`${action.replace(/_/g, " ")} failed: ${output.stderr || "Unknown error"}`, "error");
+        } else {
+          showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
+        }
+      } else {
+        showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
       }
-      showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
       setTimeout(fetchStack, 500);
     } catch (err) {
       showToast(`${action} failed: ${err}`, "error");
@@ -154,57 +158,42 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                 <Show when={actionInProgress()}>
                   <Spinner />
                 </Show>
-                <Show when={s().status !== "Running"}>
-                  <button
-                    class="btn btn-sm btn-primary"
-                    onClick={() => doStackAction("start_stack")}
-                    disabled={actionInProgress()}
-                  >
-                    Start All
-                  </button>
-                </Show>
-                <Show when={s().status !== "Stopped"}>
+                <Show when={s().status === "Running"}>
                   <button
                     class="btn btn-sm"
-                    onClick={() => doStackAction("stop_stack")}
+                    onClick={() => doStackAction("compose_down")}
                     disabled={actionInProgress()}
+                    title="Stop stack"
                   >
-                    Stop All
+                    &#9632; Stop
                   </button>
                 </Show>
-                <Show when={s().working_dir}>
-                  <div class="btn-separator" />
+                <Show when={s().status !== "Running"}>
                   <button
                     class="btn btn-sm btn-primary"
                     onClick={() => doStackAction("compose_up")}
                     disabled={actionInProgress()}
-                    title="docker compose up -d"
+                    title="Start stack"
                   >
-                    Up
+                    &#9654; Start
                   </button>
+                </Show>
+                <Show when={s().working_dir}>
                   <button
-                    class="btn btn-sm btn-danger"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Run docker compose down for '${props.stackName}'? This will stop and remove all containers.`
-                        )
-                      ) {
-                        doStackAction("compose_down");
-                      }
-                    }}
+                    class="btn btn-sm"
+                    onClick={() => doStackAction("restart_stack")}
                     disabled={actionInProgress()}
-                    title="docker compose down"
+                    title="Restart stack"
                   >
-                    Down
+                    &#10227; Restart
                   </button>
                   <button
                     class="btn btn-sm"
                     onClick={() => doStackAction("compose_pull")}
                     disabled={actionInProgress()}
-                    title="docker compose pull"
+                    title="Pull images"
                   >
-                    Pull
+                    &#8595; Pull
                   </button>
                 </Show>
               </div>
@@ -212,56 +201,6 @@ export default function StackDetailPage(props: StackDetailPageProps) {
           )}
         </Show>
       </div>
-
-      {/* Compose CLI output */}
-      <Show when={composeOutput()}>
-        {(co) => (
-          <div
-            class="card"
-            style={{
-              "margin-bottom": "16px",
-              "border-color": co().output.success ? "#238636" : "#da3633",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                "justify-content": "space-between",
-                "align-items": "center",
-                "margin-bottom": "8px",
-              }}
-            >
-              <span style={{ "font-weight": "600", "font-size": "13px" }}>
-                Compose output
-                {co().output.success ? " (success)" : " (failed)"}
-              </span>
-              <button class="btn btn-sm" onClick={() => setComposeOutput(null)}>
-                Dismiss
-              </button>
-            </div>
-            <Show when={co().output.stdout}>
-              <pre
-                class="mono"
-                style={{
-                  color: "#c9d1d9",
-                  "white-space": "pre-wrap",
-                  "margin-bottom": "4px",
-                }}
-              >
-                {co().output.stdout}
-              </pre>
-            </Show>
-            <Show when={co().output.stderr}>
-              <pre
-                class="mono"
-                style={{ color: "#f85149", "white-space": "pre-wrap" }}
-              >
-                {co().output.stderr}
-              </pre>
-            </Show>
-          </div>
-        )}
-      </Show>
 
       {/* Tab bar */}
       <div class="detail-tab-bar">

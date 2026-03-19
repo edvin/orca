@@ -2817,3 +2817,82 @@ body {
   top: 8px;
   right: 8px;
 }
+
+/* ==================== Dropdown Menu ==================== */
+.dropdown-wrapper {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 160px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+  padding: 4px;
+  animation: modal-scale-in 0.1s ease-out;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #c9d1d9;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.1s;
+  font-family: inherit;
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background: #21262d;
+}
+
+.dropdown-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dropdown-item:disabled:hover {
+  background: transparent;
+}
+
+.dropdown-item-danger {
+  color: #f85149;
+}
+
+.dropdown-item-danger:hover {
+  background: #da363318;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #21262d;
+  margin: 4px 0;
+}
+
+/* ==================== Toast Copy Button ==================== */
+.toast-copy {
+  background: none;
+  border: none;
+  color: #484f58;
+  cursor: pointer;
+  padding: 2px;
+  font-size: 12px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.toast-copy:hover {
+  color: #e6edf3;
+}

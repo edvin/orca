@@ -29,6 +29,40 @@ export function showToast(
   }, 4000);
 }
 
+function CopyToastButton(props: { message: string }) {
+  const [copied, setCopied] = createSignal(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(props.message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Fallback
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = props.message;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      } catch {
+        // silently fail
+      }
+    }
+  };
+
+  return (
+    <button class="toast-copy" onClick={handleCopy} title="Copy error message">
+      {copied() ? "\u2713" : "\u2398"}
+    </button>
+  );
+}
+
 export default function ToastContainer() {
   return (
     <div class="toast-container">
@@ -54,6 +88,9 @@ export default function ToastContainer() {
                 )}
               </Show>
             </span>
+            <Show when={toast.type === "error"}>
+              <CopyToastButton message={toast.message} />
+            </Show>
             <button
               class="toast-close"
               onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}

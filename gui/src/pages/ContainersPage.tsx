@@ -33,7 +33,8 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [showRunDialog, setShowRunDialog] = createSignal(false);
   const [inlineStats, setInlineStats] = createSignal<Record<string, ContainerStats>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set(["__standalone__"]));
-  const [composeOutput, setComposeOutput] = createSignal<{ name: string; output: any } | null>(null);
+  const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
+  const [containerMenuOpen, setContainerMenuOpen] = createSignal<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -73,14 +74,68 @@ export default function ContainersPage(props: ContainersPageProps) {
     setInlineStats(newStats);
   };
 
+  // Close dropdown menus when clicking outside
+  const handleClickOutside = () => {
+    setMenuOpen(null);
+    setContainerMenuOpen(null);
+  };
+
   onMount(() => {
     refresh().then(fetchAllRunningStats);
     const interval = setInterval(() => {
       refresh();
       fetchAllRunningStats();
     }, 3000);
-    onCleanup(() => clearInterval(interval));
+    document.addEventListener("click", handleClickOutside);
+    onCleanup(() => {
+      clearInterval(interval);
+      document.removeEventListener("click", handleClickOutside);
+    });
   });
+
+  const restartStack = async (name: string) => {
+    setStackActionInProgress(name);
+    try {
+      await invoke("restart_stack", { name });
+      showToast("Stack restarted", "success");
+      setTimeout(refresh, 500);
+    } catch (err) {
+      showToast(`Restart failed: ${err}`, "error");
+    }
+    setStackActionInProgress(null);
+  };
+
+  const pullStack = async (name: string) => {
+    setStackActionInProgress(name);
+    try {
+      const result = await invoke("compose_pull", { name });
+      if (result && typeof result === "object") {
+        const output = result as any;
+        if (!output.success) {
+          showToast(`Pull failed: ${output.stderr || "Unknown error"}`, "error");
+        } else {
+          showToast("Images pulled successfully", "success");
+        }
+      }
+      setTimeout(refresh, 500);
+    } catch (err) {
+      showToast(`Pull failed: ${err}`, "error");
+    }
+    setStackActionInProgress(null);
+  };
+
+  const deleteStack = async (name: string) => {
+    if (!window.confirm(`Run docker compose down for '${name}'? This will stop and remove all containers.`)) return;
+    setStackActionInProgress(name);
+    try {
+      await invoke("compose_down", { name });
+      showToast("Stack removed", "success");
+      setTimeout(refresh, 500);
+    } catch (err) {
+      showToast(`Delete failed: ${err}`, "error");
+    }
+    setStackActionInProgress(null);
+  };
 
   // Group containers by compose project label
   const grouped = (): { stackGroups: StackGroup[]; standalone: Container[] } => {
@@ -200,11 +255,17 @@ export default function ContainersPage(props: ContainersPageProps) {
   const doStackAction = async (action: string, name: string, e: MouseEvent) => {
     e.stopPropagation();
     setStackActionInProgress(name);
-    setComposeOutput(null);
     try {
       const result = await invoke(action, { name });
       if (result && typeof result === "object") {
-        setComposeOutput({ name, output: result as any });
+        const output = result as any;
+        if (!output.success) {
+          showToast(`${action.replace(/_/g, " ")} failed: ${output.stderr || "Unknown error"}`, "error");
+        } else {
+          showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
+        }
+      } else {
+        showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
       }
       setTimeout(refresh, 500);
     } catch (err) {
@@ -285,57 +346,75 @@ export default function ContainersPage(props: ContainersPageProps) {
             <Show when={actionInProgress() === c.id}>
               <Spinner size={14} />
             </Show>
-            <button
-              class="action-icon action-icon-start"
-              onClick={(e) => doAction("start_container", c.id, e)}
-              disabled={loading() || c.state === "Running"}
-              title="Start"
-            >
-              &#9654;
-            </button>
-            <button
-              class="action-icon action-icon-stop"
-              onClick={(e) => doAction("stop_container", c.id, e)}
-              disabled={loading() || c.state !== "Running"}
-              title="Stop"
-            >
-              &#9632;
-            </button>
-            <button
-              class="action-icon action-icon-restart"
-              onClick={(e) => doRestart(c.id, e)}
-              disabled={loading() || c.state !== "Running"}
-              title="Restart"
-            >
-              &#8635;
-            </button>
-            <button
-              class="action-icon action-icon-logs"
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onNavigate?.(
-                  stackName
-                    ? `container:${c.id},stack:${stackName}`
-                    : `container:${c.id}`
-                );
-              }}
-              title="Logs"
-            >
-              &#128203;
-            </button>
-            <button
-              class="action-icon action-icon-delete"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm(`Remove container '${c.name}'? This cannot be undone.`)) {
-                  doAction("remove_container", c.id, e);
-                }
-              }}
-              disabled={loading() || c.state === "Running"}
-              title="Remove"
-            >
-              &#128465;
-            </button>
+            <Show when={c.state === "Running"}>
+              <button
+                class="action-icon action-icon-stop"
+                onClick={(e) => doAction("stop_container", c.id, e)}
+                disabled={loading()}
+                title="Stop"
+              >
+                &#9632;
+              </button>
+            </Show>
+            <Show when={c.state !== "Running"}>
+              <button
+                class="action-icon action-icon-start"
+                onClick={(e) => doAction("start_container", c.id, e)}
+                disabled={loading()}
+                title="Start"
+              >
+                &#9654;
+              </button>
+            </Show>
+            <div class="dropdown-wrapper">
+              <button
+                class="action-icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setContainerMenuOpen(containerMenuOpen() === c.id ? null : c.id);
+                }}
+                title="More actions"
+              >
+                &#8943;
+              </button>
+              <Show when={containerMenuOpen() === c.id}>
+                <div class="dropdown-menu" onClick={(e: MouseEvent) => e.stopPropagation()}>
+                  <button
+                    class="dropdown-item"
+                    onClick={() => { doRestart(c.id, new MouseEvent("click")); setContainerMenuOpen(null); }}
+                    disabled={loading() || c.state !== "Running"}
+                  >
+                    &#10227; Restart
+                  </button>
+                  <button
+                    class="dropdown-item"
+                    onClick={() => {
+                      props.onNavigate?.(
+                        stackName
+                          ? `container:${c.id},stack:${stackName}`
+                          : `container:${c.id}`
+                      );
+                      setContainerMenuOpen(null);
+                    }}
+                  >
+                    &#128203; Logs
+                  </button>
+                  <div class="dropdown-divider" />
+                  <button
+                    class="dropdown-item dropdown-item-danger"
+                    onClick={() => {
+                      if (window.confirm(`Remove container '${c.name}'? This cannot be undone.`)) {
+                        doAction("remove_container", c.id, new MouseEvent("click"));
+                      }
+                      setContainerMenuOpen(null);
+                    }}
+                    disabled={loading() || c.state === "Running"}
+                  >
+                    &#128465; Delete
+                  </button>
+                </div>
+              </Show>
+            </div>
           </div>
         </td>
       </tr>
@@ -385,39 +464,6 @@ export default function ContainersPage(props: ContainersPageProps) {
           </button>
         </div>
       </div>
-
-      {/* Compose CLI output banner */}
-      <Show when={composeOutput()}>
-        {(co) => (
-          <div
-            class="card"
-            style={{
-              "margin-bottom": "16px",
-              "border-color": co().output.success ? "#238636" : "#da3633",
-            }}
-          >
-            <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "8px" }}>
-              <span style={{ "font-weight": "600", "font-size": "13px" }}>
-                Compose output: {co().name}
-                {co().output.success ? " (success)" : " (failed)"}
-              </span>
-              <button class="btn btn-sm" onClick={() => setComposeOutput(null)}>
-                Dismiss
-              </button>
-            </div>
-            <Show when={co().output.stdout}>
-              <pre class="mono" style={{ color: "#c9d1d9", "white-space": "pre-wrap", "margin-bottom": "4px" }}>
-                {co().output.stdout}
-              </pre>
-            </Show>
-            <Show when={co().output.stderr}>
-              <pre class="mono" style={{ color: "#f85149", "white-space": "pre-wrap" }}>
-                {co().output.stderr}
-              </pre>
-            </Show>
-          </div>
-        )}
-      </Show>
 
       <Show
         when={totalCount() > 0}
@@ -485,76 +531,57 @@ export default function ContainersPage(props: ContainersPageProps) {
                       </div>
                     </div>
                     <div class="stack-header-right">
-                      <div class="action-icons" style={{ "margin-right": "8px" }}>
-                        <button
-                          class="action-icon action-icon-start"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            for (const c of group.containers) {
-                              if (c.state !== "Running") {
-                                invoke("start_container", { id: c.id }).catch(() => {});
-                              }
-                            }
-                            setTimeout(refresh, 800);
-                          }}
-                          disabled={isLoading()}
-                          title="Start all"
-                        >
-                          &#9654;
-                        </button>
-                        <button
-                          class="action-icon action-icon-stop"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            for (const c of group.containers) {
-                              if (c.state === "Running") {
-                                invoke("stop_container", { id: c.id }).catch(() => {});
-                              }
-                            }
-                            setTimeout(refresh, 800);
-                          }}
-                          disabled={isLoading()}
-                          title="Stop all"
-                        >
-                          &#9632;
-                        </button>
-                        <button
-                          class="action-icon action-icon-restart"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            doStackAction("compose_pull", group.name, e);
-                          }}
-                          disabled={isLoading()}
-                          title="Pull"
-                        >
-                          &#8635;
-                        </button>
-                      </div>
-                      <Show when={group.composeProject?.working_dir}>
-                        <div class="btn-group">
+                      <div class="action-icons" style={{ "margin-right": "4px" }}>
+                        <Show when={isLoading()}>
+                          <Spinner size={14} />
+                        </Show>
+                        <Show when={allRunning()}>
                           <button
-                            class="btn btn-sm btn-outline"
-                            onClick={(e) => doStackAction("compose_up", group.name, e)}
-                            disabled={isLoading()}
-                            title="docker compose up -d"
-                          >
-                            {isLoading() ? <><Spinner size={12} />{" ..."}</> : "\u2191 Up"}
-                          </button>
-                          <button
-                            class="btn btn-sm btn-outline"
+                            class="action-icon action-icon-stop"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm(`Run docker compose down for '${group.name}'? This will stop and remove all containers.`)) {
-                                doStackAction("compose_down", group.name, e);
-                              }
+                              doStackAction("compose_down", group.name, e);
                             }}
                             disabled={isLoading()}
-                            title="docker compose down"
+                            title="Stop stack"
                           >
-                            &#8595; Down
+                            &#9632;
                           </button>
+                        </Show>
+                        <Show when={!allRunning()}>
+                          <button
+                            class="action-icon action-icon-start"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              doStackAction("compose_up", group.name, e);
+                            }}
+                            disabled={isLoading()}
+                            title="Start stack"
+                          >
+                            &#9654;
+                          </button>
+                        </Show>
+                        <div class="dropdown-wrapper">
+                          <button
+                            class="action-icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuOpen(menuOpen() === group.name ? null : group.name);
+                            }}
+                            title="More actions"
+                          >
+                            &#8943;
+                          </button>
+                          <Show when={menuOpen() === group.name}>
+                            <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                              <button class="dropdown-item" onClick={() => { restartStack(group.name); setMenuOpen(null); }}>&#10227; Restart</button>
+                              <button class="dropdown-item" onClick={() => { pullStack(group.name); setMenuOpen(null); }}>&#8595; Pull Images</button>
+                              <div class="dropdown-divider" />
+                              <button class="dropdown-item dropdown-item-danger" onClick={() => { deleteStack(group.name); setMenuOpen(null); }}>&#128465; Delete Stack</button>
+                            </div>
+                          </Show>
                         </div>
-                      </Show>
+                      </div>
                     </div>
                   </div>
 
