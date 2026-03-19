@@ -242,12 +242,12 @@ async fn check_lima_installed() -> HealthCheck {
             fix_action: None,
             details: Some(version),
         },
-        Err(e) => HealthCheck {
+        Err(_) => HealthCheck {
             name: "Lima".to_string(),
-            description: "Lima VM manager (used for running Linux containers on macOS)".to_string(),
+            description: "Optional: Lima VM manager for running containers without Docker Desktop".to_string(),
             status: CheckStatus::Warning,
             fix_action: Some("install_lima".to_string()),
-            details: Some(format!("Not found: {e}")),
+            details: Some("Not installed — install with: brew install lima".to_string()),
         },
     }
 }
@@ -402,10 +402,22 @@ pub async fn check_environment() -> EnvironmentStatus {
             checks.push(check_docker_group().await);
         }
         "macos" => {
-            checks.push(check_docker_installed().await);
-            checks.push(check_lima_installed().await);
-            checks.push(check_brew_installed().await);
-            checks.push(check_docker_desktop().await);
+            let docker_check = check_docker_installed().await;
+            let docker_desktop_check = check_docker_desktop().await;
+            let docker_available = docker_check.status == CheckStatus::Pass;
+            let has_docker_desktop = docker_desktop_check.status == CheckStatus::Pass;
+
+            checks.push(docker_check);
+            checks.push(docker_desktop_check);
+
+            // Only show Lima/Homebrew if Docker isn't already available.
+            // Lima is an alternative to Docker Desktop, not a requirement.
+            if !docker_available && !has_docker_desktop {
+                checks.push(check_brew_installed().await);
+                let mut lima = check_lima_installed().await;
+                lima.description = "Alternative: run Docker via Lima VM (without Docker Desktop)".to_string();
+                checks.push(lima);
+            }
         }
         "windows" => {
             checks.push(check_wsl2_enabled().await);
