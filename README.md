@@ -49,7 +49,7 @@
 
 ### Kubernetes (k3s)
 
-- **One-click k3s cluster** with Traefik ingress controller (bundled)
+- **One-click k3s cluster** with Traefik ingress controller (bundled) and progress dialog
 - Manage **pods, deployments, services, ingresses** across namespaces
 - **Persistent volume** and PVC management
 - Scale deployments, restart rollouts, delete pods
@@ -59,9 +59,11 @@
 
 ### App Templates
 
-- **12 one-click deployable apps** — PostgreSQL, MySQL, Redis, MongoDB, Nginx, Caddy, Grafana, Prometheus, MinIO, Adminer, MailHog, Portainer
+- **One-click deployable apps** — databases, web servers, monitoring, AI, dev tools, and more
 - Pre-configured with sensible defaults (ports, volumes, env vars)
-- Editable configuration before deploy
+- Structured editors for ports, env vars, and volumes before deploy
+- **Create your own templates** — saved locally and available alongside builtins
+- Password/secret env vars auto-masked in the editor
 
 ### AI Assistant
 
@@ -87,9 +89,10 @@
 
 ### Environment Management
 
-- Auto-detect Docker/Podman installation
-- One-click install for missing prerequisites
-- Health checks with fix buttons
+- **Welcome wizard** on first launch — guides new users through runtime setup
+- Auto-detect Docker/Podman installation across platforms
+- One-click install with **progress dialog** showing step-by-step output
+- Health checks with fix buttons and detailed diagnostics
 - Docker Desktop coexistence detection
 
 ### Security
@@ -104,6 +107,7 @@
 
 - Custom titlebar with runtime status and version display
 - **System tray** — close to tray, not quit
+- **Auto-updates** with signature verification and seamless daemon restart
 - Notification bell with activity feed
 - **Command palette** (Ctrl+K)
 - Toast notifications with actions
@@ -391,6 +395,7 @@ The daemon exposes a REST API at `http://127.0.0.1:9477/api/v1/`:
 | `/k8s/pvs` | GET | List PVs |
 | `/k8s/apply` | POST | Apply YAML manifest |
 | `/templates` | GET | List app templates |
+| `/templates/user` | POST, DELETE | Create/update / delete user templates |
 | `/templates/:id/deploy` | POST | Deploy template |
 | `/environment/status` | GET | Environment health checks |
 | `/environment/fix` | POST | Run fix action |
