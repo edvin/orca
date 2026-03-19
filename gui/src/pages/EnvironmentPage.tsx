@@ -107,7 +107,17 @@ export default function EnvironmentPage() {
 
   const closeActionDialog = async () => {
     setActionDialogOpen(false);
-    // Always re-check after closing the action dialog
+    if (actionSuccess()) {
+      // Restart the daemon so it reconnects to the newly installed runtime
+      try {
+        await invoke("stop_daemon");
+        // Brief pause for the process to fully exit
+        await new Promise(r => setTimeout(r, 1000));
+        await invoke("start_daemon");
+        // Wait for it to become ready
+        await new Promise(r => setTimeout(r, 2000));
+      } catch { /* ignore — daemon may already be restarting */ }
+    }
     await refresh();
   };
 

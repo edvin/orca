@@ -195,13 +195,13 @@ pub async fn run_fix_streaming(
                 send(">>> Checking for existing Docker installation...".into()).await;
                 if let Ok(v) = run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
                     send(format!("Docker found: {v}")).await;
-                    send(">>> Starting Docker service...".into()).await;
+                    send(">>> Configuring TCP listener...".into()).await;
                     let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                        "mkdir -p /etc/docker && \
-                         if ! grep -q '2375' /etc/docker/daemon.json 2>/dev/null; then \
-                           echo '{\"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://0.0.0.0:2375\"]}' > /etc/docker/daemon.json; \
-                         fi"
+                        "mkdir -p /etc/systemd/system/docker.service.d && \
+                         echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                         systemctl daemon-reload 2>/dev/null"
                     ]).await;
+                    send(">>> Starting Docker service...".into()).await;
                     let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await;
                     send("Docker started.".into()).await;
                     return Ok(());
@@ -226,7 +226,9 @@ pub async fn run_fix_streaming(
 
                 send(">>> Configuring TCP listener...".into()).await;
                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "mkdir -p /etc/docker && echo '{\"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://0.0.0.0:2375\"]}' > /etc/docker/daemon.json"
+                    "mkdir -p /etc/systemd/system/docker.service.d && \
+                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                     systemctl daemon-reload 2>/dev/null"
                 ]).await;
 
                 send(">>> Starting Docker service...".into()).await;
@@ -852,15 +854,14 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                                 // Ensure TCP listener is configured
                                 log.push_str("Configuring TCP listener...\n");
                                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                                    "mkdir -p /etc/docker && \
-                                     if [ ! -f /etc/docker/daemon.json ] || ! grep -q '2375' /etc/docker/daemon.json 2>/dev/null; then \
-                                       echo '{\"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://0.0.0.0:2375\"]}' > /etc/docker/daemon.json; \
-                                     fi"
+                                    "mkdir -p /etc/systemd/system/docker.service.d && \
+                                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                                     systemctl daemon-reload 2>/dev/null"
                                 ]).await;
-                                log.push_str("Starting Docker...\n");
-                                match run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await {
-                                    Ok(o) => log.push_str(&format!("service docker start: {o}\n")),
-                                    Err(e) => log.push_str(&format!("Failed to start: {e}\n")),
+                                log.push_str("Restarting Docker with TCP listener...\n");
+                                match run_cmd("wsl", &["-u", "root", "--", "service", "docker", "restart"]).await {
+                                    Ok(o) => log.push_str(&format!("{o}\n")),
+                                    Err(e) => log.push_str(&format!("Failed to restart: {e}\n")),
                                 }
                                 // Verify
                                 match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
@@ -915,13 +916,10 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 // the Windows host can connect to it
                 log.push_str("\n>>> Configuring Docker TCP listener for Orca...\n");
                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "mkdir -p /etc/docker && \
-                     if [ ! -f /etc/docker/daemon.json ] || ! grep -q '2375' /etc/docker/daemon.json 2>/dev/null; then \
-                       echo '{\"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://0.0.0.0:2375\"]}' > /etc/docker/daemon.json && \
-                       echo 'TCP listener configured on port 2375'; \
-                     else \
-                       echo 'TCP listener already configured'; \
-                     fi"
+                    "mkdir -p /etc/systemd/system/docker.service.d && \
+                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                     systemctl daemon-reload 2>/dev/null; \
+                     echo 'TCP listener configured on port 2375'"
                 ]).await.map(|o| log.push_str(&format!("{o}\n")));
 
                 log.push_str("\n>>> Starting Docker service...\n");
