@@ -334,32 +334,38 @@ body {
 /* ==================== Table ==================== */
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .table thead th {
-  padding: 10px 12px;
+  padding: 10px 14px;
   text-align: left;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #8b949e;
-  border-bottom: 1px solid #21262d;
+  border-bottom: 2px solid #21262d;
+  background: #0d1117;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .table tbody tr {
-  border-bottom: 1px solid #161b2244;
-  transition: background 0.15s ease;
+  border-bottom: 1px solid #161b2266;
+  transition: background 0.12s ease;
 }
 
 .table tbody tr:hover {
-  background: #161b2288;
+  background: #1c212844;
 }
 
 .table tbody td {
-  padding: 12px 12px;
+  padding: 10px 14px;
   vertical-align: middle;
+  font-size: 13px;
 }
 
 /* ==================== State Badges ==================== */
@@ -430,27 +436,29 @@ body {
 }
 
 .btn-primary {
-  background: #2da44e;
-  border-color: #2da44e66;
+  background: linear-gradient(180deg, #34d058 0%, #2ea043 100%);
+  border-color: #2ea04366;
   color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
 }
 
 .btn-primary:hover {
-  background: #3fb950;
+  background: linear-gradient(180deg, #3fb950 0%, #34d058 100%);
   border-color: #3fb95066;
-  box-shadow: 0 2px 8px rgba(63, 185, 80, 0.25);
+  box-shadow: 0 2px 8px rgba(63, 185, 80, 0.3);
 }
 
 .btn-danger {
-  background: #da3633;
-  border-color: #f8514944;
+  background: linear-gradient(180deg, #f85149 0%, #da3633 100%);
+  border-color: #da363366;
   color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
 }
 
 .btn-danger:hover {
-  background: #f85149;
+  background: linear-gradient(180deg, #ff6a62 0%, #f85149 100%);
   border-color: #f8514966;
-  box-shadow: 0 2px 8px rgba(248, 81, 73, 0.2);
+  box-shadow: 0 2px 8px rgba(248, 81, 73, 0.3);
 }
 
 .btn-sm {
@@ -2051,17 +2059,17 @@ body {
 /* ==================== AI Assistant ==================== */
 .ai-fab {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 48px;
-  height: 48px;
+  bottom: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1f6feb, #58a6ff);
-  border: none;
-  color: white;
-  font-size: 20px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 16px;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(31, 111, 235, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   z-index: 900;
   transition: all 0.2s;
   display: flex;
@@ -2070,8 +2078,11 @@ body {
 }
 
 .ai-fab:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(31, 111, 235, 0.45);
+  background: #30363d;
+  color: #58a6ff;
+  border-color: #58a6ff44;
+  box-shadow: 0 4px 12px rgba(31, 111, 235, 0.2);
+  transform: scale(1.05);
 }
 
 .ai-panel {
@@ -2283,6 +2294,7 @@ body {
   font-size: 11px;
   color: #484f58;
   font-weight: 400;
+  margin-left: 12px;
 }
 
 /* ==================== Bulk Selection Bar ==================== */
@@ -2290,11 +2302,15 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
-  background: #161b22;
-  border: 1px solid #21262d;
+  padding: 8px 14px;
+  background: #161b22ee;
+  border: 1px solid #30363d;
   border-radius: 8px;
-  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  backdrop-filter: blur(8px);
+  margin-bottom: 0;
 }
 
 .bulk-action-bar span {
