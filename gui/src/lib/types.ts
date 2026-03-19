@@ -236,6 +236,7 @@ export interface AppTemplate {
   default_volumes: string[];
   restart_policy: string;
   notes: string;
+  is_builtin: boolean;
 }
 
 // --- AI ---

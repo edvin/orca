@@ -21,7 +21,7 @@ fn generate_token() -> String {
 }
 
 pub fn builtin_templates() -> Vec<AppTemplate> {
-    vec![
+    let mut templates = vec![
         // Databases
         AppTemplate {
             id: "postgres".to_string(),
@@ -34,6 +34,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["POSTGRES_PASSWORD=changeme".to_string(), "POSTGRES_DB=mydb".to_string()],
             default_volumes: vec!["pgdata:/var/lib/postgresql/data".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Connect with: psql -h localhost -U postgres -d mydb".to_string(),
         },
         AppTemplate {
@@ -47,6 +48,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["MYSQL_ROOT_PASSWORD=changeme".to_string(), "MYSQL_DATABASE=mydb".to_string()],
             default_volumes: vec!["mysqldata:/var/lib/mysql".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Connect with: mysql -h 127.0.0.1 -u root -p".to_string(),
         },
         AppTemplate {
@@ -60,6 +62,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec!["redisdata:/data".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Connect with: redis-cli".to_string(),
         },
         AppTemplate {
@@ -73,6 +76,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["MONGO_INITDB_ROOT_USERNAME=admin".to_string(), "MONGO_INITDB_ROOT_PASSWORD=changeme".to_string()],
             default_volumes: vec!["mongodata:/data/db".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Connect with: mongosh -u admin -p changeme".to_string(),
         },
         // Web Servers
@@ -87,6 +91,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec![],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Serve files from /usr/share/nginx/html".to_string(),
         },
         AppTemplate {
@@ -100,6 +105,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec!["caddydata:/data".to_string(), "caddyconfig:/config".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Configure via Caddyfile at /etc/caddy/Caddyfile".to_string(),
         },
         // Monitoring
@@ -114,6 +120,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["GF_SECURITY_ADMIN_PASSWORD=admin".to_string()],
             default_volumes: vec!["grafanadata:/var/lib/grafana".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Login at http://localhost:3000 with admin/admin".to_string(),
         },
         AppTemplate {
@@ -127,6 +134,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec!["promdata:/prometheus".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Dashboard at http://localhost:9090".to_string(),
         },
         // Storage
@@ -141,6 +149,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["MINIO_ROOT_USER=minioadmin".to_string(), "MINIO_ROOT_PASSWORD=minioadmin".to_string()],
             default_volumes: vec!["miniodata:/data".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Console at http://localhost:9001".to_string(),
         },
         // Tools
@@ -155,6 +164,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec![],
             restart_policy: "no".to_string(),
+            is_builtin: false,
             notes: "Open http://localhost:8081 to manage databases".to_string(),
         },
         AppTemplate {
@@ -168,6 +178,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec![],
             restart_policy: "no".to_string(),
+            is_builtin: false,
             notes: "SMTP on port 1025, Web UI at http://localhost:8025".to_string(),
         },
         AppTemplate {
@@ -181,6 +192,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec!["/var/run/docker.sock:/var/run/docker.sock".to_string(), "portainerdata:/data".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Access at https://localhost:9443".to_string(),
         },
         // Open Source AI/ML
@@ -195,6 +207,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec!["ollama:/root/.ollama".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "API at http://localhost:11434. Pull a model: curl http://localhost:11434/api/pull -d '{\"name\": \"llama3\"}'".to_string(),
         },
         // Development Tools
@@ -209,6 +222,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["GITLAB_ROOT_PASSWORD=changeme".to_string()],
             default_volumes: vec!["gitlab-config:/etc/gitlab".to_string(), "gitlab-logs:/var/log/gitlab".to_string(), "gitlab-data:/var/opt/gitlab".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Access at http://localhost:8080. Login with root/changeme. First start takes several minutes.".to_string(),
         },
         AppTemplate {
@@ -222,6 +236,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec![],
             default_volumes: vec!["gitea-data:/data".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Setup wizard at http://localhost:3000".to_string(),
         },
         // Message Queues
@@ -236,6 +251,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["RABBITMQ_DEFAULT_USER=admin".to_string(), "RABBITMQ_DEFAULT_PASS=changeme".to_string()],
             default_volumes: vec!["rabbitmq-data:/var/lib/rabbitmq".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Management UI at http://localhost:15672 (admin/changeme)".to_string(),
         },
         // Search
@@ -250,6 +266,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["discovery.type=single-node".to_string(), "xpack.security.enabled=false".to_string(), "ES_JAVA_OPTS=-Xms512m -Xmx512m".to_string()],
             default_volumes: vec!["es-data:/usr/share/elasticsearch/data".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "API at http://localhost:9200".to_string(),
         },
         // AI Assistants
@@ -271,6 +288,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
                 "openclaw-workspace:/home/node/.openclaw/workspace".to_string(),
             ],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Gateway UI at http://localhost:18789. Enter the OPENCLAW_GATEWAY_TOKEN value in Settings to authenticate. Configure your AI provider API keys and messaging channels from the web interface.".to_string(),
         },
         // More Databases
@@ -285,7 +303,49 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_env: vec!["MARIADB_ROOT_PASSWORD=changeme".to_string(), "MARIADB_DATABASE=mydb".to_string()],
             default_volumes: vec!["mariadb-data:/var/lib/mysql".to_string()],
             restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
             notes: "Connect with: mariadb -h 127.0.0.1 -u root -p".to_string(),
         },
-    ]
+    ];
+    for t in &mut templates {
+        t.is_builtin = true;
+    }
+    templates
+}
+
+/// Path to user templates JSON file.
+fn user_templates_path() -> std::path::PathBuf {
+    let config_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    config_dir.join("orca").join("templates.json")
+}
+
+/// Load user-defined templates from disk.
+pub fn load_user_templates() -> Vec<AppTemplate> {
+    let path = user_templates_path();
+    if !path.exists() {
+        return vec![];
+    }
+    match std::fs::read_to_string(&path) {
+        Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
+        Err(_) => vec![],
+    }
+}
+
+/// Save user-defined templates to disk.
+pub fn save_user_templates(templates: &[AppTemplate]) -> anyhow::Result<()> {
+    let path = user_templates_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let data = serde_json::to_string_pretty(templates)?;
+    std::fs::write(&path, data)?;
+    Ok(())
+}
+
+/// Get all templates (builtins + user-defined).
+pub fn all_templates() -> Vec<AppTemplate> {
+    let mut templates = builtin_templates();
+    templates.extend(load_user_templates());
+    templates
 }

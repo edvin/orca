@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AppTemplate {
     pub id: String,
     pub name: String,
@@ -13,4 +13,7 @@ pub struct AppTemplate {
     pub default_volumes: Vec<String>,
     pub restart_policy: String,
     pub notes: String,
+    /// Whether this is a builtin template (read-only) or user-created.
+    #[serde(default)]
+    pub is_builtin: bool,
 }

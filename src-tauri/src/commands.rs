@@ -840,6 +840,31 @@ pub async fn deploy_template(
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+#[tauri::command]
+pub async fn save_user_template(template: serde_json::Value) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/templates/user"))
+        .json(&template)
+        .send()
+        .await
+        .map_err(|e| format!("Save failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn delete_user_template(id: String) -> Result<serde_json::Value, String> {
+    client()
+        .delete(format!("{DAEMON_URL}/templates/user?id={id}"))
+        .send()
+        .await
+        .map_err(|e| format!("Delete failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
 // --- AI Assistant ---
 
 #[tauri::command]

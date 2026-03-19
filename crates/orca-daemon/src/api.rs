@@ -171,6 +171,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/system/health", get(system_health))
         // Templates
         .route("/templates", get(list_templates))
+        .route("/templates/user", post(save_user_template).delete(delete_user_template))
         .route("/templates/{id}/deploy", post(deploy_template))
         // AI
         .route("/ai/ask", post(ai_ask))
@@ -1581,7 +1582,41 @@ async fn system_health(
 // --- Templates ---
 
 async fn list_templates() -> Json<Vec<orca_core::templates::AppTemplate>> {
-    Json(orca_backend_common::templates::builtin_templates())
+    Json(orca_backend_common::templates::all_templates())
+}
+
+async fn save_user_template(
+    Json(template): Json<orca_core::templates::AppTemplate>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut user_templates = orca_backend_common::templates::load_user_templates();
+    // Update existing or add new
+    if let Some(existing) = user_templates.iter_mut().find(|t| t.id == template.id) {
+        *existing = template;
+    } else {
+        let mut t = template;
+        t.is_builtin = false;
+        user_templates.push(t);
+    }
+    orca_backend_common::templates::save_user_templates(&user_templates)?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct DeleteTemplateParams {
+    id: String,
+}
+
+async fn delete_user_template(
+    Query(params): Query<DeleteTemplateParams>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut user_templates = orca_backend_common::templates::load_user_templates();
+    let before = user_templates.len();
+    user_templates.retain(|t| t.id != params.id);
+    if user_templates.len() == before {
+        return Err(anyhow::anyhow!("User template '{}' not found", params.id).into());
+    }
+    orca_backend_common::templates::save_user_templates(&user_templates)?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]
@@ -1603,7 +1638,7 @@ async fn deploy_template(
 ) -> Result<impl IntoResponse, ApiError> {
     use orca_core::runtime::ContainerCreateOpts;
 
-    let templates = orca_backend_common::templates::builtin_templates();
+    let templates = orca_backend_common::templates::all_templates();
     let template = templates
         .iter()
         .find(|t| t.id == id)

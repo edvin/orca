@@ -77,6 +77,8 @@ pub fn run() {
             commands::env_fix,
             commands::list_templates,
             commands::deploy_template,
+            commands::save_user_template,
+            commands::delete_user_template,
             commands::ai_ask,
             commands::get_general_settings,
             commands::save_general_settings,
