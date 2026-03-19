@@ -110,8 +110,9 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # Skip macOS code signing (no Apple Developer cert in CI)
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          APPLE_SIGNING_IDENTITY: ""
+          APPLE_SIGNING_IDENTITY: "-"
         run: cargo tauri build --target ${{ matrix.platform.target }}
 
       - name: Upload release artifacts
