@@ -167,6 +167,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Environment
         .route("/environment/status", get(env_status))
         .route("/environment/fix", post(env_fix))
+        .route("/environment/fix-stream", post(env_fix_stream))
         // System health
         .route("/system/health", get(system_health))
         // Templates
@@ -1557,6 +1558,30 @@ async fn env_fix(
 ) -> Result<impl IntoResponse, ApiError> {
     let output = orca_backend_common::environment::run_fix(&body.action).await?;
     Ok(Json(serde_json::json!({ "output": output })))
+}
+
+async fn env_fix_stream(
+    Json(body): Json<FixRequest>,
+) -> impl IntoResponse {
+    use axum::response::sse::{Event, Sse};
+    use tokio_stream::wrappers::ReceiverStream;
+    use futures::StreamExt;
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<String>(100);
+    let action = body.action.clone();
+
+    tokio::spawn(async move {
+        match orca_backend_common::environment::run_fix_streaming(&action, tx.clone()).await {
+            Ok(_) => { let _ = tx.send("[DONE]".into()).await; }
+            Err(e) => { let _ = tx.send(format!("[ERROR] {e}")).await; }
+        }
+    });
+
+    let stream = ReceiverStream::new(rx).map(|line| {
+        Ok::<_, std::convert::Infallible>(Event::default().data(line))
+    });
+
+    Sse::new(stream)
 }
 
 // --- System Health ---

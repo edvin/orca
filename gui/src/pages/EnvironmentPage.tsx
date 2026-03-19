@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from "solid-js";
+import { createSignal, createEffect, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { EnvironmentStatus, HealthCheck } from "../lib/types";
 import { showToast } from "../components/Toast";
@@ -14,6 +14,13 @@ export default function EnvironmentPage() {
   const [actionLog, setActionLog] = createSignal("");
   const [actionSuccess, setActionSuccess] = createSignal<boolean | null>(null);
   let mouseDownOnOverlay = false;
+  let logRef: HTMLPreElement | undefined;
+
+  // Auto-scroll log to bottom when content changes
+  createEffect(() => {
+    actionLog(); // track dependency
+    if (logRef) logRef.scrollTop = logRef.scrollHeight;
+  });
 
   const refresh = async () => {
     setLoading(true);
@@ -28,22 +35,71 @@ export default function EnvironmentPage() {
   };
 
   const runFix = async (action: string, checkName: string) => {
-    // Open dialog immediately
     setActionName(checkName);
-    setActionLog(`Running ${action}...\nThis may take a few minutes.\n\n`);
+    setActionLog("");
     setActionRunning(true);
     setActionSuccess(null);
     setActionDialogOpen(true);
 
     try {
-      const result = (await invoke("env_fix", { action })) as { output: string };
-      const output = result.output || "(no output from command)";
-      setActionLog((prev) => prev + output);
-      setActionSuccess(true);
+      // Get API token for auth
+      let token = "";
+      try { token = await invoke("get_api_token") as string; } catch { /* no token */ }
+
+      // Use SSE streaming endpoint for real-time output
+      const resp = await fetch("http://127.0.0.1:9477/api/v1/environment/fix-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+      }
+
+      const reader = resp.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        let done = false;
+        let success = true;
+        while (!done) {
+          const { value, done: streamDone } = await reader.read();
+          done = streamDone;
+          if (value) {
+            const text = decoder.decode(value, { stream: !done });
+            // Parse SSE format: "data: ...\n\n"
+            for (const line of text.split("\n")) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") {
+                  done = true;
+                } else if (data.startsWith("[ERROR]")) {
+                  setActionLog((prev) => prev + "\n" + data.slice(8) + "\n");
+                  success = false;
+                  done = true;
+                } else {
+                  setActionLog((prev) => prev + data + "\n");
+                }
+              }
+            }
+          }
+        }
+        setActionSuccess(success);
+      }
     } catch (e) {
-      const error = String(e);
-      setActionLog((prev) => prev + `\nError:\n${error}`);
-      setActionSuccess(false);
+      // Fallback to non-streaming endpoint
+      try {
+        const result = (await invoke("env_fix", { action })) as { output: string };
+        setActionLog(result.output || "(no output)");
+        setActionSuccess(true);
+      } catch (e2) {
+        setActionLog((prev) => prev + `\nError: ${e2}\n`);
+        setActionSuccess(false);
+      }
     } finally {
       setActionRunning(false);
     }
@@ -135,7 +191,7 @@ export default function EnvironmentPage() {
                       Environment Ready
                     </div>
                     <div style={{ "font-size": "13px", color: "var(--text-muted)", "margin-top": "2px" }}>
-                      Platform: {platformLabel(s().platform)} {"\u2014"} Suggested runtime: {s().suggested_runtime}
+                      Platform: {platformLabel(s().platform)} {"\u2014"} Runtime: {s().suggested_runtime}
                     </div>
                   </div>
                 </div>
@@ -324,12 +380,12 @@ export default function EnvironmentPage() {
                 "min-height": "120px",
                 overflow: "auto",
                 background: "#0d1117",
-              }}>{actionLog()}</pre>
+              }} ref={logRef}>{actionLog()}</pre>
             </div>
             <div class="modal-footer">
               <Show when={!actionRunning()}>
                 <button class="btn btn-primary" onClick={closeActionDialog}>
-                  Close & Re-check
+                  Close
                 </button>
               </Show>
               <Show when={actionRunning()}>

@@ -102,6 +102,162 @@ async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Run a command and stream its output line by line to a sender.
+/// Returns the exit status.
+pub async fn run_cmd_streaming(
+    program: &str,
+    args: &[&str],
+    tx: &tokio::sync::mpsc::Sender<String>,
+) -> Result<(), String> {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let mut cmd = Command::new(program);
+    cmd.args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let extended = format!(
+        "/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/sbin:{}",
+        current_path
+    );
+    cmd.env("PATH", &extended);
+
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+
+    // Drop stdin so the child sees EOF
+    drop(child.stdin.take());
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    // Read stdout and stderr concurrently, sending lines as they come
+    let tx2 = tx.clone();
+    let stdout_task = tokio::spawn(async move {
+        if let Some(out) = stdout {
+            let mut reader = BufReader::new(out).lines();
+            while let Ok(Some(line)) = reader.next_line().await {
+                let _ = tx2.send(line).await;
+            }
+        }
+    });
+
+    let tx3 = tx.clone();
+    let stderr_task = tokio::spawn(async move {
+        if let Some(err) = stderr {
+            let mut reader = BufReader::new(err).lines();
+            while let Ok(Some(line)) = reader.next_line().await {
+                let _ = tx3.send(line).await;
+            }
+        }
+    });
+
+    let _ = stdout_task.await;
+    let _ = stderr_task.await;
+
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("exit code {}", status.code().unwrap_or(-1)))
+    }
+}
+
+/// Run a fix action with streaming output to a sender.
+pub async fn run_fix_streaming(
+    action: &str,
+    tx: tokio::sync::mpsc::Sender<String>,
+) -> anyhow::Result<()> {
+    let send = |msg: String| {
+        let tx = tx.clone();
+        async move { let _ = tx.send(msg).await; }
+    };
+
+    match action {
+        "install_docker" => {
+            #[cfg(target_os = "windows")]
+            {
+                send(">>> Checking WSL status...".into()).await;
+                if let Ok(v) = run_cmd("wsl", &["--version"]).await {
+                    for line in v.lines() { send(line.to_string()).await; }
+                }
+
+                send("\n>>> Probing WSL...".into()).await;
+                let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"]).await
+                    .map_err(|e| anyhow::anyhow!("WSL not available: {e}"))?;
+                if !probe.contains("wsl-ok") {
+                    anyhow::bail!("No WSL distro found. Install Ubuntu from the Microsoft Store.");
+                }
+                send("WSL is ready.\n".into()).await;
+
+                // Check if Docker is already installed
+                send(">>> Checking for existing Docker installation...".into()).await;
+                if let Ok(v) = run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
+                    send(format!("Docker found: {v}")).await;
+                    send(">>> Starting Docker service...".into()).await;
+                    let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                        "mkdir -p /etc/docker && \
+                         if ! grep -q '2375' /etc/docker/daemon.json 2>/dev/null; then \
+                           echo '{\"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://0.0.0.0:2375\"]}' > /etc/docker/daemon.json; \
+                         fi"
+                    ]).await;
+                    let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await;
+                    send("Docker started.".into()).await;
+                    return Ok(());
+                }
+
+                send("Docker not installed. Running install script...\n".into()).await;
+
+                // Stop existing daemon
+                let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "stop"]).await;
+
+                // Stream the install script
+                send(">>> Downloading and running Docker install script...".into()).await;
+                send("    (this will take a minute or two)\n".into()).await;
+                run_cmd_streaming("wsl", &["-u", "root", "--", "bash", "-c",
+                    "curl -fsSL https://get.docker.com | sh"
+                ], &tx).await.map_err(|e| anyhow::anyhow!("Install failed: {e}"))?;
+
+                send("\n>>> Adding user to docker group...".into()).await;
+                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                    "DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && usermod -aG docker \"$DEFAULT_USER\""
+                ]).await;
+
+                send(">>> Configuring TCP listener...".into()).await;
+                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                    "mkdir -p /etc/docker && echo '{\"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://0.0.0.0:2375\"]}' > /etc/docker/daemon.json"
+                ]).await;
+
+                send(">>> Starting Docker service...".into()).await;
+                let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await;
+
+                send(">>> Verifying...".into()).await;
+                match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
+                    Ok(v) => send(format!("{v}\n\nDocker installed successfully!")).await,
+                    Err(e) => send(format!("Verification failed: {e}")).await,
+                }
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                send(">>> Running Docker install script...".into()).await;
+                run_cmd_streaming("sh", &["-c", "curl -fsSL https://get.docker.com | sh"], &tx)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Install failed: {e}"))?;
+                send("\nDocker installed successfully!".into()).await;
+            }
+        }
+        // For all other actions, fall back to non-streaming run_fix
+        _ => {
+            send(format!("Running {action}...")).await;
+            let output = super::environment::run_fix(action).await?;
+            send(output).await;
+        }
+    }
+    Ok(())
+}
+
 /// Decode command output, handling UTF-16LE (common from Windows CLI tools like wsl.exe).
 fn decode_output(bytes: &[u8]) -> String {
     // Check for UTF-16LE BOM (FF FE) or null bytes interleaved with ASCII
