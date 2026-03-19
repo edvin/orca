@@ -1,6 +1,5 @@
 use tauri::{
     AppHandle, Manager,
-    image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
@@ -13,14 +12,9 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let menu = Menu::with_items(app, &[&show, &hide, &separator, &quit])?;
 
-    // Use dedicated tray icon with transparent background
-    let tray_icon = Image::from_path("icons/tray-32x32.png")
-        .or_else(|_| Image::from_path("src-tauri/icons/tray-32x32.png"))
-        .unwrap_or_else(|_| app.default_window_icon().cloned().expect("no icon"));
-
     let _tray = TrayIconBuilder::new()
         .tooltip("Orca — Container Desktop")
-        .icon(tray_icon)
+        .icon(app.default_window_icon().cloned().expect("no window icon"))
         .icon_as_template(true)
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
