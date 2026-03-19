@@ -102,93 +102,171 @@ export default function EnvironmentPage() {
       >
         {(s) => (
           <div style={{ "max-width": "720px" }}>
-            {/* Status Banner */}
-            <div
-              class="card"
-              style={{
-                "border-left": `4px solid ${s().ready ? "#3fb950" : "#f85149"}`,
-                "margin-bottom": "20px",
-              }}
-            >
+            {/* Ready banner */}
+            <Show when={s().ready}>
               <div
+                class="card"
                 style={{
-                  display: "flex",
-                  "align-items": "center",
-                  gap: "12px",
+                  "border-left": "4px solid #3fb950",
+                  "margin-bottom": "20px",
                 }}
               >
-                <span
+                <div
                   style={{
-                    "font-size": "28px",
-                    color: s().ready ? "#3fb950" : "#f85149",
-                    "line-height": "1",
+                    display: "flex",
+                    "align-items": "center",
+                    gap: "12px",
                   }}
                 >
-                  {s().ready ? "\u2713" : "\u26A0"}
-                </span>
-                <div>
-                  <div
+                  <span
                     style={{
-                      "font-size": "18px",
-                      "font-weight": "600",
-                      color: s().ready ? "#3fb950" : "#f85149",
+                      "font-size": "28px",
+                      color: "#3fb950",
+                      "line-height": "1",
                     }}
                   >
-                    {s().ready ? "Environment Ready" : "Setup Required"}
-                  </div>
-                  <div
-                    style={{
-                      "font-size": "13px",
-                      color: "var(--text-muted)",
-                      "margin-top": "2px",
-                    }}
-                  >
-                    Platform: {platformLabel(s().platform)}
-                    {s().ready
-                      ? ` \u2014 Suggested runtime: ${s().suggested_runtime}`
-                      : " \u2014 Install a container runtime to get started"}
+                    {"\u2713"}
+                  </span>
+                  <div>
+                    <div
+                      style={{
+                        "font-size": "18px",
+                        "font-weight": "600",
+                        color: "#3fb950",
+                      }}
+                    >
+                      Environment Ready
+                    </div>
+                    <div
+                      style={{
+                        "font-size": "13px",
+                        color: "var(--text-muted)",
+                        "margin-top": "2px",
+                      }}
+                    >
+                      Platform: {platformLabel(s().platform)} {"\u2014"} Suggested runtime: {s().suggested_runtime}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </Show>
 
-            {/* Quick action for non-ready state */}
+            {/* Welcome / Setup wizard for new users */}
             <Show when={!s().ready}>
-              <div class="card" style={{
-                "border-left": "4px solid #58a6ff",
-                "margin-bottom": "20px",
-                padding: "20px",
+              <div style={{
+                "margin-bottom": "24px",
+                background: "linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%)",
+                border: "1px solid rgba(88, 166, 255, 0.2)",
+                "border-radius": "12px",
+                padding: "32px",
               }}>
-                <div style={{ "font-weight": "600", "margin-bottom": "8px" }}>
-                  Get started
+                <div style={{
+                  "font-size": "24px",
+                  "font-weight": "700",
+                  "margin-bottom": "8px",
+                  color: "var(--text-primary)",
+                }}>
+                  Welcome to Orca
                 </div>
-                <div style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px" }}>
+                <div style={{
+                  "font-size": "14px",
+                  color: "var(--text-muted)",
+                  "margin-bottom": "24px",
+                  "line-height": "1.5",
+                }}>
                   {s().platform === "macos"
-                    ? "Orca needs Docker Desktop or Docker via Lima to manage containers on macOS."
+                    ? "Orca needs a container runtime to manage your containers. We'll help you set up Docker via Lima or Docker Desktop on macOS."
                     : s().platform === "windows"
-                    ? "Orca needs WSL2 with Docker installed to manage containers on Windows."
-                    : "Orca needs Docker or Podman to manage containers."}
+                    ? "Orca needs Docker running inside WSL2 to manage containers on Windows. Let's get that set up."
+                    : "Orca needs a container runtime to get started. We can install Docker or Podman for you."}
                 </div>
-                <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-                  <For each={s().checks.filter(c => c.fix_action && c.status !== "Pass")}>
-                    {(check) => (
-                      <button
-                        class="btn btn-primary"
-                        disabled={fixingAction() === check.fix_action}
-                        onClick={() => runFix(check.fix_action!)}
-                      >
-                        {fixingAction() === check.fix_action
-                          ? "Installing..."
-                          : `Install ${check.name}`}
-                      </button>
+
+                {/* Setup steps */}
+                <div style={{
+                  display: "flex",
+                  "flex-direction": "column",
+                  gap: "12px",
+                }}>
+                  <For each={s().checks}>
+                    {(check, i) => (
+                      <div style={{
+                        display: "flex",
+                        "align-items": "center",
+                        gap: "14px",
+                        padding: "14px 16px",
+                        background: "rgba(0, 0, 0, 0.2)",
+                        "border-radius": "8px",
+                        border: `1px solid ${check.status === "Pass" ? "rgba(63, 185, 80, 0.3)" : "rgba(255, 255, 255, 0.06)"}`,
+                      }}>
+                        {/* Step number / check indicator */}
+                        <div style={{
+                          width: "28px",
+                          height: "28px",
+                          "border-radius": "50%",
+                          display: "flex",
+                          "align-items": "center",
+                          "justify-content": "center",
+                          "font-size": "13px",
+                          "font-weight": "600",
+                          "flex-shrink": "0",
+                          background: check.status === "Pass" ? "#3fb950" : "rgba(255, 255, 255, 0.08)",
+                          color: check.status === "Pass" ? "#fff" : "var(--text-muted)",
+                        }}>
+                          {check.status === "Pass" ? "\u2713" : i() + 1}
+                        </div>
+
+                        {/* Step description */}
+                        <div style={{ flex: "1", "min-width": "0" }}>
+                          <div style={{
+                            "font-weight": "600",
+                            "font-size": "14px",
+                            color: check.status === "Pass" ? "#3fb950" : "var(--text-primary)",
+                          }}>
+                            {check.name}
+                          </div>
+                          <div style={{
+                            "font-size": "12px",
+                            color: "var(--text-muted)",
+                            "margin-top": "2px",
+                          }}>
+                            {check.status === "Pass" ? check.details || check.description : check.description}
+                          </div>
+                        </div>
+
+                        {/* Action button */}
+                        <Show when={check.fix_action && check.status !== "Pass"}>
+                          <button
+                            class="btn btn-primary"
+                            disabled={fixingAction() === check.fix_action}
+                            onClick={() => runFix(check.fix_action!)}
+                            style={{ "flex-shrink": "0" }}
+                          >
+                            {fixingAction() === check.fix_action
+                              ? "Installing..."
+                              : `Install`}
+                          </button>
+                        </Show>
+                        <Show when={check.status === "Pass"}>
+                          <span style={{ color: "#3fb950", "font-size": "12px", "font-weight": "600", "flex-shrink": "0" }}>
+                            Done
+                          </span>
+                        </Show>
+                      </div>
                     )}
                   </For>
-                  <Show when={s().checks.filter(c => c.fix_action && c.status !== "Pass").length === 0}>
-                    <div style={{ "font-size": "13px", color: "#8b949e" }}>
-                      Install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" style={{ color: "#58a6ff" }}>Docker Desktop</a> or a container runtime manually, then click Re-check.
-                    </div>
-                  </Show>
                 </div>
+
+                {/* Manual install fallback */}
+                <Show when={s().checks.filter(c => c.fix_action && c.status !== "Pass").length === 0 && !s().ready}>
+                  <div style={{
+                    "margin-top": "16px",
+                    "font-size": "13px",
+                    color: "var(--text-muted)",
+                    "text-align": "center",
+                  }}>
+                    Or install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" style={{ color: "#58a6ff" }}>Docker Desktop</a> manually, then click Re-check.
+                  </div>
+                </Show>
               </div>
             </Show>
 
@@ -211,103 +289,105 @@ export default function EnvironmentPage() {
               </div>
             </Show>
 
-            {/* Health Checks */}
-            <div
-              style={{
-                display: "flex",
-                "flex-direction": "column",
-                gap: "8px",
-              }}
-            >
-              <For each={s().checks}>
-                {(check) => (
-                  <div
-                    class="card"
-                    style={{
-                      "border-left": `4px solid ${statusColor(check)}`,
-                    }}
-                  >
+            {/* Health Checks — shown only when environment is ready */}
+            <Show when={s().ready}>
+              <div
+                style={{
+                  display: "flex",
+                  "flex-direction": "column",
+                  gap: "8px",
+                }}
+              >
+                <For each={s().checks}>
+                  {(check) => (
                     <div
+                      class="card"
                       style={{
-                        display: "flex",
-                        "align-items": "flex-start",
-                        "justify-content": "space-between",
-                        gap: "12px",
+                        "border-left": `4px solid ${statusColor(check)}`,
                       }}
                     >
                       <div
                         style={{
                           display: "flex",
                           "align-items": "flex-start",
-                          gap: "10px",
-                          flex: "1",
+                          "justify-content": "space-between",
+                          gap: "12px",
                         }}
                       >
-                        <span
+                        <div
                           style={{
-                            color: statusColor(check),
-                            "font-size": "16px",
-                            "line-height": "1.4",
-                            "flex-shrink": "0",
+                            display: "flex",
+                            "align-items": "flex-start",
+                            gap: "10px",
+                            flex: "1",
                           }}
                         >
-                          {statusIcon(check)}
-                        </span>
-                        <div>
-                          <div
+                          <span
                             style={{
-                              "font-weight": "600",
-                              "font-size": "14px",
+                              color: statusColor(check),
+                              "font-size": "16px",
+                              "line-height": "1.4",
+                              "flex-shrink": "0",
                             }}
                           >
-                            {check.name}
-                          </div>
-                          <div
-                            style={{
-                              "font-size": "12px",
-                              color: "var(--text-muted)",
-                              "margin-top": "2px",
-                            }}
-                          >
-                            {check.description}
-                          </div>
-                          <Show when={check.details}>
+                            {statusIcon(check)}
+                          </span>
+                          <div>
+                            <div
+                              style={{
+                                "font-weight": "600",
+                                "font-size": "14px",
+                              }}
+                            >
+                              {check.name}
+                            </div>
                             <div
                               style={{
                                 "font-size": "12px",
                                 color: "var(--text-muted)",
-                                "margin-top": "4px",
-                                "font-family": "monospace",
-                                opacity: "0.8",
+                                "margin-top": "2px",
                               }}
                             >
-                              {check.details}
+                              {check.description}
                             </div>
-                          </Show>
+                            <Show when={check.details}>
+                              <div
+                                style={{
+                                  "font-size": "12px",
+                                  color: "var(--text-muted)",
+                                  "margin-top": "4px",
+                                  "font-family": "monospace",
+                                  opacity: "0.8",
+                                }}
+                              >
+                                {check.details}
+                              </div>
+                            </Show>
+                          </div>
                         </div>
-                      </div>
 
-                      <Show
-                        when={
-                          check.fix_action && check.status !== "Pass"
-                        }
-                      >
-                        <button
-                          class="btn btn-sm"
-                          disabled={fixingAction() === check.fix_action}
-                          onClick={() => runFix(check.fix_action!)}
-                          style={{ "flex-shrink": "0" }}
+                        <Show
+                          when={
+                            check.fix_action && check.status !== "Pass"
+                          }
                         >
-                          {fixingAction() === check.fix_action
-                            ? "Installing..."
-                            : "Install"}
-                        </button>
-                      </Show>
+                          <button
+                            class="btn btn-sm"
+                            disabled={fixingAction() === check.fix_action}
+                            onClick={() => runFix(check.fix_action!)}
+                            style={{ "flex-shrink": "0" }}
+                          >
+                            {fixingAction() === check.fix_action
+                              ? "Installing..."
+                              : "Install"}
+                          </button>
+                        </Show>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </For>
-            </div>
+                  )}
+                </For>
+              </div>
+            </Show>
 
             {/* Fix action log */}
             <Show when={fixLog()}>
