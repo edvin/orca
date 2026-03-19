@@ -7,6 +7,8 @@ import RunContainerDialog from "../components/RunContainerDialog";
 import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
 import LastUpdated from "../components/LastUpdated";
+import SortableHeader from "../components/SortableHeader";
+import { useSort } from "../lib/useSort";
 
 export default function ImagesPage() {
   const [images, setImages] = createSignal<Image[]>([]);
@@ -31,6 +33,7 @@ export default function ImagesPage() {
   const [searching, setSearching] = createSignal(false);
   const [showSearchDropdown, setShowSearchDropdown] = createSignal(false);
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
+  const { sortField, sortDir, toggleSort, sortFn } = useSort<Image>("tag");
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   const refresh = async () => {
@@ -78,12 +81,22 @@ export default function ImagesPage() {
 
   const filtered = () => {
     const q = search().toLowerCase();
-    if (!q) return images();
-    return images().filter(
-      (img) =>
-        img.repo_tags.some((t) => t.toLowerCase().includes(q)) ||
-        img.id.includes(q)
-    );
+    let list = images();
+    if (q) {
+      list = list.filter(
+        (img) =>
+          img.repo_tags.some((t) => t.toLowerCase().includes(q)) ||
+          img.id.includes(q)
+      );
+    }
+    return sortFn(list, (item, field) => {
+      switch (field) {
+        case "tag": return item.repo_tags[0] || "";
+        case "size": return item.size_bytes;
+        case "created": return item.created_at;
+        default: return "";
+      }
+    });
   };
 
   const toggleSelect = (id: string, e: MouseEvent) => {
@@ -484,10 +497,10 @@ export default function ImagesPage() {
                   style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
                 />
               </th>
-              <th>Repository / Tag</th>
+              <SortableHeader label="Repository / Tag" field="tag" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th>ID</th>
-              <th>Size</th>
-              <th>Created</th>
+              <SortableHeader label="Size" field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th style={{ "text-align": "right" }}>Actions</th>
             </tr>
           </thead>

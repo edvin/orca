@@ -4,6 +4,8 @@ import type { Volume } from "../lib/types";
 import { formatTimestamp } from "../lib/format";
 import { showToast } from "../components/Toast";
 import CopyButton from "../components/CopyButton";
+import SortableHeader from "../components/SortableHeader";
+import { useSort } from "../lib/useSort";
 
 export default function VolumesPage() {
   const [volumes, setVolumes] = createSignal<Volume[]>([]);
@@ -13,6 +15,7 @@ export default function VolumesPage() {
   const [createDriver, setCreateDriver] = createSignal("local");
   const [createLabels, setCreateLabels] = createSignal("");
   const [creating, setCreating] = createSignal(false);
+  const { sortField, sortDir, toggleSort, sortFn } = useSort<Volume>("name");
 
   const refresh = async () => {
     try {
@@ -24,6 +27,17 @@ export default function VolumesPage() {
   };
 
   onMount(refresh);
+
+  const sorted = () => {
+    return sortFn(volumes(), (item, field) => {
+      switch (field) {
+        case "name": return item.name;
+        case "driver": return item.driver;
+        case "created": return item.created_at;
+        default: return "";
+      }
+    });
+  };
 
   const removeVolume = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
@@ -79,14 +93,14 @@ export default function VolumesPage() {
         <table class="table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Driver</th>
-              <th>Created</th>
+              <SortableHeader label="Name" field="name" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <SortableHeader label="Driver" field="driver" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th style={{ "text-align": "right" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            <For each={volumes()}>
+            <For each={sorted()}>
               {(v) => (
                 <>
                   <tr onClick={() => setSelected(selected() === v.name ? null : v.name)} style={{ cursor: "pointer" }}>

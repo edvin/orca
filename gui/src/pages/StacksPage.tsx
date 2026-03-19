@@ -175,15 +175,19 @@ export default function StacksPage() {
         )}
       </Show>
 
-      {/* Log Viewer */}
+      {/* Log Viewer — modal overlay so it doesn't shift content */}
       <Show when={logsFor()}>
         {(lf) => (
-          <div style={{ "margin-bottom": "16px" }}>
-            <LogViewer
-              containerId={lf().id}
-              containerName={lf().name}
-              onClose={() => setLogsFor(null)}
-            />
+          <div class="modal-overlay" onClick={(e) => {
+            if ((e.target as HTMLElement).classList.contains("modal-overlay")) setLogsFor(null);
+          }}>
+            <div style={{ width: "80vw", "max-width": "900px", height: "70vh" }}>
+              <LogViewer
+                containerId={lf().id}
+                containerName={lf().name}
+                onClose={() => setLogsFor(null)}
+              />
+            </div>
           </div>
         )}
       </Show>

@@ -577,14 +577,35 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
 
 /// Check if Docker/Podman is currently reachable.
 pub async fn check_docker_connection() -> bool {
+    // First try via the extended PATH
     let cli = detect_cli().await;
-    Command::new(cli)
-        .args(["info"])
+    let mut cmd = Command::new(cli);
+    cmd.args(["info"])
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await
-        .is_ok_and(|s| s.success())
+        .stderr(Stdio::null());
+    let path = extended_path();
+    cmd.env("PATH", &path);
+
+    if cmd.status().await.is_ok_and(|s| s.success()) {
+        return true;
+    }
+
+    // Fallback: try connecting directly to the Docker socket
+    // This works even when the CLI isn't in PATH
+    let sock = std::path::Path::new("/var/run/docker.sock");
+    if sock.exists() {
+        return true;
+    }
+
+    // Check macOS Docker Desktop socket
+    if let Some(home) = dirs::home_dir() {
+        let desktop_sock = home.join(".docker/run/docker.sock");
+        if desktop_sock.exists() {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// JSON shape returned by `docker system df --format '{{json .}}'`.

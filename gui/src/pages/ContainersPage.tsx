@@ -11,7 +11,9 @@ import Spinner from "../components/Spinner";
 import ResourceBar from "../components/ResourceBar";
 import Sparkline from "../components/Sparkline";
 import LastUpdated from "../components/LastUpdated";
+import SortableHeader from "../components/SortableHeader";
 import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
+import { useSort } from "../lib/useSort";
 import { copyToClipboard } from "../lib/clipboard";
 
 interface ContainersPageProps {
@@ -34,6 +36,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [showRunDialog, setShowRunDialog] = createSignal(false);
   // Inline stats for all running containers, keyed by container ID
   const [inlineStats, setInlineStats] = createSignal<Record<string, ContainerStats>>({});
+  const { sortField, sortDir, toggleSort, sortFn } = useSort<Container>("name");
 
   const refresh = async () => {
     try {
@@ -114,13 +117,23 @@ export default function ContainersPage(props: ContainersPageProps) {
       list = list.filter((c) => c.state !== "Running");
     }
     const q = search().toLowerCase();
-    if (!q) return list;
-    return list.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.image.toLowerCase().includes(q) ||
-        c.id.includes(q)
-    );
+    if (q) {
+      list = list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.image.toLowerCase().includes(q) ||
+          c.id.includes(q)
+      );
+    }
+    return sortFn(list, (item, field) => {
+      switch (field) {
+        case "name": return item.name;
+        case "image": return item.image;
+        case "state": return item.state;
+        case "created": return item.created_at;
+        default: return "";
+      }
+    });
   };
 
   const runningCount = () => containers().filter((c) => c.state === "Running").length;
@@ -384,13 +397,13 @@ export default function ContainersPage(props: ContainersPageProps) {
                   style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
                 />
               </th>
-              <th>Name</th>
-              <th>Image</th>
-              <th>State</th>
+              <SortableHeader label="Name" field="name" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <SortableHeader label="Image" field="image" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <SortableHeader label="State" field="state" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th>CPU</th>
               <th>Memory</th>
               <th>Ports</th>
-              <th>Created</th>
+              <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th style={{ "text-align": "right" }}>Actions</th>
             </tr>
           </thead>

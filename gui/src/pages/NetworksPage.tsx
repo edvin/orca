@@ -2,6 +2,8 @@ import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Network } from "../lib/types";
 import { showToast } from "../components/Toast";
+import SortableHeader from "../components/SortableHeader";
+import { useSort } from "../lib/useSort";
 
 const DEFAULT_NETWORKS = ["bridge", "host", "none"];
 
@@ -11,6 +13,7 @@ export default function NetworksPage() {
   const [createName, setCreateName] = createSignal("");
   const [createDriver, setCreateDriver] = createSignal("bridge");
   const [creating, setCreating] = createSignal(false);
+  const { sortField, sortDir, toggleSort, sortFn } = useSort<Network>("name");
 
   const refresh = async () => {
     try {
@@ -65,6 +68,17 @@ export default function NetworksPage() {
 
   const isDefaultNetwork = (name: string) => DEFAULT_NETWORKS.includes(name);
 
+  const sorted = () => {
+    return sortFn(networks(), (item, field) => {
+      switch (field) {
+        case "name": return item.name;
+        case "driver": return item.driver;
+        case "subnet": return item.subnet || "";
+        default: return "";
+      }
+    });
+  };
+
   return (
     <div>
       <div class="page-header">
@@ -95,16 +109,16 @@ export default function NetworksPage() {
         <table class="table">
           <thead>
             <tr>
-              <th>Name</th>
+              <SortableHeader label="Name" field="name" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th>ID</th>
-              <th>Driver</th>
-              <th>Subnet</th>
+              <SortableHeader label="Driver" field="driver" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <SortableHeader label="Subnet" field="subnet" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th>Gateway</th>
               <th style={{ "text-align": "right" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            <For each={networks()}>
+            <For each={sorted()}>
               {(n) => (
                 <tr>
                   <td style={{ "font-weight": "500" }}>{n.name}</td>
