@@ -65,7 +65,6 @@ export default function App() {
       setEnvironmentChecked(true);
       if (!envStatus.ready) {
         setPage("environment");
-        showToast("Setup required — follow the steps to get started", "info");
       } else {
         const warnings = envStatus.checks.filter((c) => c.status === "Warning");
         if (warnings.length > 0) {
