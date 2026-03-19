@@ -96,10 +96,18 @@ export default function KubernetesPage() {
     setEnabling(true);
     try {
       await invoke("k8s_enable");
-      showToast("Kubernetes cluster enabled", "success");
-      await refreshStatus();
+      showToast("Kubernetes cluster enabling — this may take a minute", "info");
+      // Poll for readiness
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        await refreshStatus();
+        if (status()?.running) {
+          showToast("Kubernetes cluster is ready", "success");
+          break;
+        }
+      }
     } catch (e) {
-      showToast(`Failed to enable: ${e}`, "error");
+      showToast(`Failed to enable Kubernetes: ${e}`, "error");
     } finally {
       setEnabling(false);
     }
