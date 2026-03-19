@@ -67,19 +67,33 @@ fn num_cpus() -> u32 {
 }
 
 fn total_memory_mb() -> u64 {
-    // Read from /proc/meminfo on Linux
-    std::fs::read_to_string("/proc/meminfo")
-        .ok()
-        .and_then(|contents| {
-            contents
-                .lines()
-                .find(|l| l.starts_with("MemTotal:"))
-                .and_then(|line| {
-                    line.split_whitespace()
-                        .nth(1)
-                        .and_then(|kb| kb.parse::<u64>().ok())
-                })
-        })
-        .map(|kb| kb / 1024)
-        .unwrap_or(0)
+    // Linux: /proc/meminfo
+    if let Ok(contents) = std::fs::read_to_string("/proc/meminfo") {
+        if let Some(kb) = contents
+            .lines()
+            .find(|l| l.starts_with("MemTotal:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|kb| kb.parse::<u64>().ok())
+        {
+            return kb / 1024;
+        }
+    }
+
+    // Windows: use PowerShell
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command",
+                "(Get-CimInstance Win32_OperatingSystem).TotalVisibleMemorySize"])
+            .output()
+        {
+            if let Ok(s) = String::from_utf8(output.stdout) {
+                if let Ok(kb) = s.trim().parse::<u64>() {
+                    return kb / 1024;
+                }
+            }
+        }
+    }
+
+    0
 }

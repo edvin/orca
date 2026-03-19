@@ -1040,29 +1040,48 @@ pub async fn get_system_resources() -> Option<SystemResources> {
             Err(_) => total / 2, // rough fallback
         };
         (total, available)
-    } else {
-        // Fallback: try `free -b` (Linux only)
-        match run_cmd("free", &["-b"]).await {
+    } else if cfg!(target_os = "windows") {
+        // Windows: use PowerShell to query OS memory info
+        match run_cmd("powershell", &["-NoProfile", "-Command",
+            "Get-CimInstance Win32_OperatingSystem | ForEach-Object { \"$($_.TotalVisibleMemorySize) $($_.FreePhysicalMemory)\" }"
+        ]).await {
             Ok(output) => {
-                let mut total = 0u64;
-                let mut available = 0u64;
-                for line in output.lines() {
-                    if line.starts_with("Mem:") {
-                        let parts: Vec<&str> = line.split_whitespace().collect();
-                        if parts.len() >= 7 {
-                            total = parts[1].parse().unwrap_or(0);
-                            available = parts[6].parse().unwrap_or(0);
-                        }
-                    }
+                let parts: Vec<&str> = output.trim().split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let total_kb = parts[0].parse::<u64>().unwrap_or(0);
+                    let free_kb = parts[1].parse::<u64>().unwrap_or(0);
+                    (total_kb * 1024, free_kb * 1024)
+                } else {
+                    (0, 0)
                 }
-                (total, available)
             }
             Err(_) => (0, 0),
         }
+    } else {
+        (0, 0)
     };
 
-    // Disk usage: use `df -k` (works on both Linux and macOS)
-    let (disk_total, disk_free) = match run_cmd("df", &["-k", "/"]).await {
+    // Disk usage
+    let (disk_total, disk_free) = if cfg!(target_os = "windows") {
+        // Windows: use PowerShell to get disk info for C:
+        match run_cmd("powershell", &["-NoProfile", "-Command",
+            "Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='C:'\" | ForEach-Object { \"$($_.Size) $($_.FreeSpace)\" }"
+        ]).await {
+            Ok(output) => {
+                let parts: Vec<&str> = output.trim().split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let total = parts[0].parse::<u64>().unwrap_or(0);
+                    let free = parts[1].parse::<u64>().unwrap_or(0);
+                    (total, free)
+                } else {
+                    (0, 0)
+                }
+            }
+            Err(_) => (0, 0),
+        }
+    } else {
+        // Linux/macOS: use df -k
+        match run_cmd("df", &["-k", "/"]).await {
         Ok(output) => {
             let mut total = 0u64;
             let mut free = 0u64;
@@ -1078,6 +1097,7 @@ pub async fn get_system_resources() -> Option<SystemResources> {
             (total, free)
         }
         Err(_) => (0, 0),
+    }
     };
 
     let disk_usage_percent = if disk_total > 0 {
