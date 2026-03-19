@@ -232,6 +232,26 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             restart_policy: "unless-stopped".to_string(),
             notes: "API at http://localhost:9200".to_string(),
         },
+        // AI Assistants
+        AppTemplate {
+            id: "openclaw".to_string(),
+            name: "OpenClaw".to_string(),
+            description: "Personal AI assistant — connects to WhatsApp, Telegram, Slack, and more".to_string(),
+            icon: "\u{1F9BE}".to_string(),
+            category: "AI".to_string(),
+            image: "ghcr.io/openclaw/openclaw:latest".to_string(),
+            default_ports: vec!["18789:18789".to_string()],
+            default_env: vec![
+                "NODE_ENV=production".to_string(),
+                "OPENCLAW_GATEWAY_BIND=lan".to_string(),
+            ],
+            default_volumes: vec![
+                "openclaw-config:/home/node/.openclaw".to_string(),
+                "openclaw-workspace:/home/node/.openclaw/workspace".to_string(),
+            ],
+            restart_policy: "unless-stopped".to_string(),
+            notes: "Gateway UI at http://localhost:18789. Configure your AI provider API keys and messaging channels from the web interface. First start runs setup automatically.".to_string(),
+        },
         // More Databases
         AppTemplate {
             id: "mariadb".to_string(),

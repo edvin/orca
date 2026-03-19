@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AppTemplate } from "../lib/types";
 import { showToast } from "../components/Toast";
 
-const CATEGORIES = ["All", "Database", "Web Server", "Monitoring", "Storage", "Tools"];
+const CATEGORIES = ["All", "Database", "Web Server", "AI", "Monitoring", "Storage", "Tools", "Development", "Message Queue", "Search"];
 
 interface EnvEntry { key: string; value: string }
 interface VolumeEntry { source: string; target: string }
