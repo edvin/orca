@@ -920,6 +920,7 @@ pub async fn get_daemon_info() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn check_for_updates(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri_plugin_updater::UpdaterExt;
     let updater = app.updater().map_err(|e| format!("Updater not available: {e}"))?;
 
     match updater.check().await {

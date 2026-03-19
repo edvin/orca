@@ -96,17 +96,22 @@ pub fn run() {
             // Check for updates in background
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                // Wait a bit before checking
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                match app_handle.updater().expect("updater not configured").check().await {
-                    Ok(Some(update)) => {
-                        tracing::info!("Update available: v{}", update.version);
-                    }
-                    Ok(None) => {
-                        tracing::debug!("No updates available");
-                    }
+                use tauri_plugin_updater::UpdaterExt;
+                match app_handle.updater() {
+                    Ok(updater) => match updater.check().await {
+                        Ok(Some(update)) => {
+                            tracing::info!("Update available: v{}", update.version);
+                        }
+                        Ok(None) => {
+                            tracing::debug!("No updates available");
+                        }
+                        Err(e) => {
+                            tracing::debug!("Update check failed: {e}");
+                        }
+                    },
                     Err(e) => {
-                        tracing::debug!("Update check failed (expected on dev): {e}");
+                        tracing::debug!("Updater not available: {e}");
                     }
                 }
             });
