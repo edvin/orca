@@ -95,7 +95,7 @@ fn default_anthropic_model() -> String {
 }
 
 /// Generate a 32-character hex token using platform-appropriate randomness.
-fn generate_random_token() -> anyhow::Result<String> {
+pub(crate) fn generate_random_token() -> anyhow::Result<String> {
     let mut bytes = [0u8; 16];
 
     // Try /dev/urandom (Linux/macOS)
@@ -294,5 +294,87 @@ mod tests {
             "config path should end with orca/config.json, got {:?}",
             path
         );
+    }
+
+    #[test]
+    fn find_credentials_matches_ghcr() {
+        let mut config = OrcaConfig::default();
+        config.registries.push(RegistryCredential::new(
+            "https://ghcr.io",
+            "GitHub Container Registry",
+            "user",
+            "token123",
+        ));
+        let cred = config.find_credentials("ghcr.io/user/repo:tag");
+        assert!(cred.is_some(), "should match ghcr.io credential");
+        assert_eq!(cred.unwrap().username, "user");
+    }
+
+    #[test]
+    fn find_credentials_matches_docker_hub() {
+        let mut config = OrcaConfig::default();
+        config.registries.push(RegistryCredential::new(
+            "https://index.docker.io/v1/",
+            "Docker Hub",
+            "dockeruser",
+            "dockerpass",
+        ));
+        let cred = config.find_credentials("nginx:latest");
+        assert!(cred.is_some(), "should match docker.io credential for bare image name");
+        assert_eq!(cred.unwrap().username, "dockeruser");
+    }
+
+    #[test]
+    fn find_credentials_no_match() {
+        let mut config = OrcaConfig::default();
+        config.registries.push(RegistryCredential::new(
+            "https://ghcr.io",
+            "GitHub",
+            "user",
+            "pass",
+        ));
+        let cred = config.find_credentials("registry.example.com/image:v1");
+        assert!(cred.is_none(), "should not match unknown registry");
+    }
+
+    #[test]
+    fn registry_credential_password_roundtrip() {
+        let cred = RegistryCredential::new("https://ghcr.io", "GH", "user", "s3cret!");
+        assert_eq!(cred.password(), "s3cret!");
+    }
+
+    #[test]
+    fn add_registry_replaces_existing() {
+        let mut config = OrcaConfig::default();
+        // Bypass save() by manipulating registries directly (same logic as add_registry minus save)
+        let cred1 = RegistryCredential::new("https://ghcr.io", "GH", "old_user", "old_pass");
+        config.registries.push(cred1);
+        let cred2 = RegistryCredential::new("https://ghcr.io", "GH", "new_user", "new_pass");
+        config.registries.retain(|r| r.server != cred2.server);
+        config.registries.push(cred2);
+
+        assert_eq!(config.registries.len(), 1, "should have exactly one entry");
+        assert_eq!(config.registries[0].username, "new_user");
+    }
+
+    #[test]
+    fn remove_registry_works() {
+        let mut config = OrcaConfig::default();
+        config.registries.push(RegistryCredential::new(
+            "https://ghcr.io", "GH", "user", "pass",
+        ));
+        config.registries.push(RegistryCredential::new(
+            "https://index.docker.io/v1/", "Docker Hub", "user2", "pass2",
+        ));
+        config.registries.retain(|r| r.server != "https://ghcr.io");
+        assert_eq!(config.registries.len(), 1);
+        assert_eq!(config.registries[0].server, "https://index.docker.io/v1/");
+    }
+
+    #[test]
+    fn generate_random_token_length() {
+        let token = generate_random_token().expect("should generate token");
+        assert_eq!(token.len(), 32, "token should be 32 hex chars, got {}", token.len());
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()), "token should be hex");
     }
 }

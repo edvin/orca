@@ -892,3 +892,52 @@ pub async fn check_system_health() -> SystemHealth {
         warnings,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extended_path_includes_homebrew() {
+        let path = extended_path();
+        assert!(
+            path.contains("/opt/homebrew/bin"),
+            "extended_path should include /opt/homebrew/bin, got: {}",
+            path
+        );
+    }
+
+    #[test]
+    fn detect_platform_returns_valid() {
+        let platform = detect_platform();
+        assert!(
+            ["linux", "macos", "windows", "unknown"].contains(&platform.as_str()),
+            "detect_platform should return a known platform, got: {}",
+            platform
+        );
+    }
+
+    #[test]
+    fn parse_docker_size_various_units() {
+        assert_eq!(parse_docker_size("0B"), 0);
+        assert_eq!(parse_docker_size("100B"), 100);
+        assert_eq!(parse_docker_size("1KB"), 1_000);
+        assert_eq!(parse_docker_size("1.5MB"), 1_500_000);
+        assert_eq!(parse_docker_size("2GB"), 2_000_000_000);
+        assert_eq!(parse_docker_size("1KIB"), 1_024);
+    }
+
+    #[test]
+    fn parse_reclaimable_size_with_percentage() {
+        assert_eq!(parse_reclaimable_size("1.234GB (45%)"), 1_234_000_000);
+        assert_eq!(parse_reclaimable_size("0B"), 0);
+    }
+
+    #[test]
+    fn parse_meminfo_kb_extracts_value() {
+        let meminfo = "MemTotal:       16384000 kB\nMemFree:         1234567 kB\nMemAvailable:   8000000 kB\n";
+        assert_eq!(parse_meminfo_kb(meminfo, "MemTotal:"), Some(16384000));
+        assert_eq!(parse_meminfo_kb(meminfo, "MemAvailable:"), Some(8000000));
+        assert_eq!(parse_meminfo_kb(meminfo, "SwapTotal:"), None);
+    }
+}

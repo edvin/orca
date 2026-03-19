@@ -273,7 +273,7 @@ async fn load_dockerignore(context: &std::path::Path) -> Vec<String> {
     }
 }
 
-fn should_ignore(path: &str, patterns: &[String]) -> bool {
+pub(crate) fn should_ignore(path: &str, patterns: &[String]) -> bool {
     for pattern in patterns {
         // Simple glob matching — handles "node_modules", "*.tmp", "target/"
         if pattern.ends_with('/') {
@@ -295,4 +295,43 @@ fn should_ignore(path: &str, patterns: &[String]) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn patterns(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn should_ignore_exact_match() {
+        assert!(should_ignore("node_modules", &patterns(&["node_modules"])));
+    }
+
+    #[test]
+    fn should_ignore_directory_pattern() {
+        assert!(should_ignore("target/debug/foo", &patterns(&["target/"])));
+    }
+
+    #[test]
+    fn should_ignore_wildcard() {
+        assert!(should_ignore("file.tmp", &patterns(&["*.tmp"])));
+    }
+
+    #[test]
+    fn should_ignore_no_match() {
+        assert!(!should_ignore("src/main.rs", &patterns(&["node_modules"])));
+    }
+
+    #[test]
+    fn should_ignore_nested_path() {
+        assert!(should_ignore("node_modules/foo/bar", &patterns(&["node_modules"])));
+    }
+
+    #[test]
+    fn should_ignore_empty_patterns() {
+        assert!(!should_ignore("anything.rs", &patterns(&[])));
+    }
 }

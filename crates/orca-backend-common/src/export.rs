@@ -206,4 +206,73 @@ mod tests {
         assert!(yaml.contains("image: nginx:latest"));
         assert!(yaml.contains("\"8080:80\""));
     }
+
+    #[test]
+    fn docker_run_with_empty_container() {
+        let c = Container {
+            id: String::new(),
+            name: String::new(),
+            image: "alpine".to_string(),
+            state: ContainerState::Created,
+            ports: vec![],
+            labels: HashMap::new(),
+            created_at: String::new(),
+            exit_code: None,
+            error: None,
+            oom_killed: None,
+            started_at: None,
+            finished_at: None,
+            command: None,
+            env: None,
+            mounts: None,
+        };
+        let cmd = container_to_docker_run(&c);
+        assert!(cmd.starts_with("docker run -d"), "should start with docker run -d");
+        assert!(cmd.contains("alpine"), "should contain the image name");
+        // No --name flag when name is empty
+        assert!(!cmd.contains("--name"), "should not have --name for empty name");
+    }
+
+    #[test]
+    fn compose_with_special_chars_in_name() {
+        let c = Container {
+            id: "def456".to_string(),
+            name: "my.app-v2".to_string(),
+            image: "redis:7".to_string(),
+            state: ContainerState::Running,
+            ports: vec![],
+            labels: HashMap::new(),
+            created_at: String::new(),
+            exit_code: None,
+            error: None,
+            oom_killed: None,
+            started_at: None,
+            finished_at: None,
+            command: None,
+            env: None,
+            mounts: None,
+        };
+        let yaml = containers_to_compose(&[c], "test");
+        // Dots and dashes should be replaced with underscores
+        assert!(yaml.contains("my_app_v2:"), "dots/dashes should be sanitized to underscores");
+        assert!(yaml.contains("image: redis:7"));
+    }
+
+    #[test]
+    fn shell_escape_special_chars() {
+        assert_eq!(shell_escape(""), "''");
+        assert_eq!(shell_escape("simple"), "simple");
+        assert_eq!(shell_escape("has space"), "'has space'");
+        assert_eq!(shell_escape("it's"), "'it'\\''s'");
+    }
+
+    #[test]
+    fn sanitize_service_name_empty() {
+        assert_eq!(sanitize_service_name(""), "service");
+    }
+
+    #[test]
+    fn sanitize_service_name_keeps_alphanumeric() {
+        assert_eq!(sanitize_service_name("web_app1"), "web_app1");
+    }
 }

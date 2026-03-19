@@ -245,3 +245,55 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
         },
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn tool_catalog_has_tools() {
+        let catalog = tool_catalog();
+        assert!(!catalog.is_empty(), "tool catalog should not be empty");
+    }
+
+    #[test]
+    fn tool_catalog_all_have_names() {
+        for tool in tool_catalog() {
+            assert!(!tool.name.is_empty(), "every tool must have a non-empty name");
+        }
+    }
+
+    #[test]
+    fn tool_catalog_all_have_descriptions() {
+        for tool in tool_catalog() {
+            assert!(
+                !tool.description.is_empty(),
+                "tool '{}' must have a non-empty description",
+                tool.name
+            );
+        }
+    }
+
+    #[test]
+    fn tool_catalog_unique_names() {
+        let catalog = tool_catalog();
+        let mut seen = HashSet::new();
+        for tool in &catalog {
+            assert!(
+                seen.insert(&tool.name),
+                "duplicate tool name: '{}'",
+                tool.name
+            );
+        }
+    }
+
+    #[test]
+    fn tool_catalog_has_diagnose_container() {
+        let catalog = tool_catalog();
+        assert!(
+            catalog.iter().any(|t| t.name == "diagnose_container"),
+            "catalog must contain the 'diagnose_container' diagnostic tool"
+        );
+    }
+}
