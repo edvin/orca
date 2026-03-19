@@ -27,14 +27,21 @@ export default function StatusBar() {
   };
 
   const installUpdate = async () => {
+    const info = updateAvailable();
+    if (!info) return;
+
+    const confirmed = window.confirm(
+      `Update to Orca v${info.version}?\n\nThe app will download the update and restart.\n${info.body ? `\nWhat's new:\n${info.body}` : ""}`
+    );
+    if (!confirmed) return;
+
     setInstalling(true);
     try {
-      // Tauri updater handles download + install + restart
       const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
       if (update) {
+        showToast("Downloading update...", "info");
         await update.downloadAndInstall();
-        // App will restart after install
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
       }
