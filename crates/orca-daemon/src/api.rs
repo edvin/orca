@@ -66,6 +66,11 @@ pub async fn auth_middleware(
         return Ok(next.run(req).await);
     }
 
+    // Allow WebSocket terminal endpoint — it does its own auth via query param
+    if req.uri().path().contains("/terminal") {
+        return Ok(next.run(req).await);
+    }
+
     let auth_header = req
         .headers()
         .get("authorization")
