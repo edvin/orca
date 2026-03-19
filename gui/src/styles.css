@@ -31,6 +31,92 @@ body {
   position: relative;
 }
 
+/* ==================== Status Bar ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 24px;
+  background: #161b22;
+  border-top: 1px solid #21262d;
+  padding: 0 12px;
+  font-size: 11px;
+  color: #8b949e;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.status-bar-left,
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.status-bar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-bar-separator {
+  width: 1px;
+  height: 12px;
+  background: #30363d;
+  margin: 0 2px;
+}
+
+.status-bar-mini-bar {
+  width: 40px;
+  height: 4px;
+  background: #21262d;
+  border-radius: 2px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.status-bar-mini-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+  display: block;
+}
+
+.status-bar-warning {
+  color: #d29922;
+}
+
+.status-bar-update {
+  background: none;
+  border: 1px solid #2da44e66;
+  color: #3fb950;
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.status-bar-update:hover {
+  background: #2da44e22;
+  border-color: #3fb950;
+}
+
+.status-bar-update:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .resize-handle {
   position: absolute;
   bottom: 0;

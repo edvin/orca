@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { startEventSubscription, onOrcaEvent } from "./lib/events";
 import { addEvent } from "./lib/activityStore";
 import Titlebar from "./components/Titlebar";
+import StatusBar from "./components/StatusBar";
 import Sidebar from "./components/Sidebar";
 import ToastContainer, { showToast } from "./components/Toast";
 import ContainersPage from "./pages/ContainersPage";
@@ -211,6 +212,7 @@ export default function App() {
           <AiAssistant onNavigate={(p: string) => navigate(p)} />
         </>
       )}
+      <StatusBar />
       <ToastContainer />
       <div class="resize-handle" onMouseDown={startResize} />
     </div>
