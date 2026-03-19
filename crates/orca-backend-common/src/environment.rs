@@ -575,34 +575,46 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             // On Windows: install Docker inside the default WSL2 distro
             #[cfg(target_os = "windows")]
             {
-                // First check if WSL2 has a distro available
-                let distros = run_cmd("wsl", &["--list", "--quiet"]).await
-                    .map_err(|e| anyhow::anyhow!("WSL2 not available: {e}. Enable WSL2 first."))?;
+                // Use the default WSL distro (no -d flag) to avoid UTF-16 distro name issues.
+                // First verify WSL can run a simple command.
+                let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"]).await
+                    .map_err(|e| anyhow::anyhow!(
+                        "Cannot run commands in WSL. Make sure WSL2 is enabled and a Linux \
+                         distro (e.g. Ubuntu) is installed from the Microsoft Store.\n\
+                         Error: {e}"
+                    ))?;
 
-                let distro = if distros.contains("Ubuntu") {
-                    "Ubuntu"
-                } else {
-                    let first = distros.lines().find(|l| !l.trim().is_empty());
-                    match first {
-                        Some(d) => d.trim(),
-                        None => anyhow::bail!("No WSL2 distro found. Install Ubuntu from the Microsoft Store first."),
-                    }
-                };
+                if !probe.contains("wsl-ok") {
+                    anyhow::bail!(
+                        "WSL responded but output was unexpected: '{probe}'. \
+                         Make sure a WSL2 distro is installed."
+                    );
+                }
 
-                tracing::info!("Installing Docker in WSL2 distro: {distro}");
-
-                // Run as root (-u root) to avoid sudo password prompts.
-                // The Docker install script detects it's already root and skips sudo.
-                // Then add the default WSL user to the docker group.
-                let output = run_cmd("wsl", &["-d", distro, "-u", "root", "--", "bash", "-c",
-                    "curl -fsSL https://get.docker.com | sh 2>&1 && \
-                     DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && \
-                     usermod -aG docker \"$DEFAULT_USER\" 2>&1 && \
-                     service docker start 2>&1 && \
-                     echo 'Docker installed and started successfully'"])
+                // Install Docker using the official convenience script, running as root.
+                // Stop any existing Docker service first to avoid conflicts.
+                // Capture both stdout and stderr so the user sees full progress.
+                let output = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                    "set -e; \
+                     echo '>>> Stopping any existing Docker service...'; \
+                     service docker stop 2>/dev/null || true; \
+                     pkill dockerd 2>/dev/null || true; \
+                     sleep 1; \
+                     echo '>>> Downloading Docker install script...'; \
+                     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh 2>&1; \
+                     echo '>>> Running install script...'; \
+                     sh /tmp/get-docker.sh 2>&1; \
+                     echo '>>> Adding user to docker group...'; \
+                     DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1); \
+                     usermod -aG docker \"$DEFAULT_USER\" 2>&1; \
+                     echo '>>> Starting Docker service...'; \
+                     service docker start 2>&1; \
+                     echo '>>> Verifying installation...'; \
+                     docker --version 2>&1; \
+                     echo '>>> Docker installed and started successfully'"])
                     .await
-                    .map_err(|e| anyhow::anyhow!("Docker install in WSL2 distro '{distro}' failed: {e}"))?;
-                Ok(format!("Docker installed in WSL2 ({distro}):\n{output}"))
+                    .map_err(|e| anyhow::anyhow!("Docker install in WSL2 failed: {e}"))?;
+                Ok(format!("Docker installed in WSL2:\n{output}"))
             }
             #[cfg(not(target_os = "windows"))]
             {
