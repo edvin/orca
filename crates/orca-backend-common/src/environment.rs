@@ -78,14 +78,33 @@ async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
     let result = cmd.output().await.map_err(|e| e.to_string())?;
 
     if result.status.success() {
-        Ok(String::from_utf8_lossy(&result.stdout).trim().to_string())
+        Ok(decode_output(&result.stdout).trim().to_string())
     } else {
-        let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
+        let stderr = decode_output(&result.stderr).trim().to_string();
         Err(if stderr.is_empty() {
             format!("exit code {}", result.status.code().unwrap_or(-1))
         } else {
             stderr
         })
+    }
+}
+
+/// Decode command output, handling UTF-16LE (common from Windows CLI tools like wsl.exe).
+fn decode_output(bytes: &[u8]) -> String {
+    // Check for UTF-16LE BOM (FF FE) or null bytes interleaved with ASCII
+    // which is the telltale sign of UTF-16LE without BOM
+    let is_utf16 = (bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+        || (bytes.len() >= 4 && bytes[1] == 0 && bytes[3] == 0);
+
+    if is_utf16 {
+        let skip = if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE { 2 } else { 0 };
+        let u16s: Vec<u16> = bytes[skip..]
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        String::from_utf16_lossy(&u16s)
+    } else {
+        String::from_utf8_lossy(bytes).to_string()
     }
 }
 
@@ -571,8 +590,16 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 };
 
                 tracing::info!("Installing Docker in WSL2 distro: {distro}");
-                let output = run_cmd("wsl", &["-d", distro, "--", "bash", "-c",
-                    "curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER"])
+
+                // Run as root (-u root) to avoid sudo password prompts.
+                // The Docker install script detects it's already root and skips sudo.
+                // Then add the default WSL user to the docker group.
+                let output = run_cmd("wsl", &["-d", distro, "-u", "root", "--", "bash", "-c",
+                    "curl -fsSL https://get.docker.com | sh 2>&1 && \
+                     DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && \
+                     usermod -aG docker \"$DEFAULT_USER\" 2>&1 && \
+                     service docker start 2>&1 && \
+                     echo 'Docker installed and started successfully'"])
                     .await
                     .map_err(|e| anyhow::anyhow!("Docker install in WSL2 distro '{distro}' failed: {e}"))?;
                 Ok(format!("Docker installed in WSL2 ({distro}):\n{output}"))
