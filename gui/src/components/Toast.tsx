@@ -58,7 +58,7 @@ function CopyToastButton(props: { message: string }) {
 
   return (
     <button class="toast-copy" onClick={handleCopy} title="Copy error message">
-      {copied() ? "\u2713" : "\u2398"}
+      {copied() ? "\u{2705}" : "\u{1F4CB}"}
     </button>
   );
 }
@@ -70,7 +70,7 @@ export default function ToastContainer() {
         {(toast) => (
           <div class={`toast toast-${toast.type}`}>
             <span class="toast-icon">
-              {toast.type === "success" ? "\u2713" : toast.type === "error" ? "\u2717" : "\u2139"}
+              {toast.type === "success" ? "\u{2705}" : toast.type === "error" ? "\u{274C}" : "\u{2139}\uFE0F"}
             </span>
             <span class="toast-message">
               {toast.message}
@@ -95,7 +95,7 @@ export default function ToastContainer() {
               class="toast-close"
               onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
             >
-              \u00d7
+              {"\u00d7"}
             </button>
           </div>
         )}
