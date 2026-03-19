@@ -18,6 +18,9 @@ export default function ImagesPage() {
   const [pullStatus, setPullStatus] = createSignal("");
   const [selected, setSelected] = createSignal<Set<string>>(new Set());
   const [showPull, setShowPull] = createSignal(false);
+  const [showPruneConfirm, setShowPruneConfirm] = createSignal(false);
+  const [pruning, setPruning] = createSignal(false);
+  let pullInputRef: HTMLInputElement | undefined;
   const [showBuild, setShowBuild] = createSignal(false);
   const [buildPath, setBuildPath] = createSignal("");
   const [buildDockerfile, setBuildDockerfile] = createSignal("");
@@ -150,6 +153,7 @@ export default function ImagesPage() {
   };
 
   const pruneUnused = async () => {
+    setPruning(true);
     try {
       const result = (await invoke("prune_images")) as any;
       const count = result.images_deleted?.length || 0;
@@ -158,6 +162,9 @@ export default function ImagesPage() {
       await refresh();
     } catch (e) {
       showToast(`Prune failed: ${e}`, "error");
+    } finally {
+      setPruning(false);
+      setShowPruneConfirm(false);
     }
   };
 
@@ -251,13 +258,17 @@ export default function ImagesPage() {
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
           />
-          <button class="btn" onClick={() => setShowPull(!showPull())}>
+          <button class="btn" onClick={() => {
+            const opening = !showPull();
+            setShowPull(opening);
+            if (opening) setTimeout(() => pullInputRef?.focus(), 50);
+          }}>
             Pull
           </button>
           <button class="btn" onClick={() => setShowBuild(!showBuild())}>
             Build
           </button>
-          <button class="btn" onClick={pruneUnused}>
+          <button class="btn" onClick={() => setShowPruneConfirm(true)}>
             Prune
           </button>
           <button class="btn" onClick={refresh}>
@@ -282,9 +293,10 @@ export default function ImagesPage() {
                 <path fill-rule="evenodd" d="M11.5 7a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zm-.82 4.74a6 6 0 111.06-1.06l3.04 3.04a.75.75 0 11-1.06 1.06l-3.04-3.04z" />
               </svg>
               <input
+                ref={pullInputRef}
                 class="pull-input"
                 type="text"
-                placeholder="Search & pull image (e.g. nginx, postgres)"
+                placeholder="Search Docker Hub and pull an image (e.g. nginx, postgres:16)"
                 value={pullRef()}
                 onInput={(e) => onPullInput(e.currentTarget.value)}
                 onKeyDown={handlePullKeyDown}
@@ -644,6 +656,37 @@ export default function ImagesPage() {
           onClose={() => setRunImage(null)}
           onCreated={refresh}
         />
+      </Show>
+
+      {/* Prune Confirmation Dialog */}
+      <Show when={showPruneConfirm()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !pruning()) setShowPruneConfirm(false); (e.currentTarget as any).__mdOverlay = false; }}
+        >
+          <div class="modal-dialog" style={{ "max-width": "460px" }}>
+            <div class="modal-header">
+              <span class="modal-title">Prune Unused Images</span>
+              <button class="modal-close" onClick={() => setShowPruneConfirm(false)}>{"\u00d7"}</button>
+            </div>
+            <div class="modal-body">
+              <p style={{ "margin-bottom": "12px", "line-height": "1.5" }}>
+                This will remove all images that are not referenced by any container.
+              </p>
+              <p style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.5" }}>
+                Dangling images (untagged layers) and unused images will be deleted.
+                Images in use by running or stopped containers are kept.
+                This action cannot be undone.
+              </p>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setShowPruneConfirm(false)} disabled={pruning()}>Cancel</button>
+              <button class="btn" style={{ background: "#da3633", color: "#fff" }} onClick={pruneUnused} disabled={pruning()}>
+                {pruning() ? "Pruning..." : "Prune Images"}
+              </button>
+            </div>
+          </div>
+        </div>
       </Show>
     </div>
   );

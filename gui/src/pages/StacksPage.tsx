@@ -201,7 +201,7 @@ export default function StacksPage(props: StacksPageProps) {
         when={stacks().length > 0}
         fallback={
           <div class="empty">
-            <div class="empty-icon">{"📋"}</div>
+            <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7"/><path d="M7 4h10a2 2 0 012 2v1H5V6a2 2 0 012-2z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="14" x2="13" y2="14"/></svg></div>
             <p class="empty-title">No compose stacks detected</p>
             <p>
               Run{" "}

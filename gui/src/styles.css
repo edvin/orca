@@ -751,7 +751,10 @@ body {
 .empty-icon {
   font-size: 48px;
   margin-bottom: 16px;
-  opacity: 0.6;
+  opacity: 0.4;
+  color: #8b949e;
+  display: flex;
+  justify-content: center;
 }
 
 .empty-title {
