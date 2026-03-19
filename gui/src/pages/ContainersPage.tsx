@@ -45,6 +45,17 @@ export default function ContainersPage(props: ContainersPageProps) {
       setContainers(containerResult);
       setStacks(stackResult);
       setLastUpdated(new Date());
+
+      // Auto-expand stacks with running containers (on first load)
+      if (expanded().size <= 1) {
+        const autoExpand = new Set(expanded());
+        for (const stack of stackResult) {
+          if (stack.services.some((s) => s.state === "Running")) {
+            autoExpand.add(stack.name);
+          }
+        }
+        setExpanded(autoExpand);
+      }
     } catch (e) {
       console.error("Failed to list containers/stacks:", e);
     }
