@@ -11,11 +11,7 @@ static CLI_CELL: OnceCell<&'static str> = OnceCell::const_new();
 /// The result is cached after the first call.
 fn extended_path() -> String {
     let current = std::env::var("PATH").unwrap_or_default();
-    if cfg!(target_os = "macos") {
-        format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{current}")
-    } else {
-        current
-    }
+    format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/sbin:{current}")
 }
 
 async fn detect_cli() -> &'static str {
@@ -70,17 +66,14 @@ async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    // On macOS, the app bundle has a minimal PATH. Extend it to include
-    // common locations where Docker, Homebrew, Lima etc. are installed.
-    #[cfg(target_os = "macos")]
-    {
-        let current_path = std::env::var("PATH").unwrap_or_default();
-        let extended = format!(
-            "/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{}",
-            current_path
-        );
-        cmd.env("PATH", extended);
-    }
+    // Extend PATH to include common binary locations. App bundles on macOS
+    // have a minimal PATH, but this is harmless on all platforms.
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let extended = format!(
+        "/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/sbin:{}",
+        current_path
+    );
+    cmd.env("PATH", &extended);
 
     let result = cmd.output().await.map_err(|e| e.to_string())?;
 
@@ -97,7 +90,16 @@ async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
 }
 
 async fn check_docker_installed() -> HealthCheck {
-    match run_cmd("docker", &["--version"]).await {
+    // Try via PATH (which we extend), then explicit common paths as fallback
+    let result = match run_cmd("docker", &["--version"]).await {
+        Ok(v) => Ok(v),
+        Err(_) => match run_cmd("/usr/local/bin/docker", &["--version"]).await {
+            Ok(v) => Ok(v),
+            Err(_) => run_cmd("/opt/homebrew/bin/docker", &["--version"]).await,
+        },
+    };
+
+    match result {
         Ok(version) => HealthCheck {
             name: "Docker Runtime".to_string(),
             description: "Docker CLI is installed".to_string(),
@@ -305,26 +307,20 @@ async fn check_wsl2_enabled() -> HealthCheck {
 
 async fn check_docker_desktop() -> HealthCheck {
     // Check if Docker Desktop is installed by looking for its specific markers
-    #[cfg(target_os = "macos")]
-    let desktop_installed = std::path::Path::new("/Applications/Docker.app").exists();
-
-    #[cfg(target_os = "windows")]
-    let desktop_installed = std::path::Path::new(
-        &format!(
-            "{}\\Docker\\Docker\\Docker Desktop.exe",
-            std::env::var("ProgramFiles").unwrap_or_default()
-        ),
-    )
-    .exists();
-
-    #[cfg(target_os = "linux")]
-    let desktop_installed = {
-        // Docker Desktop on Linux installs to /opt/docker-desktop
+    let desktop_installed = if cfg!(target_os = "macos") {
+        std::path::Path::new("/Applications/Docker.app").exists()
+    } else if cfg!(target_os = "windows") {
+        std::path::Path::new(
+            &format!(
+                "{}\\Docker\\Docker\\Docker Desktop.exe",
+                std::env::var("ProgramFiles").unwrap_or_default()
+            ),
+        ).exists()
+    } else if cfg!(target_os = "linux") {
         std::path::Path::new("/opt/docker-desktop").exists()
+    } else {
+        false
     };
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    let desktop_installed = false;
 
     if desktop_installed {
         HealthCheck {
