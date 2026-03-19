@@ -72,7 +72,7 @@ export default function Sidebar(props: SidebarProps) {
           class={`nav-item ${props.currentPage === "settings" ? "active" : ""}`}
           onClick={() => props.onNavigate("settings")}
         >
-          <span class="nav-icon">{"\u2699"}</span>
+          <span class="nav-icon">{"\u{2699}\uFE0F"}</span>
           <span class="nav-label">Settings</span>
         </button>
       </nav>
