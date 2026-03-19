@@ -93,6 +93,19 @@ export default function TemplatesPage() {
 
   const closeDeploy = () => setDeployTarget(null);
 
+  /** Build a Docker Hub URL for an image reference. */
+  const dockerHubUrl = (image: string) => {
+    const name = image.split(":")[0]; // strip tag
+    if (name.includes("ghcr.io")) return `https://${name}`;
+    if (name.includes("/")) {
+      // user/repo or registry/repo
+      if (name.includes(".")) return null; // custom registry, skip
+      return `https://hub.docker.com/r/${name}`;
+    }
+    // official image (e.g. "postgres", "nginx")
+    return `https://hub.docker.com/_/${name}`;
+  };
+
   const handleOverlayMouseDown = (e: MouseEvent) => {
     mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay");
   };
@@ -189,7 +202,7 @@ export default function TemplatesPage() {
     setEditorId("");
     setEditorName("");
     setEditorDesc("");
-    setEditorIcon("\u{1F4E6}");
+    setEditorIcon("\u25A3");
     setEditorCategory("Tools");
     setEditorImage("");
     setEditorNotes("");
@@ -431,7 +444,16 @@ export default function TemplatesPage() {
                   <input class="form-input" value={deployName()} onInput={(e) => setDeployName(e.currentTarget.value)} placeholder="Container name" />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Image</label>
+                  <label class="form-label">
+                    Image
+                    <Show when={dockerHubUrl(template().image)}>
+                      {(url) => (
+                        <a href={url()} target="_blank" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
+                          View on Docker Hub {"\u2197"}
+                        </a>
+                      )}
+                    </Show>
+                  </label>
                   <input class="form-input" value={template().image} disabled style="opacity: 0.7" />
                 </div>
                 <PortEditor ports={deployPorts} update={updatePort} add={addPort} remove={removePort} />
