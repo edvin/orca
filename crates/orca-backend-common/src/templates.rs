@@ -1,5 +1,25 @@
 use orca_core::templates::AppTemplate;
 
+/// Generate a random alphanumeric token for services that need one.
+fn generate_token() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    // Simple xorshift-based PRNG — good enough for a default token
+    let mut state = seed as u64 | 1;
+    let chars: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    (0..32)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            chars[(state as usize) % chars.len()] as char
+        })
+        .collect()
+}
+
 pub fn builtin_templates() -> Vec<AppTemplate> {
     vec![
         // Databases
@@ -240,9 +260,10 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             icon: "\u{1F9BE}".to_string(),
             category: "AI".to_string(),
             image: "ghcr.io/openclaw/openclaw:latest".to_string(),
-            default_ports: vec!["18789:18789".to_string()],
+            default_ports: vec!["18789:18789".to_string(), "18790:18790".to_string()],
             default_env: vec![
                 "NODE_ENV=production".to_string(),
+                format!("OPENCLAW_GATEWAY_TOKEN={}", generate_token()),
                 "OPENCLAW_GATEWAY_BIND=lan".to_string(),
             ],
             default_volumes: vec![
@@ -250,7 +271,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
                 "openclaw-workspace:/home/node/.openclaw/workspace".to_string(),
             ],
             restart_policy: "unless-stopped".to_string(),
-            notes: "Gateway UI at http://localhost:18789. Configure your AI provider API keys and messaging channels from the web interface. First start runs setup automatically.".to_string(),
+            notes: "Gateway UI at http://localhost:18789. Enter the OPENCLAW_GATEWAY_TOKEN value in Settings to authenticate. Configure your AI provider API keys and messaging channels from the web interface.".to_string(),
         },
         // More Databases
         AppTemplate {
