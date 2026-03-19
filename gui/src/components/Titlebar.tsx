@@ -56,7 +56,22 @@ export default function Titlebar(props: TitlebarProps) {
   onMount(() => {
     pollHealth();
     const interval = setInterval(pollHealth, 10_000);
-    onCleanup(() => clearInterval(interval));
+
+    // Close bell dropdown when clicking outside
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bellOpen()) {
+        const bell = document.querySelector(".notification-bell");
+        if (bell && !bell.contains(e.target as Node)) {
+          setBellOpen(false);
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+
+    onCleanup(() => {
+      clearInterval(interval);
+      document.removeEventListener("mousedown", handleClickOutside);
+    });
   });
 
   const minimize = async () => {
