@@ -2417,3 +2417,245 @@ body {
   gap: 12px;
   margin-top: 8px;
 }
+
+/* ==================== Container Detail Page ==================== */
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.detail-page-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.detail-back-btn {
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: all 0.15s;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.detail-back-btn:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.detail-page-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-page-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f0f6fc;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-page-image {
+  font-size: 13px;
+  color: #8b949e;
+  font-family: 'SFMono-Regular', monospace;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-page-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Detail tab bar (underline style) */
+.detail-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #21262d;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.detail-tab-item {
+  padding: 10px 18px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #8b949e;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.detail-tab-item:hover {
+  color: #e6edf3;
+  border-bottom-color: #30363d;
+}
+
+.detail-tab-item.active {
+  color: #e6edf3;
+  border-bottom-color: #58a6ff;
+}
+
+/* Detail tab content fills available space */
+.detail-tab-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 20px;
+}
+
+.detail-tab-content .log-viewer {
+  height: auto;
+  flex: 1;
+  min-height: 400px;
+}
+
+.detail-tab-content .xterm-container {
+  flex: 1;
+}
+
+/* xterm container */
+.xterm-container {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Stat cards row */
+.detail-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.detail-stat-card {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 18px;
+  transition: border-color 0.15s;
+}
+
+.detail-stat-card:hover {
+  border-color: #30363d;
+}
+
+.detail-stat-label {
+  font-size: 11px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.detail-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #e6edf3;
+  letter-spacing: -0.3px;
+}
+
+.detail-stat-secondary {
+  font-size: 12px;
+  color: #8b949e;
+  font-weight: 400;
+}
+
+.detail-stat-bar {
+  margin-top: 10px;
+}
+
+.detail-stat-sparkline {
+  margin-top: 8px;
+}
+
+/* Overview layout */
+.detail-overview {
+  padding-bottom: 24px;
+}
+
+/* Info section */
+.detail-info-section {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.detail-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #21262d;
+}
+
+/* Inspect tab */
+.detail-inspect {
+  padding-bottom: 24px;
+}
+
+.detail-env-list {
+  max-height: 300px;
+  overflow: auto;
+}
+
+/* Export tab */
+.detail-export {
+  padding-bottom: 24px;
+}
+
+.detail-export-block {
+  position: relative;
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.detail-export-code {
+  padding: 14px;
+  margin: 0;
+  font-family: 'SFMono-Regular', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  color: #e6edf3;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.detail-export-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}

@@ -7,6 +7,7 @@ import Sidebar from "./components/Sidebar";
 import ToastContainer, { showToast } from "./components/Toast";
 import StacksPage from "./pages/StacksPage";
 import ContainersPage from "./pages/ContainersPage";
+import ContainerDetailPage from "./pages/ContainerDetailPage";
 import ImagesPage from "./pages/ImagesPage";
 import VolumesPage from "./pages/VolumesPage";
 import NetworksPage from "./pages/NetworksPage";
@@ -22,10 +23,11 @@ import CommandPalette from "./components/CommandPalette";
 import AiAssistant from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "dashboard" | "templates" | "stacks" | "containers" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
+export type Page = "dashboard" | "templates" | "stacks" | "containers" | "container-detail" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
+  const [detailId, setDetailId] = createSignal<string | null>(null);
   const [daemonStatus, setDaemonStatus] = createSignal<string>("connecting");
   const [showCommandPalette, setShowCommandPalette] = createSignal(false);
   const [environmentChecked, setEnvironmentChecked] = createSignal(false);
@@ -72,6 +74,16 @@ export default function App() {
       }
     } catch {
       // Daemon returned error, will retry next time
+    }
+  };
+
+  const navigate = (target: string) => {
+    if (target.startsWith("container:")) {
+      setDetailId(target.split(":").slice(1).join(":"));
+      setPage("container-detail");
+    } else {
+      setDetailId(null);
+      setPage(target as Page);
     }
   };
 
@@ -125,22 +137,28 @@ export default function App() {
 
   return (
     <div class="app-root">
-      <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => setPage(p as Page)} />
+      <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => navigate(p)} />
       {daemonStatus() !== "running" ? (
         <ConnectionScreen status={daemonStatus()} onRetry={checkDaemon} />
       ) : (
         <>
           <div class="app-body">
             <Sidebar
-              currentPage={page()}
-              onNavigate={setPage}
+              currentPage={page() === "container-detail" ? "containers" as Page : page()}
+              onNavigate={(p: Page) => navigate(p)}
               daemonStatus={daemonStatus()}
             />
             <main class="app-main">
-              {page() === "dashboard" && <DashboardPage onNavigate={(p) => setPage(p as Page)} />}
+              {page() === "dashboard" && <DashboardPage onNavigate={(p) => navigate(p)} />}
               {page() === "templates" && <TemplatesPage />}
               {page() === "stacks" && <StacksPage />}
-              {page() === "containers" && <ContainersPage onNavigate={(p) => setPage(p as Page)} />}
+              {page() === "containers" && <ContainersPage onNavigate={(p) => navigate(p)} />}
+              {page() === "container-detail" && detailId() && (
+                <ContainerDetailPage
+                  containerId={detailId()!}
+                  onBack={() => navigate("containers")}
+                />
+              )}
               {page() === "images" && <ImagesPage />}
               {page() === "volumes" && <VolumesPage />}
               {page() === "networks" && <NetworksPage />}
@@ -154,10 +172,10 @@ export default function App() {
           {showCommandPalette() && (
             <CommandPalette
               onClose={() => setShowCommandPalette(false)}
-              onNavigate={(p) => setPage(p)}
+              onNavigate={(p: Page) => navigate(p)}
             />
           )}
-          <AiAssistant onNavigate={(p) => setPage(p as Page)} />
+          <AiAssistant onNavigate={(p: string) => navigate(p)} />
         </>
       )}
       <ToastContainer />
