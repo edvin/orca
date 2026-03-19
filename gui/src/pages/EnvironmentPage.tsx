@@ -7,6 +7,7 @@ export default function EnvironmentPage() {
   const [status, setStatus] = createSignal<EnvironmentStatus | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [fixingAction, setFixingAction] = createSignal<string | null>(null);
+  const [fixLog, setFixLog] = createSignal<string | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -22,13 +23,17 @@ export default function EnvironmentPage() {
 
   const runFix = async (action: string) => {
     setFixingAction(action);
+    setFixLog(`Running: ${action}...`);
     try {
       const result = (await invoke("env_fix", { action })) as { output: string };
-      showToast(result.output || "Fix applied successfully", "success");
-      // Re-check after fix
+      const output = result.output || "(no output)";
+      setFixLog(`✅ ${action} completed:\n\n${output}`);
+      showToast("Fix completed — check the log below", "success");
       await refresh();
     } catch (e) {
-      showToast(`Fix failed: ${e}`, "error");
+      const error = String(e);
+      setFixLog(`❌ ${action} failed:\n\n${error}`);
+      showToast(`Fix failed: ${error}`, "error");
     } finally {
       setFixingAction(null);
     }
@@ -303,6 +308,48 @@ export default function EnvironmentPage() {
                 )}
               </For>
             </div>
+
+            {/* Fix action log */}
+            <Show when={fixLog()}>
+              <div style={{
+                "margin-top": "16px",
+                background: "#0d1117",
+                border: "1px solid #21262d",
+                "border-radius": "8px",
+                overflow: "hidden",
+              }}>
+                <div style={{
+                  display: "flex",
+                  "justify-content": "space-between",
+                  "align-items": "center",
+                  padding: "8px 12px",
+                  background: "#161b22",
+                  "border-bottom": "1px solid #21262d",
+                  "font-size": "12px",
+                  "font-weight": "600",
+                }}>
+                  <span>Action Log</span>
+                  <button
+                    class="action-icon"
+                    title="Clear log"
+                    onClick={() => setFixLog(null)}
+                    style={{ "font-size": "12px" }}
+                  >✕</button>
+                </div>
+                <pre style={{
+                  padding: "12px",
+                  margin: 0,
+                  "font-family": "'JetBrains Mono NF', monospace",
+                  "font-size": "12px",
+                  "line-height": "1.5",
+                  color: "#c9d1d9",
+                  "white-space": "pre-wrap",
+                  "word-break": "break-all",
+                  "max-height": "300px",
+                  overflow: "auto",
+                }}>{fixLog()}</pre>
+              </div>
+            </Show>
           </div>
         )}
       </Show>

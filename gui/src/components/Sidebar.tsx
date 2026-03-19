@@ -11,13 +11,13 @@ interface SidebarProps {
 const mainNavItems: { id: Page; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
   { id: "containers", label: "Containers", icon: "\u{1F4E6}" },
-  { id: "images", label: "Images", icon: "\u{1F4E5}" },
-  { id: "volumes", label: "Volumes", icon: "\u{1F4C0}" },
+  { id: "images", label: "Images", icon: "\u{1F4F7}" },
+  { id: "volumes", label: "Volumes", icon: "\u{1F4BD}" },
   { id: "networks", label: "Networks", icon: "\u{1F310}" },
-  { id: "kubernetes", label: "Kubernetes", icon: "\u2388" },
-  { id: "machine", label: "Machine", icon: "\u{1F5A5}" },
-  { id: "templates", label: "Templates", icon: "\u{1F3AA}" },
-  { id: "environment", label: "System Health", icon: "\u{1F6E0}" },
+  { id: "kubernetes", label: "Kubernetes", icon: "\u2388\uFE0F" },
+  { id: "machine", label: "Machine", icon: "\u{1F5A5}\uFE0F" },
+  { id: "templates", label: "Templates", icon: "\u{1F9E9}" },
+  { id: "environment", label: "System Health", icon: "\u{1F6E0}\uFE0F" },
   { id: "activity", label: "Activity", icon: "\u{1F4AC}" },
 ];
 
