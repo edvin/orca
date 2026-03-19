@@ -29,11 +29,19 @@ impl DaemonManager {
         let daemon_path = find_daemon_binary();
         tracing::info!("Starting orca-daemon from: {}", daemon_path);
 
-        let child = Command::new(&daemon_path)
-            .stdout(Stdio::null())
+        let mut cmd = Command::new(&daemon_path);
+        cmd.stdout(Stdio::null())
             .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()
+            .kill_on_drop(true);
+
+        // On Windows, prevent the daemon from opening a visible console window
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        let child = cmd.spawn()
             .map_err(|e| format!("Failed to start daemon: {e}"))?;
 
         *self.child.lock().map_err(|e| format!("Lock poisoned: {e}"))? = Some(child);

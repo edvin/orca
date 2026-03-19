@@ -102,21 +102,21 @@ async fn check_docker_installed() -> HealthCheck {
     match result {
         Ok(version) => HealthCheck {
             name: "Docker Runtime".to_string(),
-            description: "Docker CLI is installed".to_string(),
+            description: "Container runtime is available".to_string(),
             status: CheckStatus::Pass,
             fix_action: None,
             details: Some(version),
         },
         Err(e) => HealthCheck {
             name: "Docker Runtime".to_string(),
-            description: "Docker CLI is installed".to_string(),
+            description: "No container runtime found".to_string(),
             status: CheckStatus::Fail,
             fix_action: Some(if cfg!(target_os = "linux") {
                 "install_docker_linux".to_string()
             } else {
                 "install_docker".to_string()
             }),
-            details: Some(format!("Not found: {e}")),
+            details: Some(format!("Docker/Podman not in PATH: {e}")),
         },
     }
 }
@@ -325,21 +325,20 @@ async fn check_docker_desktop() -> HealthCheck {
     if desktop_installed {
         HealthCheck {
             name: "Docker Desktop".to_string(),
-            description: "Docker Desktop is installed".to_string(),
+            description: "Detected — Orca shares the same Docker daemon".to_string(),
             status: CheckStatus::Pass,
             fix_action: None,
-            details: Some(
-                "Docker Desktop detected — Orca can work alongside it using the same Docker daemon"
-                    .to_string(),
-            ),
+            details: Some("Docker Desktop is installed alongside Orca".to_string()),
         }
     } else {
+        // Don't show Docker Desktop as a check at all when not installed —
+        // we don't want to promote it, Orca is the replacement
         HealthCheck {
             name: "Docker Desktop".to_string(),
-            description: "Docker Desktop (optional — not required if Docker/Podman CLI is installed)".to_string(),
-            status: CheckStatus::Warning,
+            description: "Not installed".to_string(),
+            status: CheckStatus::Pass, // Pass, not Warning — absence is fine
             fix_action: None,
-            details: Some("Docker Desktop not detected (this is fine if you have Docker or Podman CLI)".to_string()),
+            details: None, // No details, keeps it quiet
         }
     }
 }
@@ -443,9 +442,16 @@ pub async fn check_environment() -> EnvironmentStatus {
         _ => {}
     }
 
-    // Environment is ready if at least one runtime or Docker Desktop passes
+    // Environment is ready if a container runtime is available
+    // Docker Desktop counts only if it's actually installed (has details)
     let ready = checks.iter().any(|c| {
-        (c.name.contains("Runtime") || c.name.contains("Docker Desktop")) && c.status == CheckStatus::Pass
+        if c.name.contains("Runtime") && c.status == CheckStatus::Pass {
+            return true;
+        }
+        if c.name == "Docker Desktop" && c.status == CheckStatus::Pass && c.details.is_some() {
+            return true;
+        }
+        false
     });
 
     let suggested = if checks
@@ -550,15 +556,29 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             // On Windows: install Docker inside the default WSL2 distro
             #[cfg(target_os = "windows")]
             {
-                let output = run_cmd("wsl", &["-d", "Ubuntu", "--", "bash", "-c",
+                // First check if WSL2 has a distro available
+                let distros = run_cmd("wsl", &["--list", "--quiet"]).await
+                    .map_err(|e| anyhow::anyhow!("WSL2 not available: {e}. Enable WSL2 first."))?;
+
+                let distro = if distros.contains("Ubuntu") {
+                    "Ubuntu"
+                } else {
+                    let first = distros.lines().find(|l| !l.trim().is_empty());
+                    match first {
+                        Some(d) => d.trim(),
+                        None => anyhow::bail!("No WSL2 distro found. Install Ubuntu from the Microsoft Store first."),
+                    }
+                };
+
+                tracing::info!("Installing Docker in WSL2 distro: {distro}");
+                let output = run_cmd("wsl", &["-d", distro, "--", "bash", "-c",
                     "curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER"])
                     .await
-                    .map_err(|e| anyhow::anyhow!("Docker install in WSL2 failed: {e}"))?;
-                Ok(format!("Docker installed in WSL2:\n{output}"))
+                    .map_err(|e| anyhow::anyhow!("Docker install in WSL2 distro '{distro}' failed: {e}"))?;
+                Ok(format!("Docker installed in WSL2 ({distro}):\n{output}"))
             }
             #[cfg(not(target_os = "windows"))]
             {
-                // Same as install_docker_linux
                 let output = run_cmd("bash", &["-c", "curl -fsSL https://get.docker.com | sh"])
                     .await
                     .map_err(|e| anyhow::anyhow!("Docker install failed: {e}"))?;
