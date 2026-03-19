@@ -61,6 +61,16 @@ export default function ContainersPage(props: ContainersPageProps) {
     }
   };
 
+  const deduplicatePorts = (ports: { host_ip?: string | null; host_port: number; container_port: number }[]) => {
+    const seen = new Set<string>();
+    return ports.filter((p) => {
+      const key = `${p.host_port}:${p.container_port}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   const fetchAllRunningStats = async () => {
     const running = containers().filter((c) => c.state === "Running");
     if (running.length === 0) return;
@@ -351,7 +361,33 @@ export default function ContainersPage(props: ContainersPageProps) {
             )}
           </Show>
         </td>
-        <td class="mono">{formatPorts(c.ports)}</td>
+        <td class="mono" style={{ "max-width": "200px" }}>
+          <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "align-items": "center" }}>
+            {c.ports && c.ports.length > 0 ? (
+              <For each={deduplicatePorts(c.ports)}>
+                {(p) => {
+                  const isHttp = [80, 443, 3000, 4200, 5000, 5173, 8000, 8080, 8443, 8888, 9000, 9090, 9443, 15672, 18789].includes(p.host_port);
+                  const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
+                  return isHttp ? (
+                    <a
+                      href={`${proto}://localhost:${p.host_port}`}
+                      target="_blank"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ color: "#58a6ff", "font-size": "12px" }}
+                      title={`Open ${proto}://localhost:${p.host_port}`}
+                    >
+                      {p.host_port}:{p.container_port}
+                    </a>
+                  ) : (
+                    <span style={{ color: "#8b949e", "font-size": "12px" }}>{p.host_port}:{p.container_port}</span>
+                  );
+                }}
+              </For>
+            ) : (
+              <span style={{ color: "#484f58" }}>-</span>
+            )}
+          </div>
+        </td>
         <td style={{ "text-align": "right" }}>
           <div class="action-icons">
             <Show when={actionInProgress() === c.id}>
@@ -386,7 +422,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 }}
                 title="More actions"
               >
-                &#8943;
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
               </button>
               <Show when={containerMenuOpen() === c.id}>
                 <div class="dropdown-menu" onClick={(e: MouseEvent) => e.stopPropagation()}>
@@ -581,7 +617,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                             }}
                             title="More actions"
                           >
-                            &#8943;
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                           </button>
                           <Show when={menuOpen() === group.name}>
                             <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>

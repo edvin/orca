@@ -646,10 +646,46 @@ body {
   box-shadow: none;
 }
 
+/* ==================== Custom Checkboxes ==================== */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #30363d;
+  border-radius: 4px;
+  background: #0d1117;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+input[type="checkbox"]:hover {
+  border-color: #58a6ff;
+}
+
+input[type="checkbox"]:checked {
+  background: #1f6feb;
+  border-color: #1f6feb;
+}
+
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
 /* ==================== Icon Action Buttons ==================== */
 .action-icon {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -668,7 +704,9 @@ body {
   color: #e6edf3;
 }
 
+.action-icon-start { font-size: 16px; }
 .action-icon-start:hover { color: #3fb950; background: #23883618; }
+.action-icon-stop { font-size: 14px; }
 .action-icon-stop:hover { color: #f85149; background: #da363318; }
 .action-icon-restart:hover { color: #58a6ff; background: #1f6feb18; }
 .action-icon-delete:hover { color: #f85149; background: #da363318; }
@@ -1832,6 +1870,15 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+}
+
+.inline-resource .resource-bar {
+  flex-shrink: 0;
+}
+
+.inline-resource .resource-bar-label {
+  flex-shrink: 0;
 }
 
 /* ==================== K8s Empty States ==================== */
