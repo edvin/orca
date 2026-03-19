@@ -291,28 +291,12 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
-            <div class="settings-divider" />
-            <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
-              <div class="settings-row-left">
-                <span class="settings-label">Telemetry</span>
-                <span class="settings-description">Send anonymous usage statistics</span>
-              </div>
-              <div
-                class="settings-toggle"
-                onClick={() => daemonConnected() && saveGeneralSetting("telemetry", !telemetry())}
-                style={{ cursor: daemonConnected() ? "pointer" : "not-allowed" }}
-              >
-                <div class={`toggle-track${telemetry() ? " toggle-on" : ""}`}>
-                  <div class="toggle-thumb" />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Runtime Section */}
+        {/* Runtime Section (read-only — reflects actual system state) */}
         <div class="settings-section">
-          <h2 class="settings-section-title">Container Runtime</h2>
+          <h2 class="settings-section-title">Container Runtime <span style={{ "font-size": "11px", color: "#484f58", "font-weight": "400", "margin-left": "8px" }}>auto-detected</span></h2>
           <div class="card">
             <Show when={machine()} fallback={
               <div style={{ padding: "8px 0", color: "#8b949e" }}>
