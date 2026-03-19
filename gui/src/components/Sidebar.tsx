@@ -8,13 +8,13 @@ interface SidebarProps {
   daemonStatus: string;
 }
 
-const mainNavItems: { id: Page; label: string; icon: string }[] = [
+const mainNavItems: { id: Page; label: string; icon: string; iconScale?: number }[] = [
   { id: "dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
   { id: "containers", label: "Containers", icon: "\u{1F4E6}" },
   { id: "images", label: "Images", icon: "\u{1F4BF}" },
   { id: "volumes", label: "Volumes", icon: "\u{1F4BD}" },
   { id: "networks", label: "Networks", icon: "\u{1F310}" },
-  { id: "kubernetes", label: "Kubernetes", icon: "\u2388\uFE0F" },
+  { id: "kubernetes", label: "Kubernetes", icon: "\u2388", iconScale: 1.45 },
   { id: "machine", label: "Machine", icon: "\u{1F5A5}\uFE0F" },
   { id: "templates", label: "Templates", icon: "\u{1F9E9}" },
   { id: "environment", label: "System Health", icon: "\u{1F6E0}\uFE0F" },
@@ -57,7 +57,7 @@ export default function Sidebar(props: SidebarProps) {
               class={`nav-item ${props.currentPage === item.id ? "active" : ""}`}
               onClick={() => props.onNavigate(item.id)}
             >
-              <span class="nav-icon">{item.icon}</span>
+              <span class="nav-icon" style={item.iconScale ? { transform: `scale(${item.iconScale})` } : {}}>{item.icon}</span>
               <span class="nav-label">{item.label}</span>
               <Show when={badgeFor(item.id)}>
                 {(count) => <span class="nav-badge">{count()}</span>}

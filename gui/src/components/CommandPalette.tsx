@@ -5,6 +5,7 @@ interface Command {
   id: string;
   name: string;
   icon: string;
+  iconScale?: number;
   category: string;
   shortcut?: string;
   action: () => void;
@@ -26,7 +27,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
     { id: "nav-images", name: "Go to Images", icon: "\u{1F4BF}", category: "Navigate", action: () => { props.onNavigate("images"); props.onClose(); } },
     { id: "nav-volumes", name: "Go to Volumes", icon: "\u{1F4BD}", category: "Navigate", action: () => { props.onNavigate("volumes"); props.onClose(); } },
     { id: "nav-networks", name: "Go to Networks", icon: "\u{1F310}", category: "Navigate", action: () => { props.onNavigate("networks"); props.onClose(); } },
-    { id: "nav-kubernetes", name: "Go to Kubernetes", icon: "\u2388\uFE0F", category: "Navigate", action: () => { props.onNavigate("kubernetes"); props.onClose(); } },
+    { id: "nav-kubernetes", name: "Go to Kubernetes", icon: "\u2388", iconScale: 1.45, category: "Navigate", action: () => { props.onNavigate("kubernetes"); props.onClose(); } },
     { id: "nav-machine", name: "Go to Machine", icon: "\u{1F5A5}\uFE0F", category: "Navigate", action: () => { props.onNavigate("machine"); props.onClose(); } },
     { id: "nav-templates", name: "Go to Templates", icon: "\u{1F9E9}", category: "Navigate", action: () => { props.onNavigate("templates"); props.onClose(); } },
     { id: "nav-activity", name: "Go to Activity", icon: "\u{1F4AC}", category: "Navigate", action: () => { props.onNavigate("activity"); props.onClose(); } },
@@ -35,7 +36,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
     { id: "act-run", name: "Run Container...", icon: "\u{25B6}\uFE0F", category: "Action", action: () => { props.onNavigate("containers"); props.onClose(); } },
     { id: "act-pull", name: "Pull Image...", icon: "\u{2B07}\uFE0F", category: "Action", action: () => { props.onNavigate("images"); props.onClose(); } },
     { id: "act-prune", name: "Prune Images", icon: "\u{1F9F9}", category: "Action", action: () => { props.onNavigate("images"); props.onClose(); } },
-    { id: "act-k8s", name: "Enable Kubernetes", icon: "\u2388\uFE0F", category: "Action", action: () => { props.onNavigate("kubernetes"); props.onClose(); } },
+    { id: "act-k8s", name: "Enable Kubernetes", icon: "\u2388", iconScale: 1.45, category: "Action", action: () => { props.onNavigate("kubernetes"); props.onClose(); } },
   ];
 
   const fuzzyMatch = (text: string, pattern: string): boolean => {
@@ -100,7 +101,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
                 onClick={() => cmd.action()}
                 onMouseEnter={() => setSelectedIndex(i())}
               >
-                <span class="command-item-icon">{cmd.icon}</span>
+                <span class="command-item-icon" style={cmd.iconScale ? { transform: `scale(${cmd.iconScale})` } : {}}>{cmd.icon}</span>
                 <span class="command-item-name">{cmd.name}</span>
                 <span class="command-item-category">{cmd.category}</span>
                 <Show when={cmd.shortcut}>
