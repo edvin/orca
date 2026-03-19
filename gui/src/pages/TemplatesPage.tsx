@@ -12,6 +12,7 @@ interface PortEntry { host: string; container: string }
 export default function TemplatesPage() {
   const [templates, setTemplates] = createSignal<AppTemplate[]>([]);
   const [category, setCategory] = createSignal("All");
+  const [search, setSearch] = createSignal("");
   const [deploying, setDeploying] = createSignal(false);
   const [deployTarget, setDeployTarget] = createSignal<AppTemplate | null>(null);
 
@@ -51,8 +52,16 @@ export default function TemplatesPage() {
 
   const filtered = () => {
     const cat = category();
-    if (cat === "All") return templates();
-    return templates().filter((t) => t.category === cat);
+    const q = search().toLowerCase().trim();
+    let items = cat === "All" ? templates() : templates().filter((t) => t.category === cat);
+    if (q) {
+      items = items.filter((t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        t.image.toLowerCase().includes(q)
+      );
+    }
+    return items;
   };
 
   const groupedByCategory = () => {
@@ -390,7 +399,16 @@ export default function TemplatesPage() {
     <div>
       <div class="page-header">
         <h1 class="page-title">App Templates</h1>
-        <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
+        <div class="page-actions">
+          <input
+            class="search-input"
+            type="text"
+            placeholder="Search templates..."
+            value={search()}
+            onInput={(e) => setSearch(e.currentTarget.value)}
+          />
+          <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
+        </div>
       </div>
 
       {/* Category filter tabs */}

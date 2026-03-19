@@ -544,6 +544,7 @@ body {
   text-transform: capitalize;
   transition: all 0.2s ease;
   letter-spacing: 0.2px;
+  width: fit-content;
 }
 
 .state-running {
