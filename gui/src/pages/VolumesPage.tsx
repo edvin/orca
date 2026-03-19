@@ -3,13 +3,15 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Volume } from "../lib/types";
 import { formatTimestamp } from "../lib/format";
 import { showToast } from "../components/Toast";
-import CopyButton from "../components/CopyButton";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 
-export default function VolumesPage() {
+interface VolumesPageProps {
+  onNavigate?: (target: string) => void;
+}
+
+export default function VolumesPage(props: VolumesPageProps) {
   const [volumes, setVolumes] = createSignal<Volume[]>([]);
-  const [selected, setSelected] = createSignal<string | null>(null);
   const [showCreate, setShowCreate] = createSignal(false);
   const [createName, setCreateName] = createSignal("");
   const [createDriver, setCreateDriver] = createSignal("local");
@@ -95,6 +97,7 @@ export default function VolumesPage() {
             <tr>
               <SortableHeader label="Name" field="name" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <SortableHeader label="Driver" field="driver" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <th>Size</th>
               <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th style={{ "text-align": "right" }}>Actions</th>
             </tr>
@@ -102,50 +105,24 @@ export default function VolumesPage() {
           <tbody>
             <For each={sorted()}>
               {(v) => (
-                <>
-                  <tr onClick={() => setSelected(selected() === v.name ? null : v.name)} style={{ cursor: "pointer" }}>
-                    <td>
-                      <div style={{ "font-weight": "500" }}>{v.name}</div>
-                      <Show when={Object.keys(v.labels).length > 0}>
-                        <div style={{ "font-size": "11px", color: "#8b949e", "margin-top": "2px" }}>
-                          {Object.keys(v.labels).length} label{Object.keys(v.labels).length !== 1 ? "s" : ""}
-                        </div>
-                      </Show>
-                    </td>
-                    <td style={{ color: "#8b949e" }}>{v.driver}</td>
-                    <td style={{ color: "#8b949e" }}>{formatTimestamp(v.created_at)}</td>
-                    <td style={{ "text-align": "right" }}>
-                      <button class="action-icon action-icon-delete" title="Remove volume" onClick={(e) => removeVolume(v.name, e)}>🗑</button>
-                    </td>
-                  </tr>
-                  <Show when={selected() === v.name}>
-                    <tr>
-                      <td colspan="4" style={{ padding: 0 }}>
-                        <div class="detail-body">
-                          <div class="card-grid">
-                            <div class="card-label">Mount Point</div>
-                            <div class="card-value" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                              <span class="mono" style={{ "font-size": "12px" }}>{v.mountpoint}</span>
-                              <CopyButton text={v.mountpoint} />
-                            </div>
-                            <Show when={Object.keys(v.labels).length > 0}>
-                              <div class="card-label">Labels</div>
-                              <div class="card-value">
-                                <For each={Object.entries(v.labels)}>
-                                  {([k, val]) => (
-                                    <div class="mono" style={{ "line-height": "1.6", "font-size": "11px" }}>
-                                      <span style={{ color: "#58a6ff" }}>{k}</span>{val ? `=${val}` : <span style={{ color: "#484f58" }}> (empty)</span>}
-                                    </div>
-                                  )}
-                                </For>
-                              </div>
-                            </Show>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  </Show>
-                </>
+                <tr onClick={() => props.onNavigate?.(`volume:${v.name}`)} style={{ cursor: "pointer" }}>
+                  <td>
+                    <div style={{ "font-weight": "500" }}>{v.name}</div>
+                    <Show when={Object.keys(v.labels).length > 0}>
+                      <div style={{ "font-size": "11px", color: "#8b949e", "margin-top": "2px" }}>
+                        {Object.keys(v.labels).length} label{Object.keys(v.labels).length !== 1 ? "s" : ""}
+                      </div>
+                    </Show>
+                  </td>
+                  <td style={{ color: "#8b949e" }}>{v.driver}</td>
+                  <td style={{ color: "#8b949e" }}>-</td>
+                  <td style={{ color: "#8b949e" }}>{formatTimestamp(v.created_at)}</td>
+                  <td style={{ "text-align": "right" }}>
+                    <button class="action-icon action-icon-delete" title="Remove volume" onClick={(e) => removeVolume(v.name, e)}>
+                      {"\uD83D\uDDD1"}
+                    </button>
+                  </td>
+                </tr>
               )}
             </For>
           </tbody>

@@ -13,6 +13,7 @@ export default function NetworksPage() {
   const [createName, setCreateName] = createSignal("");
   const [createDriver, setCreateDriver] = createSignal("bridge");
   const [creating, setCreating] = createSignal(false);
+  const [expandedNetwork, setExpandedNetwork] = createSignal<string | null>(null);
   const { sortField, sortDir, toggleSort, sortFn } = useSort<Network>("name");
 
   const refresh = async () => {
@@ -119,9 +120,17 @@ export default function NetworksPage() {
           </thead>
           <tbody>
             <For each={sorted()}>
-              {(n) => (
-                <tr>
-                  <td style={{ "font-weight": "500" }}>{n.name}</td>
+              {(n) => (<>
+                <tr
+                  onClick={() => setExpandedNetwork(expandedNetwork() === n.id ? null : n.id)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <td style={{ "font-weight": "500" }}>
+                    <span class={`expand-arrow ${expandedNetwork() === n.id ? "expanded" : ""}`} style={{ "margin-right": "6px", "font-size": "10px" }}>
+                      {"\u25B6"}
+                    </span>
+                    {n.name}
+                  </td>
                   <td class="mono" style={{ color: "#8b949e" }}>{n.id.substring(0, 12)}</td>
                   <td>{n.driver}</td>
                   <td class="mono">{n.subnet || "-"}</td>
@@ -132,11 +141,47 @@ export default function NetworksPage() {
                         class="action-icon action-icon-delete"
                         title="Remove network"
                         onClick={(e) => removeNetwork(n.name, e)}
-                      >🗑</button>
+                      >{"\uD83D\uDDD1"}</button>
                     </Show>
                   </td>
                 </tr>
-              )}
+                <Show when={expandedNetwork() === n.id}>
+                  <tr>
+                    <td colspan="6" style={{ padding: "12px 16px 12px 36px", background: "#161b22", "border-top": "none" }}>
+                      <div style={{ display: "grid", "grid-template-columns": "repeat(3, 1fr)", gap: "12px", "font-size": "13px" }}>
+                        <div>
+                          <span style={{ color: "#8b949e" }}>Full ID</span>
+                          <div class="mono" style={{ "word-break": "break-all", "margin-top": "2px" }}>{n.id}</div>
+                        </div>
+                        <div>
+                          <span style={{ color: "#8b949e" }}>Subnet</span>
+                          <div class="mono" style={{ "margin-top": "2px" }}>{n.subnet || "None"}</div>
+                        </div>
+                        <div>
+                          <span style={{ color: "#8b949e" }}>Gateway</span>
+                          <div class="mono" style={{ "margin-top": "2px" }}>{n.gateway || "None"}</div>
+                        </div>
+                        <div>
+                          <span style={{ color: "#8b949e" }}>Driver</span>
+                          <div style={{ "margin-top": "2px" }}>{n.driver}</div>
+                        </div>
+                        <div>
+                          <span style={{ color: "#8b949e" }}>Scope</span>
+                          <div style={{ "margin-top": "2px" }}>{isDefaultNetwork(n.name) ? "Default" : "Custom"}</div>
+                        </div>
+                        <div>
+                          <span style={{ color: "#8b949e" }}>Labels</span>
+                          <div class="mono" style={{ "margin-top": "2px" }}>
+                            {Object.keys(n.labels).length > 0
+                              ? Object.entries(n.labels).map(([k, v]) => `${k}=${v}`).join(", ")
+                              : "None"}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </Show>
+              </>)}
             </For>
           </tbody>
         </table>

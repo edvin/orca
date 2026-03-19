@@ -136,14 +136,14 @@ export default function ContainersPage(props: ContainersPageProps) {
   };
 
   const deleteStack = async (name: string) => {
-    if (!window.confirm(`Run docker compose down for '${name}'? This will stop and remove all containers.`)) return;
+    if (!window.confirm(`Delete stack "${name}"? This will stop and remove all containers in the stack.`)) return;
     setStackActionInProgress(name);
     try {
       await invoke("compose_down", { name });
-      showToast("Stack removed", "success");
-      setTimeout(refresh, 500);
+      showToast(`Stack "${name}" removed`, "success");
+      await refresh();
     } catch (err) {
-      showToast(`Delete failed: ${err}`, "error");
+      showToast(`Failed to delete stack: ${err}`, "error");
     }
     setStackActionInProgress(null);
   };

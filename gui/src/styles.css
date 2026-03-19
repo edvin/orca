@@ -147,7 +147,7 @@ body {
   justify-content: space-between;
   align-items: center;
   height: 46px;
-  background: linear-gradient(90deg, #0d1117 0%, #111820 100%);
+  background: linear-gradient(90deg, #141921 0%, #181f28 100%);
   border-bottom: 1px solid #21262d;
   padding: 0 10px 0 14px;
   user-select: none;
@@ -517,7 +517,7 @@ body {
 }
 
 .table tbody tr:hover {
-  background: #1c212844;
+  background: #1c212888;
 }
 
 .table tbody td {
@@ -2870,6 +2870,11 @@ body {
   margin-bottom: 14px;
   padding-bottom: 8px;
   border-bottom: 1px solid #21262d;
+}
+
+/* Volume file browser */
+.file-entry:hover {
+  background: rgba(88, 166, 255, 0.06);
 }
 
 /* Inspect tab */

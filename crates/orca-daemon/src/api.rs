@@ -129,6 +129,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/volumes", get(list_volumes).post(create_volume_handler))
         .route("/volumes/{name}", get(inspect_volume))
         .route("/volumes/{name}", delete(remove_volume))
+        .route("/volumes/{name}/files", get(volume_list_files))
+        .route("/volumes/{name}/file", get(volume_read_file))
+        .route("/volumes/{name}/containers", get(volume_containers))
         // Networks
         .route("/networks", get(list_networks).post(create_network_handler))
         .route("/networks/{name}", get(inspect_network))
@@ -977,6 +980,166 @@ async fn create_volume_handler(
 
     let volume = VolumeManager::create(state.runtime.as_ref(), &body.name, labels).await?;
     Ok((StatusCode::CREATED, Json(volume)))
+}
+
+// --- Volume File Browsing ---
+
+#[derive(Deserialize)]
+struct VolumeFilesQuery {
+    #[serde(default)]
+    path: Option<String>,
+}
+
+async fn volume_list_files(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Query(query): Query<VolumeFilesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::runtime::{ContainerCreateOpts, VolumeMount};
+
+    let subpath = query.path.unwrap_or_default();
+    let sanitized = subpath.replace("..", "").replace('\0', "");
+    let data_path = if sanitized.is_empty() || sanitized == "/" {
+        "/data".to_string()
+    } else {
+        format!("/data/{}", sanitized.trim_start_matches('/'))
+    };
+
+    // Create a temporary container to list files
+    let opts = ContainerCreateOpts {
+        image: "alpine:latest".to_string(),
+        name: None,
+        command: vec![
+            "ls".to_string(),
+            "-la".to_string(),
+            "--time-style=+%Y-%m-%dT%H:%M:%S".to_string(),
+            data_path,
+        ],
+        env: HashMap::new(),
+        ports: vec![],
+        volumes: vec![VolumeMount {
+            source: name.clone(),
+            target: "/data".to_string(),
+            read_only: true,
+        }],
+        labels: HashMap::new(),
+        restart_policy: None,
+        network: None,
+        detach: false,
+        remove_on_exit: true,
+        cpu_limit: None,
+        memory_limit: None,
+        memory_swap: None,
+    };
+
+    let id = state.runtime.create_container(opts).await?;
+    state.runtime.start_container(&id).await?;
+
+    // Wait for container to finish and collect logs
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let log_rx = state.runtime.container_logs(&id, false, Some(1000)).await?;
+    let mut lines = Vec::new();
+    let mut rx = log_rx;
+    while let Some(line) = rx.recv().await {
+        lines.push(line);
+    }
+
+    // Clean up
+    let _ = state.runtime.remove_container(&id, true).await;
+
+    // Parse ls -la output into structured data
+    let mut entries = Vec::new();
+    for line in &lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("total") {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.splitn(7, char::is_whitespace).collect();
+        if parts.len() >= 7 {
+            let permissions = parts[0];
+            let is_dir = permissions.starts_with('d');
+            let size_str = parts[4];
+            let modified = parts[5];
+            let name_part = parts[6].trim();
+            if name_part == "." || name_part == ".." {
+                continue;
+            }
+            entries.push(serde_json::json!({
+                "name": name_part,
+                "size": size_str,
+                "permissions": permissions,
+                "modified": modified,
+                "is_dir": is_dir,
+            }));
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "entries": entries, "path": sanitized })))
+}
+
+async fn volume_read_file(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Query(query): Query<VolumeFilesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::runtime::{ContainerCreateOpts, VolumeMount};
+
+    let file_path = query.path.unwrap_or_default();
+    let sanitized = file_path.replace("..", "").replace('\0', "");
+    let data_path = format!("/data/{}", sanitized.trim_start_matches('/'));
+
+    let opts = ContainerCreateOpts {
+        image: "alpine:latest".to_string(),
+        name: None,
+        command: vec!["cat".to_string(), data_path],
+        env: HashMap::new(),
+        ports: vec![],
+        volumes: vec![VolumeMount {
+            source: name.clone(),
+            target: "/data".to_string(),
+            read_only: true,
+        }],
+        labels: HashMap::new(),
+        restart_policy: None,
+        network: None,
+        detach: false,
+        remove_on_exit: true,
+        cpu_limit: None,
+        memory_limit: None,
+        memory_swap: None,
+    };
+
+    let id = state.runtime.create_container(opts).await?;
+    state.runtime.start_container(&id).await?;
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let log_rx = state.runtime.container_logs(&id, false, Some(10000)).await?;
+    let mut lines = Vec::new();
+    let mut rx = log_rx;
+    while let Some(line) = rx.recv().await {
+        lines.push(line);
+    }
+
+    let _ = state.runtime.remove_container(&id, true).await;
+
+    Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
+}
+
+async fn volume_containers(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let containers = state.runtime.list_containers(true).await?;
+    let using_volume: Vec<_> = containers
+        .into_iter()
+        .filter(|c| {
+            c.mounts.as_ref().map_or(false, |mounts| {
+                mounts.iter().any(|m| m.source == name || m.source.ends_with(&format!("/{name}")))
+            })
+        })
+        .collect();
+
+    Ok(Json(using_volume))
 }
 
 // --- Networks ---

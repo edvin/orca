@@ -11,6 +11,7 @@ import ContainerDetailPage from "./pages/ContainerDetailPage";
 import StackDetailPage from "./pages/StackDetailPage";
 import ImagesPage from "./pages/ImagesPage";
 import VolumesPage from "./pages/VolumesPage";
+import VolumeDetailPage from "./pages/VolumeDetailPage";
 import NetworksPage from "./pages/NetworksPage";
 import KubernetesPage from "./pages/KubernetesPage";
 import MachinePage from "./pages/MachinePage";
@@ -24,7 +25,7 @@ import CommandPalette from "./components/CommandPalette";
 import AiAssistant from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
+export type Page = "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
@@ -89,6 +90,10 @@ export default function App() {
       setDetailId(target.split(":").slice(1).join(":"));
       setBreadcrumbStack(null);
       setPage("container-detail");
+    } else if (target.startsWith("volume:")) {
+      setDetailId(target.split(":").slice(1).join(":"));
+      setBreadcrumbStack(null);
+      setPage("volume-detail");
     } else if (target.startsWith("stack:")) {
       setDetailId(target.split(":").slice(1).join(":"));
       setBreadcrumbStack(null);
@@ -170,7 +175,7 @@ export default function App() {
         <>
           <div class="app-body">
             <Sidebar
-              currentPage={page() === "container-detail" ? "containers" as Page : page() === "stack-detail" ? "containers" as Page : page()}
+              currentPage={page() === "container-detail" ? "containers" as Page : page() === "stack-detail" ? "containers" as Page : page() === "volume-detail" ? "volumes" as Page : page()}
               onNavigate={(p: Page) => navigate(p)}
               daemonStatus={daemonStatus()}
             />
@@ -194,7 +199,14 @@ export default function App() {
                 />
               )}
               {page() === "images" && <ImagesPage />}
-              {page() === "volumes" && <VolumesPage />}
+              {page() === "volumes" && <VolumesPage onNavigate={(p) => navigate(p)} />}
+              {page() === "volume-detail" && detailId() && (
+                <VolumeDetailPage
+                  volumeName={detailId()!}
+                  onBack={() => navigate("volumes")}
+                  onNavigate={(p) => navigate(p)}
+                />
+              )}
               {page() === "networks" && <NetworksPage />}
               {page() === "kubernetes" && <KubernetesPage />}
               {page() === "machine" && <MachinePage />}

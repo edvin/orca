@@ -512,6 +512,27 @@ pub async fn create_volume(name: String, driver: Option<String>, labels: Option<
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+// --- Volume File Browsing ---
+
+#[tauri::command]
+pub async fn volume_list_files(name: String, path: Option<String>) -> Result<serde_json::Value, String> {
+    let query = match &path {
+        Some(p) => format!("?path={}", urlencoding::encode(p)),
+        None => String::new(),
+    };
+    get_json(&format!("/volumes/{name}/files{query}")).await
+}
+
+#[tauri::command]
+pub async fn volume_read_file(name: String, path: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/volumes/{name}/file?path={}", urlencoding::encode(&path))).await
+}
+
+#[tauri::command]
+pub async fn volume_containers(name: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/volumes/{name}/containers")).await
+}
+
 // --- Images (inspect) ---
 
 #[tauri::command]

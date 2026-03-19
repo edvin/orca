@@ -51,8 +51,15 @@ export default function LogViewer(props: LogViewerProps) {
 
   const filtered = () => {
     const q = filter().toLowerCase();
-    if (!q) return lines();
-    return lines().filter((l) => l.toLowerCase().includes(q));
+    let result = lines();
+    if (q) {
+      result = result.filter((l) => l.toLowerCase().includes(q));
+    }
+    // Remove consecutive empty lines
+    return result.filter((line, i, arr) => {
+      if (line.trim() === "" && i > 0 && arr[i - 1].trim() === "") return false;
+      return true;
+    });
   };
 
   const handleScroll = () => {
@@ -124,17 +131,17 @@ export default function LogViewer(props: LogViewerProps) {
           >
             Auto-scroll
           </button>
-          <button class="btn btn-sm" onClick={copyAll} title="Copy all visible log lines">
-            Copy All
+          <button class="action-icon" onClick={copyAll} title="Copy all logs">
+            {"\uD83D\uDCCB"}
           </button>
-          <button class="btn btn-sm" onClick={downloadLogs} title="Download logs as .log file">
-            Download
+          <button class="action-icon" onClick={downloadLogs} title="Download logs">
+            {"\u2B07\uFE0F"}
           </button>
-          <button class="btn btn-sm" onClick={fetchLogs}>
-            Refresh
+          <button class="action-icon" onClick={fetchLogs} title="Refresh">
+            {"\uD83D\uDD04"}
           </button>
-          <button class="btn btn-sm" onClick={props.onClose}>
-            Close
+          <button class="action-icon" onClick={props.onClose} title="Close">
+            {"\u2715"}
           </button>
         </div>
       </div>
