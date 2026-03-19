@@ -9,11 +9,22 @@ static CLI_CELL: OnceCell<&'static str> = OnceCell::const_new();
 
 /// Detect the container CLI command — prefers docker, falls back to podman.
 /// The result is cached after the first call.
+fn extended_path() -> String {
+    let current = std::env::var("PATH").unwrap_or_default();
+    if cfg!(target_os = "macos") {
+        format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{current}")
+    } else {
+        current
+    }
+}
+
 async fn detect_cli() -> &'static str {
     CLI_CELL
         .get_or_init(|| async {
+            let path = extended_path();
             if Command::new("docker")
                 .arg("--version")
+                .env("PATH", &path)
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()
@@ -24,6 +35,7 @@ async fn detect_cli() -> &'static str {
             }
             if Command::new("podman")
                 .arg("--version")
+                .env("PATH", &path)
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()
@@ -52,14 +64,25 @@ fn detect_platform() -> String {
 
 /// Run a command and capture its stdout. Returns Ok(stdout) on success.
 async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
-    let result = Command::new(program)
-        .args(args)
+    let mut cmd = Command::new(program);
+    cmd.args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
+        .stderr(Stdio::piped());
+
+    // On macOS, the app bundle has a minimal PATH. Extend it to include
+    // common locations where Docker, Homebrew, Lima etc. are installed.
+    #[cfg(target_os = "macos")]
+    {
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let extended = format!(
+            "/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{}",
+            current_path
+        );
+        cmd.env("PATH", extended);
+    }
+
+    let result = cmd.output().await.map_err(|e| e.to_string())?;
 
     if result.status.success() {
         Ok(String::from_utf8_lossy(&result.stdout).trim().to_string())

@@ -147,6 +147,46 @@ export default function EnvironmentPage() {
               </div>
             </div>
 
+            {/* Quick action for non-ready state */}
+            <Show when={!s().ready}>
+              <div class="card" style={{
+                "border-left": "4px solid #58a6ff",
+                "margin-bottom": "20px",
+                padding: "20px",
+              }}>
+                <div style={{ "font-weight": "600", "margin-bottom": "8px" }}>
+                  Get started
+                </div>
+                <div style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px" }}>
+                  {s().platform === "macos"
+                    ? "Orca needs Docker Desktop or Docker via Lima to manage containers on macOS."
+                    : s().platform === "windows"
+                    ? "Orca needs WSL2 with Docker installed to manage containers on Windows."
+                    : "Orca needs Docker or Podman to manage containers."}
+                </div>
+                <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                  <For each={s().checks.filter(c => c.fix_action && c.status !== "Pass")}>
+                    {(check) => (
+                      <button
+                        class="btn btn-primary"
+                        disabled={fixingAction() === check.fix_action}
+                        onClick={() => runFix(check.fix_action!)}
+                      >
+                        {fixingAction() === check.fix_action
+                          ? "Installing..."
+                          : `Install ${check.name}`}
+                      </button>
+                    )}
+                  </For>
+                  <Show when={s().checks.filter(c => c.fix_action && c.status !== "Pass").length === 0}>
+                    <div style={{ "font-size": "13px", color: "#8b949e" }}>
+                      Install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" style={{ color: "#58a6ff" }}>Docker Desktop</a> or a container runtime manually, then click Re-check.
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </Show>
+
             {/* Docker Desktop note */}
             <Show when={hasDockerDesktop()}>
               <div
