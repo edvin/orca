@@ -58,11 +58,27 @@ impl DaemonManager {
         Err("Daemon started but failed to respond within 7.5 seconds".into())
     }
 
-    /// Stop the daemon process.
+    /// Stop the daemon process (fire-and-forget).
     pub fn stop(&self) {
         if let Some(mut child) = self.child.lock().ok().and_then(|mut guard| guard.take()) {
             tracing::info!("Stopping orca-daemon");
             let _ = child.start_kill();
+            // Brief sleep to give the process time to exit
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    }
+
+    /// Stop the daemon and wait for the process to fully exit.
+    /// Important on Windows where the binary file is locked while the process runs.
+    pub async fn stop_and_wait(&self) {
+        if let Some(mut child) = self.child.lock().ok().and_then(|mut guard| guard.take()) {
+            tracing::info!("Stopping orca-daemon and waiting for exit");
+            let _ = child.start_kill();
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                child.wait(),
+            ).await;
+            tracing::info!("orca-daemon stopped");
         }
     }
 

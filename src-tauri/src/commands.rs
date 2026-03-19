@@ -958,6 +958,13 @@ pub async fn start_daemon(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn stop_daemon(app: tauri::AppHandle) -> Result<String, String> {
+    let dm = app.state::<Arc<daemon::DaemonManager>>();
+    dm.stop_and_wait().await;
+    Ok("Daemon stopped".into())
+}
+
+#[tauri::command]
 pub async fn get_daemon_info() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "binary_path": daemon::find_daemon_binary(),

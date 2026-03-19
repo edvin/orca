@@ -41,6 +41,8 @@ export default function StatusBar() {
       const update = await check();
       if (update) {
         showToast("Downloading update...", "info");
+        // Stop the daemon before installing so the installer can replace the binary
+        try { await invoke("stop_daemon"); } catch { /* ignore */ }
         await update.downloadAndInstall();
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
