@@ -119,12 +119,17 @@ jobs:
         shell: bash
         run: |
           TARGET="target/${{ matrix.platform.target }}/release"
-          FILES=$(find "$TARGET/bundle" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" \) 2>/dev/null || true)
-          # Add standalone daemon
-          [ -f "$TARGET/orca-daemon" ] && FILES="$FILES $TARGET/orca-daemon"
-          [ -f "$TARGET/orca-daemon.exe" ] && FILES="$FILES $TARGET/orca-daemon.exe"
+          FILES=""
+          for f in $(find "$TARGET/bundle" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" \) 2>/dev/null); do
+            FILES="$FILES $f"
+          done
+          # Add standalone daemon (only if file actually exists)
+          if [ -f "$TARGET/orca-daemon" ]; then FILES="$FILES $TARGET/orca-daemon"; fi
+          if [ -f "$TARGET/orca-daemon.exe" ]; then FILES="$FILES $TARGET/orca-daemon.exe"; fi
+          FILES=$(echo "$FILES" | xargs)
           if [ -n "$FILES" ]; then
-            echo "Uploading: $FILES"
+            echo "Uploading:"
+            echo "$FILES" | tr ' ' '\n'
             gh release upload "${{ github.ref_name }}" $FILES --repo "${{ github.repository }}" --clobber
           else
             echo "No artifacts found to upload"
