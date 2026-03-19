@@ -755,8 +755,33 @@ pub async fn get_system_resources() -> Option<SystemResources> {
         } else {
             (0, 0)
         }
+    } else if cfg!(target_os = "macos") {
+        // macOS: use sysctl for memory
+        let total = match run_cmd("sysctl", &["-n", "hw.memsize"]).await {
+            Ok(s) => s.trim().parse::<u64>().unwrap_or(0),
+            Err(_) => 0,
+        };
+        // Get page size and free pages for available memory
+        let available = match run_cmd("vm_stat", &[]).await {
+            Ok(output) => {
+                let page_size = 16384u64; // default on Apple Silicon
+                let free_pages = output.lines()
+                    .find(|l| l.contains("Pages free"))
+                    .and_then(|l| l.split_whitespace().last())
+                    .and_then(|s| s.trim_end_matches('.').parse::<u64>().ok())
+                    .unwrap_or(0);
+                let inactive_pages = output.lines()
+                    .find(|l| l.contains("Pages inactive"))
+                    .and_then(|l| l.split_whitespace().last())
+                    .and_then(|s| s.trim_end_matches('.').parse::<u64>().ok())
+                    .unwrap_or(0);
+                (free_pages + inactive_pages) * page_size
+            }
+            Err(_) => total / 2, // rough fallback
+        };
+        (total, available)
     } else {
-        // Fallback: try to get from `free` command
+        // Fallback: try `free -b` (Linux only)
         match run_cmd("free", &["-b"]).await {
             Ok(output) => {
                 let mut total = 0u64;
@@ -776,20 +801,17 @@ pub async fn get_system_resources() -> Option<SystemResources> {
         }
     };
 
-    // Disk usage: parse `df` output for the root filesystem
-    let (disk_total, disk_free) = match run_cmd("df", &["-B1", "/"]).await {
+    // Disk usage: use `df -k` (works on both Linux and macOS)
+    let (disk_total, disk_free) = match run_cmd("df", &["-k", "/"]).await {
         Ok(output) => {
-            // Second line has: Filesystem 1B-blocks Used Available Use% Mounted
             let mut total = 0u64;
             let mut free = 0u64;
             for (i, line) in output.lines().enumerate() {
-                if i == 0 {
-                    continue; // header
-                }
+                if i == 0 { continue; }
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 4 {
-                    total = parts[1].parse().unwrap_or(0);
-                    free = parts[3].parse().unwrap_or(0);
+                    total = parts[1].parse::<u64>().unwrap_or(0) * 1024; // KB to bytes
+                    free = parts[3].parse::<u64>().unwrap_or(0) * 1024;
                 }
                 break;
             }
@@ -820,9 +842,15 @@ pub async fn check_system_health() -> SystemHealth {
 
     let cli = detect_cli().await;
     let version = if connected {
+        // Try CLI first, then fall back to docker version without format (macOS compat)
         run_cmd(cli, &["version", "--format", "{{.Server.Version}}"])
             .await
             .ok()
+            .or_else(|| {
+                // On macOS, the CLI might not be in PATH even though docker is running.
+                // Try to extract version from the socket connection later (via bollard in daemon).
+                None
+            })
     } else {
         None
     };

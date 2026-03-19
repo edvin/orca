@@ -1393,9 +1393,20 @@ async fn env_fix(
 // --- System Health ---
 
 async fn system_health(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let health = orca_backend_common::environment::check_system_health().await;
+    let mut health = orca_backend_common::environment::check_system_health().await;
+
+    // Override connection status and version from bollard (already connected via socket).
+    // The CLI-based checks may fail on macOS where docker isn't in PATH,
+    // but the daemon's bollard connection works fine.
+    if let Ok(version) = state.runtime.docker.version().await {
+        health.docker_connected = true;
+        health.docker_version = version.version;
+        // Remove false "not running" warning
+        health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable"));
+    }
+
     Ok(Json(health))
 }
 
