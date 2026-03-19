@@ -152,14 +152,14 @@ export default function EnvironmentPage() {
                 padding: "32px",
               }}>
                 <div style={{ "font-size": "24px", "font-weight": "700", "margin-bottom": "8px", color: "var(--text-primary)" }}>
-                  Welcome to Orca
+                  Container Runtime Setup
                 </div>
                 <div style={{ "font-size": "14px", color: "var(--text-muted)", "margin-bottom": "24px", "line-height": "1.5" }}>
                   {s().platform === "macos"
-                    ? "Orca needs a container runtime to manage your containers. We'll help you set up Docker via Lima or Docker Desktop on macOS."
+                    ? "Orca needs a container runtime to manage your containers. Set up Docker via Lima or Docker Desktop on macOS."
                     : s().platform === "windows"
-                    ? "Orca needs Docker running inside WSL2 to manage containers on Windows. Let's get that set up."
-                    : "Orca needs a container runtime to get started. We can install Docker or Podman for you."}
+                    ? "Orca needs Docker running inside WSL2 to manage containers on Windows."
+                    : "Orca needs a container runtime. Install Docker or Podman to get started."}
                 </div>
 
                 {/* Setup steps */}
