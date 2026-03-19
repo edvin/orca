@@ -1542,9 +1542,10 @@ async fn ai_ask(
     Json(body): Json<AiAskRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Read provider settings from config
-    let (provider, api_key, model) = {
+    let (provider, api_key, model, openai_url) = {
         let config = state.config.blocking_lock();
         let provider = config.ai_provider.clone();
+        let url = config.openai_url.clone();
         let (key, model) = if provider == "openai" {
             let key = std::env::var("OPENAI_API_KEY")
                 .ok()
@@ -1556,7 +1557,7 @@ async fn ai_ask(
                 .or_else(|| config.anthropic_api_key.clone());
             (key, config.anthropic_model.clone())
         };
-        (provider, key, model)
+        (provider, key, model, url)
     };
 
     let api_key = match api_key {
@@ -1618,7 +1619,7 @@ async fn ai_ask(
     let answer = if provider == "openai" {
         // Call OpenAI API
         let api_resp = http_client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(format!("{}/chat/completions", openai_url.trim_end_matches('/')))
             .header("Authorization", format!("Bearer {api_key}"))
             .header("content-type", "application/json")
             .json(&serde_json::json!({
@@ -1733,6 +1734,8 @@ struct AiSettingsRequest {
     provider: String,
     api_key: String,
     model: String,
+    #[serde(default)]
+    url: Option<String>,
 }
 
 async fn save_ai_settings(
@@ -1748,6 +1751,11 @@ async fn save_ai_settings(
             Some(body.api_key)
         };
         config.openai_model = body.model;
+        if let Some(url) = body.url {
+            if !url.is_empty() {
+                config.openai_url = url;
+            }
+        }
     } else {
         config.anthropic_api_key = if body.api_key.is_empty() {
             None
@@ -1770,6 +1778,7 @@ async fn get_ai_settings(
         "has_openai_key": config.openai_api_key.as_ref().map(|k| !k.is_empty()).unwrap_or(false),
         "anthropic_model": config.anthropic_model,
         "openai_model": config.openai_model,
+        "openai_url": config.openai_url,
         "api_token": config.api_token.clone().unwrap_or_default(),
     })))
 }

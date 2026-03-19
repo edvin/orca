@@ -22,6 +22,8 @@ export default function AiAssistant(props: AiAssistantProps) {
   const [showInlineSetup, setShowInlineSetup] = createSignal(false);
   const [setupProvider, setSetupProvider] = createSignal<"anthropic" | "openai">("anthropic");
   const [setupApiKey, setSetupApiKey] = createSignal("");
+  const [setupUrl, setSetupUrl] = createSignal("");
+  const [setupModel, setSetupModel] = createSignal("");
   const [setupSaving, setSetupSaving] = createSignal(false);
   let messagesEnd: HTMLDivElement | undefined;
 
@@ -51,11 +53,14 @@ export default function AiAssistant(props: AiAssistantProps) {
       await invoke("save_ai_settings", {
         provider: setupProvider(),
         apiKey: key,
-        model: "",
+        model: setupModel().trim() || (setupProvider() === "openai" ? "gpt-4o" : "claude-sonnet-4-20250514"),
+        url: setupUrl().trim() || null,
       });
       showToast("AI settings saved", "success");
       setShowInlineSetup(false);
       setSetupApiKey("");
+      setSetupUrl("");
+      setSetupModel("");
       await checkCredentials();
     } catch (e) {
       showToast(`Failed to save AI settings: ${e}`, "error");
@@ -193,22 +198,38 @@ export default function AiAssistant(props: AiAssistantProps) {
                   </div>
                 </Show>
                 <Show when={showInlineSetup()}>
-                  <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 280px">
+                  <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 300px">
                     <select
-                      style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 8px; border-radius: 6px; font-size: 13px; font-family: inherit"
+                      class="form-select"
                       value={setupProvider()}
                       onChange={(e) => setSetupProvider(e.currentTarget.value as "anthropic" | "openai")}
                     >
-                      <option value="anthropic">Anthropic</option>
-                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic (Claude)</option>
+                      <option value="openai">OpenAI / Compatible</option>
                     </select>
                     <input
                       type="password"
+                      class="form-input"
                       placeholder="API Key"
-                      style="background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 8px; border-radius: 6px; font-size: 13px; font-family: inherit"
                       value={setupApiKey()}
                       onInput={(e) => setSetupApiKey(e.currentTarget.value)}
                     />
+                    <Show when={setupProvider() === "openai"}>
+                      <input
+                        type="text"
+                        class="form-input"
+                        placeholder="API URL (default: https://api.openai.com/v1)"
+                        value={setupUrl()}
+                        onInput={(e) => setSetupUrl(e.currentTarget.value)}
+                      />
+                      <input
+                        type="text"
+                        class="form-input"
+                        placeholder="Model (default: gpt-4o)"
+                        value={setupModel()}
+                        onInput={(e) => setSetupModel(e.currentTarget.value)}
+                      />
+                    </Show>
                     <div style="display: flex; gap: 6px; justify-content: flex-end">
                       <button class="btn btn-sm" onClick={() => setShowInlineSetup(false)}>
                         Cancel

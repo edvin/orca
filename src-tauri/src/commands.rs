@@ -877,6 +877,7 @@ pub async fn save_ai_settings(
     provider: String,
     api_key: String,
     model: String,
+    url: Option<String>,
 ) -> Result<(), String> {
     let resp = client()
         .post(format!("{DAEMON_URL}/settings/ai"))
@@ -884,6 +885,7 @@ pub async fn save_ai_settings(
             "provider": provider,
             "api_key": api_key,
             "model": model,
+            "url": url,
         }))
         .send()
         .await

@@ -67,10 +67,13 @@ pub struct OrcaConfig {
     /// AI provider: "anthropic" or "openai"
     #[serde(default = "default_ai_provider")]
     pub ai_provider: String,
-    /// OpenAI API key (alternative to Anthropic)
+    /// OpenAI-compatible API key (also used for Google, Ollama, etc.)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openai_api_key: Option<String>,
-    /// OpenAI model to use (default: gpt-4o)
+    /// OpenAI-compatible API base URL (default: https://api.openai.com/v1)
+    #[serde(default = "default_openai_url")]
+    pub openai_url: String,
+    /// OpenAI-compatible model to use (default: gpt-4o)
     #[serde(default = "default_openai_model")]
     pub openai_model: String,
     /// Anthropic model to use (default: claude-sonnet-4-20250514)
@@ -80,6 +83,9 @@ pub struct OrcaConfig {
 
 fn default_ai_provider() -> String {
     "anthropic".into()
+}
+fn default_openai_url() -> String {
+    "https://api.openai.com/v1".into()
 }
 fn default_openai_model() -> String {
     "gpt-4o".into()
@@ -136,6 +142,7 @@ impl Default for OrcaConfig {
             anthropic_api_key: None,
             ai_provider: default_ai_provider(),
             openai_api_key: None,
+            openai_url: default_openai_url(),
             openai_model: default_openai_model(),
             anthropic_model: default_anthropic_model(),
         }
