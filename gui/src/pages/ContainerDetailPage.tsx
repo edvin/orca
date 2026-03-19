@@ -234,7 +234,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
         items={
           props.breadcrumbStack
             ? [
-                { label: "Stacks", onClick: () => props.onNavigate?.("stacks") },
+                { label: "Containers", onClick: () => props.onNavigate?.("containers") },
                 { label: props.breadcrumbStack, onClick: () => props.onNavigate?.(`stack:${props.breadcrumbStack}`) },
                 { label: container()?.name ?? "..." },
               ]

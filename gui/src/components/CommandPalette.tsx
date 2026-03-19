@@ -24,7 +24,6 @@ export default function CommandPalette(props: CommandPaletteProps) {
     { id: "nav-dashboard", name: "Go to Dashboard", icon: "\u25a4", category: "Navigate", shortcut: "", action: () => { props.onNavigate("dashboard"); props.onClose(); } },
     { id: "nav-containers", name: "Go to Containers", icon: "\u25a3", category: "Navigate", action: () => { props.onNavigate("containers"); props.onClose(); } },
     { id: "nav-images", name: "Go to Images", icon: "\u25ce", category: "Navigate", action: () => { props.onNavigate("images"); props.onClose(); } },
-    { id: "nav-stacks", name: "Go to Stacks", icon: "\u25a6", category: "Navigate", action: () => { props.onNavigate("stacks"); props.onClose(); } },
     { id: "nav-volumes", name: "Go to Volumes", icon: "\u25c8", category: "Navigate", action: () => { props.onNavigate("volumes"); props.onClose(); } },
     { id: "nav-networks", name: "Go to Networks", icon: "\u25cc", category: "Navigate", action: () => { props.onNavigate("networks"); props.onClose(); } },
     { id: "nav-kubernetes", name: "Go to Kubernetes", icon: "\u2388", category: "Navigate", action: () => { props.onNavigate("kubernetes"); props.onClose(); } },

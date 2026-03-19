@@ -485,6 +485,73 @@ body {
   font-size: 11px;
 }
 
+.btn-outline {
+  background: transparent;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+}
+
+.btn-outline:hover {
+  background: #21262d;
+  border-color: #8b949e;
+  color: #e6edf3;
+  box-shadow: none;
+}
+
+/* ==================== Icon Action Buttons ==================== */
+.action-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #484f58;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+  padding: 0;
+}
+
+.action-icon:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.action-icon-start:hover { color: #3fb950; background: #23883618; }
+.action-icon-stop:hover { color: #f85149; background: #da363318; }
+.action-icon-restart:hover { color: #58a6ff; background: #1f6feb18; }
+.action-icon-delete:hover { color: #f85149; background: #da363318; }
+.action-icon-logs:hover { color: #58a6ff; background: #1f6feb18; }
+
+.action-icon:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.action-icon:disabled:hover {
+  background: transparent;
+  color: #484f58;
+}
+
+.action-icons {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.state-indicator-running {
+  color: #3fb950;
+  font-size: 10px;
+}
+
+.state-indicator-stopped {
+  color: #484f58;
+  font-size: 10px;
+}
+
 .btn-group {
   display: flex;
   gap: 4px;

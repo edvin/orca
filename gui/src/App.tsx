@@ -5,7 +5,6 @@ import { addEvent } from "./lib/activityStore";
 import Titlebar from "./components/Titlebar";
 import Sidebar from "./components/Sidebar";
 import ToastContainer, { showToast } from "./components/Toast";
-import StacksPage from "./pages/StacksPage";
 import ContainersPage from "./pages/ContainersPage";
 import ContainerDetailPage from "./pages/ContainerDetailPage";
 import StackDetailPage from "./pages/StackDetailPage";
@@ -24,7 +23,7 @@ import CommandPalette from "./components/CommandPalette";
 import AiAssistant from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "dashboard" | "templates" | "stacks" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
+export type Page = "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
@@ -157,14 +156,13 @@ export default function App() {
         <>
           <div class="app-body">
             <Sidebar
-              currentPage={page() === "container-detail" ? "containers" as Page : page() === "stack-detail" ? "stacks" as Page : page()}
+              currentPage={page() === "container-detail" ? "containers" as Page : page() === "stack-detail" ? "containers" as Page : page()}
               onNavigate={(p: Page) => navigate(p)}
               daemonStatus={daemonStatus()}
             />
             <main class="app-main">
               {page() === "dashboard" && <DashboardPage onNavigate={(p) => navigate(p)} />}
               {page() === "templates" && <TemplatesPage />}
-              {page() === "stacks" && <StacksPage onNavigate={(p) => navigate(p)} />}
               {page() === "containers" && <ContainersPage onNavigate={(p) => navigate(p)} />}
               {page() === "container-detail" && detailId() && (
                 <ContainerDetailPage
@@ -177,7 +175,7 @@ export default function App() {
               {page() === "stack-detail" && detailId() && (
                 <StackDetailPage
                   stackName={detailId()!}
-                  onBack={() => navigate("stacks")}
+                  onBack={() => navigate("containers")}
                   onNavigate={(p) => navigate(p)}
                 />
               )}
