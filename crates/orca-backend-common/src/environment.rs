@@ -61,8 +61,10 @@ fn detect_platform() -> String {
 /// Run a command and capture its stdout. Returns Ok(stdout) on success.
 async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
     let mut cmd = Command::new(program);
+    // Use piped stdin (not null) — wsl.exe on Windows exits immediately with null stdin.
+    // We drop the stdin handle right away so the child sees EOF, not a blocked pipe.
     cmd.args(args)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -75,16 +77,27 @@ async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
     );
     cmd.env("PATH", &extended);
 
-    let result = cmd.output().await.map_err(|e| e.to_string())?;
+    let child = cmd.spawn().map_err(|e| e.to_string())?;
+    let result = child.wait_with_output().await.map_err(|e| e.to_string())?;
+
+    let stdout = decode_output(&result.stdout);
+    let stderr = decode_output(&result.stderr);
+    // Combine stdout and stderr so we never lose output
+    let combined = if stderr.trim().is_empty() {
+        stdout.trim().to_string()
+    } else if stdout.trim().is_empty() {
+        stderr.trim().to_string()
+    } else {
+        format!("{}\n{}", stdout.trim(), stderr.trim())
+    };
 
     if result.status.success() {
-        Ok(decode_output(&result.stdout).trim().to_string())
+        Ok(combined)
     } else {
-        let stderr = decode_output(&result.stderr).trim().to_string();
-        Err(if stderr.is_empty() {
+        Err(if combined.is_empty() {
             format!("exit code {}", result.status.code().unwrap_or(-1))
         } else {
-            stderr
+            combined
         })
     }
 }
