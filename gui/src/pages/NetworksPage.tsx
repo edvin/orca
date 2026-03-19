@@ -129,11 +129,10 @@ export default function NetworksPage() {
                   <td style={{ "text-align": "right" }}>
                     <Show when={!isDefaultNetwork(n.name)}>
                       <button
-                        class="btn btn-sm btn-danger"
+                        class="action-icon action-icon-delete"
+                        title="Remove network"
                         onClick={(e) => removeNetwork(n.name, e)}
-                      >
-                        Remove
-                      </button>
+                      >🗑</button>
                     </Show>
                   </td>
                 </tr>

@@ -9,7 +9,7 @@ interface SidebarProps {
 }
 
 const mainNavItems: { id: Page; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Dashboard", icon: "\u{1F4CA}" },
+  { id: "dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
   { id: "containers", label: "Containers", icon: "\u{1F4E6}" },
   { id: "images", label: "Images", icon: "\u{1F5BC}" },
   { id: "volumes", label: "Volumes", icon: "\u{1F4BE}" },

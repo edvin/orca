@@ -115,7 +115,7 @@ export default function VolumesPage() {
                     <td style={{ color: "#8b949e" }}>{v.driver}</td>
                     <td style={{ color: "#8b949e" }}>{formatTimestamp(v.created_at)}</td>
                     <td style={{ "text-align": "right" }}>
-                      <button class="btn btn-sm btn-danger" onClick={(e) => removeVolume(v.name, e)}>Remove</button>
+                      <button class="action-icon action-icon-delete" title="Remove volume" onClick={(e) => removeVolume(v.name, e)}>🗑</button>
                     </td>
                   </tr>
                   <Show when={selected() === v.name}>
@@ -134,7 +134,7 @@ export default function VolumesPage() {
                                 <For each={Object.entries(v.labels)}>
                                   {([k, val]) => (
                                     <div class="mono" style={{ "line-height": "1.6", "font-size": "11px" }}>
-                                      <span style={{ color: "#58a6ff" }}>{k}</span>=<span>{val}</span>
+                                      <span style={{ color: "#58a6ff" }}>{k}</span>{val ? `=${val}` : <span style={{ color: "#484f58" }}> (empty)</span>}
                                     </div>
                                   )}
                                 </For>
