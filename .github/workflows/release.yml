@@ -10,13 +10,13 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create.outputs.id }}
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
@@ -27,12 +27,13 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        id: create
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
-          name: Orca v${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "Orca v${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            --draft
 
   build-and-upload:
     name: Build (${{ matrix.platform.name }})
@@ -110,31 +111,28 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          # Skip macOS code signing (no Apple Developer cert in CI)
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           APPLE_SIGNING_IDENTITY: "-"
         run: cargo tauri build --target ${{ matrix.platform.target }}
 
       - name: Upload release artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          files: |
-            target/${{ matrix.platform.target }}/release/bundle/**/*.AppImage
-            target/${{ matrix.platform.target }}/release/bundle/**/*.deb
-            target/${{ matrix.platform.target }}/release/bundle/**/*.dmg
-            target/${{ matrix.platform.target }}/release/bundle/**/*.exe
-            target/${{ matrix.platform.target }}/release/bundle/**/*.msi
-            target/${{ matrix.platform.target }}/release/bundle/**/*.sig
-            target/${{ matrix.platform.target }}/release/bundle/**/*latest.json
-
-      - name: Upload standalone daemon
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          files: |
-            target/${{ matrix.platform.target }}/release/orca-daemon
-            target/${{ matrix.platform.target }}/release/orca-daemon.exe
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=()
+          for f in target/${{ matrix.platform.target }}/release/bundle/**/*.{AppImage,deb,dmg,exe,msi,sig}; do
+            [ -f "$f" ] && files+=("$f")
+          done
+          for f in target/${{ matrix.platform.target }}/release/bundle/**/*latest.json; do
+            [ -f "$f" ] && files+=("$f")
+          done
+          # Standalone daemon
+          for f in target/${{ matrix.platform.target }}/release/orca-daemon target/${{ matrix.platform.target }}/release/orca-daemon.exe; do
+            [ -f "$f" ] && files+=("$f")
+          done
+          if [ ${#files[@]} -gt 0 ]; then
+            gh release upload "${{ github.ref_name }}" "${files[@]}" --repo "${{ github.repository }}" --clobber
+          fi
 
   publish-release:
     name: Publish Release
@@ -142,12 +140,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Publish release
-        uses: actions/github-script@v8
-        with:
-          script: |
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: ${{ needs.create-release.outputs.release_id }},
-              draft: false,
-            });
+        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
