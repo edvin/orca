@@ -1386,8 +1386,8 @@ async fn k8s_status(
 async fn k8s_enable(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.k8s.enable().await?;
-    Ok(StatusCode::NO_CONTENT)
+    let log = state.k8s.enable_with_progress().await?;
+    Ok(Json(serde_json::json!({ "output": log })))
 }
 
 async fn k8s_disable(

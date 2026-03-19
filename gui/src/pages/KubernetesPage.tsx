@@ -31,6 +31,13 @@ export default function KubernetesPage() {
   const [logPod, setLogPod] = createSignal<string | null>(null);
   const [logLines, setLogLines] = createSignal<string[]>([]);
 
+  // Setup progress dialog
+  const [setupDialogOpen, setSetupDialogOpen] = createSignal(false);
+  const [setupLog, setSetupLog] = createSignal("");
+  const [setupRunning, setSetupRunning] = createSignal(false);
+  const [setupSuccess, setSetupSuccess] = createSignal<boolean | null>(null);
+  let mouseDownOnOverlay = false;
+
   const refreshStatus = async () => {
     try {
       const s = (await invoke("k8s_status")) as ClusterStatus;
@@ -94,23 +101,29 @@ export default function KubernetesPage() {
 
   const handleEnable = async () => {
     setEnabling(true);
+    setSetupLog("Setting up Kubernetes cluster...\nThis may take a few minutes.\n\n");
+    setSetupRunning(true);
+    setSetupSuccess(null);
+    setSetupDialogOpen(true);
+
     try {
-      await invoke("k8s_enable");
-      showToast("Kubernetes cluster enabling — this may take a minute", "info");
-      // Poll for readiness
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        await refreshStatus();
-        if (status()?.running) {
-          showToast("Kubernetes cluster is ready", "success");
-          break;
-        }
-      }
+      const result = (await invoke("k8s_enable")) as { output?: string };
+      const output = result?.output || "";
+      setSetupLog((prev) => prev + output);
+      setSetupSuccess(true);
+      await refreshStatus();
     } catch (e) {
-      showToast(`Failed to enable Kubernetes: ${e}`, "error");
+      setSetupLog((prev) => prev + `\nError: ${e}`);
+      setSetupSuccess(false);
     } finally {
+      setSetupRunning(false);
       setEnabling(false);
     }
+  };
+
+  const closeSetupDialog = async () => {
+    setSetupDialogOpen(false);
+    await refreshStatus();
   };
 
   const handleDisable = async () => {
@@ -790,6 +803,67 @@ export default function KubernetesPage() {
           </div>
         </div>
       </Show>
+
+      {/* Kubernetes Setup Progress Dialog */}
+      <Show when={setupDialogOpen()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
+          onClick={(e) => { if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !setupRunning()) closeSetupDialog(); mouseDownOnOverlay = false; }}
+        >
+          <div class="modal-dialog" style={{ "max-width": "640px" }}>
+            <div class="modal-header">
+              <span class="modal-title">
+                <Show when={setupRunning()} fallback={
+                  <Show when={setupSuccess()} fallback={
+                    <span style={{ color: "#f85149" }}>{"\u2717"} Kubernetes setup failed</span>
+                  }>
+                    <span style={{ color: "#3fb950" }}>{"\u2713"} Kubernetes cluster ready</span>
+                  </Show>
+                }>
+                  <span>Setting up Kubernetes...</span>
+                </Show>
+              </span>
+              <Show when={!setupRunning()}>
+                <button class="modal-close" onClick={closeSetupDialog}>{"\u00d7"}</button>
+              </Show>
+            </div>
+            <div style={{ padding: "0" }}>
+              <Show when={setupRunning()}>
+                <div style={{ height: "3px", background: "#21262d", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: "30%", background: "#58a6ff", animation: "progress-slide 1.5s ease-in-out infinite", "border-radius": "2px" }} />
+                </div>
+              </Show>
+              <pre style={{
+                padding: "16px", margin: 0,
+                "font-family": "'JetBrains Mono NF', monospace",
+                "font-size": "12px", "line-height": "1.6",
+                color: "#c9d1d9", "white-space": "pre-wrap",
+                "word-break": "break-all", "max-height": "400px",
+                "min-height": "120px", overflow: "auto",
+                background: "#0d1117",
+              }}>{setupLog()}</pre>
+            </div>
+            <div class="modal-footer">
+              <Show when={!setupRunning()}>
+                <button class="btn btn-primary" onClick={closeSetupDialog}>Close</button>
+              </Show>
+              <Show when={setupRunning()}>
+                <span style={{ "font-size": "12px", color: "var(--text-muted)" }}>
+                  This may take several minutes — downloading k3s and waiting for the cluster...
+                </span>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      <style>{`
+        @keyframes progress-slide {
+          0% { transform: translateX(-100%); }
+          50% { transform: translateX(233%); }
+          100% { transform: translateX(-100%); }
+        }
+      `}</style>
     </div>
   );
 }

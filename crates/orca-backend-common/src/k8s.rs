@@ -130,6 +130,105 @@ impl K3sManager {
         tracing::info!("k3s installed successfully");
         Ok(())
     }
+
+    /// Enable k3s with step-by-step progress log returned as a string.
+    pub async fn enable_with_progress(&self) -> anyhow::Result<String> {
+        let mut log = String::new();
+
+        // Step 1: Check/install k3s
+        if !self.is_k3s_installed().await {
+            log.push_str(">>> Downloading and installing k3s...\n");
+            log.push_str("    This downloads the k3s binary (~60MB)\n\n");
+
+            let output = Command::new("sh")
+                .args([
+                    "-c",
+                    "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh - 2>&1",
+                ])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+                .await?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if !stdout.trim().is_empty() {
+                log.push_str(&format!("{}\n", stdout.trim()));
+            }
+            if !stderr.trim().is_empty() {
+                log.push_str(&format!("{}\n", stderr.trim()));
+            }
+
+            if !output.status.success() {
+                log.push_str("\n>>> k3s installation failed\n");
+                anyhow::bail!("{log}");
+            }
+            log.push_str("\n>>> k3s binary installed\n\n");
+        } else {
+            log.push_str(">>> k3s is already installed\n\n");
+        }
+
+        // Step 2: Start k3s
+        log.push_str(">>> Starting k3s server...\n");
+        let systemd_result = Command::new("systemctl")
+            .args(["start", "k3s"])
+            .output()
+            .await;
+
+        match &systemd_result {
+            Ok(o) if o.status.success() => {
+                log.push_str("    Started via systemd\n\n");
+            }
+            _ => {
+                log.push_str("    systemd not available, starting directly...\n");
+                Command::new("k3s")
+                    .args(["server", "--write-kubeconfig-mode=644", "--disable=metrics-server"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()?;
+                log.push_str("    k3s server process spawned\n\n");
+            }
+        }
+
+        // Step 3: Wait for cluster readiness
+        log.push_str(">>> Waiting for cluster to become ready...\n");
+        for i in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            if !self.kubeconfig_path().exists() {
+                if i % 10 == 9 {
+                    log.push_str(&format!("    Waiting for kubeconfig... ({i}s)\n"));
+                }
+                continue;
+            }
+
+            if let Ok(client) = self.get_client().await {
+                match client.apiserver_version().await {
+                    Ok(ver) => {
+                        log.push_str(&format!("    API server ready — Kubernetes v{}.{}\n\n", ver.major, ver.minor));
+
+                        // Step 4: Enable Traefik dashboard
+                        log.push_str(">>> Enabling Traefik dashboard...\n");
+                        match self.enable_traefik_dashboard().await {
+                            Ok(_) => log.push_str("    Dashboard available at http://127.0.0.1:9000/dashboard/\n\n"),
+                            Err(e) => log.push_str(&format!("    Dashboard setup failed (non-critical): {e}\n\n")),
+                        }
+
+                        log.push_str(">>> Kubernetes cluster is ready\n");
+                        return Ok(log);
+                    }
+                    Err(_) => {
+                        if i % 10 == 9 {
+                            log.push_str(&format!("    Waiting for API server... ({i}s)\n"));
+                        }
+                    }
+                }
+            }
+        }
+
+        log.push_str("\n>>> Timed out waiting for API server (60s)\n");
+        anyhow::bail!("{log}")
+    }
 }
 
 impl K8sManager for K3sManager {
