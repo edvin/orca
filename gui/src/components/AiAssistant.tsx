@@ -11,10 +11,16 @@ interface AiMessage {
 
 interface AiAssistantProps {
   onNavigate?: (page: string) => void;
+  ref?: (api: AiAssistantApi) => void;
+}
+
+export interface AiAssistantApi {
+  askAboutContainer: (containerId: string, containerName: string, image: string) => void;
 }
 
 export default function AiAssistant(props: AiAssistantProps) {
   const [open, setOpen] = createSignal(false);
+  const [pendingContext, setPendingContext] = createSignal<import("../lib/types").AiContext | null>(null);
   const [messages, setMessages] = createSignal<AiMessage[]>([]);
   const [input, setInput] = createSignal("");
   const [loading, setLoading] = createSignal(false);
@@ -32,6 +38,37 @@ export default function AiAssistant(props: AiAssistantProps) {
       messagesEnd?.scrollIntoView({ behavior: "smooth" });
     }, 50);
   };
+
+  // Expose API for external callers
+  const askAboutContainer = async (containerId: string, containerName: string, image: string) => {
+    setOpen(true);
+
+    // Gather container context: recent logs
+    let logs = "";
+    try {
+      const logResult = (await invoke("container_logs", { id: containerId, tail: 50 })) as string[];
+      logs = logResult.map(l => l.replace(/\n$/, "")).join("\n");
+    } catch { /* ignore */ }
+
+    const context: import("../lib/types").AiContext = {
+      container_id: containerId,
+      container_name: containerName,
+      image,
+      container_logs: logs || undefined,
+    };
+    setPendingContext(context);
+
+    // Pre-fill a helpful prompt
+    const prompt = `I'm looking at container "${containerName}" (image: ${image}). Can you help me understand what it's doing and if there are any issues?`;
+    setInput(prompt);
+
+    // Auto-send
+    await sendMessageWithContext(prompt, context);
+  };
+
+  if (props.ref) {
+    props.ref({ askAboutContainer });
+  }
 
   const checkCredentials = async () => {
     try {
@@ -68,9 +105,17 @@ export default function AiAssistant(props: AiAssistantProps) {
     setSetupSaving(false);
   };
 
-  const sendMessage = async (query?: string) => {
+  const sendMessageWithContext = async (query: string, context: import("../lib/types").AiContext | null) => {
+    return sendMessage(query, context);
+  };
+
+  const sendMessage = async (query?: string, context?: import("../lib/types").AiContext | null) => {
     const text = query || input().trim();
     if (!text || loading()) return;
+
+    // Use pending context if no explicit context provided
+    const ctx = context !== undefined ? context : pendingContext();
+    setPendingContext(null);
 
     // Check credentials before sending
     if (!hasCredentials()) {
@@ -88,7 +133,7 @@ export default function AiAssistant(props: AiAssistantProps) {
     try {
       const result = (await invoke("ai_ask", {
         query: text,
-        context: null,
+        context: ctx || null,
       })) as AiResponse;
 
       setMessages((prev) => [

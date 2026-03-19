@@ -13,6 +13,7 @@ import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsSt
 
 interface ContainersPageProps {
   onNavigate?: (page: string) => void;
+  onAskAi?: (containerId: string, containerName: string, image: string) => void;
 }
 
 interface StackGroup {
@@ -411,6 +412,16 @@ export default function ContainersPage(props: ContainersPageProps) {
                 title="Start"
               >
                 &#9654;
+              </button>
+            </Show>
+            <Show when={props.onAskAi}>
+              <button
+                class="action-icon"
+                onClick={(e) => { e.stopPropagation(); props.onAskAi?.(c.id, c.name, c.image); }}
+                title="Ask AI about this container"
+                style={{ "font-size": "14px" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
               </button>
             </Show>
             <div class="dropdown-wrapper">

@@ -23,6 +23,7 @@ import TemplatesPage from "./pages/TemplatesPage";
 import ConnectionScreen from "./components/ConnectionScreen";
 import CommandPalette from "./components/CommandPalette";
 import AiAssistant from "./components/AiAssistant";
+import type { AiAssistantApi } from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 
 export type Page = "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
@@ -34,6 +35,7 @@ export default function App() {
   const [breadcrumbStack, setBreadcrumbStack] = createSignal<string | null>(null);
   const [showCommandPalette, setShowCommandPalette] = createSignal(false);
   const [environmentChecked, setEnvironmentChecked] = createSignal(false);
+  let aiApi: AiAssistantApi | undefined;
 
   const checkDaemon = async () => {
     try {
@@ -181,7 +183,7 @@ export default function App() {
             <main class="app-main">
               {page() === "dashboard" && <DashboardPage onNavigate={(p) => navigate(p)} />}
               {page() === "templates" && <TemplatesPage />}
-              {page() === "containers" && <ContainersPage onNavigate={(p) => navigate(p)} />}
+              {page() === "containers" && <ContainersPage onNavigate={(p) => navigate(p)} onAskAi={(id, name, image) => aiApi?.askAboutContainer(id, name, image)} />}
               {page() === "container-detail" && detailId() && (
                 <ContainerDetailPage
                   containerId={detailId()!}
@@ -220,7 +222,7 @@ export default function App() {
               onNavigate={(p: Page) => navigate(p)}
             />
           )}
-          <AiAssistant onNavigate={(p: string) => navigate(p)} />
+          <AiAssistant onNavigate={(p: string) => navigate(p)} ref={(api) => { aiApi = api; }} />
         </>
       )}
       <StatusBar />
