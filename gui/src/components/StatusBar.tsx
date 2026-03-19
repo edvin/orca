@@ -18,11 +18,12 @@ export default function StatusBar() {
 
   const checkUpdate = async () => {
     try {
-      const result = (await invoke("check_for_updates")) as any;
-      if (result.available) {
-        setUpdateAvailable({ version: result.version, body: result.body });
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check();
+      if (update) {
+        setUpdateAvailable({ version: update.version, body: update.body ?? undefined });
       }
-    } catch { /* updater not configured */ }
+    } catch { /* updater not configured or not in Tauri context */ }
   };
 
   const installUpdate = async () => {
