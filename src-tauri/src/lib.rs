@@ -43,6 +43,8 @@ pub fn run() {
             commands::volume_read_file,
             commands::volume_containers,
             commands::inspect_image,
+            commands::image_list_files,
+            commands::image_read_file,
             commands::list_networks,
             commands::create_network,
             commands::remove_network,

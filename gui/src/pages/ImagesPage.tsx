@@ -40,6 +40,15 @@ export default function ImagesPage() {
   const { sortField, sortDir, toggleSort, sortFn } = useSort<Image>("tag");
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Image file browser state
+  interface FileEntry { name: string; size: string; permissions: string; modified: string; is_dir: boolean; link_target?: string }
+  const [fileBrowserImage, setFileBrowserImage] = createSignal<string | null>(null);
+  const [fileBrowserPath, setFileBrowserPath] = createSignal("/");
+  const [files, setFiles] = createSignal<FileEntry[]>([]);
+  const [filesLoading, setFilesLoading] = createSignal(false);
+  const [fileContent, setFileContent] = createSignal<string | null>(null);
+  const [fileContentPath, setFileContentPath] = createSignal("");
+
   const refresh = async () => {
     try {
       const result = (await invoke("list_images")) as Image[];
@@ -219,6 +228,74 @@ export default function ImagesPage() {
 
   const handlePullKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && !pulling()) doPull();
+  };
+
+  // --- Image File Browser ---
+  const openFileBrowser = (imageId: string) => {
+    setFileBrowserImage(imageId);
+    setFileBrowserPath("/");
+    setFileContent(null);
+    setFileContentPath("");
+    fetchImageFiles(imageId, "/");
+  };
+
+  const closeFileBrowser = () => {
+    setFileBrowserImage(null);
+    setFiles([]);
+    setFileContent(null);
+  };
+
+  const fetchImageFiles = async (imageId: string, path: string) => {
+    setFilesLoading(true);
+    setFileContent(null);
+    try {
+      const result = (await invoke("image_list_files", { id: imageId, path })) as { entries: FileEntry[]; path: string };
+      setFiles(result.entries);
+      setFileBrowserPath(path || "/");
+    } catch (e) {
+      showToast(`Failed to browse files: ${e}`, "error");
+      setFiles([]);
+    } finally {
+      setFilesLoading(false);
+    }
+  };
+
+  const navigateToDir = (dirName: string) => {
+    const imageId = fileBrowserImage();
+    if (!imageId) return;
+    const current = fileBrowserPath();
+    const newPath = current === "/" ? `/${dirName}` : `${current}/${dirName}`;
+    fetchImageFiles(imageId, newPath);
+  };
+
+  const navigateUp = () => {
+    const imageId = fileBrowserImage();
+    if (!imageId) return;
+    const current = fileBrowserPath();
+    const parent = current.substring(0, current.lastIndexOf("/")) || "/";
+    fetchImageFiles(imageId, parent);
+  };
+
+  const navigateToSegment = (index: number) => {
+    const imageId = fileBrowserImage();
+    if (!imageId) return;
+    const segments = fileBrowserPath().split("/").filter(Boolean);
+    const newPath = "/" + segments.slice(0, index + 1).join("/");
+    fetchImageFiles(imageId, newPath);
+  };
+
+  const readImageFile = async (filePath: string) => {
+    const imageId = fileBrowserImage();
+    if (!imageId) return;
+    const current = fileBrowserPath();
+    const fullPath = current === "/" ? `/${filePath}` : `${current}/${filePath}`;
+    try {
+      const result = (await invoke("image_read_file", { id: imageId, path: fullPath })) as { content: string };
+      setFileContent(result.content);
+      setFileContentPath(filePath);
+    } catch (e) {
+      showToast(`Failed to read file: ${e}`, "error");
+    }
   };
 
   const totalSize = () =>
@@ -603,7 +680,7 @@ export default function ImagesPage() {
                               const created = d?.created_at || d?.Created || img.created_at;
                               const size = d?.size_bytes || d?.Size || img.size_bytes;
                               const layers = d?.rootfs?.Layers || d?.rootfs?.layers || d?.layers || [];
-                              return (
+                              return (<>
                                 <div class="card-grid">
                                   <div class="card-label">Image ID</div>
                                   <div class="card-value mono" style={{ "font-size": "11px", display: "flex", "align-items": "center", gap: "6px" }}>
@@ -636,7 +713,12 @@ export default function ImagesPage() {
                                     {Array.isArray(layers) ? layers.length : 0} layer{Array.isArray(layers) && layers.length !== 1 ? "s" : ""}
                                   </div>
                                 </div>
-                              );
+                                <div style={{ "margin-top": "12px" }}>
+                                  <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); openFileBrowser(img.id); }}>
+                                    Browse Files
+                                  </button>
+                                </div>
+                              </>);
                             }}
                           </Show>
                         </div>
@@ -684,6 +766,112 @@ export default function ImagesPage() {
               <button class="btn" style={{ background: "#da3633", color: "#fff" }} onClick={pruneUnused} disabled={pruning()}>
                 {pruning() ? "Pruning..." : "Prune Images"}
               </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Image File Browser Dialog */}
+      <Show when={fileBrowserImage()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) closeFileBrowser(); (e.currentTarget as any).__mdOverlay = false; }}
+        >
+          <div class="modal-dialog" style={{ "max-width": "800px", "max-height": "80vh", display: "flex", "flex-direction": "column" }}>
+            <div class="modal-header">
+              <span class="modal-title">
+                Image Files
+              </span>
+              <button class="modal-close" onClick={closeFileBrowser}>{"\u00d7"}</button>
+            </div>
+
+            {/* Breadcrumb */}
+            <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", "font-size": "12px", display: "flex", "align-items": "center", gap: "4px" }}>
+              <button
+                style={{ background: "none", border: "none", color: "#58a6ff", cursor: "pointer", padding: "2px 4px", "font-size": "12px" }}
+                onClick={() => { const id = fileBrowserImage(); if (id) fetchImageFiles(id, "/"); }}
+              >/</button>
+              <For each={fileBrowserPath().split("/").filter(Boolean)}>
+                {(segment, i) => (
+                  <>
+                    <span style={{ color: "#484f58" }}>/</span>
+                    <button
+                      style={{ background: "none", border: "none", color: "#58a6ff", cursor: "pointer", padding: "2px 4px", "font-size": "12px" }}
+                      onClick={() => navigateToSegment(i())}
+                    >{segment}</button>
+                  </>
+                )}
+              </For>
+            </div>
+
+            <div style={{ flex: "1", overflow: "auto" }}>
+              <Show when={fileContent() !== null} fallback={
+                <Show when={!filesLoading()} fallback={
+                  <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}><Spinner size={14} /> Loading files...</div>
+                }>
+                  <Show when={files().length > 0} fallback={
+                    <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}>Empty directory</div>
+                  }>
+                    {/* Back button */}
+                    <Show when={fileBrowserPath() !== "/"}>
+                      <div
+                        style={{ padding: "6px 16px", cursor: "pointer", "border-bottom": "1px solid #21262d", display: "flex", "align-items": "center", gap: "8px", "font-size": "13px", color: "#8b949e" }}
+                        onClick={navigateUp}
+                      >
+                        <span style={{ "font-size": "10px" }}>{"\u25C0"}</span> ..
+                      </div>
+                    </Show>
+                    <For each={files()}>
+                      {(f) => (
+                        <div
+                          style={{
+                            padding: "6px 16px",
+                            cursor: "pointer",
+                            "border-bottom": "1px solid #21262d",
+                            display: "flex",
+                            "align-items": "center",
+                            gap: "10px",
+                            "font-size": "13px",
+                          }}
+                          onClick={() => f.is_dir ? navigateToDir(f.name) : readImageFile(f.name)}
+                        >
+                          <span style={{ color: f.is_dir ? "#58a6ff" : "#8b949e", width: "16px", "text-align": "center", "flex-shrink": "0" }}>
+                            {f.is_dir ? "\u{1F4C1}" : "\u{1F4C4}"}
+                          </span>
+                          <span style={{ flex: "1", color: f.is_dir ? "#58a6ff" : "#e6edf3", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                            {f.name}
+                            <Show when={f.link_target}>
+                              <span style={{ color: "#484f58", "margin-left": "6px" }}>{"\u2192"} {f.link_target}</span>
+                            </Show>
+                          </span>
+                          <span class="mono" style={{ color: "#484f58", "font-size": "11px", "flex-shrink": "0" }}>{f.permissions}</span>
+                          <span style={{ color: "#484f58", "font-size": "11px", "flex-shrink": "0", "min-width": "60px", "text-align": "right" }}>{f.size}</span>
+                        </div>
+                      )}
+                    </For>
+                  </Show>
+                </Show>
+              }>
+                {/* File content viewer */}
+                <div>
+                  <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                    <span style={{ "font-size": "12px", color: "#e6edf3" }}>{fileContentPath()}</span>
+                    <button class="btn btn-sm" onClick={() => setFileContent(null)} style={{ "font-size": "11px", padding: "2px 8px" }}>Back</button>
+                  </div>
+                  <pre style={{
+                    padding: "12px 16px",
+                    margin: 0,
+                    "font-family": "'JetBrains Mono NF', monospace",
+                    "font-size": "12px",
+                    "line-height": "1.5",
+                    color: "#c9d1d9",
+                    "white-space": "pre-wrap",
+                    "word-break": "break-all",
+                    overflow: "auto",
+                    "max-height": "60vh",
+                  }}>{fileContent()}</pre>
+                </div>
+              </Show>
             </div>
           </div>
         </div>

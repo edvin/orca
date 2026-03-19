@@ -125,6 +125,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/batch-delete", post(batch_delete_images))
         .route("/images/search", get(search_images))
         .route("/images/{source}/tag", post(tag_image))
+        .route("/images/{id}/files", get(image_list_files))
+        .route("/images/{id}/file", get(image_read_file))
         // Volumes
         .route("/volumes", get(list_volumes).post(create_volume_handler))
         .route("/volumes/{name}", get(inspect_volume))
@@ -1125,6 +1127,160 @@ async fn volume_read_file(
     let _ = state.runtime.remove_container(&id, true).await;
 
     Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
+}
+
+// --- Image File Browsing ---
+
+async fn image_list_files(
+    State(state): State<Arc<AppState>>,
+    Path(image_id): Path<String>,
+    Query(query): Query<VolumeFilesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::runtime::ContainerCreateOpts;
+
+    // Resolve image name from ID (bollard needs the repo tag or full ID)
+    let image_ref = resolve_image_ref(&state, &image_id).await?;
+
+    let subpath = query.path.unwrap_or_default();
+    let sanitized = subpath.replace("..", "").replace('\0', "");
+    let browse_path = if sanitized.is_empty() || sanitized == "/" {
+        "/".to_string()
+    } else {
+        format!("/{}", sanitized.trim_start_matches('/'))
+    };
+
+    let opts = ContainerCreateOpts {
+        image: image_ref,
+        name: None,
+        command: vec![
+            "ls".to_string(),
+            "-la".to_string(),
+            "--time-style=+%Y-%m-%dT%H:%M:%S".to_string(),
+            browse_path,
+        ],
+        env: HashMap::new(),
+        ports: vec![],
+        volumes: vec![],
+        labels: HashMap::new(),
+        restart_policy: None,
+        network: None,
+        detach: false,
+        remove_on_exit: true,
+        cpu_limit: None,
+        memory_limit: None,
+        memory_swap: None,
+    };
+
+    let id = state.runtime.create_container(opts).await?;
+    state.runtime.start_container(&id).await?;
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let log_rx = state.runtime.container_logs(&id, false, Some(1000)).await?;
+    let mut lines = Vec::new();
+    let mut rx = log_rx;
+    while let Some(line) = rx.recv().await {
+        lines.push(line);
+    }
+
+    let _ = state.runtime.remove_container(&id, true).await;
+
+    let mut entries = Vec::new();
+    for line in &lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("total") {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.splitn(7, char::is_whitespace).collect();
+        if parts.len() >= 7 {
+            let permissions = parts[0];
+            let is_dir = permissions.starts_with('d');
+            let size_str = parts[4];
+            let modified = parts[5];
+            let name_part = parts[6].trim();
+            if name_part == "." || name_part == ".." {
+                continue;
+            }
+            // Strip symlink targets (e.g. "bin -> usr/bin")
+            let display_name = if let Some(arrow) = name_part.find(" -> ") {
+                &name_part[..arrow]
+            } else {
+                name_part
+            };
+            let is_link = permissions.starts_with('l');
+            entries.push(serde_json::json!({
+                "name": display_name,
+                "size": size_str,
+                "permissions": permissions,
+                "modified": modified,
+                "is_dir": is_dir || is_link,
+                "link_target": if is_link { name_part.find(" -> ").map(|i| &name_part[i+4..]) } else { None },
+            }));
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "entries": entries, "path": sanitized })))
+}
+
+async fn image_read_file(
+    State(state): State<Arc<AppState>>,
+    Path(image_id): Path<String>,
+    Query(query): Query<VolumeFilesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::runtime::ContainerCreateOpts;
+
+    let image_ref = resolve_image_ref(&state, &image_id).await?;
+
+    let file_path = query.path.unwrap_or_default();
+    let sanitized = file_path.replace("..", "").replace('\0', "");
+    let full_path = format!("/{}", sanitized.trim_start_matches('/'));
+
+    let opts = ContainerCreateOpts {
+        image: image_ref,
+        name: None,
+        command: vec!["cat".to_string(), full_path],
+        env: HashMap::new(),
+        ports: vec![],
+        volumes: vec![],
+        labels: HashMap::new(),
+        restart_policy: None,
+        network: None,
+        detach: false,
+        remove_on_exit: true,
+        cpu_limit: None,
+        memory_limit: None,
+        memory_swap: None,
+    };
+
+    let id = state.runtime.create_container(opts).await?;
+    state.runtime.start_container(&id).await?;
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let log_rx = state.runtime.container_logs(&id, false, Some(10000)).await?;
+    let mut lines = Vec::new();
+    let mut rx = log_rx;
+    while let Some(line) = rx.recv().await {
+        lines.push(line);
+    }
+
+    let _ = state.runtime.remove_container(&id, true).await;
+
+    Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
+}
+
+/// Resolve an image ID to a usable reference (repo:tag or full sha).
+async fn resolve_image_ref(state: &AppState, id: &str) -> anyhow::Result<String> {
+    let images: Vec<orca_core::image::Image> = ImageManager::list(state.runtime.as_ref()).await?;
+    if let Some(img) = images.iter().find(|i| i.id == id || i.id.contains(id)) {
+        // Prefer a repo:tag if available
+        if let Some(tag) = img.repo_tags.first() {
+            if tag != "<none>:<none>" {
+                return Ok(tag.clone());
+            }
+        }
+        Ok(img.id.clone())
+    } else {
+        Ok(id.to_string())
+    }
 }
 
 async fn volume_containers(

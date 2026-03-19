@@ -540,6 +540,20 @@ pub async fn inspect_image(id: String) -> Result<serde_json::Value, String> {
     get_json(&format!("/images/{id}")).await
 }
 
+#[tauri::command]
+pub async fn image_list_files(id: String, path: Option<String>) -> Result<serde_json::Value, String> {
+    let encoded_id = urlencoding::encode(&id);
+    let path_param = path.map(|p| format!("?path={}", urlencoding::encode(&p))).unwrap_or_default();
+    get_json(&format!("/images/{encoded_id}/files{path_param}")).await
+}
+
+#[tauri::command]
+pub async fn image_read_file(id: String, path: String) -> Result<serde_json::Value, String> {
+    let encoded_id = urlencoding::encode(&id);
+    let encoded_path = urlencoding::encode(&path);
+    get_json(&format!("/images/{encoded_id}/file?path={encoded_path}")).await
+}
+
 // --- Networks ---
 
 #[tauri::command]

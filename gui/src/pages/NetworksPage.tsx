@@ -146,7 +146,7 @@ export default function NetworksPage() {
                         class="action-icon action-icon-delete"
                         title="Remove network"
                         onClick={(e) => removeNetwork(n.name, e)}
-                      >{"\uD83D\uDDD1"}</button>
+                      >{"\u2715"}</button>
                     </Show>
                   </td>
                 </tr>
