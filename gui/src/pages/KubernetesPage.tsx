@@ -37,6 +37,13 @@ export default function KubernetesPage() {
   const [setupRunning, setSetupRunning] = createSignal(false);
   const [setupSuccess, setSetupSuccess] = createSignal<boolean | null>(null);
   let mouseDownOnOverlay = false;
+  let setupLogRef: HTMLPreElement | undefined;
+
+  // Auto-scroll setup log
+  createEffect(() => {
+    setupLog();
+    if (setupLogRef) setupLogRef.scrollTop = setupLogRef.scrollHeight;
+  });
 
   const refreshStatus = async () => {
     try {
@@ -101,20 +108,70 @@ export default function KubernetesPage() {
 
   const handleEnable = async () => {
     setEnabling(true);
-    setSetupLog("Setting up Kubernetes cluster...\nThis may take a few minutes.\n\n");
+    setSetupLog("");
     setSetupRunning(true);
     setSetupSuccess(null);
     setSetupDialogOpen(true);
 
     try {
-      const result = (await invoke("k8s_enable")) as { output?: string };
-      const output = result?.output || "";
-      setSetupLog((prev) => prev + output);
-      setSetupSuccess(true);
+      // Get API token for auth
+      let token = "";
+      try { token = await invoke("get_api_token") as string; } catch { /* no token */ }
+
+      // Use SSE streaming endpoint for real-time output
+      const resp = await fetch("http://127.0.0.1:9477/api/v1/k8s/enable-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+      }
+
+      const reader = resp.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        let done = false;
+        let success = true;
+        while (!done) {
+          const { value, done: streamDone } = await reader.read();
+          done = streamDone;
+          if (value) {
+            const text = decoder.decode(value, { stream: !done });
+            for (const line of text.split("\n")) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") {
+                  done = true;
+                } else if (data.startsWith("[ERROR]")) {
+                  setSetupLog((prev) => prev + "\n" + data.slice(8) + "\n");
+                  success = false;
+                  done = true;
+                } else {
+                  setSetupLog((prev) => prev + data + "\n");
+                }
+              }
+            }
+          }
+        }
+        setSetupSuccess(success);
+      }
       await refreshStatus();
     } catch (e) {
-      setSetupLog((prev) => prev + `\nError: ${e}`);
-      setSetupSuccess(false);
+      // Fallback to non-streaming
+      try {
+        const result = (await invoke("k8s_enable")) as { output?: string };
+        setSetupLog(result?.output || "");
+        setSetupSuccess(true);
+        await refreshStatus();
+      } catch (e2) {
+        setSetupLog((prev) => prev + `\nError: ${e2}\n`);
+        setSetupSuccess(false);
+      }
     } finally {
       setSetupRunning(false);
       setEnabling(false);
@@ -810,7 +867,7 @@ export default function KubernetesPage() {
           onMouseDown={(e) => { mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
           onClick={(e) => { if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !setupRunning()) closeSetupDialog(); mouseDownOnOverlay = false; }}
         >
-          <div class="modal-dialog" style={{ "max-width": "640px" }}>
+          <div class="modal-dialog" style={{ "max-width": "720px" }}>
             <div class="modal-header">
               <span class="modal-title">
                 <Show when={setupRunning()} fallback={
@@ -833,13 +890,13 @@ export default function KubernetesPage() {
                   <div style={{ height: "100%", width: "30%", background: "#58a6ff", animation: "progress-slide 1.5s ease-in-out infinite", "border-radius": "2px" }} />
                 </div>
               </Show>
-              <pre style={{
+              <pre ref={setupLogRef} style={{
                 padding: "16px", margin: 0,
                 "font-family": "'JetBrains Mono NF', monospace",
                 "font-size": "12px", "line-height": "1.6",
                 color: "#c9d1d9", "white-space": "pre-wrap",
-                "word-break": "break-all", "max-height": "400px",
-                "min-height": "120px", overflow: "auto",
+                "word-break": "break-all", "max-height": "500px",
+                "min-height": "200px", overflow: "auto",
                 background: "#0d1117",
               }}>{setupLog()}</pre>
             </div>

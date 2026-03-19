@@ -229,6 +229,104 @@ impl K3sManager {
         log.push_str("\n>>> Timed out waiting for API server (60s)\n");
         anyhow::bail!("{log}")
     }
+
+    /// Enable k3s with streaming progress via a channel.
+    pub async fn enable_streaming(&self, tx: tokio::sync::mpsc::Sender<String>) -> anyhow::Result<()> {
+        use crate::environment::run_cmd_streaming;
+
+        let send = |msg: String| {
+            let tx = tx.clone();
+            async move { let _ = tx.send(msg).await; }
+        };
+
+        // Step 1: Check/install k3s
+        if !self.is_k3s_installed().await {
+            send(">>> Downloading and installing k3s...".into()).await;
+            send("    This downloads the k3s binary (~60MB)\n".into()).await;
+
+            let result = run_cmd_streaming("sh", &[
+                "-c",
+                "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh -"
+            ], &tx).await;
+
+            match result {
+                Ok(_) => send("\n>>> k3s binary installed\n".into()).await,
+                Err(e) => {
+                    send(format!("\n>>> k3s installation failed: {e}")).await;
+                    anyhow::bail!("k3s installation failed: {e}");
+                }
+            }
+        } else {
+            send(">>> k3s is already installed\n".into()).await;
+        }
+
+        // Step 2: Start k3s
+        send(">>> Starting k3s server...".into()).await;
+        let systemd_result = Command::new("systemctl")
+            .args(["start", "k3s"])
+            .output()
+            .await;
+
+        match &systemd_result {
+            Ok(o) if o.status.success() => {
+                send("    Started via systemd\n".into()).await;
+            }
+            _ => {
+                send("    systemd not available, starting directly...".into()).await;
+                match Command::new("k3s")
+                    .args(["server", "--write-kubeconfig-mode=644", "--disable=metrics-server"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                {
+                    Ok(_) => send("    k3s server process spawned\n".into()).await,
+                    Err(e) => {
+                        send(format!("    Failed to start k3s: {e}")).await;
+                        anyhow::bail!("Failed to start k3s: {e}");
+                    }
+                }
+            }
+        }
+
+        // Step 3: Wait for cluster readiness
+        send(">>> Waiting for cluster to become ready...".into()).await;
+        for i in 0..120 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            if !self.kubeconfig_path().exists() {
+                if i % 5 == 4 {
+                    send(format!("    Waiting for kubeconfig... ({i}s)")).await;
+                }
+                continue;
+            }
+
+            if let Ok(client) = self.get_client().await {
+                match client.apiserver_version().await {
+                    Ok(ver) => {
+                        send(format!("    API server ready — Kubernetes v{}.{}\n", ver.major, ver.minor)).await;
+
+                        // Step 4: Enable Traefik dashboard
+                        send(">>> Enabling Traefik dashboard...".into()).await;
+                        match self.enable_traefik_dashboard().await {
+                            Ok(_) => send("    Dashboard available at http://127.0.0.1:9000/dashboard/\n".into()).await,
+                            Err(e) => send(format!("    Dashboard setup failed (non-critical): {e}\n")).await,
+                        }
+
+                        send(">>> Kubernetes cluster is ready".into()).await;
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        if i % 5 == 4 {
+                            send(format!("    Waiting for API server... ({i}s)")).await;
+                        }
+                    }
+                }
+            }
+        }
+
+        send(">>> Timed out waiting for API server (120s)".into()).await;
+        anyhow::bail!("k3s started but API server didn't become ready within 120 seconds")
+    }
 }
 
 impl K8sManager for K3sManager {

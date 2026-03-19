@@ -150,6 +150,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Kubernetes
         .route("/k8s/status", get(k8s_status))
         .route("/k8s/enable", post(k8s_enable))
+        .route("/k8s/enable-stream", post(k8s_enable_stream))
         .route("/k8s/disable", post(k8s_disable))
         .route("/k8s/reset", post(k8s_reset))
         .route("/k8s/kubeconfig", get(k8s_kubeconfig))
@@ -1545,6 +1546,30 @@ async fn k8s_enable(
 ) -> Result<impl IntoResponse, ApiError> {
     let log = state.k8s.enable_with_progress().await?;
     Ok(Json(serde_json::json!({ "output": log })))
+}
+
+async fn k8s_enable_stream(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    use axum::response::sse::{Event, Sse};
+    use tokio_stream::wrappers::ReceiverStream;
+    use futures::StreamExt;
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<String>(100);
+    let k8s = state.k8s.clone();
+
+    tokio::spawn(async move {
+        match k8s.enable_streaming(tx.clone()).await {
+            Ok(_) => { let _ = tx.send("[DONE]".into()).await; }
+            Err(e) => { let _ = tx.send(format!("[ERROR] {e}")).await; }
+        }
+    });
+
+    let stream = ReceiverStream::new(rx).map(|line| {
+        Ok::<_, std::convert::Infallible>(Event::default().data(line))
+    });
+
+    Sse::new(stream)
 }
 
 async fn k8s_disable(
