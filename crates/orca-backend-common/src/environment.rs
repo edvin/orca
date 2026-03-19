@@ -511,36 +511,63 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             if let Ok(_) = run_cmd("apt", &["--version"]).await {
                 let output =
                     run_cmd("sudo", &["apt", "install", "-y", "podman"]).await
-                        .map_err(|e| anyhow::anyhow!("apt install failed: {e}"))?;
+                        .map_err(|e| anyhow::anyhow!(
+                            "Failed to install Podman via apt.\n\n\
+                             You can try installing manually by running:\n\
+                             sudo apt install -y podman\n\n\
+                             Error: {e}"
+                        ))?;
                 Ok(format!("Installed podman via apt:\n{output}"))
             } else if let Ok(_) = run_cmd("dnf", &["--version"]).await {
                 let output =
                     run_cmd("sudo", &["dnf", "install", "-y", "podman"]).await
-                        .map_err(|e| anyhow::anyhow!("dnf install failed: {e}"))?;
+                        .map_err(|e| anyhow::anyhow!(
+                            "Failed to install Podman via dnf.\n\n\
+                             You can try installing manually by running:\n\
+                             sudo dnf install -y podman\n\n\
+                             Error: {e}"
+                        ))?;
                 Ok(format!("Installed podman via dnf:\n{output}"))
             } else if let Ok(_) = run_cmd("pacman", &["--version"]).await {
                 let output =
                     run_cmd("sudo", &["pacman", "-S", "--noconfirm", "podman"]).await
-                        .map_err(|e| anyhow::anyhow!("pacman install failed: {e}"))?;
+                        .map_err(|e| anyhow::anyhow!(
+                            "Failed to install Podman via pacman.\n\n\
+                             You can try installing manually by running:\n\
+                             sudo pacman -S podman\n\n\
+                             Error: {e}"
+                        ))?;
                 Ok(format!("Installed podman via pacman:\n{output}"))
             } else {
                 anyhow::bail!(
-                    "Could not detect package manager (tried apt, dnf, pacman). \
-                     Please install podman manually."
+                    "Could not detect a supported package manager.\n\n\
+                     Please install Podman manually for your distribution.\n\
+                     See: https://podman.io/docs/installation#linux-distributions"
                 )
             }
         }
         "install_docker_linux" => {
-            // Use the official Docker install script
             let output = run_cmd("sh", &["-c", "curl -fsSL https://get.docker.com | sh"])
                 .await
-                .map_err(|e| anyhow::anyhow!("Docker install script failed: {e}"))?;
+                .map_err(|e| anyhow::anyhow!(
+                    "The Docker install script failed.\n\n\
+                     You can try installing manually by running:\n\
+                     curl -fsSL https://get.docker.com | sh\n\n\
+                     Or see: https://docs.docker.com/engine/install/\n\n\
+                     Error: {e}"
+                ))?;
             Ok(format!("Docker installed:\n{output}"))
         }
         "start_docker" => {
             let output = run_cmd("sudo", &["systemctl", "start", "docker"])
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to start Docker: {e}"))?;
+                .map_err(|e| anyhow::anyhow!(
+                    "Failed to start the Docker daemon.\n\n\
+                     Try running manually:\n\
+                     sudo systemctl start docker\n\n\
+                     If Docker is not installed, use the Install button above first.\n\n\
+                     Error: {e}"
+                ))?;
             Ok(format!(
                 "Docker daemon started.{}",
                 if output.is_empty() {
@@ -552,12 +579,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
         }
         "start_podman" => {
             // Try rootless socket first, fall back to root
-            let output = run_cmd("systemctl", &["--user", "start", "podman.socket"])
-                .await
-                .or_else(|_| {
-                    // Synchronous fallback not possible; try the root variant
-                    Err("rootless failed".to_string())
-                });
+            let output = run_cmd("systemctl", &["--user", "start", "podman.socket"]).await;
             match output {
                 Ok(out) => Ok(format!(
                     "Podman socket started (rootless).{}",
@@ -566,7 +588,14 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 Err(_) => {
                     let out = run_cmd("sudo", &["systemctl", "start", "podman.socket"])
                         .await
-                        .map_err(|e| anyhow::anyhow!("Failed to start Podman socket: {e}"))?;
+                        .map_err(|e| anyhow::anyhow!(
+                            "Failed to start the Podman socket.\n\n\
+                             Try running manually:\n\
+                             systemctl --user start podman.socket\n\
+                             or: sudo systemctl start podman.socket\n\n\
+                             If Podman is not installed, use the Install button above first.\n\n\
+                             Error: {e}"
+                        ))?;
                     Ok(format!(
                         "Podman socket started (root).{}",
                         if out.is_empty() { String::new() } else { format!("\n{out}") }
@@ -578,9 +607,16 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             let user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
             let output = run_cmd("sudo", &["usermod", "-aG", "docker", &user])
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to add user to docker group: {e}"))?;
+                .map_err(|e| anyhow::anyhow!(
+                    "Failed to add your user to the docker group.\n\n\
+                     Try running manually:\n\
+                     sudo usermod -aG docker {user}\n\n\
+                     Then log out and back in for the change to take effect.\n\n\
+                     Error: {e}"
+                ))?;
             Ok(format!(
-                "Added {user} to docker group. You may need to log out and back in for this to take effect.{}",
+                "Added {user} to docker group.\n\n\
+                 Important: You need to log out and back in (or restart) for this to take effect.{}",
                 if output.is_empty() { String::new() } else { format!("\n{output}") }
             ))
         }
@@ -592,15 +628,27 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 // First verify WSL can run a simple command.
                 let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"]).await
                     .map_err(|e| anyhow::anyhow!(
-                        "Cannot run commands in WSL. Make sure WSL2 is enabled and a Linux \
-                         distro (e.g. Ubuntu) is installed from the Microsoft Store.\n\
-                         Error: {e}"
+                        "No WSL2 Linux distribution found.\n\n\
+                         To install Docker on Windows, Orca needs a Linux environment via WSL2.\n\n\
+                         How to set up WSL2:\n\
+                         1. Open the Microsoft Store app\n\
+                         2. Search for \"Ubuntu\" and click Install\n\
+                         3. Launch Ubuntu once to complete setup (create a username and password)\n\
+                         4. Come back here and click Install again\n\n\
+                         Alternatively, run this in PowerShell (as Administrator):\n\
+                         wsl --install -d Ubuntu\n\n\
+                         Error details: {e}"
                     ))?;
 
                 if !probe.contains("wsl-ok") {
                     anyhow::bail!(
-                        "WSL responded but output was unexpected: '{probe}'. \
-                         Make sure a WSL2 distro is installed."
+                        "WSL2 is installed but no Linux distribution is configured.\n\n\
+                         Please install a Linux distribution:\n\
+                         1. Open the Microsoft Store app\n\
+                         2. Search for \"Ubuntu\" and click Install\n\
+                         3. Launch Ubuntu once to complete setup (create a username and password)\n\
+                         4. Come back here and click Install again\n\n\
+                         WSL output: '{probe}'"
                     );
                 }
 
@@ -626,35 +674,72 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                      docker --version 2>&1; \
                      echo '>>> Docker installed and started successfully'"])
                     .await
-                    .map_err(|e| anyhow::anyhow!("Docker install in WSL2 failed: {e}"))?;
+                    .map_err(|e| anyhow::anyhow!(
+                        "Docker install in WSL2 failed.\n\n\
+                         You can try installing manually:\n\
+                         1. Open Ubuntu from the Start menu\n\
+                         2. Run: curl -fsSL https://get.docker.com | sudo sh\n\
+                         3. Run: sudo usermod -aG docker $USER\n\
+                         4. Run: sudo service docker start\n\n\
+                         Error: {e}"
+                    ))?;
                 Ok(format!("Docker installed in WSL2:\n{output}"))
             }
             #[cfg(not(target_os = "windows"))]
             {
                 let output = run_cmd("bash", &["-c", "curl -fsSL https://get.docker.com | sh"])
                     .await
-                    .map_err(|e| anyhow::anyhow!("Docker install failed: {e}"))?;
+                    .map_err(|e| anyhow::anyhow!(
+                        "The Docker install script failed.\n\n\
+                         You can try installing manually:\n\
+                         curl -fsSL https://get.docker.com | sh\n\n\
+                         Or see: https://docs.docker.com/engine/install/\n\n\
+                         Error: {e}"
+                    ))?;
                 Ok(format!("Docker installed:\n{output}"))
             }
         }
         "install_brew" => {
             let output = run_cmd("bash", &["-c", "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""])
                 .await
-                .map_err(|e| anyhow::anyhow!("Homebrew install failed: {e}"))?;
+                .map_err(|e| anyhow::anyhow!(
+                    "Homebrew installation failed.\n\n\
+                     You can try installing manually by opening Terminal and running:\n\
+                     /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n\n\
+                     See: https://brew.sh\n\n\
+                     Error: {e}"
+                ))?;
             Ok(format!("Homebrew installed:\n{output}"))
         }
         "install_lima" => {
             let output = run_cmd("brew", &["install", "lima"])
                 .await
-                .map_err(|e| anyhow::anyhow!("brew install lima failed: {e}"))?;
+                .map_err(|e| anyhow::anyhow!(
+                    "Failed to install Lima via Homebrew.\n\n\
+                     You can try installing manually by running:\n\
+                     brew install lima\n\n\
+                     Make sure Homebrew is installed first (see https://brew.sh).\n\n\
+                     Error: {e}"
+                ))?;
             Ok(format!("Lima installed:\n{output}"))
         }
         "enable_wsl2" => {
             let output = run_cmd("wsl", &["--install"])
                 .await
-                .map_err(|e| anyhow::anyhow!("WSL install failed: {e}"))?;
+                .map_err(|e| anyhow::anyhow!(
+                    "Failed to enable WSL2.\n\n\
+                     You can try enabling it manually:\n\
+                     1. Open PowerShell as Administrator\n\
+                     2. Run: wsl --install\n\
+                     3. Restart your computer when prompted\n\n\
+                     See: https://learn.microsoft.com/en-us/windows/wsl/install\n\n\
+                     Error: {e}"
+                ))?;
             Ok(format!(
-                "WSL2 installation initiated. A restart may be required.\n{output}"
+                "WSL2 installation initiated.\n\n\
+                 Important: You may need to restart your computer to complete the setup.\n\
+                 After restarting, open the Microsoft Store and install Ubuntu if you haven't already.\n\
+                 {output}"
             ))
         }
         _ => anyhow::bail!("Unknown fix action: {action}"),
