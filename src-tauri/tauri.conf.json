@@ -40,7 +40,8 @@
     ],
     "windows": {
       "nsis": {
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerHooks": "nsis-hooks.nsh"
       }
     },
     "macOS": {
