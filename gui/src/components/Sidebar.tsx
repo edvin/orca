@@ -11,7 +11,7 @@ interface SidebarProps {
 const mainNavItems: { id: Page; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
   { id: "containers", label: "Containers", icon: "\u{1F4E6}" },
-  { id: "images", label: "Images", icon: "\u{1F4F7}" },
+  { id: "images", label: "Images", icon: "\u{1F4BF}" },
   { id: "volumes", label: "Volumes", icon: "\u{1F4BD}" },
   { id: "networks", label: "Networks", icon: "\u{1F310}" },
   { id: "kubernetes", label: "Kubernetes", icon: "\u2388\uFE0F" },

@@ -23,7 +23,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
   const commands: Command[] = [
     { id: "nav-dashboard", name: "Go to Dashboard", icon: "\u{1F3E0}", category: "Navigate", shortcut: "", action: () => { props.onNavigate("dashboard"); props.onClose(); } },
     { id: "nav-containers", name: "Go to Containers", icon: "\u{1F4E6}", category: "Navigate", action: () => { props.onNavigate("containers"); props.onClose(); } },
-    { id: "nav-images", name: "Go to Images", icon: "\u{1F4F7}", category: "Navigate", action: () => { props.onNavigate("images"); props.onClose(); } },
+    { id: "nav-images", name: "Go to Images", icon: "\u{1F4BF}", category: "Navigate", action: () => { props.onNavigate("images"); props.onClose(); } },
     { id: "nav-volumes", name: "Go to Volumes", icon: "\u{1F4BD}", category: "Navigate", action: () => { props.onNavigate("volumes"); props.onClose(); } },
     { id: "nav-networks", name: "Go to Networks", icon: "\u{1F310}", category: "Navigate", action: () => { props.onNavigate("networks"); props.onClose(); } },
     { id: "nav-kubernetes", name: "Go to Kubernetes", icon: "\u2388\uFE0F", category: "Navigate", action: () => { props.onNavigate("kubernetes"); props.onClose(); } },
