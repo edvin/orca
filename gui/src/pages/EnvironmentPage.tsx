@@ -96,7 +96,7 @@ export default function EnvironmentPage() {
   const hasDockerDesktop = () => {
     const s = status();
     return s?.checks.some(
-      (c) => c.name === "Docker Desktop" && c.status === "Pass"
+      (c) => c.name === "Docker Desktop" && c.status === "Pass" && c.details
     );
   };
 
