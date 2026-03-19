@@ -81,7 +81,7 @@ export default function EnvironmentPage() {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">Environment</h1>
+        <h1 class="page-title">System Health</h1>
         <button class="btn" onClick={refresh} disabled={loading()}>
           {loading() ? "Checking..." : "Re-check"}
         </button>

@@ -184,6 +184,13 @@ body {
   background: #161b22;
   border-radius: 10px;
   border: 1px solid #21262d;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: border-color 0.15s;
+}
+
+.titlebar-status:hover {
+  border-color: #30363d;
 }
 
 .titlebar-status-dot {

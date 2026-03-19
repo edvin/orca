@@ -133,7 +133,7 @@ export default function Titlebar(props: TitlebarProps) {
       <div class="titlebar-left" data-tauri-drag-region>
         <img src="/icon.png" class="titlebar-icon" alt="" />
         <span class="titlebar-title" data-tauri-drag-region>Orca</span>
-        <div class="titlebar-status" data-tauri-drag-region>
+        <div class="titlebar-status" onClick={() => props.onNavigate?.("environment")} title="System Health">
           <span class="titlebar-status-dot" style={{ background: statusColor() }} />
           <span class="titlebar-status-text">{statusText()}</span>
           <Show when={runtimeInfo() && dockerConnected()}>
