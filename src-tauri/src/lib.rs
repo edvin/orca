@@ -81,6 +81,7 @@ pub fn run() {
             commands::start_daemon,
             commands::get_daemon_info,
             commands::check_for_updates,
+            commands::get_api_token,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

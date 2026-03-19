@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
@@ -5,6 +6,7 @@ use std::time::Duration;
 use axum::{
     Json, Router,
     extract::{Path, Query, Request, State},
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     http::StatusCode,
     middleware::Next,
     response::{
@@ -13,7 +15,9 @@ use axum::{
     },
     routing::{delete, get, post},
 };
+use futures::{SinkExt, StreamExt as FuturesStreamExt};
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
 use orca_core::compose::{self, ComposeRunner};
 use orca_core::image::ImageManager;
 use orca_core::kubernetes::K8sManager;
@@ -100,6 +104,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}/stats", get(container_stats))
         .route("/containers/{id}/logs", get(container_logs_sse))
         .route("/containers/{id}/exec", post(exec_container))
+        .route("/containers/{id}/terminal", get(container_terminal_ws))
         .route("/containers/{id}/export/run", get(export_docker_run))
         .route("/containers/{id}/export/compose", get(export_compose))
         // Registries
@@ -460,6 +465,150 @@ async fn exec_container(
 
     let result = state.runtime.exec(opts).await?;
     Ok(Json(result))
+}
+
+// --- Interactive Terminal WebSocket ---
+
+async fn container_terminal_ws(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+    ws: WebSocketUpgrade,
+) -> Result<impl IntoResponse, StatusCode> {
+    // WebSocket upgrades bypass the auth middleware (GET that upgrades),
+    // so we check the token from a query parameter instead.
+    let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
+    use subtle::ConstantTimeEq;
+    if !state.api_token.is_empty()
+        && (state.api_token.len() != token.len()
+            || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+    {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(ws.on_upgrade(move |socket| handle_terminal(socket, state, id)))
+}
+
+async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: String) {
+    use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions, StartExecResults};
+
+    // Create exec with TTY
+    let exec = match state.runtime.docker.create_exec(
+        &container_id,
+        CreateExecOptions {
+            cmd: Some(vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                "if command -v bash > /dev/null 2>&1; then exec bash; else exec sh; fi"
+                    .to_string(),
+            ]),
+            attach_stdin: Some(true),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            tty: Some(true),
+            env: Some(vec!["TERM=xterm-256color".to_string()]),
+            ..Default::default()
+        },
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            let (mut ws_sender, _) = socket.split();
+            let _ = ws_sender
+                .send(Message::Text(format!("\r\nFailed to create exec: {e}\r\n").into()))
+                .await;
+            return;
+        }
+    };
+
+    let exec_id = exec.id.clone();
+
+    // Start exec with TTY attached
+    let start_opts = Some(StartExecOptions {
+        detach: false,
+        tty: true,
+        ..Default::default()
+    });
+
+    match state.runtime.docker.start_exec(&exec_id, start_opts).await {
+        Ok(StartExecResults::Attached {
+            mut output,
+            mut input,
+        }) => {
+            let (mut ws_sender, mut ws_receiver) = socket.split();
+
+            // Container stdout/stderr -> WebSocket
+            let output_task = tokio::spawn(async move {
+                use futures::stream::StreamExt;
+                while let Some(Ok(log_output)) = output.next().await {
+                    let bytes = log_output.into_bytes();
+                    if ws_sender.send(Message::Binary(bytes.to_vec().into())).await.is_err() {
+                        break;
+                    }
+                }
+            });
+
+            // WebSocket input -> Container stdin (+ resize handling)
+            let exec_id_for_input = exec.id.clone();
+            let docker = state.runtime.docker.clone();
+            let input_task = tokio::spawn(async move {
+                while let Some(Ok(msg)) = ws_receiver.next().await {
+                    match msg {
+                        Message::Text(text) => {
+                            // Check for resize message (JSON with cols/rows)
+                            if let Ok(resize) = serde_json::from_str::<serde_json::Value>(&text) {
+                                if let (Some(cols), Some(rows)) = (
+                                    resize.get("cols").and_then(|c| c.as_u64()),
+                                    resize.get("rows").and_then(|r| r.as_u64()),
+                                ) {
+                                    let _ = docker
+                                        .resize_exec(
+                                            &exec_id_for_input,
+                                            ResizeExecOptions {
+                                                width: cols as u16,
+                                                height: rows as u16,
+                                            },
+                                        )
+                                        .await;
+                                    continue;
+                                }
+                            }
+                            if input.write_all(text.as_bytes()).await.is_err() {
+                                break;
+                            }
+                        }
+                        Message::Binary(data) => {
+                            if input.write_all(&data).await.is_err() {
+                                break;
+                            }
+                        }
+                        Message::Close(_) => break,
+                        _ => {}
+                    }
+                }
+            });
+
+            // Wait for either task to complete
+            tokio::select! {
+                _ = output_task => {}
+                _ = input_task => {}
+            }
+        }
+        Ok(StartExecResults::Detached) => {
+            let (mut ws_sender, _) = socket.split();
+            let _ = ws_sender
+                .send(Message::Text("\r\nExec started in detached mode\r\n".into()))
+                .await;
+        }
+        Err(e) => {
+            let (mut ws_sender, _) = socket.split();
+            let _ = ws_sender
+                .send(Message::Text(
+                    format!("\r\nFailed to start exec: {e}\r\n").into(),
+                ))
+                .await;
+        }
+    }
 }
 
 // --- Container Export ---

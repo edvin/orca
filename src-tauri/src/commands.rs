@@ -935,3 +935,8 @@ pub async fn check_for_updates(app: tauri::AppHandle) -> Result<serde_json::Valu
         Err(e) => Err(format!("Update check failed: {e}")),
     }
 }
+
+#[tauri::command]
+pub async fn get_api_token() -> Result<String, String> {
+    load_api_token().ok_or_else(|| "No API token configured".to_string())
+}
