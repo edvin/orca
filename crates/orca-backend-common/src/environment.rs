@@ -398,23 +398,39 @@ pub async fn check_environment() -> EnvironmentStatus {
             checks.push(check_docker_group().await);
         }
         "macos" => {
-            let docker_check = check_docker_installed().await;
             let docker_desktop_check = check_docker_desktop().await;
-            let docker_available = docker_check.status == CheckStatus::Pass;
             let has_docker_desktop = docker_desktop_check.status == CheckStatus::Pass;
 
-            checks.push(docker_check);
-            checks.push(docker_desktop_check);
+            if has_docker_desktop {
+                // Docker Desktop is installed — it provides everything needed.
+                // Don't check for docker CLI (it's in a non-standard path inside Docker.app).
+                // Don't show Lima/Homebrew (not needed with Docker Desktop).
+                let mut docker_check = HealthCheck {
+                    name: "Docker Runtime".to_string(),
+                    description: "Provided by Docker Desktop".to_string(),
+                    status: CheckStatus::Pass,
+                    fix_action: None,
+                    details: Some("Docker Desktop provides the Docker runtime".to_string()),
+                };
+                // Try to get the actual version
+                if let Ok(version) = run_cmd("docker", &["--version"]).await {
+                    docker_check.details = Some(version);
+                }
+                checks.push(docker_check);
+                checks.push(docker_desktop_check);
+            } else {
+                // No Docker Desktop — check for standalone Docker CLI and show alternatives
+                let docker_check = check_docker_installed().await;
+                checks.push(docker_check);
+                checks.push(docker_desktop_check);
 
-            // Only show Lima/Homebrew if Docker isn't already available.
-            // Lima is an optional alternative to Docker Desktop.
-            if !docker_available && !has_docker_desktop {
+                // Show Lima/Homebrew as optional alternatives
                 checks.push(check_brew_installed().await);
                 let mut lima = check_lima_installed().await;
                 lima.name = "Lima (optional)".to_string();
                 lima.description = "Run containers via a lightweight VM — alternative to Docker Desktop".to_string();
                 if lima.status == CheckStatus::Warning || lima.status == CheckStatus::Fail {
-                    lima.status = CheckStatus::Warning; // Keep as warning, not fail
+                    lima.status = CheckStatus::Warning;
                 }
                 checks.push(lima);
             }
@@ -427,9 +443,9 @@ pub async fn check_environment() -> EnvironmentStatus {
         _ => {}
     }
 
-    // Environment is ready if at least one runtime check passes
+    // Environment is ready if at least one runtime or Docker Desktop passes
     let ready = checks.iter().any(|c| {
-        c.name.contains("Runtime") && c.status == CheckStatus::Pass
+        (c.name.contains("Runtime") || c.name.contains("Docker Desktop")) && c.status == CheckStatus::Pass
     });
 
     let suggested = if checks
