@@ -34,7 +34,7 @@ export default function XTerminal(props: XTerminalProps) {
         cyan: "#39c5cf",
         white: "#e6edf3",
       },
-      fontFamily: "'SFMono-Regular', 'Menlo', 'Consolas', monospace",
+      fontFamily: "'JetBrains Mono NF', 'SFMono-Regular', 'Menlo', 'Consolas', monospace",
       fontSize: 13,
       lineHeight: 1.4,
       cursorBlink: true,

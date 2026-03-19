@@ -2418,6 +2418,51 @@ body {
   margin-top: 8px;
 }
 
+/* ==================== Breadcrumb ==================== */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.breadcrumb-item {
+  color: #58a6ff;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.breadcrumb-item:hover {
+  color: #79c0ff;
+  text-decoration: underline;
+}
+
+.breadcrumb-separator {
+  color: #484f58;
+  font-size: 12px;
+}
+
+.breadcrumb-current {
+  color: #e6edf3;
+  font-weight: 500;
+}
+
+/* ==================== Clickable Table Row ==================== */
+.clickable-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.clickable-row:hover {
+  background: #1f6feb11;
+}
+
 /* ==================== Container Detail Page ==================== */
 .detail-page {
   display: flex;

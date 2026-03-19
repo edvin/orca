@@ -8,6 +8,7 @@ import ToastContainer, { showToast } from "./components/Toast";
 import StacksPage from "./pages/StacksPage";
 import ContainersPage from "./pages/ContainersPage";
 import ContainerDetailPage from "./pages/ContainerDetailPage";
+import StackDetailPage from "./pages/StackDetailPage";
 import ImagesPage from "./pages/ImagesPage";
 import VolumesPage from "./pages/VolumesPage";
 import NetworksPage from "./pages/NetworksPage";
@@ -23,12 +24,13 @@ import CommandPalette from "./components/CommandPalette";
 import AiAssistant from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "dashboard" | "templates" | "stacks" | "containers" | "container-detail" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
+export type Page = "dashboard" | "templates" | "stacks" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
   const [detailId, setDetailId] = createSignal<string | null>(null);
   const [daemonStatus, setDaemonStatus] = createSignal<string>("connecting");
+  const [breadcrumbStack, setBreadcrumbStack] = createSignal<string | null>(null);
   const [showCommandPalette, setShowCommandPalette] = createSignal(false);
   const [environmentChecked, setEnvironmentChecked] = createSignal(false);
 
@@ -78,11 +80,22 @@ export default function App() {
   };
 
   const navigate = (target: string) => {
-    if (target.startsWith("container:")) {
-      setDetailId(target.split(":").slice(1).join(":"));
+    if (target.startsWith("container:") && target.includes(",stack:")) {
+      const [containerPart, stackPart] = target.split(",stack:");
+      setDetailId(containerPart.replace("container:", ""));
+      setBreadcrumbStack(stackPart);
       setPage("container-detail");
+    } else if (target.startsWith("container:")) {
+      setDetailId(target.split(":").slice(1).join(":"));
+      setBreadcrumbStack(null);
+      setPage("container-detail");
+    } else if (target.startsWith("stack:")) {
+      setDetailId(target.split(":").slice(1).join(":"));
+      setBreadcrumbStack(null);
+      setPage("stack-detail");
     } else {
       setDetailId(null);
+      setBreadcrumbStack(null);
       setPage(target as Page);
     }
   };
@@ -144,19 +157,28 @@ export default function App() {
         <>
           <div class="app-body">
             <Sidebar
-              currentPage={page() === "container-detail" ? "containers" as Page : page()}
+              currentPage={page() === "container-detail" ? "containers" as Page : page() === "stack-detail" ? "stacks" as Page : page()}
               onNavigate={(p: Page) => navigate(p)}
               daemonStatus={daemonStatus()}
             />
             <main class="app-main">
               {page() === "dashboard" && <DashboardPage onNavigate={(p) => navigate(p)} />}
               {page() === "templates" && <TemplatesPage />}
-              {page() === "stacks" && <StacksPage />}
+              {page() === "stacks" && <StacksPage onNavigate={(p) => navigate(p)} />}
               {page() === "containers" && <ContainersPage onNavigate={(p) => navigate(p)} />}
               {page() === "container-detail" && detailId() && (
                 <ContainerDetailPage
                   containerId={detailId()!}
-                  onBack={() => navigate("containers")}
+                  onBack={() => breadcrumbStack() ? navigate(`stack:${breadcrumbStack()}`) : navigate("containers")}
+                  onNavigate={(p) => navigate(p)}
+                  breadcrumbStack={breadcrumbStack()}
+                />
+              )}
+              {page() === "stack-detail" && detailId() && (
+                <StackDetailPage
+                  stackName={detailId()!}
+                  onBack={() => navigate("stacks")}
+                  onNavigate={(p) => navigate(p)}
                 />
               )}
               {page() === "images" && <ImagesPage />}

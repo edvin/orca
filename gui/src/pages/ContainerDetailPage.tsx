@@ -11,10 +11,13 @@ import ResourceBar from "../components/ResourceBar";
 import Sparkline from "../components/Sparkline";
 import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
 import { copyToClipboard } from "../lib/clipboard";
+import Breadcrumb from "../components/Breadcrumb";
 
 interface ContainerDetailPageProps {
   containerId: string;
   onBack: () => void;
+  onNavigate?: (target: string) => void;
+  breadcrumbStack?: string | null;
 }
 
 type DetailTab = "overview" | "logs" | "terminal" | "inspect" | "export";
@@ -226,12 +229,24 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
 
   return (
     <div class="detail-page">
+      {/* Breadcrumb */}
+      <Breadcrumb
+        items={
+          props.breadcrumbStack
+            ? [
+                { label: "Stacks", onClick: () => props.onNavigate?.("stacks") },
+                { label: props.breadcrumbStack, onClick: () => props.onNavigate?.(`stack:${props.breadcrumbStack}`) },
+                { label: container()?.name ?? "..." },
+              ]
+            : [
+                { label: "Containers", onClick: () => props.onBack() },
+                { label: container()?.name ?? "..." },
+              ]
+        }
+      />
+
       {/* Header bar */}
       <div class="detail-page-header">
-        <button class="detail-back-btn" onClick={props.onBack}>
-          <span style={{ "font-size": "16px" }}>{"\u2190"}</span>
-          Containers
-        </button>
 
         <Show when={container()} fallback={
           <div class="detail-page-info">

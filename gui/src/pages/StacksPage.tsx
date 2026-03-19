@@ -7,7 +7,11 @@ import LogViewer from "../components/LogViewer";
 import Spinner from "../components/Spinner";
 import LastUpdated from "../components/LastUpdated";
 
-export default function StacksPage() {
+interface StacksPageProps {
+  onNavigate?: (target: string) => void;
+}
+
+export default function StacksPage(props: StacksPageProps) {
   const [stacks, setStacks] = createSignal<ComposeProject[]>([]);
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   const [loading, setLoading] = createSignal<string | null>(null);
@@ -220,10 +224,14 @@ export default function StacksPage() {
                 runningCount() === stack.services.length;
 
               return (
-                <div class={`stack-card ${allRunning() ? "stack-card-healthy" : ""}`}>
+                <div
+                  class={`stack-card ${allRunning() ? "stack-card-healthy" : ""}`}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => props.onNavigate?.(`stack:${stack.name}`)}
+                >
                   <div
                     class="stack-header"
-                    onClick={() => toggleExpand(stack.name)}
+                    onClick={(e: MouseEvent) => { e.stopPropagation(); toggleExpand(stack.name); }}
                   >
                     <div class="stack-header-left">
                       <span

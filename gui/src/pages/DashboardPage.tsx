@@ -218,8 +218,11 @@ export default function DashboardPage(props: DashboardPageProps) {
               <tbody>
                 <For each={topCpu()}>
                   {(item) => (
-                    <tr>
-                      <td style={{ "font-weight": "500" }}>{item.container.name}</td>
+                    <tr
+                      class="clickable-row"
+                      onClick={() => props.onNavigate?.(`container:${item.container.id}`)}
+                    >
+                      <td style={{ "font-weight": "500", color: "#58a6ff", cursor: "pointer" }}>{item.container.name}</td>
                       <td class="mono" style={{ color: "#8b949e", "max-width": "140px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{item.container.image}</td>
                       <td style={{ color: item.stats.cpu_percent > 80 ? "#f85149" : item.stats.cpu_percent > 50 ? "#d29922" : "#3fb950" }}>
                         {item.stats.cpu_percent.toFixed(1)}%
@@ -258,8 +261,11 @@ export default function DashboardPage(props: DashboardPageProps) {
               <tbody>
                 <For each={topMemory()}>
                   {(item) => (
-                    <tr>
-                      <td style={{ "font-weight": "500" }}>{item.container.name}</td>
+                    <tr
+                      class="clickable-row"
+                      onClick={() => props.onNavigate?.(`container:${item.container.id}`)}
+                    >
+                      <td style={{ "font-weight": "500", color: "#58a6ff", cursor: "pointer" }}>{item.container.name}</td>
                       <td class="mono" style={{ color: "#8b949e", "max-width": "140px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{item.container.image}</td>
                       <td>
                         {formatBytes(item.stats.memory_usage_bytes)}
