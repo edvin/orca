@@ -624,8 +624,26 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             // On Windows: install Docker inside the default WSL2 distro
             #[cfg(target_os = "windows")]
             {
+                // Collect diagnostics so we can debug issues
+                let mut log = String::new();
+
+                // Check WSL version
+                log.push_str(">>> Checking WSL status...\n");
+                match run_cmd("wsl", &["--version"]).await {
+                    Ok(v) => log.push_str(&format!("{v}\n")),
+                    Err(e) => log.push_str(&format!("wsl --version failed: {e}\n")),
+                }
+
+                // List distros for diagnostics
+                log.push_str("\n>>> Listing WSL distros...\n");
+                match run_cmd("wsl", &["--list", "--verbose"]).await {
+                    Ok(v) => log.push_str(&format!("{v}\n")),
+                    Err(e) => log.push_str(&format!("wsl --list failed: {e}\n")),
+                }
+
                 // Use the default WSL distro (no -d flag) to avoid UTF-16 distro name issues.
                 // First verify WSL can run a simple command.
+                log.push_str("\n>>> Probing WSL...\n");
                 let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"]).await
                     .map_err(|e| anyhow::anyhow!(
                         "No WSL2 Linux distribution found.\n\n\
@@ -640,50 +658,106 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                          Error details: {e}"
                     ))?;
 
+                log.push_str(&format!("Probe result: '{}'\n", probe));
+
                 if !probe.contains("wsl-ok") {
                     anyhow::bail!(
-                        "WSL2 is installed but no Linux distribution is configured.\n\n\
+                        "{log}\n\
+                         WSL2 is installed but no Linux distribution is configured.\n\n\
                          Please install a Linux distribution:\n\
                          1. Open the Microsoft Store app\n\
                          2. Search for \"Ubuntu\" and click Install\n\
                          3. Launch Ubuntu once to complete setup (create a username and password)\n\
-                         4. Come back here and click Install again\n\n\
-                         WSL output: '{probe}'"
+                         4. Come back here and click Install again"
                     );
                 }
 
+                // Check if Docker is already installed
+                log.push_str("\n>>> Checking if Docker is already installed in WSL...\n");
+                match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
+                    Ok(v) => {
+                        log.push_str(&format!("Docker already installed: {v}\n"));
+                        log.push_str("\n>>> Checking if Docker daemon is running...\n");
+                        match run_cmd("wsl", &["-u", "root", "--", "docker", "info"]).await {
+                            Ok(info) => {
+                                log.push_str("Docker daemon is running.\n");
+                                log.push_str(&format!("{}\n", info.lines().take(5).collect::<Vec<_>>().join("\n")));
+                                return Ok(format!("{log}\nDocker is already installed and running."));
+                            }
+                            Err(_) => {
+                                log.push_str("Docker daemon is not running. Starting it...\n");
+                                match run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await {
+                                    Ok(o) => log.push_str(&format!("service docker start: {o}\n")),
+                                    Err(e) => log.push_str(&format!("Failed to start: {e}\n")),
+                                }
+                                // Verify
+                                match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
+                                    Ok(v) => return Ok(format!("{log}\nDocker started: {v}")),
+                                    Err(e) => log.push_str(&format!("Still not working: {e}\n")),
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => log.push_str("Docker not installed yet.\n"),
+                }
+
                 // Install Docker using the official convenience script, running as root.
-                // Stop any existing Docker service first to avoid conflicts.
-                // Capture both stdout and stderr so the user sees full progress.
-                let output = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "set -e; \
-                     echo '>>> Stopping any existing Docker service...'; \
-                     service docker stop 2>/dev/null || true; \
-                     pkill dockerd 2>/dev/null || true; \
-                     sleep 1; \
-                     echo '>>> Downloading Docker install script...'; \
-                     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh 2>&1; \
-                     echo '>>> Running install script...'; \
-                     sh /tmp/get-docker.sh 2>&1; \
-                     echo '>>> Adding user to docker group...'; \
-                     DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1); \
-                     usermod -aG docker \"$DEFAULT_USER\" 2>&1; \
-                     echo '>>> Starting Docker service...'; \
-                     service docker start 2>&1; \
-                     echo '>>> Verifying installation...'; \
-                     docker --version 2>&1; \
-                     echo '>>> Docker installed and started successfully'"])
-                    .await
-                    .map_err(|e| anyhow::anyhow!(
-                        "Docker install in WSL2 failed.\n\n\
-                         You can try installing manually:\n\
-                         1. Open Ubuntu from the Start menu\n\
-                         2. Run: curl -fsSL https://get.docker.com | sudo sh\n\
-                         3. Run: sudo usermod -aG docker $USER\n\
-                         4. Run: sudo service docker start\n\n\
-                         Error: {e}"
-                    ))?;
-                Ok(format!("Docker installed in WSL2:\n{output}"))
+                log.push_str("\n>>> Stopping any existing Docker service...\n");
+                let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "stop"]).await;
+                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c", "pkill dockerd 2>/dev/null || true"]).await;
+
+                log.push_str(">>> Downloading Docker install script...\n");
+                match run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                    "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh 2>&1 && echo 'Download OK' || echo 'Download FAILED'"
+                ]).await {
+                    Ok(o) => log.push_str(&format!("{o}\n")),
+                    Err(e) => {
+                        log.push_str(&format!("Download failed: {e}\n"));
+                        anyhow::bail!("{log}\n\nFailed to download Docker install script. Check your internet connection.");
+                    }
+                }
+
+                log.push_str("\n>>> Running install script (this takes a while)...\n");
+                match run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                    "sh /tmp/get-docker.sh 2>&1"
+                ]).await {
+                    Ok(o) => log.push_str(&format!("{o}\n")),
+                    Err(e) => {
+                        log.push_str(&format!("Install script failed: {e}\n"));
+                        anyhow::bail!(
+                            "{log}\n\n\
+                             Docker install script failed.\n\n\
+                             You can try installing manually:\n\
+                             1. Open Ubuntu from the Start menu\n\
+                             2. Run: curl -fsSL https://get.docker.com | sudo sh"
+                        );
+                    }
+                }
+
+                log.push_str("\n>>> Adding user to docker group...\n");
+                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                    "DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && usermod -aG docker \"$DEFAULT_USER\" 2>&1 && echo \"Added $DEFAULT_USER to docker group\""
+                ]).await.map(|o| log.push_str(&format!("{o}\n")));
+
+                log.push_str("\n>>> Starting Docker service...\n");
+                match run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await {
+                    Ok(o) => log.push_str(&format!("{o}\n")),
+                    Err(e) => log.push_str(&format!("Failed to start Docker: {e}\n")),
+                }
+
+                log.push_str("\n>>> Verifying installation...\n");
+                match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
+                    Ok(v) => {
+                        log.push_str(&format!("{v}\n"));
+                        log.push_str(">>> Docker installed and started successfully\n");
+                    }
+                    Err(e) => {
+                        log.push_str(&format!("Verification failed: {e}\n"));
+                        log.push_str("Docker may have installed but the daemon may not have started.\n");
+                    }
+                }
+
+                Ok(log)
             }
             #[cfg(not(target_os = "windows"))]
             {
