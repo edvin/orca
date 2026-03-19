@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  Open source. Built with Rust, Tauri, and SolidJS. Works with Docker and Podman.
+  <a href="https://edvin.github.io/orca">Website</a> · <a href="https://github.com/edvin/orca/releases">Download</a> · Open source. Built with Rust, Tauri, and SolidJS.
 </p>
 
 ## Features
