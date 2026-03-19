@@ -147,6 +147,19 @@ export default function App() {
     });
   });
 
+  const startResize = async (e: MouseEvent) => {
+    e.preventDefault();
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const win = getCurrentWindow();
+      // Tauri 2 uses startResizing or the ResizeDirection enum
+      await (win as any).startResizing?.("BottomRight")
+        ?? (win as any).startDragging?.();
+    } catch (err) {
+      console.error("Resize failed:", err);
+    }
+  };
+
   return (
     <div class="app-root">
       <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => navigate(p)} />
@@ -199,6 +212,7 @@ export default function App() {
         </>
       )}
       <ToastContainer />
+      <div class="resize-handle" onMouseDown={startResize} />
     </div>
   );
 }

@@ -134,6 +134,17 @@ export default function Titlebar(props: TitlebarProps) {
           </Show>
         </div>
       </div>
+      <button
+        class="titlebar-search"
+        onClick={() => {
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+        }}
+        data-tauri-drag-region-exclude
+      >
+        <span style={{ opacity: 0.5 }}>{"🔍"}</span>
+        <span>Search...</span>
+        <span class="titlebar-search-shortcut">⌘K</span>
+      </button>
       <div class="titlebar-controls">
         <div class="notification-bell">
           <button

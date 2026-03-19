@@ -10,7 +10,7 @@ html {
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  background: #0d1117;
+  background: transparent;
   color: #e6edf3;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
@@ -27,6 +27,19 @@ body {
   overflow: hidden;
   border-radius: 10px;
   border: 1px solid #30363d;
+  background: #0d1117;
+  position: relative;
+}
+
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  cursor: se-resize;
+  z-index: 9999;
+  -webkit-app-region: no-drag;
 }
 
 .app-body {
@@ -47,10 +60,10 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 38px;
+  height: 46px;
   background: linear-gradient(90deg, #0d1117 0%, #111820 100%);
   border-bottom: 1px solid #21262d;
-  padding: 0 8px 0 12px;
+  padding: 0 10px 0 14px;
   user-select: none;
   flex-shrink: 0;
   -webkit-app-region: drag;
@@ -139,6 +152,38 @@ body {
   background: #d29922;
   border-radius: 8px;
   cursor: default;
+}
+
+.titlebar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #484f58;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+  font-family: inherit;
+  min-width: 180px;
+}
+
+.titlebar-search:hover {
+  border-color: #484f58;
+  color: #8b949e;
+}
+
+.titlebar-search-shortcut {
+  margin-left: auto;
+  font-size: 10px;
+  color: #484f58;
+  background: #161b22;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: inherit;
 }
 
 .titlebar-controls {
@@ -230,7 +275,7 @@ body {
   padding: 8px 12px;
   border: none;
   background: transparent;
-  color: #8b949e;
+  color: #c9d1d9;
   text-align: left;
   cursor: pointer;
   font-size: 14px;
@@ -259,7 +304,8 @@ body {
   width: 22px;
   text-align: center;
   flex-shrink: 0;
-  opacity: 0.7;
+  color: #58a6ff;
+  opacity: 0.6;
 }
 
 .nav-item.active .nav-icon {

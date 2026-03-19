@@ -9,16 +9,16 @@ interface SidebarProps {
 }
 
 const mainNavItems: { id: Page; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Dashboard", icon: "\u25a4" },
-  { id: "templates", label: "Templates", icon: "\u29c8" },
-  { id: "containers", label: "Containers", icon: "\u25a3" },
-  { id: "images", label: "Images", icon: "\u25ce" },
-  { id: "volumes", label: "Volumes", icon: "\u25c8" },
-  { id: "networks", label: "Networks", icon: "\u25cc" },
+  { id: "dashboard", label: "Dashboard", icon: "\u{1F4CA}" },
+  { id: "templates", label: "Templates", icon: "\u{1F4E6}" },
+  { id: "containers", label: "Containers", icon: "\u{1F4E6}" },
+  { id: "images", label: "Images", icon: "\u{1F5BC}" },
+  { id: "volumes", label: "Volumes", icon: "\u{1F4BE}" },
+  { id: "networks", label: "Networks", icon: "\u{1F310}" },
   { id: "kubernetes", label: "Kubernetes", icon: "\u2388" },
-  { id: "machine", label: "Machine", icon: "\u2318" },
-  { id: "environment", label: "Environment", icon: "\u2661" },
-  { id: "activity", label: "Activity", icon: "\u29d7" },
+  { id: "machine", label: "Machine", icon: "\u{1F5A5}" },
+  { id: "environment", label: "Environment", icon: "\u{1F6E0}" },
+  { id: "activity", label: "Activity", icon: "\u{1F4AC}" },
 ];
 
 export default function Sidebar(props: SidebarProps) {
