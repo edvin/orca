@@ -17,6 +17,7 @@ export default function ImagesPage() {
   const [pulling, setPulling] = createSignal(false);
   const [pullStatus, setPullStatus] = createSignal("");
   const [selected, setSelected] = createSignal<Set<string>>(new Set());
+  const [showPull, setShowPull] = createSignal(false);
   const [showBuild, setShowBuild] = createSignal(false);
   const [buildPath, setBuildPath] = createSignal("");
   const [buildDockerfile, setBuildDockerfile] = createSignal("");
@@ -250,10 +251,13 @@ export default function ImagesPage() {
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
           />
+          <button class="btn" onClick={() => setShowPull(!showPull())}>
+            Pull
+          </button>
           <button class="btn" onClick={() => setShowBuild(!showBuild())}>
             Build
           </button>
-          <button class="btn btn-danger" onClick={pruneUnused}>
+          <button class="btn" onClick={pruneUnused}>
             Prune
           </button>
           <button class="btn" onClick={refresh}>
@@ -262,7 +266,8 @@ export default function ImagesPage() {
         </div>
       </div>
 
-      {/* Pull bar */}
+      {/* Pull bar (collapsible) */}
+      <Show when={showPull()}>
       <div style={{ "margin-bottom": "16px" }}>
         <div class="pull-bar">
           <div style={{ position: "relative", flex: 1 }}>
@@ -387,6 +392,7 @@ export default function ImagesPage() {
           <div class="pull-status"><Spinner size={12} />{" "}{pullStatus()}</div>
         </Show>
       </div>
+      </Show>
 
       {/* Build panel */}
       <Show when={showBuild()}>
@@ -468,11 +474,11 @@ export default function ImagesPage() {
           <span style={{ "font-size": "13px" }}>
             {selected().size} image{selected().size !== 1 ? "s" : ""} selected
           </span>
-          <button class="btn btn-sm btn-danger" onClick={batchDelete}>
+          <button class="btn btn-sm" onClick={batchDelete}>
             Delete Selected
           </button>
           <button class="btn btn-sm" onClick={() => setSelected(new Set())}>
-            Clear Selection
+            Clear
           </button>
         </div>
       </Show>
@@ -552,21 +558,19 @@ export default function ImagesPage() {
                       {formatTimestamp(img.created_at)}
                     </td>
                     <td style={{ "text-align": "right" }}>
-                      <div class="btn-group" style={{ "justify-content": "flex-end" }}>
+                      <div class="action-icons" style={{ "justify-content": "flex-end" }}>
                         <Show when={img.repo_tags.length > 0}>
                           <button
-                            class="btn btn-sm btn-primary"
+                            class="action-icon action-icon-start"
+                            title="Run container from this image"
                             onClick={(e) => { e.stopPropagation(); setRunImage(img.repo_tags[0]); }}
-                          >
-                            Run
-                          </button>
+                          >▶</button>
                         </Show>
                         <button
-                          class="btn btn-sm btn-danger"
+                          class="action-icon action-icon-delete"
+                          title="Remove image"
                           onClick={(e) => removeImage(img.id, img.repo_tags[0] || img.id, e)}
-                        >
-                          Remove
-                        </button>
+                        >🗑</button>
                       </div>
                     </td>
                   </tr>

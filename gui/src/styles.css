@@ -254,7 +254,7 @@ body {
   transition: all 0.15s;
   -webkit-app-region: no-drag;
   font-family: inherit;
-  min-width: 180px;
+  min-width: 360px;
 }
 
 .titlebar-search:hover {
@@ -1110,15 +1110,16 @@ body {
 }
 
 .pull-input {
-  padding: 6px 12px;
+  padding: 8px 14px;
   background: #0d1117;
   border: 1px solid #30363d;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #c9d1d9;
   font-size: 13px;
-  width: 320px;
+  flex: 1;
+  min-width: 200px;
   outline: none;
-  font-family: "SFMono-Regular", "Menlo", monospace;
+  font-family: inherit;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
