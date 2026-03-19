@@ -294,8 +294,8 @@ export default function EnvironmentPage() {
                           style={{ "flex-shrink": "0" }}
                         >
                           {fixingAction() === check.fix_action
-                            ? "Fixing..."
-                            : "Fix"}
+                            ? "Installing..."
+                            : "Install"}
                         </button>
                       </Show>
                     </div>
