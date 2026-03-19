@@ -130,7 +130,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       </Show>
 
       <Show when={showCreate()}>
-        <div class="modal-overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("modal-overlay")) setShowCreate(false); }}>
+        <div class="modal-overlay" onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }} onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowCreate(false); (e.currentTarget as any).__mdOverlay = false; }}>
           <div class="modal-dialog">
             <div class="modal-header">
               <h2 class="modal-title">Create Volume</h2>

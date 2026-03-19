@@ -98,10 +98,15 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
     }
   };
 
+  let mouseDownOnOverlay = false;
+  const handleOverlayMouseDown = (e: MouseEvent) => {
+    mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay");
+  };
   const handleOverlayClick = (e: MouseEvent) => {
-    if ((e.target as HTMLElement).classList.contains("modal-overlay") && stage() === "form") {
+    if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && stage() === "form") {
       props.onClose();
     }
+    mouseDownOnOverlay = false;
   };
 
   const stageIcon = () => {
@@ -116,7 +121,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
   };
 
   return (
-    <div class="modal-overlay" onClick={handleOverlayClick}>
+    <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
       <div class="modal-dialog">
         <div class="modal-header">
           <h2 class="modal-title">Run Container</h2>

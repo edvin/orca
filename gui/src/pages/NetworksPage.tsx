@@ -61,10 +61,15 @@ export default function NetworksPage() {
     setCreating(false);
   };
 
+  let mouseDownOnOverlay = false;
+  const handleOverlayMouseDown = (e: MouseEvent) => {
+    mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay");
+  };
   const handleOverlayClick = (e: MouseEvent) => {
-    if ((e.target as HTMLElement).classList.contains("modal-overlay")) {
+    if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) {
       setShowCreate(false);
     }
+    mouseDownOnOverlay = false;
   };
 
   const isDefaultNetwork = (name: string) => DEFAULT_NETWORKS.includes(name);
@@ -189,7 +194,7 @@ export default function NetworksPage() {
 
       {/* Create Network Dialog */}
       <Show when={showCreate()}>
-        <div class="modal-overlay" onClick={handleOverlayClick}>
+        <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
           <div class="modal-dialog">
             <div class="modal-header">
               <h2 class="modal-title">Create Network</h2>

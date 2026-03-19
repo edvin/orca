@@ -182,8 +182,9 @@ export default function StacksPage(props: StacksPageProps) {
       {/* Log Viewer — modal overlay so it doesn't shift content */}
       <Show when={logsFor()}>
         {(lf) => (
-          <div class="modal-overlay" onClick={(e) => {
-            if ((e.target as HTMLElement).classList.contains("modal-overlay")) setLogsFor(null);
+          <div class="modal-overlay" onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }} onClick={(e) => {
+            if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) setLogsFor(null);
+            (e.currentTarget as any).__mdOverlay = false;
           }}>
             <div style={{ width: "80vw", "max-width": "900px", height: "70vh" }}>
               <LogViewer
