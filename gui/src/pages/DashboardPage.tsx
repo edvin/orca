@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
+import { createSignal, onMount, onCleanup, For, Show, Index } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, Image, ComposeProject, SystemHealth } from "../lib/types";
 import { formatBytes } from "../lib/format";
@@ -107,6 +107,17 @@ export default function DashboardPage(props: DashboardPageProps) {
           <LastUpdated timestamp={lastUpdated()} />
         </h1>
       </div>
+
+      {/* Skeleton loading state */}
+      <Show when={!lastUpdated()}>
+        <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", "margin-bottom": "20px" }}>
+          <Index each={[1, 2, 3, 4]}>{() => <div class="skeleton-card" style={{ height: "90px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>}</Index>
+        </div>
+        <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "16px" }}>
+          <div class="skeleton-card" style={{ height: "100px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line" /><div class="skeleton-line skeleton-line-medium" /></div>
+          <div class="skeleton-card" style={{ height: "100px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line" /><div class="skeleton-line skeleton-line-medium" /></div>
+        </div>
+      </Show>
 
       <Show when={containers().length === 0 && images().length === 0 && stacks().length === 0 && lastUpdated()}>
         <div class="empty">

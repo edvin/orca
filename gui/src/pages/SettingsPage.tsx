@@ -23,14 +23,18 @@ export default function SettingsPage() {
   const [telemetry, setTelemetry] = createSignal(false);
 
   // AI settings
-  const [aiProvider, setAiProvider] = createSignal<"anthropic" | "openai">("anthropic");
+  type AiProviderType = "anthropic" | "openai" | "gemini" | "custom";
+  const [aiProvider, setAiProvider] = createSignal<AiProviderType>("anthropic");
   const [aiApiKey, setAiApiKey] = createSignal("");
   const [aiModel, setAiModel] = createSignal("");
+  const [aiUrl, setAiUrl] = createSignal("");
   const [aiSaving, setAiSaving] = createSignal(false);
   const [aiTesting, setAiTesting] = createSignal(false);
   const [aiTestResult, setAiTestResult] = createSignal<string | null>(null);
   const [hasAnthropicKey, setHasAnthropicKey] = createSignal(false);
   const [hasOpenaiKey, setHasOpenaiKey] = createSignal(false);
+  const [availableModels, setAvailableModels] = createSignal<string[]>([]);
+  const [loadingModels, setLoadingModels] = createSignal(false);
   const [apiToken, setApiToken] = createSignal("");
   const [mcpCopied, setMcpCopied] = createSignal(false);
   const [endpointCopied, setEndpointCopied] = createSignal(false);
@@ -148,18 +152,34 @@ export default function SettingsPage() {
         has_openai_key: boolean;
         anthropic_model: string;
         openai_model: string;
+        openai_url: string;
         api_token: string;
       };
-      setAiProvider(settings.provider as "anthropic" | "openai");
+      setAiProvider(settings.provider as AiProviderType);
       setHasAnthropicKey(settings.has_anthropic_key);
       setHasOpenaiKey(settings.has_openai_key);
       setAiModel(
-        settings.provider === "openai" ? settings.openai_model : settings.anthropic_model
+        settings.provider === "anthropic" ? settings.anthropic_model : settings.openai_model
       );
+      setAiUrl(settings.openai_url || "");
       setApiToken(settings.api_token);
       setAiApiKey("");
+      // Load available models
+      loadModels();
     } catch (e) {
       console.error("Failed to load AI settings:", e);
+    }
+  };
+
+  const loadModels = async () => {
+    setLoadingModels(true);
+    try {
+      const result = (await invoke("list_ai_models")) as { models: string[] };
+      setAvailableModels(result.models || []);
+    } catch {
+      setAvailableModels([]);
+    } finally {
+      setLoadingModels(false);
     }
   };
 
@@ -170,6 +190,7 @@ export default function SettingsPage() {
         provider: aiProvider(),
         apiKey: aiApiKey(),
         model: aiModel(),
+        url: aiUrl() || null,
       });
       showToast("AI settings saved", "success");
       await refreshAiSettings();
@@ -312,32 +333,53 @@ export default function SettingsPage() {
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
                   <div class="form-group">
                     <label class="form-label">Provider</label>
-                    <div style={{ display: "flex", gap: "16px", "margin-top": "4px" }}>
-                      <label style={{ display: "flex", "align-items": "center", gap: "6px", cursor: "pointer", color: "#e6edf3" }}>
-                        <input
-                          type="radio"
-                          name="ai-provider"
-                          checked={aiProvider() === "anthropic"}
-                          onChange={() => { setAiProvider("anthropic"); setAiModel("claude-sonnet-4-20250514"); setAiApiKey(""); setAiTestResult(null); }}
-                        />
-                        Anthropic (Claude)
-                      </label>
-                      <label style={{ display: "flex", "align-items": "center", gap: "6px", cursor: "pointer", color: "#e6edf3" }}>
-                        <input
-                          type="radio"
-                          name="ai-provider"
-                          checked={aiProvider() === "openai"}
-                          onChange={() => { setAiProvider("openai"); setAiModel("gpt-4o"); setAiApiKey(""); setAiTestResult(null); }}
-                        />
-                        OpenAI (GPT)
-                      </label>
+                    <div style={{ display: "flex", gap: "8px", "margin-top": "4px", "flex-wrap": "wrap" }}>
+                      {([
+                        ["anthropic", "Anthropic (Claude)"],
+                        ["openai", "OpenAI (GPT)"],
+                        ["gemini", "Google (Gemini)"],
+                        ["custom", "Custom"],
+                      ] as [AiProviderType, string][]).map(([id, label]) => (
+                        <button
+                          class={`btn btn-sm ${aiProvider() === id ? "btn-primary" : ""}`}
+                          onClick={() => {
+                            setAiProvider(id);
+                            setAiApiKey("");
+                            setAiTestResult(null);
+                            if (id === "anthropic") setAiModel("claude-sonnet-4-20250514");
+                            else if (id === "openai") setAiModel("gpt-4o");
+                            else if (id === "gemini") setAiModel("gemini-2.0-flash");
+                            else setAiModel("");
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
+                  {/* Custom URL field */}
+                  <Show when={aiProvider() === "custom"}>
+                    <div class="form-group">
+                      <label class="form-label">API Base URL</label>
+                      <input
+                        class="form-input mono"
+                        type="text"
+                        placeholder="https://api.example.com/v1"
+                        value={aiUrl()}
+                        onInput={(e) => setAiUrl(e.currentTarget.value)}
+                      />
+                      <span class="form-hint">OpenAI-compatible endpoint (must support /chat/completions)</span>
+                    </div>
+                  </Show>
+
                   <div class="form-group">
                     <label class="form-label">
-                      {aiProvider() === "openai" ? "OpenAI" : "Anthropic"} API Key
-                      <Show when={(aiProvider() === "anthropic" && hasAnthropicKey()) || (aiProvider() === "openai" && hasOpenaiKey())}>
+                      API Key
+                      <Show when={
+                        (aiProvider() === "anthropic" && hasAnthropicKey()) ||
+                        (aiProvider() !== "anthropic" && hasOpenaiKey())
+                      }>
                         <span style={{ color: "#3fb950", "font-size": "11px", "margin-left": "8px" }}>(configured)</span>
                       </Show>
                     </label>
@@ -345,9 +387,10 @@ export default function SettingsPage() {
                       class="form-input"
                       type="password"
                       placeholder={
-                        (aiProvider() === "anthropic" && hasAnthropicKey()) || (aiProvider() === "openai" && hasOpenaiKey())
+                        (aiProvider() === "anthropic" && hasAnthropicKey()) ||
+                        (aiProvider() !== "anthropic" && hasOpenaiKey())
                           ? "Key is set — enter a new key to replace"
-                          : aiProvider() === "openai" ? "sk-..." : "sk-ant-..."
+                          : "Enter your API key"
                       }
                       value={aiApiKey()}
                       onInput={(e) => setAiApiKey(e.currentTarget.value)}
@@ -355,14 +398,45 @@ export default function SettingsPage() {
                   </div>
 
                   <div class="form-group">
-                    <label class="form-label">Model</label>
-                    <input
-                      class="form-input"
-                      type="text"
-                      placeholder={aiProvider() === "openai" ? "gpt-4o" : "claude-sonnet-4-20250514"}
-                      value={aiModel()}
-                      onInput={(e) => setAiModel(e.currentTarget.value)}
-                    />
+                    <label class="form-label">
+                      Model
+                      <Show when={loadingModels()}>
+                        <span style={{ color: "#8b949e", "font-size": "11px", "margin-left": "8px" }}>loading...</span>
+                      </Show>
+                      <Show when={!loadingModels() && availableModels().length > 0}>
+                        <button
+                          class="btn btn-sm"
+                          style={{ "margin-left": "8px", "font-size": "10px", padding: "1px 6px" }}
+                          onClick={loadModels}
+                        >
+                          Refresh
+                        </button>
+                      </Show>
+                    </label>
+                    <Show when={availableModels().length > 0} fallback={
+                      <input
+                        class="form-input"
+                        type="text"
+                        placeholder={
+                          aiProvider() === "anthropic" ? "claude-sonnet-4-20250514"
+                            : aiProvider() === "gemini" ? "gemini-2.0-flash"
+                            : aiProvider() === "openai" ? "gpt-4o"
+                            : "model-name"
+                        }
+                        value={aiModel()}
+                        onInput={(e) => setAiModel(e.currentTarget.value)}
+                      />
+                    }>
+                      <select
+                        class="form-input"
+                        value={aiModel()}
+                        onChange={(e) => setAiModel(e.currentTarget.value)}
+                      >
+                        <For each={availableModels()}>
+                          {(model) => <option value={model}>{model}</option>}
+                        </For>
+                      </select>
+                    </Show>
                   </div>
 
                   <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>

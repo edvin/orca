@@ -86,6 +86,7 @@ pub fn run() {
             commands::save_general_settings,
             commands::save_ai_settings,
             commands::get_ai_settings,
+            commands::list_ai_models,
             commands::start_daemon,
             commands::stop_daemon,
             commands::get_daemon_info,

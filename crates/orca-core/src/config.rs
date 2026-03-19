@@ -64,7 +64,7 @@ pub struct OrcaConfig {
     /// Anthropic API key for AI assistant features.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anthropic_api_key: Option<String>,
-    /// AI provider: "anthropic" or "openai"
+    /// AI provider: "anthropic", "openai", "gemini", or "custom"
     #[serde(default = "default_ai_provider")]
     pub ai_provider: String,
     /// OpenAI-compatible API key (also used for Google, Ollama, etc.)

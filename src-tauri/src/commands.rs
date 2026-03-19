@@ -965,6 +965,11 @@ pub async fn get_ai_settings() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+pub async fn list_ai_models() -> Result<serde_json::Value, String> {
+    get_json("/settings/ai/models").await
+}
+
+#[tauri::command]
 pub async fn start_daemon(app: tauri::AppHandle) -> Result<String, String> {
     let dm = app.state::<Arc<daemon::DaemonManager>>();
     dm.start().await?;

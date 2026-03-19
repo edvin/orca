@@ -104,8 +104,13 @@ export default function MachinePage() {
       <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "16px", "max-width": "900px" }}>
         {/* Machine Info */}
         <Show when={machine()} fallback={
-          <div class="card">
-            <p style={{ color: "#8b949e" }}>Loading machine info...</p>
+          <div class="skeleton-card" style={{ height: "200px" }}>
+            <div class="skeleton-line skeleton-line-short" />
+            <div class="skeleton-line" />
+            <div class="skeleton-line skeleton-line-medium" />
+            <div class="skeleton-line" />
+            <div class="skeleton-line skeleton-line-short" />
+            <div class="skeleton-line skeleton-line-medium" />
           </div>
         }>
           {(m) => (
@@ -142,7 +147,13 @@ export default function MachinePage() {
         </Show>
 
         {/* Docker Connection */}
-        <Show when={health()}>
+        <Show when={health()} fallback={
+          <div class="skeleton-card" style={{ height: "100px" }}>
+            <div class="skeleton-line skeleton-line-short" />
+            <div class="skeleton-line skeleton-line-medium" />
+            <div class="skeleton-line" />
+          </div>
+        }>
           {(h) => (
             <div class="card">
               <h3 style={{ "margin-bottom": "12px", "font-size": "14px", color: "#e6edf3" }}>Docker Status</h3>

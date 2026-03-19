@@ -3056,3 +3056,35 @@ input[type="checkbox"]:checked::after {
 .toast-copy:hover {
   color: #e6edf3;
 }
+
+/* ==================== Skeleton Loading ==================== */
+.skeleton-card {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-line {
+  height: 12px;
+  background: linear-gradient(90deg, #21262d 25%, #30363d 50%, #21262d 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.skeleton-line-short { width: 40%; }
+.skeleton-line-medium { width: 70%; }
+
+.skeleton-row td {
+  padding: 12px 14px;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

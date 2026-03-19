@@ -182,6 +182,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/settings/general", get(get_general_settings).post(save_general_settings))
         .route("/settings/ai", post(save_ai_settings))
         .route("/settings/ai", get(get_ai_settings))
+        .route("/settings/ai/models", get(list_ai_models))
         // Agent APIs (MCP + OpenAI-compatible)
         .route("/agent/tools", get(agent_list_tools))
         .route("/agent/execute", post(agent_execute_tool))
@@ -1950,16 +1951,26 @@ async fn ai_ask(
         let config = state.config.blocking_lock();
         let provider = config.ai_provider.clone();
         let url = config.openai_url.clone();
-        let (key, model) = if provider == "openai" {
-            let key = std::env::var("OPENAI_API_KEY")
-                .ok()
-                .or_else(|| config.openai_api_key.clone());
-            (key, config.openai_model.clone())
-        } else {
-            let key = std::env::var("ANTHROPIC_API_KEY")
-                .ok()
-                .or_else(|| config.anthropic_api_key.clone());
-            (key, config.anthropic_model.clone())
+        let (key, model) = match provider.as_str() {
+            "anthropic" => {
+                let key = std::env::var("ANTHROPIC_API_KEY")
+                    .ok()
+                    .or_else(|| config.anthropic_api_key.clone());
+                (key, config.anthropic_model.clone())
+            }
+            "gemini" => {
+                let key = std::env::var("GOOGLE_API_KEY")
+                    .ok()
+                    .or_else(|| config.openai_api_key.clone());
+                (key, config.openai_model.clone())
+            }
+            // "openai", "custom", or anything else
+            _ => {
+                let key = std::env::var("OPENAI_API_KEY")
+                    .ok()
+                    .or_else(|| config.openai_api_key.clone());
+                (key, config.openai_model.clone())
+            }
         };
         (provider, key, model, url)
     };
@@ -1967,7 +1978,12 @@ async fn ai_ask(
     let api_key = match api_key {
         Some(key) if !key.is_empty() => key,
         _ => {
-            let provider_name = if provider == "openai" { "OpenAI" } else { "Anthropic" };
+            let provider_name = match provider.as_str() {
+                "anthropic" => "Anthropic",
+                "gemini" => "Google Gemini",
+                "custom" => "Custom provider",
+                _ => "OpenAI",
+            };
             return Ok(Json(orca_core::ai::AiResponse {
                 answer: format!(
                     "No {provider_name} API key configured. To enable AI features, set the \
@@ -2020,10 +2036,18 @@ async fn ai_ask(
 
     let http_client = reqwest::Client::new();
 
-    let answer = if provider == "openai" {
-        // Call OpenAI API
+    let answer = if provider == "anthropic" {
+        // Call Anthropic (Claude) API — handled below
+        call_anthropic(&http_client, &api_key, &model, &system_prompt, &user_message).await?
+    } else {
+        // OpenAI-compatible API (OpenAI, Gemini, Custom)
+        let base_url = match provider.as_str() {
+            "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
+            "custom" => openai_url.clone(),
+            _ => openai_url.clone(), // "openai"
+        };
         let api_resp = http_client
-            .post(format!("{}/chat/completions", openai_url.trim_end_matches('/')))
+            .post(format!("{}/chat/completions", base_url.trim_end_matches('/')))
             .header("Authorization", format!("Bearer {api_key}"))
             .header("content-type", "application/json")
             .json(&serde_json::json!({
@@ -2053,42 +2077,6 @@ async fn ai_ask(
             .as_array()
             .and_then(|arr| arr.first())
             .and_then(|choice| choice["message"]["content"].as_str())
-            .unwrap_or("No response received from AI.")
-            .to_string()
-    } else {
-        // Call Anthropic (Claude) API
-        let api_resp = http_client
-            .post("https://api.anthropic.com/v1/messages")
-            .header("x-api-key", &api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .json(&serde_json::json!({
-                "model": model,
-                "max_tokens": 1024,
-                "system": system_prompt,
-                "messages": [
-                    { "role": "user", "content": user_message }
-                ]
-            }))
-            .send()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to call Claude API: {e}"))?;
-
-        if !api_resp.status().is_success() {
-            let status = api_resp.status();
-            let err_body = api_resp.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!("Claude API error ({}): {}", status, err_body).into());
-        }
-
-        let resp_json: serde_json::Value = api_resp
-            .json()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to parse Claude API response: {e}"))?;
-
-        resp_json["content"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|block| block["text"].as_str())
             .unwrap_or("No response received from AI.")
             .to_string()
     };
@@ -2142,31 +2130,139 @@ struct AiSettingsRequest {
     url: Option<String>,
 }
 
+/// Call Anthropic Claude API
+async fn call_anthropic(
+    client: &reqwest::Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, ApiError> {
+    let api_resp = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&serde_json::json!({
+            "model": model,
+            "max_tokens": 1024,
+            "system": system_prompt,
+            "messages": [{ "role": "user", "content": user_message }]
+        }))
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to call Claude API: {e}"))?;
+
+    if !api_resp.status().is_success() {
+        let status = api_resp.status();
+        let err_body = api_resp.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!("Claude API error ({}): {}", status, err_body).into());
+    }
+
+    let resp_json: serde_json::Value = api_resp
+        .json()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to parse Claude API response: {e}"))?;
+
+    Ok(resp_json["content"]
+        .as_array()
+        .and_then(|arr| arr.first())
+        .and_then(|block| block["text"].as_str())
+        .unwrap_or("No response received from AI.")
+        .to_string())
+}
+
+/// List available models for the current AI provider
+async fn list_ai_models(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let (provider, api_key, base_url) = {
+        let config = state.config.blocking_lock();
+        let provider = config.ai_provider.clone();
+        let key = match provider.as_str() {
+            "anthropic" => config.anthropic_api_key.clone(),
+            _ => config.openai_api_key.clone(),
+        };
+        let url = match provider.as_str() {
+            "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
+            _ => config.openai_url.clone(),
+        };
+        (provider, key, url)
+    };
+
+    let api_key = match api_key {
+        Some(k) if !k.is_empty() => k,
+        _ => return Ok(Json(serde_json::json!({ "models": Vec::<String>::new() }))),
+    };
+
+    let client = reqwest::Client::new();
+
+    let models: Vec<String> = match provider.as_str() {
+        "anthropic" => {
+            // Anthropic doesn't have a models list endpoint — return known models
+            vec![
+                "claude-sonnet-4-20250514".into(),
+                "claude-opus-4-20250514".into(),
+                "claude-haiku-4-20250414".into(),
+                "claude-3-5-sonnet-20241022".into(),
+                "claude-3-5-haiku-20241022".into(),
+            ]
+        }
+        _ => {
+            // OpenAI-compatible /models endpoint (works for OpenAI, Gemini, Ollama, etc.)
+            match client
+                .get(format!("{}/models", base_url.trim_end_matches('/')))
+                .header("Authorization", format!("Bearer {api_key}"))
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    let json: serde_json::Value = resp.json().await.unwrap_or_default();
+                    json["data"]
+                        .as_array()
+                        .map(|arr| {
+                            let mut ids: Vec<String> = arr
+                                .iter()
+                                .filter_map(|m| m["id"].as_str().map(String::from))
+                                .collect();
+                            ids.sort();
+                            ids
+                        })
+                        .unwrap_or_default()
+                }
+                _ => vec![],
+            }
+        }
+    };
+
+    Ok(Json(serde_json::json!({ "models": models })))
+}
+
 async fn save_ai_settings(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AiSettingsRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut config = state.config.blocking_lock();
     config.ai_provider = body.provider.clone();
-    if body.provider == "openai" {
-        config.openai_api_key = if body.api_key.is_empty() {
-            None
-        } else {
-            Some(body.api_key)
-        };
-        config.openai_model = body.model;
-        if let Some(url) = body.url {
-            if !url.is_empty() {
-                config.openai_url = url;
+    match body.provider.as_str() {
+        "anthropic" => {
+            if !body.api_key.is_empty() {
+                config.anthropic_api_key = Some(body.api_key);
+            }
+            config.anthropic_model = body.model;
+        }
+        _ => {
+            // openai, gemini, custom — all use the openai_* fields
+            if !body.api_key.is_empty() {
+                config.openai_api_key = Some(body.api_key);
+            }
+            config.openai_model = body.model;
+            if let Some(url) = body.url {
+                if !url.is_empty() {
+                    config.openai_url = url;
+                }
             }
         }
-    } else {
-        config.anthropic_api_key = if body.api_key.is_empty() {
-            None
-        } else {
-            Some(body.api_key)
-        };
-        config.anthropic_model = body.model;
     }
     config.save().map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
     Ok(Json(serde_json::json!({ "ok": true })))
