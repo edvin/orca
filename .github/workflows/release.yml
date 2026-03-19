@@ -119,20 +119,27 @@ jobs:
         shell: bash
         run: |
           TARGET="target/${{ matrix.platform.target }}/release"
-          FILES=""
-          for f in $(find "$TARGET/bundle" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" \) 2>/dev/null); do
-            FILES="$FILES $f"
-          done
-          # Add standalone daemon (only if file actually exists)
-          if [ -f "$TARGET/orca-daemon" ]; then FILES="$FILES $TARGET/orca-daemon"; fi
-          if [ -f "$TARGET/orca-daemon.exe" ]; then FILES="$FILES $TARGET/orca-daemon.exe"; fi
-          FILES=$(echo "$FILES" | xargs)
-          if [ -n "$FILES" ]; then
-            echo "Uploading:"
-            echo "$FILES" | tr ' ' '\n'
-            gh release upload "${{ github.ref_name }}" $FILES --repo "${{ github.repository }}" --clobber
+          UPLOAD_FILES=""
+
+          # Find bundle artifacts
+          if [ -d "$TARGET/bundle" ]; then
+            while IFS= read -r f; do
+              UPLOAD_FILES="$UPLOAD_FILES \"$f\""
+            done < <(find "$TARGET/bundle" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" -o -name "*-setup.exe" \) 2>/dev/null)
+          fi
+
+          # Add standalone daemon binary
+          if [ -f "$TARGET/orca-daemon.exe" ]; then
+            UPLOAD_FILES="$UPLOAD_FILES \"$TARGET/orca-daemon.exe\""
+          elif [ -f "$TARGET/orca-daemon" ]; then
+            UPLOAD_FILES="$UPLOAD_FILES \"$TARGET/orca-daemon\""
+          fi
+
+          if [ -n "$UPLOAD_FILES" ]; then
+            echo "Uploading artifacts..."
+            eval gh release upload "${{ github.ref_name }}" $UPLOAD_FILES --repo "${{ github.repository }}" --clobber
           else
-            echo "No artifacts found to upload"
+            echo "No artifacts found"
           fi
 
   publish-release:
