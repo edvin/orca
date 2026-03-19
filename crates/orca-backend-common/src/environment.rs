@@ -131,6 +131,13 @@ async fn check_docker_installed() -> HealthCheck {
         },
     };
 
+    // On Windows, also check inside WSL if the host check failed
+    #[cfg(target_os = "windows")]
+    let result = match result {
+        Ok(v) => Ok(v),
+        Err(_) => run_cmd("wsl", &["docker", "--version"]).await,
+    };
+
     match result {
         Ok(version) => HealthCheck {
             name: "Docker Runtime".to_string(),
@@ -685,7 +692,16 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                                 return Ok(format!("{log}\nDocker is already installed and running."));
                             }
                             Err(_) => {
-                                log.push_str("Docker daemon is not running. Starting it...\n");
+                                log.push_str("Docker daemon is not running.\n");
+                                // Ensure TCP listener is configured
+                                log.push_str("Configuring TCP listener...\n");
+                                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                                    "mkdir -p /etc/docker && \
+                                     if [ ! -f /etc/docker/daemon.json ] || ! grep -q '2375' /etc/docker/daemon.json 2>/dev/null; then \
+                                       echo '{\"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://0.0.0.0:2375\"]}' > /etc/docker/daemon.json; \
+                                     fi"
+                                ]).await;
+                                log.push_str("Starting Docker...\n");
                                 match run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await {
                                     Ok(o) => log.push_str(&format!("service docker start: {o}\n")),
                                     Err(e) => log.push_str(&format!("Failed to start: {e}\n")),
@@ -737,6 +753,19 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 log.push_str("\n>>> Adding user to docker group...\n");
                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
                     "DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && usermod -aG docker \"$DEFAULT_USER\" 2>&1 && echo \"Added $DEFAULT_USER to docker group\""
+                ]).await.map(|o| log.push_str(&format!("{o}\n")));
+
+                // Configure Docker to also listen on TCP so orca-daemon on
+                // the Windows host can connect to it
+                log.push_str("\n>>> Configuring Docker TCP listener for Orca...\n");
+                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                    "mkdir -p /etc/docker && \
+                     if [ ! -f /etc/docker/daemon.json ] || ! grep -q '2375' /etc/docker/daemon.json 2>/dev/null; then \
+                       echo '{\"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://0.0.0.0:2375\"]}' > /etc/docker/daemon.json && \
+                       echo 'TCP listener configured on port 2375'; \
+                     else \
+                       echo 'TCP listener already configured'; \
+                     fi"
                 ]).await.map(|o| log.push_str(&format!("{o}\n")));
 
                 log.push_str("\n>>> Starting Docker service...\n");

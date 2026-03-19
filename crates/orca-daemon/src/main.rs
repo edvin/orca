@@ -66,26 +66,7 @@ async fn main() -> anyhow::Result<()> {
     // Try to connect to container runtime, but don't fail if unavailable.
     // The daemon must start even without Docker/Podman so the GUI can
     // show the Environment page and help the user install prerequisites.
-    let runtime = match orca_backend_native::NativeBackend::connect() {
-        Ok(native) => {
-            let rt = Arc::new(native.runtime);
-            let kind = rt.detect_runtime().await;
-            tracing::info!("Connected to {kind:?} runtime");
-            rt
-        }
-        Err(e) => {
-            tracing::warn!("No container runtime available: {e}");
-            tracing::warn!("Daemon will start without runtime — Environment page will guide setup");
-            // Create a dummy connection that will fail gracefully on API calls
-            Arc::new(orca_backend_common::BollardRuntime::new(
-                bollard::Docker::connect_with_local_defaults()
-                    .unwrap_or_else(|_| bollard::Docker::connect_with_defaults().unwrap_or_else(|_| {
-                        // Last resort — create a connection that will error on use
-                        bollard::Docker::connect_with_http_defaults().expect("failed to create fallback Docker client")
-                    }))
-            ))
-        }
-    };
+    let runtime = connect_runtime().await;
 
     // Start the Docker event listener
     let (events_tx, _) = broadcast::channel(256);
@@ -163,4 +144,54 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// Connect to the container runtime, trying platform-appropriate methods.
+async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
+    // 1. Try native socket connection (Linux, macOS, or Docker Desktop on Windows)
+    match orca_backend_native::NativeBackend::connect() {
+        Ok(native) => {
+            let rt = Arc::new(native.runtime);
+            let kind = rt.detect_runtime().await;
+            tracing::info!("Connected to {kind:?} runtime via socket");
+            return rt;
+        }
+        Err(e) => {
+            tracing::debug!("Native socket connection failed: {e}");
+        }
+    }
+
+    // 2. On Windows, try connecting via TCP to Docker in WSL2
+    #[cfg(target_os = "windows")]
+    {
+        // Try named pipe (Docker Desktop)
+        if let Ok(docker) = bollard::Docker::connect_with_named_pipe_defaults() {
+            if docker.ping().await.is_ok() {
+                tracing::info!("Connected to Docker via Windows named pipe");
+                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
+            }
+        }
+
+        // Try TCP on localhost:2375 (Docker in WSL2 with TCP listener)
+        if let Ok(docker) = bollard::Docker::connect_with_http(
+            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
+        ) {
+            if docker.ping().await.is_ok() {
+                tracing::info!("Connected to Docker via TCP (localhost:2375)");
+                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
+            }
+        }
+    }
+
+    tracing::warn!("No container runtime available");
+    tracing::warn!("Daemon will start without runtime — Environment page will guide setup");
+
+    // Create a fallback connection that will error on use
+    Arc::new(orca_backend_common::BollardRuntime::new(
+        bollard::Docker::connect_with_local_defaults()
+            .unwrap_or_else(|_| bollard::Docker::connect_with_defaults().unwrap_or_else(|_| {
+                bollard::Docker::connect_with_http_defaults()
+                    .expect("failed to create fallback Docker client")
+            }))
+    ))
 }
