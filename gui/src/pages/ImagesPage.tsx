@@ -41,6 +41,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [inspecting, setInspecting] = createSignal<string | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
   const [searchResults, setSearchResults] = createSignal<ImageSearchResult[]>([]);
+  const [selectedResultIndex, setSelectedResultIndex] = createSignal(-1);
   const [searching, setSearching] = createSignal(false);
   const [showSearchDropdown, setShowSearchDropdown] = createSignal(false);
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
@@ -93,7 +94,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       const results = (await invoke("search_images", { query: q })) as ImageSearchResult[];
       setSearchResults(results);
     } catch (e) {
-      logError("Search images", `Query "${q}": ${e}`);
+      logError(`Failed to search images: ${e}`, `Query "${q}"`);
       setSearchResults([]);
     }
     setSearching(false);
@@ -101,6 +102,7 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   const onPullInput = (value: string) => {
     setPullRef(value);
+    setSelectedResultIndex(-1);
     if (searchTimer) clearTimeout(searchTimer);
     searchTimer = setTimeout(() => doSearch(value.trim()), 500);
   };
@@ -109,6 +111,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     setPullRef(name);
     setShowSearchDropdown(false);
     setSearchResults([]);
+    setSelectedResultIndex(-1);
   };
 
   const filtered = () => {
@@ -155,7 +158,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       showToast("Image removed", "success");
       await refresh();
     } catch (e) {
-      logError("Remove image", `Image "${tag}": ${e}`);
+      logError(`Failed to remove image: ${e}`, `Image "${tag}"`);
       showToast(`Failed to remove: ${e}`, "error");
     }
   };
@@ -177,7 +180,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       setSelected(new Set<string>());
       await refresh();
     } catch (e) {
-      logError("Batch delete images", `${ids.length} images: ${e}`);
+      logError(`Failed to batch delete images: ${e}`, `${ids.length} images selected`);
       showToast(`Batch delete failed: ${e}`, "error");
     }
   };
@@ -191,7 +194,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       showToast(`Pruned ${count} image${count !== 1 ? "s" : ""}, freed ${space}`, "success");
       await refresh();
     } catch (e) {
-      logError("Prune images", `${e}`);
+      logError(`Failed to prune images: ${e}`);
       showToast(`Prune failed: ${e}`, "error");
     } finally {
       setPruning(false);
@@ -220,7 +223,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       await refresh();
     } catch (e) {
       setPullStatus("");
-      logError("Pull image", `Image "${ref_}": ${e}`);
+      logError(`Failed to pull image: ${e}`, `Image "${ref_}"`);
       showToast(`Pull failed: ${e}`, "error");
     }
     setPulling(false);
@@ -245,14 +248,50 @@ export default function ImagesPage(props: ImagesPageProps) {
         showToast("Build failed -- check build log", "error");
       }
     } catch (e) {
-      logError("Build image", `Context "${path}"${buildTag().trim() ? `, tag "${buildTag().trim()}"` : ""}: ${e}`);
+      logError(`Failed to build image: ${e}`, `Context "${path}"${buildTag().trim() ? `, tag "${buildTag().trim()}"` : ""}`);
       showToast(`Build error: ${e}`, "error");
     }
     setBuilding(false);
   };
 
   const handlePullKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && !pulling()) doPull();
+    const results = searchResults();
+    const idx = selectedResultIndex();
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (results.length > 0) {
+        setShowSearchDropdown(true);
+        setSelectedResultIndex(Math.min(idx + 1, results.length - 1));
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (idx > 0) {
+        setSelectedResultIndex(idx - 1);
+      } else {
+        setSelectedResultIndex(-1);
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (idx >= 0 && idx < results.length) {
+        // A result is selected — use it as the pull target and pull
+        selectSearchResult(results[idx].name);
+        doPull();
+      } else if (results.length > 0 && showSearchDropdown()) {
+        // No selection yet — highlight the first result
+        setSelectedResultIndex(0);
+      } else if (pullRef().trim() && !pulling()) {
+        // No dropdown — pull whatever is typed
+        doPull();
+      }
+    } else if (e.key === "Escape") {
+      if (showSearchDropdown()) {
+        setShowSearchDropdown(false);
+        setSelectedResultIndex(-1);
+      } else if (!pulling()) {
+        setShowPull(false);
+      }
+    }
   };
 
   // --- Image File Browser ---
@@ -282,7 +321,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       setFileBrowserPath(path || "/");
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as any)?.message || String(e);
-      logError("Browse image files", `Image ${imageId}, path "${path}": ${msg}`);
+      logError(`Failed to browse image files: ${msg}`, `Image ${imageId}, path "${path}"`);
       setFileError(msg);
       setFiles([]);
     } finally {
@@ -324,7 +363,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       setFileContent(result.content);
       setFileContentPath(filePath);
     } catch (e) {
-      logError("Read image file", `Image ${imageId}, path "${fullPath}": ${e}`);
+      logError(`Failed to read image file: ${e}`, `Image ${imageId}, path "${fullPath}"`);
       showToast(`Failed to read file: ${e}`, "error");
     }
   };
@@ -337,12 +376,128 @@ export default function ImagesPage(props: ImagesPageProps) {
       const result = (await invoke("scan_image", { id: imageId })) as ScanResult;
       setScanResult(result);
     } catch (e) {
-      logError("Scan image", `Image ${imageId}: ${e}`);
+      logError(`Failed to scan image: ${e}`, `Image ${imageId}`);
       showToast(`Scan failed: ${e}`, "error");
       setScanImageId(null);
     } finally {
       setScanning(false);
     }
+  };
+
+  const exportScanReport = (img: Image, scan: ScanResult) => {
+    const imageName = img.repo_tags?.[0] || img.id.slice(0, 12);
+    const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const vulns = (scan.results || [])
+      .flatMap((r) => (r.Vulnerabilities || []).map((v) => ({ ...v, _target: r.Target })))
+      .sort((a, b) => {
+        const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+        return (order[a.Severity] ?? 4) - (order[b.Severity] ?? 4);
+      });
+
+    const severityColor = (s: string) => {
+      switch (s) {
+        case "CRITICAL": return { bg: "#da3633", fg: "#fff" };
+        case "HIGH": return { bg: "#ea580c", fg: "#fff" };
+        case "MEDIUM": return { bg: "#ca8a04", fg: "#fff" };
+        case "LOW": return { bg: "#484f58", fg: "#fff" };
+        default: return { bg: "#9ca3af", fg: "#000" };
+      }
+    };
+
+    const vulnRows = vulns.map((v) => {
+      const c = severityColor(v.Severity);
+      return `<tr>
+        <td><span class="badge" style="background:${c.bg};color:${c.fg}">${v.Severity}</span></td>
+        <td>${v.PrimaryURL ? `<a href="${v.PrimaryURL}" target="_blank">${v.VulnerabilityID}</a>` : v.VulnerabilityID}</td>
+        <td class="mono">${v.PkgName}</td>
+        <td class="mono">${v.InstalledVersion}</td>
+        <td class="mono ${v.FixedVersion ? "fixed" : "no-fix"}">${v.FixedVersion || "\u2014"}</td>
+        <td class="desc">${v.Title || "\u2014"}</td>
+      </tr>`;
+    }).join("\n");
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vulnerability Report — ${imageName}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: #0a0e14; color: #e6edf3; min-height: 100vh; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 48px 32px; }
+  .header { margin-bottom: 40px; }
+  .header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; }
+  .header h1 span { color: #58a6ff; }
+  .header .meta { font-size: 13px; color: #8b949e; display: flex; gap: 20px; margin-top: 8px; }
+  .header .meta span { display: flex; align-items: center; gap: 4px; }
+  .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 32px; }
+  .summary-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 20px; text-align: center; }
+  .summary-card .number { font-size: 32px; font-weight: 700; letter-spacing: -1px; }
+  .summary-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8b949e; margin-top: 4px; }
+  .summary-card.critical .number { color: #f85149; }
+  .summary-card.high .number { color: #ea580c; }
+  .summary-card.medium .number { color: #d97706; }
+  .summary-card.low .number { color: #8b949e; }
+  .summary-card.total .number { color: #e6edf3; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { position: sticky; top: 0; }
+  th { padding: 12px 14px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; background: #161b22; border-bottom: 1px solid #21262d; }
+  td { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .fixed { color: #3fb950; }
+  .no-fix { color: #484f58; }
+  .desc { color: #8b949e; max-width: 320px; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .table-wrap { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; overflow: hidden; }
+  .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #484f58; padding: 20px; }
+  .footer a { color: #58a6ff; }
+  @media print { body { background: #fff; color: #1a1a1a; } th { background: #f0f0f0; color: #333; } td { border-color: #e0e0e0; } .badge { border: 1px solid currentColor; } .desc { color: #666; } .summary-card { border-color: #e0e0e0; } .footer { display: none; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Vulnerability Report — <span>${imageName}</span></h1>
+    <div class="meta">
+      <span>Scanned: ${timestamp}</span>
+      <span>Scanner: Trivy (via Orca Desktop)</span>
+      <span>${vulns.length} vulnerabilities found</span>
+    </div>
+  </div>
+  <div class="summary">
+    <div class="summary-card total"><div class="number">${scan.total}</div><div class="label">Total</div></div>
+    <div class="summary-card critical"><div class="number">${scan.critical}</div><div class="label">Critical</div></div>
+    <div class="summary-card high"><div class="number">${scan.high}</div><div class="label">High</div></div>
+    <div class="summary-card medium"><div class="number">${scan.medium}</div><div class="label">Medium</div></div>
+    <div class="summary-card low"><div class="number">${scan.low}</div><div class="label">Low</div></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Severity</th><th>CVE</th><th>Package</th><th>Installed</th><th>Fixed In</th><th>Title</th></tr></thead>
+      <tbody>${vulnRows}</tbody>
+    </table>
+  </div>
+  <div class="footer">Generated by <a href="https://orca-desktop.com">Orca Desktop</a> using Trivy</div>
+</div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const safeName = imageName.replace(/[^a-zA-Z0-9_-]/g, "_");
+    a.download = `vulnerability-report-${safeName}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Report exported — open the HTML file in your browser", "success");
   };
 
   const totalSize = () =>
@@ -360,7 +515,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       const data = await invoke("inspect_image", { id });
       setInspectData(data);
     } catch (e) {
-      logError("Inspect image", `Image ${id}: ${e}`);
+      logError(`Failed to inspect image: ${e}`, `Image ${id}`);
     }
   };
 
@@ -702,7 +857,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                         </Show>
                                         <Show when={scanResult()!.high > 0}>
                                           <span style={{
-                                            background: "#d29922",
+                                            background: "#ea580c",
                                             color: "#fff",
                                             padding: "2px 8px",
                                             "border-radius": "10px",
@@ -714,8 +869,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                                         </Show>
                                         <Show when={scanResult()!.medium > 0}>
                                           <span style={{
-                                            background: "#e3b341",
-                                            color: "#000",
+                                            background: "#ca8a04",
+                                            color: "#fff",
                                             padding: "2px 8px",
                                             "border-radius": "10px",
                                             "font-size": "12px",
@@ -736,6 +891,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                                             {scanResult()!.low} Low
                                           </span>
                                         </Show>
+                                        <button
+                                          class="btn btn-sm"
+                                          style={{ "margin-left": "auto" }}
+                                          onClick={(e) => { e.stopPropagation(); exportScanReport(img, scanResult()!); }}
+                                        >
+                                          Export Report
+                                        </button>
                                       </div>
                                       {/* Detailed vulnerability report */}
                                       <Show when={scanResult()!.results}>
@@ -775,11 +937,10 @@ export default function ImagesPage(props: ImagesPageProps) {
                                                         "border-radius": "4px",
                                                         "font-size": "11px",
                                                         "font-weight": "600",
-                                                        color: vuln.Severity === "CRITICAL" || vuln.Severity === "HIGH" ? "#fff"
-                                                          : vuln.Severity === "MEDIUM" ? "#000" : "#e6edf3",
+                                                        color: "#fff",
                                                         background: vuln.Severity === "CRITICAL" ? "#da3633"
-                                                          : vuln.Severity === "HIGH" ? "#d29922"
-                                                          : vuln.Severity === "MEDIUM" ? "#e3b341"
+                                                          : vuln.Severity === "HIGH" ? "#ea580c"
+                                                          : vuln.Severity === "MEDIUM" ? "#ca8a04"
                                                           : "#484f58",
                                                       }}>
                                                         {vuln.Severity}
@@ -879,7 +1040,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
           onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !pulling()) setShowPull(false); (e.currentTarget as any).__mdOverlay = false; }}
         >
-          <div class="modal-dialog" style={{ "max-width": "560px" }}>
+          <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "min-height": "500px", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
               <span class="modal-title">Pull Image</span>
               <button class="modal-close" onClick={() => { if (!pulling()) setShowPull(false); }}>{"\u00d7"}</button>
@@ -905,17 +1066,14 @@ export default function ImagesPage(props: ImagesPageProps) {
                     onInput={(e) => onPullInput(e.currentTarget.value)}
                     onKeyDown={handlePullKeyDown}
                     onFocus={() => { if (searchResults().length > 0) setShowSearchDropdown(true); }}
-                    onBlur={() => { setTimeout(() => setShowSearchDropdown(false), 200); }}
                     disabled={pulling()}
                     style={{ "padding-left": "32px", width: "100%", "box-sizing": "border-box" }}
                   />
                 </div>
                 <Show when={showSearchDropdown()}>
                   <div style={{
-                    position: "absolute", top: "100%", left: 0, right: 0,
-                    background: "#161b22", border: "1px solid #30363d", "border-radius": "0 0 8px 8px",
-                    "max-height": "320px", "overflow-y": "auto", "z-index": "100",
-                    "box-shadow": "0 8px 24px rgba(0,0,0,0.4)",
+                    background: "#161b22", border: "1px solid #30363d", "border-radius": "8px",
+                    "max-height": "360px", "overflow-y": "auto", "margin-top": "8px",
                   }}>
                     <Show when={searching()}>
                       <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
@@ -928,17 +1086,20 @@ export default function ImagesPage(props: ImagesPageProps) {
                       </div>
                     </Show>
                     <For each={searchResults()}>
-                      {(result) => (
+                      {(result, i) => (
                         <div
                           style={{
                             padding: "8px 14px", cursor: "pointer", "border-bottom": "1px solid #21262d",
                             display: "flex", "align-items": "center", gap: "8px",
+                            background: i() === selectedResultIndex() ? "rgba(31, 111, 235, 0.12)" : "transparent",
+                            "border-left": i() === selectedResultIndex() ? "2px solid #58a6ff" : "2px solid transparent",
                           }}
-                          onMouseDown={() => selectSearchResult(result.name)}
+                          onMouseDown={() => { selectSearchResult(result.name); doPull(); }}
+                          onMouseEnter={() => setSelectedResultIndex(i())}
                         >
                           <div style={{ flex: 1, "min-width": 0 }}>
                             <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                              <span class="mono" style={{ "font-weight": "600", "font-size": "13px" }}>
+                              <span class="mono" style={{ "font-weight": "600", "font-size": "13px", color: i() === selectedResultIndex() ? "#58a6ff" : "#e6edf3" }}>
                                 {result.name}
                               </span>
                               <Show when={result.official}>
@@ -1020,10 +1181,10 @@ export default function ImagesPage(props: ImagesPageProps) {
           onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
           onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) closeFileBrowser(); (e.currentTarget as any).__mdOverlay = false; }}
         >
-          <div class="modal-dialog" style={{ "max-width": "800px", "max-height": "80vh", display: "flex", "flex-direction": "column" }}>
+          <div class="modal-dialog" style={{ width: "900px", "max-width": "90vw", height: "70vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
               <span class="modal-title">
-                Image Files
+                Files — {images().find((i) => i.id === fileBrowserImage())?.repo_tags?.[0] || fileBrowserImage()?.slice(0, 12)}
               </span>
               <button class="modal-close" onClick={closeFileBrowser}>{"\u00d7"}</button>
             </div>
@@ -1064,24 +1225,18 @@ export default function ImagesPage(props: ImagesPageProps) {
                     {/* Back button */}
                     <Show when={fileBrowserPath() !== "/"}>
                       <div
-                        style={{ padding: "6px 16px", cursor: "pointer", "border-bottom": "1px solid #21262d", display: "flex", "align-items": "center", gap: "8px", "font-size": "13px", color: "#8b949e" }}
+                        class="file-browser-row"
+                        style={{ color: "#8b949e" }}
                         onClick={navigateUp}
                       >
-                        <span style={{ "font-size": "10px" }}>{"\u25C0"}</span> ..
+                        <span style={{ color: "#8b949e", width: "16px", "text-align": "center", "flex-shrink": "0", "font-size": "10px" }}>{"\u25C0"}</span>
+                        <span>.. (parent)</span>
                       </div>
                     </Show>
                     <For each={files()}>
                       {(f) => (
                         <div
-                          style={{
-                            padding: "6px 16px",
-                            cursor: "pointer",
-                            "border-bottom": "1px solid #21262d",
-                            display: "flex",
-                            "align-items": "center",
-                            gap: "10px",
-                            "font-size": "13px",
-                          }}
+                          class="file-browser-row"
                           onClick={() => f.is_dir ? navigateToDir(f.name) : readImageFile(f.name)}
                         >
                           <span style={{ color: f.is_dir ? "#58a6ff" : "#8b949e", width: "16px", "text-align": "center", "flex-shrink": "0" }}>
@@ -1102,7 +1257,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 </Show>
               }>
                 {/* File content viewer */}
-                <div>
+                <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
                   <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
                     <span style={{ "font-size": "12px", color: "#e6edf3" }}>{fileContentPath()}</span>
                     <button class="btn btn-sm" onClick={() => setFileContent(null)} style={{ "font-size": "11px", padding: "2px 8px" }}>Back</button>
@@ -1117,7 +1272,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                     "white-space": "pre-wrap",
                     "word-break": "break-all",
                     overflow: "auto",
-                    "max-height": "60vh",
+                    flex: "1",
                   }}>{fileContent()}</pre>
                 </div>
               </Show>

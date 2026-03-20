@@ -75,7 +75,8 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       setCurrentPath(result.path || "");
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as any)?.message || String(e);
-      logError("Browse volume files", `Volume "${props.volumeName}", path "${path || "/"}": ${msg}`);
+      logError(`Failed to browse volume files: ${msg}`, `Volume "${props.volumeName}", path "${path || "/"}"`);
+
       setFileError(msg);
       setFiles([]);
     }
@@ -92,7 +93,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       setFileContent(result.content);
       setFileContentPath(path);
     } catch (e) {
-      logError("Read volume file", `Volume "${props.volumeName}", path "${path}": ${e}`);
+      logError(`Failed to read volume file: ${e}`, `Volume "${props.volumeName}", path "${path}"`);
       showToast(`Failed to read file: ${e}`, "error");
     }
     setFileContentLoading(false);
@@ -118,7 +119,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       showToast(`Volume "${props.volumeName}" removed`, "success");
       props.onBack();
     } catch (err) {
-      logError("Remove volume", `Volume "${props.volumeName}": ${err}`);
+      logError(`Failed to remove volume: ${err}`, `Volume "${props.volumeName}"`);
       showToast(`Failed to remove volume: ${err}`, "error");
     }
   };

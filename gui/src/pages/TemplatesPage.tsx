@@ -1,4 +1,5 @@
 import { createSignal, onMount, For, Show } from "solid-js";
+import Spinner from "../components/Spinner";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppTemplate } from "../lib/types";
 import { showToast } from "../components/Toast";
@@ -19,6 +20,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [category, setCategory] = createSignal("All");
   const [search, setSearch] = createSignal("");
   const [deploying, setDeploying] = createSignal(false);
+  const [deployStatus, setDeployStatus] = createSignal("");
   const [deployTarget, setDeployTarget] = createSignal<AppTemplate | null>(null);
 
   // Deploy dialog state
@@ -185,11 +187,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     if (!template) return;
 
     setDeploying(true);
+    setDeployStatus("Pulling image...");
     try {
       const ports = deployPorts().filter((p) => p.host || p.container).map((p) => `${p.host}:${p.container}`);
       const env = deployEnv().filter((e) => e.key).map((e) => `${e.key}=${e.value}`);
       const volumes = deployVolumes().filter((v) => v.source || v.target).map((v) => `${v.source}:${v.target}`);
 
+      setDeployStatus(`Pulling ${template.image}...`);
       const result = (await invoke("deploy_template", {
         id: template.id,
         name: deployName() || null,
@@ -211,8 +215,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         props.onNavigate?.("containers");
       }
     } catch (e: any) {
-      logError("Deploy template", `Template "${template.name}" (${template.image}): ${e}`);
-      showToast(`Deploy failed: ${e}`, "error");
+      const err = String(e);
+      const isConflict = err.includes("is already in use") || err.includes("Conflict");
+      const displayMsg = isConflict
+        ? `A container named "${deployName() || `orca-${template.id}`}" already exists. Remove or rename it first.`
+        : err;
+      logError(`Deploy failed: ${displayMsg}`, `Template "${template.name}" (${template.image})`);
+      showToast(displayMsg, "error");
     } finally {
       setDeploying(false);
     }
@@ -282,7 +291,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       await refreshTemplates();
       showToast(`Template "${template.name}" saved`, "success");
     } catch (e: any) {
-      logError("Save template", `Template "${editorName()}": ${e}`);
+      logError(`Failed to save template: ${e}`, `Template "${editorName()}"`);
       showToast(`Failed to save template: ${e}`, "error");
     } finally {
       setEditorSaving(false);
@@ -295,7 +304,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       await refreshTemplates();
       showToast(`Template "${template.name}" deleted`, "success");
     } catch (e: any) {
-      logError("Delete template", `Template "${template.name}": ${e}`);
+      logError(`Failed to delete template: ${e}`, `Template "${template.name}"`);
       showToast(`Failed to delete: ${e}`, "error");
     }
   };
@@ -502,7 +511,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 </Show>
               </div>
               <div class="modal-footer">
-                <button class="btn" onClick={() => closeDeploy()}>Cancel</button>
+                <Show when={deploying() && deployStatus()}>
+                  <span style={{ "font-size": "12px", color: "#8b949e", "margin-right": "auto" }}>
+                    <Spinner size={12} />{" "}{deployStatus()}
+                  </span>
+                </Show>
+                <button class="btn" onClick={() => closeDeploy()} disabled={deploying()}>Cancel</button>
                 <button class="btn btn-primary" onClick={() => doDeploy()} disabled={deploying()}>
                   {deploying() ? "Deploying..." : "Deploy"}
                 </button>

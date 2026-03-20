@@ -206,7 +206,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       await fetchInspect();
     } catch (err) {
       const cName = container()?.name || props.containerId;
-      logError("Update container resources", `Container "${cName}": ${err}`);
+      logError(`Failed to update container resources: ${err}`, `Container "${cName}"`);
       showToast(`Update failed: ${err}`, "error");
     }
     setResourceSaving(false);
@@ -220,7 +220,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       await fetchContainer();
     } catch (err) {
       const cName = container()?.name || props.containerId;
-      logError(`Container ${action.replace("_container", "")}`, `Container "${cName}": ${err}`);
+      logError(`Failed to ${action.replace("_container", "")} container: ${err}`, `Container "${cName}"`);
       showToast(`${action} failed: ${err}`, "error");
     }
     setActionInProgress(false);
@@ -235,7 +235,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       await fetchContainer();
     } catch (err) {
       const cName = container()?.name || props.containerId;
-      logError("Restart container", `Container "${cName}": ${err}`);
+      logError(`Failed to restart container: ${err}`, `Container "${cName}"`);
       showToast(`Restart failed: ${err}`, "error");
     }
     setActionInProgress(false);
@@ -252,7 +252,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       props.onBack();
     } catch (err) {
       const cName = container()?.name || props.containerId;
-      logError("Remove container", `Container "${cName}": ${err}`);
+      logError(`Failed to remove container: ${err}`, `Container "${cName}"`);
       showToast(`Remove failed: ${err}`, "error");
       setActionInProgress(false);
     }

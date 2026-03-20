@@ -23,7 +23,7 @@ export default function NetworksPage() {
       const result = (await invoke("list_networks")) as Network[];
       setNetworks(result);
     } catch (e) {
-      logError("List networks", `${e}`);
+      logError(`Failed to list networks: ${e}`);
     }
   };
 
@@ -37,7 +37,7 @@ export default function NetworksPage() {
       showToast(`Network "${name}" removed`, "success");
       await refresh();
     } catch (err) {
-      logError("Remove network", `Network "${name}": ${err}`);
+      logError(`Failed to remove network: ${err}`, `Network "${name}"`);
       showToast(`Failed to remove network: ${err}`, "error");
     }
   };
@@ -59,7 +59,7 @@ export default function NetworksPage() {
       setShowCreate(false);
       await refresh();
     } catch (err) {
-      logError("Create network", `Network "${name}", driver "${createDriver()}": ${err}`);
+      logError(`Failed to create network: ${err}`, `Network "${name}", driver "${createDriver()}"`);
       showToast(`Failed to create network: ${err}`, "error");
     }
     setCreating(false);

@@ -185,7 +185,7 @@ export default function Titlebar(props: TitlebarProps) {
               if (opening) markAllRead();
             }}
           >
-            {"\u{1F514}"}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
             <Show when={getUnreadCount() > 0}>
               <span class="notification-badge">
                 {getUnreadCount() > 99 ? "99+" : getUnreadCount()}
@@ -211,12 +211,19 @@ export default function Titlebar(props: TitlebarProps) {
                 >
                   <For each={getAlertEvents().slice(0, 10)}>
                     {(event) => (
-                      <div class="activity-event">
+                      <div
+                        class="activity-event activity-event-clickable"
+                        onClick={() => { setBellOpen(false); props.onNavigate?.("activity"); }}
+                        title="Click to view in Activity"
+                      >
                         <div class={`activity-event-icon activity-icon-${event.severity}`}>
                           {event.severity === "error" ? "\u2717" : "\u26A0"}
                         </div>
                         <div class="activity-event-body">
                           <div class="activity-event-title">{event.title}</div>
+                          <Show when={event.detail}>
+                            <div class="activity-event-detail">{event.detail}</div>
+                          </Show>
                           <div class="activity-event-time">{relativeTime(event.timestamp)}</div>
                         </div>
                       </div>

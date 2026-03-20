@@ -14,7 +14,17 @@ export default function LogViewer(props: LogViewerProps) {
   const [autoScroll, setAutoScroll] = createSignal(true);
   const [filter, setFilter] = createSignal("");
   const [tail, setTail] = createSignal(500);
+  const [fontSize, setFontSize] = createSignal(
+    parseInt(localStorage.getItem("log-font-size") || "13", 10)
+  );
   let logContainer: HTMLPreElement | undefined;
+  let filterRef: HTMLInputElement | undefined;
+
+  const changeFontSize = (delta: number) => {
+    const next = Math.max(9, Math.min(24, fontSize() + delta));
+    setFontSize(next);
+    localStorage.setItem("log-font-size", String(next));
+  };
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -34,11 +44,21 @@ export default function LogViewer(props: LogViewerProps) {
     setLoading(false);
   };
 
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+      e.preventDefault();
+      filterRef?.focus();
+    }
+  };
+
   onMount(() => {
     fetchLogs();
-    // Poll for new logs every 2 seconds
     const interval = setInterval(fetchLogs, 2000);
-    onCleanup(() => clearInterval(interval));
+    document.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => {
+      clearInterval(interval);
+      document.removeEventListener("keydown", handleKeyDown);
+    });
   });
 
   createEffect(() => {
@@ -103,16 +123,30 @@ export default function LogViewer(props: LogViewerProps) {
           <span class="log-count">{filtered().length} lines</span>
         </div>
         <div class="log-header-right">
-          <input
-            class="search-input"
-            style={{ width: "160px" }}
-            type="text"
-            placeholder="Filter logs..."
-            value={filter()}
-            onInput={(e) => setFilter(e.currentTarget.value)}
-          />
+          <div style={{ position: "relative", display: "inline-flex", "align-items": "center" }}>
+            <input
+              ref={filterRef}
+              class="search-input"
+              style={{ width: "320px", "padding-right": "28px" }}
+              type="text"
+              placeholder="Filter logs... (Ctrl+F)"
+              value={filter()}
+              onInput={(e) => setFilter(e.currentTarget.value)}
+            />
+            <Show when={filter().length > 0}>
+              <button
+                class="search-clear-btn"
+                onClick={() => setFilter("")}
+                title="Clear filter"
+                type="button"
+              >
+                &times;
+              </button>
+            </Show>
+          </div>
           <select
-            class="log-select"
+            class="form-input"
+            style={{ width: "120px", "font-size": "12px", padding: "5px 32px 5px 8px" }}
             value={tail()}
             onChange={(e) => {
               setTail(Number(e.currentTarget.value));
@@ -121,8 +155,8 @@ export default function LogViewer(props: LogViewerProps) {
           >
             <option value={100}>100 lines</option>
             <option value={500}>500 lines</option>
-            <option value={2000}>2000 lines</option>
-            <option value={10000}>10000 lines</option>
+            <option value={2000}>2,000 lines</option>
+            <option value={10000}>10,000 lines</option>
           </select>
           <button
             class={`btn btn-sm ${autoScroll() ? "btn-primary" : ""}`}
@@ -135,6 +169,11 @@ export default function LogViewer(props: LogViewerProps) {
           >
             Auto-scroll
           </button>
+          <div style={{ display: "flex", "align-items": "center", gap: "1px", background: "#21262d", "border-radius": "4px", padding: "0 2px" }}>
+            <button class="action-icon" onClick={() => changeFontSize(-1)} title="Decrease font size" style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>&minus;</button>
+            <span style={{ "font-size": "10px", color: "#8b949e", "min-width": "24px", "text-align": "center" }}>{fontSize()}</span>
+            <button class="action-icon" onClick={() => changeFontSize(1)} title="Increase font size" style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>+</button>
+          </div>
           <button class="action-icon" onClick={copyAll} title="Copy all logs">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
           </button>
@@ -161,6 +200,7 @@ export default function LogViewer(props: LogViewerProps) {
           class="log-content"
           ref={logContainer}
           onScroll={handleScroll}
+          style={{ "font-size": `${fontSize()}px` }}
         >
           {filtered().join("\n") || "(no log output)"}
         </pre>

@@ -1049,6 +1049,27 @@ async fn create_volume_handler(
 
 // --- Volume File Browsing ---
 
+/// Ensure a helper image (e.g. alpine:latest) is available locally, pulling if needed.
+async fn ensure_image(state: &Arc<AppState>, image: &str) -> Result<(), ApiError> {
+    if state.runtime.docker.inspect_image(image).await.is_ok() {
+        return Ok(());
+    }
+    use bollard::image::CreateImageOptions;
+    use futures::StreamExt;
+
+    let (name, tag) = image.rsplit_once(':').unwrap_or((image, "latest"));
+    let opts = CreateImageOptions {
+        from_image: name,
+        tag,
+        ..Default::default()
+    };
+    let mut stream = state.runtime.docker.create_image(Some(opts), None, None);
+    while let Some(result) = stream.next().await {
+        result.map_err(|e| anyhow::anyhow!("Failed to pull {image}: {e}"))?;
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 struct VolumeFilesQuery {
     #[serde(default)]
@@ -1072,6 +1093,9 @@ async fn volume_list_files(
     } else {
         format!("/data/{}", sanitized.trim_start_matches('/'))
     };
+
+    // Ensure alpine is available
+    ensure_image(&state, "alpine:latest").await?;
 
     // Create a temporary container to list files
     let opts = ContainerCreateOpts {
@@ -1177,6 +1201,8 @@ async fn volume_read_file(
     let file_path = query.path.unwrap_or_default();
     let sanitized = file_path.replace("..", "").replace('\0', "");
     let data_path = format!("/data/{}", sanitized.trim_start_matches('/'));
+
+    ensure_image(&state, "alpine:latest").await?;
 
     let opts = ContainerCreateOpts {
         image: "alpine:latest".to_string(),
@@ -2273,33 +2299,8 @@ async fn deploy_template(
         memory_swap: None,
     };
 
-    // Pull the image first if not already available
-    {
-        use bollard::image::CreateImageOptions;
-        use futures::StreamExt;
-
-        let (img_name, img_tag) = if let Some((n, t)) = template.image.rsplit_once(':') {
-            (n.to_string(), t.to_string())
-        } else {
-            (template.image.clone(), "latest".to_string())
-        };
-
-        // Check if image exists locally
-        let needs_pull = state.runtime.docker.inspect_image(&template.image).await.is_err();
-        if needs_pull {
-            let pull_opts = CreateImageOptions {
-                from_image: img_name.as_str(),
-                tag: img_tag.as_str(),
-                ..Default::default()
-            };
-            let mut stream = state.runtime.docker.create_image(Some(pull_opts), None, None);
-            while let Some(result) = stream.next().await {
-                if let Err(e) = result {
-                    return Err(anyhow::anyhow!("Failed to pull image {}: {e}", template.image).into());
-                }
-            }
-        }
-    }
+    // Pull the image if not already available
+    ensure_image(&state, &template.image).await?;
 
     let container_id = state.runtime.create_container(opts).await?;
 

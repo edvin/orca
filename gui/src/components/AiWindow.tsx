@@ -99,9 +99,8 @@ export default function AiWindow() {
             container_logs: logs || undefined,
           };
           setPendingContext(context);
-          const prompt = `I'm looking at container "${containerName}" (image: ${image}). Can you help me understand what it's doing and if there are any issues?`;
-          setInput(prompt);
-          await sendMessage(prompt);
+          setInput("");
+          inputRef?.focus();
         }
       );
       onCleanup(unlisten);
@@ -203,12 +202,32 @@ export default function AiWindow() {
         <div ref={messagesEnd} />
       </div>
 
+      {/* Context banner */}
+      <Show when={pendingContext()}>
+        {(ctx) => (
+          <div class="ai-context-banner">
+            <div class="ai-context-info">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+              </svg>
+              <span>{ctx().container_name}</span>
+              <span style={{ color: "#6e7681", "font-size": "11px" }}>{ctx().image}</span>
+            </div>
+            <button class="ai-context-dismiss" onClick={() => setPendingContext(null)} title="Clear context">{"\u00d7"}</button>
+          </div>
+        )}
+      </Show>
+
       {/* Input */}
       <div class="ai-window-input-area">
         <textarea
           ref={inputRef}
           class="ai-window-input"
-          placeholder={hasCredentials() === false ? "Configure AI provider first..." : "Ask anything..."}
+          placeholder={hasCredentials() === false
+            ? "Configure AI provider first..."
+            : pendingContext()
+            ? `Ask about ${pendingContext()!.container_name}...`
+            : "Ask anything..."}
           value={input()}
           onInput={(e) => setInput(e.currentTarget.value)}
           onKeyDown={handleKeyDown}

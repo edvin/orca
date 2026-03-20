@@ -162,12 +162,12 @@ export default function KubernetesPage() {
               setSetupSuccess(isReady ? true : isInstructions ? null : true);
             } else {
               setSetupLog("No output from daemon. Check the Activity tab for errors.\n");
-              logError("Kubernetes enable", "No output received from daemon");
+              logError("Failed to enable Kubernetes: no output received from daemon");
               setSetupSuccess(false);
             }
             await refreshStatus();
           } catch (e) {
-            logError("Kubernetes enable failed", String(e));
+            logError(`Failed to enable Kubernetes: ${e}`);
             setSetupLog((prev) => prev + `\nError: ${e}\n`);
             setSetupSuccess(false);
           } finally {
@@ -189,7 +189,7 @@ export default function KubernetesPage() {
         }
       };
     } catch (e) {
-      logError("Kubernetes enable failed", String(e));
+      logError(`Failed to enable Kubernetes: ${e}`);
       setSetupLog(`Error: ${e}\n`);
       setSetupSuccess(false);
       setSetupRunning(false);
@@ -208,7 +208,7 @@ export default function KubernetesPage() {
       showToast("Kubernetes cluster disabled", "success");
       await refreshStatus();
     } catch (e) {
-      logError("Disable Kubernetes", `${e}`);
+      logError(`Failed to disable Kubernetes: ${e}`);
       showToast(`Failed to disable: ${e}`, "error");
     }
   };
@@ -220,7 +220,7 @@ export default function KubernetesPage() {
       showToast("Kubernetes cluster reset", "success");
       await refreshStatus();
     } catch (e) {
-      logError("Reset Kubernetes cluster", `${e}`);
+      logError(`Failed to reset Kubernetes cluster: ${e}`);
       showToast(`Failed to reset: ${e}`, "error");
     }
   };
@@ -232,7 +232,7 @@ export default function KubernetesPage() {
       showToast(`Pod ${name} deleted`, "success");
       await refreshWorkloads();
     } catch (e) {
-      logError("Delete Kubernetes pod", `Pod "${name}" in namespace "${namespace}": ${e}`);
+      logError(`Failed to delete pod: ${e}`, `Pod "${name}" in namespace "${namespace}"`);
       showToast(`Failed to delete pod: ${e}`, "error");
     }
   };
@@ -250,7 +250,7 @@ export default function KubernetesPage() {
       showToast(`Scaled ${name} to ${replicas} replicas`, "success");
       await refreshWorkloads();
     } catch (e) {
-      logError("Scale Kubernetes deployment", `Deployment "${name}" in "${namespace}" to ${replicas} replicas: ${e}`);
+      logError(`Failed to scale deployment: ${e}`, `Deployment "${name}" in "${namespace}" to ${replicas} replicas`);
       showToast(`Failed to scale: ${e}`, "error");
     }
   };
@@ -261,7 +261,7 @@ export default function KubernetesPage() {
       showToast(`Deployment ${name} restarting`, "success");
       await refreshWorkloads();
     } catch (e) {
-      logError("Restart Kubernetes deployment", `Deployment "${name}" in "${namespace}": ${e}`);
+      logError(`Failed to restart deployment: ${e}`, `Deployment "${name}" in "${namespace}"`);
       showToast(`Failed to restart: ${e}`, "error");
     }
   };
@@ -273,7 +273,7 @@ export default function KubernetesPage() {
       showToast(`PVC ${name} deleted`, "success");
       await refreshWorkloads();
     } catch (e) {
-      logError("Delete Kubernetes PVC", `PVC "${name}" in namespace "${namespace}": ${e}`);
+      logError(`Failed to delete PVC: ${e}`, `PVC "${name}" in namespace "${namespace}"`);
       showToast(`Failed to delete PVC: ${e}`, "error");
     }
   };
@@ -289,7 +289,7 @@ export default function KubernetesPage() {
       })) as string[];
       setLogLines(lines);
     } catch (e) {
-      logError("Fetch Kubernetes pod logs", `Pod "${name}" in namespace "${namespace}": ${e}`);
+      logError(`Failed to fetch pod logs: ${e}`, `Pod "${name}" in namespace "${namespace}"`);
       showToast(`Failed to get logs: ${e}`, "error");
       setLogPod(null);
     }

@@ -431,11 +431,17 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
         .filter(|&m| m > 0)
         .map(|m| m as u64);
 
-    // Extract CPU limit from NanoCPUs (convert back to cores)
+    // Extract CPU limit: try NanoCPUs first, then fall back to CpuPeriod/CpuQuota
+    // (Docker's update API uses period/quota, not NanoCPUs)
     let cpu_limit = host_config
         .and_then(|hc| hc.nano_cpus)
         .filter(|&c| c > 0)
-        .map(|c| c as f64 / 1_000_000_000.0);
+        .map(|c| c as f64 / 1_000_000_000.0)
+        .or_else(|| {
+            let period = host_config?.cpu_period.filter(|&p| p > 0)?;
+            let quota = host_config?.cpu_quota.filter(|&q| q > 0)?;
+            Some(quota as f64 / period as f64)
+        });
 
     // Extract restart policy
     let restart_policy = host_config

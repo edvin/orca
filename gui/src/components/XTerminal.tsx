@@ -1,4 +1,4 @@
-import { onMount, onCleanup } from "solid-js";
+import { createSignal, onMount, onCleanup } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -12,6 +12,21 @@ interface XTerminalProps {
 
 export default function XTerminal(props: XTerminalProps) {
   let termDiv: HTMLDivElement | undefined;
+  let termInstance: Terminal | undefined;
+  let fitAddonInstance: FitAddon | undefined;
+  const [fontSize, setFontSize] = createSignal(
+    parseInt(localStorage.getItem("terminal-font-size") || "13", 10)
+  );
+
+  const changeFontSize = (delta: number) => {
+    const next = Math.max(9, Math.min(24, fontSize() + delta));
+    setFontSize(next);
+    localStorage.setItem("terminal-font-size", String(next));
+    if (termInstance) {
+      termInstance.options.fontSize = next;
+      fitAddonInstance?.fit();
+    }
+  };
 
   onMount(async () => {
     const term = new Terminal({
@@ -31,7 +46,7 @@ export default function XTerminal(props: XTerminalProps) {
         white: "#e6edf3",
       },
       fontFamily: "'JetBrains Mono NF', 'SFMono-Regular', 'Menlo', 'Consolas', monospace",
-      fontSize: 13,
+      fontSize: fontSize(),
       lineHeight: 1.3,
       cursorBlink: true,
       cursorStyle: "bar",
@@ -39,7 +54,9 @@ export default function XTerminal(props: XTerminalProps) {
       convertEol: true,
     });
 
+    termInstance = term;
     const fitAddon = new FitAddon();
+    fitAddonInstance = fitAddon;
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(termDiv!);
@@ -111,5 +128,16 @@ export default function XTerminal(props: XTerminalProps) {
     });
   });
 
-  return <div ref={termDiv} class="xterm-container" />;
+  return (
+    <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
+      <div style={{ display: "flex", "align-items": "center", "justify-content": "flex-end", padding: "4px 8px", background: "#0d1117", "border-bottom": "1px solid #21262d", gap: "4px" }}>
+        <div style={{ display: "flex", "align-items": "center", gap: "1px", background: "#21262d", "border-radius": "4px", padding: "0 2px" }}>
+          <button class="action-icon" onClick={() => changeFontSize(-1)} title="Decrease font size" style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>&minus;</button>
+          <span style={{ "font-size": "10px", color: "#8b949e", "min-width": "24px", "text-align": "center" }}>{fontSize()}</span>
+          <button class="action-icon" onClick={() => changeFontSize(1)} title="Increase font size" style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>+</button>
+        </div>
+      </div>
+      <div ref={termDiv} class="xterm-container" style={{ flex: "1" }} />
+    </div>
+  );
 }

@@ -77,7 +77,7 @@ export default function MachinePage() {
       showToast("Docker system pruned successfully", "success");
       await refreshHealth();
     } catch (e) {
-      logError("Docker system prune", `${e}`);
+      logError(`Failed to prune Docker system: ${e}`);
       showToast(`Prune failed: ${e}`, "error");
     } finally {
       setPruning(false);

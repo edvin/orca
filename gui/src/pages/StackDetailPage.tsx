@@ -66,7 +66,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       }
       setTimeout(fetchStack, 500);
     } catch (err) {
-      logError(`Stack ${action}`, `Stack "${props.stackName}": ${err}`);
+      logError(`Failed to ${action.replace(/_/g, " ")} stack: ${err}`, `Stack "${props.stackName}"`);
       showToast(`${action} failed: ${err}`, "error");
     }
     setActionInProgress(false);
@@ -80,7 +80,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       showToast("Service restarted", "success");
       await fetchStack();
     } catch (err) {
-      logError("Restart service", `Stack "${props.stackName}", service ${containerId}: ${err}`);
+      logError(`Failed to restart service: ${err}`, `Stack "${props.stackName}", service ${containerId}`);
       showToast(`Restart failed: ${err}`, "error");
     }
     setServiceLoading(null);

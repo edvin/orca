@@ -41,13 +41,13 @@ export async function openAiWindow() {
 
     // Listen for creation errors
     win.once("tauri://error", (e) => {
-      logError("AI window creation failed", JSON.stringify(e.payload));
+      logError(`AI window creation failed: ${JSON.stringify(e.payload)}`);
       showToast(`Failed to open AI window: ${JSON.stringify(e.payload)}`, "error");
     });
 
   } catch (e) {
     const msg = String(e);
-    logError("Open AI window", msg);
+    logError(`Failed to open AI window: ${msg}`);
     showToast(`Failed to open AI window: ${msg}`, "error");
   }
 }
@@ -60,7 +60,7 @@ export default function AiAssistant(props: AiAssistantProps) {
         const { emit } = await import("@tauri-apps/api/event");
         await emit("ai-ask-container", { containerId, containerName, image });
       } catch (e) {
-        logError("Send container context to AI", String(e));
+        logError(`Failed to send container context to AI: ${e}`);
       }
     }, 500);
   };

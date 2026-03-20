@@ -92,11 +92,11 @@ export default function EnvironmentPage() {
         }
         if (!receivedData) {
           setActionLog("No response from server.\n");
-          logError(`Environment fix: ${checkName}`, "No response from SSE stream");
+          logError(`Environment fix failed: ${checkName} - no response from SSE stream`);
           success = false;
         } else if (!receivedDone && success) {
           setActionLog((prev) => prev + "\nStream ended unexpectedly.\n");
-          logError(`Environment fix: ${checkName}`, "SSE stream ended without completion signal");
+          logError(`Environment fix failed: ${checkName} - SSE stream ended without completion signal`);
           success = false;
         }
         if (!success) {
@@ -105,13 +105,13 @@ export default function EnvironmentPage() {
         setActionSuccess(success);
       }
     } catch (e) {
-      logError(`Environment fix SSE error: ${checkName}`, `${e}`);
+      logError(`Environment fix SSE error for ${checkName}: ${e}`);
       try {
         const result = (await invoke("env_fix", { action })) as { output: string };
         setActionLog(result.output || "(no output)");
         setActionSuccess(true);
       } catch (e2) {
-        logError(`Environment fix failed: ${checkName}`, `${e2}`);
+        logError(`Environment fix failed for ${checkName}: ${e2}`);
         setActionLog((prev) => prev + `\nError: ${e2}\n`);
         setActionSuccess(false);
       }
@@ -187,7 +187,7 @@ export default function EnvironmentPage() {
       showToast("Daemon restarted", "success");
       await refresh();
     } catch (e) {
-      logError("Restart daemon", `${e}`);
+      logError(`Failed to restart daemon: ${e}`);
       showToast(`Restart failed: ${e}`, "error");
     } finally {
       setRestarting(false);
@@ -209,7 +209,7 @@ export default function EnvironmentPage() {
       setDiagnoseLog(result.log.join("\n"));
       setDiagnoseResult(result.connected);
     } catch (e) {
-      logError("Connection diagnostics", `${e}`);
+      logError(`Connection diagnostics failed: ${e}`);
       setDiagnoseLog(`Failed to run diagnostics: ${e}`);
       setDiagnoseResult(false);
     } finally {

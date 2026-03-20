@@ -87,7 +87,7 @@ export default function SettingsPage() {
       setRegPassword("");
       await refreshRegistries();
     } catch (e) {
-      logError("Add registry", `Server "${server}": ${e}`);
+      logError(`Failed to add registry: ${e}`, `Server "${server}"`);
       showToast(`Failed to add registry: ${e}`, "error");
     }
   };
@@ -99,7 +99,7 @@ export default function SettingsPage() {
       showToast("Registry removed", "success");
       await refreshRegistries();
     } catch (e) {
-      logError("Remove registry", `Server "${server}": ${e}`);
+      logError(`Failed to remove registry: ${e}`, `Server "${server}"`);
       showToast(`Failed to remove registry: ${e}`, "error");
     }
   };
@@ -144,7 +144,7 @@ export default function SettingsPage() {
       setStartOnLogin(prev.start_on_login);
       setShowTrayIcon(prev.show_tray_icon);
       setTelemetry(prev.telemetry);
-      logError("Save general settings", `Field "${field}": ${e}`);
+      logError(`Failed to save general settings: ${e}`, `Field "${field}"`);
       showToast(`Failed to save settings: ${e}`, "error");
     }
   };
@@ -201,7 +201,7 @@ export default function SettingsPage() {
       showToast("AI settings saved", "success");
       await refreshAiSettings();
     } catch (e) {
-      logError("Save AI settings", `Provider "${aiProvider()}", model "${aiModel()}": ${e}`);
+      logError(`Failed to save AI settings: ${e}`, `Provider "${aiProvider()}", model "${aiModel()}"`);
       showToast(`Failed to save AI settings: ${e}`, "error");
     } finally {
       setAiSaving(false);
@@ -220,7 +220,7 @@ export default function SettingsPage() {
       showToast("AI connection test passed", "success");
     } catch (e) {
       setAiTestResult("error");
-      logError("AI connection test", `Provider "${aiProvider()}", model "${aiModel()}": ${e}`);
+      logError(`Failed AI connection test: ${e}`, `Provider "${aiProvider()}", model "${aiModel()}"`);
       showToast(`AI test failed: ${e}`, "error");
     } finally {
       setAiTesting(false);
@@ -653,7 +653,7 @@ export default function SettingsPage() {
                       const info = (await invoke("get_daemon_info")) as any;
                       setDaemonLog(info.log_tail || "(empty)");
                       setDaemonLogPath(info.log_path || "");
-                    } catch (e) { logError("Load daemon log", `${e}`); showToast(`Failed: ${e}`, "error"); }
+                    } catch (e) { logError(`Failed to load daemon log: ${e}`); showToast(`Failed: ${e}`, "error"); }
                   }} style={{ "font-size": "11px" }}>Load Log</button>
                 </div>
                 <Show when={daemonLog()}>
@@ -690,7 +690,7 @@ export default function SettingsPage() {
                       try {
                         await invoke("cleanup", { scope: "templates" });
                         showToast("User templates removed", "success");
-                      } catch (e) { logError("Remove templates", `${e}`); showToast(`Failed: ${e}`, "error"); }
+                      } catch (e) { logError(`Failed to remove templates: ${e}`); showToast(`Failed: ${e}`, "error"); }
                     }} title="Remove user templates" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
@@ -703,7 +703,7 @@ export default function SettingsPage() {
                       try {
                         const result = (await invoke("cleanup", { scope: "vms" })) as { log: string[] };
                         showToast(result.log.join(". ") || "Cleanup done", "success");
-                      } catch (e) { logError("Stop & remove VMs", `${e}`); showToast(`Failed: ${e}`, "error"); }
+                      } catch (e) { logError(`Failed to stop & remove VMs: ${e}`); showToast(`Failed: ${e}`, "error"); }
                     }} title="Remove VMs" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0" }}>
@@ -716,7 +716,7 @@ export default function SettingsPage() {
                       try {
                         const result = (await invoke("cleanup", { scope: "all" })) as { log: string[] };
                         showToast("Orca Desktop has been fully reset. Restart the app.", "success");
-                      } catch (e) { logError("Reset everything", `${e}`); showToast(`Failed: ${e}`, "error"); }
+                      } catch (e) { logError(`Failed to reset everything: ${e}`); showToast(`Failed: ${e}`, "error"); }
                     }}>Reset All</button>
                   </div>
                 </div>

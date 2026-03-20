@@ -50,7 +50,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       showToast(`Volume "${name}" removed`, "success");
       await refresh();
     } catch (err) {
-      logError("Remove volume", `Volume "${name}": ${err}`);
+      logError(`Failed to remove volume: ${err}`, `Volume "${name}"`);
       showToast(`Failed to remove volume: ${err}`, "error");
     }
   };
@@ -67,7 +67,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       setCreateName(""); setCreateDriver("local"); setCreateLabels(""); setShowCreate(false);
       await refresh();
     } catch (err) {
-      logError("Create volume", `Volume "${name}": ${err}`);
+      logError(`Failed to create volume: ${err}`, `Volume "${name}"`);
       showToast(`Failed to create volume: ${err}`, "error");
     }
     setCreating(false);

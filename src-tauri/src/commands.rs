@@ -953,7 +953,12 @@ pub async fn deploy_template(
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!("Deploy failed: {body}"));
+        // Try to extract a readable error from Docker's JSON response
+        let msg = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v.get("error").and_then(|e| e.as_str().map(String::from)))
+            .unwrap_or(body);
+        return Err(msg);
     }
 
     resp.json()
