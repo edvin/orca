@@ -712,6 +712,10 @@ input[type="checkbox"]:checked::after {
   padding: 0;
 }
 
+.action-icon svg {
+  pointer-events: none;
+}
+
 .action-icon:hover {
   background: #21262d;
   color: #e6edf3;
@@ -722,7 +726,8 @@ input[type="checkbox"]:checked::after {
 .action-icon-stop { font-size: 14px; }
 .action-icon-stop:hover { color: #f85149; background: #da363318; }
 .action-icon-restart:hover { color: #58a6ff; background: #1f6feb18; }
-.action-icon-delete:hover { color: #f85149; background: #da363318; }
+.action-icon-delete { color: #f85149; }
+.action-icon-delete:hover { color: #ff6e6a; background: #da363318; }
 .action-icon-logs:hover { color: #58a6ff; background: #1f6feb18; }
 
 .action-icon:disabled {
