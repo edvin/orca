@@ -5,7 +5,7 @@ import { copyToClipboard } from "../lib/clipboard";
 interface LogViewerProps {
   containerId: string;
   containerName: string;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 export default function LogViewer(props: LogViewerProps) {
@@ -132,17 +132,19 @@ export default function LogViewer(props: LogViewerProps) {
             Auto-scroll
           </button>
           <button class="action-icon" onClick={copyAll} title="Copy all logs">
-            {"\uD83D\uDCCB"}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
           </button>
           <button class="action-icon" onClick={downloadLogs} title="Download logs">
-            {"\u2B07\uFE0F"}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
           <button class="action-icon" onClick={fetchLogs} title="Refresh">
-            {"\uD83D\uDD04"}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
           </button>
-          <button class="action-icon" onClick={props.onClose} title="Close">
-            {"\u2715"}
-          </button>
+          <Show when={props.onClose}>
+            <button class="action-icon" onClick={props.onClose} title="Close">
+              {"\u2715"}
+            </button>
+          </Show>
         </div>
       </div>
       <Show

@@ -612,7 +612,6 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
             <LogViewer
               containerId={c().id}
               containerName={c().name}
-              onClose={() => switchTab("overview")}
             />
           )}
         </Show>
