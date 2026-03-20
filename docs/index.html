@@ -26,13 +26,12 @@
 
     /* Hero */
     .hero {
-      min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 40px 20px;
+      padding: 80px 20px 60px;
       position: relative;
       overflow: hidden;
     }
@@ -78,10 +77,39 @@
       -webkit-backdrop-filter: blur(20px) saturate(150%);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 24px;
-      padding: 64px 80px;
-      max-width: 900px;
+      padding: 56px 80px 48px;
+      max-width: 1060px;
       width: 100%;
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .hero-pills {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #8b949e;
+      letter-spacing: 0.2px;
+    }
+
+    .hero-pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
 
     .hero-stats {
@@ -258,7 +286,7 @@
     .features {
       max-width: 1100px;
       margin: 0 auto;
-      padding: 80px 20px 40px;
+      padding: 40px 20px 40px;
     }
 
     .feature-grid {
@@ -507,6 +535,12 @@
 
 <section class="hero">
   <div class="hero-content">
+    <div class="hero-pills">
+      <span class="hero-pill"><span class="hero-pill-dot" style="background: #3fb950;"></span> Free &amp; Open Source</span>
+      <span class="hero-pill"><span class="hero-pill-dot" style="background: #58a6ff;"></span> Built-in AI</span>
+      <span class="hero-pill"><span class="hero-pill-dot" style="background: #a371f7;"></span> MCP Agent APIs</span>
+      <span class="hero-pill"><span class="hero-pill-dot" style="background: #d29922;"></span> Cross-Platform</span>
+    </div>
     <img src="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png" alt="Orca Desktop" class="hero-logo">
     <h1>Orca Desktop</h1>
     <p class="hero-tagline">
