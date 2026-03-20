@@ -1,11 +1,14 @@
 import { createSignal, createEffect, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { EnvironmentStatus, HealthCheck } from "../lib/types";
+import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth } from "../lib/types";
+import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 
 export default function EnvironmentPage() {
   const [status, setStatus] = createSignal<EnvironmentStatus | null>(null);
   const [loading, setLoading] = createSignal(true);
+  const [machine, setMachine] = createSignal<MachineInfo | null>(null);
+  const [health, setHealth] = createSignal<SystemHealth | null>(null);
 
   // Action dialog state
   const [actionDialogOpen, setActionDialogOpen] = createSignal(false);
@@ -24,8 +27,14 @@ export default function EnvironmentPage() {
   const refresh = async () => {
     setLoading(true);
     try {
-      const result = (await invoke("env_status")) as EnvironmentStatus;
-      setStatus(result);
+      const [envRes, machineRes, healthRes] = await Promise.allSettled([
+        invoke("env_status"),
+        invoke("get_machine_info"),
+        invoke("system_health"),
+      ]);
+      if (envRes.status === "fulfilled") setStatus(envRes.value as EnvironmentStatus);
+      if (machineRes.status === "fulfilled") setMachine(machineRes.value as MachineInfo);
+      if (healthRes.status === "fulfilled") setHealth(healthRes.value as SystemHealth);
     } catch (e) {
       showToast(`Failed to check environment: ${e}`, "error");
     } finally {
@@ -290,6 +299,52 @@ export default function EnvironmentPage() {
                     </div>
                   )}
                 </For>
+              </div>
+            </Show>
+
+            {/* System Info — shown when ready */}
+            <Show when={s().ready && (machine() || health())}>
+              <div style={{ "margin-top": "24px" }}>
+                <div style={{ "font-size": "13px", "font-weight": "600", color: "#8b949e", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "12px" }}>
+                  System Info
+                </div>
+                <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+                  <Show when={machine()}>
+                    {(m) => (
+                      <div style={{ background: "rgba(22, 27, 34, 0.5)", border: "1px solid rgba(255,255,255,0.06)", "border-radius": "10px", padding: "16px 18px" }}>
+                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>Runtime</div>
+                        <div class="card-grid" style={{ "font-size": "12px" }}>
+                          <span class="card-label">Backend</span>
+                          <span class="card-value">{m().backend} · {m().config.runtime}</span>
+                          <span class="card-label">State</span>
+                          <span class={`state-badge ${m().state === "Running" ? "state-running" : "state-stopped"}`}>{m().state}</span>
+                          <span class="card-label">CPUs</span>
+                          <span class="card-value">{m().config.cpus}</span>
+                          <span class="card-label">Memory</span>
+                          <span class="card-value">{formatBytes(m().config.memory_mb * 1024 * 1024)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </Show>
+                  <Show when={health()?.system_resources}>
+                    {(res) => (
+                      <div style={{ background: "rgba(22, 27, 34, 0.5)", border: "1px solid rgba(255,255,255,0.06)", "border-radius": "10px", padding: "16px 18px" }}>
+                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>Resources</div>
+                        <div class="card-grid" style={{ "font-size": "12px" }}>
+                          <span class="card-label">Memory</span>
+                          <span class="card-value">
+                            {formatBytes(res().memory_total_bytes - res().memory_available_bytes)} / {formatBytes(res().memory_total_bytes)}
+                          </span>
+                          <span class="card-label">Disk</span>
+                          <span class="card-value">
+                            {formatBytes(res().disk_total_bytes - res().disk_free_bytes)} / {formatBytes(res().disk_total_bytes)}
+                            <span style={{ color: "#6e7681", "margin-left": "4px" }}>({res().disk_usage_percent.toFixed(0)}%)</span>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </Show>
+                </div>
               </div>
             </Show>
 

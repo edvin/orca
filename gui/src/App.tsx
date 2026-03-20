@@ -26,7 +26,7 @@ import AiAssistant from "./components/AiAssistant";
 import type { AiAssistantApi } from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 
-export type Page = "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "kubernetes" | "machine" | "environment" | "activity" | "settings";
+export type Page = "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "kubernetes" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
@@ -210,7 +210,7 @@ export default function App() {
               )}
               {page() === "networks" && <NetworksPage />}
               {page() === "kubernetes" && <KubernetesPage />}
-              {page() === "machine" && <MachinePage />}
+              {/* Machine page merged into System Health */}
               {page() === "environment" && <EnvironmentPage />}
               {page() === "activity" && <ActivityPage />}
               {page() === "settings" && <SettingsPage />}

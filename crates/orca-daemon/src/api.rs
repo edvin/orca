@@ -1995,7 +1995,7 @@ async fn ai_ask(
 ) -> Result<impl IntoResponse, ApiError> {
     // Read provider settings from config
     let (provider, api_key, model, openai_url) = {
-        let config = state.config.blocking_lock();
+        let config = state.config.lock().await;
         let provider = config.ai_provider.clone();
         let url = config.openai_url.clone();
         let (key, model) = match provider.as_str() {
@@ -2146,7 +2146,7 @@ struct GeneralSettingsRequest {
 async fn get_general_settings(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let config = state.config.blocking_lock();
+    let config = state.config.lock().await;
     Ok(Json(serde_json::json!({
         "start_on_login": config.start_on_login,
         "show_tray_icon": config.show_tray_icon,
@@ -2158,7 +2158,7 @@ async fn save_general_settings(
     State(state): State<Arc<AppState>>,
     Json(body): Json<GeneralSettingsRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut config = state.config.blocking_lock();
+    let mut config = state.config.lock().await;
     config.start_on_login = body.start_on_login;
     config.show_tray_icon = body.show_tray_icon;
     config.telemetry = body.telemetry;
@@ -2224,7 +2224,7 @@ async fn list_ai_models(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
     let (provider, api_key, base_url) = {
-        let config = state.config.blocking_lock();
+        let config = state.config.lock().await;
         let provider = config.ai_provider.clone();
         let key = match provider.as_str() {
             "anthropic" => config.anthropic_api_key.clone(),
@@ -2289,7 +2289,7 @@ async fn save_ai_settings(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AiSettingsRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut config = state.config.blocking_lock();
+    let mut config = state.config.lock().await;
     config.ai_provider = body.provider.clone();
     match body.provider.as_str() {
         "anthropic" => {
@@ -2318,7 +2318,7 @@ async fn save_ai_settings(
 async fn get_ai_settings(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let config = state.config.blocking_lock();
+    let config = state.config.lock().await;
     Ok(Json(serde_json::json!({
         "provider": config.ai_provider,
         "has_anthropic_key": config.anthropic_api_key.as_ref().map(|k| !k.is_empty()).unwrap_or(false),

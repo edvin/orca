@@ -102,17 +102,21 @@ export default function TemplatesPage() {
 
   const closeDeploy = () => setDeployTarget(null);
 
-  /** Build a Docker Hub URL for an image reference. */
-  const dockerHubUrl = (image: string) => {
+  /** Build a registry URL and label for an image reference. */
+  const imageRegistryLink = (image: string): { url: string; label: string } | null => {
     const name = image.split(":")[0]; // strip tag
-    if (name.includes("ghcr.io")) return `https://${name}`;
-    if (name.includes("/")) {
-      // user/repo or registry/repo
-      if (name.includes(".")) return null; // custom registry, skip
-      return `https://hub.docker.com/r/${name}`;
+    if (name.startsWith("ghcr.io/")) {
+      // GitHub Container Registry: ghcr.io/owner/repo → github.com/owner/repo
+      const parts = name.replace("ghcr.io/", "").split("/");
+      if (parts.length >= 2) {
+        return { url: `https://github.com/${parts[0]}/${parts[1]}`, label: "View on GitHub" };
+      }
     }
-    // official image (e.g. "postgres", "nginx")
-    return `https://hub.docker.com/_/${name}`;
+    if (name.includes(".")) return null; // other custom registries
+    if (name.includes("/")) {
+      return { url: `https://hub.docker.com/r/${name}`, label: "View on Docker Hub" };
+    }
+    return { url: `https://hub.docker.com/_/${name}`, label: "View on Docker Hub" };
   };
 
   const handleOverlayMouseDown = (e: MouseEvent) => {
@@ -464,10 +468,10 @@ export default function TemplatesPage() {
                 <div class="form-group">
                   <label class="form-label">
                     Image
-                    <Show when={dockerHubUrl(template().image)}>
-                      {(url) => (
-                        <a href={url()} target="_blank" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
-                          View on Docker Hub {"\u2197"}
+                    <Show when={imageRegistryLink(template().image)}>
+                      {(link) => (
+                        <a href={link().url} target="_blank" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
+                          {link().label} {"\u2197"}
                         </a>
                       )}
                     </Show>
