@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats } from "../lib/types";
 import { formatBytes, formatTimestamp, shortId, formatPorts } from "../lib/format";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import LogViewer from "../components/LogViewer";
 import XTerminal from "../components/XTerminal";
 import CopyButton from "../components/CopyButton";
@@ -238,7 +239,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const doRemove = async () => {
     const c = container();
     if (!c) return;
-    if (!window.confirm(`Remove container '${c.name}'? This cannot be undone.`)) return;
+    if (!await confirmDanger("Remove Container", `Remove container '${c.name}'? This cannot be undone.`)) return;
     setActionInProgress(true);
     try {
       await invoke("remove_container", { id: props.containerId });

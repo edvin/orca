@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ComposeProject } from "../lib/types";
 import { formatPorts } from "../lib/format";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import LogViewer from "../components/LogViewer";
 import Spinner from "../components/Spinner";
 import LastUpdated from "../components/LastUpdated";
@@ -316,8 +317,8 @@ export default function StacksPage(props: StacksPageProps) {
                           </button>
                           <button
                             class="btn btn-sm btn-danger"
-                            onClick={(e) => {
-                              if (window.confirm(`Run docker compose down for '${stack.name}'? This will stop and remove all containers in the stack.`)) {
+                            onClick={async (e) => {
+                              if (await confirmDanger("Compose Down", `Run docker compose down for '${stack.name}'? This will stop and remove all containers in the stack.`)) {
                                 doStackAction("compose_down", stack.name, e);
                               }
                             }}

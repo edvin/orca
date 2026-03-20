@@ -2,6 +2,7 @@ import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Network } from "../lib/types";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 
@@ -29,7 +30,7 @@ export default function NetworksPage() {
 
   const removeNetwork = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(`Remove network "${name}"?`)) return;
+    if (!await confirmDanger("Remove Network", `Remove network "${name}"?`)) return;
     try {
       await invoke("remove_network", { name });
       showToast(`Network "${name}" removed`, "success");

@@ -4,6 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import type { SystemHealth } from "../lib/types";
 import { formatBytes } from "../lib/format";
 import { showToast } from "./Toast";
+import { confirm } from "./ConfirmDialog";
 
 export default function StatusBar() {
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
@@ -32,9 +33,11 @@ export default function StatusBar() {
     const info = updateAvailable();
     if (!info) return;
 
-    const confirmed = window.confirm(
-      `Update to Orca Desktop v${info.version}?\n\nThe app will download the update and restart.\n${info.body ? `\nWhat's new:\n${info.body}` : ""}`
-    );
+    const confirmed = await confirm({
+      title: "Update Available",
+      message: `Update to Orca Desktop v${info.version}?\n\nThe app will download the update and restart.${info.body ? `\n\nWhat's new:\n${info.body}` : ""}`,
+      confirmLabel: "Update",
+    });
     if (!confirmed) return;
 
     setInstalling(true);

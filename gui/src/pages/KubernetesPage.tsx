@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show, createEffect } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import Spinner from "../components/Spinner";
 import type {
   ClusterStatus,
@@ -206,7 +207,7 @@ export default function KubernetesPage() {
   };
 
   const handleReset = async () => {
-    if (!window.confirm("Reset Kubernetes cluster? This will delete ALL workloads and data.")) return;
+    if (!await confirmDanger("Reset Cluster", "Reset Kubernetes cluster? This will delete ALL workloads and data.")) return;
     try {
       await invoke("k8s_reset");
       showToast("Kubernetes cluster reset", "success");
@@ -217,7 +218,7 @@ export default function KubernetesPage() {
   };
 
   const handleDeletePod = async (namespace: string, name: string) => {
-    if (!window.confirm(`Delete pod '${name}'?`)) return;
+    if (!await confirmDanger("Delete Pod", `Delete pod '${name}'?`)) return;
     try {
       await invoke("k8s_delete_pod", { namespace, name });
       showToast(`Pod ${name} deleted`, "success");
@@ -255,7 +256,7 @@ export default function KubernetesPage() {
   };
 
   const handleDeletePvc = async (namespace: string, name: string) => {
-    if (!window.confirm(`Delete PVC '${name}'? Associated data may be lost.`)) return;
+    if (!await confirmDanger("Delete PVC", `Delete PVC '${name}'? Associated data may be lost.`)) return;
     try {
       await invoke("k8s_delete_pvc", { namespace, name });
       showToast(`PVC ${name} deleted`, "success");

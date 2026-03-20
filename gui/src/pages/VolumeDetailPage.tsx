@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Volume, Container } from "../lib/types";
 import { formatTimestamp } from "../lib/format";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import CopyButton from "../components/CopyButton";
 import Breadcrumb from "../components/Breadcrumb";
 import Spinner from "../components/Spinner";
@@ -110,7 +111,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
   };
 
   const doRemove = async () => {
-    if (!window.confirm(`Remove volume "${props.volumeName}"? This will permanently delete the volume data.`)) return;
+    if (!await confirmDanger("Remove Volume", `Remove volume "${props.volumeName}"? This will permanently delete the volume data.`)) return;
     try {
       await invoke("remove_volume", { name: props.volumeName });
       showToast(`Volume "${props.volumeName}" removed`, "success");

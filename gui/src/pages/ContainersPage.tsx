@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, ComposeProject } from "../lib/types";
 import { formatPorts, formatTimestamp, shortId, formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import RunContainerDialog from "../components/RunContainerDialog";
 import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
@@ -147,7 +148,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   };
 
   const deleteStack = async (name: string) => {
-    if (!window.confirm(`Delete stack "${name}"? This will stop and remove all containers in the stack.`)) return;
+    if (!await confirmDanger("Delete Stack", `Delete stack "${name}"? This will stop and remove all containers in the stack.`)) return;
     setStackActionInProgress(name);
     try {
       await invoke("compose_down", { name });
@@ -480,8 +481,8 @@ export default function ContainersPage(props: ContainersPageProps) {
                   <div class="dropdown-divider" />
                   <button
                     class="dropdown-item dropdown-item-danger"
-                    onClick={() => {
-                      if (window.confirm(`Remove container '${c.name}'? This cannot be undone.`)) {
+                    onClick={async () => {
+                      if (await confirmDanger("Remove Container", `Remove container '${c.name}'? This cannot be undone.`)) {
                         doAction("remove_container", c.id, new MouseEvent("click"));
                       }
                       setContainerMenuOpen(null);

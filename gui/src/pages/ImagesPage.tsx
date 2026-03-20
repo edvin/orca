@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Image, ImageSearchResult, ScanResult } from "../lib/types";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import RunContainerDialog from "../components/RunContainerDialog";
 import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
@@ -136,7 +137,7 @@ export default function ImagesPage() {
 
   const removeImage = async (id: string, tag: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(`Remove image '${tag}'?`)) return;
+    if (!await confirmDanger("Remove Image", `Remove image '${tag}'?`)) return;
     try {
       await invoke("remove_image", { id });
       showToast("Image removed", "success");

@@ -2,6 +2,7 @@ import { createSignal, onMount, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { MachineInfo, RegistryCredential } from "../lib/types";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 
 type SettingsTab = "general" | "ai" | "registries" | "about";
 
@@ -89,7 +90,7 @@ export default function SettingsPage() {
   };
 
   const removeReg = async (server: string) => {
-    if (!window.confirm(`Remove registry '${server}'?`)) return;
+    if (!await confirmDanger("Remove Registry", `Remove registry '${server}'?`)) return;
     try {
       await invoke("remove_registry", { server });
       showToast("Registry removed", "success");
@@ -657,7 +658,7 @@ export default function SettingsPage() {
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Delete custom templates you've created</div>
                     </div>
                     <button class="btn btn-sm" onClick={async () => {
-                      if (!window.confirm("Remove all user-created templates?")) return;
+                      if (!await confirmDanger("Remove Templates", "Remove all user-created templates?")) return;
                       try {
                         await invoke("cleanup", { scope: "templates" });
                         showToast("User templates removed", "success");
@@ -670,7 +671,7 @@ export default function SettingsPage() {
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Stop Lima VMs (macOS) or remove Docker TCP config (Windows)</div>
                     </div>
                     <button class="btn btn-sm" onClick={async () => {
-                      if (!window.confirm("Stop and remove all Orca Desktop-managed VMs and runtime config?")) return;
+                      if (!await confirmDanger("Stop & Remove VMs", "Stop and remove all Orca Desktop-managed VMs and runtime config?")) return;
                       try {
                         const result = (await invoke("cleanup", { scope: "vms" })) as { log: string[] };
                         showToast(result.log.join(". ") || "Cleanup done", "success");
@@ -683,7 +684,7 @@ export default function SettingsPage() {
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all config, templates, VMs, and data — like a fresh install</div>
                     </div>
                     <button class="btn btn-sm" style={{ color: "#f85149", "border-color": "#da363380" }} onClick={async () => {
-                      if (!window.confirm("This will remove ALL Orca Desktop data including config, API keys, templates, and VMs.\n\nThis cannot be undone. Continue?")) return;
+                      if (!await confirmDanger("Reset Everything", "This will remove ALL Orca Desktop data including config, API keys, templates, and VMs.\n\nThis cannot be undone. Continue?")) return;
                       try {
                         const result = (await invoke("cleanup", { scope: "all" })) as { log: string[] };
                         showToast("Orca Desktop has been fully reset. Restart the app.", "success");
