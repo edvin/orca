@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { JSX, Show } from "solid-js";
 
 interface SortableHeaderProps {
   label: string;
@@ -7,6 +7,7 @@ interface SortableHeaderProps {
   currentDirection: "asc" | "desc";
   onSort: (field: string) => void;
   align?: "left" | "right";
+  style?: JSX.CSSProperties;
 }
 
 export default function SortableHeader(props: SortableHeaderProps) {
@@ -15,7 +16,7 @@ export default function SortableHeader(props: SortableHeaderProps) {
   return (
     <th
       class="sortable-th"
-      style={{ "text-align": props.align || "left", cursor: "pointer" }}
+      style={{ "text-align": props.align || "left", cursor: "pointer", ...props.style }}
       onClick={() => props.onSort(props.field)}
     >
       {props.label}
