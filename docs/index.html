@@ -79,8 +79,37 @@
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 24px;
       padding: 64px 80px;
-      max-width: 720px;
+      max-width: 900px;
+      width: 100%;
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .hero-stats {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-top: 32px;
+      padding-top: 28px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .hero-stat {
+      text-align: center;
+    }
+
+    .hero-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #e6edf3;
+      letter-spacing: -0.5px;
+    }
+
+    .hero-stat-label {
+      font-size: 12px;
+      color: #6e7681;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .hero-logo {
@@ -89,6 +118,7 @@
       margin-bottom: 24px;
       filter: drop-shadow(0 8px 24px rgba(31, 111, 235, 0.3));
       animation: logo-float 6s ease-in-out infinite;
+      border-radius: 22px;
     }
 
     @keyframes logo-float {
@@ -480,12 +510,18 @@
     <img src="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png" alt="Orca Desktop" class="hero-logo">
     <h1>Orca Desktop</h1>
     <p class="hero-tagline">
-      Open source container management with built-in AI.
-      Everything you need for Docker, Compose, and Kubernetes.
+      The open source container management app with built-in AI.
+      Manage Docker, Compose, Kubernetes, and more — from a single, beautiful interface.
     </p>
     <div class="hero-buttons">
-      <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Latest</a>
-      <a href="https://github.com/edvin/orca" class="btn btn-secondary">View on GitHub</a>
+      <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </a>
+      <a href="https://github.com/edvin/orca" class="btn btn-secondary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        GitHub
+      </a>
     </div>
 
     <div class="download-links">
@@ -503,7 +539,26 @@
     </a>
   </div>
 
-    <div class="hero-badges">
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-value">27</div>
+        <div class="hero-stat-label">AI Agent Tools</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value">3</div>
+        <div class="hero-stat-label">Platforms</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value">4</div>
+        <div class="hero-stat-label">AI Providers</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value">~15MB</div>
+        <div class="hero-stat-label">Installer</div>
+      </div>
+    </div>
+
+    <div class="hero-badges" style="margin-top: 24px;">
       <img src="https://github.com/edvin/orca/actions/workflows/build.yml/badge.svg" alt="Build">
       <img src="https://img.shields.io/github/license/edvin/orca" alt="License">
       <img src="https://img.shields.io/github/stars/edvin/orca" alt="Stars">
