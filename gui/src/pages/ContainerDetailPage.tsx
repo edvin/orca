@@ -295,15 +295,20 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     });
   };
 
-  const formatUptime = (createdAt: string | number): string => {
+  const formatUptime = (createdAt: string | number | undefined | null): string => {
+    if (!createdAt) return "-";
     try {
-      // Docker returns created_at as either ISO string or Unix timestamp (seconds)
       let created: Date;
       if (typeof createdAt === "number") {
-        // Unix timestamp in seconds — convert to milliseconds
         created = new Date(createdAt < 1e12 ? createdAt * 1000 : createdAt);
       } else {
-        created = new Date(createdAt);
+        // Try parsing as number first (string "1234567890")
+        const num = Number(createdAt);
+        if (!isNaN(num) && num > 1e8) {
+          created = new Date(num < 1e12 ? num * 1000 : num);
+        } else {
+          created = new Date(createdAt);
+        }
       }
       if (isNaN(created.getTime())) return "-";
       const now = new Date();
@@ -314,7 +319,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       if (days > 0) return `${days}d ${hours}h`;
       if (hours > 0) return `${hours}h ${minutes}m`;
-      return `${minutes}m`;
+      if (minutes > 0) return `${minutes}m`;
+      return "< 1m";
     } catch {
       return "-";
     }
@@ -552,7 +558,9 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                 }>
                   {(c) => (
                     <div class="detail-stat-value">
-                      {c().state === "Running" ? formatUptime(c().created_at) : "Stopped"}
+                      {c().state === "Running"
+                        ? formatUptime(inspectData()?.started_at || inspectData()?.State?.StartedAt || c().created_at)
+                        : "Stopped"}
                     </div>
                   )}
                 </Show>
