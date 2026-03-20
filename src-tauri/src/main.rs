@@ -6,7 +6,8 @@ fn main() {
     {
         // Workaround for WebKitGTK EGL crash on some Linux setups (Manjaro, Wayland, etc.)
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            // SAFETY: called before any threads are spawned (start of main)
+            unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1"); }
         }
 
         // Workaround for Wayland libwayland-client version mismatch in AppImage.
@@ -29,7 +30,8 @@ fn main() {
 
             if let Some(lib) = lib_path {
                 // Set marker to prevent infinite re-exec loop
-                std::env::set_var("__ORCA_WAYLAND_FIX", "1");
+                // SAFETY: called before any threads are spawned (start of main)
+                unsafe { std::env::set_var("__ORCA_WAYLAND_FIX", "1"); }
                 // Prepend to existing LD_PRELOAD
                 let existing = std::env::var("LD_PRELOAD").unwrap_or_default();
                 let preload = if existing.is_empty() {
