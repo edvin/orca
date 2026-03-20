@@ -182,6 +182,24 @@ export interface PersistentVolume {
 
 // --- Image Scanning ---
 
+export interface ScanVulnerability {
+  VulnerabilityID: string;
+  PkgName: string;
+  InstalledVersion: string;
+  FixedVersion?: string;
+  Severity: string;
+  Title?: string;
+  Description?: string;
+  PrimaryURL?: string;
+}
+
+export interface ScanTargetResult {
+  Target: string;
+  Class?: string;
+  Type?: string;
+  Vulnerabilities?: ScanVulnerability[];
+}
+
 export interface ScanResult {
   total: number;
   critical: number;
@@ -189,6 +207,7 @@ export interface ScanResult {
   medium: number;
   low: number;
   error?: string;
+  results?: ScanTargetResult[];
 }
 
 // --- Registries ---

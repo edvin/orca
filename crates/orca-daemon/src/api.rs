@@ -2273,6 +2273,34 @@ async fn deploy_template(
         memory_swap: None,
     };
 
+    // Pull the image first if not already available
+    {
+        use bollard::image::CreateImageOptions;
+        use futures::StreamExt;
+
+        let (img_name, img_tag) = if let Some((n, t)) = template.image.rsplit_once(':') {
+            (n.to_string(), t.to_string())
+        } else {
+            (template.image.clone(), "latest".to_string())
+        };
+
+        // Check if image exists locally
+        let needs_pull = state.runtime.docker.inspect_image(&template.image).await.is_err();
+        if needs_pull {
+            let pull_opts = CreateImageOptions {
+                from_image: img_name.as_str(),
+                tag: img_tag.as_str(),
+                ..Default::default()
+            };
+            let mut stream = state.runtime.docker.create_image(Some(pull_opts), None, None);
+            while let Some(result) = stream.next().await {
+                if let Err(e) = result {
+                    return Err(anyhow::anyhow!("Failed to pull image {}: {e}", template.image).into());
+                }
+            }
+        }
+    }
+
     let container_id = state.runtime.create_container(opts).await?;
 
     // Start the container
@@ -2357,9 +2385,12 @@ async fn ai_ask(
     let mut system_prompt = String::from(
         "You are the AI assistant built into Orca Desktop, an open source container management app. \
          You help users with Docker containers, images, networking, volumes, and troubleshooting. \
-         Keep responses concise and actionable. Use markdown formatting. \
-         When suggesting fixes, be specific with commands. \
-         You can suggest actions the user can take in the Orca Desktop UI."
+         Keep responses concise and actionable. Use markdown formatting.\n\n\
+         IMPORTANT: You have tools available to interact with the Docker environment directly. \
+         When a user asks you to list containers, check logs, inspect images, manage networks, etc., \
+         USE your tools to get real data — do NOT make up responses or say you cannot do it. \
+         Always prefer using tools over suggesting CLI commands the user has to run themselves. \
+         After calling tools, summarize the results in a helpful way."
     );
 
     let user_message = body.query.clone();
@@ -2391,9 +2422,28 @@ async fn ai_ask(
 
     let http_client = reqwest::Client::new();
 
+    // Build tool definitions for the LLM
+    let catalog = orca_core::agent_tools::tool_catalog();
+    let anthropic_tools: Vec<serde_json::Value> = catalog.iter().map(|t| {
+        serde_json::json!({
+            "name": t.name,
+            "description": t.description,
+            "input_schema": t.parameters,
+        })
+    }).collect();
+    let openai_tools: Vec<serde_json::Value> = catalog.iter().map(|t| {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.parameters,
+            }
+        })
+    }).collect();
+
     let answer = if provider == "anthropic" {
-        // Call Anthropic (Claude) API — handled below
-        call_anthropic(&http_client, &api_key, &model, &system_prompt, &user_message).await?
+        call_anthropic_with_tools(&http_client, &api_key, &model, &system_prompt, &user_message, &anthropic_tools, &state).await?
     } else {
         // OpenAI-compatible API (OpenAI, Gemini, Custom)
         let base_url = match provider.as_str() {
@@ -2401,39 +2451,7 @@ async fn ai_ask(
             "custom" => openai_url.clone(),
             _ => openai_url.clone(), // "openai"
         };
-        let api_resp = http_client
-            .post(format!("{}/chat/completions", base_url.trim_end_matches('/')))
-            .header("Authorization", format!("Bearer {api_key}"))
-            .header("content-type", "application/json")
-            .json(&serde_json::json!({
-                "model": model,
-                "max_tokens": 1024,
-                "messages": [
-                    { "role": "system", "content": system_prompt },
-                    { "role": "user", "content": user_message }
-                ]
-            }))
-            .send()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to call OpenAI API: {e}"))?;
-
-        if !api_resp.status().is_success() {
-            let status = api_resp.status();
-            let err_body = api_resp.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!("OpenAI API error ({}): {}", status, err_body).into());
-        }
-
-        let resp_json: serde_json::Value = api_resp
-            .json()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to parse OpenAI API response: {e}"))?;
-
-        resp_json["choices"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|choice| choice["message"]["content"].as_str())
-            .unwrap_or("No response received from AI.")
-            .to_string()
+        call_openai_with_tools(&http_client, &api_key, &model, &base_url, &system_prompt, &user_message, &openai_tools, &state).await?
     };
 
     Ok(Json(orca_core::ai::AiResponse {
@@ -2485,46 +2503,180 @@ struct AiSettingsRequest {
     url: Option<String>,
 }
 
-/// Call Anthropic Claude API
-async fn call_anthropic(
+/// Call Anthropic Claude API with tool use support
+async fn call_anthropic_with_tools(
     client: &reqwest::Client,
     api_key: &str,
     model: &str,
     system_prompt: &str,
     user_message: &str,
+    tools: &[serde_json::Value],
+    state: &Arc<AppState>,
 ) -> Result<String, ApiError> {
-    let api_resp = client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&serde_json::json!({
-            "model": model,
-            "max_tokens": 1024,
-            "system": system_prompt,
-            "messages": [{ "role": "user", "content": user_message }]
-        }))
-        .send()
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to call Claude API: {e}"))?;
+    let mut messages = vec![serde_json::json!({ "role": "user", "content": user_message })];
 
-    if !api_resp.status().is_success() {
-        let status = api_resp.status();
-        let err_body = api_resp.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!("Claude API error ({}): {}", status, err_body).into());
+    // Tool-calling loop (max 5 rounds to prevent runaway)
+    for _ in 0..5 {
+        let api_resp = client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&serde_json::json!({
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "tools": tools,
+                "messages": messages,
+            }))
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to call Claude API: {e}"))?;
+
+        if !api_resp.status().is_success() {
+            let status = api_resp.status();
+            let err_body = api_resp.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("Claude API error ({}): {}", status, err_body).into());
+        }
+
+        let resp_json: serde_json::Value = api_resp
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse Claude API response: {e}"))?;
+
+        let stop_reason = resp_json["stop_reason"].as_str().unwrap_or("");
+        let content = resp_json["content"].as_array().cloned().unwrap_or_default();
+
+        if stop_reason == "tool_use" {
+            // Process tool calls
+            messages.push(serde_json::json!({ "role": "assistant", "content": content }));
+
+            let mut tool_results = Vec::new();
+            for block in &content {
+                if block["type"].as_str() == Some("tool_use") {
+                    let tool_name = block["name"].as_str().unwrap_or("");
+                    let tool_id = block["id"].as_str().unwrap_or("");
+                    let tool_input = block["input"].clone();
+
+                    let result = match crate::agent::execute_tool(state, tool_name, tool_input).await {
+                        Ok(v) => serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": serde_json::to_string_pretty(&v).unwrap_or_default(),
+                        }),
+                        Err(e) => serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": format!("Error: {e}"),
+                            "is_error": true,
+                        }),
+                    };
+                    tool_results.push(result);
+                }
+            }
+
+            messages.push(serde_json::json!({ "role": "user", "content": tool_results }));
+        } else {
+            // Final text response — extract all text blocks
+            let text: String = content.iter()
+                .filter(|b| b["type"].as_str() == Some("text"))
+                .filter_map(|b| b["text"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            return Ok(if text.is_empty() { "No response received from AI.".to_string() } else { text });
+        }
     }
 
-    let resp_json: serde_json::Value = api_resp
-        .json()
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to parse Claude API response: {e}"))?;
+    Ok("Tool calling limit reached. Please try a simpler question.".to_string())
+}
 
-    Ok(resp_json["content"]
-        .as_array()
-        .and_then(|arr| arr.first())
-        .and_then(|block| block["text"].as_str())
-        .unwrap_or("No response received from AI.")
-        .to_string())
+/// Call OpenAI-compatible API with tool use support
+async fn call_openai_with_tools(
+    client: &reqwest::Client,
+    api_key: &str,
+    model: &str,
+    base_url: &str,
+    system_prompt: &str,
+    user_message: &str,
+    tools: &[serde_json::Value],
+    state: &Arc<AppState>,
+) -> Result<String, ApiError> {
+    let mut messages = vec![
+        serde_json::json!({ "role": "system", "content": system_prompt }),
+        serde_json::json!({ "role": "user", "content": user_message }),
+    ];
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+
+    for _ in 0..5 {
+        let api_resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("content-type", "application/json")
+            .json(&serde_json::json!({
+                "model": model,
+                "max_tokens": 4096,
+                "messages": messages,
+                "tools": tools,
+            }))
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to call OpenAI API: {e}"))?;
+
+        if !api_resp.status().is_success() {
+            let status = api_resp.status();
+            let err_body = api_resp.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("OpenAI API error ({}): {}", status, err_body).into());
+        }
+
+        let resp_json: serde_json::Value = api_resp
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse OpenAI API response: {e}"))?;
+
+        let choice = resp_json["choices"].as_array()
+            .and_then(|arr| arr.first())
+            .cloned()
+            .unwrap_or_default();
+
+        let finish_reason = choice["finish_reason"].as_str().unwrap_or("");
+        let message = &choice["message"];
+
+        if finish_reason == "tool_calls" || message.get("tool_calls").is_some() {
+            let tool_calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
+            if tool_calls.is_empty() {
+                // No actual tool calls, treat as final response
+                return Ok(message["content"].as_str().unwrap_or("No response received from AI.").to_string());
+            }
+
+            // Add assistant message with tool calls
+            messages.push(message.clone());
+
+            // Execute each tool call
+            for tc in &tool_calls {
+                let fn_name = tc["function"]["name"].as_str().unwrap_or("");
+                let fn_args: serde_json::Value = tc["function"]["arguments"]
+                    .as_str()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default();
+                let tc_id = tc["id"].as_str().unwrap_or("");
+
+                let result = match crate::agent::execute_tool(state, fn_name, fn_args).await {
+                    Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+                    Err(e) => format!("Error: {e}"),
+                };
+
+                messages.push(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": result,
+                }));
+            }
+        } else {
+            return Ok(message["content"].as_str().unwrap_or("No response received from AI.").to_string());
+        }
+    }
+
+    Ok("Tool calling limit reached. Please try a simpler question.".to_string())
 }
 
 /// List available models for the current AI provider

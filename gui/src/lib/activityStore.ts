@@ -25,11 +25,19 @@ export function addEvent(event: Omit<ActivityEvent, "id" | "timestamp">) {
     if (updated.length > 200) updated.length = 200;
     return updated;
   });
-  setUnreadCount((c) => c + 1);
+  // Only count errors and warnings as unread notifications
+  if (full.severity === "error" || full.severity === "warning") {
+    setUnreadCount((c) => c + 1);
+  }
 }
 
 export function getEvents() {
   return events();
+}
+
+/** Get only errors and warnings — for the notification bell */
+export function getAlertEvents() {
+  return events().filter((e) => e.severity === "error" || e.severity === "warning");
 }
 
 export function getUnreadCount() {

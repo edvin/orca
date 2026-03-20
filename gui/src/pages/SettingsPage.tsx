@@ -430,7 +430,6 @@ export default function SettingsPage() {
                         class="form-input"
                         value={aiModel()}
                         onChange={(e) => setAiModel(e.currentTarget.value)}
-                        style={{ "padding-right": "32px" }}
                       >
                         <For each={availableModels()}>
                           {(model) => <option value={model}>{model}</option>}

@@ -1,6 +1,6 @@
 import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { Image, ImageSearchResult, ScanResult } from "../lib/types";
+import type { Image, ImageSearchResult, ScanResult, ScanVulnerability } from "../lib/types";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
@@ -737,6 +737,85 @@ export default function ImagesPage(props: ImagesPageProps) {
                                           </span>
                                         </Show>
                                       </div>
+                                      {/* Detailed vulnerability report */}
+                                      <Show when={scanResult()!.results}>
+                                        <div style={{
+                                          "margin-top": "12px",
+                                          "max-height": "400px",
+                                          overflow: "auto",
+                                          border: "1px solid rgba(255,255,255,0.06)",
+                                          "border-radius": "8px",
+                                        }}>
+                                          <table class="table" style={{ "font-size": "12px", margin: 0 }}>
+                                            <thead>
+                                              <tr>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Severity</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>CVE</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Package</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Installed</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Fixed In</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Title</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              <For each={
+                                                scanResult()!.results!
+                                                  .flatMap((r) => (r.Vulnerabilities || []).map((v) => ({ ...v, _target: r.Target })))
+                                                  .sort((a, b) => {
+                                                    const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+                                                    return (order[a.Severity] ?? 4) - (order[b.Severity] ?? 4);
+                                                  })
+                                              }>
+                                                {(vuln) => (
+                                                  <tr>
+                                                    <td>
+                                                      <span style={{
+                                                        display: "inline-block",
+                                                        padding: "1px 6px",
+                                                        "border-radius": "4px",
+                                                        "font-size": "11px",
+                                                        "font-weight": "600",
+                                                        color: vuln.Severity === "CRITICAL" || vuln.Severity === "HIGH" ? "#fff"
+                                                          : vuln.Severity === "MEDIUM" ? "#000" : "#e6edf3",
+                                                        background: vuln.Severity === "CRITICAL" ? "#da3633"
+                                                          : vuln.Severity === "HIGH" ? "#d29922"
+                                                          : vuln.Severity === "MEDIUM" ? "#e3b341"
+                                                          : "#484f58",
+                                                      }}>
+                                                        {vuln.Severity}
+                                                      </span>
+                                                    </td>
+                                                    <td>
+                                                      <Show when={vuln.PrimaryURL} fallback={
+                                                        <span class="mono">{vuln.VulnerabilityID}</span>
+                                                      }>
+                                                        <a
+                                                          href={vuln.PrimaryURL}
+                                                          target="_blank"
+                                                          onClick={(e) => e.stopPropagation()}
+                                                          style={{ color: "#58a6ff" }}
+                                                        >
+                                                          {vuln.VulnerabilityID}
+                                                        </a>
+                                                      </Show>
+                                                    </td>
+                                                    <td class="mono" style={{ color: "#e6edf3" }}>{vuln.PkgName}</td>
+                                                    <td class="mono" style={{ color: "#8b949e" }}>{vuln.InstalledVersion}</td>
+                                                    <td class="mono" style={{ color: vuln.FixedVersion ? "#3fb950" : "#484f58" }}>
+                                                      {vuln.FixedVersion || "—"}
+                                                    </td>
+                                                    <td style={{ color: "#8b949e", "max-width": "300px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}
+                                                      title={vuln.Title || vuln.Description || ""}
+                                                    >
+                                                      {vuln.Title || "—"}
+                                                    </td>
+                                                  </tr>
+                                                )}
+                                              </For>
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </Show>
                                     </Show>
                                     </Show>
                                   </div>

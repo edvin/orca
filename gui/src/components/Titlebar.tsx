@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
-import { getEvents, getUnreadCount, markAllRead, clearEvents } from "../lib/activityStore";
+import { getAlertEvents, getUnreadCount, markAllRead, clearEvents } from "../lib/activityStore";
 import { openAiWindow } from "./AiAssistant";
 import type { SystemHealth } from "../lib/types";
 
@@ -197,23 +197,23 @@ export default function Titlebar(props: TitlebarProps) {
               <div class="notification-dropdown-header">
                 <span>Notifications</span>
                 <span style={{ color: "#8b949e", "font-weight": "400" }}>
-                  {getEvents().length} events
+                  {getAlertEvents().length} alert{getAlertEvents().length !== 1 ? "s" : ""}
                 </span>
               </div>
               <div class="notification-dropdown-body">
                 <Show
-                  when={getEvents().length > 0}
+                  when={getAlertEvents().length > 0}
                   fallback={
                     <div style={{ padding: "20px", "text-align": "center", color: "#8b949e", "font-size": "12px" }}>
-                      No events yet
+                      No errors or warnings
                     </div>
                   }
                 >
-                  <For each={getEvents().slice(0, 10)}>
+                  <For each={getAlertEvents().slice(0, 10)}>
                     {(event) => (
                       <div class="activity-event">
                         <div class={`activity-event-icon activity-icon-${event.severity}`}>
-                          {event.type.startsWith("container") ? "\u25a3" : event.type.startsWith("image") ? "\u25ce" : "\u2139"}
+                          {event.severity === "error" ? "\u2717" : "\u26A0"}
                         </div>
                         <div class="activity-event-body">
                           <div class="activity-event-title">{event.title}</div>
@@ -232,9 +232,9 @@ export default function Titlebar(props: TitlebarProps) {
                     if (props.onNavigate) props.onNavigate("activity");
                   }}
                 >
-                  View All
+                  View All Activity
                 </button>
-                <Show when={getEvents().length > 0}>
+                <Show when={getAlertEvents().length > 0}>
                   <button
                     class="notification-view-all notification-clear-btn"
                     onClick={() => {
@@ -242,7 +242,7 @@ export default function Titlebar(props: TitlebarProps) {
                       setBellOpen(false);
                     }}
                   >
-                    Clear All
+                    Clear
                   </button>
                 </Show>
               </div>

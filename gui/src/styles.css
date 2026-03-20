@@ -170,6 +170,8 @@ body {
   user-select: none;
   flex-shrink: 0;
   -webkit-app-region: drag;
+  position: relative;
+  z-index: 100;
 }
 
 .titlebar-left {
@@ -545,8 +547,6 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
-  position: relative;
-  z-index: 1;
 }
 
 .page-title {
@@ -1534,6 +1534,24 @@ input[type="checkbox"]:checked::after {
 .form-input:focus {
   border-color: #58a6ff;
   box-shadow: 0 0 0 3px #1f6feb22;
+}
+
+select.form-input,
+select.form-select,
+select.log-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+select option {
+  background: #161b22;
+  color: #e6edf3;
+  padding: 8px 12px;
 }
 
 .form-textarea {
@@ -2728,7 +2746,7 @@ input[type="checkbox"]:checked::after {
   font-family: inherit;
   resize: none;
   outline: none;
-  min-height: 40px;
+  min-height: 52px;
   max-height: 120px;
   transition: border-color 0.15s;
 }
@@ -2742,8 +2760,8 @@ input[type="checkbox"]:checked::after {
 }
 
 .ai-window-send {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   background: rgba(31, 111, 235, 0.15);
   border: 1px solid rgba(31, 111, 235, 0.3);

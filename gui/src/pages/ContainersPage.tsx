@@ -99,7 +99,10 @@ export default function ContainersPage(props: ContainersPageProps) {
   };
 
   // Close dropdown menus when clicking outside
-  const handleClickOutside = () => {
+  const handleClickOutside = (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    // Don't close if the click is inside a dropdown-wrapper (toggle or menu item)
+    if (target.closest?.(".dropdown-wrapper")) return;
     setMenuOpen(null);
     setContainerMenuOpen(null);
   };
@@ -448,7 +451,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 title="Ask AI about this container"
                 style={{ "font-size": "14px" }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/><path d="M4 3v2"/><path d="M3 4h2"/><path d="M20 19v2"/><path d="M19 20h2"/></svg>
               </button>
             </Show>
             <div class="dropdown-wrapper">
@@ -741,6 +744,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                         <th>CPU</th>
                         <th>Memory</th>
                         <th>Ports</th>
+                        <th>Net I/O</th>
                         <th style={{ "text-align": "right" }}>Actions</th>
                       </tr>
                     </thead>

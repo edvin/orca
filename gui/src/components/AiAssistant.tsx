@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { logError, logInfo } from "../lib/activityStore";
+import { logError } from "../lib/activityStore";
 import { showToast } from "./Toast";
 
 interface AiAssistantProps {
@@ -14,7 +14,6 @@ export interface AiAssistantApi {
 /** Opens the AI assistant in a separate window */
 export async function openAiWindow() {
   try {
-    logInfo("Opening AI assistant window");
     const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
 
     // Check if the window already exists
@@ -33,6 +32,7 @@ export async function openAiWindow() {
       minWidth: 360,
       minHeight: 400,
       decorations: false,
+      transparent: true,
       resizable: true,
       center: false,
       x: window.screenX + window.outerWidth - 500,

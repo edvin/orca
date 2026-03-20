@@ -126,12 +126,9 @@ export default function AiWindow() {
       <div class="ai-window-header" data-tauri-drag-region>
         <div class="ai-window-title" data-tauri-drag-region>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="16" height="12" x="4" y="8" rx="2"/>
-            <path d="M2 14h2"/>
-            <path d="M20 14h2"/>
-            <path d="M15 13v2"/>
-            <path d="M9 13v2"/>
-            <path d="M12 8V4H8"/>
+            <path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/>
+            <path d="M4 3v2"/><path d="M3 4h2"/>
+            <path d="M20 19v2"/><path d="M19 20h2"/>
           </svg>
           Orca Desktop AI
         </div>
@@ -148,10 +145,9 @@ export default function AiWindow() {
         <Show when={hasCredentials() === false}>
           <div class="ai-window-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style={{ opacity: 0.3 }}>
-              <rect width="16" height="12" x="4" y="8" rx="2"/>
-              <path d="M2 14h2"/><path d="M20 14h2"/>
-              <path d="M15 13v2"/><path d="M9 13v2"/>
-              <path d="M12 8V4H8"/>
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/>
+              <path d="M4 3v2"/><path d="M3 4h2"/>
+              <path d="M20 19v2"/><path d="M19 20h2"/>
             </svg>
             <div style={{ "font-size": "15px", "font-weight": "600", "margin-top": "12px" }}>Configure AI Provider</div>
             <div style={{ "font-size": "13px", color: "#6e7681", "margin-top": "6px", "line-height": "1.5" }}>
@@ -164,10 +160,9 @@ export default function AiWindow() {
         <Show when={hasCredentials() && messages().length === 0}>
           <div class="ai-window-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style={{ opacity: 0.4 }}>
-              <rect width="16" height="12" x="4" y="8" rx="2"/>
-              <path d="M2 14h2"/><path d="M20 14h2"/>
-              <path d="M15 13v2"/><path d="M9 13v2"/>
-              <path d="M12 8V4H8"/>
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/>
+              <path d="M4 3v2"/><path d="M3 4h2"/>
+              <path d="M20 19v2"/><path d="M19 20h2"/>
             </svg>
             <div style={{ "font-size": "15px", "font-weight": "600", "margin-top": "12px" }}>Ask me anything</div>
             <div style={{ "font-size": "13px", color: "#6e7681", "margin-top": "6px", "line-height": "1.5" }}>
@@ -178,10 +173,10 @@ export default function AiWindow() {
 
         <For each={messages()}>
           {(msg) => (
-            <div class={`ai-window-msg ai-window-msg-${msg.role}`}>
+            <div class="ai-window-msg">
               <Show when={msg.role === "ai"}>
                 <div class="ai-window-msg-avatar">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
                 </div>
               </Show>
               <div
@@ -195,9 +190,9 @@ export default function AiWindow() {
         </For>
 
         <Show when={loading()}>
-          <div class="ai-window-msg ai-window-msg-ai">
+          <div class="ai-window-msg">
             <div class="ai-window-msg-avatar">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
             </div>
             <div class="ai-window-msg-bubble ai-window-msg-ai ai-window-typing">
               <span /><span /><span />
