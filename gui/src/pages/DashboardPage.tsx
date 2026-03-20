@@ -110,12 +110,12 @@ export default function DashboardPage(props: DashboardPageProps) {
 
       {/* Skeleton loading state */}
       <Show when={!lastUpdated()}>
-        <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", "margin-bottom": "20px" }}>
-          <Index each={[1, 2, 3, 4]}>{() => <div class="skeleton-card" style={{ height: "90px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>}</Index>
+        <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", "margin-bottom": "16px" }}>
+          <Index each={[1, 2, 3, 4]}>{() => <div class="skeleton-card" style={{ height: "70px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>}</Index>
         </div>
-        <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "16px" }}>
-          <div class="skeleton-card" style={{ height: "100px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line" /><div class="skeleton-line skeleton-line-medium" /></div>
-          <div class="skeleton-card" style={{ height: "100px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line" /><div class="skeleton-line skeleton-line-medium" /></div>
+        <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
+          <div class="skeleton-card" style={{ height: "80px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>
+          <div class="skeleton-card" style={{ height: "80px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>
         </div>
       </Show>
 

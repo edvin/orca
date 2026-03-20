@@ -140,7 +140,7 @@ export default function Titlebar(props: TitlebarProps) {
             <span class="titlebar-runtime">{runtimeInfo()}</span>
           </Show>
           <Show when={dockerConnected() === false && props.daemonStatus === "running"}>
-            <span class="titlebar-reconnecting">Reconnecting...</span>
+            <span class="titlebar-reconnecting" title="Click to check System Health">No runtime</span>
           </Show>
           <Show when={warningCount() > 0}>
             <span class="titlebar-warning-badge" title={`${warningCount()} warning${warningCount() > 1 ? "s" : ""}`}>

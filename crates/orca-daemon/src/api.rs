@@ -1774,17 +1774,56 @@ async fn system_health(
 ) -> Result<impl IntoResponse, ApiError> {
     let mut health = orca_backend_common::environment::check_system_health().await;
 
-    // Override connection status and version from bollard (already connected via socket).
-    // The CLI-based checks may fail on macOS where docker isn't in PATH,
-    // but the daemon's bollard connection works fine.
+    // Try to connect to Docker via the daemon's existing connection
     if let Ok(version) = state.runtime.docker.version().await {
         health.docker_connected = true;
         health.docker_version = version.version;
-        // Remove false "not running" warning
         health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable"));
+    } else {
+        // The daemon's connection is dead — try fresh connections.
+        // This handles the case where Docker was installed after the daemon started.
+        let connected = try_docker_connection().await;
+        if let Some((version, _)) = connected {
+            health.docker_connected = true;
+            health.docker_version = Some(version);
+            health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable"));
+            // Add a hint that the daemon needs restart for full functionality
+            if !health.warnings.iter().any(|w| w.contains("restart")) {
+                health.warnings.push("Docker is available but Orca needs a restart to connect. Close and reopen Orca.".to_string());
+            }
+        }
     }
 
     Ok(Json(health))
+}
+
+/// Try to connect to Docker via various methods. Returns (version, method) on success.
+async fn try_docker_connection() -> Option<(String, &'static str)> {
+    // Try local defaults (Unix socket on Linux/macOS, named pipe on Windows)
+    if let Ok(docker) = bollard::Docker::connect_with_local_defaults() {
+        if let Ok(ver) = docker.version().await {
+            return Some((ver.version.unwrap_or_default(), "local"));
+        }
+    }
+
+    // On Windows, try TCP to WSL Docker
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(docker) = bollard::Docker::connect_with_named_pipe_defaults() {
+            if let Ok(ver) = docker.version().await {
+                return Some((ver.version.unwrap_or_default(), "pipe"));
+            }
+        }
+        if let Ok(docker) = bollard::Docker::connect_with_http(
+            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
+        ) {
+            if let Ok(ver) = docker.version().await {
+                return Some((ver.version.unwrap_or_default(), "tcp"));
+            }
+        }
+    }
+
+    None
 }
 
 // --- Templates ---
