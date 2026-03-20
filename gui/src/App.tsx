@@ -237,7 +237,7 @@ export default function App() {
           <AiAssistant onNavigate={(p: string) => navigate(p)} ref={(api) => { aiApi = api; }} />
         </>
       )}
-      <StatusBar />
+      <StatusBar onNavigate={(p) => navigate(p)} />
       <ToastContainer />
       <ConfirmDialog />
       <div class="resize-handle" onMouseDown={startResize} />

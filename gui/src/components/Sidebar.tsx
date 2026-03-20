@@ -117,6 +117,11 @@ const mainNavItems: { id: Page; label: string }[] = [
   { id: "activity", label: "Activity" },
 ];
 
+// Persist collapsed state across navigations
+const [collapsed, setCollapsed] = createSignal(
+  localStorage.getItem("sidebar-collapsed") === "true"
+);
+
 export default function Sidebar(props: SidebarProps) {
   const [containerCount, setContainerCount] = createSignal(0);
   const [imageCount, setImageCount] = createSignal(0);
@@ -138,6 +143,12 @@ export default function Sidebar(props: SidebarProps) {
     onCleanup(() => clearInterval(interval));
   });
 
+  const toggleCollapsed = () => {
+    const next = !collapsed();
+    setCollapsed(next);
+    localStorage.setItem("sidebar-collapsed", String(next));
+  };
+
   const badgeFor = (id: Page) => {
     if (id === "containers" && containerCount() > 0) return containerCount();
     if (id === "images" && imageCount() > 0) return imageCount();
@@ -145,13 +156,14 @@ export default function Sidebar(props: SidebarProps) {
   };
 
   return (
-    <aside class="sidebar">
+    <aside class={`sidebar ${collapsed() ? "sidebar-collapsed" : ""}`}>
       <nav class="sidebar-nav">
         <For each={mainNavItems}>
           {(item) => (
             <button
               class={`nav-item ${props.currentPage === item.id ? "active" : ""}`}
               onClick={() => props.onNavigate(item.id)}
+              title={collapsed() ? item.label : undefined}
             >
               <span class="nav-icon">{icons[item.id]?.()}</span>
               <span class="nav-label">{item.label}</span>
@@ -167,12 +179,20 @@ export default function Sidebar(props: SidebarProps) {
         <button
           class={`nav-item ${props.currentPage === "settings" ? "active" : ""}`}
           onClick={() => props.onNavigate("settings")}
+          title={collapsed() ? "Settings" : undefined}
         >
           <span class="nav-icon">{icons.settings()}</span>
           <span class="nav-label">Settings</span>
         </button>
       </nav>
 
+      <button class="sidebar-toggle" onClick={toggleCollapsed} title={collapsed() ? "Expand sidebar" : "Collapse sidebar"}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          style={{ transform: collapsed() ? "rotate(180deg)" : "none", transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)" }}
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
     </aside>
   );
 }

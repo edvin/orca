@@ -1,16 +1,18 @@
 use tauri::{
     AppHandle, Manager,
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+    let sep_top = PredefinedMenuItem::separator(app)?;
     let show = MenuItem::with_id(app, "show", "Show Orca", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "hide", "Hide Window", true, None::<&str>)?;
-    let separator = MenuItem::with_id(app, "sep", "────────────", false, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Orca", true, None::<&str>)?;
+    let sep_bottom = PredefinedMenuItem::separator(app)?;
 
-    let menu = Menu::with_items(app, &[&show, &hide, &separator, &quit])?;
+    let menu = Menu::with_items(app, &[&sep_top, &show, &hide, &separator, &quit, &sep_bottom])?;
 
     let _tray = TrayIconBuilder::new()
         .tooltip("Orca — Container Desktop")

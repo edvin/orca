@@ -7,3 +7,4 @@ gui/dist/
 .DS_Store
 .claude/worktrees/
 src-tauri/gen/
+src-tauri/binaries/

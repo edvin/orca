@@ -6,7 +6,11 @@ import { formatBytes } from "../lib/format";
 import { showToast } from "./Toast";
 import { confirm } from "./ConfirmDialog";
 
-export default function StatusBar() {
+interface StatusBarProps {
+  onNavigate?: (page: string) => void;
+}
+
+export default function StatusBar(props: StatusBarProps) {
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
   const [updateAvailable, setUpdateAvailable] = createSignal<{version: string; body?: string} | null>(null);
   const [installing, setInstalling] = createSignal(false);
@@ -126,7 +130,10 @@ export default function StatusBar() {
 
         <Show when={health()?.warnings && health()!.warnings.length > 0}>
           <span class="status-bar-separator" />
-          <span class="status-bar-item status-bar-warning">
+          <span
+            class="status-bar-item status-bar-warning status-bar-clickable"
+            onClick={() => props.onNavigate?.("environment")}
+          >
             ⚠ {health()!.warnings.length} warning{health()!.warnings.length > 1 ? "s" : ""}
           </span>
         </Show>
