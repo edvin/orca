@@ -148,7 +148,38 @@ impl K3sManager {
     pub async fn enable_with_progress(&self) -> anyhow::Result<String> {
         let mut log = String::new();
 
-        // Step 1: Check/install k3s
+        // Platform check
+        if cfg!(target_os = "windows") {
+            log.push_str("Platform: Windows\n\n");
+            log.push_str("On Windows, Kubernetes (k3s) runs inside WSL2.\n\n");
+            log.push_str("To set up:\n");
+            log.push_str("  1. Open Ubuntu in WSL2\n");
+            log.push_str("  2. Run: curl -sfL https://get.k3s.io | sudo sh -\n");
+            log.push_str("  3. Restart Orca Desktop\n\n");
+            log.push_str("Orca Desktop will detect the k3s cluster automatically.\n");
+            return Ok(log);
+        }
+
+        if cfg!(target_os = "macos") {
+            log.push_str("Platform: macOS\n\n");
+
+            if std::path::Path::new("/Applications/Docker.app").exists() {
+                log.push_str("Docker Desktop detected.\n\n");
+                log.push_str("Docker Desktop includes built-in Kubernetes support:\n");
+                log.push_str("  1. Open Docker Desktop\n");
+                log.push_str("  2. Go to Settings → Kubernetes\n");
+                log.push_str("  3. Check 'Enable Kubernetes'\n");
+                log.push_str("  4. Click 'Apply & Restart'\n\n");
+                log.push_str("Once enabled, Orca Desktop will detect the cluster automatically.\n");
+                return Ok(log);
+            }
+
+            log.push_str("k3s requires Linux. Set up a Lima VM first via System Health,\n");
+            log.push_str("then Orca Desktop can install k3s inside it.\n");
+            return Ok(log);
+        }
+
+        // Step 1: Check/install k3s (Linux)
         if !self.is_k3s_installed().await {
             log.push_str(">>> Downloading and installing k3s...\n");
             log.push_str("    This downloads the k3s binary (~60MB)\n\n");

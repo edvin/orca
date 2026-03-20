@@ -30,7 +30,6 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       const result = (await invoke("get_stack", { name: props.stackName })) as ComposeProject;
       setStack(result);
     } catch (e) {
-      logError("Fetch stack", `Stack "${props.stackName}": ${e}`);
     }
   };
 

@@ -37,7 +37,6 @@ export default function EnvironmentPage() {
       if (machineRes.status === "fulfilled") setMachine(machineRes.value as MachineInfo);
       if (healthRes.status === "fulfilled") setHealth(healthRes.value as SystemHealth);
     } catch (e) {
-      logError("Check environment status", `${e}`);
       showToast(`Failed to check environment: ${e}`, "error");
     } finally {
       setLoading(false);

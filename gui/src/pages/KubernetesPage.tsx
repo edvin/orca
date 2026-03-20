@@ -59,7 +59,6 @@ export default function KubernetesPage() {
         }
       }
     } catch (e) {
-      logError("Kubernetes status", `${e}`);
     }
   };
 
@@ -87,7 +86,6 @@ export default function KubernetesPage() {
         setPvs(pvResult);
       }
     } catch (e) {
-      logError("Load Kubernetes workloads", `Namespace "${ns}", tab "${tab()}": ${e}`);
     } finally {
       setLoading(false);
     }
@@ -116,15 +114,19 @@ export default function KubernetesPage() {
     setSetupDialogOpen(true);
 
     try {
-      setSetupLog("Starting Kubernetes setup...\n");
+      setSetupLog("Starting Kubernetes setup...\n\n");
       const result = (await invoke("k8s_enable")) as { output?: string };
       const output = result?.output || "";
-      setSetupLog(output || "(no output)\n");
-      if (output.toLowerCase().includes("error") && !output.toLowerCase().includes("k3s is running")) {
-        logError("Kubernetes setup may have issues", output);
-        setSetupSuccess(false);
+      if (output) {
+        setSetupLog(output);
+        // Check if it's actual success (cluster ready) or just instructions
+        const isReady = output.includes("cluster is ready") || output.includes("Ready");
+        const isInstructions = output.includes("To set up") || output.includes("Docker Desktop");
+        setSetupSuccess(isReady ? true : isInstructions ? null : true);
       } else {
-        setSetupSuccess(true);
+        setSetupLog("No output from daemon. Check the Activity tab for errors.\n");
+        logError("Kubernetes enable", "No output received from daemon");
+        setSetupSuccess(false);
       }
       await refreshStatus();
     } catch (e) {

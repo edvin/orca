@@ -48,7 +48,6 @@ export default function StacksPage(props: StacksPageProps) {
       setStacks(result);
       setLastUpdated(new Date());
     } catch (e) {
-      logError("List stacks", `${e}`);
     }
   };
 

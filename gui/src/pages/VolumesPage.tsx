@@ -26,7 +26,6 @@ export default function VolumesPage(props: VolumesPageProps) {
       const result = (await invoke("list_volumes")) as Volume[];
       setVolumes(result);
     } catch (e) {
-      logError("List volumes", `${e}`);
     }
   };
 

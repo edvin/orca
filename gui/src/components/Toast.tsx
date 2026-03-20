@@ -29,9 +29,8 @@ export function showToast(
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, type === "error" ? 8000 : 4000);
 
-  // Log to activity feed for persistence
+  // Only log errors to activity feed (info toasts are too noisy)
   if (type === "error") logError(message);
-  else if (type === "info") logInfo(message);
 }
 
 function CopyToastButton(props: { message: string }) {

@@ -48,7 +48,6 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       const v = vols.find((x) => x.name === props.volumeName);
       if (v) setVolume(v);
     } catch (e) {
-      logError("Fetch volume", `Volume "${props.volumeName}": ${e}`);
     }
   };
 
@@ -58,7 +57,6 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       const result = (await invoke("volume_containers", { name: props.volumeName })) as Container[];
       setContainers(result);
     } catch (e) {
-      logError("Fetch volume containers", `Volume "${props.volumeName}": ${e}`);
     }
     setContainersLoading(false);
   };

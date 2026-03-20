@@ -63,7 +63,6 @@ export default function ImagesPage() {
       setImages(result);
       setLastUpdated(new Date());
     } catch (e) {
-      logError("List images", `${e}`);
     }
   };
 

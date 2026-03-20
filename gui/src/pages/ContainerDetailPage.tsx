@@ -48,7 +48,6 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       const c = containers.find((x) => x.id === props.containerId);
       if (c) setContainer(c);
     } catch (e) {
-      logError("Fetch container details", `Container ${props.containerId}: ${e}`);
     }
   };
 

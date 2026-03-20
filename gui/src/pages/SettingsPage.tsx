@@ -68,7 +68,6 @@ export default function SettingsPage() {
       const result = (await invoke("list_registries")) as RegistryCredential[];
       setRegistries(result);
     } catch (e) {
-      logError("List registries", `${e}`);
     }
   };
 
@@ -122,7 +121,6 @@ export default function SettingsPage() {
       setTelemetry(settings.telemetry);
       setDaemonConnected(true);
     } catch (e) {
-      logError("Load general settings", `${e}`);
     }
   };
 
@@ -174,7 +172,6 @@ export default function SettingsPage() {
       // Load available models
       loadModels();
     } catch (e) {
-      logError("Load AI settings", `${e}`);
     }
   };
 
