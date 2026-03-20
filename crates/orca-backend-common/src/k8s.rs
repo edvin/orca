@@ -265,21 +265,123 @@ impl K3sManager {
 
         if platform == "macos" {
             send("".into()).await;
-            send("k3s requires Linux. On macOS, Kubernetes runs inside a Lima VM.".into()).await;
-            send("".into()).await;
-            send("To set up Kubernetes on macOS:".into()).await;
-            send("  1. Install Lima: brew install lima".into()).await;
-            send("  2. Create a VM: limactl create --name=orca template://k3s".into()).await;
-            send("  3. Start the VM: limactl start orca".into()).await;
-            send("  4. Set KUBECONFIG: export KUBECONFIG=$(limactl list orca --format '{{.Dir}}/copied-from-guest/kubeconfig.yaml')".into()).await;
-            send("".into()).await;
-            send("Orca Desktop will add native macOS Kubernetes support in a future update.".into()).await;
-            anyhow::bail!("Kubernetes setup on macOS requires manual Lima/k3s configuration");
+
+            // Check if Docker Desktop is installed — it has built-in K8s
+            if std::path::Path::new("/Applications/Docker.app").exists() {
+                send("Docker Desktop detected.".into()).await;
+                send("".into()).await;
+                send("Docker Desktop includes built-in Kubernetes support:".into()).await;
+                send("  1. Open Docker Desktop".into()).await;
+                send("  2. Go to Settings → Kubernetes".into()).await;
+                send("  3. Check 'Enable Kubernetes'".into()).await;
+                send("  4. Click 'Apply & Restart'".into()).await;
+                send("".into()).await;
+                send("Once enabled, Orca Desktop will detect the cluster automatically.".into()).await;
+                anyhow::bail!("Enable Kubernetes via Docker Desktop settings");
+            }
+
+            // Check if Lima is available — install k3s inside the Lima VM
+            send("Checking for Lima VM...".into()).await;
+            match crate::environment::run_cmd("limactl", &["list", "--format", "{{.Name}}"]).await {
+                Ok(vms) => {
+                    let vm_name = vms.lines().find(|l| !l.trim().is_empty());
+                    if let Some(vm) = vm_name {
+                        send(format!("Found Lima VM: {vm}")).await;
+                        send("Installing k3s inside the Lima VM...".into()).await;
+                        send("".into()).await;
+
+                        // Install k3s inside the Lima VM
+                        let install_result = crate::environment::run_cmd_streaming(
+                            "limactl", &["shell", vm, "sudo", "sh", "-c",
+                                "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh -"
+                            ], &tx
+                        ).await;
+
+                        match install_result {
+                            Ok(_) => {
+                                send("\n>>> k3s installed in Lima VM".into()).await;
+
+                                // Copy kubeconfig from VM
+                                send(">>> Copying kubeconfig...".into()).await;
+                                match crate::environment::run_cmd(
+                                    "limactl", &["shell", vm, "sudo", "cat", "/etc/rancher/k3s/k3s.yaml"]
+                                ).await {
+                                    Ok(kubeconfig) => {
+                                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                                        let kube_dir = format!("{home}/.kube");
+                                        let _ = std::fs::create_dir_all(&kube_dir);
+                                        let kube_path = format!("{kube_dir}/config");
+                                        // Replace localhost with the Lima VM IP
+                                        let fixed = kubeconfig.replace("127.0.0.1", "localhost");
+                                        std::fs::write(&kube_path, &fixed)
+                                            .map_err(|e| anyhow::anyhow!("Failed to write kubeconfig: {e}"))?;
+                                        send(format!("Kubeconfig written to {kube_path}")).await;
+                                    }
+                                    Err(e) => {
+                                        send(format!("Warning: could not copy kubeconfig: {e}")).await;
+                                    }
+                                }
+
+                                send("".into()).await;
+                                send(">>> Waiting for cluster to become ready...".into()).await;
+                                for i in 0..60 {
+                                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                    if let Ok(output) = crate::environment::run_cmd(
+                                        "limactl", &["shell", vm, "sudo", "k3s", "kubectl", "get", "nodes"]
+                                    ).await {
+                                        if output.contains("Ready") {
+                                            send(format!("    Cluster ready!\n\n{output}")).await;
+                                            send("".into()).await;
+                                            send(">>> Kubernetes is ready in your Lima VM.".into()).await;
+                                            return Ok(());
+                                        }
+                                    }
+                                    if i % 5 == 4 {
+                                        send(format!("    Waiting... ({i}s)")).await;
+                                    }
+                                }
+                                anyhow::bail!("k3s installed but cluster didn't become ready within 120s");
+                            }
+                            Err(e) => {
+                                send(format!("\nk3s installation failed: {e}")).await;
+                                anyhow::bail!("Failed to install k3s in Lima VM: {e}");
+                            }
+                        }
+                    } else {
+                        send("No Lima VM found.".into()).await;
+                        send("".into()).await;
+                        send("To use Kubernetes on macOS, you need either:".into()).await;
+                        send("  1. Docker Desktop (has built-in Kubernetes)".into()).await;
+                        send("  2. A Lima VM (created via System Health setup)".into()).await;
+                        send("".into()).await;
+                        send("Set up a container runtime first via System Health, then try again.".into()).await;
+                        anyhow::bail!("No container runtime VM found. Set up Docker first via System Health.");
+                    }
+                }
+                Err(_) => {
+                    send("Lima is not installed.".into()).await;
+                    send("".into()).await;
+                    send("To use Kubernetes on macOS, you need either:".into()).await;
+                    send("  1. Docker Desktop (has built-in Kubernetes)".into()).await;
+                    send("  2. Lima + Docker (set up via System Health)".into()).await;
+                    send("".into()).await;
+                    send("Set up a container runtime first, then try again.".into()).await;
+                    anyhow::bail!("No container runtime available. Set up Docker first via System Health.");
+                }
+            }
         }
 
-        if platform == "unsupported" {
-            send("Kubernetes is only supported on Linux currently.".into()).await;
-            anyhow::bail!("Kubernetes is not supported on this platform");
+        if platform == "unsupported" || platform == "windows" {
+            send("".into()).await;
+            send("On Windows, Kubernetes (k3s) runs inside WSL2.".into()).await;
+            send("".into()).await;
+            send("To set up:".into()).await;
+            send("  1. Open Ubuntu in WSL2".into()).await;
+            send("  2. Run: curl -sfL https://get.k3s.io | sudo sh -".into()).await;
+            send("  3. Restart Orca Desktop".into()).await;
+            send("".into()).await;
+            send("Orca Desktop will detect the k3s cluster automatically.".into()).await;
+            anyhow::bail!("Kubernetes on Windows requires manual k3s setup in WSL2");
         }
 
         // Step 1: Check/install k3s

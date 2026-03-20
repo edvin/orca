@@ -59,7 +59,7 @@ fn detect_platform() -> String {
 }
 
 /// Run a command and capture its stdout. Returns Ok(stdout) on success.
-async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
+pub async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
     let mut cmd = Command::new(program);
     // Use piped stdin (not null) — wsl.exe on Windows exits immediately with null stdin.
     // We drop the stdin handle right away so the child sees EOF, not a blocked pipe.
