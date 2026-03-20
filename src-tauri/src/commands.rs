@@ -37,12 +37,18 @@ fn client() -> reqwest::Client {
 }
 
 async fn get_json<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, String> {
-    client()
+    let resp = client()
         .get(format!("{DAEMON_URL}{path}"))
         .send()
         .await
-        .map_err(|e| format!("Daemon connection failed: {e}"))?
-        .json::<T>()
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
+    }
+
+    resp.json::<T>()
         .await
         .map_err(|e| format!("Invalid response: {e}"))
 }
@@ -63,12 +69,18 @@ async fn post_empty(path: &str) -> Result<(), String> {
 }
 
 async fn post_json(path: &str) -> Result<serde_json::Value, String> {
-    client()
+    let resp = client()
         .post(format!("{DAEMON_URL}{path}"))
         .send()
         .await
-        .map_err(|e| format!("Daemon connection failed: {e}"))?
-        .json()
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
+    }
+
+    resp.json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))
 }
@@ -927,7 +939,7 @@ pub async fn deploy_template(
     env: Option<Vec<String>>,
     volumes: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
-    client()
+    let resp = client()
         .post(format!("{DAEMON_URL}/templates/{id}/deploy"))
         .json(&serde_json::json!({
             "name": name,
@@ -937,8 +949,14 @@ pub async fn deploy_template(
         }))
         .send()
         .await
-        .map_err(|e| format!("Deploy failed: {e}"))?
-        .json()
+        .map_err(|e| format!("Deploy failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Deploy failed: {body}"));
+    }
+
+    resp.json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))
 }
