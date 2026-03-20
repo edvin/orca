@@ -451,8 +451,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                   setContainerMenuOpen(containerMenuOpen() === c.id ? null : c.id);
                 }}
                 title="More actions"
+                style={{ color: "#8b949e" }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
               </button>
               <Show when={containerMenuOpen() === c.id}>
                 <div class="dropdown-menu" onClick={(e: MouseEvent) => e.stopPropagation()}>
@@ -659,8 +660,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                               setMenuOpen(menuOpen() === group.name ? null : group.name);
                             }}
                             title="More actions"
+                            style={{ color: "#8b949e" }}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
                           </button>
                           <Show when={menuOpen() === group.name}>
                             <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>
