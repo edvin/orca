@@ -881,6 +881,29 @@ input[type="checkbox"]:checked::after {
   box-shadow: 0 0 0 3px #1f6feb22;
 }
 
+.search-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #484f58;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-clear-btn:hover {
+  color: #e6edf3;
+  background: #30363d;
+}
+
 /* ==================== Detail Panel ==================== */
 .detail-panel {
   background: #161b22;

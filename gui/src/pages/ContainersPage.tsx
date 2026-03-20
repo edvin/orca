@@ -529,13 +529,26 @@ export default function ContainersPage(props: ContainersPageProps) {
               Stopped ({stoppedCount()})
             </button>
           </div>
-          <input
-            class="search-input"
-            type="text"
-            placeholder="Search containers & stacks..."
-            value={search()}
-            onInput={(e) => setSearch(e.currentTarget.value)}
-          />
+          <div style={{ position: "relative", display: "inline-flex", "align-items": "center" }}>
+            <input
+              class="search-input"
+              type="text"
+              placeholder="Search containers & stacks..."
+              value={search()}
+              onInput={(e) => setSearch(e.currentTarget.value)}
+              style={{ "padding-right": "30px" }}
+            />
+            <Show when={search().length > 0}>
+              <button
+                class="search-clear-btn"
+                onClick={() => setSearch("")}
+                title="Clear search"
+                type="button"
+              >
+                &times;
+              </button>
+            </Show>
+          </div>
           <button class="btn btn-primary" onClick={() => setShowRunDialog(true)}>
             Run
           </button>
