@@ -5,7 +5,7 @@
 <h1 align="center">Orca Desktop</h1>
 
 <p align="center">
-  <strong>Open source Docker Desktop alternative with built-in AI.</strong><br>
+  <strong>Open source container management desktop app with built-in AI.</strong><br>
   Containers, images, compose stacks, Kubernetes, AI assistant, and agent APIs — all in one place.
 </p>
 
@@ -93,7 +93,7 @@
 - Auto-detect Docker/Podman installation across platforms
 - One-click install with **progress dialog** showing step-by-step output
 - Health checks with fix buttons and detailed diagnostics
-- Docker Desktop coexistence detection
+- Coexistence with existing Docker installations
 
 ### Security
 

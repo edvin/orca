@@ -2041,7 +2041,7 @@ async fn ai_ask(
 
     // Build context-enriched prompt
     let mut system_prompt = String::from(
-        "You are the AI assistant built into Orca Desktop, an open source Docker Desktop alternative. \
+        "You are the AI assistant built into Orca Desktop, an open source container management app. \
          You help users with Docker containers, images, networking, volumes, and troubleshooting. \
          Keep responses concise and actionable. Use markdown formatting. \
          When suggesting fixes, be specific with commands. \

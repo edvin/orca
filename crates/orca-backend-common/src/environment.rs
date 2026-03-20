@@ -443,7 +443,7 @@ async fn check_lima_installed() -> HealthCheck {
         },
         Err(_) => HealthCheck {
             name: "Lima".to_string(),
-            description: "Optional: Lima VM manager for running containers without Docker Desktop".to_string(),
+            description: "Optional: Lima VM manager for running containers in a lightweight VM".to_string(),
             status: CheckStatus::Warning,
             fix_action: Some("install_lima".to_string()),
             details: Some("Not installed — install with: brew install lima".to_string()),
@@ -620,7 +620,7 @@ pub async fn check_environment() -> EnvironmentStatus {
                 checks.push(check_brew_installed().await);
                 let mut lima = check_lima_installed().await;
                 lima.name = "Lima (optional)".to_string();
-                lima.description = "Run containers via a lightweight VM — alternative to Docker Desktop".to_string();
+                lima.description = "Run containers via a lightweight Linux VM".to_string();
                 if lima.status == CheckStatus::Warning || lima.status == CheckStatus::Fail {
                     lima.status = CheckStatus::Warning;
                 }

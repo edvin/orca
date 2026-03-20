@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Orca Desktop — Open Source Docker Desktop Alternative</title>
-  <meta name="description" content="Open source Docker Desktop alternative with built-in AI. Manage Docker, Podman, Compose, and Kubernetes from one place.">
-  <meta property="og:title" content="Orca Desktop — Open Source Docker Desktop Alternative">
-  <meta property="og:description" content="Open source Docker Desktop alternative with built-in AI assistant and agent APIs.">
+  <title>Orca Desktop — Open Source Container Management App</title>
+  <meta name="description" content="Open source container management desktop app with built-in AI. Manage Docker, Podman, Compose, and Kubernetes from one place.">
+  <meta property="og:title" content="Orca Desktop — Container Management Desktop App">
+  <meta property="og:description" content="Open source container management app with built-in AI assistant and agent APIs.">
   <meta property="og:image" content="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png">
   <meta property="og:url" content="https://edvin.github.io/orca">
   <link rel="icon" href="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-icon-whale.png">
@@ -122,6 +122,29 @@
       background: #30363d;
       border-color: #484f58;
       transform: translateY(-2px);
+      text-decoration: none;
+    }
+
+    .download-links {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      margin-bottom: 32px;
+      position: relative;
+    }
+
+    .download-links a {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #8b949e;
+      font-size: 14px;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .download-links a:hover {
+      color: #e6edf3;
       text-decoration: none;
     }
 
@@ -288,13 +311,29 @@
   <img src="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png" alt="Orca" class="hero-logo">
   <h1>Orca Desktop</h1>
   <p class="hero-tagline">
-    Open source Docker Desktop alternative with built-in AI.
+    Open source container management desktop app with built-in AI.
     Manage containers, images, compose stacks, and Kubernetes.
   </p>
   <div class="hero-buttons">
-    <a href="https://github.com/edvin/orca/releases" class="btn btn-primary">Download</a>
+    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Latest</a>
     <a href="https://github.com/edvin/orca" class="btn btn-secondary">View on GitHub</a>
   </div>
+
+  <div class="download-links">
+    <a href="https://github.com/edvin/orca/releases/latest" title="Windows">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.45H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.45L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+      Windows
+    </a>
+    <a href="https://github.com/edvin/orca/releases/latest" title="macOS">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+      macOS
+    </a>
+    <a href="https://github.com/edvin/orca/releases/latest" title="Linux">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.368 1.884 1.43.777.07 1.63-.675 1.903-1.386.038-.1.07-.276.095-.465.024-.2.04-.341.046-.553.01-.168.011-.22.007-.307-.01-.145-.032-.263-.06-.401-.092-.465-.252-.779-.452-1.251-.116-.303-.217-.532-.283-.745-.067-.213-.108-.396-.108-.596 0-.085.005-.182.014-.266.147-.208.38-.727.413-1.445.016-.382-.03-.726-.193-1.052-.122-.233-.336-.438-.566-.591-.036-.047-.075-.09-.111-.133-.36-.6-.57-.868-.69-1.276-.105-.307-.141-.608-.141-.915 0-.42.062-.83.154-1.211.137-.593.354-1.137.604-1.6.31-.58.616-1.08.86-1.47.249-.402.428-.711.496-.979.108-.399.087-1.167-.085-1.74-.183-.634-.462-1.088-.782-1.42-.285-.317-.626-.517-.867-.617-.257-.122-.36-.186-.382-.208l-.012-.019c-.024-.048-.042-.168-.025-.258.022-.18.075-.38.14-.58.195-.594.338-1.307.259-1.797-.106-.714-.457-1.35-.838-1.632-.239-.174-.442-.255-.682-.262zM9.078 21.053c-.175.167-.43.279-.652.292-.222-.007-.383-.14-.383-.334 0-.106.033-.22.1-.357.139-.275.355-.522.648-.607.115-.04.245-.093.36-.103.1.3-.09.543-.25.727-.05.06-.103.112-.158.168a2.79 2.79 0 01-.155.132c-.063.052-.132.094-.135.128-.003.025.01.035.024.057z"/></svg>
+      Linux
+    </a>
+  </div>
+
   <div class="hero-badges">
     <img src="https://github.com/edvin/orca/actions/workflows/build.yml/badge.svg" alt="Build">
     <img src="https://img.shields.io/github/license/edvin/orca" alt="License">

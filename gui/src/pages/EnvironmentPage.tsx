@@ -241,7 +241,7 @@ export default function EnvironmentPage() {
                   display: "flex", "align-items": "center", gap: "8px",
                 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  Docker Desktop detected — Orca Desktop shares the same Docker daemon.
+                  Existing Docker installation detected — Orca Desktop shares the same daemon.
                 </div>
               </Show>
 
@@ -307,7 +307,7 @@ export default function EnvironmentPage() {
                 </div>
                 <div style={{ "font-size": "14px", color: "var(--text-muted)", "margin-bottom": "24px", "line-height": "1.5" }}>
                   {s().platform === "macos"
-                    ? "Orca Desktop needs a container runtime. Set up Docker via Lima or Docker Desktop on macOS."
+                    ? "Orca Desktop needs a container runtime. Set up Docker via Lima on macOS."
                     : s().platform === "windows"
                     ? "Orca Desktop needs Docker running inside WSL2 to manage containers on Windows."
                     : "Orca Desktop needs a container runtime. Install Docker or Podman to get started."}
@@ -352,7 +352,7 @@ export default function EnvironmentPage() {
 
                 <Show when={s().checks.filter(c => c.fix_action && c.status !== "Pass").length === 0 && !s().ready}>
                   <div style={{ "margin-top": "16px", "font-size": "13px", color: "var(--text-muted)", "text-align": "center" }}>
-                    Or install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" style={{ color: "#58a6ff" }}>Docker Desktop</a> manually, then click Re-check.
+                    Or install Docker manually, then click Re-check.
                   </div>
                 </Show>
               </div>
