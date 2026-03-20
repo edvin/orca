@@ -430,6 +430,7 @@ async fn create_container(
         restart_policy: body.restart_policy,
         network: body.network,
         detach: true,
+        entrypoint: None,
         remove_on_exit: false,
         cpu_limit: body.cpu_limit,
         memory_limit,
@@ -1034,6 +1035,7 @@ async fn volume_list_files(
         restart_policy: None,
         network: None,
         detach: false,
+        entrypoint: None,
         remove_on_exit: true,
         cpu_limit: None,
         memory_limit: None,
@@ -1111,6 +1113,7 @@ async fn volume_read_file(
         restart_policy: None,
         network: None,
         detach: false,
+        entrypoint: None,
         remove_on_exit: true,
         cpu_limit: None,
         memory_limit: None,
@@ -1154,12 +1157,13 @@ async fn image_list_files(
     };
 
     let opts = ContainerCreateOpts {
-        image: image_ref,
+        image: image_ref.clone(),
         name: None,
+        // Override entrypoint to ensure ls runs directly regardless of image config
+        entrypoint: Some(vec!["".to_string()]),
         command: vec![
-            "ls".to_string(),
+            "/bin/ls".to_string(),
             "-la".to_string(),
-            "--time-style=+%Y-%m-%dT%H:%M:%S".to_string(),
             browse_path,
         ],
         env: HashMap::new(),
@@ -1241,7 +1245,8 @@ async fn image_read_file(
     let opts = ContainerCreateOpts {
         image: image_ref,
         name: None,
-        command: vec!["cat".to_string(), full_path],
+        entrypoint: Some(vec!["".to_string()]),
+        command: vec!["/bin/cat".to_string(), full_path],
         env: HashMap::new(),
         ports: vec![],
         volumes: vec![],
@@ -1953,6 +1958,7 @@ async fn deploy_template(
         restart_policy: Some(template.restart_policy.clone()),
         network: None,
         detach: true,
+        entrypoint: None,
         remove_on_exit: false,
         cpu_limit: None,
         memory_limit: None,

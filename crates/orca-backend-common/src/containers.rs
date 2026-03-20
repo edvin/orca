@@ -51,6 +51,7 @@ impl ContainerRuntime for BollardRuntime {
             } else {
                 Some(opts.command.clone())
             },
+            entrypoint: opts.entrypoint.clone(),
             env: Some(
                 opts.env
                     .iter()

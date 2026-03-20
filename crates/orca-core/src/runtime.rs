@@ -74,6 +74,8 @@ pub struct ContainerCreateOpts {
     pub image: String,
     pub name: Option<String>,
     pub command: Vec<String>,
+    /// Override the image's entrypoint. Use vec![""] to clear it entirely.
+    pub entrypoint: Option<Vec<String>>,
     pub env: HashMap<String, String>,
     pub ports: Vec<PortMapping>,
     pub volumes: Vec<VolumeMount>,

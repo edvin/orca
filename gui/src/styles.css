@@ -2374,9 +2374,9 @@ input[type="checkbox"]:checked::after {
   font-size: 14px;
   font-weight: 600;
   color: #e6edf3;
-  margin: 36px 0 12px;
+  margin: 48px 0 14px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #21262d;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .template-category-header:first-child {
