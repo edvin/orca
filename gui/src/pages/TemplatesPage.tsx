@@ -399,12 +399,6 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           <button class="action-icon" title="Delete" onClick={(e) => { e.stopPropagation(); deleteTemplate(props.template); }} style={{ "font-size": "12px", width: "24px", height: "24px", color: "#f85149" }}>{"\u2715"}</button>
         </div>
       </Show>
-      <button
-        class="btn btn-primary btn-sm template-deploy-btn"
-        onClick={(e) => { e.stopPropagation(); openDeploy(props.template); }}
-      >
-        Deploy
-      </button>
     </div>
   );
 

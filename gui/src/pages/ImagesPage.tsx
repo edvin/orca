@@ -335,11 +335,7 @@ export default function ImagesPage() {
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
           />
-          <button class="btn" onClick={() => {
-            const opening = !showPull();
-            setShowPull(opening);
-            if (opening) setTimeout(() => pullInputRef?.focus(), 50);
-          }}>
+          <button class="btn" onClick={() => setShowPull(true)}>
             Pull
           </button>
           <button class="btn" onClick={() => setShowBuild(!showBuild())}>
@@ -354,134 +350,6 @@ export default function ImagesPage() {
         </div>
       </div>
 
-      {/* Pull bar (collapsible) */}
-      <Show when={showPull()}>
-      <div style={{ "margin-bottom": "16px" }}>
-        <div class="pull-bar">
-          <div style={{ position: "relative", flex: 1 }}>
-            <div style={{ position: "relative" }}>
-              <svg
-                style={{
-                  position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)",
-                  width: "14px", height: "14px", color: "#8b949e", "pointer-events": "none",
-                }}
-                viewBox="0 0 16 16" fill="currentColor"
-              >
-                <path fill-rule="evenodd" d="M11.5 7a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zm-.82 4.74a6 6 0 111.06-1.06l3.04 3.04a.75.75 0 11-1.06 1.06l-3.04-3.04z" />
-              </svg>
-              <input
-                ref={pullInputRef}
-                class="pull-input"
-                type="text"
-                placeholder="Search Docker Hub and pull an image (e.g. nginx, postgres:16)"
-                value={pullRef()}
-                onInput={(e) => onPullInput(e.currentTarget.value)}
-                onKeyDown={handlePullKeyDown}
-                onFocus={() => { if (searchResults().length > 0) setShowSearchDropdown(true); }}
-                onBlur={() => { setTimeout(() => setShowSearchDropdown(false), 200); }}
-                disabled={pulling()}
-                style={{ "padding-left": "32px" }}
-              />
-            </div>
-            <Show when={showSearchDropdown()}>
-              <div style={{
-                position: "absolute", top: "100%", left: 0, right: 0,
-                background: "#161b22", border: "1px solid #30363d", "border-radius": "0 0 8px 8px",
-                "max-height": "320px", "overflow-y": "auto", "z-index": "100",
-                "box-shadow": "0 8px 24px rgba(0,0,0,0.4)",
-              }}>
-                <Show when={searching()}>
-                  <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
-                    <Spinner size={12} />{" "}Searching...
-                  </div>
-                </Show>
-                <Show when={!searching() && searchResults().length === 0 && pullRef().trim().length >= 2}>
-                  <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
-                    No results found
-                  </div>
-                </Show>
-                <For each={searchResults()}>
-                  {(result) => (
-                    <div
-                      style={{
-                        padding: "8px 14px", cursor: "pointer", "border-bottom": "1px solid #21262d",
-                        display: "flex", "align-items": "center", gap: "8px",
-                      }}
-                      onMouseDown={() => selectSearchResult(result.name)}
-                    >
-                      <div style={{ flex: 1, "min-width": 0 }}>
-                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                          <span class="mono" style={{ "font-weight": "600", "font-size": "13px" }}>
-                            {result.name}
-                          </span>
-                          <Show when={result.official}>
-                            <span style={{
-                              background: "#1f6feb", color: "#fff", "font-size": "10px",
-                              padding: "1px 6px", "border-radius": "4px", "font-weight": "600",
-                            }}>
-                              OFFICIAL
-                            </span>
-                          </Show>
-                        </div>
-                        <div style={{
-                          color: "#8b949e", "font-size": "12px",
-                          "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis",
-                        }}>
-                          {result.description || "No description"}
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: "12px", "font-size": "11px", color: "#8b949e", "flex-shrink": 0 }}>
-                        <Show when={result.pulls}>
-                          <span title="Downloads">{result.pulls}</span>
-                        </Show>
-                        <span title="Stars">{"\u2605"} {result.stars}</span>
-                      </div>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </div>
-          <button
-            class="btn btn-primary"
-            onClick={doPull}
-            disabled={pulling() || !pullRef().trim()}
-          >
-            {pulling() ? (<><Spinner size={12} />{" Pulling..."}</>) : "Pull"}
-          </button>
-          <button
-            class="btn"
-            onClick={() => setShowAuth(!showAuth())}
-            style={{ "min-width": "60px" }}
-          >
-            {showAuth() ? "Auth \u25B2" : "Auth \u25BC"}
-          </button>
-        </div>
-        <Show when={showAuth()}>
-          <div style={{ display: "flex", gap: "8px", "margin-top": "8px" }}>
-            <input
-              class="form-input"
-              type="text"
-              placeholder="Username"
-              value={authUsername()}
-              onInput={(e) => setAuthUsername(e.currentTarget.value)}
-              style={{ flex: 1 }}
-            />
-            <input
-              class="form-input"
-              type="password"
-              placeholder="Password"
-              value={authPassword()}
-              onInput={(e) => setAuthPassword(e.currentTarget.value)}
-              style={{ flex: 1 }}
-            />
-          </div>
-        </Show>
-        <Show when={pullStatus()}>
-          <div class="pull-status"><Spinner size={12} />{" "}{pullStatus()}</div>
-        </Show>
-      </div>
-      </Show>
 
       {/* Build panel */}
       <Show when={showBuild()}>
@@ -594,7 +462,7 @@ export default function ImagesPage() {
               </th>
               <SortableHeader label="Repository / Tag" field="tag" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th>ID</th>
-              <SortableHeader label="Size" field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <SortableHeader label="Size" field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} style={{ "min-width": "90px" }} />
               <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th style={{ "text-align": "right" }}>Actions</th>
             </tr>
