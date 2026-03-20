@@ -24,9 +24,11 @@
 
 - **Full lifecycle** — create, start, stop, restart, kill, remove containers
 - **Run containers from images** with ports, volumes, env vars, restart policies, CPU/memory limits
-- **Live resource monitoring** with sparkline charts (CPU, memory, network I/O)
-- **Exec terminal** — run commands inside containers with command history
+- **Live resource editing** — change memory limits, CPU cores, and restart policy on running containers
+- **Live resource monitoring** — CPU, memory, network I/O with per-container stats
+- **Exec terminal** — interactive shell inside containers
 - **Log viewer** with search, tail size control, auto-scroll, and log download
+- **AI-powered diagnostics** — click the AI button on any container to analyze logs and troubleshoot
 - **Multi-stage progress** when running containers (pull → create → start)
 - **Container diagnostics** for failed containers — exit code, OOM detection, error messages
 - **Copy as `docker run`** / **Export as `docker-compose.yml`** for any running container
@@ -34,10 +36,12 @@
 
 ### Image Management
 
-- **Pull images** with Docker Hub search autocomplete and progress tracking
+- **Pull images** with Docker Hub search dialog and progress tracking
 - **Build images** from Dockerfile with `.dockerignore` support and streaming build log
+- **Vulnerability scanning** — one-click CVE scan powered by Trivy with severity badges
+- **Browse image files** — explore any image's filesystem without running it
 - **Tag, remove, batch delete** with multi-select checkboxes
-- **Prune** unused images with space reclaimed reporting
+- **Prune** unused images with confirmation dialog and space reclaimed reporting
 - **Registry authentication** for private registries (Docker Hub, GitHub, GitLab, AWS ECR)
 
 ### Compose Stacks
@@ -67,11 +71,11 @@
 
 ### AI Assistant
 
-- **Built-in chat** powered by Claude (Anthropic) or GPT (OpenAI) — user's choice
-- **One-click crash diagnosis** with pre-filled container context (logs, exit code, image)
-- Natural language container troubleshooting
-- Actionable fix suggestions with UI navigation
-- Provider and model configurable in Settings
+- **Separate floating window** — drag anywhere, resize, pin to another monitor
+- **4 providers** — Claude (Anthropic), GPT (OpenAI), Gemini (Google), or any custom OpenAI-compatible endpoint
+- **Context-aware** — click the AI button on any container to chat about it with logs pre-loaded
+- **Model picker** — dropdown fetched from provider's API
+- Natural language container troubleshooting with actionable suggestions
 
 ### AI Agent API
 
@@ -117,9 +121,10 @@
 ### Cross-Platform
 
 - **Linux**: native Docker/Podman — no VM needed
-- **macOS**: Lima VM with Apple Virtualization.framework
-- **Windows**: WSL2 with Docker or Podman
-- CI/CD builds for all platforms
+- **macOS**: Lima VM with Apple Virtualization.framework, VirtioFS, proxy passthrough
+- **Windows**: WSL2 with Docker, auto-configured TCP bridge
+- Signed auto-updates on all platforms
+- Guided setup wizard with real-time streaming progress
 
 ## Architecture
 
