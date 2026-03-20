@@ -201,10 +201,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       closeDeploy();
       const containerId = result?.id;
       const notes = result?.notes || template.notes;
-      showToast(`${template.name} deployed successfully! ${notes}`, "success");
+      showToast(`${template.name} deployed successfully!${notes ? " " + notes : ""}`, "success");
       // Navigate to the container detail page
       if (containerId && props.onNavigate) {
         props.onNavigate(`container:${containerId}`);
+      } else {
+        // Fallback: navigate to containers list
+        props.onNavigate?.("containers");
       }
     } catch (e: any) {
       logError("Deploy template", `Template "${template.name}" (${template.image}): ${e}`);
