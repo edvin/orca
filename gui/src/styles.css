@@ -2118,12 +2118,14 @@ input[type="checkbox"]:checked::after {
   right: 0;
   width: 320px;
   max-height: 400px;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  background: rgba(22, 27, 34, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   overflow: hidden;
-  z-index: 100;
+  z-index: 9999;
   animation: modal-scale-in 0.1s ease-out;
 }
 
@@ -2423,13 +2425,9 @@ input[type="checkbox"]:checked::after {
   font-size: 14px;
   font-weight: 600;
   color: #e6edf3;
-  margin: 48px 0 14px;
+  margin: 0 0 14px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.template-category-header:first-child {
-  margin-top: 0;
 }
 
 /* ==================== AI Assistant ==================== */

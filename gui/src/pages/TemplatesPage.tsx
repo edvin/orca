@@ -441,8 +441,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         </div>
       }>
         <For each={Object.entries(groupedByCategory())}>
-          {([cat, items]) => (
-            <div>
+          {([cat, items], i) => (
+            <div style={i() > 0 ? { "margin-top": "48px" } : {}}>
               <div class="template-category-header">{cat}</div>
               <div class="template-grid">
                 <For each={items}>
