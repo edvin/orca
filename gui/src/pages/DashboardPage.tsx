@@ -135,7 +135,8 @@ export default function DashboardPage(props: DashboardPageProps) {
         </div>
       </Show>
 
-      {/* Summary cards */}
+      {/* Summary cards — only show after first data load */}
+      <Show when={lastUpdated()}>
       <div class="dashboard-grid">
         <div class="dashboard-stat-card">
           <div class="dashboard-stat-label">Containers</div>
@@ -301,6 +302,7 @@ export default function DashboardPage(props: DashboardPageProps) {
           </Show>
         </div>
       </div>
+      </Show>
     </div>
   );
 }
