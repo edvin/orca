@@ -30,11 +30,9 @@ body {
   position: relative;
 }
 
-/* macOS: use clip-path for rounded corners to avoid white artifacts
-   from the window background showing through border-radius */
+/* macOS: native rounded corners via NSWindow style mask (set in Rust) */
 .app-root.platform-macos {
   border-radius: 0;
-  clip-path: inset(0 round 10px);
 }
 
 /* ==================== Status Bar ==================== */

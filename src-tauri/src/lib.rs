@@ -100,6 +100,31 @@ pub fn run() {
         .setup(move |app| {
             tray::setup_tray(app.handle())?;
 
+            // macOS: native rounded corners
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.with_webview(move |webview| {
+                        use cocoa::appkit::{NSWindow, NSWindowStyleMask, NSWindowTitleVisibility};
+                        use cocoa::base::{id, YES, NO};
+                        unsafe {
+                            let ns_window: id = webview.ns_window() as id;
+                            // Re-add titled mask for native rounded corners
+                            let mut mask = ns_window.styleMask();
+                            mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask;
+                            mask |= NSWindowStyleMask::NSTitledWindowMask;
+                            ns_window.setStyleMask_(mask);
+                            // Hide the titlebar visually
+                            ns_window.setTitlebarAppearsTransparent_(YES);
+                            ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleHidden);
+                            ns_window.setHasShadow_(YES);
+                            ns_window.setOpaque_(NO);
+                        }
+                    });
+                }
+            }
+
             // Auto-start daemon in background
             let dm_setup = dm.clone();
             tauri::async_runtime::spawn(async move {

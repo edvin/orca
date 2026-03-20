@@ -1015,7 +1015,7 @@ pub async fn save_ai_settings(
         }))
         .send()
         .await
-        .map_err(|e| format!("Failed to save AI settings: {e}"))?;
+        .map_err(|e| format!("Cannot reach daemon: {e}"))?;
 
     if resp.status().is_success() {
         Ok(())
@@ -1051,10 +1051,28 @@ pub async fn stop_daemon(app: tauri::AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn get_daemon_info() -> Result<serde_json::Value, String> {
+    let log_path = orca_core::config::OrcaConfig::config_path()
+        .parent()
+        .map(|p| p.join("daemon.log"))
+        .unwrap_or_default();
+    let log_tail = std::fs::read_to_string(&log_path)
+        .unwrap_or_default()
+        .lines()
+        .rev()
+        .take(100)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+
     Ok(serde_json::json!({
         "binary_path": daemon::find_daemon_binary(),
         "port": 9477,
-        "config_path": "~/.config/orca/config.json",
+        "config_path": orca_core::config::OrcaConfig::config_path().to_string_lossy(),
+        "log_path": log_path.to_string_lossy(),
+        "log_tail": log_tail,
+        "version": env!("CARGO_PKG_VERSION"),
     }))
 }
 

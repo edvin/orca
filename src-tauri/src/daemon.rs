@@ -46,9 +46,25 @@ impl DaemonManager {
         let daemon_path = find_daemon_binary();
         tracing::info!("Starting orca-daemon from: {}", daemon_path);
 
+        // Log daemon output to a file for debugging
+        let log_dir = orca_core::config::OrcaConfig::config_path()
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+        let _ = std::fs::create_dir_all(&log_dir);
+        let log_path = log_dir.join("daemon.log");
+        let log_file = std::fs::File::create(&log_path)
+            .map(Stdio::from)
+            .unwrap_or_else(|_| Stdio::null());
+        let err_file = std::fs::OpenOptions::new()
+            .create(true).append(true).open(&log_path)
+            .map(Stdio::from)
+            .unwrap_or_else(|_| Stdio::null());
+        tracing::info!("Daemon log: {}", log_path.display());
+
         let mut cmd = Command::new(&daemon_path);
-        cmd.stdout(Stdio::null())
-            .stderr(Stdio::null())
+        cmd.stdout(log_file)
+            .stderr(err_file)
             .kill_on_drop(true);
 
         // On Windows, prevent the daemon from opening a visible console window

@@ -31,3 +31,7 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio-util = { version = "0.7", features = ["io"] }
 tokio-stream.workspace = true
 urlencoding.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+objc = "0.2"
