@@ -590,12 +590,25 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     <div class="card-label">Port Mappings</div>
                     <div class="card-value">
                       <Show when={c().ports.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
-                        <For each={c().ports}>
-                          {(p) => (
-                            <div class="mono" style={{ "line-height": "1.6" }}>
-                              {p.host_ip || "0.0.0.0"}:{p.host_port} {"->"}  {p.container_port}/{p.protocol}
-                            </div>
-                          )}
+                        <For each={deduplicatePorts(c().ports)}>
+                          {(p) => {
+                            const httpPorts = [80, 443, 3000, 4200, 5000, 5173, 8000, 8080, 8443, 8888, 9000, 9090, 9443, 15672, 18789];
+                            const isHttp = httpPorts.includes(p.host_port);
+                            const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
+                            return (
+                              <div class="mono" style={{ "line-height": "1.8", "font-size": "12px" }}>
+                                <Show when={isHttp} fallback={
+                                  <span>{p.host_port} {"\u2192"} {p.container_port}/{p.protocol || "tcp"}</span>
+                                }>
+                                  <a href={`${proto}://localhost:${p.host_port}`} target="_blank" style={{ color: "#58a6ff" }}>
+                                    :{p.host_port}
+                                  </a>
+                                  <span style={{ color: "#484f58" }}> {"\u2192"} </span>
+                                  <span style={{ color: "#8b949e" }}>{p.container_port}/{p.protocol || "tcp"}</span>
+                                </Show>
+                              </div>
+                            );
+                          }}
                         </For>
                       </Show>
                     </div>
@@ -676,23 +689,26 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                               "min-width": "200px",
                             }}>
                               <div style={{ flex: "1" }}>
-                                <div style={{ "font-size": "13px", "font-weight": "500", color: "#e6edf3" }}>
-                                  <span class="mono">{p.host_port}</span>
-                                  <span style={{ color: "#484f58", margin: "0 6px" }}>{"\u2192"}</span>
-                                  <span class="mono" style={{ color: "#8b949e" }}>{p.container_port}</span>
-                                  <span style={{ color: "#484f58", "font-size": "11px", "margin-left": "4px" }}>/{p.protocol || "tcp"}</span>
+                                <div style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "13px" }}>
+                                  <div>
+                                    <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>Host</div>
+                                    <span class="mono" style={{ "font-weight": "600", color: "#e6edf3" }}>{p.host_port}</span>
+                                  </div>
+                                  <span style={{ color: "#484f58", "font-size": "16px" }}>{"\u2192"}</span>
+                                  <div>
+                                    <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>Container</div>
+                                    <span class="mono" style={{ color: "#8b949e" }}>{p.container_port}<span style={{ "font-size": "10px", "margin-left": "3px" }}>/{p.protocol || "tcp"}</span></span>
+                                  </div>
                                 </div>
                                 <Show when={isHttp}>
-                                  <div style={{ "margin-top": "4px" }}>
-                                    <a
-                                      href={`${proto}://localhost:${p.host_port}`}
-                                      target="_blank"
-                                      style={{ color: "#58a6ff", "font-size": "12px" }}
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {proto}://localhost:{p.host_port} {"\u2197"}
-                                    </a>
-                                  </div>
+                                  <a
+                                    href={`${proto}://localhost:${p.host_port}`}
+                                    target="_blank"
+                                    style={{ color: "#58a6ff", "font-size": "12px", "margin-top": "6px", display: "inline-block" }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {proto}://localhost:{p.host_port} {"\u2197"}
+                                  </a>
                                 </Show>
                               </div>
                               <Show when={isHttp}>
