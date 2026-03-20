@@ -1441,15 +1441,40 @@ async fn scan_image(
         ..Default::default()
     };
 
-    let container = docker
-        .create_container(None::<CreateContainerOptions<String>>, config)
+    let container = match docker
+        .create_container(None::<CreateContainerOptions<String>>, config.clone())
         .await
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to start Trivy scanner. Make sure the aquasec/trivy:latest image is available \
-                 (pull it with: docker pull aquasec/trivy:latest). Error: {e}"
-            )
-        })?;
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("404") || err_str.contains("No such image") {
+                // Auto-pull the Trivy image
+                use bollard::image::CreateImageOptions;
+                let pull_opts = CreateImageOptions {
+                    from_image: "aquasec/trivy",
+                    tag: "latest",
+                    ..Default::default()
+                };
+                let mut pull_stream = docker.create_image(Some(pull_opts), None, None);
+                while let Some(_) = pull_stream.next().await {}
+
+                // Retry container creation
+                docker
+                    .create_container(None::<CreateContainerOptions<String>>, config)
+                    .await
+                    .map_err(|e2| {
+                        anyhow::anyhow!(
+                            "Failed to create Trivy container after pulling image: {e2}"
+                        )
+                    })?
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Failed to start Trivy scanner: {e}"
+                ).into());
+            }
+        }
+    };
 
     let id = &container.id;
 

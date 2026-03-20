@@ -243,10 +243,21 @@ impl ContainerRuntime for BollardRuntime {
             }
         });
 
+        // Docker's container update API does not support NanoCpus.
+        // Use CpuPeriod + CpuQuota instead: quota = cores * period.
+        let (cpu_period, cpu_quota) = if let Some(cores) = opts.cpu_limit {
+            let period: i64 = 100_000; // default 100ms in microseconds
+            let quota = (cores * period as f64) as i64;
+            (Some(period), Some(quota))
+        } else {
+            (None, None)
+        };
+
         let config = UpdateContainerOptions::<String> {
             memory: opts.memory_limit.map(|m| m as i64),
             memory_swap: opts.memory_swap,
-            nano_cpus: opts.cpu_limit.map(|c| (c * 1_000_000_000.0) as i64),
+            cpu_period,
+            cpu_quota,
             restart_policy,
             ..Default::default()
         };

@@ -747,7 +747,30 @@ pub async fn k8s_status() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn k8s_enable() -> Result<serde_json::Value, String> {
-    post_json("/k8s/enable").await
+    // K8s setup can take several minutes — use a long timeout
+    let long_client = {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(token) = load_api_token() {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+                headers.insert(reqwest::header::AUTHORIZATION, val);
+            }
+        }
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(600))
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    };
+
+    long_client
+        .post(format!("{DAEMON_URL}/k8s/enable"))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]

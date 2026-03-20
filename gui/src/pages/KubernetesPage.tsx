@@ -116,86 +116,21 @@ export default function KubernetesPage() {
     setSetupDialogOpen(true);
 
     try {
-      // Get API token for auth
-      let token = "";
-      try { token = await invoke("get_api_token") as string; } catch { /* no token */ }
-
-      // Use SSE streaming endpoint for real-time output
-      const resp = await fetch("http://127.0.0.1:9477/api/v1/k8s/enable-stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-        },
-      });
-
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
-      }
-
-      const reader = resp.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (reader) {
-        let done = false;
-        let success = true;
-        let receivedData = false;
-        let receivedDone = false;
-        while (!done) {
-          const { value, done: streamDone } = await reader.read();
-          done = streamDone;
-          if (value) {
-            const text = decoder.decode(value, { stream: !done });
-            for (const line of text.split("\n")) {
-              if (line.startsWith("data: ")) {
-                const data = line.slice(6);
-                receivedData = true;
-                if (data === "[DONE]") {
-                  receivedDone = true;
-                  done = true;
-                } else if (data === "[ERROR]") {
-                  success = false;
-                  done = true;
-                } else if (data.startsWith("[ERROR] ")) {
-                  setSetupLog((prev) => prev + data.slice(8) + "\n");
-                  success = false;
-                  done = true;
-                } else {
-                  setSetupLog((prev) => prev + data + "\n");
-                }
-              }
-            }
-          }
-        }
-        if (!receivedData) {
-          const msg = "No response from server. The daemon may not support this operation on this platform.";
-          setSetupLog(msg + "\n");
-          logError("Kubernetes setup: no data received from SSE stream");
-          success = false;
-        } else if (!receivedDone && success) {
-          setSetupLog((prev) => prev + "\nStream ended unexpectedly.\n");
-          logError("Kubernetes setup: SSE stream ended without [DONE] or [ERROR]", setupLog());
-          success = false;
-        }
-        if (!success) {
-          logError("Kubernetes setup failed", setupLog());
-        }
-        setSetupSuccess(success);
+      setSetupLog("Starting Kubernetes setup...\n");
+      const result = (await invoke("k8s_enable")) as { output?: string };
+      const output = result?.output || "";
+      setSetupLog(output || "(no output)\n");
+      if (output.toLowerCase().includes("error") && !output.toLowerCase().includes("k3s is running")) {
+        logError("Kubernetes setup may have issues", output);
+        setSetupSuccess(false);
+      } else {
+        setSetupSuccess(true);
       }
       await refreshStatus();
     } catch (e) {
-      logError("Kubernetes SSE stream error", String(e));
-      // Fallback to non-streaming
-      try {
-        setSetupLog((prev) => prev + `SSE failed (${e}), trying direct call...\n\n`);
-        const result = (await invoke("k8s_enable")) as { output?: string };
-        setSetupLog((prev) => prev + (result?.output || "(no output)"));
-        setSetupSuccess(true);
-        await refreshStatus();
-      } catch (e2) {
-        setSetupLog((prev) => prev + `\nError: ${e2}\n`);
-        setSetupSuccess(false);
-      }
+      logError("Kubernetes enable failed", String(e));
+      setSetupLog((prev) => prev + `\nError: ${e}\n`);
+      setSetupSuccess(false);
     } finally {
       setSetupRunning(false);
       setEnabling(false);
