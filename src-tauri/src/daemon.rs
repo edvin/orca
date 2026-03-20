@@ -19,11 +19,28 @@ impl DaemonManager {
     }
 
     /// Start the daemon if not already running.
+    /// If a daemon is running but has a different version, restart it.
     pub async fn start(&self) -> Result<(), String> {
         // Check if daemon is already responding
         if self.health_check().await {
-            tracing::info!("Orca daemon already running");
-            return Ok(());
+            // Verify version matches this app
+            let expected_version = env!("CARGO_PKG_VERSION");
+            match self.daemon_version().await {
+                Some(v) if v == expected_version => {
+                    tracing::info!("Orca daemon already running (v{v})");
+                    return Ok(());
+                }
+                Some(v) => {
+                    tracing::info!("Daemon version mismatch: running v{v}, app is v{expected_version} — restarting");
+                    self.stop();
+                    // Wait for old daemon to fully exit
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+                None => {
+                    tracing::info!("Orca daemon already running (version unknown)");
+                    return Ok(());
+                }
+            }
         }
 
         let daemon_path = find_daemon_binary();
@@ -80,6 +97,18 @@ impl DaemonManager {
             ).await;
             tracing::info!("orca-daemon stopped");
         }
+    }
+
+    /// Get the version of the running daemon, if available.
+    async fn daemon_version(&self) -> Option<String> {
+        let resp = reqwest::Client::new()
+            .get("http://127.0.0.1:9477/api/v1/health")
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await
+            .ok()?;
+        let json: serde_json::Value = resp.json().await.ok()?;
+        json["version"].as_str().map(|s| s.to_string())
     }
 
     async fn health_check(&self) -> bool {
