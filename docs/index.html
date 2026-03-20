@@ -294,6 +294,45 @@
       background-clip: text;
     }
 
+    /* Feature table rows */
+    .ft-row {
+      display: grid;
+      grid-template-columns: 1fr 48px;
+      padding: 12px 24px;
+      font-size: 14px;
+      color: #c9d1d9;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      transition: background 0.12s;
+      align-items: center;
+    }
+
+    .ft-row:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .ft-row strong {
+      color: #e6edf3;
+    }
+
+    .ft-row code {
+      background: rgba(255, 255, 255, 0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .ft-check {
+      text-align: center;
+      color: #3fb950;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .ft-unique {
+      color: #a371f7;
+      text-shadow: 0 0 8px rgba(163, 113, 247, 0.3);
+    }
+
     .section-header p {
       color: #6e7681;
       font-size: 18px;
@@ -543,6 +582,7 @@
 
     @media (max-width: 600px) {
       .hero h1 { font-size: 40px; }
+      .ft-row { font-size: 13px; padding: 10px 16px; }
       .hero-tagline { font-size: 17px; }
       .hero-content { padding: 40px 24px; margin: 0 12px; }
       .feature-grid { grid-template-columns: 1fr; }
@@ -621,73 +661,87 @@
 
 <section class="features">
   <div class="section-header">
-    <h2>Everything you need</h2>
-    <p>Containers, images, compose stacks, Kubernetes, AI, and more — all in one app.</p>
+    <h2>Why Orca Desktop</h2>
+    <p>No subscription. No 1GB RAM overhead. No vendor lock-in. Just containers.</p>
   </div>
 
-  <div class="feature-grid">
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-      </div>
-      <h3>Container Management</h3>
-      <p>Full lifecycle with live resource monitoring, interactive terminal, log viewer, <strong>live resource editing</strong> (memory, CPU, restart policy), AI diagnostics, and export as docker-compose.yml.</p>
+  <!-- Punchy value props -->
+  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1100px; margin: 0 auto 48px; padding: 0 20px;">
+    <div style="background: rgba(63, 185, 80, 0.06); border: 1px solid rgba(63, 185, 80, 0.12); border-radius: 14px; padding: 24px; text-align: center;">
+      <div style="font-size: 32px; font-weight: 800; color: #3fb950; letter-spacing: -1px;">Free</div>
+      <div style="font-size: 13px; color: #8b949e; margin-top: 4px;">Open source. MIT licensed. Forever.</div>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12.83 2.18a2 2 0 00-1.66 0L2.6 6.08a1 1 0 000 1.83l8.58 3.91a2 2 0 001.66 0l8.58-3.9a1 1 0 000-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 01-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 01-1.66 0L2 12.65"/></svg>
-      </div>
-      <h3>Images & Security</h3>
-      <p>Pull with Docker Hub search, build from Dockerfile, browse image files, and <strong>scan for vulnerabilities</strong> with Trivy. Severity badges show Critical/High/Medium/Low CVE counts at a glance.</p>
+    <div style="background: rgba(88, 166, 255, 0.06); border: 1px solid rgba(88, 166, 255, 0.12); border-radius: 14px; padding: 24px; text-align: center;">
+      <div style="font-size: 32px; font-weight: 800; color: #58a6ff; letter-spacing: -1px;">~30 MB</div>
+      <div style="font-size: 13px; color: #8b949e; margin-top: 4px;">RAM usage. Not 1-2 GB.</div>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></svg>
-      </div>
-      <h3>Compose Stacks</h3>
-      <p>Auto-detects compose projects from container labels. Compose up/down/pull with full streaming output. Service health indicators at a glance.</p>
+    <div style="background: rgba(163, 113, 247, 0.06); border: 1px solid rgba(163, 113, 247, 0.12); border-radius: 14px; padding: 24px; text-align: center;">
+      <div style="font-size: 32px; font-weight: 800; color: #a371f7; letter-spacing: -1px;">&lt; 2s</div>
+      <div style="font-size: 13px; color: #8b949e; margin-top: 4px;">Startup time. Instant.</div>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><circle cx="12" cy="12" r="2"/></svg>
+  </div>
+
+  <!-- Feature table -->
+  <div style="max-width: 900px; margin: 0 auto; padding: 0 20px;">
+    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; overflow: hidden;">
+
+      <!-- Table header -->
+      <div style="display: grid; grid-template-columns: 1fr 48px; padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #6e7681; font-weight: 600;">
+        <span>Feature</span>
+        <span style="text-align: center;"></span>
       </div>
-      <h3>Kubernetes</h3>
-      <p>One-click k3s cluster with Traefik ingress. Manage pods, deployments, services, ingresses, PVCs. Scale, restart, apply YAML manifests, view pod logs.</p>
+
+      <!-- Category: Container Management -->
+      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Containers</div>
+
+      <div class="ft-row"><span>Full container lifecycle (create, start, stop, restart, kill, remove)</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Live resource monitoring (CPU, memory, network I/O)</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Live resource editing</strong> — change memory, CPU, restart policy on running containers</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span>Interactive terminal (exec shell)</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Log viewer with search, tail control, auto-scroll</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>AI-powered diagnostics</strong> — click to analyze any container with logs</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span>Export as <code>docker run</code> / <code>docker-compose.yml</code></span><span class="ft-check">&#10003;</span></div>
+
+      <!-- Category: Images -->
+      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Images & Security</div>
+
+      <div class="ft-row"><span>Pull with Docker Hub search dialog</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Build from Dockerfile with streaming log</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Vulnerability scanning</strong> — one-click CVE scan with Trivy</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Image file browser</strong> — explore filesystem without running</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span>Private registry auth (Docker Hub, GitHub, GitLab, ECR)</span><span class="ft-check">&#10003;</span></div>
+
+      <!-- Category: Orchestration -->
+      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Orchestration</div>
+
+      <div class="ft-row"><span>Compose stacks — auto-detect, up/down/pull, service health</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>One-click Kubernetes (k3s) with Traefik ingress</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Pods, deployments, services, ingresses, PVCs, YAML apply</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Volume management with file browser</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Network management with subnet configuration</span><span class="ft-check">&#10003;</span></div>
+
+      <!-- Category: AI -->
+      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">AI & Automation</div>
+
+      <div class="ft-row"><span><strong>AI assistant</strong> — floating window, drag to any monitor</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>4 AI providers</strong> — Claude, GPT, Gemini, custom OpenAI-compatible</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>MCP server</strong> — 27 tools for Claude Code / Claude Desktop</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>OpenAI-compatible endpoint</strong> — works with any agent framework</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>App templates</strong> — one-click deploy + create your own</span><span class="ft-check ft-unique">&#10003;</span></div>
+
+      <!-- Category: Platform -->
+      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Platform</div>
+
+      <div class="ft-row"><span>Linux, macOS, Windows — native on all platforms</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Guided setup wizard with streaming progress</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Signed auto-updates</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>macOS: Apple Virtualization.framework + VirtioFS + proxy passthrough</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Glassmorphism UI — frosted glass, smooth animations</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row" style="border: none;"><span><strong>Open source</strong> — MIT licensed, free forever, no telemetry</span><span class="ft-check ft-unique">&#10003;</span></div>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/><path d="M12 8V4H8"/></svg>
-      </div>
-      <h3>AI Assistant</h3>
-      <p>Separate floating window with Claude, GPT, Gemini, or custom providers. Click the AI button on any container to chat about it with logs pre-loaded. Drag the window anywhere — even to another monitor.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/><path d="M2 12h20"/></svg>
-      </div>
-      <h3>Agent APIs</h3>
-      <p>MCP server for Claude Code/Desktop, OpenAI-compatible function calling endpoint, and direct tool execution. 27 tools across 8 categories.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0021 19V5"/><path d="M3 12A9 3 0 0021 12"/></svg>
-      </div>
-      <h3>Volumes & Networks</h3>
-      <p>Create, inspect, and delete volumes with built-in file browser. Manage networks with subnet/gateway configuration. Full Docker resource management.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
-      </div>
-      <h3>App Templates</h3>
-      <p>One-click deploy for PostgreSQL, Redis, Nginx, Grafana, Ollama, OpenClaw, and more. Create your own templates. Structured editors for ports, env vars, volumes.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      </div>
-      <h3>Guided Setup</h3>
-      <p>Setup wizard for new users with real-time streaming progress. One-click Docker install on Linux and Windows (WSL2). Auto-detects existing installations.</p>
+
+    <div style="text-align: center; margin-top: 16px; font-size: 12px; color: #484f58;">
+      <span class="ft-unique" style="display: inline;">&#10003;</span> = unique to Orca Desktop
     </div>
   </div>
 </section>
