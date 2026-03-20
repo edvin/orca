@@ -1826,7 +1826,13 @@ async fn k8s_enable_stream(
     tokio::spawn(async move {
         match k8s.enable_streaming(tx.clone()).await {
             Ok(_) => { let _ = tx.send("[DONE]".into()).await; }
-            Err(e) => { let _ = tx.send(format!("[ERROR] {e}")).await; }
+            Err(e) => {
+                // Send error lines individually (SSE can't handle multi-line data well)
+                for line in e.to_string().lines() {
+                    let _ = tx.send(line.to_string()).await;
+                }
+                let _ = tx.send("[ERROR]".into()).await;
+            }
         }
     });
 
@@ -2019,7 +2025,12 @@ async fn env_fix_stream(
     tokio::spawn(async move {
         match orca_backend_common::environment::run_fix_streaming(&action, tx.clone()).await {
             Ok(_) => { let _ = tx.send("[DONE]".into()).await; }
-            Err(e) => { let _ = tx.send(format!("[ERROR] {e}")).await; }
+            Err(e) => {
+                for line in e.to_string().lines() {
+                    let _ = tx.send(line.to_string()).await;
+                }
+                let _ = tx.send("[ERROR]".into()).await;
+            }
         }
     });
 

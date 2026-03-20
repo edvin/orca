@@ -2,6 +2,7 @@ import { createSignal, onMount, onCleanup, For, Show, createEffect } from "solid
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
+import { logError, logInfo } from "../lib/activityStore";
 import Spinner from "../components/Spinner";
 import type {
   ClusterStatus,
@@ -152,8 +153,11 @@ export default function KubernetesPage() {
                 if (data === "[DONE]") {
                   receivedDone = true;
                   done = true;
-                } else if (data.startsWith("[ERROR]")) {
-                  setSetupLog((prev) => prev + "\n" + data.slice(8) + "\n");
+                } else if (data === "[ERROR]") {
+                  success = false;
+                  done = true;
+                } else if (data.startsWith("[ERROR] ")) {
+                  setSetupLog((prev) => prev + data.slice(8) + "\n");
                   success = false;
                   done = true;
                 } else {
@@ -164,21 +168,28 @@ export default function KubernetesPage() {
           }
         }
         if (!receivedData) {
-          setSetupLog("No response from server. The daemon may not support this operation on this platform.\n");
+          const msg = "No response from server. The daemon may not support this operation on this platform.";
+          setSetupLog(msg + "\n");
+          logError("Kubernetes setup: no data received from SSE stream");
           success = false;
         } else if (!receivedDone && success) {
-          // Stream ended without [DONE] or [ERROR] — treat as incomplete
           setSetupLog((prev) => prev + "\nStream ended unexpectedly.\n");
+          logError("Kubernetes setup: SSE stream ended without [DONE] or [ERROR]", setupLog());
           success = false;
+        }
+        if (!success) {
+          logError("Kubernetes setup failed", setupLog());
         }
         setSetupSuccess(success);
       }
       await refreshStatus();
     } catch (e) {
+      logError("Kubernetes SSE stream error", String(e));
       // Fallback to non-streaming
       try {
+        setSetupLog((prev) => prev + `SSE failed (${e}), trying direct call...\n\n`);
         const result = (await invoke("k8s_enable")) as { output?: string };
-        setSetupLog(result?.output || "");
+        setSetupLog((prev) => prev + (result?.output || "(no output)"));
         setSetupSuccess(true);
         await refreshStatus();
       } catch (e2) {
@@ -880,7 +891,7 @@ export default function KubernetesPage() {
           onMouseDown={(e) => { mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
           onClick={(e) => { if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !setupRunning()) closeSetupDialog(); mouseDownOnOverlay = false; }}
         >
-          <div class="modal-dialog" style={{ "max-width": "820px" }}>
+          <div class="modal-dialog" style={{ "max-width": "900px", width: "90vw" }}>
             <div class="modal-header">
               <span class="modal-title">
                 <Show when={setupRunning()} fallback={

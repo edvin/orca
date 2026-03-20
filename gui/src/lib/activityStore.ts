@@ -44,3 +44,18 @@ export function clearEvents() {
   setEvents([]);
   setUnreadCount(0);
 }
+
+/** Log an app-level error to the activity feed */
+export function logError(title: string, detail?: string) {
+  addEvent({ type: "app-error", title, detail, severity: "error" });
+}
+
+/** Log an app-level warning */
+export function logWarning(title: string, detail?: string) {
+  addEvent({ type: "app-warning", title, detail, severity: "warning" });
+}
+
+/** Log an app-level info event */
+export function logInfo(title: string, detail?: string) {
+  addEvent({ type: "app-info", title, detail, severity: "info" });
+}

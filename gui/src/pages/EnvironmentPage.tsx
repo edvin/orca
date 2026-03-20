@@ -82,7 +82,8 @@ export default function EnvironmentPage() {
                 const data = line.slice(6);
                 receivedData = true;
                 if (data === "[DONE]") { receivedDone = true; done = true; }
-                else if (data.startsWith("[ERROR]")) { setActionLog((prev) => prev + "\n" + data.slice(8) + "\n"); success = false; done = true; }
+                else if (data === "[ERROR]") { success = false; done = true; }
+                else if (data.startsWith("[ERROR] ")) { setActionLog((prev) => prev + data.slice(8) + "\n"); success = false; done = true; }
                 else { setActionLog((prev) => prev + data + "\n"); }
               }
             }

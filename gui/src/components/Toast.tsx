@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
+import { logError, logWarning, logInfo } from "../lib/activityStore";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -26,7 +27,11 @@ export function showToast(
   setToasts((prev) => [...prev, { id, message, type, action }]);
   setTimeout(() => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, 4000);
+  }, type === "error" ? 8000 : 4000);
+
+  // Log to activity feed for persistence
+  if (type === "error") logError(message);
+  else if (type === "info") logInfo(message);
 }
 
 function CopyToastButton(props: { message: string }) {
