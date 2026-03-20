@@ -2343,6 +2343,7 @@ async fn cleanup(
     if scope == "vms" || scope == "all" {
         #[cfg(target_os = "macos")]
         {
+            use std::process::Stdio;
             log.push("Stopping Lima VMs...".to_string());
             let output = tokio::process::Command::new("limactl")
                 .args(["list", "--json"])
@@ -2508,8 +2509,8 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
         log.push("Method 4: Docker via WSL CLI".to_string());
         match tokio::process::Command::new("wsl")
             .args(["docker", "version", "--format", "{{.Server.Version}}"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .output()
             .await
         {
