@@ -2818,16 +2818,54 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                 let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 log.push(format!("  Docker {v} is running in WSL"));
                 log.push("".to_string());
-                log.push("Docker is running inside WSL but not accessible from Windows.".to_string());
-                log.push("The Docker TCP listener may not be configured.".to_string());
+                log.push("Docker is running inside WSL but TCP listener not configured.".to_string());
+                log.push("Attempting to configure automatically...".to_string());
                 log.push("".to_string());
-                log.push("To fix, run in Ubuntu:".to_string());
-                log.push("  sudo mkdir -p /etc/systemd/system/docker.service.d".to_string());
-                log.push("  echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375' \\".to_string());
-                log.push("    | sudo tee /etc/systemd/system/docker.service.d/override.conf".to_string());
-                log.push("  sudo systemctl daemon-reload && sudo service docker restart".to_string());
-                log.push("".to_string());
-                log.push("Then restart Orca Desktop.".to_string());
+
+                // Auto-configure TCP listener
+                let configure_result = tokio::process::Command::new("wsl")
+                    .args(["-u", "root", "--", "bash", "-c",
+                        "mkdir -p /etc/systemd/system/docker.service.d && \
+                         echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' \
+                         > /etc/systemd/system/docker.service.d/override.conf && \
+                         systemctl daemon-reload && service docker restart"])
+                    .output()
+                    .await;
+
+                match configure_result {
+                    Ok(r) if r.status.success() => {
+                        log.push("TCP listener configured and Docker restarted!".to_string());
+                        log.push("".to_string());
+                        // Wait a moment for Docker to restart
+                        tokio::time::sleep(Duration::from_secs(3)).await;
+                        // Try TCP again
+                        if let Ok(docker) = bollard::Docker::connect_with_http(
+                            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
+                        ) {
+                            if let Ok(ver) = docker.version().await {
+                                let v2 = ver.version.unwrap_or_default();
+                                log.push(format!("Connected via TCP! Docker {v2}"));
+                                log.push("Restart Orca Desktop to use this connection for all operations.".to_string());
+                                return Ok(Json(serde_json::json!({
+                                    "connected": true,
+                                    "method": "tcp",
+                                    "version": v2,
+                                    "log": log,
+                                })));
+                            }
+                        }
+                        log.push("TCP configured but connection still failing. Restart Orca Desktop and try again.".to_string());
+                    }
+                    _ => {
+                        log.push("Failed to auto-configure. Please run manually in Ubuntu:".to_string());
+                        log.push("  sudo mkdir -p /etc/systemd/system/docker.service.d".to_string());
+                        log.push("  echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375' \\".to_string());
+                        log.push("    | sudo tee /etc/systemd/system/docker.service.d/override.conf".to_string());
+                        log.push("  sudo systemctl daemon-reload && sudo service docker restart".to_string());
+                        log.push("".to_string());
+                        log.push("Then restart Orca Desktop.".to_string());
+                    }
+                }
             }
             Ok(out) => {
                 let err = String::from_utf8_lossy(&out.stderr).trim().to_string();

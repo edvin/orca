@@ -71,13 +71,14 @@ export default function App() {
       if (!envStatus.ready) {
         setPage("environment");
       } else {
-        const warnings = envStatus.checks.filter((c) => c.status === "Warning");
-        if (warnings.length > 0) {
-          showToast(
-            `Environment has ${warnings.length} warning${warnings.length > 1 ? "s" : ""} — check Environment page`,
-            "info"
-          );
-        }
+        // Environment says ready, but check if daemon can actually reach Docker
+        try {
+          const health = (await invoke("system_health")) as any;
+          if (!health?.docker_connected) {
+            setPage("environment");
+            showToast("Docker detected but daemon not connected — check System Health", "info");
+          }
+        } catch {}
       }
     } catch {
       // Daemon returned error, will retry next time
