@@ -741,6 +741,20 @@ input[type="checkbox"]:checked::after {
   display: flex;
   gap: 2px;
   align-items: center;
+  position: relative;
+}
+
+.action-icons.loading > *:not(.action-spinner) {
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.action-spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .state-indicator-running {

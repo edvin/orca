@@ -409,9 +409,9 @@ export default function ContainersPage(props: ContainersPageProps) {
           </Show>
         </td>
         <td style={{ "text-align": "right" }}>
-          <div class="action-icons">
+          <div class={`action-icons ${actionInProgress() === c.id ? "loading" : ""}`}>
             <Show when={actionInProgress() === c.id}>
-              <Spinner size={14} />
+              <div class="action-spinner"><Spinner size={14} /></div>
             </Show>
             <Show when={c.state === "Running"}>
               <button
@@ -608,9 +608,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                       </div>
                     </div>
                     <div class="stack-header-right">
-                      <div class="action-icons" style={{ "margin-right": "4px" }}>
+                      <div class={`action-icons ${isLoading() ? "loading" : ""}`} style={{ "margin-right": "4px" }}>
                         <Show when={isLoading()}>
-                          <Spinner size={14} />
+                          <div class="action-spinner"><Spinner size={14} /></div>
                         </Show>
                         <Show when={allRunning()}>
                           <button

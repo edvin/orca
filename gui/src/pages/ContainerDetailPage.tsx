@@ -283,9 +283,9 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                 {c().state}
               </span>
 
-              <div class="detail-page-actions">
+              <div class={`detail-page-actions action-icons ${actionInProgress() ? "loading" : ""}`}>
                 <Show when={actionInProgress()}>
-                  <Spinner />
+                  <div class="action-spinner"><Spinner size={14} /></div>
                 </Show>
                 <Show when={c().state !== "Running"}>
                   <button
