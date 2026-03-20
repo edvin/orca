@@ -239,13 +239,44 @@ impl K3sManager {
             async move { let _ = tx.send(msg).await; }
         };
 
+        // Platform check
+        let platform = if cfg!(target_os = "linux") {
+            "linux"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "unsupported"
+        };
+
+        send(format!("Platform: {platform}")).await;
+
+        if platform == "macos" {
+            send("".into()).await;
+            send("k3s requires Linux. On macOS, Kubernetes runs inside a Lima VM.".into()).await;
+            send("".into()).await;
+            send("To set up Kubernetes on macOS:".into()).await;
+            send("  1. Install Lima: brew install lima".into()).await;
+            send("  2. Create a VM: limactl create --name=orca template://k3s".into()).await;
+            send("  3. Start the VM: limactl start orca".into()).await;
+            send("  4. Set KUBECONFIG: export KUBECONFIG=$(limactl list orca --format '{{.Dir}}/copied-from-guest/kubeconfig.yaml')".into()).await;
+            send("".into()).await;
+            send("Orca Desktop will add native macOS Kubernetes support in a future update.".into()).await;
+            anyhow::bail!("Kubernetes setup on macOS requires manual Lima/k3s configuration");
+        }
+
+        if platform == "unsupported" {
+            send("Kubernetes is only supported on Linux currently.".into()).await;
+            anyhow::bail!("Kubernetes is not supported on this platform");
+        }
+
         // Step 1: Check/install k3s
         if !self.is_k3s_installed().await {
+            send("".into()).await;
             send(">>> Downloading and installing k3s...".into()).await;
             send("    This downloads the k3s binary (~60MB)\n".into()).await;
 
-            let result = run_cmd_streaming("sh", &[
-                "-c",
+            let result = run_cmd_streaming("sudo", &[
+                "-n", "sh", "-c",
                 "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh -"
             ], &tx).await;
 
@@ -253,6 +284,10 @@ impl K3sManager {
                 Ok(_) => send("\n>>> k3s binary installed\n".into()).await,
                 Err(e) => {
                     send(format!("\n>>> k3s installation failed: {e}")).await;
+                    send("".into()).await;
+                    send("This may require sudo access. Try manually:".into()).await;
+                    send("  curl -sfL https://get.k3s.io | sudo sh -".into()).await;
+                    send("Then restart Orca Desktop.".into()).await;
                     anyhow::bail!("k3s installation failed: {e}");
                 }
             }
