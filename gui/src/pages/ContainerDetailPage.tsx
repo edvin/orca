@@ -735,11 +735,28 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     <div style={{ color: "#8b949e", padding: "8px 0" }}>None</div>
                   }>
                     <For each={getContainerMounts()}>
-                      {(m: any) => (
-                        <div class="mono" style={{ "line-height": "1.8", "font-size": "12px" }}>
-                          {m.source} {"\u2192"} {m.destination} ({m.rw ? "rw" : "ro"})
-                        </div>
-                      )}
+                      {(m: any) => {
+                        const mountType = m.type || m.Type || (m.source?.startsWith("/") ? "bind" : "volume");
+                        const isVolume = mountType === "volume";
+                        const volumeName = isVolume ? (m.name || m.Name || m.source || m.Source) : null;
+                        return (
+                          <div class="mono" style={{ "line-height": "1.8", "font-size": "12px", display: "flex", "align-items": "center", gap: "4px" }}>
+                            <Show when={isVolume && volumeName && props.onNavigate} fallback={
+                              <span style={{ color: "#8b949e" }}>{m.source || m.Source}</span>
+                            }>
+                              <a
+                                style={{ color: "#58a6ff", cursor: "pointer" }}
+                                onClick={() => props.onNavigate?.(`volume:${volumeName}`)}
+                              >
+                                {m.source || m.Source}
+                              </a>
+                            </Show>
+                            <span style={{ color: "#484f58" }}> {"\u2192"} </span>
+                            <span>{m.destination || m.Destination}</span>
+                            <span style={{ color: "#6e7681", "font-size": "11px", "margin-left": "4px" }}>({m.rw === false ? "ro" : "rw"})</span>
+                          </div>
+                        );
+                      }}
                     </For>
                   </Show>
 
@@ -859,12 +876,21 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                             <div class="card-value mono" style={{ "font-size": "12px", "word-break": "break-all" }}>{mountDest}</div>
                           </div>
                           <Show when={volumeName && props.onNavigate}>
-                            <div style={{ "margin-top": "12px" }}>
+                            <div style={{ "margin-top": "12px", display: "flex", gap: "8px" }}>
                               <button
                                 class="btn btn-sm"
                                 onClick={() => props.onNavigate?.(`volume:${volumeName}`)}
                                 style={{ "font-size": "12px" }}
                               >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0021 19V5"/><path d="M3 12A9 3 0 0021 12"/></svg>
+                                View Volume
+                              </button>
+                              <button
+                                class="btn btn-sm"
+                                onClick={() => props.onNavigate?.(`volume:${volumeName}`)}
+                                style={{ "font-size": "12px" }}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7"/><path d="M7 4h10a2 2 0 012 2v1H5V6a2 2 0 012-2z"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
                                 Browse Files
                               </button>
                             </div>
