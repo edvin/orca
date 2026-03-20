@@ -1,7 +1,9 @@
-import { createSignal, createEffect, onMount, onCleanup } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { startEventSubscription, onOrcaEvent } from "./lib/events";
 import { addEvent } from "./lib/activityStore";
+import { lazy } from "solid-js";
+const AiWindow = lazy(() => import("./components/AiWindow"));
 import Titlebar from "./components/Titlebar";
 import StatusBar from "./components/StatusBar";
 import Sidebar from "./components/Sidebar";
@@ -166,6 +168,11 @@ export default function App() {
       console.error("Resize failed:", err);
     }
   };
+
+  // If loaded with #ai hash, render standalone AI window
+  if (window.location.hash === "#ai") {
+    return <AiWindow />;
+  }
 
   return (
     <div class={`app-root ${navigator.platform.includes("Mac") ? "platform-macos" : ""}`}>
