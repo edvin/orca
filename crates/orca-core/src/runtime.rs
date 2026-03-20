@@ -40,6 +40,15 @@ pub struct Container {
     pub env: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mounts: Option<Vec<ContainerMount>>,
+    /// Memory limit in bytes (0 = unlimited).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_limit: Option<u64>,
+    /// CPU cores limit (e.g. 0.5, 2.0; 0 = unlimited).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_limit: Option<f64>,
+    /// Restart policy name: "no", "always", "unless-stopped", "on-failure".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart_policy: Option<String>,
 }
 
 /// A bind mount or volume mount on a container.
@@ -122,6 +131,23 @@ pub struct ContainerStats {
     pub block_write_bytes: u64,
 }
 
+/// Options for updating a container's resource limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerUpdateOpts {
+    /// Memory limit in bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_limit: Option<u64>,
+    /// Memory+swap limit in bytes (-1 for unlimited).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_swap: Option<i64>,
+    /// CPU cores limit (e.g. 0.5, 2.0). Converted to NanoCPUs internally.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_limit: Option<f64>,
+    /// Restart policy: "no", "always", "unless-stopped", "on-failure".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart_policy: Option<String>,
+}
+
 /// Trait for interacting with a container runtime.
 /// Implementors talk to the runtime socket (podman or docker).
 #[trait_variant::make(Send)]
@@ -143,6 +169,7 @@ pub trait ContainerRuntime {
         tail: Option<u32>,
     ) -> anyhow::Result<tokio::sync::mpsc::Receiver<String>>;
     async fn container_stats(&self, id: &str) -> anyhow::Result<ContainerStats>;
+    async fn update_container(&self, id: &str, opts: ContainerUpdateOpts) -> anyhow::Result<()>;
 
     // Exec
     async fn exec(&self, opts: ExecOpts) -> anyhow::Result<ExecResult>;

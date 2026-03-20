@@ -6,6 +6,9 @@ export interface Container {
   ports: PortMapping[];
   labels: Record<string, string>;
   created_at: string;
+  memory_limit?: number;
+  cpu_limit?: number;
+  restart_policy?: string;
 }
 
 export interface PortMapping {

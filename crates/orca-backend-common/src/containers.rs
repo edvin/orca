@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bollard::container::{
     CreateContainerOptions, KillContainerOptions, ListContainersOptions, LogsOptions,
-    RemoveContainerOptions, StatsOptions, StopContainerOptions,
+    RemoveContainerOptions, StatsOptions, StopContainerOptions, UpdateContainerOptions,
 };
 use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::models::HostConfig;
@@ -230,6 +230,31 @@ impl ContainerRuntime for BollardRuntime {
         })
     }
 
+    async fn update_container(&self, id: &str, opts: orca_core::runtime::ContainerUpdateOpts) -> anyhow::Result<()> {
+        let restart_policy = opts.restart_policy.map(|p| {
+            bollard::models::RestartPolicy {
+                name: Some(match p.as_str() {
+                    "always" => bollard::models::RestartPolicyNameEnum::ALWAYS,
+                    "unless-stopped" => bollard::models::RestartPolicyNameEnum::UNLESS_STOPPED,
+                    "on-failure" => bollard::models::RestartPolicyNameEnum::ON_FAILURE,
+                    _ => bollard::models::RestartPolicyNameEnum::NO,
+                }),
+                maximum_retry_count: None,
+            }
+        });
+
+        let config = UpdateContainerOptions::<String> {
+            memory: opts.memory_limit.map(|m| m as i64),
+            memory_swap: opts.memory_swap,
+            nano_cpus: opts.cpu_limit.map(|c| (c * 1_000_000_000.0) as i64),
+            restart_policy,
+            ..Default::default()
+        };
+
+        self.docker.update_container(id, config).await?;
+        Ok(())
+    }
+
     async fn exec(&self, opts: ExecOpts) -> anyhow::Result<ExecResult> {
         let exec = self
             .docker
@@ -327,6 +352,9 @@ fn summary_to_container(c: &bollard::models::ContainerSummary) -> Container {
         command: None,
         env: None,
         mounts: None,
+        memory_limit: None,
+        cpu_limit: None,
+        restart_policy: None,
     }
 }
 
@@ -384,6 +412,31 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
                 .collect()
         });
 
+    let host_config = info.host_config.as_ref();
+
+    // Extract memory limit (0 means unlimited in Docker)
+    let memory_limit = host_config
+        .and_then(|hc| hc.memory)
+        .filter(|&m| m > 0)
+        .map(|m| m as u64);
+
+    // Extract CPU limit from NanoCPUs (convert back to cores)
+    let cpu_limit = host_config
+        .and_then(|hc| hc.nano_cpus)
+        .filter(|&c| c > 0)
+        .map(|c| c as f64 / 1_000_000_000.0);
+
+    // Extract restart policy
+    let restart_policy = host_config
+        .and_then(|hc| hc.restart_policy.as_ref())
+        .and_then(|rp| rp.name)
+        .map(|name| match name {
+            bollard::models::RestartPolicyNameEnum::ALWAYS => "always".to_string(),
+            bollard::models::RestartPolicyNameEnum::UNLESS_STOPPED => "unless-stopped".to_string(),
+            bollard::models::RestartPolicyNameEnum::ON_FAILURE => "on-failure".to_string(),
+            _ => "no".to_string(),
+        });
+
     Container {
         id: info.id.clone().unwrap_or_default(),
         name: info
@@ -408,5 +461,8 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
         command: info.config.as_ref().and_then(|c| c.cmd.clone()),
         env: info.config.as_ref().and_then(|c| c.env.clone()),
         mounts,
+        memory_limit,
+        cpu_limit,
+        restart_policy,
     }
 }

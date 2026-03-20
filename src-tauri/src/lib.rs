@@ -22,6 +22,7 @@ pub fn run() {
             commands::stop_container,
             commands::exec_container,
             commands::remove_container,
+            commands::update_container,
             commands::export_docker_run,
             commands::export_compose,
             commands::create_and_run_container,

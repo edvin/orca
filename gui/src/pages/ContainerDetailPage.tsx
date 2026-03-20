@@ -20,7 +20,7 @@ interface ContainerDetailPageProps {
   breadcrumbStack?: string | null;
 }
 
-type DetailTab = "overview" | "logs" | "terminal" | "inspect" | "export";
+type DetailTab = "overview" | "logs" | "terminal" | "inspect" | "resources" | "export";
 
 export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [container, setContainer] = createSignal<Container | null>(null);
@@ -31,6 +31,12 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [actionInProgress, setActionInProgress] = createSignal(false);
   const [dockerRunCmd, setDockerRunCmd] = createSignal<string | null>(null);
   const [composeYaml, setComposeYaml] = createSignal<string | null>(null);
+
+  // Resource editing state
+  const [editMemory, setEditMemory] = createSignal("");
+  const [editCpu, setEditCpu] = createSignal("");
+  const [editRestart, setEditRestart] = createSignal("no");
+  const [resourceSaving, setResourceSaving] = createSignal(false);
 
   let statsInterval: ReturnType<typeof setInterval> | undefined;
 
@@ -119,6 +125,9 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       stopStatsRefresh();
     }
 
+    if (tab === "resources") {
+      initResourceFields();
+    }
     if (tab === "export") {
       fetchExportData();
     }
@@ -135,6 +144,70 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     } catch {
       // May fail
     }
+  };
+
+  const initResourceFields = () => {
+    const data = inspectData();
+    if (!data) return;
+    // Memory: show in MB if set, empty if unlimited
+    const memBytes = data.memory_limit;
+    if (memBytes && memBytes > 0) {
+      const mb = memBytes / (1024 * 1024);
+      if (mb >= 1024 && mb % 1024 === 0) {
+        setEditMemory(`${mb / 1024}`);
+      } else {
+        setEditMemory(`${Math.round(mb)}`);
+      }
+    } else {
+      setEditMemory("");
+    }
+    // CPU: show cores if set
+    const cpuCores = data.cpu_limit;
+    if (cpuCores && cpuCores > 0) {
+      setEditCpu(`${cpuCores}`);
+    } else {
+      setEditCpu("");
+    }
+    // Restart policy
+    setEditRestart(data.restart_policy || "no");
+  };
+
+  const saveResources = async () => {
+    setResourceSaving(true);
+    try {
+      const memStr = editMemory().trim();
+      const cpuStr = editCpu().trim();
+
+      // Build the update params
+      const params: any = { id: props.containerId };
+
+      if (memStr) {
+        // If it's just a number, treat it as MB
+        const num = parseFloat(memStr);
+        if (!isNaN(num) && memStr === `${num}`) {
+          params.memoryLimit = `${num}m`;
+        } else {
+          params.memoryLimit = memStr;
+        }
+      }
+
+      if (cpuStr) {
+        const cpuNum = parseFloat(cpuStr);
+        if (!isNaN(cpuNum) && cpuNum > 0) {
+          params.cpuLimit = cpuNum;
+        }
+      }
+
+      params.restartPolicy = editRestart();
+
+      await invoke("update_container", params);
+      showToast("Resources updated", "success");
+      // Re-fetch to reflect new values
+      await fetchInspect();
+    } catch (err) {
+      showToast(`Update failed: ${err}`, "error");
+    }
+    setResourceSaving(false);
   };
 
   const doAction = async (action: string) => {
@@ -354,6 +427,12 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
           onClick={() => switchTab("inspect")}
         >
           Inspect
+        </button>
+        <button
+          class={`detail-tab-item ${activeTab() === "resources" ? "active" : ""}`}
+          onClick={() => switchTab("resources")}
+        >
+          Resources
         </button>
         <button
           class={`detail-tab-item ${activeTab() === "export" ? "active" : ""}`}
@@ -700,6 +779,130 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                 </div>
               )}
             </Show>
+          </div>
+        </Show>
+
+        {/* Resources tab */}
+        <Show when={activeTab() === "resources"}>
+          <div class="detail-overview">
+            <div class="detail-info-section">
+              <h3 class="detail-section-title">Resource Limits</h3>
+              <p style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "16px" }}>
+                Configure memory and CPU limits for this container. Changes apply immediately to the running container.
+              </p>
+
+              <div style={{ display: "flex", "flex-direction": "column", gap: "16px", "max-width": "480px" }}>
+                {/* Memory Limit */}
+                <div style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                  "border-radius": "8px",
+                  padding: "16px",
+                }}>
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "8px" }}>
+                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>Memory Limit</label>
+                    <Show when={inspectData()?.memory_limit}>
+                      <span style={{ color: "#8b949e", "font-size": "12px" }}>
+                        Current: {formatBytes(inspectData()?.memory_limit || 0)}
+                      </span>
+                    </Show>
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <input
+                      type="text"
+                      class="input"
+                      placeholder="e.g. 512 (MB)"
+                      value={editMemory()}
+                      onInput={(e) => setEditMemory(e.currentTarget.value)}
+                      style={{ flex: "1" }}
+                    />
+                    <span style={{ color: "#8b949e", "font-size": "13px", "min-width": "24px" }}>MB</span>
+                  </div>
+                  <div style={{ color: "#484f58", "font-size": "11px", "margin-top": "6px" }}>
+                    Leave empty for no limit. Supports values like 512, 1024, or 2048.
+                  </div>
+                </div>
+
+                {/* CPU Limit */}
+                <div style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                  "border-radius": "8px",
+                  padding: "16px",
+                }}>
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "8px" }}>
+                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>CPU Limit</label>
+                    <Show when={inspectData()?.cpu_limit}>
+                      <span style={{ color: "#8b949e", "font-size": "12px" }}>
+                        Current: {inspectData()?.cpu_limit?.toFixed(2)} cores
+                      </span>
+                    </Show>
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <input
+                      type="text"
+                      class="input"
+                      placeholder="e.g. 0.5, 1.0, 2.0"
+                      value={editCpu()}
+                      onInput={(e) => setEditCpu(e.currentTarget.value)}
+                      style={{ flex: "1" }}
+                    />
+                    <span style={{ color: "#8b949e", "font-size": "13px", "min-width": "40px" }}>cores</span>
+                  </div>
+                  <div style={{ color: "#484f58", "font-size": "11px", "margin-top": "6px" }}>
+                    Leave empty for no limit. Use decimal values: 0.5 = half a core, 2.0 = two cores.
+                  </div>
+                </div>
+
+                {/* Restart Policy */}
+                <div style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                  "border-radius": "8px",
+                  padding: "16px",
+                }}>
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "8px" }}>
+                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>Restart Policy</label>
+                    <Show when={inspectData()?.restart_policy}>
+                      <span style={{ color: "#8b949e", "font-size": "12px" }}>
+                        Current: {inspectData()?.restart_policy}
+                      </span>
+                    </Show>
+                  </div>
+                  <select
+                    class="input"
+                    value={editRestart()}
+                    onChange={(e) => setEditRestart(e.currentTarget.value)}
+                  >
+                    <option value="no">No</option>
+                    <option value="always">Always</option>
+                    <option value="unless-stopped">Unless Stopped</option>
+                    <option value="on-failure">On Failure</option>
+                  </select>
+                  <div style={{ color: "#484f58", "font-size": "11px", "margin-top": "6px" }}>
+                    Controls whether the container restarts automatically after exiting or on system reboot.
+                  </div>
+                </div>
+
+                {/* Save button */}
+                <div style={{ display: "flex", gap: "8px", "margin-top": "4px" }}>
+                  <button
+                    class="btn btn-primary"
+                    onClick={saveResources}
+                    disabled={resourceSaving()}
+                  >
+                    {resourceSaving() ? "Saving..." : "Apply Changes"}
+                  </button>
+                  <button
+                    class="btn"
+                    onClick={initResourceFields}
+                    disabled={resourceSaving()}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </Show>
 

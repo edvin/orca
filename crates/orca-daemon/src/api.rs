@@ -108,6 +108,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}", delete(remove_container))
         .route("/containers/{id}/stats", get(container_stats))
         .route("/containers/{id}/logs", get(container_logs_sse))
+        .route("/containers/{id}/update", post(update_container))
         .route("/containers/{id}/exec", post(exec_container))
         .route("/containers/{id}/terminal", get(container_terminal_ws))
         .route("/containers/{id}/export/run", get(export_docker_run))
@@ -340,6 +341,49 @@ async fn remove_container(
 ) -> Result<impl IntoResponse, ApiError> {
     state.runtime.remove_container(&id, false).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// --- Container Update (resource limits) ---
+
+#[derive(Deserialize)]
+struct UpdateContainerRequest {
+    /// Memory limit as human-readable string (e.g. "512m", "1g") or raw bytes, or null to clear.
+    #[serde(default)]
+    memory_limit: Option<String>,
+    /// CPU cores limit (e.g. 0.5, 2.0), or null to clear.
+    #[serde(default)]
+    cpu_limit: Option<f64>,
+    /// Restart policy: "no", "always", "unless-stopped", "on-failure".
+    #[serde(default)]
+    restart_policy: Option<String>,
+}
+
+async fn update_container(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<UpdateContainerRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::runtime::ContainerUpdateOpts;
+
+    let memory_limit = body
+        .memory_limit
+        .as_deref()
+        .map(parse_memory_string)
+        .transpose()?;
+
+    // If memory limit is set but no swap specified, set swap to 2x memory
+    // (Docker default behavior when --memory-swap is not explicitly set)
+    let memory_swap = memory_limit.map(|m| (m * 2) as i64);
+
+    let opts = ContainerUpdateOpts {
+        memory_limit,
+        memory_swap,
+        cpu_limit: body.cpu_limit,
+        restart_policy: body.restart_policy,
+    };
+
+    state.runtime.update_container(&id, opts).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 // --- Container Create ---
