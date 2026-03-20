@@ -75,6 +75,7 @@ hostResolver:
   enabled: true
   hosts:
     host.docker.internal: host.lima.internal
+propagateProxyEnv: true
 "#,
             cpus = config.cpus,
             memory = config.memory_mb / 1024,
