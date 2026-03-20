@@ -33,6 +33,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
   // File browser state
   const [files, setFiles] = createSignal<FileEntry[]>([]);
   const [filesLoading, setFilesLoading] = createSignal(false);
+  const [fileError, setFileError] = createSignal<string | null>(null);
   const [fileBrowsingStarted, setFileBrowsingStarted] = createSignal(false);
   const [currentPath, setCurrentPath] = createSignal("");
   const [fileContent, setFileContent] = createSignal<string | null>(null);
@@ -64,6 +65,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
     setFilesLoading(true);
     setFileContent(null);
     setFileContentPath(null);
+    setFileError(null);
     try {
       const result = (await invoke("volume_list_files", {
         name: props.volumeName,
@@ -72,7 +74,9 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       setFiles(result.entries);
       setCurrentPath(result.path || "");
     } catch (e) {
-      showToast(`Failed to browse files: ${e}`, "error");
+      const msg = typeof e === "string" ? e : (e as any)?.message || String(e);
+      setFileError(msg);
+      setFiles([]);
     }
     setFilesLoading(false);
   };
@@ -404,9 +408,15 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                 </Show>
                 <Show when={!filesLoading()}>
                   <Show when={files().length > 0} fallback={
-                    <div class="empty" style={{ padding: "20px 0" }}>
-                      <p>Empty directory</p>
-                    </div>
+                    <Show when={fileError()} fallback={
+                      <div class="empty" style={{ padding: "20px 0" }}>
+                        <p>Empty directory</p>
+                      </div>
+                    }>
+                      <div style={{ padding: "16px 20px", color: "#f85149", background: "rgba(248, 81, 73, 0.1)", "border-radius": "6px", margin: "12px 0", "font-size": "13px" }}>
+                        <strong>Error:</strong> {fileError()}
+                      </div>
+                    </Show>
                   }>
                     <div style={{
                       background: "#0d1117",

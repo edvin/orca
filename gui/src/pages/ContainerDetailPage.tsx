@@ -20,7 +20,7 @@ interface ContainerDetailPageProps {
   breadcrumbStack?: string | null;
 }
 
-type DetailTab = "overview" | "logs" | "terminal" | "inspect" | "resources" | "export";
+type DetailTab = "overview" | "logs" | "terminal" | "inspect" | "volumes" | "resources" | "export";
 
 export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [container, setContainer] = createSignal<Container | null>(null);
@@ -390,8 +390,10 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     class="btn btn-sm btn-danger"
                     onClick={doRemove}
                     disabled={actionInProgress()}
+                    title="Remove container"
+                    style={{ color: "#f85149" }}
                   >
-                    Remove
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                   </button>
                 </Show>
               </div>
@@ -427,6 +429,12 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
           onClick={() => switchTab("inspect")}
         >
           Inspect
+        </button>
+        <button
+          class={`detail-tab-item ${activeTab() === "volumes" ? "active" : ""}`}
+          onClick={() => switchTab("volumes")}
+        >
+          Volumes
         </button>
         <button
           class={`detail-tab-item ${activeTab() === "resources" ? "active" : ""}`}
@@ -782,6 +790,80 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
           </div>
         </Show>
 
+        {/* Volumes tab */}
+        <Show when={activeTab() === "volumes"}>
+          <div class="detail-overview">
+            <div class="detail-info-section">
+              <h3 class="detail-section-title">Mounts & Volumes</h3>
+              <Show when={getContainerMounts().length > 0} fallback={
+                <div style={{ color: "#8b949e", padding: "8px 0" }}>No mounts configured for this container.</div>
+              }>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
+                  <For each={getContainerMounts()}>
+                    {(m: any) => {
+                      const mountType = m.type || m.Type || (m.source && m.source.startsWith("/") ? "bind" : "volume");
+                      const mountSource = m.source || m.Source || "-";
+                      const mountDest = m.destination || m.Destination || m.target || m.Target || "-";
+                      const isReadOnly = m.rw === false || m.RW === false || m.read_only === true || m.mode === "ro";
+                      const mode = isReadOnly ? "ro" : "rw";
+                      const volumeName = mountType === "volume" ? (m.name || m.Name || mountSource) : null;
+                      return (
+                        <div style={{
+                          background: "rgba(255, 255, 255, 0.03)",
+                          border: "1px solid rgba(255, 255, 255, 0.06)",
+                          "border-radius": "8px",
+                          padding: "16px",
+                        }}>
+                          <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "12px" }}>
+                            <span style={{
+                              padding: "2px 8px",
+                              "border-radius": "4px",
+                              "font-size": "11px",
+                              "font-weight": "600",
+                              "text-transform": "uppercase",
+                              background: mountType === "volume" ? "rgba(88, 166, 255, 0.15)" : mountType === "bind" ? "rgba(163, 113, 247, 0.15)" : "rgba(139, 148, 158, 0.15)",
+                              color: mountType === "volume" ? "#58a6ff" : mountType === "bind" ? "#a371f7" : "#8b949e",
+                            }}>
+                              {mountType}
+                            </span>
+                            <span style={{
+                              padding: "2px 8px",
+                              "border-radius": "4px",
+                              "font-size": "11px",
+                              "font-weight": "600",
+                              background: mode === "ro" ? "rgba(248, 81, 73, 0.15)" : "rgba(63, 185, 80, 0.15)",
+                              color: mode === "ro" ? "#f85149" : "#3fb950",
+                            }}>
+                              {mode}
+                            </span>
+                          </div>
+                          <div class="card-grid">
+                            <div class="card-label">Source</div>
+                            <div class="card-value mono" style={{ "font-size": "12px", "word-break": "break-all" }}>{mountSource}</div>
+                            <div class="card-label">Destination</div>
+                            <div class="card-value mono" style={{ "font-size": "12px", "word-break": "break-all" }}>{mountDest}</div>
+                          </div>
+                          <Show when={volumeName && props.onNavigate}>
+                            <div style={{ "margin-top": "12px" }}>
+                              <button
+                                class="btn btn-sm"
+                                onClick={() => props.onNavigate?.(`volume:${volumeName}`)}
+                                style={{ "font-size": "12px" }}
+                              >
+                                Browse Files
+                              </button>
+                            </div>
+                          </Show>
+                        </div>
+                      );
+                    }}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
+
         {/* Resources tab */}
         <Show when={activeTab() === "resources"}>
           <div class="detail-overview">
@@ -810,7 +892,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
                     <input
                       type="text"
-                      class="input"
+                      class="form-input"
                       placeholder="e.g. 512 (MB)"
                       value={editMemory()}
                       onInput={(e) => setEditMemory(e.currentTarget.value)}
@@ -841,7 +923,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
                     <input
                       type="text"
-                      class="input"
+                      class="form-input"
                       placeholder="e.g. 0.5, 1.0, 2.0"
                       value={editCpu()}
                       onInput={(e) => setEditCpu(e.currentTarget.value)}
@@ -870,7 +952,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     </Show>
                   </div>
                   <select
-                    class="input"
+                    class="form-select"
                     value={editRestart()}
                     onChange={(e) => setEditRestart(e.currentTarget.value)}
                   >

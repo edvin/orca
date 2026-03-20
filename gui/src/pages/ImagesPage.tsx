@@ -46,6 +46,7 @@ export default function ImagesPage() {
   const [fileBrowserPath, setFileBrowserPath] = createSignal("/");
   const [files, setFiles] = createSignal<FileEntry[]>([]);
   const [filesLoading, setFilesLoading] = createSignal(false);
+  const [fileError, setFileError] = createSignal<string | null>(null);
   const [fileContent, setFileContent] = createSignal<string | null>(null);
   const [fileContentPath, setFileContentPath] = createSignal("");
 
@@ -242,6 +243,7 @@ export default function ImagesPage() {
     setFileBrowserPath("/");
     setFileContent(null);
     setFileContentPath("");
+    setFileError(null);
     fetchImageFiles(imageId, "/");
   };
 
@@ -249,17 +251,20 @@ export default function ImagesPage() {
     setFileBrowserImage(null);
     setFiles([]);
     setFileContent(null);
+    setFileError(null);
   };
 
   const fetchImageFiles = async (imageId: string, path: string) => {
     setFilesLoading(true);
     setFileContent(null);
+    setFileError(null);
     try {
       const result = (await invoke("image_list_files", { id: imageId, path })) as { entries: FileEntry[]; path: string };
       setFiles(result.entries);
       setFileBrowserPath(path || "/");
     } catch (e) {
-      showToast(`Failed to browse files: ${e}`, "error");
+      const msg = typeof e === "string" ? e : (e as any)?.message || String(e);
+      setFileError(msg);
       setFiles([]);
     } finally {
       setFilesLoading(false);
@@ -928,7 +933,13 @@ export default function ImagesPage() {
                   <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}><Spinner size={14} /> Loading files...</div>
                 }>
                   <Show when={files().length > 0} fallback={
-                    <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}>Empty directory</div>
+                    <Show when={fileError()} fallback={
+                      <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}>Empty directory</div>
+                    }>
+                      <div style={{ padding: "16px 20px", color: "#f85149", background: "rgba(248, 81, 73, 0.1)", "border-radius": "6px", margin: "12px 16px", "font-size": "13px" }}>
+                        <strong>Error:</strong> {fileError()}
+                      </div>
+                    </Show>
                   }>
                     {/* Back button */}
                     <Show when={fileBrowserPath() !== "/"}>

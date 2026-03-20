@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import type { SystemHealth } from "../lib/types";
 import { formatBytes } from "../lib/format";
 import { showToast } from "./Toast";
@@ -8,6 +9,7 @@ export default function StatusBar() {
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
   const [updateAvailable, setUpdateAvailable] = createSignal<{version: string; body?: string} | null>(null);
   const [installing, setInstalling] = createSignal(false);
+  const [appVersion, setAppVersion] = createSignal<string | null>(null);
 
   const pollHealth = async () => {
     try {
@@ -56,6 +58,7 @@ export default function StatusBar() {
   onMount(() => {
     pollHealth();
     checkUpdate();
+    getVersion().then((v) => setAppVersion(v)).catch(() => {});
     const interval = setInterval(pollHealth, 15000);
     onCleanup(() => clearInterval(interval));
   });
@@ -138,7 +141,9 @@ export default function StatusBar() {
               : `Update available: v${updateAvailable()!.version}`}
           </button>
         </Show>
-        <span class="status-bar-item" style={{ opacity: 0.5 }}>v0.1.3</span>
+        <Show when={appVersion()}>
+          <span class="status-bar-item" style={{ opacity: 0.5 }}>v{appVersion()}</span>
+        </Show>
       </div>
     </div>
   );

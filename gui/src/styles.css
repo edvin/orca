@@ -618,16 +618,16 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, #34d058 0%, #2ea043 100%);
-  border-color: #2ea04366;
-  color: #fff;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+  background: rgba(31, 111, 235, 0.15);
+  border: 1px solid rgba(31, 111, 235, 0.3);
+  color: #58a6ff;
+  text-shadow: none;
 }
 
 .btn-primary:hover {
-  background: linear-gradient(180deg, #3fb950 0%, #34d058 100%);
-  border-color: #3fb95066;
-  box-shadow: 0 2px 8px rgba(63, 185, 80, 0.3);
+  background: rgba(31, 111, 235, 0.25);
+  border-color: rgba(31, 111, 235, 0.5);
+  box-shadow: 0 2px 8px rgba(31, 111, 235, 0.2);
 }
 
 .btn-danger {

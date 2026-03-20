@@ -1099,8 +1099,28 @@ async fn volume_list_files(
         lines.push(line);
     }
 
+    // Check exit code before cleanup
+    let exit_code = match state.runtime.inspect_container(&id).await {
+        Ok(info) => info.exit_code,
+        Err(_) => None,
+    };
+
     // Clean up
     let _ = state.runtime.remove_container(&id, true).await;
+
+    // If the container exited with non-zero, return an error
+    if let Some(code) = exit_code {
+        if code != 0 {
+            // Lines likely contain stderr/error output
+            let stderr = lines.join("\n");
+            let msg = if stderr.is_empty() {
+                format!("Command failed with exit code {code}")
+            } else {
+                format!("Command failed with exit code {code}: {stderr}")
+            };
+            return Err(anyhow::anyhow!("{msg}").into());
+        }
+    }
 
     // Parse ls -la output into structured data
     let mut entries = Vec::new();
@@ -1263,6 +1283,7 @@ async fn run_in_image(
     cmd: Vec<&str>,
 ) -> anyhow::Result<Vec<String>> {
     use bollard::container::{Config, CreateContainerOptions, LogsOptions, WaitContainerOptions};
+    use bollard::models::ContainerWaitResponse;
     use futures::StreamExt;
 
     let config = Config {
@@ -1284,25 +1305,46 @@ async fn run_in_image(
 
     // Wait for the container to finish (max 10 seconds)
     let wait_opts = WaitContainerOptions { condition: "not-running" };
-    let _ = tokio::time::timeout(
+    let wait_result = tokio::time::timeout(
         Duration::from_secs(10),
         docker.wait_container(id, Some(wait_opts)).next(),
     ).await;
 
-    // Collect logs
-    let log_opts = LogsOptions::<String> {
-        stdout: true,
-        stderr: true,
-        ..Default::default()
+    let exit_code = match wait_result {
+        Ok(Some(Ok(ContainerWaitResponse { status_code, .. }))) => Some(status_code),
+        _ => None,
     };
 
-    let mut lines = Vec::new();
-    let mut stream = docker.logs(id, Some(log_opts));
+    // Collect stdout
+    let stdout_opts = LogsOptions::<String> {
+        stdout: true,
+        stderr: false,
+        ..Default::default()
+    };
+    let mut stdout_lines = Vec::new();
+    let mut stream = docker.logs(id, Some(stdout_opts));
     while let Some(Ok(output)) = stream.next().await {
         let text = output.to_string();
         for line in text.lines() {
             if !line.is_empty() {
-                lines.push(line.to_string());
+                stdout_lines.push(line.to_string());
+            }
+        }
+    }
+
+    // Collect stderr
+    let stderr_opts = LogsOptions::<String> {
+        stdout: false,
+        stderr: true,
+        ..Default::default()
+    };
+    let mut stderr_lines = Vec::new();
+    let mut stream = docker.logs(id, Some(stderr_opts));
+    while let Some(Ok(output)) = stream.next().await {
+        let text = output.to_string();
+        for line in text.lines() {
+            if !line.is_empty() {
+                stderr_lines.push(line.to_string());
             }
         }
     }
@@ -1313,7 +1355,20 @@ async fn run_in_image(
         ..Default::default()
     })).await;
 
-    Ok(lines)
+    // If the container exited with non-zero, return an error with stderr
+    if let Some(code) = exit_code {
+        if code != 0 {
+            let stderr = stderr_lines.join("\n");
+            let msg = if stderr.is_empty() {
+                format!("Command failed with exit code {code}")
+            } else {
+                format!("Command failed with exit code {code}: {stderr}")
+            };
+            return Err(anyhow::anyhow!("{msg}"));
+        }
+    }
+
+    Ok(stdout_lines)
 }
 
 /// Resolve an image ID to a usable reference (repo:tag or full sha).

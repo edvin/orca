@@ -314,7 +314,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 <input class="form-input" style={{ flex: "1" }} value={port.host} onInput={(e) => props.update(i(), "host", e.currentTarget.value)} placeholder="8080" />
                 <span style={{ color: "#484f58" }}>:</span>
                 <input class="form-input" style={{ flex: "1" }} value={port.container} onInput={(e) => props.update(i(), "container", e.currentTarget.value)} placeholder="80" />
-                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ "font-size": "14px", width: "28px", height: "28px", "flex-shrink": "0" }}>{"\u2715"}</button>
+                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </For>
@@ -344,7 +344,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 <input class="form-input" style={{ flex: "2", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={entry.key} onInput={(e) => props.update(i(), "key", e.currentTarget.value)} placeholder="KEY" />
                 <span style={{ color: "#484f58" }}>=</span>
                 <input class="form-input" style={{ flex: "3", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} type={entry.key.toLowerCase().includes("password") || entry.key.toLowerCase().includes("secret") ? "password" : "text"} value={entry.value} onInput={(e) => props.update(i(), "value", e.currentTarget.value)} placeholder="value" />
-                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ "font-size": "14px", width: "28px", height: "28px", "flex-shrink": "0" }}>{"\u2715"}</button>
+                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </For>
@@ -379,7 +379,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol.source} onInput={(e) => props.update(i(), "source", e.currentTarget.value)} placeholder="volume-name" />
                 <span style={{ color: "#484f58" }}>:</span>
                 <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol.target} onInput={(e) => props.update(i(), "target", e.currentTarget.value)} placeholder="/data" />
-                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ "font-size": "14px", width: "28px", height: "28px", "flex-shrink": "0" }}>{"\u2715"}</button>
+                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </For>
@@ -396,7 +396,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       <Show when={!props.template.is_builtin}>
         <div style={{ position: "absolute", top: "8px", right: "8px", display: "flex", gap: "4px" }}>
           <button class="action-icon" title="Edit" onClick={(e) => { e.stopPropagation(); openEditTemplate(props.template); }} style={{ "font-size": "12px", width: "24px", height: "24px" }}>{"\u270E"}</button>
-          <button class="action-icon" title="Delete" onClick={(e) => { e.stopPropagation(); deleteTemplate(props.template); }} style={{ "font-size": "12px", width: "24px", height: "24px", color: "#f85149" }}>{"\u2715"}</button>
+          <button class="action-icon" title="Delete" onClick={(e) => { e.stopPropagation(); deleteTemplate(props.template); }} style={{ width: "24px", height: "24px", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
         </div>
       </Show>
     </div>

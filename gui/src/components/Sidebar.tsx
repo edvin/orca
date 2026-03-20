@@ -173,9 +173,6 @@ export default function Sidebar(props: SidebarProps) {
         </button>
       </nav>
 
-      <div class="sidebar-version">
-        v0.1.0
-      </div>
     </aside>
   );
 }

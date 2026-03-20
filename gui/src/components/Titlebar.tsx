@@ -2,6 +2,7 @@ import { createSignal, onMount, onCleanup, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import { getEvents, getUnreadCount, markAllRead } from "../lib/activityStore";
+import { openAiWindow } from "./AiAssistant";
 import type { SystemHealth } from "../lib/types";
 
 interface TitlebarProps {
@@ -161,6 +162,20 @@ export default function Titlebar(props: TitlebarProps) {
         <span class="titlebar-search-shortcut">⌘K</span>
       </button>
       <div class="titlebar-controls">
+        <button
+          class="notification-btn"
+          title="AI Assistant"
+          onClick={openAiWindow}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="16" height="12" x="4" y="8" rx="2"/>
+            <path d="M2 14h2"/>
+            <path d="M20 14h2"/>
+            <path d="M15 13v2"/>
+            <path d="M9 13v2"/>
+            <path d="M12 8V4H8"/>
+          </svg>
+        </button>
         <div class="notification-bell">
           <button
             class="notification-btn"

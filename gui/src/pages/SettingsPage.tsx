@@ -539,7 +539,7 @@ export default function SettingsPage() {
                           <td>{reg.username}</td>
                           <td style={{ color: "#8b949e" }}>{"\u2022\u2022\u2022\u2022\u2022\u2022"}</td>
                           <td style={{ "text-align": "right" }}>
-                            <button class="btn btn-sm btn-danger" onClick={() => removeReg(reg.server)}>Delete</button>
+                            <button class="btn btn-sm btn-danger" onClick={() => removeReg(reg.server)} title="Delete registry" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                           </td>
                         </tr>
                       )}
@@ -662,7 +662,7 @@ export default function SettingsPage() {
                         await invoke("cleanup", { scope: "templates" });
                         showToast("User templates removed", "success");
                       } catch (e) { showToast(`Failed: ${e}`, "error"); }
-                    }}>Remove</button>
+                    }} title="Remove user templates" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
                     <div>
@@ -675,7 +675,7 @@ export default function SettingsPage() {
                         const result = (await invoke("cleanup", { scope: "vms" })) as { log: string[] };
                         showToast(result.log.join(". ") || "Cleanup done", "success");
                       } catch (e) { showToast(`Failed: ${e}`, "error"); }
-                    }}>Remove</button>
+                    }} title="Remove VMs" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0" }}>
                     <div>

@@ -10,7 +10,7 @@ export interface AiAssistantApi {
 }
 
 /** Opens the AI assistant in a separate window */
-async function openAiWindow() {
+export async function openAiWindow() {
   try {
     const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
 
@@ -59,20 +59,5 @@ export default function AiAssistant(props: AiAssistantProps) {
     props.ref({ askAboutContainer });
   }
 
-  return (
-    <button
-      class="ai-fab"
-      onClick={openAiWindow}
-      title="AI Assistant"
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect width="16" height="12" x="4" y="8" rx="2"/>
-        <path d="M2 14h2"/>
-        <path d="M20 14h2"/>
-        <path d="M15 13v2"/>
-        <path d="M9 13v2"/>
-        <path d="M12 8V4H8"/>
-      </svg>
-    </button>
-  );
+  return null;
 }
