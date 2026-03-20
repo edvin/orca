@@ -250,10 +250,72 @@ pub async fn run_fix_streaming(
                 send("\nDocker installed successfully!".into()).await;
             }
         }
+        "install_docker_linux" => {
+            send(">>> Installing Docker on Linux...".into()).await;
+            send("    Running: curl -fsSL https://get.docker.com | sudo sh\n".into()).await;
+
+            // The Docker install script needs root. Use sudo -S which reads
+            // password from stdin (will fail if sudo requires password without
+            // NOPASSWD, but that's expected for a desktop app).
+            // First try without password (NOPASSWD configured or already cached)
+            let result = run_cmd_streaming(
+                "sh", &["-c", "curl -fsSL https://get.docker.com | sudo -n sh"],
+                &tx
+            ).await;
+
+            match result {
+                Ok(_) => {
+                    send("\n>>> Adding user to docker group...".into()).await;
+                    let user = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+                    let _ = run_cmd("sudo", &["-n", "usermod", "-aG", "docker", &user]).await;
+                    send(format!("    Added {user} to docker group")).await;
+
+                    send("\n>>> Starting Docker service...".into()).await;
+                    let _ = run_cmd("sudo", &["-n", "systemctl", "start", "docker"]).await;
+                    let _ = run_cmd("sudo", &["-n", "systemctl", "enable", "docker"]).await;
+
+                    send(">>> Verifying...".into()).await;
+                    match run_cmd("docker", &["--version"]).await {
+                        Ok(v) => send(format!("{v}\n\nDocker installed successfully!\n\nYou may need to log out and back in for group changes to take effect.")).await,
+                        Err(e) => send(format!("Verification failed: {e}")).await,
+                    }
+                }
+                Err(e) => {
+                    send(format!("\nInstall script failed: {e}\n")).await;
+                    send("This likely means sudo requires a password.\n".into()).await;
+                    send("Please install Docker manually by running in a terminal:\n".into()).await;
+                    send("  curl -fsSL https://get.docker.com | sudo sh\n".into()).await;
+                    send("  sudo usermod -aG docker $USER\n".into()).await;
+                    send("  sudo systemctl start docker\n".into()).await;
+                    send("\nThen restart Orca Desktop.".into()).await;
+                    anyhow::bail!("Docker install requires sudo access. See instructions above.");
+                }
+            }
+        }
+        "install_podman_linux" => {
+            send(">>> Installing Podman on Linux...\n".into()).await;
+            // Detect package manager
+            if run_cmd("apt", &["--version"]).await.is_ok() {
+                send(">>> Using apt...\n".into()).await;
+                run_cmd_streaming("sudo", &["-n", "apt", "install", "-y", "podman"], &tx).await
+                    .map_err(|e| anyhow::anyhow!("apt install failed (sudo may require password): {e}"))?;
+            } else if run_cmd("dnf", &["--version"]).await.is_ok() {
+                send(">>> Using dnf...\n".into()).await;
+                run_cmd_streaming("sudo", &["-n", "dnf", "install", "-y", "podman"], &tx).await
+                    .map_err(|e| anyhow::anyhow!("dnf install failed: {e}"))?;
+            } else if run_cmd("pacman", &["--version"]).await.is_ok() {
+                send(">>> Using pacman...\n".into()).await;
+                run_cmd_streaming("sudo", &["-n", "pacman", "-S", "--noconfirm", "podman"], &tx).await
+                    .map_err(|e| anyhow::anyhow!("pacman install failed: {e}"))?;
+            } else {
+                anyhow::bail!("No supported package manager found. Install podman manually.");
+            }
+            send("\nPodman installed successfully!".into()).await;
+        }
         // For all other actions, fall back to non-streaming run_fix
         _ => {
             send(format!("Running {action}...")).await;
-            let output = super::environment::run_fix(action).await?;
+            let output = run_fix(action).await?;
             send(output).await;
         }
     }
