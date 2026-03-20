@@ -183,23 +183,22 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       const params: any = { id: props.containerId };
 
       if (memStr) {
-        // If it's just a number, treat it as MB
         const num = parseFloat(memStr);
         if (!isNaN(num) && memStr === `${num}`) {
-          params.memoryLimit = `${num}m`;
+          params.memory_limit = `${num}m`;
         } else {
-          params.memoryLimit = memStr;
+          params.memory_limit = memStr;
         }
       }
 
       if (cpuStr) {
         const cpuNum = parseFloat(cpuStr);
         if (!isNaN(cpuNum) && cpuNum > 0) {
-          params.cpuLimit = cpuNum;
+          params.cpu_limit = cpuNum;
         }
       }
 
-      params.restartPolicy = editRestart();
+      params.restart_policy = editRestart();
 
       await invoke("update_container", params);
       showToast("Resources updated", "success");

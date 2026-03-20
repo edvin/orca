@@ -179,13 +179,13 @@ pub async fn update_container(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Update failed: {e}"))?;
+        .map_err(|e| format!("{e}"))?;
 
     if resp.status().is_success() {
-        resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+        resp.json().await.map_err(|e| format!("{e}"))
     } else {
         let body = resp.text().await.unwrap_or_default();
-        Err(format!("Update failed: {body}"))
+        Err(body)
     }
 }
 

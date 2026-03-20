@@ -1312,6 +1312,8 @@ input[type="checkbox"]:checked::after {
 .toast-icon {
   font-size: 15px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .toast-message {
@@ -1322,10 +1324,10 @@ input[type="checkbox"]:checked::after {
 .toast-close {
   background: none;
   border: none;
-  color: #8b949e;
-  font-size: 16px;
+  color: #6e7681;
+  font-size: 20px;
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0 4px;
   line-height: 1;
   transition: color 0.15s ease;
   flex-shrink: 0;
