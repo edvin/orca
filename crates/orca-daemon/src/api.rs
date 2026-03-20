@@ -128,6 +128,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/{source}/tag", post(tag_image))
         .route("/images/{id}/files", get(image_list_files))
         .route("/images/{id}/file", get(image_read_file))
+        .route("/images/{id}/scan", get(scan_image))
         // Volumes
         .route("/volumes", get(list_volumes).post(create_volume_handler))
         .route("/volumes/{name}", get(inspect_volume))
@@ -1329,6 +1330,120 @@ async fn resolve_image_ref(state: &AppState, id: &str) -> anyhow::Result<String>
     } else {
         Ok(id.to_string())
     }
+}
+
+/// Scan an image for vulnerabilities using Trivy (run as a container).
+async fn scan_image(
+    State(state): State<Arc<AppState>>,
+    Path(image_id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    use bollard::container::{Config, CreateContainerOptions, LogsOptions, WaitContainerOptions};
+    use bollard::models::{HostConfig, Mount, MountTypeEnum};
+    use futures::StreamExt;
+
+    let image_ref = resolve_image_ref(&state, &image_id).await?;
+    let docker = &state.runtime.docker;
+
+    // Run Trivy as a container with access to the Docker socket
+    let config = Config {
+        image: Some("aquasec/trivy:latest".to_string()),
+        cmd: Some(vec![
+            "image".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
+            "--quiet".to_string(),
+            image_ref.clone(),
+        ]),
+        host_config: Some(HostConfig {
+            mounts: Some(vec![Mount {
+                target: Some("/var/run/docker.sock".to_string()),
+                source: Some("/var/run/docker.sock".to_string()),
+                typ: Some(MountTypeEnum::BIND),
+                read_only: Some(true),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let container = docker
+        .create_container(None::<CreateContainerOptions<String>>, config)
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to start Trivy scanner. Make sure the aquasec/trivy:latest image is available \
+                 (pull it with: docker pull aquasec/trivy:latest). Error: {e}"
+            )
+        })?;
+
+    let id = &container.id;
+
+    docker.start_container::<String>(id, None).await
+        .map_err(|e| anyhow::anyhow!("Failed to start Trivy container: {e}"))?;
+
+    // Trivy scans can take a while — wait up to 5 minutes
+    let wait_opts = WaitContainerOptions { condition: "not-running" };
+    let _ = tokio::time::timeout(
+        Duration::from_secs(300),
+        docker.wait_container(id, Some(wait_opts)).next(),
+    ).await;
+
+    // Collect stdout
+    let log_opts = LogsOptions::<String> {
+        stdout: true,
+        stderr: false,
+        ..Default::default()
+    };
+
+    let mut output = String::new();
+    let mut stream = docker.logs(id, Some(log_opts));
+    while let Some(Ok(chunk)) = stream.next().await {
+        output.push_str(&chunk.to_string());
+    }
+
+    // Clean up
+    let _ = docker.remove_container(id, Some(bollard::container::RemoveContainerOptions {
+        force: true,
+        ..Default::default()
+    })).await;
+
+    // Parse the Trivy JSON output
+    let trivy_results: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|e| anyhow::anyhow!("Failed to parse Trivy output: {e}"))?;
+
+    // Count vulnerabilities by severity
+    let mut critical = 0u64;
+    let mut high = 0u64;
+    let mut medium = 0u64;
+    let mut low = 0u64;
+
+    if let Some(results) = trivy_results.get("Results").and_then(|r| r.as_array()) {
+        for result in results {
+            if let Some(vulns) = result.get("Vulnerabilities").and_then(|v| v.as_array()) {
+                for vuln in vulns {
+                    match vuln.get("Severity").and_then(|s| s.as_str()) {
+                        Some("CRITICAL") => critical += 1,
+                        Some("HIGH") => high += 1,
+                        Some("MEDIUM") => medium += 1,
+                        Some("LOW") | Some("UNKNOWN") => low += 1,
+                        _ => low += 1,
+                    }
+                }
+            }
+        }
+    }
+
+    let total = critical + high + medium + low;
+
+    Ok(Json(serde_json::json!({
+        "total": total,
+        "critical": critical,
+        "high": high,
+        "medium": medium,
+        "low": low,
+        "results": trivy_results.get("Results").cloned().unwrap_or(serde_json::json!([])),
+    })))
 }
 
 async fn volume_containers(

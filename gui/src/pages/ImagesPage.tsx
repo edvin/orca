@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { Image, ImageSearchResult } from "../lib/types";
+import type { Image, ImageSearchResult, ScanResult } from "../lib/types";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 import { showToast } from "../components/Toast";
 import RunContainerDialog from "../components/RunContainerDialog";
@@ -48,6 +48,11 @@ export default function ImagesPage() {
   const [filesLoading, setFilesLoading] = createSignal(false);
   const [fileContent, setFileContent] = createSignal<string | null>(null);
   const [fileContentPath, setFileContentPath] = createSignal("");
+
+  // Vulnerability scanning state
+  const [scanResult, setScanResult] = createSignal<ScanResult | null>(null);
+  const [scanning, setScanning] = createSignal(false);
+  const [scanImageId, setScanImageId] = createSignal<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -296,6 +301,21 @@ export default function ImagesPage() {
       setFileContentPath(filePath);
     } catch (e) {
       showToast(`Failed to read file: ${e}`, "error");
+    }
+  };
+
+  const doScanImage = async (imageId: string) => {
+    setScanning(true);
+    setScanImageId(imageId);
+    setScanResult(null);
+    try {
+      const result = (await invoke("scan_image", { id: imageId })) as ScanResult;
+      setScanResult(result);
+    } catch (e) {
+      showToast(`Scan failed: ${e}`, "error");
+      setScanImageId(null);
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -582,11 +602,99 @@ export default function ImagesPage() {
                                     {Array.isArray(layers) ? layers.length : 0} layer{Array.isArray(layers) && layers.length !== 1 ? "s" : ""}
                                   </div>
                                 </div>
-                                <div style={{ "margin-top": "12px" }}>
+                                <div style={{ "margin-top": "12px", display: "flex", gap: "8px", "align-items": "center", "flex-wrap": "wrap" }}>
                                   <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); openFileBrowser(img.id); }}>
                                     Browse Files
                                   </button>
+                                  <button
+                                    class="btn btn-sm"
+                                    disabled={scanning() && scanImageId() === img.id}
+                                    onClick={(e) => { e.stopPropagation(); doScanImage(img.id); }}
+                                  >
+                                    {scanning() && scanImageId() === img.id
+                                      ? (<><Spinner size={12} />{" Scanning..."}</>)
+                                      : "Scan for Vulnerabilities"}
+                                  </button>
                                 </div>
+                                <Show when={scanImageId() === img.id && scanResult()}>
+                                  <div style={{ "margin-top": "12px" }}>
+                                    <Show
+                                      when={scanResult()!.total > 0}
+                                      fallback={
+                                        <div style={{
+                                          padding: "8px 12px",
+                                          background: "#0d1117",
+                                          border: "1px solid #238636",
+                                          "border-radius": "6px",
+                                          color: "#3fb950",
+                                          "font-size": "13px",
+                                          "font-weight": "500",
+                                        }}>
+                                          No vulnerabilities found
+                                        </div>
+                                      }
+                                    >
+                                      <div style={{
+                                        display: "flex",
+                                        gap: "8px",
+                                        "align-items": "center",
+                                        "flex-wrap": "wrap",
+                                      }}>
+                                        <span style={{ "font-size": "13px", color: "#8b949e", "margin-right": "4px" }}>
+                                          {scanResult()!.total} vulnerabilities:
+                                        </span>
+                                        <Show when={scanResult()!.critical > 0}>
+                                          <span style={{
+                                            background: "#da3633",
+                                            color: "#fff",
+                                            padding: "2px 8px",
+                                            "border-radius": "10px",
+                                            "font-size": "12px",
+                                            "font-weight": "600",
+                                          }}>
+                                            {scanResult()!.critical} Critical
+                                          </span>
+                                        </Show>
+                                        <Show when={scanResult()!.high > 0}>
+                                          <span style={{
+                                            background: "#d29922",
+                                            color: "#fff",
+                                            padding: "2px 8px",
+                                            "border-radius": "10px",
+                                            "font-size": "12px",
+                                            "font-weight": "600",
+                                          }}>
+                                            {scanResult()!.high} High
+                                          </span>
+                                        </Show>
+                                        <Show when={scanResult()!.medium > 0}>
+                                          <span style={{
+                                            background: "#e3b341",
+                                            color: "#000",
+                                            padding: "2px 8px",
+                                            "border-radius": "10px",
+                                            "font-size": "12px",
+                                            "font-weight": "600",
+                                          }}>
+                                            {scanResult()!.medium} Medium
+                                          </span>
+                                        </Show>
+                                        <Show when={scanResult()!.low > 0}>
+                                          <span style={{
+                                            background: "#484f58",
+                                            color: "#e6edf3",
+                                            padding: "2px 8px",
+                                            "border-radius": "10px",
+                                            "font-size": "12px",
+                                            "font-weight": "600",
+                                          }}>
+                                            {scanResult()!.low} Low
+                                          </span>
+                                        </Show>
+                                      </div>
+                                    </Show>
+                                  </div>
+                                </Show>
                               </>);
                             }}
                           </Show>

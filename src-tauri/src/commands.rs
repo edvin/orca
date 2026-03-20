@@ -589,6 +589,37 @@ pub async fn image_read_file(id: String, path: String) -> Result<serde_json::Val
     get_json(&format!("/images/{encoded_id}/file?path={encoded_path}")).await
 }
 
+// --- Image Scanning ---
+
+#[tauri::command]
+pub async fn scan_image(id: String) -> Result<serde_json::Value, String> {
+    // Trivy scans can take a while — use a longer timeout
+    let client = {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(token) = load_api_token() {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+                headers.insert(reqwest::header::AUTHORIZATION, val);
+            }
+        }
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(600))
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    };
+
+    let encoded = urlencoding::encode(&id);
+    client
+        .get(format!("{DAEMON_URL}/images/{encoded}/scan"))
+        .send()
+        .await
+        .map_err(|e| format!("Scan failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
 // --- Networks ---
 
 #[tauri::command]
