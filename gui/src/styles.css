@@ -3073,16 +3073,20 @@ input[type="checkbox"]:checked::after {
   top: 100%;
   right: 0;
   min-width: 160px;
-  background: rgba(22, 27, 34, 0.92);
+  background: rgba(22, 27, 34, 0.95);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03);
-  z-index: 50;
+  z-index: 9999;
   padding: 4px;
   animation: modal-scale-in 0.1s ease-out;
 }
+
+/* Ensure dropdown isn't clipped by table overflow */
+.table { overflow: visible; }
+.table tbody { overflow: visible; }
 
 .dropdown-item {
   display: flex;
