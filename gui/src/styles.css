@@ -30,13 +30,11 @@ body {
   position: relative;
 }
 
-/* macOS handles window corners natively — CSS border-radius causes white artifacts */
-@supports (-webkit-appearance: none) {
-  @media screen {
-    .app-root.platform-macos {
-      border-radius: 0;
-    }
-  }
+/* macOS: use clip-path for rounded corners to avoid white artifacts
+   from the window background showing through border-radius */
+.app-root.platform-macos {
+  border-radius: 0;
+  clip-path: inset(0 round 10px);
 }
 
 /* ==================== Status Bar ==================== */

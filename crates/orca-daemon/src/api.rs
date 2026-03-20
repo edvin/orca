@@ -63,7 +63,12 @@ pub async fn auth_middleware(
 ) -> Result<axum::response::Response, StatusCode> {
     // Allow health endpoint without auth
     if req.uri().path() == "/api/v1/health" || req.uri().path() == "/health" {
-        return Ok(next.run(req).await);
+        let mut response = next.run(req).await;
+        response.headers_mut().insert(
+            "x-orca-version",
+            axum::http::HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
+        );
+        return Ok(response);
     }
 
     // Allow WebSocket terminal endpoint — it does its own auth via query param
@@ -89,7 +94,13 @@ pub async fn auth_middleware(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    Ok(next.run(req).await)
+    let mut response = next.run(req).await;
+    // Add daemon version header so the UI can detect version mismatches
+    response.headers_mut().insert(
+        "x-orca-version",
+        axum::http::HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
+    );
+    Ok(response)
 }
 
 pub fn routes() -> Router<Arc<AppState>> {
