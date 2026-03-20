@@ -269,6 +269,36 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             is_builtin: false,
             notes: "API at http://localhost:9200".to_string(),
         },
+        // More Message Queues
+        AppTemplate {
+            id: "nats".to_string(),
+            name: "NATS JetStream".to_string(),
+            description: "Cloud-native messaging with persistent streaming".to_string(),
+            icon: "\u{26A1}".to_string(),
+            category: "Message Queue".to_string(),
+            image: "nats:latest".to_string(),
+            default_ports: vec!["4222:4222".to_string(), "8222:8222".to_string()],
+            default_env: vec![],
+            default_volumes: vec!["nats-data:/data".to_string()],
+            restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
+            notes: "Client port 4222, monitoring at http://localhost:8222. JetStream is enabled by default in recent versions.".to_string(),
+        },
+        // More Search
+        AppTemplate {
+            id: "meilisearch".to_string(),
+            name: "Meilisearch".to_string(),
+            description: "Lightning-fast, typo-tolerant search engine".to_string(),
+            icon: "\u{1F50D}".to_string(),
+            category: "Search".to_string(),
+            image: "getmeili/meilisearch:latest".to_string(),
+            default_ports: vec!["7700:7700".to_string()],
+            default_env: vec!["MEILI_ENV=development".to_string()],
+            default_volumes: vec!["meili-data:/meili_data".to_string()],
+            restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
+            notes: "Dashboard at http://localhost:7700. Set MEILI_MASTER_KEY for production use.".to_string(),
+        },
         // AI Assistants
         AppTemplate {
             id: "openclaw".to_string(),
