@@ -114,26 +114,84 @@ export default function KubernetesPage() {
     setSetupDialogOpen(true);
 
     try {
-      setSetupLog("Starting Kubernetes setup...\n\n");
-      const result = (await invoke("k8s_enable")) as { output?: string };
-      const output = result?.output || "";
-      if (output) {
-        setSetupLog(output);
-        // Check if it's actual success (cluster ready) or just instructions
-        const isReady = output.includes("cluster is ready") || output.includes("Ready");
-        const isInstructions = output.includes("To set up") || output.includes("Docker Desktop");
-        setSetupSuccess(isReady ? true : isInstructions ? null : true);
-      } else {
-        setSetupLog("No output from daemon. Check the Activity tab for errors.\n");
-        logError("Kubernetes enable", "No output received from daemon");
-        setSetupSuccess(false);
-      }
-      await refreshStatus();
+      // Get auth token for WebSocket
+      let token = "";
+      try { token = await invoke("get_api_token") as string; } catch {}
+
+      const wsUrl = `ws://127.0.0.1:9477/api/v1/k8s/enable-stream?token=${encodeURIComponent(token)}`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        setSetupLog("Starting Kubernetes setup...\n");
+      };
+
+      ws.onmessage = (event) => {
+        const line = event.data;
+        if (line === "[DONE]") {
+          setSetupSuccess(true);
+          setSetupRunning(false);
+          setEnabling(false);
+          refreshStatus();
+          ws.close();
+        } else if (line === "[ERROR]") {
+          setSetupSuccess(false);
+          setSetupRunning(false);
+          setEnabling(false);
+          ws.close();
+        } else {
+          setSetupLog((prev) => prev + line + "\n");
+          // Check for instruction-style output (not an actual install)
+          if (line.includes("To set up") || line.includes("Docker Desktop")) {
+            setSetupSuccess(null); // informational, not success/failure
+          }
+        }
+      };
+
+      ws.onerror = () => {
+        // WebSocket failed — fall back to non-streaming invoke
+        ws.close();
+        (async () => {
+          try {
+            setSetupLog("Connecting...\n");
+            const result = (await invoke("k8s_enable")) as { output?: string };
+            const output = result?.output || "";
+            if (output) {
+              setSetupLog(output);
+              const isReady = output.includes("cluster is ready") || output.includes("Ready");
+              const isInstructions = output.includes("To set up") || output.includes("Docker Desktop");
+              setSetupSuccess(isReady ? true : isInstructions ? null : true);
+            } else {
+              setSetupLog("No output from daemon. Check the Activity tab for errors.\n");
+              logError("Kubernetes enable", "No output received from daemon");
+              setSetupSuccess(false);
+            }
+            await refreshStatus();
+          } catch (e) {
+            logError("Kubernetes enable failed", String(e));
+            setSetupLog((prev) => prev + `\nError: ${e}\n`);
+            setSetupSuccess(false);
+          } finally {
+            setSetupRunning(false);
+            setEnabling(false);
+          }
+        })();
+      };
+
+      ws.onclose = () => {
+        // Ensure state is cleaned up if connection drops unexpectedly
+        if (setupRunning()) {
+          setSetupRunning(false);
+          setEnabling(false);
+          if (setupSuccess() === null) {
+            setSetupSuccess(false);
+            setSetupLog((prev) => prev + "\nConnection lost.\n");
+          }
+        }
+      };
     } catch (e) {
       logError("Kubernetes enable failed", String(e));
-      setSetupLog((prev) => prev + `\nError: ${e}\n`);
+      setSetupLog(`Error: ${e}\n`);
       setSetupSuccess(false);
-    } finally {
       setSetupRunning(false);
       setEnabling(false);
     }
@@ -835,15 +893,15 @@ export default function KubernetesPage() {
           onMouseDown={(e) => { mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
           onClick={(e) => { if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !setupRunning()) closeSetupDialog(); mouseDownOnOverlay = false; }}
         >
-          <div class="modal-dialog" style={{ "max-width": "900px", width: "90vw" }}>
+          <div class="modal-dialog" style={{ "max-width": "1000px", width: "90vw" }}>
             <div class="modal-header">
               <span class="modal-title">
                 <Show when={setupRunning()} fallback={
-                  <Show when={setupSuccess()} fallback={
-                    <span style={{ color: "#f85149" }}>{"\u2717"} Kubernetes setup failed</span>
-                  }>
-                    <span style={{ color: "#3fb950" }}>{"\u2713"} Kubernetes cluster ready</span>
-                  </Show>
+                  setupSuccess() === true
+                    ? <span style={{ color: "#3fb950" }}>{"\u2713"} Kubernetes cluster ready</span>
+                    : setupSuccess() === false
+                    ? <span style={{ color: "#f85149" }}>{"\u2717"} Kubernetes setup failed</span>
+                    : <span>Kubernetes Setup</span>
                 }>
                   <span>Setting up Kubernetes...</span>
                 </Show>
@@ -863,8 +921,8 @@ export default function KubernetesPage() {
                 "font-family": "'JetBrains Mono NF', monospace",
                 "font-size": "12px", "line-height": "1.6",
                 color: "#c9d1d9", "white-space": "pre-wrap",
-                "word-break": "break-all", "max-height": "500px",
-                "min-height": "200px", overflow: "auto",
+                "word-break": "break-all", "max-height": "60vh",
+                "min-height": "350px", overflow: "auto",
                 background: "#0d1117",
               }}>{setupLog()}</pre>
             </div>

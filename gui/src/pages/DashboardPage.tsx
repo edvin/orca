@@ -3,8 +3,21 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, Image, ComposeProject, SystemHealth } from "../lib/types";
 import { formatBytes } from "../lib/format";
 import { recordMetrics, getCpuHistory, getMemoryHistory, getAggregatedCpuHistory, getAggregatedMemoryHistory } from "../lib/metricsStore";
+import { logError } from "../lib/activityStore";
 import Sparkline from "../components/Sparkline";
 import LastUpdated from "../components/LastUpdated";
+
+/** Wrap an invoke call with a timeout (ms). Rejects on timeout. */
+function invokeWithTimeout<T>(cmd: string, args?: Record<string, unknown>, timeoutMs = 10_000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${cmd} timed out after ${timeoutMs / 1000}s`)), timeoutMs);
+    invoke(cmd, args)
+      .then((v) => { clearTimeout(timer); resolve(v as T); })
+      .catch((e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+type CardState = "loading" | "ready" | "error";
 
 interface DashboardPageProps {
   onNavigate?: (page: string) => void;
@@ -18,30 +31,45 @@ export default function DashboardPage(props: DashboardPageProps) {
   const [containerStats, setContainerStats] = createSignal<Record<string, ContainerStats>>({});
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
 
-  const fetchAll = async () => {
-    const [cRes, iRes, sRes, hRes] = await Promise.allSettled([
-      invoke("list_containers"),
-      invoke("list_images"),
-      invoke("list_stacks"),
-      invoke("system_health"),
-    ]);
-    if (cRes.status === "fulfilled") setContainers(cRes.value as Container[]);
-    if (iRes.status === "fulfilled") setImages(iRes.value as Image[]);
-    if (sRes.status === "fulfilled") setStacks(sRes.value as ComposeProject[]);
-    if (hRes.status === "fulfilled") setHealth(hRes.value as SystemHealth);
-    setLastUpdated(new Date());
+  const [containersState, setContainersState] = createSignal<CardState>("loading");
+  const [imagesState, setImagesState] = createSignal<CardState>("loading");
+  const [stacksState, setStacksState] = createSignal<CardState>("loading");
+  const [healthState, setHealthState] = createSignal<CardState>("loading");
+  const [containersError, setContainersError] = createSignal("");
+  const [imagesError, setImagesError] = createSignal("");
+  const [stacksError, setStacksError] = createSignal("");
+  const [healthError, setHealthError] = createSignal("");
+
+  const fetchAll = () => {
+    // Each card fetches independently — no waiting for the others
+    invokeWithTimeout<Container[]>("list_containers")
+      .then((v) => { setContainers(v || []); setContainersState("ready"); })
+      .catch((e) => { setContainersError(String(e)); setContainersState("error"); logError("Dashboard: list containers", String(e)); })
+      .finally(() => setLastUpdated(new Date()));
+
+    invokeWithTimeout<Image[]>("list_images")
+      .then((v) => { setImages(v || []); setImagesState("ready"); })
+      .catch((e) => { setImagesError(String(e)); setImagesState("error"); logError("Dashboard: list images", String(e)); });
+
+    invokeWithTimeout<ComposeProject[]>("list_stacks")
+      .then((v) => { setStacks(v || []); setStacksState("ready"); })
+      .catch((e) => { setStacksError(String(e)); setStacksState("error"); logError("Dashboard: list stacks", String(e)); });
+
+    invokeWithTimeout<SystemHealth>("system_health", undefined, 15_000)
+      .then((v) => { setHealth(v); setHealthState("ready"); })
+      .catch((e) => { setHealthError(String(e)); setHealthState("error"); logError("Dashboard: system health", String(e)); });
   };
 
   const fetchStats = async () => {
     const running = containers().filter((c) => c.state === "Running");
     if (running.length === 0) return;
     const results = await Promise.allSettled(
-      running.map((c) => invoke("container_stats", { id: c.id }))
+      running.map((c) => invokeWithTimeout<ContainerStats>("container_stats", { id: c.id }))
     );
     const newStats: Record<string, ContainerStats> = {};
     results.forEach((r, i) => {
       if (r.status === "fulfilled") {
-        const s = r.value as ContainerStats;
+        const s = r.value;
         newStats[running[i].id] = s;
         recordMetrics(running[i].id, {
           timestamp: Date.now(),
@@ -57,9 +85,12 @@ export default function DashboardPage(props: DashboardPageProps) {
   };
 
   onMount(() => {
-    fetchAll().then(fetchStats);
+    fetchAll();
+    // Stats depend on containers being loaded; kick off after a short delay
+    setTimeout(fetchStats, 2000);
     const interval = setInterval(() => {
-      fetchAll().then(fetchStats);
+      fetchAll();
+      fetchStats();
     }, 5000);
     onCleanup(() => clearInterval(interval));
   });
@@ -108,18 +139,11 @@ export default function DashboardPage(props: DashboardPageProps) {
         </h1>
       </div>
 
-      {/* Skeleton loading state */}
-      <Show when={!lastUpdated()}>
-        <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", "margin-bottom": "16px" }}>
-          <Index each={[1, 2, 3, 4]}>{() => <div class="skeleton-card" style={{ height: "70px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>}</Index>
-        </div>
-        <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
-          <div class="skeleton-card" style={{ height: "80px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>
-          <div class="skeleton-card" style={{ height: "80px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>
-        </div>
-      </Show>
-
-      <Show when={containers().length === 0 && images().length === 0 && stacks().length === 0 && lastUpdated()}>
+      {/* Empty state — shown when all cards resolved but nothing exists */}
+      <Show when={
+        containersState() === "ready" && imagesState() === "ready" && stacksState() === "ready"
+        && containers().length === 0 && images().length === 0 && stacks().length === 0
+      }>
         <div class="empty">
           <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
           <p class="empty-title">Welcome to Orca Desktop</p>
@@ -135,51 +159,82 @@ export default function DashboardPage(props: DashboardPageProps) {
         </div>
       </Show>
 
-      {/* Summary cards — only show after first data load */}
-      <Show when={lastUpdated()}>
+      {/* Summary cards — each resolves independently */}
       <div class="dashboard-grid">
         <div class="dashboard-stat-card">
           <div class="dashboard-stat-label">Containers</div>
-          <div class="dashboard-stat-value">{containers().length}</div>
-          <div class="dashboard-stat-sub">
-            <span style={{ color: "#3fb950" }}>{runningCount()} running</span>
-            {containers().length - runningCount() > 0 && (
-              <span style={{ color: "#8b949e" }}>
-                {" / "}{containers().length - runningCount()} stopped
-              </span>
-            )}
-          </div>
+          <Show when={containersState() !== "loading"} fallback={
+            <><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></>
+          }>
+            <Show when={containersState() === "ready"} fallback={
+              <div class="dashboard-stat-error">{containersError()}</div>
+            }>
+              <div class="dashboard-stat-value">{containers().length}</div>
+              <div class="dashboard-stat-sub">
+                <span style={{ color: "#3fb950" }}>{runningCount()} running</span>
+                {containers().length - runningCount() > 0 && (
+                  <span style={{ color: "#8b949e" }}>
+                    {" / "}{containers().length - runningCount()} stopped
+                  </span>
+                )}
+              </div>
+            </Show>
+          </Show>
         </div>
 
         <div class="dashboard-stat-card">
           <div class="dashboard-stat-label">Images</div>
-          <div class="dashboard-stat-value">{images().length}</div>
-          <div class="dashboard-stat-sub">{formatBytes(totalImageSize())} total</div>
+          <Show when={imagesState() !== "loading"} fallback={
+            <><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></>
+          }>
+            <Show when={imagesState() === "ready"} fallback={
+              <div class="dashboard-stat-error">{imagesError()}</div>
+            }>
+              <div class="dashboard-stat-value">{images().length}</div>
+              <div class="dashboard-stat-sub">{formatBytes(totalImageSize())} total</div>
+            </Show>
+          </Show>
         </div>
 
         <div class="dashboard-stat-card">
           <div class="dashboard-stat-label">Stacks</div>
-          <div class="dashboard-stat-value">{stacks().length}</div>
-          <div class="dashboard-stat-sub">
-            <span style={{ color: "#3fb950" }}>{runningStacks()} running</span>
-          </div>
+          <Show when={stacksState() !== "loading"} fallback={
+            <><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></>
+          }>
+            <Show when={stacksState() === "ready"} fallback={
+              <div class="dashboard-stat-error">{stacksError()}</div>
+            }>
+              <div class="dashboard-stat-value">{stacks().length}</div>
+              <div class="dashboard-stat-sub">
+                <span style={{ color: "#3fb950" }}>{runningStacks()} running</span>
+              </div>
+            </Show>
+          </Show>
         </div>
 
         <div class="dashboard-stat-card">
           <div class="dashboard-stat-label">System</div>
-          <Show when={health()?.system_resources} fallback={
-            <div class="dashboard-stat-value" style={{ "font-size": "14px", color: "#8b949e" }}>Loading...</div>
+          <Show when={healthState() !== "loading"} fallback={
+            <><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></>
           }>
-            {(res) => (
-              <>
-                <div class="dashboard-stat-value" style={{ "font-size": "20px" }}>
-                  {res().cpu_count} CPUs
-                </div>
-                <div class="dashboard-stat-sub">
-                  {formatBytes(res().memory_total_bytes - res().memory_available_bytes)} / {formatBytes(res().memory_total_bytes)} RAM
-                </div>
-              </>
-            )}
+            <Show when={healthState() === "ready" && health()?.system_resources} fallback={
+              <Show when={healthState() === "error"} fallback={
+                <div class="dashboard-stat-value" style={{ "font-size": "14px", color: "#8b949e" }}>No data</div>
+              }>
+                <div class="dashboard-stat-error">{healthError()}</div>
+              </Show>
+            }>
+              {(res) => (
+                <>
+                  <div class="dashboard-stat-value" style={{ "font-size": "20px" }}>
+                    {res().cpu_count} CPUs
+                  </div>
+                  <div class="dashboard-stat-sub">
+                    {formatBytes(res().memory_total_bytes - res().memory_available_bytes)} / {formatBytes(res().memory_total_bytes)} RAM
+                  </div>
+                </>
+              )}
+            </Show>
           </Show>
         </div>
       </div>
@@ -302,7 +357,6 @@ export default function DashboardPage(props: DashboardPageProps) {
           </Show>
         </div>
       </div>
-      </Show>
     </div>
   );
 }

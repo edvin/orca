@@ -345,6 +345,31 @@ export default function EnvironmentPage() {
               </div>
             </Show>
 
+            {/* Warnings banner */}
+            <Show when={health()?.warnings && health()!.warnings.length > 0}>
+              <div style={{ "margin-top": "20px" }}>
+                <For each={health()!.warnings}>
+                  {(warning) => (
+                    <div style={{
+                      display: "flex",
+                      "align-items": "center",
+                      gap: "10px",
+                      padding: "12px 16px",
+                      background: "rgba(210, 153, 34, 0.08)",
+                      border: "1px solid rgba(210, 153, 34, 0.25)",
+                      "border-radius": "10px",
+                      "margin-bottom": "8px",
+                      "font-size": "13px",
+                      color: "#d29922",
+                    }}>
+                      <span style={{ "font-size": "16px" }}>{"\u26A0"}</span>
+                      <span>{warning}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+
             {/* System Info — shown when ready */}
             <Show when={s().ready && (machine() || health())}>
               <div style={{ "margin-top": "24px" }}>

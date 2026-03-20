@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
-import { getEvents, getUnreadCount, markAllRead } from "../lib/activityStore";
+import { getEvents, getUnreadCount, markAllRead, clearEvents } from "../lib/activityStore";
 import { openAiWindow } from "./AiAssistant";
 import type { SystemHealth } from "../lib/types";
 
@@ -235,6 +235,17 @@ export default function Titlebar(props: TitlebarProps) {
                 >
                   View All
                 </button>
+                <Show when={getEvents().length > 0}>
+                  <button
+                    class="notification-view-all notification-clear-btn"
+                    onClick={() => {
+                      clearEvents();
+                      setBellOpen(false);
+                    }}
+                  >
+                    Clear All
+                  </button>
+                </Show>
               </div>
             </div>
           </Show>

@@ -71,8 +71,8 @@ pub async fn auth_middleware(
         return Ok(response);
     }
 
-    // Allow WebSocket terminal endpoint — it does its own auth via query param
-    if req.uri().path().ends_with("/terminal") {
+    // Allow WebSocket endpoints — they do their own auth via query param
+    if req.uri().path().ends_with("/terminal") || req.uri().path().ends_with("/enable-stream") {
         return Ok(next.run(req).await);
     }
 
@@ -163,7 +163,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Kubernetes
         .route("/k8s/status", get(k8s_status))
         .route("/k8s/enable", post(k8s_enable))
-        .route("/k8s/enable-stream", post(k8s_enable_stream))
+        .route("/k8s/enable-stream", get(k8s_enable_ws))
         .route("/k8s/disable", post(k8s_disable))
         .route("/k8s/reset", post(k8s_reset))
         .route("/k8s/kubeconfig", get(k8s_kubeconfig))
@@ -1840,21 +1840,32 @@ async fn k8s_enable(
     Ok(Json(serde_json::json!({ "output": log })))
 }
 
-async fn k8s_enable_stream(
+async fn k8s_enable_ws(
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    use axum::response::sse::{Event, Sse};
-    use tokio_stream::wrappers::ReceiverStream;
-    use futures::StreamExt;
+    Query(params): Query<HashMap<String, String>>,
+    ws: WebSocketUpgrade,
+) -> Result<impl IntoResponse, StatusCode> {
+    // Auth check (same as terminal WS)
+    let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
+    use subtle::ConstantTimeEq;
+    if !state.api_token.is_empty()
+        && (state.api_token.len() != token.len()
+            || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+    {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(ws.on_upgrade(move |socket| handle_k8s_enable(socket, state)))
+}
 
-    let (tx, rx) = tokio::sync::mpsc::channel::<String>(100);
+async fn handle_k8s_enable(mut socket: WebSocket, state: Arc<AppState>) {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
     let k8s = state.k8s.clone();
 
+    // Spawn the enable task
     tokio::spawn(async move {
         match k8s.enable_streaming(tx.clone()).await {
             Ok(_) => { let _ = tx.send("[DONE]".into()).await; }
             Err(e) => {
-                // Send error lines individually (SSE can't handle multi-line data well)
                 for line in e.to_string().lines() {
                     let _ = tx.send(line.to_string()).await;
                 }
@@ -1863,11 +1874,13 @@ async fn k8s_enable_stream(
         }
     });
 
-    let stream = ReceiverStream::new(rx).map(|line| {
-        Ok::<_, std::convert::Infallible>(Event::default().data(line))
-    });
-
-    Sse::new(stream)
+    // Forward progress lines to WebSocket
+    while let Some(line) = rx.recv().await {
+        if socket.send(Message::Text(line.into())).await.is_err() {
+            break;
+        }
+    }
+    let _ = socket.close().await;
 }
 
 async fn k8s_disable(

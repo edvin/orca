@@ -422,20 +422,8 @@ export default function SettingsPage() {
                       </Show>
                     </label>
                     <Show when={availableModels().length > 0} fallback={
-                      <div>
-                        <input
-                          class="form-input"
-                          type="text"
-                          placeholder={
-                            aiProvider() === "anthropic" ? "claude-sonnet-4-20250514"
-                              : aiProvider() === "gemini" ? "gemini-2.0-flash"
-                              : aiProvider() === "openai" ? "gpt-4o"
-                              : "model-name"
-                          }
-                          value={aiModel()}
-                          onInput={(e) => setAiModel(e.currentTarget.value)}
-                        />
-                        <span class="form-hint">Save your API key first, then available models will load as a dropdown</span>
+                      <div style={{ padding: "8px 0", "font-size": "12px", color: "#6e7681" }}>
+                        Save your API key first — available models will load as a dropdown
                       </div>
                     }>
                       <select

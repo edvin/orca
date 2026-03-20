@@ -1341,9 +1341,9 @@ input[type="checkbox"]:checked::after {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px) saturate(150%);
-  -webkit-backdrop-filter: blur(8px) saturate(150%);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -2150,7 +2150,9 @@ input[type="checkbox"]:checked::after {
 .notification-dropdown-footer {
   padding: 8px 14px;
   border-top: 1px solid #21262d;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .notification-view-all {
@@ -2164,6 +2166,14 @@ input[type="checkbox"]:checked::after {
 
 .notification-view-all:hover {
   text-decoration: underline;
+}
+
+.notification-clear-btn {
+  color: #8b949e;
+}
+
+.notification-clear-btn:hover {
+  color: #f85149;
 }
 
 /* ==================== Sparkline ==================== */
@@ -2215,6 +2225,14 @@ input[type="checkbox"]:checked::after {
   font-size: 12px;
   color: #8b949e;
   margin-top: 4px;
+}
+
+.dashboard-stat-error {
+  font-size: 12px;
+  color: #f85149;
+  margin-top: 6px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .dashboard-chart-card {

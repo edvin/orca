@@ -45,8 +45,8 @@ export default function ContainersPage(props: ContainersPageProps) {
         invoke("list_containers") as Promise<Container[]>,
         invoke("list_stacks") as Promise<ComposeProject[]>,
       ]);
-      setContainers(containerResult);
-      setStacks(stackResult);
+      setContainers(containerResult || []);
+      setStacks(stackResult || []);
       setLastUpdated(new Date());
 
       // Auto-expand stacks with running containers (on first load)
@@ -237,9 +237,9 @@ export default function ContainersPage(props: ContainersPageProps) {
     return { stackGroups: filteredStacks, standalone: filteredStandalone };
   };
 
-  const totalCount = () => containers().length;
-  const runningCount = () => containers().filter((c) => c.state === "Running").length;
-  const stoppedCount = () => containers().filter((c) => c.state !== "Running").length;
+  const totalCount = () => (containers() || []).length;
+  const runningCount = () => (containers() || []).filter((c) => c.state === "Running").length;
+  const stoppedCount = () => (containers() || []).filter((c) => c.state !== "Running").length;
 
   const toggleExpand = (name: string) => {
     const next = new Set(expanded());
