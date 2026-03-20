@@ -137,6 +137,8 @@ export default function KubernetesPage() {
       if (reader) {
         let done = false;
         let success = true;
+        let receivedData = false;
+        let receivedDone = false;
         while (!done) {
           const { value, done: streamDone } = await reader.read();
           done = streamDone;
@@ -145,7 +147,9 @@ export default function KubernetesPage() {
             for (const line of text.split("\n")) {
               if (line.startsWith("data: ")) {
                 const data = line.slice(6);
+                receivedData = true;
                 if (data === "[DONE]") {
+                  receivedDone = true;
                   done = true;
                 } else if (data.startsWith("[ERROR]")) {
                   setSetupLog((prev) => prev + "\n" + data.slice(8) + "\n");
@@ -157,6 +161,14 @@ export default function KubernetesPage() {
               }
             }
           }
+        }
+        if (!receivedData) {
+          setSetupLog("No response from server. The daemon may not support this operation on this platform.\n");
+          success = false;
+        } else if (!receivedDone && success) {
+          // Stream ended without [DONE] or [ERROR] — treat as incomplete
+          setSetupLog((prev) => prev + "\nStream ended unexpectedly.\n");
+          success = false;
         }
         setSetupSuccess(success);
       }
@@ -867,7 +879,7 @@ export default function KubernetesPage() {
           onMouseDown={(e) => { mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
           onClick={(e) => { if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !setupRunning()) closeSetupDialog(); mouseDownOnOverlay = false; }}
         >
-          <div class="modal-dialog" style={{ "max-width": "720px" }}>
+          <div class="modal-dialog" style={{ "max-width": "820px" }}>
             <div class="modal-header">
               <span class="modal-title">
                 <Show when={setupRunning()} fallback={

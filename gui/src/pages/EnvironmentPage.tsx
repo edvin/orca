@@ -70,6 +70,8 @@ export default function EnvironmentPage() {
       if (reader) {
         let done = false;
         let success = true;
+        let receivedData = false;
+        let receivedDone = false;
         while (!done) {
           const { value, done: streamDone } = await reader.read();
           done = streamDone;
@@ -78,12 +80,20 @@ export default function EnvironmentPage() {
             for (const line of text.split("\n")) {
               if (line.startsWith("data: ")) {
                 const data = line.slice(6);
-                if (data === "[DONE]") { done = true; }
+                receivedData = true;
+                if (data === "[DONE]") { receivedDone = true; done = true; }
                 else if (data.startsWith("[ERROR]")) { setActionLog((prev) => prev + "\n" + data.slice(8) + "\n"); success = false; done = true; }
                 else { setActionLog((prev) => prev + data + "\n"); }
               }
             }
           }
+        }
+        if (!receivedData) {
+          setActionLog("No response from server.\n");
+          success = false;
+        } else if (!receivedDone && success) {
+          setActionLog((prev) => prev + "\nStream ended unexpectedly.\n");
+          success = false;
         }
         setActionSuccess(success);
       }

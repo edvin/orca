@@ -1143,9 +1143,6 @@ async fn image_list_files(
     Path(image_id): Path<String>,
     Query(query): Query<VolumeFilesQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    use orca_core::runtime::ContainerCreateOpts;
-
-    // Resolve image name from ID (bollard needs the repo tag or full ID)
     let image_ref = resolve_image_ref(&state, &image_id).await?;
 
     let subpath = query.path.unwrap_or_default();
@@ -1156,41 +1153,8 @@ async fn image_list_files(
         format!("/{}", sanitized.trim_start_matches('/'))
     };
 
-    let opts = ContainerCreateOpts {
-        image: image_ref.clone(),
-        name: None,
-        // Override entrypoint to ensure ls runs directly regardless of image config
-        entrypoint: Some(vec!["".to_string()]),
-        command: vec![
-            "/bin/ls".to_string(),
-            "-la".to_string(),
-            browse_path,
-        ],
-        env: HashMap::new(),
-        ports: vec![],
-        volumes: vec![],
-        labels: HashMap::new(),
-        restart_policy: None,
-        network: None,
-        detach: false,
-        remove_on_exit: true,
-        cpu_limit: None,
-        memory_limit: None,
-        memory_swap: None,
-    };
-
-    let id = state.runtime.create_container(opts).await?;
-    state.runtime.start_container(&id).await?;
-
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let log_rx = state.runtime.container_logs(&id, false, Some(1000)).await?;
-    let mut lines = Vec::new();
-    let mut rx = log_rx;
-    while let Some(line) = rx.recv().await {
-        lines.push(line);
-    }
-
-    let _ = state.runtime.remove_container(&id, true).await;
+    let lines = run_in_image(&state.runtime.docker, &image_ref,
+        vec!["ls", "-la", &browse_path]).await?;
 
     let mut entries = Vec::new();
     for line in &lines {
@@ -1234,46 +1198,77 @@ async fn image_read_file(
     Path(image_id): Path<String>,
     Query(query): Query<VolumeFilesQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    use orca_core::runtime::ContainerCreateOpts;
-
     let image_ref = resolve_image_ref(&state, &image_id).await?;
 
     let file_path = query.path.unwrap_or_default();
     let sanitized = file_path.replace("..", "").replace('\0', "");
     let full_path = format!("/{}", sanitized.trim_start_matches('/'));
 
-    let opts = ContainerCreateOpts {
-        image: image_ref,
-        name: None,
-        entrypoint: Some(vec!["".to_string()]),
-        command: vec!["/bin/cat".to_string(), full_path],
-        env: HashMap::new(),
-        ports: vec![],
-        volumes: vec![],
-        labels: HashMap::new(),
-        restart_policy: None,
-        network: None,
-        detach: false,
-        remove_on_exit: true,
-        cpu_limit: None,
-        memory_limit: None,
-        memory_swap: None,
-    };
-
-    let id = state.runtime.create_container(opts).await?;
-    state.runtime.start_container(&id).await?;
-
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let log_rx = state.runtime.container_logs(&id, false, Some(10000)).await?;
-    let mut lines = Vec::new();
-    let mut rx = log_rx;
-    while let Some(line) = rx.recv().await {
-        lines.push(line);
-    }
-
-    let _ = state.runtime.remove_container(&id, true).await;
+    let lines = run_in_image(&state.runtime.docker, &image_ref,
+        vec!["cat", &full_path]).await?;
 
     Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
+}
+
+/// Run a command inside an image by creating a temporary container,
+/// waiting for it to finish, collecting output, and cleaning up.
+async fn run_in_image(
+    docker: &bollard::Docker,
+    image: &str,
+    cmd: Vec<&str>,
+) -> anyhow::Result<Vec<String>> {
+    use bollard::container::{Config, CreateContainerOptions, LogsOptions, WaitContainerOptions};
+    use futures::StreamExt;
+
+    let config = Config {
+        image: Some(image.to_string()),
+        entrypoint: Some(vec!["".to_string()]),  // Clear entrypoint
+        cmd: Some(cmd.iter().map(|s| s.to_string()).collect()),
+        ..Default::default()
+    };
+
+    let container = docker
+        .create_container(None::<CreateContainerOptions<String>>, config)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create container: {e}"))?;
+
+    let id = &container.id;
+
+    docker.start_container::<String>(id, None).await
+        .map_err(|e| anyhow::anyhow!("Failed to start container: {e}"))?;
+
+    // Wait for the container to finish (max 10 seconds)
+    let wait_opts = WaitContainerOptions { condition: "not-running" };
+    let _ = tokio::time::timeout(
+        Duration::from_secs(10),
+        docker.wait_container(id, Some(wait_opts)).next(),
+    ).await;
+
+    // Collect logs
+    let log_opts = LogsOptions::<String> {
+        stdout: true,
+        stderr: true,
+        ..Default::default()
+    };
+
+    let mut lines = Vec::new();
+    let mut stream = docker.logs(id, Some(log_opts));
+    while let Some(Ok(output)) = stream.next().await {
+        let text = output.to_string();
+        for line in text.lines() {
+            if !line.is_empty() {
+                lines.push(line.to_string());
+            }
+        }
+    }
+
+    // Clean up
+    let _ = docker.remove_container(id, Some(bollard::container::RemoveContainerOptions {
+        force: true,
+        ..Default::default()
+    })).await;
+
+    Ok(lines)
 }
 
 /// Resolve an image ID to a usable reference (repo:tag or full sha).
