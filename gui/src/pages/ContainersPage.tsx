@@ -317,6 +317,10 @@ export default function ContainersPage(props: ContainersPageProps) {
     return (s.memory_usage_bytes / s.memory_limit_bytes) * 100;
   };
 
+  // A container has a real limit if the percentage is meaningful (> 1%)
+  // When Docker returns host RAM as the limit, small containers show < 1%
+  const hasRealMemLimit = (s: ContainerStats) => memPercent(s) > 1;
+
   const containerRow = (c: Container, stackName?: string) => {
     const cStats = () => inlineStats()[c.id];
     return (
@@ -347,10 +351,7 @@ export default function ContainersPage(props: ContainersPageProps) {
             </span>
           }>
             {(s) => (
-              <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                <ResourceBar value={s().cpu_percent} label={`${s().cpu_percent.toFixed(1)}%`} />
-                <Sparkline data={getCpuHistory(c.id)} width={40} height={16} color="#58a6ff" max={100} />
-              </div>
+              <ResourceBar value={s().cpu_percent} label={`${s().cpu_percent.toFixed(1)}%`} />
             )}
           </Show>
         </td>
@@ -361,10 +362,11 @@ export default function ContainersPage(props: ContainersPageProps) {
             </span>
           }>
             {(s) => (
-              <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+              <Show when={hasRealMemLimit(s())} fallback={
+                <span style={{ "font-size": "11px", color: "#8b949e" }}>{formatBytes(s().memory_usage_bytes)}</span>
+              }>
                 <ResourceBar value={memPercent(s())} label={formatBytes(s().memory_usage_bytes)} />
-                <Sparkline data={getMemoryHistory(c.id)} width={40} height={16} color="#a371f7" max={100} />
-              </div>
+              </Show>
             )}
           </Show>
         </td>
@@ -394,6 +396,17 @@ export default function ContainersPage(props: ContainersPageProps) {
               <span style={{ color: "#484f58" }}>-</span>
             )}
           </div>
+        </td>
+        <td>
+          <Show when={c.state === "Running" && cStats()} fallback={
+            <span style={{ color: "#484f58", "font-size": "11px" }}>{c.state === "Running" ? "-" : "\u2014"}</span>
+          }>
+            {(s) => (
+              <span style={{ "font-size": "11px", color: "#8b949e", "white-space": "nowrap" }}>
+                {"\u2191"}{formatBytes(s().network_tx_bytes)} {"\u2193"}{formatBytes(s().network_rx_bytes)}
+              </span>
+            )}
+          </Show>
         </td>
         <td style={{ "text-align": "right" }}>
           <div class="action-icons">
@@ -660,6 +673,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                             <th>CPU</th>
                             <th>Memory</th>
                             <th>Ports</th>
+                            <th>Net I/O</th>
                             <th style={{ "text-align": "right" }}>Actions</th>
                           </tr>
                         </thead>

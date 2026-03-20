@@ -407,20 +407,26 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     {container()?.state === "Running" ? "-" : "N/A"}
                   </div>
                 }>
-                  {(s) => (
+                  {(s) => {
+                    const hasLimit = memPercent(s()) > 1;
+                    return (
                     <>
                       <div class="detail-stat-value">
                         {formatBytes(s().memory_usage_bytes)}
-                        <span class="detail-stat-secondary">
-                          {" / "}{formatBytes(s().memory_limit_bytes)}
-                        </span>
+                        <Show when={hasLimit}>
+                          <span class="detail-stat-secondary">
+                            {" / "}{formatBytes(s().memory_limit_bytes)}
+                          </span>
+                        </Show>
                       </div>
-                      <div class="detail-stat-bar">
-                        <ResourceBar
-                          value={memPercent(s())}
-                          label=""
-                        />
-                      </div>
+                      <Show when={hasLimit}>
+                        <div class="detail-stat-bar">
+                          <ResourceBar
+                            value={memPercent(s())}
+                            label=""
+                          />
+                        </div>
+                      </Show>
                       <div class="detail-stat-sparkline">
                         <Sparkline
                           data={getMemoryHistory(props.containerId)}
@@ -431,7 +437,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                         />
                       </div>
                     </>
-                  )}
+                  );}}
                 </Show>
               </div>
 
