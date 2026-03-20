@@ -165,6 +165,25 @@ export default function EnvironmentPage() {
   const [diagnoseRunning, setDiagnoseRunning] = createSignal(false);
   const [diagnoseResult, setDiagnoseResult] = createSignal<boolean | null>(null);
 
+  const [restarting, setRestarting] = createSignal(false);
+
+  const restartDaemon = async () => {
+    setRestarting(true);
+    try {
+      showToast("Restarting daemon...", "info");
+      await invoke("stop_daemon");
+      await new Promise(r => setTimeout(r, 1500));
+      await invoke("start_daemon");
+      await new Promise(r => setTimeout(r, 2000));
+      showToast("Daemon restarted", "success");
+      await refresh();
+    } catch (e) {
+      showToast(`Restart failed: ${e}`, "error");
+    } finally {
+      setRestarting(false);
+    }
+  };
+
   const runDiagnose = async () => {
     setDiagnoseLog("Testing connection methods...\n\n");
     setDiagnoseRunning(true);
@@ -192,8 +211,11 @@ export default function EnvironmentPage() {
       <div class="page-header">
         <h1 class="page-title">System Health</h1>
         <div class="page-actions">
+          <button class="btn" onClick={restartDaemon} disabled={restarting()}>
+            {restarting() ? "Restarting..." : "Restart Daemon"}
+          </button>
           <button class="btn" onClick={runDiagnose}>
-            Diagnose Connection
+            Diagnose
           </button>
           <button class="btn" onClick={refresh} disabled={loading()}>
             {loading() ? "Checking..." : "Re-check"}

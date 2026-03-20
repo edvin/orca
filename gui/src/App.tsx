@@ -8,6 +8,7 @@ import Titlebar from "./components/Titlebar";
 import StatusBar from "./components/StatusBar";
 import Sidebar from "./components/Sidebar";
 import ToastContainer, { showToast } from "./components/Toast";
+import ConfirmDialog from "./components/ConfirmDialog";
 import ContainersPage from "./pages/ContainersPage";
 import ContainerDetailPage from "./pages/ContainerDetailPage";
 import StackDetailPage from "./pages/StackDetailPage";
@@ -234,6 +235,7 @@ export default function App() {
       )}
       <StatusBar />
       <ToastContainer />
+      <ConfirmDialog />
       <div class="resize-handle" onMouseDown={startResize} />
     </div>
   );
