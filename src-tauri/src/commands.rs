@@ -1014,3 +1014,16 @@ pub async fn check_for_updates(app: tauri::AppHandle) -> Result<serde_json::Valu
 pub async fn get_api_token() -> Result<String, String> {
     load_api_token().ok_or_else(|| "No API token configured".to_string())
 }
+
+#[tauri::command]
+pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/settings/cleanup"))
+        .json(&serde_json::json!({ "scope": scope }))
+        .send()
+        .await
+        .map_err(|e| format!("Cleanup failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}

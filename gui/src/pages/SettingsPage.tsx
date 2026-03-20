@@ -637,9 +637,59 @@ export default function SettingsPage() {
               <div class="card">
                 <div class="card-grid">
                   <span class="card-label">Config File</span>
-                  <span class="card-value mono">~/.config/orca/config.toml</span>
+                  <span class="card-value mono">~/.config/orca/config.json</span>
                   <span class="card-label">Data Directory</span>
                   <span class="card-value mono">~/.local/share/orca/</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h2 class="settings-section-title">Cleanup</h2>
+              <div class="card">
+                <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
+                  Remove Orca data from your system. This is useful before uninstalling or to start fresh.
+                </p>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
+                    <div>
+                      <div style={{ "font-size": "13px", "font-weight": "500" }}>Remove User Templates</div>
+                      <div style={{ "font-size": "12px", color: "#8b949e" }}>Delete custom templates you've created</div>
+                    </div>
+                    <button class="btn btn-sm" onClick={async () => {
+                      if (!window.confirm("Remove all user-created templates?")) return;
+                      try {
+                        await invoke("cleanup", { scope: "templates" });
+                        showToast("User templates removed", "success");
+                      } catch (e) { showToast(`Failed: ${e}`, "error"); }
+                    }}>Remove</button>
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
+                    <div>
+                      <div style={{ "font-size": "13px", "font-weight": "500" }}>Stop & Remove VMs</div>
+                      <div style={{ "font-size": "12px", color: "#8b949e" }}>Stop Lima VMs (macOS) or remove Docker TCP config (Windows)</div>
+                    </div>
+                    <button class="btn btn-sm" onClick={async () => {
+                      if (!window.confirm("Stop and remove all Orca-managed VMs and runtime config?")) return;
+                      try {
+                        const result = (await invoke("cleanup", { scope: "vms" })) as { log: string[] };
+                        showToast(result.log.join(". ") || "Cleanup done", "success");
+                      } catch (e) { showToast(`Failed: ${e}`, "error"); }
+                    }}>Remove</button>
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0" }}>
+                    <div>
+                      <div style={{ "font-size": "13px", "font-weight": "500", color: "#f85149" }}>Reset Everything</div>
+                      <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all config, templates, VMs, and data — like a fresh install</div>
+                    </div>
+                    <button class="btn btn-sm" style={{ color: "#f85149", "border-color": "#da363380" }} onClick={async () => {
+                      if (!window.confirm("This will remove ALL Orca data including config, API keys, templates, and VMs.\n\nThis cannot be undone. Continue?")) return;
+                      try {
+                        const result = (await invoke("cleanup", { scope: "all" })) as { log: string[] };
+                        showToast("Orca has been fully reset. Restart the app.", "success");
+                      } catch (e) { showToast(`Failed: ${e}`, "error"); }
+                    }}>Reset All</button>
+                  </div>
                 </div>
               </div>
             </div>

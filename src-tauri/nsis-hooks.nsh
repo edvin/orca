@@ -10,3 +10,13 @@
   ; Give processes time to fully exit and release file handles
   Sleep 1000
 !macroend
+
+; Clean up Orca config and data on uninstall
+!macro NSIS_HOOK_POSTUNINSTALL
+  ; Remove Orca config directory
+  RMDir /r "$APPDATA\orca"
+  RMDir /r "$LOCALAPPDATA\orca"
+  ; Remove Docker TCP override from WSL (best effort)
+  nsExec::ExecToLog 'wsl -u root -- rm -f /etc/systemd/system/docker.service.d/override.conf'
+  nsExec::ExecToLog 'wsl -u root -- systemctl daemon-reload'
+!macroend

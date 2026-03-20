@@ -92,6 +92,7 @@ pub fn run() {
             commands::get_daemon_info,
             commands::check_for_updates,
             commands::get_api_token,
+            commands::cleanup,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

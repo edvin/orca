@@ -183,6 +183,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/settings/ai", post(save_ai_settings))
         .route("/settings/ai", get(get_ai_settings))
         .route("/settings/ai/models", get(list_ai_models))
+        .route("/settings/cleanup", post(cleanup))
         // Agent APIs (MCP + OpenAI-compatible)
         .route("/agent/tools", get(agent_list_tools))
         .route("/agent/execute", post(agent_execute_tool))
@@ -2281,6 +2282,96 @@ async fn get_ai_settings(
         "openai_url": config.openai_url,
         "api_token": config.api_token.clone().unwrap_or_default(),
     })))
+}
+
+// --- Cleanup ---
+
+#[derive(Deserialize)]
+struct CleanupRequest {
+    /// What to clean up: "config", "vms", "templates", "all"
+    #[serde(default)]
+    scope: String,
+}
+
+async fn cleanup(
+    Json(body): Json<CleanupRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut log = Vec::new();
+    let scope = body.scope.as_str();
+
+    // Stop and delete Lima VMs (macOS)
+    if scope == "vms" || scope == "all" {
+        #[cfg(target_os = "macos")]
+        {
+            log.push("Stopping Lima VMs...".to_string());
+            let output = tokio::process::Command::new("limactl")
+                .args(["list", "--json"])
+                .stdout(Stdio::piped())
+                .output()
+                .await;
+
+            if let Ok(out) = output {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                for line in stdout.lines() {
+                    if let Ok(vm) = serde_json::from_str::<serde_json::Value>(line) {
+                        if let Some(name) = vm.get("name").and_then(|n| n.as_str()) {
+                            log.push(format!("  Stopping VM '{name}'..."));
+                            let _ = tokio::process::Command::new("limactl")
+                                .args(["stop", name])
+                                .output()
+                                .await;
+                            log.push(format!("  Deleting VM '{name}'..."));
+                            let _ = tokio::process::Command::new("limactl")
+                                .args(["delete", name])
+                                .output()
+                                .await;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remove Docker TCP override (Windows/WSL)
+        #[cfg(target_os = "windows")]
+        {
+            log.push("Removing Docker TCP override from WSL...".to_string());
+            let _ = tokio::process::Command::new("wsl")
+                .args(["-u", "root", "--", "rm", "-f",
+                    "/etc/systemd/system/docker.service.d/override.conf"])
+                .output().await;
+            let _ = tokio::process::Command::new("wsl")
+                .args(["-u", "root", "--", "systemctl", "daemon-reload"])
+                .output().await;
+            log.push("  Done".to_string());
+        }
+    }
+
+    // Remove user templates
+    if scope == "templates" || scope == "all" {
+        let config_dir = orca_core::config::OrcaConfig::config_path()
+            .parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        let templates_path = config_dir.join("templates.json");
+        if templates_path.exists() {
+            let _ = std::fs::remove_file(&templates_path);
+            log.push("Removed user templates".to_string());
+        }
+    }
+
+    // Remove config
+    if scope == "config" || scope == "all" {
+        let config_path = orca_core::config::OrcaConfig::config_path()
+            .parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        if config_path.exists() {
+            log.push(format!("Removing config at {}", config_path.display()));
+            let _ = std::fs::remove_dir_all(&config_path);
+        }
+    }
+
+    if log.is_empty() {
+        log.push("Nothing to clean up".to_string());
+    }
+
+    Ok(Json(serde_json::json!({ "log": log })))
 }
 
 // --- Agent APIs (MCP + OpenAI-compatible) ---
