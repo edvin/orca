@@ -290,7 +290,7 @@ export default function SettingsPage() {
                 <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
                   <div class="settings-row-left">
                     <span class="settings-label">Start on Login</span>
-                    <span class="settings-description">Automatically launch Orca when you log in</span>
+                    <span class="settings-description">Automatically launch Orca Desktop when you log in</span>
                   </div>
                   <div
                     class="settings-toggle"
@@ -306,7 +306,7 @@ export default function SettingsPage() {
                 <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
                   <div class="settings-row-left">
                     <span class="settings-label">Show Tray Icon</span>
-                    <span class="settings-description">Display Orca in the system tray</span>
+                    <span class="settings-description">Display Orca Desktop in the system tray</span>
                   </div>
                   <div
                     class="settings-toggle"
@@ -648,7 +648,7 @@ export default function SettingsPage() {
               <h2 class="settings-section-title">Cleanup</h2>
               <div class="card">
                 <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
-                  Remove Orca data from your system. This is useful before uninstalling or to start fresh.
+                  Remove Orca Desktop data from your system. This is useful before uninstalling or to start fresh.
                 </p>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
@@ -670,7 +670,7 @@ export default function SettingsPage() {
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Stop Lima VMs (macOS) or remove Docker TCP config (Windows)</div>
                     </div>
                     <button class="btn btn-sm" onClick={async () => {
-                      if (!window.confirm("Stop and remove all Orca-managed VMs and runtime config?")) return;
+                      if (!window.confirm("Stop and remove all Orca Desktop-managed VMs and runtime config?")) return;
                       try {
                         const result = (await invoke("cleanup", { scope: "vms" })) as { log: string[] };
                         showToast(result.log.join(". ") || "Cleanup done", "success");
@@ -683,10 +683,10 @@ export default function SettingsPage() {
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all config, templates, VMs, and data — like a fresh install</div>
                     </div>
                     <button class="btn btn-sm" style={{ color: "#f85149", "border-color": "#da363380" }} onClick={async () => {
-                      if (!window.confirm("This will remove ALL Orca data including config, API keys, templates, and VMs.\n\nThis cannot be undone. Continue?")) return;
+                      if (!window.confirm("This will remove ALL Orca Desktop data including config, API keys, templates, and VMs.\n\nThis cannot be undone. Continue?")) return;
                       try {
                         const result = (await invoke("cleanup", { scope: "all" })) as { log: string[] };
-                        showToast("Orca has been fully reset. Restart the app.", "success");
+                        showToast("Orca Desktop has been fully reset. Restart the app.", "success");
                       } catch (e) { showToast(`Failed: ${e}`, "error"); }
                     }}>Reset All</button>
                   </div>

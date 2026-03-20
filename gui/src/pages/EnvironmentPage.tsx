@@ -241,7 +241,7 @@ export default function EnvironmentPage() {
                   display: "flex", "align-items": "center", gap: "8px",
                 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  Docker Desktop detected — Orca shares the same Docker daemon.
+                  Docker Desktop detected — Orca Desktop shares the same Docker daemon.
                 </div>
               </Show>
 
@@ -307,10 +307,10 @@ export default function EnvironmentPage() {
                 </div>
                 <div style={{ "font-size": "14px", color: "var(--text-muted)", "margin-bottom": "24px", "line-height": "1.5" }}>
                   {s().platform === "macos"
-                    ? "Orca needs a container runtime to manage your containers. Set up Docker via Lima or Docker Desktop on macOS."
+                    ? "Orca Desktop needs a container runtime. Set up Docker via Lima or Docker Desktop on macOS."
                     : s().platform === "windows"
-                    ? "Orca needs Docker running inside WSL2 to manage containers on Windows."
-                    : "Orca needs a container runtime. Install Docker or Podman to get started."}
+                    ? "Orca Desktop needs Docker running inside WSL2 to manage containers on Windows."
+                    : "Orca Desktop needs a container runtime. Install Docker or Podman to get started."}
                 </div>
 
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>

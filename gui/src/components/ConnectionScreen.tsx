@@ -51,16 +51,16 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
 
       <Show when={props.status === "connecting"}>
         <div class="connection-spinner" />
-        <h2 class="connection-title">Connecting to Orca daemon...</h2>
+        <h2 class="connection-title">Connecting to daemon...</h2>
         <p class="connection-subtitle">
-          Please wait while Orca connects to the daemon process.
+          Please wait while Orca Desktop connects to the daemon.
         </p>
       </Show>
 
       <Show when={props.status !== "connecting"}>
-        <h2 class="connection-title">The Orca daemon is not running</h2>
+        <h2 class="connection-title">The daemon is not running</h2>
         <p class="connection-subtitle">
-          The daemon manages your containers and must be running for Orca to work.
+          The daemon manages your containers and must be running for Orca Desktop to work.
         </p>
 
         <Show when={error()}>
@@ -79,7 +79,7 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
                   from GitHub Actions artifacts
                 </li>
                 <li>
-                  Place it in your PATH or next to the Orca app
+                  Place it in your PATH or next to the Orca Desktop app
                 </li>
                 <li>
                   Click <strong>Retry Connection</strong> below

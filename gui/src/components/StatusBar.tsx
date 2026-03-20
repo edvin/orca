@@ -31,7 +31,7 @@ export default function StatusBar() {
     if (!info) return;
 
     const confirmed = window.confirm(
-      `Update to Orca v${info.version}?\n\nThe app will download the update and restart.\n${info.body ? `\nWhat's new:\n${info.body}` : ""}`
+      `Update to Orca Desktop v${info.version}?\n\nThe app will download the update and restart.\n${info.body ? `\nWhat's new:\n${info.body}` : ""}`
     );
     if (!confirmed) return;
 

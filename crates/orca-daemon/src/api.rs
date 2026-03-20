@@ -1790,7 +1790,7 @@ async fn system_health(
             health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable"));
             // Add a hint that the daemon needs restart for full functionality
             if !health.warnings.iter().any(|w| w.contains("restart")) {
-                health.warnings.push("Docker is available but Orca needs a restart to connect. Close and reopen Orca.".to_string());
+                health.warnings.push("Docker is available but Orca Desktop needs a restart to connect. Close and reopen the app.".to_string());
             }
         }
     }
@@ -2041,11 +2041,11 @@ async fn ai_ask(
 
     // Build context-enriched prompt
     let mut system_prompt = String::from(
-        "You are Orca AI, an assistant built into the Orca container management desktop app. \
+        "You are the AI assistant built into Orca Desktop, an open source Docker Desktop alternative. \
          You help users with Docker containers, images, networking, volumes, and troubleshooting. \
          Keep responses concise and actionable. Use markdown formatting. \
          When suggesting fixes, be specific with commands. \
-         You can suggest actions the user can take in the Orca UI."
+         You can suggest actions the user can take in the Orca Desktop UI."
     );
 
     let user_message = body.query.clone();
@@ -2434,7 +2434,7 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                     log.push(format!("  Connected! Docker {v}"));
                     log.push("".to_string());
                     log.push("Connection successful via local socket.".to_string());
-                    log.push("Restart Orca to use this connection for all operations.".to_string());
+                    log.push("Restart Orca Desktop to use this connection for all operations.".to_string());
                     return Ok(Json(serde_json::json!({
                         "connected": true,
                         "method": "local",
@@ -2461,7 +2461,7 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                         log.push(format!("  Connected! Docker {v}"));
                         log.push("".to_string());
                         log.push("Connection successful via named pipe.".to_string());
-                        log.push("Restart Orca to use this connection.".to_string());
+                        log.push("Restart Orca Desktop to use this connection.".to_string());
                         return Ok(Json(serde_json::json!({
                             "connected": true,
                             "method": "pipe",
@@ -2491,7 +2491,7 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                         log.push(format!("  Connected! Docker {v}"));
                         log.push("".to_string());
                         log.push("Connection successful via TCP.".to_string());
-                        log.push("Restart Orca to use this connection.".to_string());
+                        log.push("Restart Orca Desktop to use this connection.".to_string());
                         return Ok(Json(serde_json::json!({
                             "connected": true,
                             "method": "tcp",
@@ -2527,7 +2527,7 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                 log.push("    | sudo tee /etc/systemd/system/docker.service.d/override.conf".to_string());
                 log.push("  sudo systemctl daemon-reload && sudo service docker restart".to_string());
                 log.push("".to_string());
-                log.push("Then restart Orca.".to_string());
+                log.push("Then restart Orca Desktop.".to_string());
             }
             Ok(out) => {
                 let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
@@ -2539,7 +2539,7 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
 
     log.push("".to_string());
     log.push("No connection method succeeded.".to_string());
-    log.push("Install a container runtime via System Health, then restart Orca.".to_string());
+    log.push("Install a container runtime via System Health, then restart Orca Desktop.".to_string());
 
     Ok(Json(serde_json::json!({
         "connected": false,

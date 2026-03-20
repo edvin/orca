@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/nicegui/static/tauri.conf.schema.json",
-  "productName": "Orca",
+  "productName": "Orca Desktop",
   "version": "0.1.16",
   "identifier": "com.orca.desktop",
   "build": {
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Orca",
+        "title": "Orca Desktop",
         "width": 1440,
         "height": 900,
         "minWidth": 900,
@@ -58,7 +58,7 @@
     "publisher": "Edvin Syse",
     "category": "DeveloperTool",
     "shortDescription": "Container management desktop app with built-in AI",
-    "longDescription": "Orca is an open source container management app. Manage Docker and Podman containers, images, compose stacks, and Kubernetes from a beautiful desktop UI with built-in AI assistant.",
+    "longDescription": "Orca Desktop is an open source container management app. Manage Docker and Podman containers, images, compose stacks, and Kubernetes from a beautiful desktop UI with built-in AI assistant.",
     "createUpdaterArtifacts": true
   },
   "plugins": {

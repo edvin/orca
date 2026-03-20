@@ -2,10 +2,10 @@
   <img src="assets/orca-logo-full.png" alt="Orca" width="200" />
 </p>
 
-<h1 align="center">Orca</h1>
+<h1 align="center">Orca Desktop</h1>
 
 <p align="center">
-  <strong>A beautiful, lightweight container management desktop app with built-in AI.</strong><br>
+  <strong>Open source Docker Desktop alternative with built-in AI.</strong><br>
   Containers, images, compose stacks, Kubernetes, AI assistant, and agent APIs — all in one place.
 </p>
 
@@ -148,13 +148,13 @@ The daemon talks to Docker/Podman via the standard API (bollard). On macOS it ma
 
 ### Install and Run
 
-Just download and launch Orca — it handles everything else:
+Just download and launch Orca Desktop — it handles everything else:
 
 1. **Download** from [Releases](https://github.com/edvin/orca/releases)
 2. **Run** the installer (Windows: exe/msi, macOS: dmg, Linux: AppImage/deb)
-3. **Orca checks your environment** and installs anything missing:
+3. **Orca Desktop checks your environment** and installs anything missing:
 
-| Platform | What Orca sets up for you |
+| Platform | What Orca Desktop sets up for you |
 |----------|--------------------------|
 | **Linux** | Installs Docker or Podman if not found |
 | **macOS** | Installs Homebrew → Lima → creates a Linux VM with Docker |
@@ -248,7 +248,7 @@ cargo build --release --bin orca
 
 ## Agent Integration
 
-Orca exposes agent-friendly APIs so AI tools can manage your containers directly.
+Orca Desktop exposes agent-friendly APIs so AI tools can manage your containers directly.
 
 ### Claude Code / Claude Desktop (MCP)
 
@@ -432,7 +432,7 @@ This triggers the release workflow which:
 5. Uploads `latest.json` for the Tauri auto-updater
 6. Publishes the release
 
-**Auto-updates:** Users with Orca installed receive update notifications automatically. The app checks `https://github.com/edvin/orca/releases/latest/download/latest.json` on startup and can download + install updates with signature verification.
+**Auto-updates:** Users with Orca Desktop installed receive update notifications automatically. The app checks `https://github.com/edvin/orca/releases/latest/download/latest.json` on startup and can download + install updates with signature verification.
 
 ### Release artifacts
 

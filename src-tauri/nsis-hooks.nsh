@@ -11,7 +11,7 @@
   Sleep 1000
 !macroend
 
-; Clean up Orca config and data on uninstall
+; Clean up Orca Desktop config and data on uninstall
 !macro NSIS_HOOK_POSTUNINSTALL
   ; Remove Orca config directory
   RMDir /r "$APPDATA\orca"

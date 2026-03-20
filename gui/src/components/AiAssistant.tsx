@@ -206,7 +206,7 @@ export default function AiAssistant(props: AiAssistantProps) {
       <Show when={open()}>
         <div class="ai-panel">
           <div class="ai-panel-header">
-            <span>{"\u2728"} Orca AI</span>
+            <span>{"\u2728"} Orca Desktop AI</span>
             <button
               class="modal-close"
               onClick={() => setOpen(false)}
@@ -296,7 +296,7 @@ export default function AiAssistant(props: AiAssistantProps) {
               <div class="ai-setup">
                 <div style="font-size: 32px; opacity: 0.5">{"\u2728"}</div>
                 <div style="font-size: 14px; color: #e6edf3; font-weight: 600">
-                  Orca AI Assistant
+                  Orca Desktop AI Assistant
                 </div>
                 <div style="font-size: 12px; color: #8b949e; line-height: 1.5">
                   Ask me anything about your containers, images, or Docker in general.
@@ -368,7 +368,7 @@ export default function AiAssistant(props: AiAssistantProps) {
               value={input()}
               onInput={(e) => setInput(e.currentTarget.value)}
               onKeyDown={handleKeyDown}
-              placeholder={hasCredentials() === false ? "Configure AI provider first..." : "Ask Orca AI..."}
+              placeholder={hasCredentials() === false ? "Configure AI provider first..." : "Ask Orca Desktop AI..."}
               disabled={loading() || hasCredentials() === false}
             />
             <button
