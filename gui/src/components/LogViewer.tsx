@@ -23,7 +23,11 @@ export default function LogViewer(props: LogViewerProps) {
         id: props.containerId,
         tail: tail(),
       })) as string[];
-      setLines(result.flatMap((l) => l.replace(/\r/g, "").split("\n")).map((l) => l.trimEnd()));
+      setLines(result
+        .flatMap((l) => l.replace(/\r/g, "").split("\n"))
+        .map((l) => l.trimEnd())
+        .filter((l) => l.length > 0)
+      );
     } catch (e) {
       setLines([`Error fetching logs: ${e}`]);
     }
