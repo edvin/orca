@@ -30,6 +30,15 @@ body {
   position: relative;
 }
 
+/* macOS handles window corners natively — CSS border-radius causes white artifacts */
+@supports (-webkit-appearance: none) {
+  @media screen {
+    .app-root.platform-macos {
+      border-radius: 0;
+    }
+  }
+}
+
 /* ==================== Status Bar ==================== */
 .status-bar {
   display: flex;

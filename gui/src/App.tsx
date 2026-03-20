@@ -168,7 +168,7 @@ export default function App() {
   };
 
   return (
-    <div class="app-root">
+    <div class={`app-root ${navigator.platform.includes("Mac") ? "platform-macos" : ""}`}>
       <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => navigate(p)} />
       {daemonStatus() !== "running" ? (
         <ConnectionScreen status={daemonStatus()} onRetry={checkDaemon} />

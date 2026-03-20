@@ -211,11 +211,20 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     return data?.command || data?.Config?.Cmd || [];
   };
 
-  const formatUptime = (createdAt: string): string => {
+  const formatUptime = (createdAt: string | number): string => {
     try {
-      const created = new Date(createdAt);
+      // Docker returns created_at as either ISO string or Unix timestamp (seconds)
+      let created: Date;
+      if (typeof createdAt === "number") {
+        // Unix timestamp in seconds — convert to milliseconds
+        created = new Date(createdAt < 1e12 ? createdAt * 1000 : createdAt);
+      } else {
+        created = new Date(createdAt);
+      }
+      if (isNaN(created.getTime())) return "-";
       const now = new Date();
       const diff = now.getTime() - created.getTime();
+      if (diff < 0) return "-";
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
