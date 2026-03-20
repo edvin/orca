@@ -93,6 +93,7 @@ pub fn run() {
             commands::check_for_updates,
             commands::get_api_token,
             commands::cleanup,
+            commands::reconnect_runtime,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

@@ -140,13 +140,46 @@ export default function EnvironmentPage() {
   const passCount = () => status()?.checks.filter(c => c.status === "Pass").length || 0;
   const totalCount = () => status()?.checks.length || 0;
 
+  // Diagnose dialog
+  const [diagnoseOpen, setDiagnoseOpen] = createSignal(false);
+  const [diagnoseLog, setDiagnoseLog] = createSignal("");
+  const [diagnoseRunning, setDiagnoseRunning] = createSignal(false);
+  const [diagnoseResult, setDiagnoseResult] = createSignal<boolean | null>(null);
+
+  const runDiagnose = async () => {
+    setDiagnoseLog("Testing connection methods...\n\n");
+    setDiagnoseRunning(true);
+    setDiagnoseResult(null);
+    setDiagnoseOpen(true);
+    try {
+      const result = (await invoke("reconnect_runtime")) as {
+        connected: boolean;
+        method?: string;
+        version?: string;
+        log: string[];
+      };
+      setDiagnoseLog(result.log.join("\n"));
+      setDiagnoseResult(result.connected);
+    } catch (e) {
+      setDiagnoseLog(`Failed to run diagnostics: ${e}`);
+      setDiagnoseResult(false);
+    } finally {
+      setDiagnoseRunning(false);
+    }
+  };
+
   return (
     <div>
       <div class="page-header">
         <h1 class="page-title">System Health</h1>
-        <button class="btn" onClick={refresh} disabled={loading()}>
-          {loading() ? "Checking..." : "Re-check"}
-        </button>
+        <div class="page-actions">
+          <button class="btn" onClick={runDiagnose}>
+            Diagnose Connection
+          </button>
+          <button class="btn" onClick={refresh} disabled={loading()}>
+            {loading() ? "Checking..." : "Re-check"}
+          </button>
+        </div>
       </div>
 
       <Show
@@ -326,6 +359,57 @@ export default function EnvironmentPage() {
             </Show>
           </div>
         )}
+      </Show>
+
+      {/* Diagnose Connection Dialog */}
+      <Show when={diagnoseOpen()}>
+        <div class="modal-overlay"
+          onMouseDown={handleOverlayMouseDown}
+          onClick={(e) => { if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !diagnoseRunning()) setDiagnoseOpen(false); mouseDownOnOverlay = false; }}
+        >
+          <div class="modal-dialog" style={{ "max-width": "680px" }}>
+            <div class="modal-header">
+              <span class="modal-title">
+                <Show when={diagnoseRunning()} fallback={
+                  <Show when={diagnoseResult()} fallback={
+                    <Show when={diagnoseResult() === false} fallback={<span>Connection Diagnostics</span>}>
+                      <span style={{ color: "#f85149" }}>Connection failed</span>
+                    </Show>
+                  }>
+                    <span style={{ color: "#3fb950" }}>Connection available</span>
+                  </Show>
+                }>
+                  <span>Testing connections...</span>
+                </Show>
+              </span>
+              <Show when={!diagnoseRunning()}>
+                <button class="modal-close" onClick={() => setDiagnoseOpen(false)}>{"\u00d7"}</button>
+              </Show>
+            </div>
+            <div style={{ padding: "0" }}>
+              <Show when={diagnoseRunning()}>
+                <div style={{ height: "3px", background: "#21262d", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: "30%", background: "#58a6ff", animation: "progress-slide 1.5s ease-in-out infinite", "border-radius": "2px" }} />
+                </div>
+              </Show>
+              <pre style={{
+                padding: "16px", margin: 0,
+                "font-family": "'JetBrains Mono NF', monospace",
+                "font-size": "12px", "line-height": "1.6",
+                color: "#c9d1d9", "white-space": "pre-wrap",
+                "word-break": "break-all", "max-height": "450px",
+                "min-height": "120px", overflow: "auto",
+                background: "#0d1117",
+              }}>{diagnoseLog()}</pre>
+            </div>
+            <div class="modal-footer">
+              <Show when={!diagnoseRunning()}>
+                <button class="btn" onClick={() => setDiagnoseOpen(false)}>Close</button>
+                <button class="btn btn-primary" onClick={runDiagnose}>Retry</button>
+              </Show>
+            </div>
+          </div>
+        </div>
       </Show>
 
       {/* Action Progress Dialog */}

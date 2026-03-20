@@ -26,7 +26,6 @@ body {
   height: 100vh;
   overflow: hidden;
   border-radius: 10px;
-  border: 1px solid #30363d;
   background: #0d1117;
   position: relative;
 }

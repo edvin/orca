@@ -1016,6 +1016,18 @@ pub async fn get_api_token() -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn reconnect_runtime() -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/settings/reconnect"))
+        .send()
+        .await
+        .map_err(|e| format!("Reconnect failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
 pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
     client()
         .post(format!("{DAEMON_URL}/settings/cleanup"))

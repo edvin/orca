@@ -184,6 +184,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/settings/ai", get(get_ai_settings))
         .route("/settings/ai/models", get(list_ai_models))
         .route("/settings/cleanup", post(cleanup))
+        .route("/settings/reconnect", post(reconnect_runtime))
         // Agent APIs (MCP + OpenAI-compatible)
         .route("/agent/tools", get(agent_list_tools))
         .route("/agent/execute", post(agent_execute_tool))
@@ -2411,6 +2412,140 @@ async fn cleanup(
     }
 
     Ok(Json(serde_json::json!({ "log": log })))
+}
+
+// --- Runtime Reconnect ---
+
+async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
+    let mut log = Vec::new();
+
+    // Try each connection method and report results
+    log.push("Attempting to connect to container runtime...".to_string());
+
+    // 1. Local defaults (Unix socket / named pipe)
+    log.push("".to_string());
+    log.push("Method 1: Local socket".to_string());
+    match bollard::Docker::connect_with_local_defaults() {
+        Ok(docker) => {
+            match docker.version().await {
+                Ok(ver) => {
+                    let v = ver.version.unwrap_or_default();
+                    log.push(format!("  Connected! Docker {v}"));
+                    log.push("".to_string());
+                    log.push("Connection successful via local socket.".to_string());
+                    log.push("Restart Orca to use this connection for all operations.".to_string());
+                    return Ok(Json(serde_json::json!({
+                        "connected": true,
+                        "method": "local",
+                        "version": v,
+                        "log": log,
+                    })));
+                }
+                Err(e) => log.push(format!("  Socket exists but ping failed: {e}")),
+            }
+        }
+        Err(e) => log.push(format!("  Not available: {e}")),
+    }
+
+    // 2. Named pipe (Windows Docker Desktop)
+    #[cfg(target_os = "windows")]
+    {
+        log.push("".to_string());
+        log.push("Method 2: Windows named pipe".to_string());
+        match bollard::Docker::connect_with_named_pipe_defaults() {
+            Ok(docker) => {
+                match docker.version().await {
+                    Ok(ver) => {
+                        let v = ver.version.unwrap_or_default();
+                        log.push(format!("  Connected! Docker {v}"));
+                        log.push("".to_string());
+                        log.push("Connection successful via named pipe.".to_string());
+                        log.push("Restart Orca to use this connection.".to_string());
+                        return Ok(Json(serde_json::json!({
+                            "connected": true,
+                            "method": "pipe",
+                            "version": v,
+                            "log": log,
+                        })));
+                    }
+                    Err(e) => log.push(format!("  Pipe exists but ping failed: {e}")),
+                }
+            }
+            Err(e) => log.push(format!("  Not available: {e}")),
+        }
+    }
+
+    // 3. TCP (Docker in WSL2 or remote)
+    #[cfg(target_os = "windows")]
+    {
+        log.push("".to_string());
+        log.push("Method 3: TCP localhost:2375".to_string());
+        match bollard::Docker::connect_with_http(
+            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
+        ) {
+            Ok(docker) => {
+                match docker.version().await {
+                    Ok(ver) => {
+                        let v = ver.version.unwrap_or_default();
+                        log.push(format!("  Connected! Docker {v}"));
+                        log.push("".to_string());
+                        log.push("Connection successful via TCP.".to_string());
+                        log.push("Restart Orca to use this connection.".to_string());
+                        return Ok(Json(serde_json::json!({
+                            "connected": true,
+                            "method": "tcp",
+                            "version": v,
+                            "log": log,
+                        })));
+                    }
+                    Err(e) => log.push(format!("  TCP connection failed: {e}")),
+                }
+            }
+            Err(e) => log.push(format!("  Not available: {e}")),
+        }
+
+        log.push("".to_string());
+        log.push("Method 4: Docker via WSL CLI".to_string());
+        match tokio::process::Command::new("wsl")
+            .args(["docker", "version", "--format", "{{.Server.Version}}"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+        {
+            Ok(out) if out.status.success() => {
+                let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                log.push(format!("  Docker {v} is running in WSL"));
+                log.push("".to_string());
+                log.push("Docker is running inside WSL but not accessible from Windows.".to_string());
+                log.push("The Docker TCP listener may not be configured.".to_string());
+                log.push("".to_string());
+                log.push("To fix, run in Ubuntu:".to_string());
+                log.push("  sudo mkdir -p /etc/systemd/system/docker.service.d".to_string());
+                log.push("  echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375' \\".to_string());
+                log.push("    | sudo tee /etc/systemd/system/docker.service.d/override.conf".to_string());
+                log.push("  sudo systemctl daemon-reload && sudo service docker restart".to_string());
+                log.push("".to_string());
+                log.push("Then restart Orca.".to_string());
+            }
+            Ok(out) => {
+                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                log.push(format!("  Docker not running in WSL: {err}"));
+            }
+            Err(e) => log.push(format!("  WSL not available: {e}")),
+        }
+    }
+
+    log.push("".to_string());
+    log.push("No connection method succeeded.".to_string());
+    log.push("Install a container runtime via System Health, then restart Orca.".to_string());
+
+    Ok(Json(serde_json::json!({
+        "connected": false,
+        "method": serde_json::Value::Null,
+        "version": serde_json::Value::Null,
+        "log": log,
+    })))
 }
 
 // --- Agent APIs (MCP + OpenAI-compatible) ---
