@@ -188,6 +188,7 @@ export interface ScanResult {
   high: number;
   medium: number;
   low: number;
+  error?: string;
 }
 
 // --- Registries ---

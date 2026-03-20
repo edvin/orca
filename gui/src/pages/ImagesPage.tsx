@@ -624,6 +624,25 @@ export default function ImagesPage() {
                                 </div>
                                 <Show when={scanImageId() === img.id && scanResult()}>
                                   <div style={{ "margin-top": "12px" }}>
+                                    {/* Scan error */}
+                                    <Show when={scanResult()!.error}>
+                                      <div style={{
+                                        padding: "10px 14px",
+                                        background: "rgba(248, 81, 73, 0.08)",
+                                        border: "1px solid rgba(248, 81, 73, 0.2)",
+                                        "border-radius": "8px",
+                                        color: "#f85149",
+                                        "font-size": "12px",
+                                        "white-space": "pre-wrap",
+                                        "word-break": "break-word",
+                                        "line-height": "1.5",
+                                        "max-height": "200px",
+                                        overflow: "auto",
+                                      }}>
+                                        {scanResult()!.error}
+                                      </div>
+                                    </Show>
+                                    <Show when={!scanResult()!.error}>
                                     <Show
                                       when={scanResult()!.total > 0}
                                       fallback={
@@ -698,6 +717,7 @@ export default function ImagesPage() {
                                           </span>
                                         </Show>
                                       </div>
+                                    </Show>
                                     </Show>
                                   </div>
                                 </Show>

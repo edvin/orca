@@ -1461,17 +1461,28 @@ async fn scan_image(
         docker.wait_container(id, Some(wait_opts)).next(),
     ).await;
 
-    // Collect stdout
-    let log_opts = LogsOptions::<String> {
+    // Collect stdout and stderr
+    let log_opts_out = LogsOptions::<String> {
         stdout: true,
         stderr: false,
         ..Default::default()
     };
+    let log_opts_err = LogsOptions::<String> {
+        stdout: false,
+        stderr: true,
+        ..Default::default()
+    };
 
-    let mut output = String::new();
-    let mut stream = docker.logs(id, Some(log_opts));
+    let mut stdout = String::new();
+    let mut stream = docker.logs(id, Some(log_opts_out));
     while let Some(Ok(chunk)) = stream.next().await {
-        output.push_str(&chunk.to_string());
+        stdout.push_str(&chunk.to_string());
+    }
+
+    let mut stderr = String::new();
+    let mut stream = docker.logs(id, Some(log_opts_err));
+    while let Some(Ok(chunk)) = stream.next().await {
+        stderr.push_str(&chunk.to_string());
     }
 
     // Clean up
@@ -1480,9 +1491,29 @@ async fn scan_image(
         ..Default::default()
     })).await;
 
+    // If no stdout, return error with stderr details
+    if stdout.trim().is_empty() {
+        let detail = if stderr.trim().is_empty() {
+            "Trivy produced no output. The image may not exist or the Docker socket may not be accessible.".to_string()
+        } else {
+            format!("Trivy error:\n{}", stderr.trim())
+        };
+        return Ok(Json(serde_json::json!({
+            "error": detail,
+            "total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
+        })));
+    }
+
     // Parse the Trivy JSON output
-    let trivy_results: serde_json::Value = serde_json::from_str(&output)
-        .map_err(|e| anyhow::anyhow!("Failed to parse Trivy output: {e}"))?;
+    let trivy_results: serde_json::Value = match serde_json::from_str(&stdout) {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok(Json(serde_json::json!({
+                "error": format!("Failed to parse Trivy output: {e}\n\nRaw output (first 500 chars):\n{}", &stdout[..stdout.len().min(500)]),
+                "total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
+            })));
+        }
+    };
 
     // Count vulnerabilities by severity
     let mut critical = 0u64;
