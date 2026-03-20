@@ -276,22 +276,28 @@ export default function ContainersPage(props: ContainersPageProps) {
 
   const doStackAction = async (action: string, name: string, e: MouseEvent) => {
     e.stopPropagation();
+    const label = action.replace(/_/g, " ").replace("compose ", "");
     setStackActionInProgress(name);
     try {
       const result = await invoke(action, { name });
       if (result && typeof result === "object") {
         const output = result as any;
-        if (!output.success) {
-          showToast(`${action.replace(/_/g, " ")} failed: ${output.stderr || "Unknown error"}`, "error");
+        if (output.success === false) {
+          showToast(`Stack ${label} failed: ${output.stderr || output.stdout || "Check container logs for details"}`, "error");
         } else {
-          showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
+          showToast(`Stack ${label} completed`, "success");
         }
       } else {
-        showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
+        showToast(`Stack ${label} completed`, "success");
       }
       setTimeout(refresh, 500);
     } catch (err) {
-      showToast(`${action} failed: ${err}`, "error");
+      const errStr = String(err);
+      if (errStr.includes("compose file") || errStr.includes("not found")) {
+        showToast(`Stack ${label} failed: No compose file found. This stack was auto-detected from container labels.`, "error");
+      } else {
+        showToast(`Stack ${label} failed: ${errStr}`, "error");
+      }
     }
     setStackActionInProgress(null);
   };
@@ -598,7 +604,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                             class="action-icon action-icon-stop"
                             onClick={(e) => {
                               e.stopPropagation();
-                              doStackAction("compose_down", group.name, e);
+                              doStackAction("stop_stack", group.name, e);
                             }}
                             disabled={isLoading()}
                             title="Stop stack"
@@ -611,7 +617,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                             class="action-icon action-icon-start"
                             onClick={(e) => {
                               e.stopPropagation();
-                              doStackAction("compose_up", group.name, e);
+                              doStackAction("start_stack", group.name, e);
                             }}
                             disabled={isLoading()}
                             title="Start stack"
