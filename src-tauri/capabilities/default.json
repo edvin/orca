@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the main window",
-  "windows": ["main"],
+  "description": "Default capability for all windows",
+  "windows": ["main", "ai-assistant"],
   "permissions": [
     "core:default",
     "core:window:default",
@@ -16,6 +16,12 @@
     "core:window:allow-is-maximized",
     "core:window:allow-start-dragging",
     "core:webview:default",
+    "core:webview:allow-create-webview-window",
+    "core:event:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "core:app:default",
+    "core:app:allow-version",
     "shell:default",
     "shell:allow-open",
     "updater:default",

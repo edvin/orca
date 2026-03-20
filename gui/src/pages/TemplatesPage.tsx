@@ -2,7 +2,7 @@ import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppTemplate } from "../lib/types";
 import { showToast } from "../components/Toast";
-import { logError } from "../lib/activityStore";
+import { logError, logInfo } from "../lib/activityStore";
 
 const CATEGORIES = ["All", "Database", "Web Server", "AI", "Monitoring", "Storage", "Tools", "Development", "Message Queue", "Search"];
 
@@ -200,13 +200,14 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
       closeDeploy();
       const containerId = result?.id;
+      const containerName = result?.name;
       const notes = result?.notes || template.notes;
-      showToast(`${template.name} deployed successfully!${notes ? " " + notes : ""}`, "success");
+      showToast(`${template.name} deployed!${notes ? " " + notes : ""}`, "success");
+      logInfo("Template deployed", `${template.name} → container ${containerName || containerId || "unknown"}`);
       // Navigate to the container detail page
       if (containerId && props.onNavigate) {
         props.onNavigate(`container:${containerId}`);
       } else {
-        // Fallback: navigate to containers list
         props.onNavigate?.("containers");
       }
     } catch (e: any) {
