@@ -12,7 +12,7 @@ interface Command {
 
 interface CommandPaletteProps {
   onClose: () => void;
-  onNavigate: (page: Page) => void;
+  onNavigate: (page: string) => void;
 }
 
 export default function CommandPalette(props: CommandPaletteProps) {
@@ -32,7 +32,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
     { id: "nav-settings", name: "Go to Settings", icon: "\u2699", category: "Navigate", action: () => { props.onNavigate("settings"); props.onClose(); } },
     { id: "nav-health", name: "Go to System Health", icon: "\u2661", category: "Navigate", action: () => { props.onNavigate("environment"); props.onClose(); } },
     { id: "act-run", name: "Run Container...", icon: "\u25B6", category: "Action", action: () => { props.onNavigate("containers"); props.onClose(); } },
-    { id: "act-pull", name: "Pull Image...", icon: "\u2913", category: "Action", action: () => { props.onNavigate("images"); props.onClose(); } },
+    { id: "act-pull", name: "Pull Image...", icon: "\u2913", category: "Action", action: () => { props.onNavigate("images:pull"); props.onClose(); } },
     { id: "act-prune", name: "Prune Images", icon: "\u2718", category: "Action", action: () => { props.onNavigate("images"); props.onClose(); } },
     { id: "act-k8s", name: "Enable Kubernetes", icon: "\u2388", category: "Action", action: () => { props.onNavigate("kubernetes"); props.onClose(); } },
   ];

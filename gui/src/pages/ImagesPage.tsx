@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Image, ImageSearchResult, ScanResult } from "../lib/types";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
@@ -12,7 +12,12 @@ import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 import { logError } from "../lib/activityStore";
 
-export default function ImagesPage() {
+interface ImagesPageProps {
+  autoOpenPull?: boolean;
+  onPullOpened?: () => void;
+}
+
+export default function ImagesPage(props: ImagesPageProps) {
   const [images, setImages] = createSignal<Image[]>([]);
   const [search, setSearch] = createSignal("");
   const [pullRef, setPullRef] = createSignal("");
@@ -66,7 +71,14 @@ export default function ImagesPage() {
     }
   };
 
-  onMount(refresh);
+  onMount(() => {
+    refresh();
+    // Auto-open pull dialog if requested (e.g. from Cmd+K → Pull Image)
+    if (props.autoOpenPull) {
+      setShowPull(true);
+      props.onPullOpened?.();
+    }
+  });
   onCleanup(() => { if (searchTimer) clearTimeout(searchTimer); });
 
   const doSearch = async (q: string) => {

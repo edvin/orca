@@ -103,6 +103,9 @@ export default function App() {
       setDetailId(target.split(":").slice(1).join(":"));
       setBreadcrumbStack(null);
       setPage("stack-detail");
+    } else if (target === "images:pull") {
+      setDetailId("pull"); // Signal to ImagesPage to open pull dialog
+      setPage("images");
     } else {
       setDetailId(null);
       setBreadcrumbStack(null);
@@ -208,7 +211,7 @@ export default function App() {
                   onNavigate={(p) => navigate(p)}
                 />
               )}
-              {page() === "images" && <ImagesPage />}
+              {page() === "images" && <ImagesPage autoOpenPull={detailId() === "pull"} onPullOpened={() => setDetailId(null)} />}
               {page() === "volumes" && <VolumesPage onNavigate={(p) => navigate(p)} />}
               {page() === "volume-detail" && detailId() && (
                 <VolumeDetailPage
@@ -228,7 +231,7 @@ export default function App() {
           {showCommandPalette() && (
             <CommandPalette
               onClose={() => setShowCommandPalette(false)}
-              onNavigate={(p: Page) => navigate(p)}
+              onNavigate={(p) => navigate(p)}
             />
           )}
           <AiAssistant onNavigate={(p: string) => navigate(p)} ref={(api) => { aiApi = api; }} />
