@@ -7,6 +7,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import CopyButton from "../components/CopyButton";
 import Breadcrumb from "../components/Breadcrumb";
 import Spinner from "../components/Spinner";
+import { logError } from "../lib/activityStore";
 
 interface VolumeDetailPageProps {
   volumeName: string;
@@ -47,7 +48,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       const v = vols.find((x) => x.name === props.volumeName);
       if (v) setVolume(v);
     } catch (e) {
-      console.error("Failed to fetch volume:", e);
+      logError("Fetch volume", `Volume "${props.volumeName}": ${e}`);
     }
   };
 
@@ -57,7 +58,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       const result = (await invoke("volume_containers", { name: props.volumeName })) as Container[];
       setContainers(result);
     } catch (e) {
-      console.error("Failed to fetch volume containers:", e);
+      logError("Fetch volume containers", `Volume "${props.volumeName}": ${e}`);
     }
     setContainersLoading(false);
   };
@@ -76,6 +77,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       setCurrentPath(result.path || "");
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as any)?.message || String(e);
+      logError("Browse volume files", `Volume "${props.volumeName}", path "${path || "/"}": ${msg}`);
       setFileError(msg);
       setFiles([]);
     }
@@ -92,6 +94,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       setFileContent(result.content);
       setFileContentPath(path);
     } catch (e) {
+      logError("Read volume file", `Volume "${props.volumeName}", path "${path}": ${e}`);
       showToast(`Failed to read file: ${e}`, "error");
     }
     setFileContentLoading(false);
@@ -117,6 +120,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       showToast(`Volume "${props.volumeName}" removed`, "success");
       props.onBack();
     } catch (err) {
+      logError("Remove volume", `Volume "${props.volumeName}": ${err}`);
       showToast(`Failed to remove volume: ${err}`, "error");
     }
   };

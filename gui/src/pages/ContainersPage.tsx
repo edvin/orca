@@ -11,6 +11,7 @@ import ResourceBar from "../components/ResourceBar";
 import Sparkline from "../components/Sparkline";
 import LastUpdated from "../components/LastUpdated";
 import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
+import { logError } from "../lib/activityStore";
 
 interface ContainersPageProps {
   onNavigate?: (page: string) => void;
@@ -59,7 +60,7 @@ export default function ContainersPage(props: ContainersPageProps) {
         setExpanded(autoExpand);
       }
     } catch (e) {
-      console.error("Failed to list containers/stacks:", e);
+      logError("List containers/stacks", `${e}`);
     }
   };
 
@@ -123,6 +124,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       showToast("Stack restarted", "success");
       setTimeout(refresh, 500);
     } catch (err) {
+      logError("Restart stack", `Stack "${name}": ${err}`);
       showToast(`Restart failed: ${err}`, "error");
     }
     setStackActionInProgress(null);
@@ -142,6 +144,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       }
       setTimeout(refresh, 500);
     } catch (err) {
+      logError("Pull stack images", `Stack "${name}": ${err}`);
       showToast(`Pull failed: ${err}`, "error");
     }
     setStackActionInProgress(null);
@@ -155,6 +158,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       showToast(`Stack "${name}" removed`, "success");
       await refresh();
     } catch (err) {
+      logError("Delete stack", `Stack "${name}": ${err}`);
       showToast(`Failed to delete stack: ${err}`, "error");
     }
     setStackActionInProgress(null);
@@ -253,6 +257,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       showToast(`Container ${action.replace("_container", "")} successful`, "success");
       await refresh();
     } catch (err) {
+      logError(`Container ${action.replace("_container", "")}`, `Container ${id}: ${err}`);
       showToast(`${action} failed: ${err}`, "error");
     }
     setLoading(false);
@@ -269,6 +274,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       showToast("Container restart successful", "success");
       await refresh();
     } catch (err) {
+      logError("Restart container", `Container ${id}: ${err}`);
       showToast(`Restart failed: ${err}`, "error");
     }
     setLoading(false);
@@ -294,6 +300,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       setTimeout(refresh, 500);
     } catch (err) {
       const errStr = String(err);
+      logError(`Stack ${label}`, `Stack "${name}": ${errStr}`);
       if (errStr.includes("compose file") || errStr.includes("not found")) {
         showToast(`Stack ${label} failed: No compose file found. This stack was auto-detected from container labels.`, "error");
       } else {

@@ -10,6 +10,7 @@ import Spinner from "../components/Spinner";
 import LastUpdated from "../components/LastUpdated";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
+import { logError } from "../lib/activityStore";
 
 export default function ImagesPage() {
   const [images, setImages] = createSignal<Image[]>([]);
@@ -62,7 +63,7 @@ export default function ImagesPage() {
       setImages(result);
       setLastUpdated(new Date());
     } catch (e) {
-      console.error("Failed to list images:", e);
+      logError("List images", `${e}`);
     }
   };
 
@@ -81,7 +82,7 @@ export default function ImagesPage() {
       const results = (await invoke("search_images", { query: q })) as ImageSearchResult[];
       setSearchResults(results);
     } catch (e) {
-      console.error("Search failed:", e);
+      logError("Search images", `Query "${q}": ${e}`);
       setSearchResults([]);
     }
     setSearching(false);
@@ -143,6 +144,7 @@ export default function ImagesPage() {
       showToast("Image removed", "success");
       await refresh();
     } catch (e) {
+      logError("Remove image", `Image "${tag}": ${e}`);
       showToast(`Failed to remove: ${e}`, "error");
     }
   };
@@ -164,6 +166,7 @@ export default function ImagesPage() {
       setSelected(new Set<string>());
       await refresh();
     } catch (e) {
+      logError("Batch delete images", `${ids.length} images: ${e}`);
       showToast(`Batch delete failed: ${e}`, "error");
     }
   };
@@ -177,6 +180,7 @@ export default function ImagesPage() {
       showToast(`Pruned ${count} image${count !== 1 ? "s" : ""}, freed ${space}`, "success");
       await refresh();
     } catch (e) {
+      logError("Prune images", `${e}`);
       showToast(`Prune failed: ${e}`, "error");
     } finally {
       setPruning(false);
@@ -205,6 +209,7 @@ export default function ImagesPage() {
       await refresh();
     } catch (e) {
       setPullStatus("");
+      logError("Pull image", `Image "${ref_}": ${e}`);
       showToast(`Pull failed: ${e}`, "error");
     }
     setPulling(false);
@@ -229,6 +234,7 @@ export default function ImagesPage() {
         showToast("Build failed -- check build log", "error");
       }
     } catch (e) {
+      logError("Build image", `Context "${path}"${buildTag().trim() ? `, tag "${buildTag().trim()}"` : ""}: ${e}`);
       showToast(`Build error: ${e}`, "error");
     }
     setBuilding(false);
@@ -265,6 +271,7 @@ export default function ImagesPage() {
       setFileBrowserPath(path || "/");
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as any)?.message || String(e);
+      logError("Browse image files", `Image ${imageId}, path "${path}": ${msg}`);
       setFileError(msg);
       setFiles([]);
     } finally {
@@ -306,6 +313,7 @@ export default function ImagesPage() {
       setFileContent(result.content);
       setFileContentPath(filePath);
     } catch (e) {
+      logError("Read image file", `Image ${imageId}, path "${fullPath}": ${e}`);
       showToast(`Failed to read file: ${e}`, "error");
     }
   };
@@ -318,6 +326,7 @@ export default function ImagesPage() {
       const result = (await invoke("scan_image", { id: imageId })) as ScanResult;
       setScanResult(result);
     } catch (e) {
+      logError("Scan image", `Image ${imageId}: ${e}`);
       showToast(`Scan failed: ${e}`, "error");
       setScanImageId(null);
     } finally {
@@ -340,7 +349,7 @@ export default function ImagesPage() {
       const data = await invoke("inspect_image", { id });
       setInspectData(data);
     } catch (e) {
-      console.error("Failed to inspect image:", e);
+      logError("Inspect image", `Image ${id}: ${e}`);
     }
   };
 

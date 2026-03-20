@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth } from "../lib/types";
 import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
+import { logError } from "../lib/activityStore";
 
 export default function EnvironmentPage() {
   const [status, setStatus] = createSignal<EnvironmentStatus | null>(null);
@@ -36,6 +37,7 @@ export default function EnvironmentPage() {
       if (machineRes.status === "fulfilled") setMachine(machineRes.value as MachineInfo);
       if (healthRes.status === "fulfilled") setHealth(healthRes.value as SystemHealth);
     } catch (e) {
+      logError("Check environment status", `${e}`);
       showToast(`Failed to check environment: ${e}`, "error");
     } finally {
       setLoading(false);
@@ -91,19 +93,26 @@ export default function EnvironmentPage() {
         }
         if (!receivedData) {
           setActionLog("No response from server.\n");
+          logError(`Environment fix: ${checkName}`, "No response from SSE stream");
           success = false;
         } else if (!receivedDone && success) {
           setActionLog((prev) => prev + "\nStream ended unexpectedly.\n");
+          logError(`Environment fix: ${checkName}`, "SSE stream ended without completion signal");
           success = false;
+        }
+        if (!success) {
+          logError(`Environment fix failed: ${checkName}`, actionLog());
         }
         setActionSuccess(success);
       }
     } catch (e) {
+      logError(`Environment fix SSE error: ${checkName}`, `${e}`);
       try {
         const result = (await invoke("env_fix", { action })) as { output: string };
         setActionLog(result.output || "(no output)");
         setActionSuccess(true);
       } catch (e2) {
+        logError(`Environment fix failed: ${checkName}`, `${e2}`);
         setActionLog((prev) => prev + `\nError: ${e2}\n`);
         setActionSuccess(false);
       }
@@ -179,6 +188,7 @@ export default function EnvironmentPage() {
       showToast("Daemon restarted", "success");
       await refresh();
     } catch (e) {
+      logError("Restart daemon", `${e}`);
       showToast(`Restart failed: ${e}`, "error");
     } finally {
       setRestarting(false);
@@ -200,6 +210,7 @@ export default function EnvironmentPage() {
       setDiagnoseLog(result.log.join("\n"));
       setDiagnoseResult(result.connected);
     } catch (e) {
+      logError("Connection diagnostics", `${e}`);
       setDiagnoseLog(`Failed to run diagnostics: ${e}`);
       setDiagnoseResult(false);
     } finally {

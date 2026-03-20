@@ -7,6 +7,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import LogViewer from "../components/LogViewer";
 import Spinner from "../components/Spinner";
 import LastUpdated from "../components/LastUpdated";
+import { logError } from "../lib/activityStore";
 
 interface StacksPageProps {
   onNavigate?: (target: string) => void;
@@ -35,6 +36,7 @@ export default function StacksPage(props: StacksPageProps) {
       showToast("Service restarted", "success");
       await refresh();
     } catch (err) {
+      logError("Restart service", `Service ${containerId}: ${err}`);
       showToast(`Restart failed: ${err}`, "error");
     }
     setServiceLoading(null);
@@ -46,7 +48,7 @@ export default function StacksPage(props: StacksPageProps) {
       setStacks(result);
       setLastUpdated(new Date());
     } catch (e) {
-      console.error("Failed to list stacks:", e);
+      logError("List stacks", `${e}`);
     }
   };
 
@@ -82,7 +84,7 @@ export default function StacksPage(props: StacksPageProps) {
       }
       setTimeout(refresh, 500);
     } catch (err) {
-      console.error(`${action} failed:`, err);
+      logError(`Stack ${action}`, `Stack "${name}": ${err}`);
     }
     setLoading(null);
   };

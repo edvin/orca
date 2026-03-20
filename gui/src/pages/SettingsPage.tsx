@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { MachineInfo, RegistryCredential } from "../lib/types";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
+import { logError } from "../lib/activityStore";
 
 type SettingsTab = "general" | "ai" | "registries" | "about";
 
@@ -37,6 +38,8 @@ export default function SettingsPage() {
   const [availableModels, setAvailableModels] = createSignal<string[]>([]);
   const [loadingModels, setLoadingModels] = createSignal(false);
   const [apiToken, setApiToken] = createSignal("");
+  const [daemonLog, setDaemonLog] = createSignal("");
+  const [daemonLogPath, setDaemonLogPath] = createSignal("");
   const [mcpCopied, setMcpCopied] = createSignal(false);
   const [endpointCopied, setEndpointCopied] = createSignal(false);
   const [tokenCopied, setTokenCopied] = createSignal(false);
@@ -65,7 +68,7 @@ export default function SettingsPage() {
       const result = (await invoke("list_registries")) as RegistryCredential[];
       setRegistries(result);
     } catch (e) {
-      console.error("Failed to list registries:", e);
+      logError("List registries", `${e}`);
     }
   };
 
@@ -85,6 +88,7 @@ export default function SettingsPage() {
       setRegPassword("");
       await refreshRegistries();
     } catch (e) {
+      logError("Add registry", `Server "${server}": ${e}`);
       showToast(`Failed to add registry: ${e}`, "error");
     }
   };
@@ -96,6 +100,7 @@ export default function SettingsPage() {
       showToast("Registry removed", "success");
       await refreshRegistries();
     } catch (e) {
+      logError("Remove registry", `Server "${server}": ${e}`);
       showToast(`Failed to remove registry: ${e}`, "error");
     }
   };
@@ -117,7 +122,7 @@ export default function SettingsPage() {
       setTelemetry(settings.telemetry);
       setDaemonConnected(true);
     } catch (e) {
-      console.error("Failed to load general settings:", e);
+      logError("Load general settings", `${e}`);
     }
   };
 
@@ -141,6 +146,7 @@ export default function SettingsPage() {
       setStartOnLogin(prev.start_on_login);
       setShowTrayIcon(prev.show_tray_icon);
       setTelemetry(prev.telemetry);
+      logError("Save general settings", `Field "${field}": ${e}`);
       showToast(`Failed to save settings: ${e}`, "error");
     }
   };
@@ -168,7 +174,7 @@ export default function SettingsPage() {
       // Load available models
       loadModels();
     } catch (e) {
-      console.error("Failed to load AI settings:", e);
+      logError("Load AI settings", `${e}`);
     }
   };
 
@@ -196,6 +202,7 @@ export default function SettingsPage() {
       showToast("AI settings saved", "success");
       await refreshAiSettings();
     } catch (e) {
+      logError("Save AI settings", `Provider "${aiProvider()}", model "${aiModel()}": ${e}`);
       showToast(`Failed to save AI settings: ${e}`, "error");
     } finally {
       setAiSaving(false);
@@ -214,6 +221,7 @@ export default function SettingsPage() {
       showToast("AI connection test passed", "success");
     } catch (e) {
       setAiTestResult("error");
+      logError("AI connection test", `Provider "${aiProvider()}", model "${aiModel()}": ${e}`);
       showToast(`AI test failed: ${e}`, "error");
     } finally {
       setAiTesting(false);
@@ -646,6 +654,36 @@ export default function SettingsPage() {
             </div>
 
             <div class="settings-section">
+              <h2 class="settings-section-title">Daemon Log</h2>
+              <div class="card">
+                <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "8px" }}>
+                  <span style={{ "font-size": "12px", color: "#6e7681" }}>Last 100 lines from daemon process output</span>
+                  <button class="btn btn-sm" onClick={async () => {
+                    try {
+                      const info = (await invoke("get_daemon_info")) as any;
+                      setDaemonLog(info.log_tail || "(empty)");
+                      setDaemonLogPath(info.log_path || "");
+                    } catch (e) { logError("Load daemon log", `${e}`); showToast(`Failed: ${e}`, "error"); }
+                  }} style={{ "font-size": "11px" }}>Load Log</button>
+                </div>
+                <Show when={daemonLog()}>
+                  <pre style={{
+                    background: "#0d1117", border: "1px solid rgba(255,255,255,0.06)",
+                    "border-radius": "8px", padding: "12px", margin: 0,
+                    "font-family": "'JetBrains Mono NF', monospace", "font-size": "11px",
+                    "line-height": "1.5", color: "#8b949e", "max-height": "300px",
+                    overflow: "auto", "white-space": "pre-wrap", "word-break": "break-all",
+                  }}>{daemonLog()}</pre>
+                  <Show when={daemonLogPath()}>
+                    <div style={{ "font-size": "11px", color: "#484f58", "margin-top": "6px" }}>
+                      {daemonLogPath()}
+                    </div>
+                  </Show>
+                </Show>
+              </div>
+            </div>
+
+            <div class="settings-section">
               <h2 class="settings-section-title">Cleanup</h2>
               <div class="card">
                 <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
@@ -662,7 +700,7 @@ export default function SettingsPage() {
                       try {
                         await invoke("cleanup", { scope: "templates" });
                         showToast("User templates removed", "success");
-                      } catch (e) { showToast(`Failed: ${e}`, "error"); }
+                      } catch (e) { logError("Remove templates", `${e}`); showToast(`Failed: ${e}`, "error"); }
                     }} title="Remove user templates" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
@@ -675,7 +713,7 @@ export default function SettingsPage() {
                       try {
                         const result = (await invoke("cleanup", { scope: "vms" })) as { log: string[] };
                         showToast(result.log.join(". ") || "Cleanup done", "success");
-                      } catch (e) { showToast(`Failed: ${e}`, "error"); }
+                      } catch (e) { logError("Stop & remove VMs", `${e}`); showToast(`Failed: ${e}`, "error"); }
                     }} title="Remove VMs" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0" }}>
@@ -688,7 +726,7 @@ export default function SettingsPage() {
                       try {
                         const result = (await invoke("cleanup", { scope: "all" })) as { log: string[] };
                         showToast("Orca Desktop has been fully reset. Restart the app.", "success");
-                      } catch (e) { showToast(`Failed: ${e}`, "error"); }
+                      } catch (e) { logError("Reset everything", `${e}`); showToast(`Failed: ${e}`, "error"); }
                     }}>Reset All</button>
                   </div>
                 </div>

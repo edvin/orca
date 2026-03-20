@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { MachineInfo, SystemHealth } from "../lib/types";
 import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
+import { logError } from "../lib/activityStore";
 
 function UsageBar(props: { used: number; total: number; label: string }) {
   const percent = () => (props.total > 0 ? (props.used / props.total) * 100 : 0);
@@ -76,6 +77,7 @@ export default function MachinePage() {
       showToast("Docker system pruned successfully", "success");
       await refreshHealth();
     } catch (e) {
+      logError("Docker system prune", `${e}`);
       showToast(`Prune failed: ${e}`, "error");
     } finally {
       setPruning(false);

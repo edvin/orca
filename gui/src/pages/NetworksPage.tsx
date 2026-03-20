@@ -5,6 +5,7 @@ import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
+import { logError } from "../lib/activityStore";
 
 const DEFAULT_NETWORKS = ["bridge", "host", "none"];
 
@@ -22,7 +23,7 @@ export default function NetworksPage() {
       const result = (await invoke("list_networks")) as Network[];
       setNetworks(result);
     } catch (e) {
-      console.error("Failed to list networks:", e);
+      logError("List networks", `${e}`);
     }
   };
 
@@ -36,6 +37,7 @@ export default function NetworksPage() {
       showToast(`Network "${name}" removed`, "success");
       await refresh();
     } catch (err) {
+      logError("Remove network", `Network "${name}": ${err}`);
       showToast(`Failed to remove network: ${err}`, "error");
     }
   };
@@ -57,6 +59,7 @@ export default function NetworksPage() {
       setShowCreate(false);
       await refresh();
     } catch (err) {
+      logError("Create network", `Network "${name}", driver "${createDriver()}": ${err}`);
       showToast(`Failed to create network: ${err}`, "error");
     }
     setCreating(false);

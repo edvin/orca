@@ -1143,13 +1143,14 @@ async fn volume_list_files(
         if trimmed.is_empty() || trimmed.starts_with("total") {
             continue;
         }
-        let parts: Vec<&str> = trimmed.splitn(7, char::is_whitespace).collect();
-        if parts.len() >= 7 {
+        // ls -la columns: permissions links owner group size month day time/year name...
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() >= 9 {
             let permissions = parts[0];
             let is_dir = permissions.starts_with('d');
             let size_str = parts[4];
-            let modified = parts[5];
-            let name_part = parts[6].trim();
+            let modified = format!("{} {} {}", parts[5], parts[6], parts[7]);
+            let name_part = parts[8..].join(" ");
             if name_part == "." || name_part == ".." {
                 continue;
             }
@@ -1244,13 +1245,14 @@ async fn image_list_files(
         if trimmed.is_empty() || trimmed.starts_with("total") {
             continue;
         }
-        let parts: Vec<&str> = trimmed.splitn(7, char::is_whitespace).collect();
-        if parts.len() >= 7 {
+        // ls -la columns: permissions links owner group size month day time/year name...
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() >= 9 {
             let permissions = parts[0];
             let is_dir = permissions.starts_with('d');
             let size_str = parts[4];
-            let modified = parts[5];
-            let name_part = parts[6].trim();
+            let modified = format!("{} {} {}", parts[5], parts[6], parts[7]);
+            let name_part = parts[8..].join(" ");
             if name_part == "." || name_part == ".." {
                 continue;
             }
@@ -1258,14 +1260,14 @@ async fn image_list_files(
             let display_name = if let Some(arrow) = name_part.find(" -> ") {
                 &name_part[..arrow]
             } else {
-                name_part
+                &name_part
             };
             let is_link = permissions.starts_with('l');
             entries.push(serde_json::json!({
                 "name": display_name,
                 "size": size_str,
                 "permissions": permissions,
-                "modified": modified,
+                "modified": &modified,
                 "is_dir": is_dir || is_link,
                 "link_target": if is_link { name_part.find(" -> ").map(|i| &name_part[i+4..]) } else { None },
             }));

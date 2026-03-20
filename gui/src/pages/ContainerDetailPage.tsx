@@ -13,6 +13,7 @@ import Sparkline from "../components/Sparkline";
 import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
 import { copyToClipboard } from "../lib/clipboard";
 import Breadcrumb from "../components/Breadcrumb";
+import { logError } from "../lib/activityStore";
 
 interface ContainerDetailPageProps {
   containerId: string;
@@ -47,7 +48,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       const c = containers.find((x) => x.id === props.containerId);
       if (c) setContainer(c);
     } catch (e) {
-      console.error("Failed to fetch container:", e);
+      logError("Fetch container details", `Container ${props.containerId}: ${e}`);
     }
   };
 
@@ -205,6 +206,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       // Re-fetch to reflect new values
       await fetchInspect();
     } catch (err) {
+      const cName = container()?.name || props.containerId;
+      logError("Update container resources", `Container "${cName}": ${err}`);
       showToast(`Update failed: ${err}`, "error");
     }
     setResourceSaving(false);
@@ -217,6 +220,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       showToast(`Container ${action.replace("_container", "")} successful`, "success");
       await fetchContainer();
     } catch (err) {
+      const cName = container()?.name || props.containerId;
+      logError(`Container ${action.replace("_container", "")}`, `Container "${cName}": ${err}`);
       showToast(`${action} failed: ${err}`, "error");
     }
     setActionInProgress(false);
@@ -230,6 +235,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       showToast("Container restart successful", "success");
       await fetchContainer();
     } catch (err) {
+      const cName = container()?.name || props.containerId;
+      logError("Restart container", `Container "${cName}": ${err}`);
       showToast(`Restart failed: ${err}`, "error");
     }
     setActionInProgress(false);
@@ -245,6 +252,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       showToast("Container removed", "success");
       props.onBack();
     } catch (err) {
+      const cName = container()?.name || props.containerId;
+      logError("Remove container", `Container "${cName}": ${err}`);
       showToast(`Remove failed: ${err}`, "error");
       setActionInProgress(false);
     }

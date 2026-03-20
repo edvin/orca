@@ -2,6 +2,7 @@ import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppTemplate } from "../lib/types";
 import { showToast } from "../components/Toast";
+import { logError } from "../lib/activityStore";
 
 const CATEGORIES = ["All", "Database", "Web Server", "AI", "Monitoring", "Storage", "Tools", "Development", "Message Queue", "Search"];
 
@@ -206,6 +207,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         props.onNavigate(`container:${containerId}`);
       }
     } catch (e: any) {
+      logError("Deploy template", `Template "${template.name}" (${template.image}): ${e}`);
       showToast(`Deploy failed: ${e}`, "error");
     } finally {
       setDeploying(false);
@@ -276,6 +278,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       await refreshTemplates();
       showToast(`Template "${template.name}" saved`, "success");
     } catch (e: any) {
+      logError("Save template", `Template "${editorName()}": ${e}`);
       showToast(`Failed to save template: ${e}`, "error");
     } finally {
       setEditorSaving(false);
@@ -288,6 +291,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       await refreshTemplates();
       showToast(`Template "${template.name}" deleted`, "success");
     } catch (e: any) {
+      logError("Delete template", `Template "${template.name}": ${e}`);
       showToast(`Failed to delete: ${e}`, "error");
     }
   };

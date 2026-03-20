@@ -6,6 +6,7 @@ import { showToast } from "../components/Toast";
 import LogViewer from "../components/LogViewer";
 import Spinner from "../components/Spinner";
 import Breadcrumb from "../components/Breadcrumb";
+import { logError } from "../lib/activityStore";
 
 interface StackDetailPageProps {
   stackName: string;
@@ -29,7 +30,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       const result = (await invoke("get_stack", { name: props.stackName })) as ComposeProject;
       setStack(result);
     } catch (e) {
-      console.error("Failed to fetch stack:", e);
+      logError("Fetch stack", `Stack "${props.stackName}": ${e}`);
     }
   };
 
@@ -66,6 +67,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       }
       setTimeout(fetchStack, 500);
     } catch (err) {
+      logError(`Stack ${action}`, `Stack "${props.stackName}": ${err}`);
       showToast(`${action} failed: ${err}`, "error");
     }
     setActionInProgress(false);
@@ -79,6 +81,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       showToast("Service restarted", "success");
       await fetchStack();
     } catch (err) {
+      logError("Restart service", `Stack "${props.stackName}", service ${containerId}: ${err}`);
       showToast(`Restart failed: ${err}`, "error");
     }
     setServiceLoading(null);

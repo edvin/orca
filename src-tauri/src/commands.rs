@@ -58,7 +58,7 @@ async fn post_empty(path: &str) -> Result<(), String> {
         Ok(())
     } else {
         let body = resp.text().await.unwrap_or_default();
-        Err(format!("Request failed: {body}"))
+        Err(body)
     }
 }
 
@@ -84,7 +84,7 @@ async fn delete(path: &str) -> Result<(), String> {
         Ok(())
     } else {
         let body = resp.text().await.unwrap_or_default();
-        Err(format!("Request failed: {body}"))
+        Err(body)
     }
 }
 
@@ -342,7 +342,7 @@ pub async fn create_and_run_container(
 
     if !create_resp.status().is_success() {
         let err_body = create_resp.text().await.unwrap_or_default();
-        return Err(format!("Failed to create container: {err_body}"));
+        return Err(err_body);
     }
 
     let create_result: serde_json::Value = create_resp
@@ -391,7 +391,7 @@ pub async fn add_registry(
         Ok(())
     } else {
         let body = resp.text().await.unwrap_or_default();
-        Err(format!("Failed to add registry: {body}"))
+        Err(body)
     }
 }
 
@@ -817,7 +817,7 @@ pub async fn k8s_scale_deployment(
         Ok(())
     } else {
         let body = resp.text().await.unwrap_or_default();
-        Err(format!("Scale failed: {body}"))
+        Err(body)
     }
 }
 
@@ -994,7 +994,7 @@ pub async fn save_general_settings(
         Ok(())
     } else {
         let body = resp.text().await.unwrap_or_default();
-        Err(format!("Failed to save general settings: {body}"))
+        Err(body)
     }
 }
 
@@ -1021,7 +1021,7 @@ pub async fn save_ai_settings(
         Ok(())
     } else {
         let body = resp.text().await.unwrap_or_default();
-        Err(format!("Failed to save AI settings: {body}"))
+        Err(body)
     }
 }
 

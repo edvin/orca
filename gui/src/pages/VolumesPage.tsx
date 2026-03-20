@@ -6,6 +6,7 @@ import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
+import { logError } from "../lib/activityStore";
 
 interface VolumesPageProps {
   onNavigate?: (target: string) => void;
@@ -25,7 +26,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       const result = (await invoke("list_volumes")) as Volume[];
       setVolumes(result);
     } catch (e) {
-      console.error("Failed to list volumes:", e);
+      logError("List volumes", `${e}`);
     }
   };
 
@@ -50,6 +51,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       showToast(`Volume "${name}" removed`, "success");
       await refresh();
     } catch (err) {
+      logError("Remove volume", `Volume "${name}": ${err}`);
       showToast(`Failed to remove volume: ${err}`, "error");
     }
   };
@@ -66,6 +68,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       setCreateName(""); setCreateDriver("local"); setCreateLabels(""); setShowCreate(false);
       await refresh();
     } catch (err) {
+      logError("Create volume", `Volume "${name}": ${err}`);
       showToast(`Failed to create volume: ${err}`, "error");
     }
     setCreating(false);
