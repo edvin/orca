@@ -16,9 +16,8 @@ export default function EnvironmentPage() {
   let mouseDownOnOverlay = false;
   let logRef: HTMLPreElement | undefined;
 
-  // Auto-scroll log to bottom when content changes
   createEffect(() => {
-    actionLog(); // track dependency
+    actionLog();
     if (logRef) logRef.scrollTop = logRef.scrollHeight;
   });
 
@@ -42,11 +41,9 @@ export default function EnvironmentPage() {
     setActionDialogOpen(true);
 
     try {
-      // Get API token for auth
       let token = "";
-      try { token = await invoke("get_api_token") as string; } catch { /* no token */ }
+      try { token = await invoke("get_api_token") as string; } catch {}
 
-      // Use SSE streaming endpoint for real-time output
       const resp = await fetch("http://127.0.0.1:9477/api/v1/environment/fix-stream", {
         method: "POST",
         headers: {
@@ -56,9 +53,7 @@ export default function EnvironmentPage() {
         body: JSON.stringify({ action }),
       });
 
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
-      }
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
 
       const reader = resp.body?.getReader();
       const decoder = new TextDecoder();
@@ -71,19 +66,12 @@ export default function EnvironmentPage() {
           done = streamDone;
           if (value) {
             const text = decoder.decode(value, { stream: !done });
-            // Parse SSE format: "data: ...\n\n"
             for (const line of text.split("\n")) {
               if (line.startsWith("data: ")) {
                 const data = line.slice(6);
-                if (data === "[DONE]") {
-                  done = true;
-                } else if (data.startsWith("[ERROR]")) {
-                  setActionLog((prev) => prev + "\n" + data.slice(8) + "\n");
-                  success = false;
-                  done = true;
-                } else {
-                  setActionLog((prev) => prev + data + "\n");
-                }
+                if (data === "[DONE]") { done = true; }
+                else if (data.startsWith("[ERROR]")) { setActionLog((prev) => prev + "\n" + data.slice(8) + "\n"); success = false; done = true; }
+                else { setActionLog((prev) => prev + data + "\n"); }
               }
             }
           }
@@ -91,7 +79,6 @@ export default function EnvironmentPage() {
         setActionSuccess(success);
       }
     } catch (e) {
-      // Fallback to non-streaming endpoint
       try {
         const result = (await invoke("env_fix", { action })) as { output: string };
         setActionLog(result.output || "(no output)");
@@ -108,15 +95,12 @@ export default function EnvironmentPage() {
   const closeActionDialog = async () => {
     setActionDialogOpen(false);
     if (actionSuccess()) {
-      // Restart the daemon so it reconnects to the newly installed runtime
       try {
         await invoke("stop_daemon");
-        // Brief pause for the process to fully exit
         await new Promise(r => setTimeout(r, 1000));
         await invoke("start_daemon");
-        // Wait for it to become ready
         await new Promise(r => setTimeout(r, 2000));
-      } catch { /* ignore — daemon may already be restarting */ }
+      } catch {}
     }
     await refresh();
   };
@@ -126,9 +110,7 @@ export default function EnvironmentPage() {
   };
 
   const handleOverlayClick = (e: MouseEvent) => {
-    if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !actionRunning()) {
-      closeActionDialog();
-    }
+    if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !actionRunning()) closeActionDialog();
     mouseDownOnOverlay = false;
   };
 
@@ -142,14 +124,6 @@ export default function EnvironmentPage() {
     }
   };
 
-  const statusIcon = (check: HealthCheck) => {
-    switch (check.status) {
-      case "Pass": return "\u2713";
-      case "Warning": return "\u26A0";
-      case "Fail": return "\u2717";
-    }
-  };
-
   const platformLabel = (p: string) => {
     switch (p) {
       case "linux": return "Linux";
@@ -159,12 +133,12 @@ export default function EnvironmentPage() {
     }
   };
 
-  const hasDockerDesktop = () => {
-    const s = status();
-    return s?.checks.some(
-      (c) => c.name === "Docker Desktop" && c.status === "Pass" && c.details
-    );
-  };
+  const hasDockerDesktop = () => status()?.checks.some(
+    (c) => c.name === "Docker Desktop" && c.status === "Pass" && c.details
+  );
+
+  const passCount = () => status()?.checks.filter(c => c.status === "Pass").length || 0;
+  const totalCount = () => status()?.checks.length || 0;
 
   return (
     <div>
@@ -178,37 +152,115 @@ export default function EnvironmentPage() {
       <Show
         when={status()}
         fallback={
-          <div class="empty">
-            <p class="empty-title">Checking environment...</p>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "16px", "max-width": "800px" }}>
+            <div class="skeleton-card" style={{ height: "120px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line" /><div class="skeleton-line skeleton-line-medium" /></div>
+            <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
+              <div class="skeleton-card" style={{ height: "80px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>
+              <div class="skeleton-card" style={{ height: "80px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>
+            </div>
           </div>
         }
       >
         {(s) => (
-          <div style={{ "max-width": "720px" }}>
-            {/* Ready banner */}
+          <div>
+            {/* === READY STATE === */}
             <Show when={s().ready}>
-              <div
-                class="card"
-                style={{
-                  "border-left": "4px solid #3fb950",
-                  "margin-bottom": "20px",
-                }}
-              >
-                <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-                  <span style={{ "font-size": "28px", color: "#3fb950", "line-height": "1" }}>{"\u2713"}</span>
-                  <div>
-                    <div style={{ "font-size": "18px", "font-weight": "600", color: "#3fb950" }}>
-                      Environment Ready
-                    </div>
-                    <div style={{ "font-size": "13px", color: "var(--text-muted)", "margin-top": "2px" }}>
-                      Platform: {platformLabel(s().platform)} {"\u2014"} Runtime: {s().suggested_runtime}
-                    </div>
+              {/* Hero status card */}
+              <div style={{
+                background: "linear-gradient(135deg, rgba(63, 185, 80, 0.06) 0%, rgba(88, 166, 255, 0.04) 100%)",
+                border: "1px solid rgba(63, 185, 80, 0.15)",
+                "border-radius": "12px",
+                padding: "32px",
+                "margin-bottom": "24px",
+                display: "flex",
+                "align-items": "center",
+                gap: "24px",
+              }}>
+                {/* Animated checkmark circle */}
+                <div style={{
+                  width: "56px", height: "56px", "border-radius": "50%",
+                  background: "rgba(63, 185, 80, 0.12)",
+                  display: "flex", "align-items": "center", "justify-content": "center",
+                  "flex-shrink": "0",
+                }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                <div style={{ flex: "1" }}>
+                  <div style={{ "font-size": "20px", "font-weight": "700", color: "#e6edf3", "margin-bottom": "4px" }}>
+                    All Systems Operational
+                  </div>
+                  <div style={{ "font-size": "14px", color: "#8b949e", "line-height": "1.5" }}>
+                    {platformLabel(s().platform)} {"\u2022"} Runtime: {s().suggested_runtime} {"\u2022"} {passCount()}/{totalCount()} checks passed
                   </div>
                 </div>
               </div>
+
+              {/* Docker Desktop note */}
+              <Show when={hasDockerDesktop()}>
+                <div style={{
+                  padding: "12px 16px", "margin-bottom": "20px",
+                  background: "rgba(88, 166, 255, 0.06)",
+                  border: "1px solid rgba(88, 166, 255, 0.12)",
+                  "border-radius": "8px",
+                  "font-size": "13px", color: "#8b949e",
+                  display: "flex", "align-items": "center", gap: "8px",
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                  Docker Desktop detected — Orca shares the same Docker daemon.
+                </div>
+              </Show>
+
+              {/* Health check grid */}
+              <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
+                <For each={s().checks}>
+                  {(check) => (
+                    <div style={{
+                      background: "#161b22",
+                      border: `1px solid ${check.status === "Pass" ? "#21262d" : check.status === "Warning" ? "rgba(210, 153, 34, 0.3)" : "rgba(248, 81, 73, 0.3)"}`,
+                      "border-radius": "10px",
+                      padding: "16px 18px",
+                      display: "flex",
+                      "align-items": "flex-start",
+                      gap: "12px",
+                    }}>
+                      {/* Status indicator */}
+                      <div style={{
+                        width: "8px", height: "8px", "border-radius": "50%",
+                        background: statusColor(check),
+                        "margin-top": "6px", "flex-shrink": "0",
+                        "box-shadow": `0 0 8px ${statusColor(check)}40`,
+                      }} />
+                      <div style={{ flex: "1", "min-width": "0" }}>
+                        <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", gap: "8px" }}>
+                          <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{check.name}</div>
+                          <Show when={check.fix_action && check.status !== "Pass"}>
+                            <button class="btn btn-sm" style={{ "font-size": "11px", padding: "2px 8px" }}
+                              disabled={actionRunning()}
+                              onClick={() => runFix(check.fix_action!, check.name)}
+                            >Fix</button>
+                          </Show>
+                        </div>
+                        <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "3px", "line-height": "1.4" }}>
+                          {check.description}
+                        </div>
+                        <Show when={check.details}>
+                          <div style={{
+                            "font-size": "11px", color: "#58a6ff", "margin-top": "4px",
+                            "font-family": "'JetBrains Mono NF', monospace", opacity: "0.8",
+                          }}>
+                            {check.details}
+                          </div>
+                        </Show>
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </div>
             </Show>
 
-            {/* Welcome / Setup wizard for new users */}
+            {/* === SETUP STATE === */}
             <Show when={!s().ready}>
               <div style={{
                 "margin-bottom": "24px",
@@ -228,17 +280,13 @@ export default function EnvironmentPage() {
                     : "Orca needs a container runtime. Install Docker or Podman to get started."}
                 </div>
 
-                {/* Setup steps */}
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
                   <For each={s().checks}>
                     {(check, i) => (
                       <div style={{
-                        display: "flex",
-                        "align-items": "center",
-                        gap: "14px",
+                        display: "flex", "align-items": "center", gap: "14px",
                         padding: "14px 16px",
-                        background: "rgba(0, 0, 0, 0.2)",
-                        "border-radius": "8px",
+                        background: "rgba(0, 0, 0, 0.2)", "border-radius": "8px",
                         border: `1px solid ${check.status === "Pass" ? "rgba(63, 185, 80, 0.3)" : "rgba(255, 255, 255, 0.06)"}`,
                       }}>
                         <div style={{
@@ -250,28 +298,16 @@ export default function EnvironmentPage() {
                         }}>
                           {check.status === "Pass" ? "\u2713" : i() + 1}
                         </div>
-
                         <div style={{ flex: "1", "min-width": "0" }}>
-                          <div style={{
-                            "font-weight": "600", "font-size": "14px",
-                            color: check.status === "Pass" ? "#3fb950" : "var(--text-primary)",
-                          }}>
+                          <div style={{ "font-weight": "600", "font-size": "14px", color: check.status === "Pass" ? "#3fb950" : "var(--text-primary)" }}>
                             {check.name}
                           </div>
                           <div style={{ "font-size": "12px", color: "var(--text-muted)", "margin-top": "2px" }}>
                             {check.status === "Pass" ? check.details || check.description : check.description}
                           </div>
                         </div>
-
                         <Show when={check.fix_action && check.status !== "Pass"}>
-                          <button
-                            class="btn btn-primary"
-                            disabled={actionRunning()}
-                            onClick={() => runFix(check.fix_action!, check.name)}
-                            style={{ "flex-shrink": "0" }}
-                          >
-                            Install
-                          </button>
+                          <button class="btn btn-primary" disabled={actionRunning()} onClick={() => runFix(check.fix_action!, check.name)} style={{ "flex-shrink": "0" }}>Install</button>
                         </Show>
                         <Show when={check.status === "Pass"}>
                           <span style={{ color: "#3fb950", "font-size": "12px", "font-weight": "600", "flex-shrink": "0" }}>Done</span>
@@ -288,52 +324,6 @@ export default function EnvironmentPage() {
                 </Show>
               </div>
             </Show>
-
-            {/* Docker Desktop note */}
-            <Show when={hasDockerDesktop()}>
-              <div class="card" style={{ "border-left": "4px solid #58a6ff", "margin-bottom": "20px", "font-size": "13px", color: "var(--text-muted)" }}>
-                <span style={{ color: "#58a6ff", "margin-right": "8px" }}>i</span>
-                Docker Desktop detected — Orca can work alongside it using the same Docker daemon.
-              </div>
-            </Show>
-
-            {/* Health Checks — shown only when environment is ready */}
-            <Show when={s().ready}>
-              <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
-                <For each={s().checks}>
-                  {(check) => (
-                    <div class="card" style={{ "border-left": `4px solid ${statusColor(check)}` }}>
-                      <div style={{ display: "flex", "align-items": "flex-start", "justify-content": "space-between", gap: "12px" }}>
-                        <div style={{ display: "flex", "align-items": "flex-start", gap: "10px", flex: "1" }}>
-                          <span style={{ color: statusColor(check), "font-size": "16px", "line-height": "1.4", "flex-shrink": "0" }}>
-                            {statusIcon(check)}
-                          </span>
-                          <div>
-                            <div style={{ "font-weight": "600", "font-size": "14px" }}>{check.name}</div>
-                            <div style={{ "font-size": "12px", color: "var(--text-muted)", "margin-top": "2px" }}>{check.description}</div>
-                            <Show when={check.details}>
-                              <div style={{ "font-size": "12px", color: "var(--text-muted)", "margin-top": "4px", "font-family": "monospace", opacity: "0.8" }}>
-                                {check.details}
-                              </div>
-                            </Show>
-                          </div>
-                        </div>
-                        <Show when={check.fix_action && check.status !== "Pass"}>
-                          <button
-                            class="btn btn-sm"
-                            disabled={actionRunning()}
-                            onClick={() => runFix(check.fix_action!, check.name)}
-                            style={{ "flex-shrink": "0" }}
-                          >
-                            Install
-                          </button>
-                        </Show>
-                      </div>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
           </div>
         )}
       </Show>
@@ -341,7 +331,7 @@ export default function EnvironmentPage() {
       {/* Action Progress Dialog */}
       <Show when={actionDialogOpen()}>
         <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
-          <div class="modal-dialog" style={{ "max-width": "640px" }}>
+          <div class="modal-dialog" style={{ "max-width": "720px" }}>
             <div class="modal-header">
               <span class="modal-title">
                 <Show when={actionRunning()} fallback={
@@ -359,56 +349,33 @@ export default function EnvironmentPage() {
               </Show>
             </div>
             <div style={{ padding: "0" }}>
-              {/* Progress indicator */}
               <Show when={actionRunning()}>
-                <div style={{
-                  height: "3px",
-                  background: "#21262d",
-                  overflow: "hidden",
-                }}>
-                  <div style={{
-                    height: "100%",
-                    width: "30%",
-                    background: "#58a6ff",
-                    animation: "progress-slide 1.5s ease-in-out infinite",
-                    "border-radius": "2px",
-                  }} />
+                <div style={{ height: "3px", background: "#21262d", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: "30%", background: "#58a6ff", animation: "progress-slide 1.5s ease-in-out infinite", "border-radius": "2px" }} />
                 </div>
               </Show>
-
-              {/* Log output */}
               <pre style={{
-                padding: "16px",
-                margin: 0,
+                padding: "16px", margin: 0,
                 "font-family": "'JetBrains Mono NF', monospace",
-                "font-size": "12px",
-                "line-height": "1.6",
-                color: "#c9d1d9",
-                "white-space": "pre-wrap",
-                "word-break": "break-all",
-                "max-height": "400px",
-                "min-height": "120px",
-                overflow: "auto",
+                "font-size": "12px", "line-height": "1.6",
+                color: "#c9d1d9", "white-space": "pre-wrap",
+                "word-break": "break-all", "max-height": "500px",
+                "min-height": "150px", overflow: "auto",
                 background: "#0d1117",
               }} ref={logRef}>{actionLog()}</pre>
             </div>
             <div class="modal-footer">
               <Show when={!actionRunning()}>
-                <button class="btn btn-primary" onClick={closeActionDialog}>
-                  Close
-                </button>
+                <button class="btn btn-primary" onClick={closeActionDialog}>Close</button>
               </Show>
               <Show when={actionRunning()}>
-                <span style={{ "font-size": "12px", color: "var(--text-muted)" }}>
-                  This may take several minutes...
-                </span>
+                <span style={{ "font-size": "12px", color: "var(--text-muted)" }}>This may take several minutes...</span>
               </Show>
             </div>
           </div>
         </div>
       </Show>
 
-      {/* CSS for progress animation */}
       <style>{`
         @keyframes progress-slide {
           0% { transform: translateX(-100%); }
