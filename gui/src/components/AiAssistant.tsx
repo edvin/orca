@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { logError, logInfo } from "../lib/activityStore";
+import { showToast } from "./Toast";
 
 interface AiAssistantProps {
   onNavigate?: (page: string) => void;
@@ -12,6 +14,7 @@ export interface AiAssistantApi {
 /** Opens the AI assistant in a separate window */
 export async function openAiWindow() {
   try {
+    logInfo("Opening AI assistant window");
     const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
 
     // Check if the window already exists
@@ -22,7 +25,7 @@ export async function openAiWindow() {
     }
 
     // Create a new window
-    new WebviewWindow("ai-assistant", {
+    const win = new WebviewWindow("ai-assistant", {
       url: "index.html#ai",
       title: "Orca Desktop AI",
       width: 480,
@@ -30,27 +33,34 @@ export async function openAiWindow() {
       minWidth: 360,
       minHeight: 400,
       decorations: false,
-      transparent: true,
       resizable: true,
       center: false,
       x: window.screenX + window.outerWidth - 500,
       y: window.screenY + 60,
     });
+
+    // Listen for creation errors
+    win.once("tauri://error", (e) => {
+      logError("AI window creation failed", JSON.stringify(e.payload));
+      showToast(`Failed to open AI window: ${JSON.stringify(e.payload)}`, "error");
+    });
+
   } catch (e) {
-    console.error("Failed to open AI window:", e);
+    const msg = String(e);
+    logError("Open AI window", msg);
+    showToast(`Failed to open AI window: ${msg}`, "error");
   }
 }
 
 export default function AiAssistant(props: AiAssistantProps) {
   const askAboutContainer = async (containerId: string, containerName: string, image: string) => {
     await openAiWindow();
-    // Give the window a moment to initialize, then send the event
     setTimeout(async () => {
       try {
         const { emit } = await import("@tauri-apps/api/event");
         await emit("ai-ask-container", { containerId, containerName, image });
       } catch (e) {
-        console.error("Failed to send container context:", e);
+        logError("Send container context to AI", String(e));
       }
     }, 500);
   };

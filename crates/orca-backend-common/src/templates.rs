@@ -154,6 +154,24 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
         },
         // Tools
         AppTemplate {
+            id: "phpmyadmin".to_string(),
+            name: "phpMyAdmin".to_string(),
+            description: "Web-based MySQL/MariaDB administration tool".to_string(),
+            icon: "\u{1F4CA}".to_string(),
+            category: "Tools".to_string(),
+            image: "phpmyadmin:latest".to_string(),
+            default_ports: vec!["8082:80".to_string()],
+            default_env: vec![
+                "PMA_HOST=orca-mysql".to_string(),
+                "PMA_PORT=3306".to_string(),
+                "PMA_ARBITRARY=1".to_string(),
+            ],
+            default_volumes: vec![],
+            restart_policy: "no".to_string(),
+            is_builtin: false,
+            notes: "Open http://localhost:8082. Set PMA_HOST to your MySQL/MariaDB container name. PMA_ARBITRARY=1 allows connecting to any server.".to_string(),
+        },
+        AppTemplate {
             id: "adminer".to_string(),
             name: "Adminer".to_string(),
             description: "Database management in a single PHP file".to_string(),
