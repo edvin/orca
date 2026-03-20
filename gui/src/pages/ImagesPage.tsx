@@ -193,6 +193,7 @@ export default function ImagesPage() {
       setPullRef("");
       setAuthUsername("");
       setAuthPassword("");
+      setShowPull(false);
       showToast(`Pulled ${ref_}`, "success");
       await refresh();
     } catch (e) {
@@ -633,6 +634,147 @@ export default function ImagesPage() {
               <button class="btn" onClick={() => setShowPruneConfirm(false)} disabled={pruning()}>Cancel</button>
               <button class="btn" style={{ background: "#da3633", color: "#fff" }} onClick={pruneUnused} disabled={pruning()}>
                 {pruning() ? "Pruning..." : "Prune Images"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Pull Image Dialog */}
+      <Show when={showPull()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !pulling()) setShowPull(false); (e.currentTarget as any).__mdOverlay = false; }}
+        >
+          <div class="modal-dialog" style={{ "max-width": "560px" }}>
+            <div class="modal-header">
+              <span class="modal-title">Pull Image</span>
+              <button class="modal-close" onClick={() => { if (!pulling()) setShowPull(false); }}>{"\u00d7"}</button>
+            </div>
+            <div class="modal-body">
+              <div style={{ position: "relative" }}>
+                <div style={{ position: "relative" }}>
+                  <svg
+                    style={{
+                      position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)",
+                      width: "14px", height: "14px", color: "#8b949e", "pointer-events": "none",
+                    }}
+                    viewBox="0 0 16 16" fill="currentColor"
+                  >
+                    <path fill-rule="evenodd" d="M11.5 7a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zm-.82 4.74a6 6 0 111.06-1.06l3.04 3.04a.75.75 0 11-1.06 1.06l-3.04-3.04z" />
+                  </svg>
+                  <input
+                    ref={(el) => { pullInputRef = el; setTimeout(() => el.focus(), 50); }}
+                    class="pull-input"
+                    type="text"
+                    placeholder="Search Docker Hub and pull an image (e.g. nginx, postgres:16)"
+                    value={pullRef()}
+                    onInput={(e) => onPullInput(e.currentTarget.value)}
+                    onKeyDown={handlePullKeyDown}
+                    onFocus={() => { if (searchResults().length > 0) setShowSearchDropdown(true); }}
+                    onBlur={() => { setTimeout(() => setShowSearchDropdown(false), 200); }}
+                    disabled={pulling()}
+                    style={{ "padding-left": "32px", width: "100%", "box-sizing": "border-box" }}
+                  />
+                </div>
+                <Show when={showSearchDropdown()}>
+                  <div style={{
+                    position: "absolute", top: "100%", left: 0, right: 0,
+                    background: "#161b22", border: "1px solid #30363d", "border-radius": "0 0 8px 8px",
+                    "max-height": "320px", "overflow-y": "auto", "z-index": "100",
+                    "box-shadow": "0 8px 24px rgba(0,0,0,0.4)",
+                  }}>
+                    <Show when={searching()}>
+                      <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
+                        <Spinner size={12} />{" "}Searching...
+                      </div>
+                    </Show>
+                    <Show when={!searching() && searchResults().length === 0 && pullRef().trim().length >= 2}>
+                      <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
+                        No results found
+                      </div>
+                    </Show>
+                    <For each={searchResults()}>
+                      {(result) => (
+                        <div
+                          style={{
+                            padding: "8px 14px", cursor: "pointer", "border-bottom": "1px solid #21262d",
+                            display: "flex", "align-items": "center", gap: "8px",
+                          }}
+                          onMouseDown={() => selectSearchResult(result.name)}
+                        >
+                          <div style={{ flex: 1, "min-width": 0 }}>
+                            <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                              <span class="mono" style={{ "font-weight": "600", "font-size": "13px" }}>
+                                {result.name}
+                              </span>
+                              <Show when={result.official}>
+                                <span style={{
+                                  background: "#1f6feb", color: "#fff", "font-size": "10px",
+                                  padding: "1px 6px", "border-radius": "4px", "font-weight": "600",
+                                }}>
+                                  OFFICIAL
+                                </span>
+                              </Show>
+                            </div>
+                            <div style={{
+                              color: "#8b949e", "font-size": "12px",
+                              "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis",
+                            }}>
+                              {result.description || "No description"}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: "12px", "font-size": "11px", color: "#8b949e", "flex-shrink": 0 }}>
+                            <Show when={result.pulls}>
+                              <span title="Downloads">{result.pulls}</span>
+                            </Show>
+                            <span title="Stars">{"\u2605"} {result.stars}</span>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+              <Show when={showAuth()}>
+                <div style={{ display: "flex", gap: "8px", "margin-top": "12px" }}>
+                  <input
+                    class="form-input"
+                    type="text"
+                    placeholder="Username"
+                    value={authUsername()}
+                    onInput={(e) => setAuthUsername(e.currentTarget.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <input
+                    class="form-input"
+                    type="password"
+                    placeholder="Password"
+                    value={authPassword()}
+                    onInput={(e) => setAuthPassword(e.currentTarget.value)}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              </Show>
+              <Show when={pullStatus()}>
+                <div class="pull-status" style={{ "margin-top": "12px" }}><Spinner size={12} />{" "}{pullStatus()}</div>
+              </Show>
+            </div>
+            <div class="modal-footer">
+              <button
+                class="btn"
+                onClick={() => setShowAuth(!showAuth())}
+                style={{ "margin-right": "auto" }}
+              >
+                {showAuth() ? "Auth \u25B2" : "Auth \u25BC"}
+              </button>
+              <button class="btn" onClick={() => { if (!pulling()) setShowPull(false); }} disabled={pulling()}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                onClick={doPull}
+                disabled={pulling() || !pullRef().trim()}
+              >
+                {pulling() ? (<><Spinner size={12} />{" Pulling..."}</>) : "Pull"}
               </button>
             </div>
           </div>
