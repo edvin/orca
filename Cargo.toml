@@ -36,3 +36,8 @@ trait-variant = "0.1"
 base64 = "0.22"
 reqwest = { version = "0.12", features = ["json"] }
 urlencoding = "2"
+
+[profile.release]
+strip = true
+lto = "thin"
+opt-level = "z"
