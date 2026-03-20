@@ -72,7 +72,7 @@ pub async fn auth_middleware(
     }
 
     // Allow WebSocket terminal endpoint — it does its own auth via query param
-    if req.uri().path().contains("/terminal") {
+    if req.uri().path().ends_with("/terminal") {
         return Ok(next.run(req).await);
     }
 
@@ -1063,7 +1063,10 @@ async fn volume_list_files(
     use orca_core::runtime::{ContainerCreateOpts, VolumeMount};
 
     let subpath = query.path.unwrap_or_default();
-    let sanitized = subpath.replace("..", "").replace('\0', "");
+    let mut sanitized = subpath.replace('\0', "");
+    while sanitized.contains("..") {
+        sanitized = sanitized.replace("..", "");
+    }
     let data_path = if sanitized.is_empty() || sanitized == "/" {
         "/data".to_string()
     } else {
@@ -1222,7 +1225,10 @@ async fn image_list_files(
     let image_ref = resolve_image_ref(&state, &image_id).await?;
 
     let subpath = query.path.unwrap_or_default();
-    let sanitized = subpath.replace("..", "").replace('\0', "");
+    let mut sanitized = subpath.replace('\0', "");
+    while sanitized.contains("..") {
+        sanitized = sanitized.replace("..", "");
+    }
     let browse_path = if sanitized.is_empty() || sanitized == "/" {
         "/".to_string()
     } else {
@@ -2546,7 +2552,6 @@ async fn get_ai_settings(
         "anthropic_model": config.anthropic_model,
         "openai_model": config.openai_model,
         "openai_url": config.openai_url,
-        "api_token": config.api_token.clone().unwrap_or_default(),
     })))
 }
 

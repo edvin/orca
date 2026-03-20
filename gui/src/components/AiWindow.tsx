@@ -1,5 +1,6 @@
 import { createSignal, For, Show, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import DOMPurify from "dompurify";
 import type { AiResponse, AiContext } from "../lib/types";
 
 /** Standalone AI chat window — rendered when the app loads with #ai hash */
@@ -116,7 +117,7 @@ export default function AiWindow() {
       .replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>')
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/\n/g, "<br/>");
-    return html;
+    return DOMPurify.sanitize(html);
   };
 
   return (

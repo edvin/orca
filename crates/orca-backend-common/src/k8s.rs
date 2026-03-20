@@ -54,6 +54,7 @@ impl K3sManager {
     }
 
     /// Find the kubectl binary — prefer `k3s kubectl`, fall back to `kubectl`.
+    /// Returns (binary, optional prefix args) so callers can use Command::new safely.
     fn kubectl_bin(&self) -> String {
         // Check for k3s first (direct install)
         if std::process::Command::new("k3s")
@@ -66,6 +67,18 @@ impl K3sManager {
             return "k3s kubectl".to_string();
         }
         "kubectl".to_string()
+    }
+
+    /// Build a Command for kubectl, handling the "k3s kubectl" case properly.
+    fn kubectl_command(&self) -> Command {
+        let bin = self.kubectl_bin();
+        if bin.starts_with("k3s ") {
+            let mut cmd = Command::new("k3s");
+            cmd.arg("kubectl");
+            cmd
+        } else {
+            Command::new("kubectl")
+        }
     }
 
     fn kubeconfig_path(&self) -> PathBuf {
@@ -931,15 +944,21 @@ impl K8sManager for K3sManager {
     }
 
     async fn apply_yaml(&self, yaml: &str) -> anyhow::Result<String> {
-        let kubectl = self.kubectl_bin();
-        let output = Command::new("sh")
-            .args(["-c", &format!("echo '{}' | {} apply -f -", yaml.replace('\'', "'\\''"), kubectl)])
+        let mut child = self.kubectl_command()
+            .args(["apply", "-f", "-"])
             .env("KUBECONFIG", self.kubeconfig_path())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output()
-            .await?;
+            .spawn()?;
 
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            stdin.write_all(yaml.as_bytes()).await?;
+            // stdin is dropped here, closing the pipe
+        }
+
+        let output = child.wait_with_output().await?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -951,15 +970,20 @@ impl K8sManager for K3sManager {
     }
 
     async fn delete_yaml(&self, yaml: &str) -> anyhow::Result<String> {
-        let kubectl = self.kubectl_bin();
-        let output = Command::new("sh")
-            .args(["-c", &format!("echo '{}' | {} delete -f -", yaml.replace('\'', "'\\''"), kubectl)])
+        let mut child = self.kubectl_command()
+            .args(["delete", "-f", "-"])
             .env("KUBECONFIG", self.kubeconfig_path())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output()
-            .await?;
+            .spawn()?;
 
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            stdin.write_all(yaml.as_bytes()).await?;
+        }
+
+        let output = child.wait_with_output().await?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
