@@ -182,7 +182,7 @@ export default function App() {
             />
             <main class="app-main">
               {page() === "dashboard" && <DashboardPage onNavigate={(p) => navigate(p)} />}
-              {page() === "templates" && <TemplatesPage />}
+              {page() === "templates" && <TemplatesPage onNavigate={(p) => navigate(p)} />}
               {page() === "containers" && <ContainersPage onNavigate={(p) => navigate(p)} onAskAi={(id, name, image) => aiApi?.askAboutContainer(id, name, image)} />}
               {page() === "container-detail" && detailId() && (
                 <ContainerDetailPage

@@ -9,7 +9,11 @@ interface EnvEntry { key: string; value: string }
 interface VolumeEntry { source: string; target: string }
 interface PortEntry { host: string; container: string }
 
-export default function TemplatesPage() {
+interface TemplatesPageProps {
+  onNavigate?: (target: string) => void;
+}
+
+export default function TemplatesPage(props: TemplatesPageProps) {
   const [templates, setTemplates] = createSignal<AppTemplate[]>([]);
   const [category, setCategory] = createSignal("All");
   const [search, setSearch] = createSignal("");
@@ -194,8 +198,13 @@ export default function TemplatesPage() {
       })) as any;
 
       closeDeploy();
+      const containerId = result?.id;
       const notes = result?.notes || template.notes;
       showToast(`${template.name} deployed successfully! ${notes}`, "success");
+      // Navigate to the container detail page
+      if (containerId && props.onNavigate) {
+        props.onNavigate(`container:${containerId}`);
+      }
     } catch (e: any) {
       showToast(`Deploy failed: ${e}`, "error");
     } finally {

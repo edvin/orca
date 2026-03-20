@@ -211,6 +211,16 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     return data?.command || data?.Config?.Cmd || [];
   };
 
+  const deduplicatePorts = (ports: { host_ip?: string | null; host_port: number; container_port: number; protocol?: string }[]) => {
+    const seen = new Set<string>();
+    return ports.filter((p) => {
+      const key = `${p.host_port}:${p.container_port}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   const formatUptime = (createdAt: string | number): string => {
     try {
       // Docker returns created_at as either ISO string or Unix timestamp (seconds)
@@ -554,15 +564,61 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   {/* Ports */}
                   <h3 class="detail-section-title" style={{ "margin-top": "24px" }}>Port Mappings</h3>
                   <Show when={c().ports.length > 0} fallback={
-                    <div style={{ color: "#8b949e", padding: "8px 0" }}>None</div>
+                    <div style={{ color: "#8b949e", padding: "8px 0" }}>No ports exposed</div>
                   }>
-                    <For each={c().ports}>
-                      {(p) => (
-                        <div class="mono" style={{ "line-height": "1.8", "font-size": "12px" }}>
-                          {p.host_ip || "0.0.0.0"}:{p.host_port} {"->"}  {p.container_port}/{p.protocol}
-                        </div>
-                      )}
-                    </For>
+                    <div style={{ display: "flex", "flex-wrap": "wrap", gap: "8px", "margin-top": "8px" }}>
+                      <For each={deduplicatePorts(c().ports)}>
+                        {(p) => {
+                          const httpPorts = [80, 443, 3000, 4200, 5000, 5173, 8000, 8080, 8443, 8888, 9000, 9090, 9443, 15672, 18789];
+                          const isHttp = httpPorts.includes(p.host_port);
+                          const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
+                          return (
+                            <div style={{
+                              display: "flex",
+                              "align-items": "center",
+                              gap: "10px",
+                              padding: "10px 14px",
+                              background: "rgba(255, 255, 255, 0.03)",
+                              border: "1px solid rgba(255, 255, 255, 0.06)",
+                              "border-radius": "8px",
+                              "min-width": "200px",
+                            }}>
+                              <div style={{ flex: "1" }}>
+                                <div style={{ "font-size": "13px", "font-weight": "500", color: "#e6edf3" }}>
+                                  <span class="mono">{p.host_port}</span>
+                                  <span style={{ color: "#484f58", margin: "0 6px" }}>{"\u2192"}</span>
+                                  <span class="mono" style={{ color: "#8b949e" }}>{p.container_port}</span>
+                                  <span style={{ color: "#484f58", "font-size": "11px", "margin-left": "4px" }}>/{p.protocol || "tcp"}</span>
+                                </div>
+                                <Show when={isHttp}>
+                                  <div style={{ "margin-top": "4px" }}>
+                                    <a
+                                      href={`${proto}://localhost:${p.host_port}`}
+                                      target="_blank"
+                                      style={{ color: "#58a6ff", "font-size": "12px" }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {proto}://localhost:{p.host_port} {"\u2197"}
+                                    </a>
+                                  </div>
+                                </Show>
+                              </div>
+                              <Show when={isHttp}>
+                                <a
+                                  href={`${proto}://localhost:${p.host_port}`}
+                                  target="_blank"
+                                  class="btn btn-sm"
+                                  style={{ "font-size": "11px", padding: "4px 10px", "flex-shrink": "0" }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Open
+                                </a>
+                              </Show>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
                   </Show>
 
                   {/* Mounts */}
