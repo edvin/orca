@@ -20,6 +20,8 @@ fn authed_client() -> reqwest::Client {
     }
     reqwest::Client::builder()
         .default_headers(headers)
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(5))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new())
 }
@@ -152,6 +154,39 @@ pub async fn exec_container(
 #[tauri::command]
 pub async fn remove_container(id: String) -> Result<(), String> {
     delete(&format!("/containers/{id}")).await
+}
+
+#[tauri::command]
+pub async fn update_container(
+    id: String,
+    memory_limit: Option<String>,
+    cpu_limit: Option<f64>,
+    restart_policy: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::json!({});
+    if let Some(mem) = memory_limit {
+        body["memory_limit"] = serde_json::json!(mem);
+    }
+    if let Some(cpu) = cpu_limit {
+        body["cpu_limit"] = serde_json::json!(cpu);
+    }
+    if let Some(policy) = restart_policy {
+        body["restart_policy"] = serde_json::json!(policy);
+    }
+
+    let resp = client()
+        .post(format!("{DAEMON_URL}/containers/{id}/update"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Update failed: {e}"))?;
+
+    if resp.status().is_success() {
+        resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Update failed: {body}"))
+    }
 }
 
 // --- Container Export ---

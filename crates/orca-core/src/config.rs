@@ -134,7 +134,7 @@ impl Default for OrcaConfig {
         Self {
             data_dir,
             default_machine: MachineConfig::default(),
-            start_on_login: false,
+            start_on_login: true,
             show_tray_icon: true,
             telemetry: false,
             api_token: None,
@@ -259,7 +259,7 @@ mod tests {
         );
 
         // Secure defaults
-        assert!(!config.start_on_login, "start_on_login should default to false");
+        assert!(config.start_on_login, "start_on_login should default to true");
         assert!(config.show_tray_icon, "show_tray_icon should default to true");
         assert!(!config.telemetry, "telemetry should default to false");
 
