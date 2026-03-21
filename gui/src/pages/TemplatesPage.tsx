@@ -2,7 +2,7 @@ import { createSignal, onMount, For, Show } from "solid-js";
 import Spinner from "../components/Spinner";
 import { invoke } from "@tauri-apps/api/core";
 import { useRefresh } from "../lib/useRefresh";
-import type { AppTemplate } from "../lib/types";
+import type { AppTemplate, ImageSearchResult } from "../lib/types";
 import { showToast } from "../components/Toast";
 import { logError, logInfo } from "../lib/activityStore";
 
@@ -46,6 +46,56 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [editorVolumes, setEditorVolumes] = createSignal<VolumeEntry[]>([]);
   const [editorSaving, setEditorSaving] = createSignal(false);
   const [editorIsNew, setEditorIsNew] = createSignal(true);
+
+  // Tab state
+  const [activeTab, setActiveTab] = createSignal<"curated" | "dockerhub">("curated");
+
+  // Docker Hub search state
+  const [hubQuery, setHubQuery] = createSignal("");
+  const [hubResults, setHubResults] = createSignal<ImageSearchResult[]>([]);
+  const [hubLoading, setHubLoading] = createSignal(false);
+  const [hubSearched, setHubSearched] = createSignal(false);
+  const [hubPulling, setHubPulling] = createSignal<Set<string>>(new Set());
+
+  const searchDockerHub = async (query?: string) => {
+    const q = query ?? hubQuery();
+    setHubLoading(true);
+    setHubSearched(true);
+    try {
+      const results = (await invoke("search_images", { query: q, limit: 50 })) as ImageSearchResult[];
+      setHubResults(results);
+    } catch (e: any) {
+      showToast(`Docker Hub search failed: ${e}`, "error");
+    } finally {
+      setHubLoading(false);
+    }
+  };
+
+  const pullHubImage = async (name: string) => {
+    setHubPulling((prev) => new Set([...prev, name]));
+    try {
+      await invoke("pull_image", { reference: name });
+      showToast(`Pulled ${name} successfully`, "success");
+    } catch (e: any) {
+      showToast(`Failed to pull ${name}: ${e}`, "error");
+    } finally {
+      setHubPulling((prev) => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
+    }
+  };
+
+  const formatPulls = (pulls: string | null): string => {
+    if (!pulls) return "";
+    const n = parseInt(pulls, 10);
+    if (isNaN(n)) return pulls;
+    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return String(n);
+  };
 
   let mouseDownOnOverlay = false;
 
@@ -444,52 +494,164 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     <div>
       <div class="page-header">
         <h1 class="page-title">App Catalog</h1>
-        <div class="page-actions">
+        <Show when={activeTab() === "curated"}>
+          <div class="page-actions">
+            <input
+              class="search-input"
+              type="text"
+              placeholder="Search templates..."
+              value={search()}
+              onInput={(e) => setSearch(e.currentTarget.value)}
+            />
+            <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
+          </div>
+        </Show>
+      </div>
+
+      {/* Source tabs */}
+      <div class="tab-bar" style="margin-bottom: 20px">
+        <button
+          class={`tab-item ${activeTab() === "curated" ? "active" : ""}`}
+          onClick={() => setActiveTab("curated")}
+        >
+          Curated
+        </button>
+        <button
+          class={`tab-item ${activeTab() === "dockerhub" ? "active" : ""}`}
+          onClick={() => {
+            setActiveTab("dockerhub");
+            if (!hubSearched()) searchDockerHub("");
+          }}
+        >
+          Docker Hub
+        </button>
+      </div>
+
+      {/* Curated tab content */}
+      <Show when={activeTab() === "curated"}>
+        {/* Category filter tabs */}
+        <div class="tab-bar" style="margin-bottom: 24px">
+          <For each={CATEGORIES}>
+            {(cat) => (
+              <button
+                class={`tab-item ${category() === cat ? "active" : ""}`}
+                onClick={() => setCategory(cat)}
+              >
+                {cat}
+              </button>
+            )}
+          </For>
+        </div>
+
+        {/* Template grid */}
+        <Show when={category() === "All"} fallback={
+          <div class="template-grid">
+            <For each={filtered()}>
+              {(template) => <TemplateCard template={template} />}
+            </For>
+          </div>
+        }>
+          <For each={Object.entries(groupedByCategory())}>
+            {([cat, items], i) => (
+              <div style={i() > 0 ? { "margin-top": "48px" } : {}}>
+                <div class="template-category-header">{cat}</div>
+                <div class="template-grid">
+                  <For each={items}>
+                    {(template) => <TemplateCard template={template} />}
+                  </For>
+                </div>
+              </div>
+            )}
+          </For>
+        </Show>
+      </Show>
+
+      {/* Docker Hub tab content */}
+      <Show when={activeTab() === "dockerhub"}>
+        <div style={{ display: "flex", gap: "8px", "margin-bottom": "20px" }}>
           <input
             class="search-input"
             type="text"
-            placeholder="Search templates..."
-            value={search()}
-            onInput={(e) => setSearch(e.currentTarget.value)}
+            placeholder="Search Docker Hub..."
+            value={hubQuery()}
+            onInput={(e) => setHubQuery(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") searchDockerHub(); }}
+            style={{ flex: "1" }}
           />
-          <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
+          <button class="btn btn-primary" onClick={() => searchDockerHub()} disabled={hubLoading()}>
+            {hubLoading() ? "Searching..." : "Search"}
+          </button>
         </div>
-      </div>
 
-      {/* Category filter tabs */}
-      <div class="tab-bar" style="margin-bottom: 24px">
-        <For each={CATEGORIES}>
-          {(cat) => (
-            <button
-              class={`tab-item ${category() === cat ? "active" : ""}`}
-              onClick={() => setCategory(cat)}
-            >
-              {cat}
-            </button>
-          )}
-        </For>
-      </div>
+        <Show when={hubLoading() && hubResults().length === 0}>
+          <div style={{ "text-align": "center", padding: "48px 0", color: "#8b949e" }}>
+            <Spinner size={24} />
+            <div style={{ "margin-top": "12px" }}>Searching Docker Hub...</div>
+          </div>
+        </Show>
 
-      {/* Template grid */}
-      <Show when={category() === "All"} fallback={
+        <Show when={!hubLoading() && hubSearched() && hubResults().length === 0}>
+          <div style={{ "text-align": "center", padding: "48px 0", color: "#8b949e" }}>
+            No results found
+          </div>
+        </Show>
+
         <div class="template-grid">
-          <For each={filtered()}>
-            {(template) => <TemplateCard template={template} />}
+          <For each={hubResults()}>
+            {(result) => {
+              const hubUrl = result.official
+                ? `https://hub.docker.com/_/${result.name}`
+                : `https://hub.docker.com/r/${result.name}`;
+              const isPulling = () => hubPulling().has(result.name);
+              return (
+                <div class="template-card" style={{ display: "flex", "flex-direction": "column", position: "relative" }}>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "6px" }}>
+                    <div style={{ "font-weight": "600", color: "#e6edf3", "font-size": "14px", flex: "1", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                      {result.name}
+                    </div>
+                    <Show when={result.official}>
+                      <span style={{ background: "#1f6feb", color: "#fff", "font-size": "10px", padding: "1px 6px", "border-radius": "4px", "flex-shrink": "0", "font-weight": "600" }}>Official</span>
+                    </Show>
+                  </div>
+                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "10px", flex: "1", overflow: "hidden", display: "-webkit-box", "-webkit-line-clamp": "3", "-webkit-box-orient": "vertical" }}>
+                    {result.description || "No description"}
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "12px", "font-size": "11px", color: "#8b949e", "margin-bottom": "10px" }}>
+                    <span title="Stars" style={{ display: "flex", "align-items": "center", gap: "3px" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                      {result.stars.toLocaleString()}
+                    </span>
+                    <Show when={result.pulls}>
+                      <span title="Pulls" style={{ display: "flex", "align-items": "center", gap: "3px" }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        {formatPulls(result.pulls)}
+                      </span>
+                    </Show>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      class="btn btn-primary btn-sm"
+                      style={{ flex: "1" }}
+                      disabled={isPulling()}
+                      onClick={() => pullHubImage(result.name)}
+                    >
+                      {isPulling() ? <><Spinner size={12} />{" "}Pulling...</> : "Pull"}
+                    </button>
+                    <a
+                      href={hubUrl}
+                      target="_blank"
+                      class="btn btn-sm"
+                      style={{ "text-decoration": "none", "text-align": "center" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Hub {"\u2197"}
+                    </a>
+                  </div>
+                </div>
+              );
+            }}
           </For>
         </div>
-      }>
-        <For each={Object.entries(groupedByCategory())}>
-          {([cat, items], i) => (
-            <div style={i() > 0 ? { "margin-top": "48px" } : {}}>
-              <div class="template-category-header">{cat}</div>
-              <div class="template-grid">
-                <For each={items}>
-                  {(template) => <TemplateCard template={template} />}
-                </For>
-              </div>
-            </div>
-          )}
-        </For>
       </Show>
 
       {/* Deploy Dialog */}
