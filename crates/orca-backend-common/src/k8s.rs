@@ -89,7 +89,24 @@ impl K3sManager {
         if let Ok(path) = std::env::var("KUBECONFIG") {
             return PathBuf::from(path);
         }
-        // Default k3s location
+        // On Windows, kubeconfig is copied to %USERPROFILE%\.kube\config
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(profile) = std::env::var("USERPROFILE") {
+                let kube_config = PathBuf::from(profile).join(".kube").join("config");
+                if kube_config.exists() {
+                    return kube_config;
+                }
+            }
+        }
+        // Default: ~/.kube/config (standard location), then k3s default
+        if let Some(home) = dirs::home_dir() {
+            let kube_config = home.join(".kube").join("config");
+            if kube_config.exists() {
+                return kube_config;
+            }
+        }
+        // Default k3s location (Linux native)
         PathBuf::from("/etc/rancher/k3s/k3s.yaml")
     }
 
@@ -113,8 +130,35 @@ impl K3sManager {
     }
 
     async fn is_k3s_installed(&self) -> bool {
-        Command::new("k3s")
+        // Try native k3s first
+        if Command::new("k3s")
             .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .is_ok_and(|s| s.success())
+        {
+            return true;
+        }
+        // On Windows, check inside WSL2
+        #[cfg(target_os = "windows")]
+        {
+            if Command::new("wsl")
+                .args(["-u", "root", "--", "which", "k3s"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await
+                .is_ok_and(|s| s.success())
+            {
+                return true;
+            }
+        }
+        // Also check if kubectl is available (works for any k8s install)
+        Command::new("kubectl")
+            .arg("version")
+            .args(["--client", "--short"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
