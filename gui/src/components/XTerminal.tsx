@@ -57,7 +57,7 @@ export default function XTerminal(props: XTerminalProps) {
         blue: "#58a6ff",
         magenta: "#bc8cff",
         cyan: "#39c5cf",
-        white: "#e6edf3",
+        white: "#b8c0cc",
       },
       fontFamily: "JetBrains Mono NF, monospace",
       fontSize: fontSize(),
