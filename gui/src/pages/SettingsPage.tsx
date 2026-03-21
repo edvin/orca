@@ -388,21 +388,50 @@ export default function SettingsPage() {
                         (aiProvider() === "anthropic" && hasAnthropicKey()) ||
                         (aiProvider() !== "anthropic" && hasOpenaiKey())
                       }>
-                        <span style={{ color: "#3fb950", "font-size": "11px", "margin-left": "8px" }}>(configured)</span>
+                        <span style={{ color: "#3fb950", "font-size": "11px", "margin-left": "8px" }}>{"\u2713"} configured</span>
                       </Show>
                     </label>
-                    <input
-                      class="form-input"
-                      type="password"
-                      placeholder={
-                        (aiProvider() === "anthropic" && hasAnthropicKey()) ||
-                        (aiProvider() !== "anthropic" && hasOpenaiKey())
-                          ? "Key is set — enter a new key to replace"
-                          : "Enter your API key"
-                      }
-                      value={aiApiKey()}
-                      onInput={(e) => setAiApiKey(e.currentTarget.value)}
-                    />
+                    <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                      <input
+                        class="form-input"
+                        style={{ flex: "1" }}
+                        type="password"
+                        placeholder={
+                          (aiProvider() === "anthropic" && hasAnthropicKey()) ||
+                          (aiProvider() !== "anthropic" && hasOpenaiKey())
+                            ? "Key is set — enter a new key to replace"
+                            : aiProvider() === "anthropic" ? "sk-ant-..." : aiProvider() === "gemini" ? "AIza..." : "sk-..."
+                        }
+                        value={aiApiKey()}
+                        onInput={(e) => setAiApiKey(e.currentTarget.value)}
+                      />
+                      <a
+                        href={
+                          aiProvider() === "anthropic" ? "https://console.anthropic.com/settings/keys"
+                          : aiProvider() === "openai" ? "https://platform.openai.com/api-keys"
+                          : aiProvider() === "gemini" ? "https://aistudio.google.com/apikey"
+                          : ""
+                        }
+                        target="_blank"
+                        class="btn btn-sm"
+                        style={{
+                          "text-decoration": "none",
+                          "white-space": "nowrap",
+                          display: aiProvider() === "custom" ? "none" : "inline-flex",
+                          gap: "4px",
+                          "align-items": "center",
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        Get Key
+                      </a>
+                    </div>
+                    <span class="form-hint">
+                      {aiProvider() === "anthropic" ? "Create a key at console.anthropic.com — pay-per-token pricing"
+                        : aiProvider() === "openai" ? "Create a key at platform.openai.com"
+                        : aiProvider() === "gemini" ? "Create a key at aistudio.google.com"
+                        : "Enter the API key for your custom endpoint"}
+                    </span>
                   </div>
 
                   <div class="form-group">
