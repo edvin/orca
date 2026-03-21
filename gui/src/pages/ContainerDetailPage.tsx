@@ -613,20 +613,14 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                       <Show when={c().ports.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
                         <For each={deduplicatePorts(c().ports)}>
                           {(p) => {
-                            const httpPorts = [80, 443, 3000, 4200, 5000, 5173, 8000, 8080, 8443, 8888, 9000, 9090, 9443, 15672, 18789];
-                            const isHttp = httpPorts.includes(p.host_port);
                             const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
                             return (
-                              <div class="mono" style={{ "line-height": "1.8", "font-size": "12px" }}>
-                                <Show when={isHttp} fallback={
-                                  <span>{p.host_port} {"\u2192"} {p.container_port}/{p.protocol || "tcp"}</span>
-                                }>
-                                  <a href={`${proto}://localhost:${p.host_port}`} target="_blank" style={{ color: "#58a6ff" }}>
-                                    :{p.host_port}
-                                  </a>
-                                  <span style={{ color: "#484f58" }}> {"\u2192"} </span>
-                                  <span style={{ color: "#8b949e" }}>{p.container_port}/{p.protocol || "tcp"}</span>
-                                </Show>
+                              <div class="mono" style={{ "line-height": "1.8", "font-size": "12px", display: "flex", "align-items": "center", gap: "6px" }}>
+                                <a href={`${proto}://localhost:${p.host_port}`} target="_blank" style={{ color: "#58a6ff" }} title={`Open ${proto}://localhost:${p.host_port}`}>
+                                  :{p.host_port}
+                                </a>
+                                <span style={{ color: "#484f58" }}>{"\u2192"}</span>
+                                <span style={{ color: "#8b949e" }}>{p.container_port}/{p.protocol || "tcp"}</span>
                               </div>
                             );
                           }}
@@ -695,8 +689,6 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     <div style={{ display: "flex", "flex-wrap": "wrap", gap: "8px", "margin-top": "8px" }}>
                       <For each={deduplicatePorts(c().ports)}>
                         {(p) => {
-                          const httpPorts = [80, 443, 3000, 4200, 5000, 5173, 8000, 8080, 8443, 8888, 9000, 9090, 9443, 15672, 18789];
-                          const isHttp = httpPorts.includes(p.host_port);
                           const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
                           return (
                             <div style={{
@@ -721,28 +713,24 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                                     <span class="mono" style={{ color: "#8b949e" }}>{p.container_port}<span style={{ "font-size": "10px", "margin-left": "3px" }}>/{p.protocol || "tcp"}</span></span>
                                   </div>
                                 </div>
-                                <Show when={isHttp}>
-                                  <a
-                                    href={`${proto}://localhost:${p.host_port}`}
-                                    target="_blank"
-                                    style={{ color: "#58a6ff", "font-size": "12px", "margin-top": "6px", display: "inline-block" }}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {proto}://localhost:{p.host_port} {"\u2197"}
-                                  </a>
-                                </Show>
-                              </div>
-                              <Show when={isHttp}>
                                 <a
                                   href={`${proto}://localhost:${p.host_port}`}
                                   target="_blank"
-                                  class="btn btn-sm"
-                                  style={{ "font-size": "11px", padding: "4px 10px", "flex-shrink": "0" }}
+                                  style={{ color: "#58a6ff", "font-size": "12px", "margin-top": "6px", display: "inline-block" }}
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  Open
+                                  {proto}://localhost:{p.host_port} {"\u2197"}
                                 </a>
-                              </Show>
+                              </div>
+                              <a
+                                href={`${proto}://localhost:${p.host_port}`}
+                                target="_blank"
+                                class="btn btn-sm"
+                                style={{ "font-size": "11px", padding: "4px 10px", "flex-shrink": "0" }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Open
+                              </a>
                             </div>
                           );
                         }}

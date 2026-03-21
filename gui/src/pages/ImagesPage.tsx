@@ -387,7 +387,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     }
   };
 
-  const exportScanReport = (img: Image, scan: ScanResult) => {
+  const exportScanReport = async (img: Image, scan: ScanResult) => {
     const imageName = img.repo_tags?.[0] || img.id.slice(0, 12);
     const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
     const vulns = (scan.results || [])

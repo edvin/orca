@@ -389,9 +389,8 @@ export default function ContainersPage(props: ContainersPageProps) {
             {c.ports && c.ports.length > 0 ? (
               <For each={deduplicatePorts(c.ports)}>
                 {(p) => {
-                  const isHttp = [80, 443, 3000, 4200, 5000, 5173, 8000, 8080, 8443, 8888, 9000, 9090, 9443, 15672, 18789].includes(p.host_port);
                   const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
-                  return isHttp ? (
+                  return (
                     <a
                       href={`${proto}://localhost:${p.host_port}`}
                       target="_blank"
@@ -401,8 +400,6 @@ export default function ContainersPage(props: ContainersPageProps) {
                     >
                       {p.host_port}:{p.container_port}
                     </a>
-                  ) : (
-                    <span style={{ color: "#8b949e", "font-size": "12px" }}>{p.host_port}:{p.container_port}</span>
                   );
                 }}
               </For>
