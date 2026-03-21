@@ -29,15 +29,26 @@ export default function XTerminal(props: XTerminalProps) {
   };
 
   onMount(async () => {
-    // Wait for the font to be fully loaded before initializing xterm.
-    // xterm.js uses canvas rendering — it measures glyphs once on init,
-    // so the font MUST be available or it'll use fallback metrics forever.
+    // Force the browser to load and rasterize the font by rendering it
+    // in a hidden element. Canvas (used by xterm.js) doesn't trigger
+    // @font-face loading on its own.
+    const fontProbe = document.createElement("span");
+    fontProbe.style.fontFamily = "'JetBrains Mono NF', 'JetBrainsMono Nerd Font'";
+    fontProbe.style.fontSize = "13px";
+    fontProbe.style.position = "absolute";
+    fontProbe.style.left = "-9999px";
+    fontProbe.textContent = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    document.body.appendChild(fontProbe);
+
+    // Wait for fonts to fully load
     try {
       await document.fonts.load("13px 'JetBrains Mono NF'");
+      await document.fonts.load("13px 'JetBrainsMono Nerd Font'");
       await document.fonts.ready;
     } catch {}
-    // Extra safety: give the browser a moment to finalize font rendering
-    await new Promise((r) => setTimeout(r, 50));
+    // Give the rasterizer time to finalize
+    await new Promise((r) => setTimeout(r, 100));
+    document.body.removeChild(fontProbe);
 
     const term = new Terminal({
       theme: {
@@ -72,6 +83,13 @@ export default function XTerminal(props: XTerminalProps) {
     term.open(termDiv!);
     fitAddon.fit();
     term.focus();
+
+    // After opening, force xterm to re-measure with the correct font
+    // by toggling the font family (triggers internal cache invalidation)
+    setTimeout(() => {
+      term.options.fontFamily = "'JetBrains Mono NF', 'JetBrainsMono Nerd Font', monospace";
+      fitAddon.fit();
+    }, 200);
 
     // Read API token from config
     let token = "";
