@@ -4,7 +4,7 @@ import type { Container, ContainerStats, Image, ComposeProject, SystemHealth } f
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import { recordMetrics, getCpuHistory, getMemoryHistory, getAggregatedCpuHistory, getAggregatedMemoryHistory } from "../lib/metricsStore";
-import { logError } from "../lib/activityStore";
+
 import Sparkline from "../components/Sparkline";
 import LastUpdated from "../components/LastUpdated";
 
@@ -41,24 +41,32 @@ export default function DashboardPage(props: DashboardPageProps) {
   const [stacksError, setStacksError] = createSignal("");
   const [healthError, setHealthError] = createSignal("");
 
+  const isConnectionError = (e: string) =>
+    e.includes("hyper") || e.includes("Connect") || e.includes("connection") ||
+    e.includes("not running") || e.includes("timed out");
+
+  const friendlyError = (e: string) =>
+    isConnectionError(e) ? "Waiting for Docker..." : e;
+
   const fetchAll = () => {
     // Each card fetches independently — no waiting for the others
+    // Don't log connection errors to Activity (they're transient during startup)
     invokeWithTimeout<Container[]>("list_containers")
       .then((v) => { setContainers(v || []); setContainersState("ready"); })
-      .catch((e) => { setContainersError(String(e)); setContainersState("error"); logError("Dashboard: list containers", String(e)); })
+      .catch((e) => { setContainersError(friendlyError(String(e))); setContainersState("error"); })
       .finally(() => setLastUpdated(new Date()));
 
     invokeWithTimeout<Image[]>("list_images")
       .then((v) => { setImages(v || []); setImagesState("ready"); })
-      .catch((e) => { setImagesError(String(e)); setImagesState("error"); logError("Dashboard: list images", String(e)); });
+      .catch((e) => { setImagesError(friendlyError(String(e))); setImagesState("error"); });
 
     invokeWithTimeout<ComposeProject[]>("list_stacks")
       .then((v) => { setStacks(v || []); setStacksState("ready"); })
-      .catch((e) => { setStacksError(String(e)); setStacksState("error"); logError("Dashboard: list stacks", String(e)); });
+      .catch((e) => { setStacksError(friendlyError(String(e))); setStacksState("error"); });
 
     invokeWithTimeout<SystemHealth>("system_health", undefined, 15_000)
       .then((v) => { setHealth(v); setHealthState("ready"); })
-      .catch((e) => { setHealthError(String(e)); setHealthState("error"); logError("Dashboard: system health", String(e)); });
+      .catch((e) => { setHealthError(friendlyError(String(e))); setHealthState("error"); });
   };
 
   useRefresh(fetchAll);
