@@ -3011,6 +3011,7 @@ select option {
   height: 80px;
   margin-bottom: 24px;
   opacity: 0.8;
+  border-radius: 18px;
 }
 
 .connection-spinner {
