@@ -490,17 +490,29 @@ export default function ImagesPage(props: ImagesPageProps) {
 </body>
 </html>`;
 
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const safeName = imageName.replace(/[^a-zA-Z0-9_-]/g, "_");
-    a.download = `vulnerability-report-${safeName}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast("Report exported — open the HTML file in your browser", "success");
+    try {
+      const safeName = imageName.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const fileName = `vulnerability-report-${safeName}.html`;
+
+      // Write to temp dir via Tauri command and open in system browser
+      const filePath = await invoke("write_temp_file", { name: fileName, content: html }) as string;
+      const { open } = await import("@tauri-apps/plugin-shell");
+      await open(filePath);
+      showToast("Report opened in browser", "success");
+    } catch {
+      // Fallback: download via blob
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeName = imageName.replace(/[^a-zA-Z0-9_-]/g, "_");
+      a.download = `vulnerability-report-${safeName}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Report downloaded", "success");
+    }
   };
 
   const totalSize = () =>

@@ -94,6 +94,7 @@ pub fn run() {
             commands::get_daemon_info,
             commands::check_for_updates,
             commands::get_api_token,
+            commands::write_temp_file,
             commands::cleanup,
             commands::reconnect_runtime,
         ])

@@ -1146,6 +1146,14 @@ pub async fn get_api_token() -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn write_temp_file(name: String, content: String) -> Result<String, String> {
+    let dir = std::env::temp_dir();
+    let path = dir.join(&name);
+    std::fs::write(&path, &content).map_err(|e| format!("Failed to write temp file: {e}"))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub async fn reconnect_runtime() -> Result<serde_json::Value, String> {
     client()
         .post(format!("{DAEMON_URL}/settings/reconnect"))
