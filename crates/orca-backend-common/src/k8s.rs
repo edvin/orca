@@ -825,21 +825,17 @@ impl K8sManager for K3sManager {
             }
         };
 
-        let mut api_result = client.apiserver_version().await;
-
-        // On Windows, if the kube client can't reach the API server directly,
-        // check k3s status via WSL commands instead (avoids port forwarding issues)
+        // On Windows, always use WSL commands — port forwarding to k3s is unreliable
         #[cfg(target_os = "windows")]
-        if !running {
-            tracing::info!("K8s status: direct API connection failed, checking via WSL...");
-            // Try starting k3s first
+        {
+            tracing::info!("K8s status: checking via WSL kubectl...");
+            // Ensure k3s is running
             let _ = Command::new("wsl")
                 .args(["-u", "root", "--", "bash", "-c",
                     "systemctl start k3s 2>/dev/null || service k3s start 2>/dev/null || true"])
                 .output()
                 .await;
 
-            // Check via wsl kubectl
             if let Ok(output) = Command::new("wsl")
                 .args(["-u", "root", "--", "k3s", "kubectl", "get", "nodes", "-o", "jsonpath={.items[0].metadata.name},{.items[0].status.conditions[?(@.type==\"Ready\")].status},{range .items[0].status.nodeInfo}{.kubeletVersion}{end}"])
                 .output()
@@ -853,38 +849,46 @@ impl K8sManager for K3sManager {
                     let wsl_version = parts.get(2).unwrap_or(&"").to_string();
                     tracing::info!("K8s via WSL: node={}, ready={}, version={}", wsl_node_name, wsl_ready, wsl_version);
 
-                    if wsl_ready {
-                        // Get pod counts
-                        let (wsl_pods_running, wsl_pods_total) = if let Ok(pod_out) = Command::new("wsl")
-                            .args(["-u", "root", "--", "k3s", "kubectl", "get", "pods", "-A", "--no-headers"])
-                            .output()
-                            .await
-                        {
-                            let pod_text = String::from_utf8_lossy(&pod_out.stdout);
-                            let total = pod_text.lines().count() as u32;
-                            let running = pod_text.lines().filter(|l| l.contains("Running")).count() as u32;
-                            (running, total)
-                        } else {
-                            (0, 0)
-                        };
+                    // Get pod counts
+                    let (pods_r, pods_t) = if let Ok(pod_out) = Command::new("wsl")
+                        .args(["-u", "root", "--", "k3s", "kubectl", "get", "pods", "-A", "--no-headers"])
+                        .output()
+                        .await
+                    {
+                        let pod_text = String::from_utf8_lossy(&pod_out.stdout);
+                        (pod_text.lines().filter(|l| l.contains("Running")).count() as u32,
+                         pod_text.lines().count() as u32)
+                    } else { (0, 0) };
 
-                        return Ok(ClusterStatus {
-                            enabled: true,
-                            running: true,
-                            version: Some(wsl_version),
-                            node_name: Some(wsl_node_name),
-                            node_status: Some("Ready".to_string()),
-                            pods_running: wsl_pods_running,
-                            pods_total: wsl_pods_total,
-                            traefik_dashboard: Some("http://127.0.0.1:9000/dashboard/".to_string()),
-                            error: None,
-                        });
-                    }
+                    return Ok(ClusterStatus {
+                        enabled: true,
+                        running: wsl_ready,
+                        version: if wsl_version.is_empty() { None } else { Some(wsl_version) },
+                        node_name: if wsl_node_name.is_empty() { None } else { Some(wsl_node_name) },
+                        node_status: if wsl_ready { Some("Ready".to_string()) } else { Some("NotReady".to_string()) },
+                        pods_running: pods_r,
+                        pods_total: pods_t,
+                        traefik_dashboard: if wsl_ready { Some("http://127.0.0.1:9000/dashboard/".to_string()) } else { None },
+                        error: None,
+                    });
                 }
             }
+            // WSL kubectl failed — k3s not installed or WSL not available
+            return Ok(ClusterStatus {
+                enabled: self.is_k3s_installed().await,
+                running: false,
+                version: None, node_name: None, node_status: None,
+                pods_running: 0, pods_total: 0, traefik_dashboard: None,
+                error: Some("Could not reach k3s via WSL".to_string()),
+            });
         }
 
+        // Non-Windows: use the kube client directly
+        #[cfg(not(target_os = "windows"))]
+        let api_result = client.apiserver_version().await;
+        #[cfg(not(target_os = "windows"))]
         let running = api_result.is_ok();
+        #[cfg(not(target_os = "windows"))]
         match &api_result {
             Ok(ver) => tracing::info!("K8s status: API server reachable, version {}.{}", ver.major, ver.minor),
             Err(e) => tracing::info!("K8s status: API server not reachable: {e}"),
