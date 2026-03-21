@@ -159,6 +159,17 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|_window, _event| {
+            // On macOS, hide the window instead of quitting when closed
+            // (the app lives in the menu bar)
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
+                if _window.label() == "main" {
+                    api.prevent_close();
+                    let _ = _window.hide();
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running orca");
 }
