@@ -279,12 +279,22 @@ impl K3sManager {
         };
 
         // Platform check
-        let platform = if cfg!(target_os = "linux") {
-            "linux"
-        } else if cfg!(target_os = "macos") {
+        // Use runtime detection — the daemon may be a Windows binary
+        // managing Docker/k3s inside WSL2
+        let platform = if cfg!(target_os = "macos") {
             "macos"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else if cfg!(target_os = "linux") {
+            // Could be native Linux OR WSL2
+            "linux"
         } else {
-            "unsupported"
+            // Runtime fallback: check for WSL
+            if std::env::var("WSL_DISTRO_NAME").is_ok() || std::path::Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists() {
+                "linux"
+            } else {
+                "unsupported"
+            }
         };
 
         send(format!("Platform: {platform}")).await;
