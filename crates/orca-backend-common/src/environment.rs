@@ -312,6 +312,162 @@ pub async fn run_fix_streaming(
             }
             send("\nPodman installed successfully!".into()).await;
         }
+        "setup_docker_macos" => {
+            send(">>> Setting up Docker on macOS via Lima\n".into()).await;
+            send("    This will create a lightweight Linux VM using Apple Virtualization.\n".into()).await;
+
+            // Step 1: Check/install Homebrew
+            send(">>> Step 1/5: Checking Homebrew...\n".into()).await;
+            if run_cmd("brew", &["--version"]).await.is_err() {
+                send("    Homebrew not found. Installing...\n".into()).await;
+                let brew_result = run_cmd_streaming(
+                    "sh", &["-c", "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""],
+                    &tx
+                ).await;
+                if let Err(e) = brew_result {
+                    send(format!("\n    Homebrew installation failed: {e}\n")).await;
+                    send("    Install Homebrew manually: https://brew.sh\n".into()).await;
+                    anyhow::bail!("Homebrew is required. Install it from https://brew.sh");
+                }
+                send("    Homebrew installed.\n".into()).await;
+            } else {
+                send("    Homebrew is installed.\n".into()).await;
+            }
+
+            // Step 2: Install Lima + Docker CLI
+            send(">>> Step 2/5: Installing Lima and Docker CLI...\n".into()).await;
+            let lima_installed = run_cmd("limactl", &["--version"]).await.is_ok();
+            let docker_cli_installed = run_cmd("docker", &["--version"]).await.is_ok();
+
+            if !lima_installed || !docker_cli_installed {
+                let mut packages = Vec::new();
+                if !lima_installed { packages.push("lima"); }
+                if !docker_cli_installed { packages.push("docker"); }
+                send(format!("    Installing: {}\n", packages.join(", "))).await;
+                let install_result = run_cmd_streaming(
+                    "brew", &[&["install"][..], &packages.iter().map(|s| *s).collect::<Vec<_>>()].concat(),
+                    &tx
+                ).await;
+                if let Err(e) = install_result {
+                    send(format!("\n    brew install failed: {e}\n")).await;
+                    anyhow::bail!("Failed to install Lima/Docker via Homebrew: {e}");
+                }
+                send("    Installation complete.\n".into()).await;
+            } else {
+                send("    Lima and Docker CLI already installed.\n".into()).await;
+            }
+
+            // Step 3: Create Lima VM with Docker
+            send(">>> Step 3/5: Creating Lima VM with Docker...\n".into()).await;
+
+            // Check if a Lima VM already exists
+            let existing_vms = run_cmd("limactl", &["list", "--format", "{{.Name}}"]).await
+                .unwrap_or_default();
+            let has_docker_vm = existing_vms.lines().any(|l| l.trim() == "docker" || l.trim() == "default");
+
+            if has_docker_vm {
+                send("    Lima VM already exists.\n".into()).await;
+            } else {
+                send("    Creating 'docker' VM with Apple Virtualization...\n".into()).await;
+                send("    This downloads a lightweight Linux image (~150MB)\n\n".into()).await;
+
+                // Use Lima's built-in docker template with Apple VZ
+                let create_result = run_cmd_streaming(
+                    "limactl", &["create", "--name=docker", "--vm-type=vz",
+                        "--rosetta", "--mount-writable",
+                        "template://docker"],
+                    &tx
+                ).await;
+
+                if let Err(e) = create_result {
+                    send(format!("\n    VM creation failed: {e}\n")).await;
+                    anyhow::bail!("Failed to create Lima VM: {e}");
+                }
+                send("\n    VM created.\n".into()).await;
+            }
+
+            // Step 4: Start the VM
+            send(">>> Step 4/5: Starting Lima VM...\n".into()).await;
+            let vm_name = if existing_vms.lines().any(|l| l.trim() == "docker") {
+                "docker"
+            } else if has_docker_vm {
+                "default"
+            } else {
+                "docker"
+            };
+
+            let start_result = run_cmd_streaming(
+                "limactl", &["start", vm_name],
+                &tx
+            ).await;
+
+            if let Err(e) = start_result {
+                // VM might already be running
+                let status = run_cmd("limactl", &["list", "--format", "{{.Name}} {{.Status}}"]).await.unwrap_or_default();
+                if !status.contains("Running") {
+                    send(format!("\n    Failed to start VM: {e}\n")).await;
+                    anyhow::bail!("Failed to start Lima VM: {e}");
+                }
+            }
+            send("    VM is running.\n".into()).await;
+
+            // Step 5: Configure Docker context to use Lima
+            send(">>> Step 5/5: Configuring Docker...\n".into()).await;
+
+            // Lima's docker template auto-configures the socket
+            // Set the DOCKER_HOST for the current session and persist it
+            let socket_path = format!(
+                "{home}/.lima/{vm_name}/sock/docker.sock",
+                home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()),
+                vm_name = vm_name
+            );
+
+            if std::path::Path::new(&socket_path).exists() {
+                send(format!("    Docker socket: {socket_path}\n")).await;
+
+                // Create/update docker context
+                let _ = run_cmd("docker", &["context", "create", "lima",
+                    "--docker", &format!("host=unix://{socket_path}"),
+                ]).await;
+                let _ = run_cmd("docker", &["context", "use", "lima"]).await;
+                send("    Docker context 'lima' configured.\n".into()).await;
+            } else {
+                // The socket might be at a different path with newer Lima
+                send("    Waiting for Docker socket...\n".into()).await;
+                for i in 0..15 {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    if std::path::Path::new(&socket_path).exists() {
+                        send(format!("    Docker socket ready: {socket_path}\n")).await;
+                        let _ = run_cmd("docker", &["context", "create", "lima",
+                            "--docker", &format!("host=unix://{socket_path}"),
+                        ]).await;
+                        let _ = run_cmd("docker", &["context", "use", "lima"]).await;
+                        break;
+                    }
+                    if i % 3 == 2 {
+                        send(format!("    Waiting... ({}s)\n", (i + 1) * 2)).await;
+                    }
+                }
+            }
+
+            // Verify Docker works
+            send("\n>>> Verifying Docker connection...\n".into()).await;
+            match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
+                Ok(version) => {
+                    send(format!("    Docker {} is ready!\n", version.trim())).await;
+                    send("\n>>> Setup complete. Orca Desktop is ready to use.\n".into()).await;
+                    send("    You can now manage containers, pull images, and deploy apps.\n".into()).await;
+                    send("\n    Tip: If you previously used Docker Desktop, you can uninstall it.\n".into()).await;
+                    send("    All your existing images and containers will need to be re-created\n".into()).await;
+                    send("    in the new Lima-based Docker environment.\n".into()).await;
+                }
+                Err(e) => {
+                    send(format!("    Docker verification failed: {e}\n")).await;
+                    send("    The VM is running but Docker may still be starting.\n".into()).await;
+                    send("    Try restarting Orca Desktop in a minute.\n".into()).await;
+                }
+            }
+        }
         // For all other actions, fall back to non-streaming run_fix
         _ => {
             send(format!("Running {action}...")).await;
@@ -372,6 +528,8 @@ async fn check_docker_installed() -> HealthCheck {
             status: CheckStatus::Fail,
             fix_action: Some(if cfg!(target_os = "linux") {
                 "install_docker_linux".to_string()
+            } else if cfg!(target_os = "macos") {
+                "setup_docker_macos".to_string()
             } else {
                 "install_docker".to_string()
             }),
