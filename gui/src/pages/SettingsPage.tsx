@@ -164,7 +164,9 @@ export default function SettingsPage() {
         openai_url: string;
         api_token: string;
       };
-      setAiProvider(settings.provider as AiProviderType);
+      // Detect Ollama: custom provider with 11434 URL
+      const isOllama = settings.provider === "custom" && (settings.openai_url || "").includes("11434");
+      setAiProvider(isOllama ? "ollama" : settings.provider as AiProviderType);
       setHasAnthropicKey(settings.has_anthropic_key);
       setHasOpenaiKey(settings.has_openai_key);
       setAiModel(
@@ -196,8 +198,10 @@ export default function SettingsPage() {
   const saveAiSettings = async () => {
     setAiSaving(true);
     try {
+      // "ollama" is stored as "custom" with the Ollama URL
+      const provider = aiProvider() === "ollama" ? "custom" : aiProvider();
       await invoke("save_ai_settings", {
-        provider: aiProvider(),
+        provider,
         apiKey: aiApiKey(),
         model: aiModel(),
         url: aiUrl() || null,
@@ -260,44 +264,43 @@ export default function SettingsPage() {
         try { await invoke("start_container", { id: "ollama" }); } catch {}
       }
 
-      // Step 2: Wait for Ollama API to be ready
-      setOllamaSetupStatus("Waiting for Ollama API...");
+      // Step 2: Wait for Ollama to be ready (via docker exec)
+      setOllamaSetupStatus("Waiting for Ollama to start...");
       let ready = false;
-      for (let i = 0; i < 15; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
         try {
-          const resp = await fetch("http://localhost:11434/api/tags");
-          if (resp.ok) { ready = true; break; }
+          const result = await invoke("exec_container", {
+            id: "ollama",
+            command: ["ollama", "list"],
+          }) as { output?: string };
+          if (result) { ready = true; break; }
         } catch {}
-        setOllamaSetupStatus(`Waiting for Ollama API... (${(i + 1) * 2}s)`);
+        setOllamaSetupStatus(`Waiting for Ollama to start... (${(i + 1) * 3}s)`);
       }
 
       if (!ready) {
-        setOllamaSetupStatus("Ollama container started but API not responding yet. It may still be initializing.");
-        // Still configure settings even if API isn't ready yet
+        setOllamaSetupStatus("Ollama container started but not responding yet. Try pulling a model manually: docker exec ollama ollama pull llama3.2");
       }
 
-      // Step 3: Pull a model
+      // Step 3: Pull a model via docker exec
       if (ready) {
-        setOllamaSetupStatus("Pulling llama3.2 model (this will take a few minutes)...");
+        setOllamaSetupStatus("Pulling llama3.2 model — this will take a few minutes...");
         try {
-          const resp = await fetch("http://localhost:11434/api/pull", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: "llama3.2", stream: false }),
-          });
-          if (resp.ok) {
-            setOllamaSetupStatus("Model pulled successfully!");
-          } else {
-            setOllamaSetupStatus("Model pull may still be in progress. Check back shortly.");
+          const result = await invoke("exec_container", {
+            id: "ollama",
+            command: ["ollama", "pull", "llama3.2"],
+          }) as { output?: string };
+          if (result?.output?.includes("success") || result?.output?.includes("pulling") || result?.output) {
+            setOllamaSetupStatus("Model ready!");
           }
-        } catch {
-          setOllamaSetupStatus("Could not pull model automatically. Run: docker exec ollama ollama pull llama3.2");
+        } catch (e) {
+          setOllamaSetupStatus(`Model pull failed: ${e}. Try: docker exec ollama ollama pull llama3.2`);
         }
       }
 
       // Step 4: Configure AI settings
-      setAiProvider("custom");
+      setAiProvider("ollama");
       setAiUrl("http://localhost:11434/v1");
       setAiModel("llama3.2");
       setAiApiKey("ollama");
