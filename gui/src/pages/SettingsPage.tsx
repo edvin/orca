@@ -42,6 +42,13 @@ export default function SettingsPage() {
   const [apiToken, setApiToken] = createSignal("");
   const [daemonLog, setDaemonLog] = createSignal("");
   const [daemonLogPath, setDaemonLogPath] = createSignal("");
+
+  // WSL2 config (Windows only)
+  const [wslMemory, setWslMemory] = createSignal("");
+  const [wslProcessors, setWslProcessors] = createSignal("");
+  const [wslSwap, setWslSwap] = createSignal("");
+  const [wslSaving, setWslSaving] = createSignal(false);
+  const isWindows = navigator.platform.includes("Win");
   const [mcpCopied, setMcpCopied] = createSignal(false);
   const [endpointCopied, setEndpointCopied] = createSignal(false);
   const [tokenCopied, setTokenCopied] = createSignal(false);
@@ -349,11 +356,40 @@ export default function SettingsPage() {
 
   const openaiEndpoint = "http://127.0.0.1:9477/api/v1/agent/openai/chat/completions";
 
+  const refreshWslConfig = async () => {
+    if (!isWindows) return;
+    try {
+      const config = (await invoke("get_wsl_config")) as { memory: string; processors: string; swap: string };
+      setWslMemory(config.memory);
+      setWslProcessors(config.processors);
+      setWslSwap(config.swap);
+    } catch (_e) {
+      // Not on Windows or command unavailable
+    }
+  };
+
+  const saveWslConfig = async () => {
+    setWslSaving(true);
+    try {
+      await invoke("save_wsl_config", {
+        memory: wslMemory(),
+        processors: wslProcessors(),
+        swap: wslSwap(),
+      });
+      showToast("WSL2 config saved. Restart WSL2 for changes to take effect.", "success");
+    } catch (e) {
+      showToast(`Failed to save WSL2 config: ${e}`, "error");
+    } finally {
+      setWslSaving(false);
+    }
+  };
+
   onMount(() => {
     refresh();
     refreshRegistries();
     refreshGeneralSettings();
     refreshAiSettings();
+    refreshWslConfig();
   });
 
   return (
@@ -422,6 +458,56 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+
+            {/* WSL2 Resources — Windows only */}
+            <Show when={isWindows}>
+              <div class="settings-section">
+                <h2 class="settings-section-title">WSL2 Resources</h2>
+                <div class="card" style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "12px" }}>
+                  <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Memory</label>
+                    <input
+                      type="text"
+                      class="input"
+                      placeholder="e.g. 8GB"
+                      value={wslMemory()}
+                      onInput={(e) => setWslMemory(e.currentTarget.value)}
+                      style={{ flex: "1" }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Processors</label>
+                    <input
+                      type="text"
+                      class="input"
+                      placeholder="e.g. 4"
+                      value={wslProcessors()}
+                      onInput={(e) => setWslProcessors(e.currentTarget.value)}
+                      style={{ flex: "1" }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Swap</label>
+                    <input
+                      type="text"
+                      class="input"
+                      placeholder="e.g. 2GB"
+                      value={wslSwap()}
+                      onInput={(e) => setWslSwap(e.currentTarget.value)}
+                      style={{ flex: "1" }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                    <span style={{ "font-size": "11px", color: "#8b949e" }}>
+                      Changes require a WSL2 restart to take effect (wsl --shutdown)
+                    </span>
+                    <button class="btn btn-primary" onClick={saveWslConfig} disabled={wslSaving()}>
+                      {wslSaving() ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Show>
           </div>
         </Show>
 

@@ -98,6 +98,8 @@ pub fn run() {
             commands::open_file_in_browser,
             commands::cleanup,
             commands::reconnect_runtime,
+            commands::get_wsl_config,
+            commands::save_wsl_config,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

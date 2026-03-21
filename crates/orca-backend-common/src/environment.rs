@@ -412,6 +412,7 @@ pub async fn run_fix_streaming(
                 let create_result = run_cmd_streaming(
                     "limactl", &["create", "--name=docker", "--vm-type=vz",
                         "--rosetta", "--mount-writable",
+                        "--mount-type=virtiofs",
                         "template://docker"],
                     &tx
                 ).await;

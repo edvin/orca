@@ -202,28 +202,31 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
             .output()
             .await;
 
-        // Wait for Docker to start with TCP listener
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        // Wait for Docker to start with TCP listener — retry every 2s for up to 15s
+        for attempt in 1..=7 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            tracing::info!("WSL2 Docker connection attempt {attempt}/7...");
 
-        // Try TCP again
-        if let Ok(docker) = bollard::Docker::connect_with_http(
-            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
-        ) {
-            if docker.ping().await.is_ok() {
-                tracing::info!("Connected to Docker via TCP after starting WSL2 Docker service");
-                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
+            // Try TCP
+            if let Ok(docker) = bollard::Docker::connect_with_http(
+                "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
+            ) {
+                if docker.ping().await.is_ok() {
+                    tracing::info!("Connected to Docker via TCP after starting WSL2 Docker service (attempt {attempt})");
+                    return Arc::new(orca_backend_common::BollardRuntime::new(docker));
+                }
+            }
+
+            // Try socket via WSL interop
+            if let Ok(docker) = bollard::Docker::connect_with_local_defaults() {
+                if docker.ping().await.is_ok() {
+                    tracing::info!("Connected to Docker via socket after starting WSL2 Docker service (attempt {attempt})");
+                    return Arc::new(orca_backend_common::BollardRuntime::new(docker));
+                }
             }
         }
 
-        // Try socket via WSL interop
-        if let Ok(docker) = bollard::Docker::connect_with_local_defaults() {
-            if docker.ping().await.is_ok() {
-                tracing::info!("Connected to Docker via socket after starting WSL2 Docker service");
-                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
-            }
-        }
-
-        tracing::warn!("Docker in WSL2 could not be started automatically");
+        tracing::warn!("Docker in WSL2 could not be started automatically after 7 attempts");
     }
 
     tracing::warn!("No container runtime available");

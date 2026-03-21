@@ -1066,6 +1066,106 @@ pub async fn ai_ask(
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+// --- WSL2 Config (Windows) ---
+
+#[tauri::command]
+pub async fn get_wsl_config() -> Result<serde_json::Value, String> {
+    let userprofile = std::env::var("USERPROFILE")
+        .map_err(|_| "USERPROFILE environment variable not set".to_string())?;
+    let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
+
+    let mut memory = String::new();
+    let mut processors = String::new();
+    let mut swap = String::new();
+
+    if config_path.exists() {
+        let content = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read .wslconfig: {e}"))?;
+
+        let mut in_wsl2_section = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.eq_ignore_ascii_case("[wsl2]") {
+                in_wsl2_section = true;
+                continue;
+            }
+            if trimmed.starts_with('[') {
+                in_wsl2_section = false;
+                continue;
+            }
+            if in_wsl2_section {
+                if let Some((key, value)) = trimmed.split_once('=') {
+                    let key = key.trim().to_lowercase();
+                    let value = value.trim().to_string();
+                    match key.as_str() {
+                        "memory" => memory = value,
+                        "processors" => processors = value,
+                        "swap" => swap = value,
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "memory": memory,
+        "processors": processors,
+        "swap": swap,
+    }))
+}
+
+#[tauri::command]
+pub async fn save_wsl_config(memory: String, processors: String, swap: String) -> Result<(), String> {
+    let userprofile = std::env::var("USERPROFILE")
+        .map_err(|_| "USERPROFILE environment variable not set".to_string())?;
+    let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
+
+    // Read existing config and preserve non-wsl2 sections
+    let existing = if config_path.exists() {
+        std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read .wslconfig: {e}"))?
+    } else {
+        String::new()
+    };
+
+    let mut other_sections = String::new();
+    let mut in_wsl2_section = false;
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.eq_ignore_ascii_case("[wsl2]") {
+            in_wsl2_section = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            in_wsl2_section = false;
+        }
+        if !in_wsl2_section {
+            other_sections.push_str(line);
+            other_sections.push('\n');
+        }
+    }
+
+    // Build new content with [wsl2] section first
+    let mut content = String::from("[wsl2]\n");
+    if !memory.is_empty() {
+        content.push_str(&format!("memory={memory}\n"));
+    }
+    if !processors.is_empty() {
+        content.push_str(&format!("processors={processors}\n"));
+    }
+    if !swap.is_empty() {
+        content.push_str(&format!("swap={swap}\n"));
+    }
+    content.push('\n');
+    content.push_str(other_sections.trim_start());
+
+    std::fs::write(&config_path, content.trim_end_matches('\n'))
+        .map_err(|e| format!("Failed to write .wslconfig: {e}"))?;
+
+    Ok(())
+}
+
 // --- General Settings ---
 
 #[tauri::command]
