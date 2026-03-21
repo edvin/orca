@@ -5,6 +5,7 @@ import type { SystemHealth } from "../lib/types";
 import { formatBytes } from "../lib/format";
 import { showToast } from "./Toast";
 import { confirm } from "./ConfirmDialog";
+import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning } from "../lib/ollamaSetup";
 
 interface StatusBarProps {
   onNavigate?: (page: string) => void;
@@ -135,6 +136,29 @@ export default function StatusBar(props: StatusBarProps) {
             onClick={() => props.onNavigate?.("environment")}
           >
             ⚠ {health()!.warnings.length} warning{health()!.warnings.length > 1 ? "s" : ""}
+          </span>
+        </Show>
+
+        <Show when={getOllamaSetupState() !== "idle"}>
+          <span class="status-bar-separator" />
+          <span
+            class="status-bar-item status-bar-clickable"
+            onClick={() => props.onNavigate?.("settings")}
+            style={{
+              color: getOllamaSetupState() === "done" ? "#3fb950"
+                : getOllamaSetupState() === "error" ? "#f85149"
+                : "#58a6ff",
+              "max-width": "300px",
+              overflow: "hidden",
+              "text-overflow": "ellipsis",
+              "white-space": "nowrap",
+            }}
+          >
+            <Show when={isOllamaSetupRunning()}>
+              <span class="status-bar-spinner" />
+            </Show>
+            {getOllamaSetupState() === "done" ? "\u2713 " : ""}
+            {getOllamaSetupStatus()}
           </span>
         </Show>
       </div>

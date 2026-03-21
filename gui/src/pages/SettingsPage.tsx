@@ -4,6 +4,7 @@ import type { MachineInfo, RegistryCredential } from "../lib/types";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
+import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, updateOllamaSetup } from "../lib/ollamaSetup";
 import Spinner from "../components/Spinner";
 
 type SettingsTab = "general" | "ai" | "registries" | "about";
@@ -34,9 +35,6 @@ export default function SettingsPage() {
   const [aiSaving, setAiSaving] = createSignal(false);
   const [aiTesting, setAiTesting] = createSignal(false);
   const [aiTestResult, setAiTestResult] = createSignal<string | null>(null);
-  const [ollamaSetupRunning, setOllamaSetupRunning] = createSignal(false);
-  const [ollamaSetupStatus, setOllamaSetupStatus] = createSignal("");
-  const [ollamaSetupDone, setOllamaSetupDone] = createSignal(false);
   const [hasAnthropicKey, setHasAnthropicKey] = createSignal(false);
   const [hasOpenaiKey, setHasOpenaiKey] = createSignal(false);
   const [availableModels, setAvailableModels] = createSignal<string[]>([]);
@@ -236,15 +234,13 @@ export default function SettingsPage() {
   };
 
   const setupOllama = async () => {
-    setOllamaSetupRunning(true);
-    setOllamaSetupStatus("Deploying Ollama container...");
-    setOllamaSetupDone(false);
+    if (isOllamaSetupRunning()) return; // Prevent double-run
+    updateOllamaSetup("running", "Deploying Ollama container...");
     try {
-      // Step 1: Pull and deploy Ollama container
-      setOllamaSetupStatus("Pulling Ollama image (this may take a few minutes)...");
+      updateOllamaSetup("running", "Pulling Ollama image (this may take a few minutes)...");
       await invoke("pull_image", { reference: "ollama/ollama:latest" });
 
-      setOllamaSetupStatus("Creating Ollama container...");
+      updateOllamaSetup("running", "Creating Ollama container...");
       try {
         await invoke("create_and_run_container", {
           image: "ollama/ollama:latest",
@@ -256,43 +252,31 @@ export default function SettingsPage() {
       } catch (e) {
         const err = String(e);
         if (err.includes("already in use") || err.includes("Conflict")) {
-          // Container exists — try to start it
           try { await invoke("start_container", { id: "ollama" }); } catch {}
         } else {
           throw e;
         }
       }
 
-      // Step 2: Wait for Ollama to be ready (via docker exec)
-      setOllamaSetupStatus("Waiting for Ollama to start...");
+      updateOllamaSetup("running", "Waiting for Ollama to start...");
       let ready = false;
       for (let i = 0; i < 20; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         try {
-          const result = await invoke("exec_container", {
-            id: "ollama",
-            command: ["ollama", "list"],
-          }) as { output?: string };
+          const result = await invoke("exec_container", { id: "ollama", command: ["ollama", "list"] }) as { output?: string };
           if (result) { ready = true; break; }
         } catch {}
-        setOllamaSetupStatus(`Waiting for Ollama to start... (${(i + 1) * 3}s)`);
+        updateOllamaSetup("running", `Waiting for Ollama to start... (${(i + 1) * 3}s)`);
       }
 
       if (!ready) {
-        setOllamaSetupStatus("Ollama container started but not responding yet. Try pulling a model manually: docker exec ollama ollama pull qwen2.5:7b");
+        updateOllamaSetup("error", "Ollama started but not responding. Try: docker exec ollama ollama pull qwen2.5:7b");
       }
 
-      // Step 3: Pull a model — run in background and poll for completion
       if (ready) {
-        setOllamaSetupStatus("Downloading qwen2.5:7b model (~4.7 GB)...");
+        updateOllamaSetup("running", "Downloading qwen2.5:7b model (~4.7 GB)...");
+        const pullPromise = invoke("exec_container", { id: "ollama", command: ["ollama", "pull", "qwen2.5:7b"] }).catch(() => null);
 
-        // Start the pull in the background (don't await — it blocks for minutes)
-        const pullPromise = invoke("exec_container", {
-          id: "ollama",
-          command: ["ollama", "pull", "qwen2.5:7b"],
-        }).catch(() => null);
-
-        // Poll until model appears in the list
         let modelReady = false;
         const startTime = Date.now();
         for (let i = 0; i < 120; i++) {
@@ -300,58 +284,39 @@ export default function SettingsPage() {
           const elapsed = Math.floor((Date.now() - startTime) / 1000);
           const mins = Math.floor(elapsed / 60);
           const secs = elapsed % 60;
-          setOllamaSetupStatus(
-            `Downloading qwen2.5:7b model (~4.7 GB)... ${mins}m ${secs}s elapsed`
-          );
+          updateOllamaSetup("running", `Downloading qwen2.5:7b (~4.7 GB)... ${mins}m ${secs}s`);
 
           try {
-            const listResult = await invoke("exec_container", {
-              id: "ollama",
-              command: ["ollama", "list"],
-            }) as { output?: string };
-            if (listResult?.output?.includes("qwen2.5")) {
-              modelReady = true;
-              break;
-            }
+            const listResult = await invoke("exec_container", { id: "ollama", command: ["ollama", "list"] }) as { output?: string };
+            if (listResult?.output?.includes("qwen2.5")) { modelReady = true; break; }
           } catch {}
         }
 
-        if (modelReady) {
-          setOllamaSetupStatus("Model downloaded and ready!");
-        } else {
-          // Pull might still be running — wait for the promise
+        if (!modelReady) {
           await pullPromise;
-          setOllamaSetupStatus("Model pull completed. Verifying...");
-          // One final check
           try {
-            const check = await invoke("exec_container", {
-              id: "ollama",
-              command: ["ollama", "list"],
-            }) as { output?: string };
-            if (check?.output?.includes("qwen2.5")) {
-              setOllamaSetupStatus("Model ready!");
-            } else {
-              setOllamaSetupStatus("Model may still be downloading. Try: docker exec ollama ollama pull qwen2.5:7b");
-            }
+            const check = await invoke("exec_container", { id: "ollama", command: ["ollama", "list"] }) as { output?: string };
+            modelReady = check?.output?.includes("qwen2.5") || false;
           } catch {}
+        }
+
+        if (!modelReady) {
+          updateOllamaSetup("error", "Model may still be downloading. Try: docker exec ollama ollama pull qwen2.5:7b");
         }
       }
 
-      // Step 4: Configure AI settings
+      // Configure AI settings regardless (container is running)
       setAiProvider("ollama");
       setAiUrl("http://localhost:11434/v1");
       setAiModel("qwen2.5:7b");
       setAiApiKey("ollama");
       await saveAiSettings();
 
-      setOllamaSetupDone(true);
-      setOllamaSetupStatus("Ollama is ready! AI assistant is now using your local model.");
-      showToast("Ollama set up successfully — AI assistant is ready", "success");
+      updateOllamaSetup("done", "Ollama is ready! AI assistant is using your local model.");
+      showToast("Ollama set up successfully", "success");
     } catch (e) {
-      setOllamaSetupStatus(`Setup failed: ${e}`);
+      updateOllamaSetup("error", `Setup failed: ${e}`);
       showToast(`Ollama setup failed: ${e}`, "error");
-    } finally {
-      setOllamaSetupRunning(false);
     }
   };
 
@@ -490,7 +455,7 @@ export default function SettingsPage() {
                               setAiModel("qwen2.5:7b");
                               setAiUrl("http://localhost:11434/v1");
                               setAiApiKey("ollama");
-                              setOllamaSetupDone(false);
+                              updateOllamaSetup("idle", "");
                             }
                             else setAiModel("");
                           }}
@@ -516,20 +481,20 @@ export default function SettingsPage() {
                           <div style={{ "font-size": "12px", color: "#8b949e" }}>No API keys, no cloud, no costs — runs on your machine</div>
                         </div>
                       </div>
-                      <Show when={ollamaSetupStatus()}>
-                        <div style={{ "font-size": "12px", color: ollamaSetupDone() ? "#3fb950" : "#8b949e", "margin": "10px 0", display: "flex", "align-items": "center", gap: "6px" }}>
-                          <Show when={ollamaSetupRunning()}><Spinner size={12} /></Show>
-                          <Show when={ollamaSetupDone()}><span style={{ color: "#3fb950" }}>{"\u2713"}</span></Show>
-                          {ollamaSetupStatus()}
+                      <Show when={getOllamaSetupStatus()}>
+                        <div style={{ "font-size": "12px", color: getOllamaSetupState() === "done" ? "#3fb950" : "#8b949e", "margin": "10px 0", display: "flex", "align-items": "center", gap: "6px" }}>
+                          <Show when={isOllamaSetupRunning()}><Spinner size={12} /></Show>
+                          <Show when={getOllamaSetupState() === "done"}><span style={{ color: "#3fb950" }}>{"\u2713"}</span></Show>
+                          {getOllamaSetupStatus()}
                         </div>
                       </Show>
                       <button
                         class="btn btn-primary btn-sm"
                         onClick={setupOllama}
-                        disabled={ollamaSetupRunning()}
+                        disabled={isOllamaSetupRunning()}
                         style={{ "margin-top": "6px" }}
                       >
-                        {ollamaSetupRunning() ? "Setting up..." : ollamaSetupDone() ? "Set up again" : "Set up Ollama"}
+                        {isOllamaSetupRunning() ? "Setting up..." : getOllamaSetupState() === "done" ? "Set up again" : "Set up Ollama"}
                       </button>
                       <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "8px" }}>
                         Deploys Ollama container and pulls qwen2.5:7b model (~4.7GB download, ~8GB RAM to run). Works on CPU — GPU optional but faster.

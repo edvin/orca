@@ -154,6 +154,22 @@ body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.status-bar-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid #58a6ff44;
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .status-bar-update {
   background: none;
   border: 1px solid #2da44e66;
