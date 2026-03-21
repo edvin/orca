@@ -825,7 +825,65 @@ impl K8sManager for K3sManager {
             }
         };
 
-        let api_result = client.apiserver_version().await;
+        let mut api_result = client.apiserver_version().await;
+
+        // On Windows, if the kube client can't reach the API server directly,
+        // check k3s status via WSL commands instead (avoids port forwarding issues)
+        #[cfg(target_os = "windows")]
+        if !running {
+            tracing::info!("K8s status: direct API connection failed, checking via WSL...");
+            // Try starting k3s first
+            let _ = Command::new("wsl")
+                .args(["-u", "root", "--", "bash", "-c",
+                    "systemctl start k3s 2>/dev/null || service k3s start 2>/dev/null || true"])
+                .output()
+                .await;
+
+            // Check via wsl kubectl
+            if let Ok(output) = Command::new("wsl")
+                .args(["-u", "root", "--", "k3s", "kubectl", "get", "nodes", "-o", "jsonpath={.items[0].metadata.name},{.items[0].status.conditions[?(@.type==\"Ready\")].status},{range .items[0].status.nodeInfo}{.kubeletVersion}{end}"])
+                .output()
+                .await
+            {
+                let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !text.is_empty() && output.status.success() {
+                    let parts: Vec<&str> = text.split(',').collect();
+                    let wsl_node_name = parts.first().unwrap_or(&"").to_string();
+                    let wsl_ready = parts.get(1).map(|s| *s == "True").unwrap_or(false);
+                    let wsl_version = parts.get(2).unwrap_or(&"").to_string();
+                    tracing::info!("K8s via WSL: node={}, ready={}, version={}", wsl_node_name, wsl_ready, wsl_version);
+
+                    if wsl_ready {
+                        // Get pod counts
+                        let (wsl_pods_running, wsl_pods_total) = if let Ok(pod_out) = Command::new("wsl")
+                            .args(["-u", "root", "--", "k3s", "kubectl", "get", "pods", "-A", "--no-headers"])
+                            .output()
+                            .await
+                        {
+                            let pod_text = String::from_utf8_lossy(&pod_out.stdout);
+                            let total = pod_text.lines().count() as u32;
+                            let running = pod_text.lines().filter(|l| l.contains("Running")).count() as u32;
+                            (running, total)
+                        } else {
+                            (0, 0)
+                        };
+
+                        return Ok(ClusterStatus {
+                            enabled: true,
+                            running: true,
+                            version: Some(wsl_version),
+                            node_name: Some(wsl_node_name),
+                            node_status: Some("Ready".to_string()),
+                            pods_running: wsl_pods_running,
+                            pods_total: wsl_pods_total,
+                            traefik_dashboard: Some("http://127.0.0.1:9000/dashboard/".to_string()),
+                            error: None,
+                        });
+                    }
+                }
+            }
+        }
+
         let running = api_result.is_ok();
         match &api_result {
             Ok(ver) => tracing::info!("K8s status: API server reachable, version {}.{}", ver.major, ver.minor),
