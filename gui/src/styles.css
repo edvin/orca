@@ -45,6 +45,7 @@ body {
   display: none;
 }
 
+
 /* ==================== Status Bar ==================== */
 .status-bar {
   display: flex;
@@ -2611,6 +2612,14 @@ select option {
   border-radius: 12px;
   overflow: hidden;
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.ai-window-macos {
+  border-radius: 0;
+}
+
+.ai-window-macos .ai-window-header {
+  padding-left: 72px;
 }
 
 .ai-window-header {

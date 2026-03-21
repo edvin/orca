@@ -155,16 +155,16 @@ export default function KubernetesPage() {
         ws.close();
         (async () => {
           try {
-            setSetupLog("Connecting...\n");
-            const result = (await invoke("k8s_enable")) as { output?: string };
-            const output = result?.output || "";
-            if (output) {
+            setSetupLog("Live streaming not available, using batch mode...\n\n");
+            const result = (await invoke("k8s_enable")) as any;
+            const output = typeof result === "string" ? result : (result?.output || JSON.stringify(result, null, 2));
+            if (output && output !== "{}" && output !== "null") {
               setSetupLog(output);
               const isReady = output.includes("cluster is ready") || output.includes("Ready");
-              const isInstructions = output.includes("To set up") || output.includes("Docker Desktop");
+              const isInstructions = output.includes("To set up") || output.includes("Docker Desktop") || output.includes("Lima");
               setSetupSuccess(isReady ? true : isInstructions ? null : true);
             } else {
-              setSetupLog("No output from daemon. Check the Activity tab for errors.\n");
+              setSetupLog("No output from daemon. Check the Activity tab and daemon log for details.\n");
               logError("Failed to enable Kubernetes: no output received from daemon");
               setSetupSuccess(false);
             }

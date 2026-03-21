@@ -150,8 +150,10 @@ export default function AiWindow() {
     return DOMPurify.sanitize(html);
   };
 
+  const isMac = navigator.platform.includes("Mac");
+
   return (
-    <div class="ai-window">
+    <div class={`ai-window ${isMac ? "ai-window-macos" : ""}`}>
       {/* Header */}
       <div class="ai-window-header" data-tauri-drag-region>
         <div class="ai-window-title" data-tauri-drag-region>
