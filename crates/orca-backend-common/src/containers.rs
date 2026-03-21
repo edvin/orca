@@ -80,6 +80,16 @@ impl ContainerRuntime for BollardRuntime {
                 nano_cpus: opts.cpu_limit.map(|c| (c * 1_000_000_000.0) as i64),
                 memory: opts.memory_limit.map(|m| m as i64),
                 memory_swap: opts.memory_swap,
+                device_requests: if opts.gpu {
+                    Some(vec![bollard::models::DeviceRequest {
+                        driver: Some("nvidia".to_string()),
+                        count: Some(-1), // all GPUs
+                        capabilities: Some(vec![vec!["gpu".to_string()]]),
+                        ..Default::default()
+                    }])
+                } else {
+                    None
+                },
                 ..Default::default()
             }),
             ..Default::default()

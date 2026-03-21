@@ -269,6 +269,7 @@ pub async fn create_and_run_container(
     restart_policy: Option<String>,
     cpu_limit: Option<f64>,
     memory_limit: Option<String>,
+    gpu: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     // Build the create request body
     let mut body = serde_json::json!({
@@ -346,6 +347,9 @@ pub async fn create_and_run_container(
     }
     if let Some(mem) = memory_limit {
         body["memory_limit"] = serde_json::json!(mem);
+    }
+    if gpu.unwrap_or(false) {
+        body["gpu"] = serde_json::json!(true);
     }
 
     // Create the container

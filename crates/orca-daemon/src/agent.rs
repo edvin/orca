@@ -161,6 +161,7 @@ pub async fn execute_tool(
                 cpu_limit,
                 memory_limit,
                 memory_swap: None,
+                gpu: false,
             };
 
             let container_id = state.runtime.create_container(opts).await
@@ -396,6 +397,7 @@ pub async fn execute_tool(
                 cpu_limit: None,
                 memory_limit: None,
                 memory_swap: None,
+                gpu: false,
             };
 
             let container_id = state.runtime.create_container(opts).await

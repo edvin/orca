@@ -99,6 +99,9 @@ pub struct ContainerCreateOpts {
     pub memory_limit: Option<u64>,
     /// Swap limit in bytes (-1 for unlimited).
     pub memory_swap: Option<i64>,
+    /// Request GPU access (--gpus all). Requires NVIDIA Container Toolkit.
+    #[serde(default)]
+    pub gpu: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

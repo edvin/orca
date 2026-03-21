@@ -491,6 +491,7 @@ async fn create_container(
         cpu_limit: body.cpu_limit,
         memory_limit,
         memory_swap: None,
+        gpu: false,
     };
 
     let id = state.runtime.create_container(opts).await?;
@@ -1122,6 +1123,7 @@ async fn volume_list_files(
         cpu_limit: None,
         memory_limit: None,
         memory_swap: None,
+        gpu: false,
     };
 
     let id = state.runtime.create_container(opts).await?;
@@ -1239,6 +1241,7 @@ async fn volume_read_file(
         cpu_limit: None,
         memory_limit: None,
         memory_swap: None,
+        gpu: false,
     };
 
     let id = state.runtime.create_container(opts).await?;
@@ -2333,6 +2336,7 @@ async fn deploy_template(
         cpu_limit: None,
         memory_limit: None,
         memory_swap: None,
+        gpu: false,
     };
 
     // Pull the image if not already available

@@ -248,6 +248,7 @@ export default function SettingsPage() {
           ports: ["11434:11434"],
           volumes: ["ollama-models:/root/.ollama"],
           restart_policy: "unless-stopped",
+          gpu: true,
         });
       } catch (e) {
         const err = String(e);
