@@ -849,7 +849,50 @@ pub async fn check_environment() -> EnvironmentStatus {
         }
         "windows" => {
             checks.push(check_wsl2_enabled().await);
-            checks.push(check_docker_installed().await);
+            // Check if Docker is installed inside WSL
+            let wsl_docker = match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
+                Ok(version) => HealthCheck {
+                    name: "Docker Runtime".to_string(),
+                    description: "Docker is installed in WSL2".to_string(),
+                    status: CheckStatus::Pass,
+                    fix_action: None,
+                    details: Some(version.trim().to_string()),
+                },
+                Err(_) => HealthCheck {
+                    name: "Docker Runtime".to_string(),
+                    description: "Docker not found in WSL2".to_string(),
+                    status: CheckStatus::Fail,
+                    fix_action: Some("install_docker".to_string()),
+                    details: Some("Install Docker inside WSL2".to_string()),
+                },
+            };
+            let docker_installed = wsl_docker.status == CheckStatus::Pass;
+            checks.push(wsl_docker);
+
+            // Check if Docker daemon is actually running
+            if docker_installed {
+                match run_cmd("wsl", &["-u", "root", "--", "docker", "info", "--format", "{{.ServerVersion}}"]).await {
+                    Ok(version) => {
+                        checks.push(HealthCheck {
+                            name: "Docker Service".to_string(),
+                            description: "Docker daemon is running in WSL2".to_string(),
+                            status: CheckStatus::Pass,
+                            fix_action: None,
+                            details: Some(format!("Server version: {}", version.trim())),
+                        });
+                    }
+                    Err(_) => {
+                        checks.push(HealthCheck {
+                            name: "Docker Service".to_string(),
+                            description: "Docker daemon is not running".to_string(),
+                            status: CheckStatus::Fail,
+                            fix_action: Some("start_docker".to_string()),
+                            details: Some("Click Fix to start Docker in WSL2".to_string()),
+                        });
+                    }
+                }
+            }
+
             // Only show Docker Desktop if it's actually installed
             let dd = check_docker_desktop().await;
             if dd.details.is_some() {

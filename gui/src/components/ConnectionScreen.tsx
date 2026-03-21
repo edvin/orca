@@ -51,16 +51,16 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
 
       <Show when={props.status === "connecting"}>
         <div class="connection-spinner" />
-        <h2 class="connection-title">Connecting to daemon...</h2>
+        <h2 class="connection-title">Starting Orca...</h2>
         <p class="connection-subtitle">
-          Please wait while Orca Desktop connects to the daemon.
+          Connecting to the Orca daemon and Docker runtime.
         </p>
       </Show>
 
       <Show when={props.status !== "connecting"}>
-        <h2 class="connection-title">The daemon is not running</h2>
+        <h2 class="connection-title">Orca daemon is not running</h2>
         <p class="connection-subtitle">
-          The daemon manages your containers and must be running for Orca Desktop to work.
+          The Orca daemon manages your containers and must be running for Orca Desktop to work.
         </p>
 
         <Show when={error()}>
