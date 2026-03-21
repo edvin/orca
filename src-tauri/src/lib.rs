@@ -111,10 +111,13 @@ pub fn run() {
                         use cocoa::base::{id, YES, NO};
                         unsafe {
                             let ns_window: id = webview.ns_window() as id;
-                            // Re-add titled mask for native rounded corners
+                            // Re-add titled mask for native rounded corners + traffic light buttons
                             let mut mask = ns_window.styleMask();
                             mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask;
                             mask |= NSWindowStyleMask::NSTitledWindowMask;
+                            mask |= NSWindowStyleMask::NSClosableWindowMask;
+                            mask |= NSWindowStyleMask::NSMiniaturizableWindowMask;
+                            mask |= NSWindowStyleMask::NSResizableWindowMask;
                             ns_window.setStyleMask_(mask);
                             // Hide the titlebar visually
                             ns_window.setTitlebarAppearsTransparent_(YES);
