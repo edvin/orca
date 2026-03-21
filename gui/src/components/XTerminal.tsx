@@ -5,6 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke } from "@tauri-apps/api/core";
 import "@xterm/xterm/css/xterm.css";
 
+
 interface XTerminalProps {
   containerId: string;
   containerName: string;
@@ -32,13 +33,20 @@ export default function XTerminal(props: XTerminalProps) {
     // Load font via FontFace API — this is the only reliable way to make
     // custom fonts available to canvas rendering (used by xterm.js).
     // CSS @font-face alone doesn't work for canvas contexts.
+    // Load font as ArrayBuffer — guaranteed to work in any webview context.
+    // URL-based FontFace loading can fail in Tauri due to custom protocols.
     const fontName = "JetBrains Mono NF";
     try {
-      const regular = new FontFace(fontName, "url(/fonts/JetBrainsMonoNerdFont-Regular.ttf)");
-      const bold = new FontFace(fontName, "url(/fonts/JetBrainsMonoNerdFont-Bold.ttf)", { weight: "bold" });
-      const [loadedRegular, loadedBold] = await Promise.all([regular.load(), bold.load()]);
-      document.fonts.add(loadedRegular);
-      document.fonts.add(loadedBold);
+      const [regularBuf, boldBuf] = await Promise.all([
+        fetch(new URL("/fonts/JetBrainsMonoNerdFont-Regular.ttf", window.location.href)).then(r => r.arrayBuffer()),
+        fetch(new URL("/fonts/JetBrainsMonoNerdFont-Bold.ttf", window.location.href)).then(r => r.arrayBuffer()),
+      ]);
+      const regular = new FontFace(fontName, regularBuf);
+      const bold = new FontFace(fontName, boldBuf, { weight: "bold" });
+      document.fonts.add(regular);
+      document.fonts.add(bold);
+      await Promise.all([regular.load(), bold.load()]);
+      console.log("Terminal font loaded:", document.fonts.check(`13px "${fontName}"`));
     } catch (e) {
       console.warn("Failed to load terminal font:", e);
     }
