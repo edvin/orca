@@ -447,7 +447,23 @@ pub async fn pull_image(
         });
     }
 
-    let resp = client()
+    // Image pulls can take a long time — use extended timeout
+    let pull_client = {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(token) = load_api_token() {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+                headers.insert(reqwest::header::AUTHORIZATION, val);
+            }
+        }
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(600))
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    };
+
+    let resp = pull_client
         .post(format!("{DAEMON_URL}/images/pull"))
         .json(&body)
         .send()

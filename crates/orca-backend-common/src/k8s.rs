@@ -758,11 +758,14 @@ impl K8sManager for K3sManager {
     }
 
     async fn status(&self) -> anyhow::Result<ClusterStatus> {
-        let kubeconfig_exists = self.kubeconfig_path().exists();
+        let kubeconfig_path = self.kubeconfig_path();
+        let kubeconfig_exists = kubeconfig_path.exists();
+        tracing::debug!("K8s status check: kubeconfig path={}, exists={}", kubeconfig_path.display(), kubeconfig_exists);
 
         if !kubeconfig_exists {
             // Check if k3s is installed (for direct installs)
             let installed = self.is_k3s_installed().await;
+            tracing::debug!("K8s status: no kubeconfig, is_k3s_installed={}", installed);
             return Ok(ClusterStatus {
                 enabled: installed,
                 running: false,
@@ -777,7 +780,8 @@ impl K8sManager for K3sManager {
 
         let client = match self.get_client().await {
             Ok(c) => c,
-            Err(_) => {
+            Err(e) => {
+                tracing::warn!("K8s status: kubeconfig found but client creation failed: {e}");
                 return Ok(ClusterStatus {
                     enabled: true,
                     running: false,
