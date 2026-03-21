@@ -1191,21 +1191,33 @@ export default function ImagesPage(props: ImagesPageProps) {
             </div>
 
             {/* Breadcrumb */}
-            <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", "font-size": "12px", display: "flex", "align-items": "center", gap: "4px" }}>
+            <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", "font-size": "12px", display: "flex", "align-items": "center", gap: "2px", "flex-wrap": "wrap" }}>
               <button
-                style={{ background: "none", border: "none", color: "#58a6ff", cursor: "pointer", padding: "2px 4px", "font-size": "12px" }}
+                style={{ background: "none", border: "none", color: fileBrowserPath() === "/" || fileBrowserPath() === "" ? "#e6edf3" : "#58a6ff", cursor: "pointer", padding: "2px 6px", "font-size": "12px", "border-radius": "4px" }}
                 onClick={() => { const id = fileBrowserImage(); if (id) fetchImageFiles(id, "/"); }}
-              >/</button>
+                title="Root"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle" }}><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+              </button>
               <For each={fileBrowserPath().split("/").filter(Boolean)}>
-                {(segment, i) => (
-                  <>
-                    <span style={{ color: "#484f58" }}>/</span>
-                    <button
-                      style={{ background: "none", border: "none", color: "#58a6ff", cursor: "pointer", padding: "2px 4px", "font-size": "12px" }}
-                      onClick={() => navigateToSegment(i())}
-                    >{segment}</button>
-                  </>
-                )}
+                {(segment, i) => {
+                  const segments = () => fileBrowserPath().split("/").filter(Boolean);
+                  const isLast = () => i() === segments().length - 1;
+                  return (
+                    <>
+                      <span style={{ color: "#484f58", "font-size": "10px" }}>{"\u203A"}</span>
+                      <button
+                        style={{
+                          background: "none", border: "none",
+                          color: isLast() ? "#e6edf3" : "#58a6ff",
+                          cursor: "pointer", padding: "2px 6px", "font-size": "12px", "border-radius": "4px",
+                          "font-weight": isLast() ? "600" : "400",
+                        }}
+                        onClick={() => navigateToSegment(i())}
+                      >{segment}</button>
+                    </>
+                  );
+                }}
               </For>
             </div>
 

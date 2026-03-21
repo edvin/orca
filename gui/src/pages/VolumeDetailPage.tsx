@@ -357,19 +357,25 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                     Back
                   </button>
                 </Show>
-                <div style={{ display: "flex", "align-items": "center", gap: "4px", color: "#8b949e", "font-size": "13px" }}>
+                <div style={{ display: "flex", "align-items": "center", gap: "2px", color: "#8b949e", "font-size": "13px", "flex-wrap": "wrap" }}>
                   <span
-                    style={{ cursor: "pointer", color: "#58a6ff" }}
+                    style={{ cursor: "pointer", color: currentPath() ? "#58a6ff" : "#e6edf3", padding: "2px 4px" }}
                     onClick={() => fetchFiles()}
+                    title="Root"
                   >
-                    /
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle" }}><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
                   </span>
                   <For each={pathSegments()}>
                     {(seg, i) => (
                       <>
-                        <span style={{ color: "#484f58" }}>/</span>
+                        <span style={{ color: "#484f58", "font-size": "10px" }}>{"\u203A"}</span>
                         <span
-                          style={{ cursor: "pointer", color: i() === pathSegments().length - 1 ? "#e6edf3" : "#58a6ff" }}
+                          style={{
+                            cursor: "pointer",
+                            color: i() === pathSegments().length - 1 ? "#e6edf3" : "#58a6ff",
+                            "font-weight": i() === pathSegments().length - 1 ? "600" : "400",
+                            padding: "2px 4px",
+                          }}
                           onClick={() => navigateToPathSegment(i())}
                         >
                           {seg}
@@ -378,8 +384,8 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                     )}
                   </For>
                   <Show when={fileContentPath()}>
-                    <span style={{ color: "#484f58" }}>/</span>
-                    <span style={{ color: "#e6edf3" }}>{fileContentPath()!.split("/").pop()}</span>
+                    <span style={{ color: "#484f58", "font-size": "10px" }}>{"\u203A"}</span>
+                    <span style={{ color: "#e6edf3", "font-weight": "600", padding: "2px 4px" }}>{fileContentPath()!.split("/").pop()}</span>
                   </Show>
                 </div>
               </div>
