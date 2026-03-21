@@ -354,6 +354,35 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             is_builtin: false,
             notes: "Connect with: mariadb -h 127.0.0.1 -u root -p".to_string(),
         },
+        // AI
+        AppTemplate {
+            id: "ollama".to_string(),
+            name: "Ollama".to_string(),
+            description: "Run open-source LLMs locally — Llama 3, Mistral, Gemma, Phi, and more. Use as Orca's AI assistant with no API keys needed.".to_string(),
+            icon: "\u{1F9E0}".to_string(),
+            category: "AI".to_string(),
+            image: "ollama/ollama:latest".to_string(),
+            default_ports: vec!["11434:11434".to_string()],
+            default_env: vec![],
+            default_volumes: vec!["ollama-models:/root/.ollama".to_string()],
+            restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
+            notes: "After starting, pull a model: docker exec ollama ollama pull llama3.2\n\nThen in Orca Settings → AI, select 'Custom' provider and set:\n  URL: http://host.docker.internal:11434/v1\n  Model: llama3.2\n\nNo API key needed for local models.".to_string(),
+        },
+        AppTemplate {
+            id: "open-webui".to_string(),
+            name: "Open WebUI".to_string(),
+            description: "Beautiful web interface for Ollama and other LLM backends. ChatGPT-like experience with local models.".to_string(),
+            icon: "\u{1F4AC}".to_string(),
+            category: "AI".to_string(),
+            image: "ghcr.io/open-webui/open-webui:main".to_string(),
+            default_ports: vec!["3000:8080".to_string()],
+            default_env: vec!["OLLAMA_BASE_URL=http://host.docker.internal:11434".to_string()],
+            default_volumes: vec!["open-webui-data:/app/backend/data".to_string()],
+            restart_policy: "unless-stopped".to_string(),
+            is_builtin: false,
+            notes: "Web UI at http://localhost:3000. Requires Ollama running (deploy it first from App Catalog). Create an account on first visit.".to_string(),
+        },
     ];
     for t in &mut templates {
         t.is_builtin = true;

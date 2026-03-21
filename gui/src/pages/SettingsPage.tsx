@@ -25,7 +25,7 @@ export default function SettingsPage() {
   const [telemetry, setTelemetry] = createSignal(false);
 
   // AI settings
-  type AiProviderType = "anthropic" | "openai" | "gemini" | "custom";
+  type AiProviderType = "anthropic" | "openai" | "gemini" | "ollama" | "custom";
   const [aiProvider, setAiProvider] = createSignal<AiProviderType>("anthropic");
   const [aiApiKey, setAiApiKey] = createSignal("");
   const [aiModel, setAiModel] = createSignal("");
@@ -346,17 +346,23 @@ export default function SettingsPage() {
                         ["anthropic", "Anthropic (Claude)"],
                         ["openai", "OpenAI (GPT)"],
                         ["gemini", "Google (Gemini)"],
+                        ["ollama", "Ollama (Local)"],
                         ["custom", "Custom"],
                       ] as [AiProviderType, string][]).map(([id, label]) => (
                         <button
                           class={`btn btn-sm ${aiProvider() === id ? "btn-primary" : ""}`}
                           onClick={() => {
-                            setAiProvider(id);
+                            setAiProvider(id === "ollama" ? "custom" as AiProviderType : id);
                             setAiApiKey("");
                             setAiTestResult(null);
                             if (id === "anthropic") setAiModel("claude-sonnet-4-20250514");
                             else if (id === "openai") setAiModel("gpt-4o");
                             else if (id === "gemini") setAiModel("gemini-2.0-flash");
+                            else if (id === "ollama") {
+                              setAiModel("llama3.2");
+                              setAiUrl("http://localhost:11434/v1");
+                              setAiApiKey("ollama");
+                            }
                             else setAiModel("");
                           }}
                         >

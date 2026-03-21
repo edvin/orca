@@ -203,8 +203,8 @@ export default function AiWindow() {
             </svg>
             <div style={{ "font-size": "15px", "font-weight": "600", "margin-top": "12px" }}>Configure AI Provider</div>
             <div style={{ "font-size": "13px", color: "#6e7681", "margin-top": "6px", "line-height": "1.5" }}>
-              Set up an API key in Settings to start chatting.
-              <br />Supports Claude, GPT, Gemini, and custom providers.
+              Set up an API key in Settings, or deploy
+              <br /><strong style={{ color: "#e6edf3" }}>Ollama</strong> from the App Catalog to run AI locally — no API key needed.
             </div>
           </div>
         </Show>
