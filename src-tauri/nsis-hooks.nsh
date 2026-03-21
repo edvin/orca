@@ -11,10 +11,9 @@
   Sleep 1000
 !macroend
 
-; Clean up Orca Desktop config and data on uninstall
+; Clean up Orca Desktop data on uninstall (but NOT config — preserve user settings)
 !macro NSIS_HOOK_POSTUNINSTALL
-  ; Remove Orca config directory
-  RMDir /r "$APPDATA\orca"
+  ; Remove cached/runtime data but keep config (API keys, settings, etc.)
   RMDir /r "$LOCALAPPDATA\orca"
   ; Remove Docker TCP override from WSL (best effort)
   nsExec::ExecToLog 'wsl -u root -- rm -f /etc/systemd/system/docker.service.d/override.conf'
