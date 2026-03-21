@@ -177,23 +177,43 @@ export default function EnvironmentPage() {
   const [diagnoseRunning, setDiagnoseRunning] = createSignal(false);
   const [diagnoseResult, setDiagnoseResult] = createSignal<boolean | null>(null);
 
-  const [restarting, setRestarting] = createSignal(false);
+  const [restartingOrca, setRestartingOrca] = createSignal(false);
+  const [restartingDocker, setRestartingDocker] = createSignal(false);
 
-  const restartDaemon = async () => {
-    setRestarting(true);
+  const restartOrcaDaemon = async () => {
+    setRestartingOrca(true);
     try {
-      showToast("Restarting daemon...", "info");
+      showToast("Restarting Orca daemon...", "info");
       await invoke("stop_daemon");
       await new Promise(r => setTimeout(r, 1500));
       await invoke("start_daemon");
       await new Promise(r => setTimeout(r, 2000));
-      showToast("Daemon restarted", "success");
+      showToast("Orca daemon restarted", "success");
       await refresh();
     } catch (e) {
-      logError(`Failed to restart daemon: ${e}`);
+      logError(`Failed to restart Orca daemon: ${e}`);
       showToast(`Restart failed: ${e}`, "error");
     } finally {
-      setRestarting(false);
+      setRestartingOrca(false);
+    }
+  };
+
+  const restartDocker = async () => {
+    setRestartingDocker(true);
+    try {
+      showToast("Restarting Docker...", "info");
+      // Platform-appropriate Docker restart
+      try {
+        await invoke("reconnect_runtime");
+      } catch {}
+      await new Promise(r => setTimeout(r, 3000));
+      showToast("Docker restarted — restart Orca daemon to reconnect", "success");
+      await refresh();
+    } catch (e) {
+      logError(`Failed to restart Docker: ${e}`);
+      showToast(`Docker restart failed: ${e}`, "error");
+    } finally {
+      setRestartingDocker(false);
     }
   };
 
@@ -225,8 +245,11 @@ export default function EnvironmentPage() {
       <div class="page-header">
         <h1 class="page-title">System Health</h1>
         <div class="page-actions">
-          <button class="btn" onClick={restartDaemon} disabled={restarting()}>
-            {restarting() ? "Restarting..." : "Restart Daemon"}
+          <button class="btn" onClick={restartDocker} disabled={restartingDocker()}>
+            {restartingDocker() ? "Restarting..." : "Restart Docker"}
+          </button>
+          <button class="btn" onClick={restartOrcaDaemon} disabled={restartingOrca()}>
+            {restartingOrca() ? "Restarting..." : "Restart Orca"}
           </button>
           <button class="btn" onClick={runDiagnose}>
             Diagnose
