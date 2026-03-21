@@ -312,6 +312,43 @@ pub async fn run_fix_streaming(
             }
             send("\nPodman installed successfully!".into()).await;
         }
+        "install_nvidia_toolkit" => {
+            send(">>> Installing NVIDIA Container Toolkit...\n".into()).await;
+
+            #[cfg(target_os = "windows")]
+            {
+                send("Installing inside WSL2...\n".into()).await;
+                let script = r#"
+                    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null && \
+                    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+                        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+                        tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null && \
+                    apt-get update && apt-get install -y nvidia-container-toolkit && \
+                    nvidia-ctk runtime configure --runtime=docker && \
+                    systemctl restart docker
+                "#;
+                run_cmd_streaming("wsl", &["-u", "root", "--", "bash", "-c", script], &tx).await
+                    .map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit installation failed: {e}"))?;
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                let script = r#"
+                    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null && \
+                    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+                        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+                        sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null && \
+                    sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit && \
+                    sudo nvidia-ctk runtime configure --runtime=docker && \
+                    sudo systemctl restart docker
+                "#;
+                run_cmd_streaming("bash", &["-c", script], &tx).await
+                    .map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit installation failed: {e}"))?;
+            }
+
+            send("\n>>> NVIDIA Container Toolkit installed!\n".into()).await;
+            send("Restart any running Ollama containers to use GPU acceleration.\n".into()).await;
+        }
         "setup_docker_macos" => {
             send(">>> Setting up Docker on macOS via Lima\n".into()).await;
             send("    This will create a lightweight Linux VM using Apple Virtualization.\n".into()).await;
@@ -799,6 +836,52 @@ async fn check_podman_socket() -> HealthCheck {
     }
 }
 
+async fn check_nvidia_gpu() -> HealthCheck {
+    // Check for NVIDIA GPU
+    let has_gpu = if cfg!(target_os = "windows") {
+        // On Windows, check inside WSL
+        run_cmd("wsl", &["-u", "root", "--", "nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]).await
+    } else {
+        run_cmd("nvidia-smi", &["--query-gpu=name", "--format=csv,noheader"]).await
+    };
+
+    match has_gpu {
+        Ok(gpu_name) => {
+            let gpu = gpu_name.trim().lines().next().unwrap_or("").to_string();
+            // Check for NVIDIA Container Toolkit
+            let toolkit = if cfg!(target_os = "windows") {
+                run_cmd("wsl", &["-u", "root", "--", "nvidia-container-cli", "--version"]).await
+            } else {
+                run_cmd("nvidia-container-cli", &["--version"]).await
+            };
+
+            match toolkit {
+                Ok(ver) => HealthCheck {
+                    name: "NVIDIA GPU".to_string(),
+                    description: "GPU acceleration available for containers".to_string(),
+                    status: CheckStatus::Pass,
+                    fix_action: None,
+                    details: Some(format!("{} — Container Toolkit {}", gpu, ver.trim().lines().next().unwrap_or(""))),
+                },
+                Err(_) => HealthCheck {
+                    name: "NVIDIA GPU".to_string(),
+                    description: format!("{} detected but Container Toolkit not installed", gpu),
+                    status: CheckStatus::Warning,
+                    fix_action: Some("install_nvidia_toolkit".to_string()),
+                    details: Some(format!("{} — install nvidia-container-toolkit for GPU in containers", gpu)),
+                },
+            }
+        }
+        Err(_) => HealthCheck {
+            name: "NVIDIA GPU".to_string(),
+            description: "No NVIDIA GPU detected (optional)".to_string(),
+            status: CheckStatus::Pass, // Not having a GPU is fine
+            fix_action: None,
+            details: None, // Keep it quiet if no GPU
+        },
+    }
+}
+
 /// Run all environment checks for the current platform.
 pub async fn check_environment() -> EnvironmentStatus {
     let platform = detect_platform();
@@ -812,6 +895,8 @@ pub async fn check_environment() -> EnvironmentStatus {
             checks.push(check_podman_socket().await);
             checks.push(check_docker_running().await);
             checks.push(check_docker_group().await);
+            let gpu = check_nvidia_gpu().await;
+            if gpu.details.is_some() { checks.push(gpu); }
         }
         "macos" => {
             let docker_desktop_check = check_docker_desktop().await;
@@ -898,6 +983,10 @@ pub async fn check_environment() -> EnvironmentStatus {
             if dd.details.is_some() {
                 checks.push(dd);
             }
+
+            // GPU check
+            let gpu = check_nvidia_gpu().await;
+            if gpu.details.is_some() { checks.push(gpu); }
         }
         _ => {}
     }
