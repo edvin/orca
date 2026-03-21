@@ -2403,6 +2403,8 @@ async fn ai_ask(
         (provider, key, model, url)
     };
 
+    tracing::info!("AI ask: provider={}, model={}, url={}, has_key={}", provider, model, openai_url, api_key.is_some());
+
     let api_key = match api_key {
         Some(key) if !key.is_empty() => key,
         _ => {
@@ -2672,8 +2674,9 @@ async fn call_openai_with_tools(
     }
     messages.push(serde_json::json!({ "role": "user", "content": user_message }));
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    tracing::info!("OpenAI-compatible API call: url={}, model={}, tools={}, history_msgs={}", url, model, tools.len(), history.len());
 
-    for _ in 0..5 {
+    for round in 0..5 {
         let mut body = serde_json::json!({
             "model": model,
             "max_tokens": 4096,
@@ -2691,9 +2694,12 @@ async fn call_openai_with_tools(
             .await
             .map_err(|e| anyhow::anyhow!("Failed to call OpenAI API: {e}"))?;
 
-        if !api_resp.status().is_success() {
-            let status = api_resp.status();
+        let status = api_resp.status();
+        tracing::info!("OpenAI API response: status={}, round={}", status, round);
+
+        if !status.is_success() {
             let err_body = api_resp.text().await.unwrap_or_default();
+            tracing::warn!("OpenAI API error: status={}, body={}", status, &err_body[..err_body.len().min(500)]);
             return Err(anyhow::anyhow!("OpenAI API error ({}): {}", status, err_body).into());
         }
 

@@ -1025,7 +1025,23 @@ pub async fn ai_ask(
     context: Option<serde_json::Value>,
     history: Option<Vec<serde_json::Value>>,
 ) -> Result<serde_json::Value, String> {
-    client()
+    // AI requests can be slow — local models need time to load into memory
+    let ai_client = {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(token) = load_api_token() {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+                headers.insert(reqwest::header::AUTHORIZATION, val);
+            }
+        }
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(300))
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    };
+
+    let resp = ai_client
         .post(format!("{DAEMON_URL}/ai/ask"))
         .json(&serde_json::json!({
             "query": query,
@@ -1034,8 +1050,14 @@ pub async fn ai_ask(
         }))
         .send()
         .await
-        .map_err(|e| format!("AI request failed: {e}"))?
-        .json()
+        .map_err(|e| format!("AI request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("AI error: {body}"));
+    }
+
+    resp.json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))
 }
