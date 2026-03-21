@@ -191,13 +191,18 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     #[cfg(target_os = "windows")]
     {
         tracing::info!("Attempting to start Docker in WSL2...");
-        // Start the Docker service inside WSL
+        // Configure TCP listener and start Docker service inside WSL
         let _ = tokio::process::Command::new("wsl")
-            .args(["-u", "root", "--", "service", "docker", "start"])
+            .args(["-u", "root", "--", "bash", "-c",
+                "mkdir -p /etc/systemd/system/docker.service.d && \
+                 echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                 systemctl daemon-reload 2>/dev/null; \
+                 service docker start"
+            ])
             .output()
             .await;
 
-        // Wait a moment for Docker to start
+        // Wait for Docker to start with TCP listener
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
         // Try TCP again

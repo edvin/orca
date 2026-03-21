@@ -858,7 +858,7 @@ async fn check_nvidia_gpu() -> HealthCheck {
             match toolkit {
                 Ok(ver) => HealthCheck {
                     name: "NVIDIA GPU".to_string(),
-                    description: "GPU acceleration available for containers".to_string(),
+                    description: "GPU acceleration available for AI workloads".to_string(),
                     status: CheckStatus::Pass,
                     fix_action: None,
                     details: Some(format!("{} — Container Toolkit {}", gpu, ver.trim().lines().next().unwrap_or(""))),
@@ -874,10 +874,10 @@ async fn check_nvidia_gpu() -> HealthCheck {
         }
         Err(_) => HealthCheck {
             name: "NVIDIA GPU".to_string(),
-            description: "No NVIDIA GPU detected (optional)".to_string(),
-            status: CheckStatus::Pass, // Not having a GPU is fine
+            description: "No NVIDIA GPU detected — optional, only needed for local AI acceleration".to_string(),
+            status: CheckStatus::Pass,
             fix_action: None,
-            details: None, // Keep it quiet if no GPU
+            details: None,
         },
     }
 }
@@ -1078,15 +1078,19 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
         "start_docker" => {
             #[cfg(target_os = "windows")]
             {
-                // On Windows, start Docker inside WSL2
-                let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await
+                // On Windows, configure TCP listener and start Docker inside WSL2
+                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                    "mkdir -p /etc/systemd/system/docker.service.d && \
+                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                     systemctl daemon-reload 2>/dev/null; \
+                     service docker start"
+                ]).await
                     .map_err(|e| anyhow::anyhow!(
                         "Failed to start Docker in WSL2.\n\n\
-                         Make sure Docker is installed in WSL2.\n\
-                         Try: wsl -u root -- service docker start\n\n\
+                         Make sure Docker is installed in WSL2.\n\n\
                          Error: {e}"
                     ))?;
-                Ok("Docker started in WSL2.\n\nRestart Orca Desktop to connect.".to_string())
+                Ok("Docker started in WSL2 with TCP listener.\n\nRestart Orca Desktop to connect.".to_string())
             }
             #[cfg(not(target_os = "windows"))]
             {
@@ -1387,8 +1391,22 @@ pub async fn check_docker_connection() -> bool {
         return true;
     }
 
+    // On Windows, try Docker via WSL
+    #[cfg(target_os = "windows")]
+    {
+        if Command::new("wsl")
+            .args(["-u", "root", "--", "docker", "info"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .is_ok_and(|s| s.success())
+        {
+            return true;
+        }
+    }
+
     // Fallback: try connecting directly to the Docker socket
-    // This works even when the CLI isn't in PATH
     let sock = std::path::Path::new("/var/run/docker.sock");
     if sock.exists() {
         return true;
