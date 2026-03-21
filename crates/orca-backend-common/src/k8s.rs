@@ -151,12 +151,7 @@ impl K3sManager {
         // Platform check
         if cfg!(target_os = "windows") {
             log.push_str("Platform: Windows\n\n");
-            log.push_str("On Windows, Kubernetes (k3s) runs inside WSL2.\n\n");
-            log.push_str("To set up:\n");
-            log.push_str("  1. Open Ubuntu in WSL2\n");
-            log.push_str("  2. Run: curl -sfL https://get.k3s.io | sudo sh -\n");
-            log.push_str("  3. Restart Orca Desktop\n\n");
-            log.push_str("Orca Desktop will detect the k3s cluster automatically.\n");
+            log.push_str("Installing k3s inside WSL2... (use the streaming endpoint for live progress)\n");
             return Ok(log);
         }
 
@@ -402,17 +397,122 @@ impl K3sManager {
             }
         }
 
-        if platform == "unsupported" || platform == "windows" {
+        if platform == "unsupported" {
+            // Detect Windows at runtime (cfg! is compile-time, but daemon may be cross-compiled)
             send("".into()).await;
-            send("On Windows, Kubernetes (k3s) runs inside WSL2.".into()).await;
+            send("Unsupported platform for automatic k3s installation.".into()).await;
+            send("Install k3s manually: curl -sfL https://get.k3s.io | sudo sh -".into()).await;
+            anyhow::bail!("Unsupported platform");
+        }
+
+        // Windows: install k3s inside WSL2
+        #[cfg(target_os = "windows")]
+        {
             send("".into()).await;
-            send("To set up:".into()).await;
-            send("  1. Open Ubuntu in WSL2".into()).await;
-            send("  2. Run: curl -sfL https://get.k3s.io | sudo sh -".into()).await;
-            send("  3. Restart Orca Desktop".into()).await;
+            send(">>> Installing Kubernetes (k3s) inside WSL2...".into()).await;
             send("".into()).await;
-            send("Orca Desktop will detect the k3s cluster automatically.".into()).await;
-            anyhow::bail!("Kubernetes on Windows requires manual k3s setup in WSL2");
+
+            // Check WSL is available
+            send(">>> Checking WSL2...".into()).await;
+            let wsl_check = Command::new("wsl")
+                .args(["--status"])
+                .output()
+                .await;
+
+            if wsl_check.is_err() || !wsl_check.as_ref().unwrap().status.success() {
+                send("WSL2 is not installed or not running.".into()).await;
+                send("".into()).await;
+                send("Install WSL2 first:".into()).await;
+                send("  wsl --install".into()).await;
+                send("Then restart your computer and try again.".into()).await;
+                anyhow::bail!("WSL2 is not available. Run 'wsl --install' first.");
+            }
+            send("    WSL2 is available".into()).await;
+
+            // Check if k3s is already installed
+            let k3s_check = Command::new("wsl")
+                .args(["-u", "root", "--", "which", "k3s"])
+                .output()
+                .await;
+
+            let k3s_installed = k3s_check.map(|o| o.status.success()).unwrap_or(false);
+
+            if !k3s_installed {
+                send("".into()).await;
+                send(">>> Downloading and installing k3s in WSL2...".into()).await;
+                send("    This downloads the k3s binary (~60MB)\n".into()).await;
+
+                let install_result = run_cmd_streaming("wsl", &[
+                    "-u", "root", "--", "sh", "-c",
+                    "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh -"
+                ], &tx).await;
+
+                match install_result {
+                    Ok(_) => send("\n>>> k3s installed in WSL2\n".into()).await,
+                    Err(e) => {
+                        send(format!("\n>>> k3s installation failed: {e}")).await;
+                        anyhow::bail!("Failed to install k3s in WSL2: {e}");
+                    }
+                }
+            } else {
+                send(">>> k3s is already installed in WSL2\n".into()).await;
+
+                // Make sure k3s service is running
+                send(">>> Starting k3s service...".into()).await;
+                let _ = Command::new("wsl")
+                    .args(["-u", "root", "--", "sh", "-c", "systemctl start k3s 2>/dev/null || k3s server --write-kubeconfig-mode=644 --disable=metrics-server &"])
+                    .output()
+                    .await;
+            }
+
+            // Copy kubeconfig from WSL2
+            send(">>> Copying kubeconfig from WSL2...".into()).await;
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+            let kubeconfig_result = Command::new("wsl")
+                .args(["-u", "root", "--", "cat", "/etc/rancher/k3s/k3s.yaml"])
+                .output()
+                .await;
+
+            match kubeconfig_result {
+                Ok(output) if output.status.success() => {
+                    let kubeconfig = String::from_utf8_lossy(&output.stdout).to_string();
+                    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| "C:\\Users\\Default".into()));
+                    let kube_dir = format!("{home}\\.kube");
+                    let _ = std::fs::create_dir_all(&kube_dir);
+                    let kube_path = format!("{kube_dir}\\config");
+                    std::fs::write(&kube_path, &kubeconfig)
+                        .map_err(|e| anyhow::anyhow!("Failed to write kubeconfig: {e}"))?;
+                    send(format!("    Kubeconfig written to {kube_path}")).await;
+                }
+                _ => {
+                    send("    Warning: could not copy kubeconfig yet (cluster may still be starting)".into()).await;
+                }
+            }
+
+            // Wait for cluster readiness
+            send("".into()).await;
+            send(">>> Waiting for cluster to become ready...".into()).await;
+            for i in 0..60 {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                if let Ok(output) = Command::new("wsl")
+                    .args(["-u", "root", "--", "k3s", "kubectl", "get", "nodes"])
+                    .output()
+                    .await
+                {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if stdout.contains("Ready") {
+                        send(format!("    Cluster ready!\n\n{stdout}")).await;
+                        send("".into()).await;
+                        send(">>> Kubernetes is ready in WSL2.".into()).await;
+                        return Ok(());
+                    }
+                }
+                if i % 5 == 4 {
+                    send(format!("    Waiting... ({}s)", i * 2)).await;
+                }
+            }
+            anyhow::bail!("k3s installed but cluster didn't become ready within 120s");
         }
 
         // Step 1: Check/install k3s
