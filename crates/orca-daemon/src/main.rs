@@ -43,7 +43,11 @@ fn default_socket_path() -> PathBuf {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("orca=debug".parse()?))
+        .with_env_filter(EnvFilter::from_default_env()
+            .add_directive("orca_daemon=debug".parse()?)
+            .add_directive("orca_backend_common=debug".parse()?)
+            .add_directive("orca_core=debug".parse()?)
+        )
         .init();
 
     let args = Args::parse();
