@@ -112,7 +112,7 @@ const mainNavItems: { id: Page; label: string }[] = [
   { id: "volumes", label: "Volumes" },
   { id: "networks", label: "Networks" },
   { id: "kubernetes", label: "Kubernetes" },
-  { id: "templates", label: "Templates" },
+  { id: "templates", label: "App Catalog" },
   { id: "environment", label: "System Health" },
   { id: "activity", label: "Activity" },
 ];

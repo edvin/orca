@@ -576,7 +576,7 @@ export default function ContainersPage(props: ContainersPageProps) {
             <p>Run a container from the Images page or use a template</p>
             <div class="empty-actions">
               <button class="btn btn-primary" onClick={() => props.onNavigate?.("templates")}>
-                Browse Templates
+                Browse App Catalog
               </button>
             </div>
           </div>

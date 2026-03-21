@@ -153,7 +153,7 @@ export default function DashboardPage(props: DashboardPageProps) {
           <p>Get started by pulling an image, deploying a template, or running docker compose</p>
           <div class="empty-actions">
             <button class="btn btn-primary" onClick={() => props.onNavigate?.("templates")}>
-              Browse Templates
+              Browse App Catalog
             </button>
             <button class="btn" onClick={() => props.onNavigate?.("images")}>
               Pull Image

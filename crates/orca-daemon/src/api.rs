@@ -2233,7 +2233,7 @@ async fn deploy_template(
 
     let container_name = overrides
         .name
-        .unwrap_or_else(|| format!("orca-{}", template.id));
+        .unwrap_or_else(|| template.id.clone());
 
     let ports_str = overrides.ports.unwrap_or_else(|| template.default_ports.clone());
     let ports: Vec<orca_core::runtime::PortMapping> = ports_str

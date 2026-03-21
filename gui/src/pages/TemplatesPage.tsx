@@ -26,9 +26,11 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
   // Deploy dialog state
   const [deployName, setDeployName] = createSignal("");
+  const [nameConflict, setNameConflict] = createSignal(false);
   const [deployPorts, setDeployPorts] = createSignal<PortEntry[]>([]);
   const [deployEnv, setDeployEnv] = createSignal<EnvEntry[]>([]);
   const [deployVolumes, setDeployVolumes] = createSignal<VolumeEntry[]>([]);
+  const [existingNames, setExistingNames] = createSignal<Set<string>>(new Set());
 
   // Editor dialog state (create/edit user template)
   const [editorOpen, setEditorOpen] = createSignal(false);
@@ -102,12 +104,19 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   };
 
   // --- Deploy dialog ---
-  const openDeploy = (template: AppTemplate) => {
+  const openDeploy = async (template: AppTemplate) => {
     setDeployTarget(template);
-    setDeployName(`orca-${template.id}`);
+    setDeployName(template.id);
     setDeployPorts(template.default_ports.map(parsePort));
     setDeployEnv(template.default_env.map(parseEnv));
     setDeployVolumes(template.default_volumes.map(parseVolume));
+    // Fetch existing container names for validation
+    try {
+      const containers = (await invoke("list_containers")) as { name: string }[];
+      const names = new Set(containers.map((c) => c.name.replace(/^\//, "")));
+      setExistingNames(names);
+      setNameConflict(names.has(template.id));
+    } catch { setExistingNames(new Set<string>()); }
   };
 
   const closeDeploy = () => setDeployTarget(null);
@@ -190,13 +199,22 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     if (!template) return;
 
     setDeploying(true);
-    setDeployStatus("Pulling image...");
     try {
       const ports = deployPorts().filter((p) => p.host || p.container).map((p) => `${p.host}:${p.container}`);
       const env = deployEnv().filter((e) => e.key).map((e) => `${e.key}=${e.value}`);
       const volumes = deployVolumes().filter((v) => v.source || v.target).map((v) => `${v.source}:${v.target}`);
 
+      // Step 1: Pull image with progress
       setDeployStatus(`Pulling ${template.image}...`);
+      try {
+        await invoke("pull_image", { reference: template.image });
+      } catch (pullErr) {
+        // Pull may fail if image is already local or name is wrong — try deploy anyway
+        setDeployStatus("Image pull completed, creating container...");
+      }
+
+      // Step 2: Deploy (image should now be local)
+      setDeployStatus("Creating and starting container...");
       const result = (await invoke("deploy_template", {
         id: template.id,
         name: deployName() || null,
@@ -221,7 +239,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       const err = String(e);
       const isConflict = err.includes("is already in use") || err.includes("Conflict");
       const displayMsg = isConflict
-        ? `A container named "${deployName() || `orca-${template.id}`}" already exists. Remove or rename it first.`
+        ? `A container named "${deployName() || template.id}" already exists. Remove or rename it first.`
         : err;
       logError(`Deploy failed: ${displayMsg}`, `Template "${template.name}" (${template.image})`);
       showToast(displayMsg, "error");
@@ -425,7 +443,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">App Templates</h1>
+        <h1 class="page-title">App Catalog</h1>
         <div class="page-actions">
           <input
             class="search-input"
@@ -486,7 +504,22 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               <div class="modal-body">
                 <div class="form-group">
                   <label class="form-label">Container Name</label>
-                  <input class="form-input" value={deployName()} onInput={(e) => setDeployName(e.currentTarget.value)} placeholder="Container name" />
+                  <input
+                    class="form-input"
+                    value={deployName()}
+                    onInput={(e) => {
+                      const name = e.currentTarget.value;
+                      setDeployName(name);
+                      setNameConflict(existingNames().has(name));
+                    }}
+                    placeholder="Container name"
+                    style={{ "border-color": nameConflict() ? "#f85149" : undefined }}
+                  />
+                  <Show when={nameConflict()}>
+                    <span class="form-hint" style={{ color: "#f85149" }}>
+                      A container named "{deployName()}" already exists
+                    </span>
+                  </Show>
                 </div>
                 <div class="form-group">
                   <label class="form-label">
