@@ -3248,6 +3248,7 @@ select option {
   min-height: 400px;
   border-radius: 8px;
   overflow: hidden;
+  font-family: "JetBrains Mono NF", monospace;
 }
 
 /* Stat cards row */

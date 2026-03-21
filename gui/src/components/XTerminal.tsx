@@ -30,26 +30,9 @@ export default function XTerminal(props: XTerminalProps) {
   };
 
   onMount(async () => {
-    // Load font via FontFace API — this is the only reliable way to make
-    // custom fonts available to canvas rendering (used by xterm.js).
-    // CSS @font-face alone doesn't work for canvas contexts.
-    // Load font as ArrayBuffer — guaranteed to work in any webview context.
-    // URL-based FontFace loading can fail in Tauri due to custom protocols.
-    const fontName = "JetBrains Mono NF";
-    try {
-      const [regularBuf, boldBuf] = await Promise.all([
-        fetch(new URL("/fonts/JetBrainsMonoNerdFont-Regular.ttf", window.location.href)).then(r => r.arrayBuffer()),
-        fetch(new URL("/fonts/JetBrainsMonoNerdFont-Bold.ttf", window.location.href)).then(r => r.arrayBuffer()),
-      ]);
-      const regular = new FontFace(fontName, regularBuf);
-      const bold = new FontFace(fontName, boldBuf, { weight: "bold" });
-      document.fonts.add(regular);
-      document.fonts.add(bold);
-      await Promise.all([regular.load(), bold.load()]);
-      console.log("Terminal font loaded:", document.fonts.check(`13px "${fontName}"`));
-    } catch (e) {
-      console.warn("Failed to load terminal font:", e);
-    }
+    // The CSS @font-face loads "JetBrains Mono NF" for DOM elements (log viewer works).
+    // For xterm.js canvas rendering, we need to ensure the font is loaded before init.
+    // Wait for all CSS fonts to be ready.
     await document.fonts.ready;
 
     const term = new Terminal({
@@ -68,13 +51,15 @@ export default function XTerminal(props: XTerminalProps) {
         cyan: "#39c5cf",
         white: "#e6edf3",
       },
-      fontFamily: "'JetBrains Mono NF', monospace",
+      fontFamily: "JetBrains Mono NF, monospace",
       fontSize: fontSize(),
       lineHeight: 1.3,
       cursorBlink: true,
       cursorStyle: "bar",
       scrollback: 10000,
       convertEol: true,
+      // Skip xterm's internal font validation — we know the font is loaded via CSS
+      allowProposedApi: true,
     });
 
     termInstance = term;
@@ -83,7 +68,13 @@ export default function XTerminal(props: XTerminalProps) {
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(termDiv!);
-    fitAddon.fit();
+
+    // Force xterm to re-measure with the CSS font by setting fontFamily after open
+    requestAnimationFrame(() => {
+      term.options.fontFamily = "JetBrains Mono NF, monospace";
+      fitAddon.fit();
+    });
+
     term.focus();
 
 
