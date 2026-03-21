@@ -24,6 +24,7 @@ export async function openAiWindow() {
     }
 
     // Create a new window
+    const isMac = navigator.platform.includes("Mac");
     const win = new WebviewWindow("ai-assistant", {
       url: "index.html#ai",
       title: "Orca Desktop AI",
@@ -31,8 +32,8 @@ export async function openAiWindow() {
       height: 640,
       minWidth: 360,
       minHeight: 400,
-      decorations: false,
-      transparent: true,
+      decorations: isMac,
+      transparent: !isMac,
       resizable: true,
       center: false,
       x: window.screenX + window.outerWidth - 500,

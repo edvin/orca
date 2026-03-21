@@ -35,6 +35,16 @@ body {
   border-radius: 0;
 }
 
+/* macOS: offset titlebar content to avoid traffic light buttons */
+.platform-macos .titlebar-left {
+  padding-left: 62px;
+}
+
+/* macOS: hide custom window controls (native ones are used) */
+.platform-macos .titlebar-btn {
+  display: none;
+}
+
 /* ==================== Status Bar ==================== */
 .status-bar {
   display: flex;

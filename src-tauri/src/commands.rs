@@ -997,12 +997,14 @@ pub async fn delete_user_template(id: String) -> Result<serde_json::Value, Strin
 pub async fn ai_ask(
     query: String,
     context: Option<serde_json::Value>,
+    history: Option<Vec<serde_json::Value>>,
 ) -> Result<serde_json::Value, String> {
     client()
         .post(format!("{DAEMON_URL}/ai/ask"))
         .json(&serde_json::json!({
             "query": query,
             "context": context,
+            "history": history.unwrap_or_default(),
         }))
         .send()
         .await
