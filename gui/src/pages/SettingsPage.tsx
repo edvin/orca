@@ -284,19 +284,58 @@ export default function SettingsPage() {
         setOllamaSetupStatus("Ollama container started but not responding yet. Try pulling a model manually: docker exec ollama ollama pull qwen2.5:7b");
       }
 
-      // Step 3: Pull a model via docker exec
+      // Step 3: Pull a model — run in background and poll for completion
       if (ready) {
-        setOllamaSetupStatus("Pulling qwen2.5:7b model — this will take a few minutes...");
-        try {
-          const result = await invoke("exec_container", {
-            id: "ollama",
-            command: ["ollama", "pull", "qwen2.5:7b"],
-          }) as { output?: string };
-          if (result?.output?.includes("success") || result?.output?.includes("pulling") || result?.output) {
-            setOllamaSetupStatus("Model ready!");
-          }
-        } catch (e) {
-          setOllamaSetupStatus(`Model pull failed: ${e}. Try: docker exec ollama ollama pull qwen2.5:7b`);
+        setOllamaSetupStatus("Downloading qwen2.5:7b model (~4.7 GB)...");
+
+        // Start the pull in the background (don't await — it blocks for minutes)
+        const pullPromise = invoke("exec_container", {
+          id: "ollama",
+          command: ["ollama", "pull", "qwen2.5:7b"],
+        }).catch(() => null);
+
+        // Poll until model appears in the list
+        let modelReady = false;
+        const startTime = Date.now();
+        for (let i = 0; i < 120; i++) {
+          await new Promise((r) => setTimeout(r, 5000));
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          const mins = Math.floor(elapsed / 60);
+          const secs = elapsed % 60;
+          setOllamaSetupStatus(
+            `Downloading qwen2.5:7b model (~4.7 GB)... ${mins}m ${secs}s elapsed`
+          );
+
+          try {
+            const listResult = await invoke("exec_container", {
+              id: "ollama",
+              command: ["ollama", "list"],
+            }) as { output?: string };
+            if (listResult?.output?.includes("qwen2.5")) {
+              modelReady = true;
+              break;
+            }
+          } catch {}
+        }
+
+        if (modelReady) {
+          setOllamaSetupStatus("Model downloaded and ready!");
+        } else {
+          // Pull might still be running — wait for the promise
+          await pullPromise;
+          setOllamaSetupStatus("Model pull completed. Verifying...");
+          // One final check
+          try {
+            const check = await invoke("exec_container", {
+              id: "ollama",
+              command: ["ollama", "list"],
+            }) as { output?: string };
+            if (check?.output?.includes("qwen2.5")) {
+              setOllamaSetupStatus("Model ready!");
+            } else {
+              setOllamaSetupStatus("Model may still be downloading. Try: docker exec ollama ollama pull qwen2.5:7b");
+            }
+          } catch {}
         }
       }
 
