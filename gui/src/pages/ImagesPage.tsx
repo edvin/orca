@@ -61,6 +61,7 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   // Vulnerability scanning state
   const [scanResult, setScanResult] = createSignal<ScanResult | null>(null);
+  const [reportPath, setReportPath] = createSignal<string | null>(null);
   const [scanning, setScanning] = createSignal(false);
   const [scanImageId, setScanImageId] = createSignal<string | null>(null);
 
@@ -493,25 +494,10 @@ export default function ImagesPage(props: ImagesPageProps) {
     try {
       const safeName = imageName.replace(/[^a-zA-Z0-9_-]/g, "_");
       const fileName = `vulnerability-report-${safeName}.html`;
-
-      // Write to temp dir via Tauri command and open in system browser
       const filePath = await invoke("write_temp_file", { name: fileName, content: html }) as string;
-      const { open } = await import("@tauri-apps/plugin-shell");
-      await open(filePath);
-      showToast("Report opened in browser", "success");
-    } catch {
-      // Fallback: download via blob
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const safeName = imageName.replace(/[^a-zA-Z0-9_-]/g, "_");
-      a.download = `vulnerability-report-${safeName}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast("Report downloaded", "success");
+      setReportPath(filePath);
+    } catch (e) {
+      showToast(`Failed to export report: ${e}`, "error");
     }
   };
 
@@ -1291,6 +1277,50 @@ export default function ImagesPage(props: ImagesPageProps) {
                   }}>{fileContent()}</pre>
                 </div>
               </Show>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Report exported dialog */}
+      <Show when={reportPath()}>
+        <div class="modal-overlay" onClick={() => setReportPath(null)}>
+          <div class="modal-dialog" style={{ "max-width": "480px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Report Ready</span>
+              <button class="modal-close" onClick={() => setReportPath(null)}>{"\u00d7"}</button>
+            </div>
+            <div class="modal-body" style={{ "text-align": "center", padding: "24px" }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-bottom": "16px" }}>
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <div style={{ "font-size": "15px", "font-weight": "600", "margin-bottom": "8px" }}>
+                Vulnerability report exported
+              </div>
+              <div class="mono" style={{
+                "font-size": "11px", color: "#8b949e", "margin-bottom": "20px",
+                background: "#161b22", padding: "8px 12px", "border-radius": "6px",
+                "word-break": "break-all", "text-align": "left",
+              }}>
+                {reportPath()}
+              </div>
+              <div style={{ display: "flex", gap: "8px", "justify-content": "center" }}>
+                <button
+                  class="btn btn-primary"
+                  onClick={async () => {
+                    try {
+                      const { open } = await import("@tauri-apps/plugin-shell");
+                      await open(reportPath()!);
+                    } catch (e) {
+                      showToast(`Failed to open: ${e}`, "error");
+                    }
+                  }}
+                >
+                  Open in Browser
+                </button>
+                <button class="btn" onClick={() => setReportPath(null)}>Close</button>
+              </div>
             </div>
           </div>
         </div>
