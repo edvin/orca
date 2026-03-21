@@ -944,23 +944,38 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             Ok(format!("Docker installed:\n{output}"))
         }
         "start_docker" => {
-            let output = run_cmd("sudo", &["systemctl", "start", "docker"])
-                .await
-                .map_err(|e| anyhow::anyhow!(
-                    "Failed to start the Docker daemon.\n\n\
-                     Try running manually:\n\
-                     sudo systemctl start docker\n\n\
-                     If Docker is not installed, use the Install button above first.\n\n\
-                     Error: {e}"
-                ))?;
-            Ok(format!(
-                "Docker daemon started.{}",
-                if output.is_empty() {
-                    String::new()
-                } else {
-                    format!("\n{output}")
-                }
-            ))
+            #[cfg(target_os = "windows")]
+            {
+                // On Windows, start Docker inside WSL2
+                let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await
+                    .map_err(|e| anyhow::anyhow!(
+                        "Failed to start Docker in WSL2.\n\n\
+                         Make sure Docker is installed in WSL2.\n\
+                         Try: wsl -u root -- service docker start\n\n\
+                         Error: {e}"
+                    ))?;
+                Ok("Docker started in WSL2.\n\nRestart Orca Desktop to connect.".to_string())
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let output = run_cmd("sudo", &["systemctl", "start", "docker"])
+                    .await
+                    .map_err(|e| anyhow::anyhow!(
+                        "Failed to start the Docker daemon.\n\n\
+                         Try running manually:\n\
+                         sudo systemctl start docker\n\n\
+                         If Docker is not installed, use the Install button above first.\n\n\
+                         Error: {e}"
+                    ))?;
+                Ok(format!(
+                    "Docker daemon started.{}",
+                    if output.is_empty() {
+                        String::new()
+                    } else {
+                        format!("\n{output}")
+                    }
+                ))
+            }
         }
         "start_podman" => {
             // Try rootless socket first, fall back to root

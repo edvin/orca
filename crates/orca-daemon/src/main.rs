@@ -183,6 +183,40 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
         }
     }
 
+    // On Windows, try to start Docker inside WSL2 before giving up
+    #[cfg(target_os = "windows")]
+    {
+        tracing::info!("Attempting to start Docker in WSL2...");
+        // Start the Docker service inside WSL
+        let _ = tokio::process::Command::new("wsl")
+            .args(["-u", "root", "--", "service", "docker", "start"])
+            .output()
+            .await;
+
+        // Wait a moment for Docker to start
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+        // Try TCP again
+        if let Ok(docker) = bollard::Docker::connect_with_http(
+            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
+        ) {
+            if docker.ping().await.is_ok() {
+                tracing::info!("Connected to Docker via TCP after starting WSL2 Docker service");
+                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
+            }
+        }
+
+        // Try socket via WSL interop
+        if let Ok(docker) = bollard::Docker::connect_with_local_defaults() {
+            if docker.ping().await.is_ok() {
+                tracing::info!("Connected to Docker via socket after starting WSL2 Docker service");
+                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
+            }
+        }
+
+        tracing::warn!("Docker in WSL2 could not be started automatically");
+    }
+
     tracing::warn!("No container runtime available");
     tracing::warn!("Daemon will start without runtime — Environment page will guide setup");
 
