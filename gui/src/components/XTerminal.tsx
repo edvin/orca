@@ -38,7 +38,7 @@ export default function XTerminal(props: XTerminalProps) {
     const term = new Terminal({
       theme: {
         background: "#0d1117",
-        foreground: "#e6edf3",
+        foreground: "#b8c0cc",
         cursor: "#58a6ff",
         cursorAccent: "#0d1117",
         selectionBackground: "#1f6feb44",
