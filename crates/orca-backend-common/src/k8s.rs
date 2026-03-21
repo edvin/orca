@@ -99,8 +99,12 @@ impl K3sManager {
                 }
             }
         }
-        // Default: ~/.kube/config (standard location), then k3s default
+        // Check for Orca-specific kubeconfig first (written when default already existed)
         if let Some(home) = dirs::home_dir() {
+            let orca_config = home.join(".kube").join("orca-k3s-config");
+            if orca_config.exists() {
+                return orca_config;
+            }
             let kube_config = home.join(".kube").join("config");
             if kube_config.exists() {
                 return kube_config;
@@ -390,7 +394,14 @@ impl K3sManager {
                                         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
                                         let kube_dir = format!("{home}/.kube");
                                         let _ = std::fs::create_dir_all(&kube_dir);
-                                        let kube_path = format!("{kube_dir}/config");
+                                        let default_path = format!("{kube_dir}/config");
+                                        let kube_path = if std::path::Path::new(&default_path).exists() {
+                                            let alt = format!("{kube_dir}/orca-k3s-config");
+                                            send(format!("Existing kubeconfig found, writing to {alt}")).await;
+                                            alt
+                                        } else {
+                                            default_path
+                                        };
                                         // Replace localhost with the Lima VM IP
                                         let fixed = kubeconfig.replace("127.0.0.1", "localhost");
                                         std::fs::write(&kube_path, &fixed)
@@ -534,7 +545,14 @@ impl K3sManager {
                     let home = std::env::var("USERPROFILE").unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| "C:\\Users\\Default".into()));
                     let kube_dir = format!("{home}\\.kube");
                     let _ = std::fs::create_dir_all(&kube_dir);
-                    let kube_path = format!("{kube_dir}\\config");
+                    let default_path = format!("{kube_dir}\\config");
+                    let kube_path = if std::path::Path::new(&default_path).exists() {
+                        let alt = format!("{kube_dir}\\orca-k3s-config");
+                        send(format!("    Existing kubeconfig found, writing to {alt}")).await;
+                        alt
+                    } else {
+                        default_path
+                    };
                     std::fs::write(&kube_path, &kubeconfig)
                         .map_err(|e| anyhow::anyhow!("Failed to write kubeconfig: {e}"))?;
                     send(format!("    Kubeconfig written to {kube_path}")).await;
