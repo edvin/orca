@@ -1104,8 +1104,7 @@ async fn volume_list_files(
         command: vec![
             "ls".to_string(),
             "-la".to_string(),
-            "--time-style=+%Y-%m-%dT%H:%M:%S".to_string(),
-            data_path,
+            data_path.clone(),
         ],
         env: HashMap::new(),
         ports: vec![],
@@ -1186,6 +1185,12 @@ async fn volume_list_files(
                 "is_dir": is_dir,
             }));
         }
+    }
+
+    // If we got output but no parsed entries, include raw output for debugging
+    if entries.is_empty() && !lines.is_empty() {
+        let raw = lines.join("\n");
+        return Err(anyhow::anyhow!("Could not parse directory listing.\nExit code: {exit_code:?}\nRaw output:\n{raw}").into());
     }
 
     Ok(Json(serde_json::json!({ "entries": entries, "path": sanitized })))
