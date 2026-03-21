@@ -53,9 +53,17 @@ export default function AiWindow() {
     scrollToBottom();
 
     try {
+      // Send recent conversation history (sliding window of last 20 messages)
+      const allMessages = messages();
+      const historyWindow = allMessages.slice(-20).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
       const result = (await invoke("ai_ask", {
         query: text,
         context: ctx || null,
+        history: historyWindow,
       })) as AiResponse;
 
       setMessages((prev) => [...prev, { role: "ai", content: result.answer }]);
@@ -107,6 +115,29 @@ export default function AiWindow() {
     } catch {}
   });
 
+  const compactHistory = async () => {
+    if (loading() || messages().length < 6) return;
+    setLoading(true);
+    try {
+      const allMessages = messages();
+      const summary = allMessages
+        .map((m) => `${m.role === "user" ? "User" : "AI"}: ${m.content.slice(0, 200)}`)
+        .join("\n");
+      const result = (await invoke("ai_ask", {
+        query: `Please provide a very brief summary of our conversation so far in 2-3 sentences, capturing the key topics and any actions taken:\n\n${summary}`,
+        context: null,
+        history: [],
+      })) as AiResponse;
+      setMessages([
+        { role: "ai", content: `*Previous conversation summary:* ${result.answer}` },
+      ]);
+    } catch {
+      // If compaction fails, just keep the recent messages
+      setMessages((prev) => prev.slice(-6));
+    }
+    setLoading(false);
+  };
+
   const renderMarkdown = (text: string) => {
     let html = text
       .replace(/&/g, "&amp;")
@@ -131,12 +162,32 @@ export default function AiWindow() {
           </svg>
           Orca Desktop AI
         </div>
-        <button class="ai-window-close" onClick={async () => {
-          try {
-            const { getCurrentWindow } = await import("@tauri-apps/api/window");
-            await getCurrentWindow().close();
-          } catch {}
-        }}>{"\u00d7"}</button>
+        <div style={{ display: "flex", "align-items": "center", gap: "2px" }}>
+          <Show when={messages().length > 0}>
+            <button
+              class="ai-window-header-btn"
+              onClick={() => compactHistory()}
+              disabled={loading() || messages().length < 6}
+              title="Compact conversation history"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+            <button
+              class="ai-window-header-btn"
+              onClick={() => { setMessages([]); setPendingContext(null); }}
+              disabled={loading()}
+              title="Clear conversation"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </Show>
+          <button class="ai-window-close" onClick={async () => {
+            try {
+              const { getCurrentWindow } = await import("@tauri-apps/api/window");
+              await getCurrentWindow().close();
+            } catch {}
+          }}>{"\u00d7"}</button>
+        </div>
       </div>
 
       {/* Messages */}

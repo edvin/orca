@@ -2320,10 +2320,18 @@ async fn deploy_template(
 // --- AI Assistant ---
 
 #[derive(Deserialize)]
+struct AiChatMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Deserialize)]
 struct AiAskRequest {
     query: String,
     #[serde(default)]
     context: Option<orca_core::ai::AiContext>,
+    #[serde(default)]
+    history: Vec<AiChatMessage>,
 }
 
 async fn ai_ask(
@@ -2395,6 +2403,7 @@ async fn ai_ask(
     );
 
     let user_message = body.query.clone();
+    let history = body.history;
 
     if let Some(ctx) = &body.context {
         system_prompt.push_str("\n\nThe user is asking about a specific container context:");
@@ -2443,8 +2452,16 @@ async fn ai_ask(
         })
     }).collect();
 
+    // Build conversation history for multi-turn support
+    let prior_messages: Vec<(String, String)> = history.iter()
+        .map(|m| (
+            if m.role == "ai" { "assistant".to_string() } else { m.role.clone() },
+            m.content.clone(),
+        ))
+        .collect();
+
     let answer = if provider == "anthropic" {
-        call_anthropic_with_tools(&http_client, &api_key, &model, &system_prompt, &user_message, &anthropic_tools, &state).await?
+        call_anthropic_with_tools(&http_client, &api_key, &model, &system_prompt, &user_message, &anthropic_tools, &state, &prior_messages).await?
     } else {
         // OpenAI-compatible API (OpenAI, Gemini, Custom)
         let base_url = match provider.as_str() {
@@ -2452,7 +2469,7 @@ async fn ai_ask(
             "custom" => openai_url.clone(),
             _ => openai_url.clone(), // "openai"
         };
-        call_openai_with_tools(&http_client, &api_key, &model, &base_url, &system_prompt, &user_message, &openai_tools, &state).await?
+        call_openai_with_tools(&http_client, &api_key, &model, &base_url, &system_prompt, &user_message, &openai_tools, &state, &prior_messages).await?
     };
 
     Ok(Json(orca_core::ai::AiResponse {
@@ -2513,8 +2530,12 @@ async fn call_anthropic_with_tools(
     user_message: &str,
     tools: &[serde_json::Value],
     state: &Arc<AppState>,
+    history: &[(String, String)],
 ) -> Result<String, ApiError> {
-    let mut messages = vec![serde_json::json!({ "role": "user", "content": user_message })];
+    let mut messages: Vec<serde_json::Value> = history.iter()
+        .map(|(role, content)| serde_json::json!({ "role": role, "content": content }))
+        .collect();
+    messages.push(serde_json::json!({ "role": "user", "content": user_message }));
 
     // Tool-calling loop (max 5 rounds to prevent runaway)
     for _ in 0..5 {
@@ -2601,11 +2622,15 @@ async fn call_openai_with_tools(
     user_message: &str,
     tools: &[serde_json::Value],
     state: &Arc<AppState>,
+    history: &[(String, String)],
 ) -> Result<String, ApiError> {
-    let mut messages = vec![
+    let mut messages: Vec<serde_json::Value> = vec![
         serde_json::json!({ "role": "system", "content": system_prompt }),
-        serde_json::json!({ "role": "user", "content": user_message }),
     ];
+    for (role, content) in history {
+        messages.push(serde_json::json!({ "role": role, "content": content }));
+    }
+    messages.push(serde_json::json!({ "role": "user", "content": user_message }));
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
     for _ in 0..5 {

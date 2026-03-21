@@ -2646,6 +2646,31 @@ select option {
   color: #e6edf3;
 }
 
+.ai-window-header-btn {
+  -webkit-app-region: no-drag;
+  background: none;
+  border: none;
+  color: #484f58;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.ai-window-header-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #8b949e;
+}
+
+.ai-window-header-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .ai-window-messages {
   flex: 1;
   overflow-y: auto;
