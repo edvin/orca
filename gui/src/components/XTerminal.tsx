@@ -29,26 +29,20 @@ export default function XTerminal(props: XTerminalProps) {
   };
 
   onMount(async () => {
-    // Force the browser to load and rasterize the font by rendering it
-    // in a hidden element. Canvas (used by xterm.js) doesn't trigger
-    // @font-face loading on its own.
-    const fontProbe = document.createElement("span");
-    fontProbe.style.fontFamily = "'JetBrains Mono NF', 'JetBrainsMono Nerd Font'";
-    fontProbe.style.fontSize = "13px";
-    fontProbe.style.position = "absolute";
-    fontProbe.style.left = "-9999px";
-    fontProbe.textContent = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    document.body.appendChild(fontProbe);
-
-    // Wait for fonts to fully load
+    // Load font via FontFace API — this is the only reliable way to make
+    // custom fonts available to canvas rendering (used by xterm.js).
+    // CSS @font-face alone doesn't work for canvas contexts.
+    const fontName = "JetBrains Mono NF";
     try {
-      await document.fonts.load("13px 'JetBrains Mono NF'");
-      await document.fonts.load("13px 'JetBrainsMono Nerd Font'");
-      await document.fonts.ready;
-    } catch {}
-    // Give the rasterizer time to finalize
-    await new Promise((r) => setTimeout(r, 100));
-    document.body.removeChild(fontProbe);
+      const regular = new FontFace(fontName, "url(/fonts/JetBrainsMonoNerdFont-Regular.ttf)");
+      const bold = new FontFace(fontName, "url(/fonts/JetBrainsMonoNerdFont-Bold.ttf)", { weight: "bold" });
+      const [loadedRegular, loadedBold] = await Promise.all([regular.load(), bold.load()]);
+      document.fonts.add(loadedRegular);
+      document.fonts.add(loadedBold);
+    } catch (e) {
+      console.warn("Failed to load terminal font:", e);
+    }
+    await document.fonts.ready;
 
     const term = new Terminal({
       theme: {
@@ -66,7 +60,7 @@ export default function XTerminal(props: XTerminalProps) {
         cyan: "#39c5cf",
         white: "#e6edf3",
       },
-      fontFamily: "'JetBrains Mono NF', 'JetBrainsMono Nerd Font', 'JetBrainsMono NF', monospace",
+      fontFamily: "'JetBrains Mono NF', monospace",
       fontSize: fontSize(),
       lineHeight: 1.3,
       cursorBlink: true,
@@ -84,12 +78,6 @@ export default function XTerminal(props: XTerminalProps) {
     fitAddon.fit();
     term.focus();
 
-    // After opening, force xterm to re-measure with the correct font
-    // by toggling the font family (triggers internal cache invalidation)
-    setTimeout(() => {
-      term.options.fontFamily = "'JetBrains Mono NF', 'JetBrainsMono Nerd Font', monospace";
-      fitAddon.fit();
-    }, 200);
 
     // Read API token from config
     let token = "";
