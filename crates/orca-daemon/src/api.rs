@@ -2399,7 +2399,11 @@ async fn ai_ask(
          When a user asks you to list containers, check logs, inspect images, manage networks, etc., \
          USE your tools to get real data — do NOT make up responses or say you cannot do it. \
          Always prefer using tools over suggesting CLI commands the user has to run themselves. \
-         After calling tools, summarize the results in a helpful way."
+         After calling tools, summarize the results in a helpful way.\n\n\
+         When the user refers to a container, image, or resource by a partial name, \
+         use your tools to find matches. If exactly one match is found, act on it directly \
+         without asking for confirmation. Only ask to disambiguate when there are multiple matches. \
+         Be decisive and action-oriented — the user expects you to just do it."
     );
 
     let user_message = body.query.clone();
