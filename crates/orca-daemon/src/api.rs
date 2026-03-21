@@ -1336,10 +1336,12 @@ async fn run_in_image(
     use bollard::models::ContainerWaitResponse;
     use futures::StreamExt;
 
+    // Use /bin/sh -c to run the command, bypassing the image's entrypoint
+    let shell_cmd = cmd.iter().map(|s| shell_escape(s)).collect::<Vec<_>>().join(" ");
     let config = Config {
         image: Some(image.to_string()),
-        entrypoint: Some(vec!["".to_string()]),  // Clear entrypoint
-        cmd: Some(cmd.iter().map(|s| s.to_string()).collect()),
+        entrypoint: Some(vec!["/bin/sh".to_string(), "-c".to_string(), shell_cmd]),
+        cmd: Some(vec![]),
         ..Default::default()
     };
 
@@ -1419,6 +1421,15 @@ async fn run_in_image(
     }
 
     Ok(stdout_lines)
+}
+
+/// Simple shell escaping for arguments.
+fn shell_escape(s: &str) -> String {
+    if s.chars().all(|c| c.is_alphanumeric() || c == '/' || c == '.' || c == '-' || c == '_') {
+        s.to_string()
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
 }
 
 /// Resolve an image ID to a usable reference (repo:tag or full sha).

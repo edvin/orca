@@ -626,14 +626,20 @@ pub async fn scan_image(id: String) -> Result<serde_json::Value, String> {
     };
 
     let encoded = urlencoding::encode(&id);
-    client
+    let resp = client
         .get(format!("{DAEMON_URL}/images/{encoded}/scan"))
         .send()
         .await
-        .map_err(|e| format!("Scan failed: {e}"))?
-        .json()
+        .map_err(|e| format!("Scan failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Scan failed: {body}"));
+    }
+
+    resp.json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
+        .map_err(|e| format!("Invalid scan response: {e}"))
 }
 
 // --- Networks ---
