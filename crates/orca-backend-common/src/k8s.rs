@@ -18,15 +18,15 @@ use orca_core::kubernetes::*;
 pub struct K3sManager {
     /// Override kubeconfig path (if None, uses default k3s location).
     kubeconfig_override: Option<PathBuf>,
-    /// Cached kube client (created on first use).
-    client: tokio::sync::OnceCell<Client>,
+    /// Cached kube client (re-created on failure).
+    client: tokio::sync::Mutex<Option<Client>>,
 }
 
 impl K3sManager {
     pub fn new() -> Self {
         Self {
             kubeconfig_override: None,
-            client: tokio::sync::OnceCell::new(),
+            client: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -35,7 +35,7 @@ impl K3sManager {
     pub fn with_kubeconfig(path: PathBuf) -> Self {
         Self {
             kubeconfig_override: Some(path),
-            client: tokio::sync::OnceCell::new(),
+            client: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -115,23 +115,31 @@ impl K3sManager {
         candidates.into_iter().last().unwrap_or_else(|| PathBuf::from("/etc/rancher/k3s/k3s.yaml"))
     }
 
-    async fn get_client(&self) -> anyhow::Result<&Client> {
-        self.client
-            .get_or_try_init(|| async {
-                let kubeconfig_path = self.kubeconfig_path();
-                if !kubeconfig_path.exists() {
-                    anyhow::bail!("Kubernetes not enabled — kubeconfig not found");
-                }
+    async fn get_client(&self) -> anyhow::Result<Client> {
+        let mut cached = self.client.lock().await;
+        if let Some(client) = cached.as_ref() {
+            return Ok(client.clone());
+        }
 
-                let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path)?;
-                let config = kube::Config::from_custom_kubeconfig(
-                    kubeconfig,
-                    &kube::config::KubeConfigOptions::default(),
-                )
-                .await?;
-                Ok(Client::try_from(config)?)
-            })
-            .await
+        let kubeconfig_path = self.kubeconfig_path();
+        tracing::info!("K8s get_client: loading kubeconfig from {}", kubeconfig_path.display());
+        if !kubeconfig_path.exists() {
+            anyhow::bail!("Kubernetes not enabled — kubeconfig not found at {}", kubeconfig_path.display());
+        }
+
+        let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path)
+            .map_err(|e| { tracing::warn!("K8s: failed to parse kubeconfig: {e}"); e })?;
+        let config = kube::Config::from_custom_kubeconfig(
+            kubeconfig,
+            &kube::config::KubeConfigOptions::default(),
+        )
+        .await
+        .map_err(|e| { tracing::warn!("K8s: failed to create config from kubeconfig: {e}"); e })?;
+        let client = Client::try_from(config)
+            .map_err(|e| { tracing::warn!("K8s: failed to create client: {e}"); e })?;
+        tracing::info!("K8s: client created successfully");
+        *cached = Some(client.clone());
+        Ok(client)
     }
 
     async fn is_k3s_installed(&self) -> bool {
@@ -760,12 +768,31 @@ impl K8sManager for K3sManager {
     async fn status(&self) -> anyhow::Result<ClusterStatus> {
         let kubeconfig_path = self.kubeconfig_path();
         let kubeconfig_exists = kubeconfig_path.exists();
-        tracing::debug!("K8s status check: kubeconfig path={}, exists={}", kubeconfig_path.display(), kubeconfig_exists);
+        tracing::info!("K8s status: kubeconfig path={}, exists={}", kubeconfig_path.display(), kubeconfig_exists);
+
+        // Log all candidate paths for debugging
+        {
+            let mut candidates = Vec::new();
+            if let Ok(profile) = std::env::var("USERPROFILE") {
+                let base = PathBuf::from(&profile).join(".kube");
+                candidates.push(("USERPROFILE orca-k3s", base.join("orca-k3s-config")));
+                candidates.push(("USERPROFILE config", base.join("config")));
+            }
+            if let Some(home) = dirs::home_dir() {
+                let base = home.join(".kube");
+                candidates.push(("HOME orca-k3s", base.join("orca-k3s-config")));
+                candidates.push(("HOME config", base.join("config")));
+            }
+            candidates.push(("k3s default", PathBuf::from("/etc/rancher/k3s/k3s.yaml")));
+            for (label, path) in &candidates {
+                tracing::info!("  K8s candidate [{}]: {} (exists={})", label, path.display(), path.exists());
+            }
+        }
 
         if !kubeconfig_exists {
             // Check if k3s is installed (for direct installs)
             let installed = self.is_k3s_installed().await;
-            tracing::debug!("K8s status: no kubeconfig, is_k3s_installed={}", installed);
+            tracing::info!("K8s status: no kubeconfig found, is_k3s_installed={}", installed);
             return Ok(ClusterStatus {
                 enabled: installed,
                 running: false,
@@ -795,7 +822,12 @@ impl K8sManager for K3sManager {
             }
         };
 
-        let running = client.apiserver_version().await.map(|_| ()).is_ok();
+        let api_result = client.apiserver_version().await;
+        let running = api_result.is_ok();
+        match &api_result {
+            Ok(ver) => tracing::info!("K8s status: API server reachable, version {}.{}", ver.major, ver.minor),
+            Err(e) => tracing::info!("K8s status: API server not reachable: {e}"),
+        }
 
         // Get version
         let version = if running {
