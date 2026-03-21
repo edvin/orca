@@ -89,29 +89,30 @@ impl K3sManager {
         if let Ok(path) = std::env::var("KUBECONFIG") {
             return PathBuf::from(path);
         }
-        // On Windows, kubeconfig is copied to %USERPROFILE%\.kube\config
-        #[cfg(target_os = "windows")]
-        {
-            if let Ok(profile) = std::env::var("USERPROFILE") {
-                let kube_config = PathBuf::from(profile).join(".kube").join("config");
-                if kube_config.exists() {
-                    return kube_config;
-                }
-            }
+        // Check all possible locations — works on any platform
+        let mut candidates = Vec::new();
+        // Windows: %USERPROFILE%\.kube\...
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            let base = PathBuf::from(profile).join(".kube");
+            candidates.push(base.join("orca-k3s-config"));
+            candidates.push(base.join("config"));
         }
-        // Check for Orca-specific kubeconfig first (written when default already existed)
+        // Unix: ~/.kube/...
         if let Some(home) = dirs::home_dir() {
-            let orca_config = home.join(".kube").join("orca-k3s-config");
-            if orca_config.exists() {
-                return orca_config;
-            }
-            let kube_config = home.join(".kube").join("config");
-            if kube_config.exists() {
-                return kube_config;
+            let base = home.join(".kube");
+            candidates.push(base.join("orca-k3s-config"));
+            candidates.push(base.join("config"));
+        }
+        // Linux native k3s
+        candidates.push(PathBuf::from("/etc/rancher/k3s/k3s.yaml"));
+
+        for path in &candidates {
+            if path.exists() {
+                return path.clone();
             }
         }
-        // Default k3s location (Linux native)
-        PathBuf::from("/etc/rancher/k3s/k3s.yaml")
+        // Fallback (won't exist but gives a meaningful path)
+        candidates.into_iter().last().unwrap_or_else(|| PathBuf::from("/etc/rancher/k3s/k3s.yaml"))
     }
 
     async fn get_client(&self) -> anyhow::Result<&Client> {

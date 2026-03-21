@@ -242,9 +242,7 @@ export default function SettingsPage() {
     try {
       // Step 1: Pull and deploy Ollama container
       setOllamaSetupStatus("Pulling Ollama image (this may take a few minutes)...");
-      try {
-        await invoke("pull_image", { reference: "ollama/ollama:latest" });
-      } catch {}
+      await invoke("pull_image", { reference: "ollama/ollama:latest" });
 
       setOllamaSetupStatus("Creating Ollama container...");
       try {
@@ -534,7 +532,7 @@ export default function SettingsPage() {
                         {ollamaSetupRunning() ? "Setting up..." : ollamaSetupDone() ? "Set up again" : "Set up Ollama"}
                       </button>
                       <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "8px" }}>
-                        Deploys Ollama container, pulls qwen2.5:7b model (~2GB), and configures the AI assistant automatically.
+                        Deploys Ollama container and pulls qwen2.5:7b model (~4.7GB download, ~8GB RAM to run). Works on CPU — GPU optional but faster.
                       </div>
                     </div>
                   </Show>
