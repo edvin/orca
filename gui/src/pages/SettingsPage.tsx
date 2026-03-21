@@ -240,7 +240,7 @@ export default function SettingsPage() {
     setOllamaSetupStatus("Deploying Ollama container...");
     setOllamaSetupDone(false);
     try {
-      // Step 1: Deploy Ollama container
+      // Step 1: Pull and deploy Ollama container
       setOllamaSetupStatus("Pulling Ollama image (this may take a few minutes)...");
       try {
         await invoke("pull_image", { reference: "ollama/ollama:latest" });
@@ -248,20 +248,21 @@ export default function SettingsPage() {
 
       setOllamaSetupStatus("Creating Ollama container...");
       try {
-        await invoke("deploy_template", {
-          id: "ollama",
+        await invoke("create_and_run_container", {
+          image: "ollama/ollama:latest",
           name: "ollama",
           ports: ["11434:11434"],
-          env: null,
           volumes: ["ollama-models:/root/.ollama"],
+          restart_policy: "unless-stopped",
         });
       } catch (e) {
         const err = String(e);
-        if (!err.includes("already in use")) {
+        if (err.includes("already in use") || err.includes("Conflict")) {
+          // Container exists — try to start it
+          try { await invoke("start_container", { id: "ollama" }); } catch {}
+        } else {
           throw e;
         }
-        // Container exists — try to start it
-        try { await invoke("start_container", { id: "ollama" }); } catch {}
       }
 
       // Step 2: Wait for Ollama to be ready (via docker exec)
@@ -280,29 +281,29 @@ export default function SettingsPage() {
       }
 
       if (!ready) {
-        setOllamaSetupStatus("Ollama container started but not responding yet. Try pulling a model manually: docker exec ollama ollama pull llama3.2");
+        setOllamaSetupStatus("Ollama container started but not responding yet. Try pulling a model manually: docker exec ollama ollama pull qwen2.5:7b");
       }
 
       // Step 3: Pull a model via docker exec
       if (ready) {
-        setOllamaSetupStatus("Pulling llama3.2 model — this will take a few minutes...");
+        setOllamaSetupStatus("Pulling qwen2.5:7b model — this will take a few minutes...");
         try {
           const result = await invoke("exec_container", {
             id: "ollama",
-            command: ["ollama", "pull", "llama3.2"],
+            command: ["ollama", "pull", "qwen2.5:7b"],
           }) as { output?: string };
           if (result?.output?.includes("success") || result?.output?.includes("pulling") || result?.output) {
             setOllamaSetupStatus("Model ready!");
           }
         } catch (e) {
-          setOllamaSetupStatus(`Model pull failed: ${e}. Try: docker exec ollama ollama pull llama3.2`);
+          setOllamaSetupStatus(`Model pull failed: ${e}. Try: docker exec ollama ollama pull qwen2.5:7b`);
         }
       }
 
       // Step 4: Configure AI settings
       setAiProvider("ollama");
       setAiUrl("http://localhost:11434/v1");
-      setAiModel("llama3.2");
+      setAiModel("qwen2.5:7b");
       setAiApiKey("ollama");
       await saveAiSettings();
 
@@ -449,7 +450,7 @@ export default function SettingsPage() {
                             else if (id === "openai") setAiModel("gpt-4o");
                             else if (id === "gemini") setAiModel("gemini-2.0-flash");
                             else if (id === "ollama") {
-                              setAiModel("llama3.2");
+                              setAiModel("qwen2.5:7b");
                               setAiUrl("http://localhost:11434/v1");
                               setAiApiKey("ollama");
                               setOllamaSetupDone(false);
@@ -494,7 +495,7 @@ export default function SettingsPage() {
                         {ollamaSetupRunning() ? "Setting up..." : ollamaSetupDone() ? "Set up again" : "Set up Ollama"}
                       </button>
                       <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "8px" }}>
-                        Deploys Ollama container, pulls llama3.2 model (~2GB), and configures the AI assistant automatically.
+                        Deploys Ollama container, pulls qwen2.5:7b model (~2GB), and configures the AI assistant automatically.
                       </div>
                     </div>
                   </Show>

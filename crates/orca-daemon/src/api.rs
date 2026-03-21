@@ -2674,16 +2674,19 @@ async fn call_openai_with_tools(
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
     for _ in 0..5 {
+        let mut body = serde_json::json!({
+            "model": model,
+            "max_tokens": 4096,
+            "messages": messages,
+        });
+        if !tools.is_empty() {
+            body["tools"] = serde_json::json!(tools);
+        }
         let api_resp = client
             .post(&url)
             .header("Authorization", format!("Bearer {api_key}"))
             .header("content-type", "application/json")
-            .json(&serde_json::json!({
-                "model": model,
-                "max_tokens": 4096,
-                "messages": messages,
-                "tools": tools,
-            }))
+            .json(&body)
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to call OpenAI API: {e}"))?;

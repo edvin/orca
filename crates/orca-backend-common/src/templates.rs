@@ -213,21 +213,6 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             is_builtin: false,
             notes: "Access at https://localhost:9443".to_string(),
         },
-        // Open Source AI/ML
-        AppTemplate {
-            id: "ollama".to_string(),
-            name: "Ollama".to_string(),
-            description: "Run large language models locally".to_string(),
-            icon: "\u{1F999}".to_string(),
-            category: "AI".to_string(),
-            image: "ollama/ollama:latest".to_string(),
-            default_ports: vec!["11434:11434".to_string()],
-            default_env: vec![],
-            default_volumes: vec!["ollama:/root/.ollama".to_string()],
-            restart_policy: "unless-stopped".to_string(),
-            is_builtin: false,
-            notes: "API at http://localhost:11434. Pull a model: curl http://localhost:11434/api/pull -d '{\"name\": \"llama3\"}'".to_string(),
-        },
         // Development Tools
         AppTemplate {
             id: "gitlab".to_string(),
@@ -358,7 +343,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
         AppTemplate {
             id: "ollama".to_string(),
             name: "Ollama".to_string(),
-            description: "Run open-source LLMs locally — Llama 3, Mistral, Gemma, Phi, and more. Use as Orca's AI assistant with no API keys needed.".to_string(),
+            description: "Run open-source LLMs locally with tool calling support. Use as Orca's AI assistant with no API keys needed.".to_string(),
             icon: "\u{1F9E0}".to_string(),
             category: "AI".to_string(),
             image: "ollama/ollama:latest".to_string(),
@@ -367,7 +352,7 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             default_volumes: vec!["ollama-models:/root/.ollama".to_string()],
             restart_policy: "unless-stopped".to_string(),
             is_builtin: false,
-            notes: "After starting, pull a model: docker exec ollama ollama pull llama3.2\n\nThen in Orca Settings → AI, select 'Custom' provider and set:\n  URL: http://host.docker.internal:11434/v1\n  Model: llama3.2\n\nNo API key needed for local models.".to_string(),
+            notes: "After starting, pull a model with tool support:\n  docker exec ollama ollama pull qwen2.5:7b\n\nThen in Settings → AI, select 'Ollama (Local)' — or click 'Set up Ollama' for automatic setup.\n\nNo API key needed.".to_string(),
         },
         AppTemplate {
             id: "open-webui".to_string(),
