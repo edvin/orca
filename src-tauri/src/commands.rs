@@ -1,7 +1,7 @@
 //! Tauri commands — callable from the frontend via `invoke()`.
 //! These proxy to the Orca daemon's HTTP API.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use serde::Deserialize;
 use tauri::Manager;
@@ -9,6 +9,9 @@ use tauri::Manager;
 use crate::daemon;
 
 const DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
+
+/// Cached API token — loaded once from config, reused for all requests.
+static API_TOKEN: OnceLock<Option<String>> = OnceLock::new();
 
 /// Build a reqwest client with the API auth token pre-configured.
 fn authed_client() -> reqwest::Client {
@@ -26,10 +29,11 @@ fn authed_client() -> reqwest::Client {
         .unwrap_or_else(|_| reqwest::Client::new())
 }
 
-/// Read the API token from the Orca config file.
+/// Read the API token from the Orca config file (cached after first read).
 fn load_api_token() -> Option<String> {
-    let config = orca_core::config::OrcaConfig::load().ok()?;
-    config.api_token
+    API_TOKEN.get_or_init(|| {
+        orca_core::config::OrcaConfig::load().ok()?.api_token
+    }).clone()
 }
 
 fn client() -> reqwest::Client {

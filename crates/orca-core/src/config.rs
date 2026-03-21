@@ -164,16 +164,15 @@ impl OrcaConfig {
             match serde_json::from_str(&contents) {
                 Ok(config) => Ok(config),
                 Err(e) => {
-                    // Config file is corrupted — back it up and start fresh
-                    let backup = path.with_extension("json.bak");
-                    let _ = std::fs::copy(&path, &backup);
+                    // Config file failed to parse — could be a partial write from
+                    // another process. Do NOT overwrite it — just return defaults
+                    // in memory. The file will be fixed on the next successful save.
                     tracing::warn!(
-                        "Config file was corrupted ({}), backed up to {}, using defaults",
-                        e, backup.display()
+                        "Config file at {} could not be parsed ({}), using in-memory defaults. \
+                         File NOT overwritten — may recover on next load.",
+                        path.display(), e
                     );
-                    let config = Self::default();
-                    config.save()?;
-                    Ok(config)
+                    Ok(Self::default())
                 }
             }
         } else {
