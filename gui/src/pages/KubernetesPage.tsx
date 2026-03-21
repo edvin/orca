@@ -359,6 +359,22 @@ export default function KubernetesPage() {
               >
                 Enable Kubernetes
               </button>
+              <Show when={status()?.error}>
+                <div style={{
+                  "margin-top": "16px",
+                  padding: "10px 14px",
+                  background: "rgba(248, 81, 73, 0.08)",
+                  border: "1px solid rgba(248, 81, 73, 0.2)",
+                  "border-radius": "8px",
+                  "font-size": "12px",
+                  color: "#f85149",
+                  "text-align": "left",
+                  "max-width": "500px",
+                  margin: "16px auto 0",
+                }}>
+                  <strong>Detection issue:</strong> {status()?.error}
+                </div>
+              </Show>
             </div>
           </Show>
         </div>

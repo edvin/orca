@@ -16,6 +16,9 @@ pub struct ClusterStatus {
     pub pods_total: u32,
     /// Traefik dashboard URL (if available).
     pub traefik_dashboard: Option<String>,
+    /// Diagnostic error message when cluster can't be reached.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// A Kubernetes pod.

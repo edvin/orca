@@ -95,6 +95,7 @@ export interface ClusterStatus {
   pods_running: number;
   pods_total: number;
   traefik_dashboard: string | null;
+  error?: string;
 }
 
 export interface Pod {

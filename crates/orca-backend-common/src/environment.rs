@@ -1370,6 +1370,27 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                  {output}"
             ))
         }
+        "install_nvidia_toolkit" => {
+            #[cfg(target_os = "windows")]
+            let output = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null && \
+                 curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null && \
+                 apt-get update && apt-get install -y nvidia-container-toolkit && \
+                 nvidia-ctk runtime configure --runtime=docker && \
+                 systemctl restart docker"
+            ]).await.map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit install failed: {e}"))?;
+
+            #[cfg(not(target_os = "windows"))]
+            let output = run_cmd("bash", &["-c",
+                "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null && \
+                 curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null && \
+                 sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit && \
+                 sudo nvidia-ctk runtime configure --runtime=docker && \
+                 sudo systemctl restart docker"
+            ]).await.map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit install failed: {e}"))?;
+
+            Ok(format!("NVIDIA Container Toolkit installed!\n\nRestart any running Ollama containers to use GPU.\n\n{output}"))
+        }
         _ => anyhow::bail!("Unknown fix action: {action}"),
     }
 }

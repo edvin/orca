@@ -802,13 +802,15 @@ impl K8sManager for K3sManager {
                 pods_running: 0,
                 pods_total: 0,
                 traefik_dashboard: None,
+                error: Some(format!("Kubeconfig not found at {}", kubeconfig_path.display())),
             });
         }
 
         let client = match self.get_client().await {
             Ok(c) => c,
             Err(e) => {
-                tracing::warn!("K8s status: kubeconfig found but client creation failed: {e}");
+                let err_msg = format!("Kubeconfig found at {} but client creation failed: {e}", kubeconfig_path.display());
+                tracing::warn!("K8s status: {}", err_msg);
                 return Ok(ClusterStatus {
                     enabled: true,
                     running: false,
@@ -818,6 +820,7 @@ impl K8sManager for K3sManager {
                     pods_running: 0,
                     pods_total: 0,
                     traefik_dashboard: None,
+                    error: Some(err_msg),
                 });
             }
         };
@@ -911,6 +914,11 @@ impl K8sManager for K3sManager {
             pods_total,
             traefik_dashboard: if running {
                 Some("http://127.0.0.1:9000/dashboard/".to_string())
+            } else {
+                None
+            },
+            error: if !running {
+                Some(format!("API server at {} not reachable", kubeconfig_path.display()))
             } else {
                 None
             },
