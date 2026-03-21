@@ -95,6 +95,7 @@ pub fn run() {
             commands::check_for_updates,
             commands::get_api_token,
             commands::write_temp_file,
+            commands::open_file_in_browser,
             commands::cleanup,
             commands::reconnect_runtime,
         ])

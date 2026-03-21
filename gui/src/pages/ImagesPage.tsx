@@ -1297,7 +1297,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       {/* Report exported dialog */}
       <Show when={reportPath()}>
         <div class="modal-overlay" onClick={() => setReportPath(null)}>
-          <div class="modal-dialog" style={{ "max-width": "480px" }} onClick={(e) => e.stopPropagation()}>
+          <div class="modal-dialog" style={{ "max-width": "600px" }} onClick={(e) => e.stopPropagation()}>
             <div class="modal-header">
               <span class="modal-title">Report Ready</span>
               <button class="modal-close" onClick={() => setReportPath(null)}>{"\u00d7"}</button>
@@ -1310,20 +1310,31 @@ export default function ImagesPage(props: ImagesPageProps) {
               <div style={{ "font-size": "15px", "font-weight": "600", "margin-bottom": "8px" }}>
                 Vulnerability report exported
               </div>
-              <div class="mono" style={{
-                "font-size": "11px", color: "#8b949e", "margin-bottom": "20px",
-                background: "#161b22", padding: "8px 12px", "border-radius": "6px",
-                "word-break": "break-all", "text-align": "left",
-              }}>
-                {reportPath()}
+              <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "20px" }}>
+                <div class="mono" style={{
+                  "font-size": "11px", color: "#8b949e", flex: "1",
+                  background: "#161b22", padding: "8px 12px", "border-radius": "6px",
+                  "word-break": "break-all", "text-align": "left",
+                }}>
+                  {reportPath()}
+                </div>
+                <button
+                  class="btn btn-sm"
+                  title="Copy path"
+                  onClick={() => {
+                    navigator.clipboard.writeText(reportPath()!);
+                    showToast("Path copied", "success");
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                </button>
               </div>
               <div style={{ display: "flex", gap: "8px", "justify-content": "center" }}>
                 <button
                   class="btn btn-primary"
                   onClick={async () => {
                     try {
-                      const { open } = await import("@tauri-apps/plugin-shell");
-                      await open(reportPath()!);
+                      await invoke("open_file_in_browser", { path: reportPath()! });
                     } catch (e) {
                       showToast(`Failed to open: ${e}`, "error");
                     }

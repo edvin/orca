@@ -3236,6 +3236,7 @@ dependencies = [
  "anyhow",
  "cocoa",
  "objc",
+ "open",
  "orca-core",
  "reqwest 0.12.28",
  "serde",

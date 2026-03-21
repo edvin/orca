@@ -1118,7 +1118,7 @@ async fn volume_list_files(
         network: None,
         detach: false,
         entrypoint: None,
-        remove_on_exit: true,
+        remove_on_exit: false,
         cpu_limit: None,
         memory_limit: None,
         memory_swap: None,
@@ -1127,8 +1127,18 @@ async fn volume_list_files(
     let id = state.runtime.create_container(opts).await?;
     state.runtime.start_container(&id).await?;
 
-    // Wait for container to finish and collect logs
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Wait for container to finish
+    {
+        use bollard::container::WaitContainerOptions;
+        use futures::StreamExt;
+        let wait_opts = WaitContainerOptions { condition: "not-running" };
+        let _ = tokio::time::timeout(
+            Duration::from_secs(10),
+            state.runtime.docker.wait_container(&id, Some(wait_opts)).next(),
+        ).await;
+    }
+
+    // Collect logs
     let log_rx = state.runtime.container_logs(&id, false, Some(1000)).await?;
     let mut lines = Vec::new();
     let mut rx = log_rx;
@@ -1136,7 +1146,7 @@ async fn volume_list_files(
         lines.push(line);
     }
 
-    // Check exit code before cleanup
+    // Check exit code
     let exit_code = match state.runtime.inspect_container(&id).await {
         Ok(info) => info.exit_code,
         Err(_) => None,
@@ -1225,7 +1235,7 @@ async fn volume_read_file(
         network: None,
         detach: false,
         entrypoint: None,
-        remove_on_exit: true,
+        remove_on_exit: false,
         cpu_limit: None,
         memory_limit: None,
         memory_swap: None,
@@ -1234,7 +1244,17 @@ async fn volume_read_file(
     let id = state.runtime.create_container(opts).await?;
     state.runtime.start_container(&id).await?;
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Wait for container to finish
+    {
+        use bollard::container::WaitContainerOptions;
+        use futures::StreamExt;
+        let wait_opts = WaitContainerOptions { condition: "not-running" };
+        let _ = tokio::time::timeout(
+            Duration::from_secs(10),
+            state.runtime.docker.wait_container(&id, Some(wait_opts)).next(),
+        ).await;
+    }
+
     let log_rx = state.runtime.container_logs(&id, false, Some(10000)).await?;
     let mut lines = Vec::new();
     let mut rx = log_rx;

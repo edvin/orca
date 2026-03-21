@@ -1166,6 +1166,11 @@ pub async fn write_temp_file(name: String, content: String) -> Result<String, St
 }
 
 #[tauri::command]
+pub async fn open_file_in_browser(path: String) -> Result<(), String> {
+    open::that(&path).map_err(|e| format!("Failed to open file: {e}"))
+}
+
+#[tauri::command]
 pub async fn reconnect_runtime() -> Result<serde_json::Value, String> {
     client()
         .post(format!("{DAEMON_URL}/settings/reconnect"))
