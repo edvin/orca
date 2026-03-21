@@ -29,11 +29,15 @@ export default function XTerminal(props: XTerminalProps) {
   };
 
   onMount(async () => {
-    // Wait for the font to load before initializing xterm
-    // (xterm.js measures glyphs on init — wrong font = wrong sizing)
+    // Wait for the font to be fully loaded before initializing xterm.
+    // xterm.js uses canvas rendering — it measures glyphs once on init,
+    // so the font MUST be available or it'll use fallback metrics forever.
     try {
       await document.fonts.load("13px 'JetBrains Mono NF'");
+      await document.fonts.ready;
     } catch {}
+    // Extra safety: give the browser a moment to finalize font rendering
+    await new Promise((r) => setTimeout(r, 50));
 
     const term = new Terminal({
       theme: {
@@ -51,7 +55,7 @@ export default function XTerminal(props: XTerminalProps) {
         cyan: "#39c5cf",
         white: "#e6edf3",
       },
-      fontFamily: "'JetBrains Mono NF', 'SFMono-Regular', 'Menlo', 'Consolas', monospace",
+      fontFamily: "'JetBrains Mono NF', 'JetBrainsMono Nerd Font', 'JetBrainsMono NF', monospace",
       fontSize: fontSize(),
       lineHeight: 1.3,
       cursorBlink: true,
