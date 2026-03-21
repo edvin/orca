@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Volume, Container } from "../lib/types";
+import { useRefresh } from "../lib/useRefresh";
 import { formatTimestamp } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
@@ -50,6 +51,8 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
     } catch (e) {
     }
   };
+
+  useRefresh(fetchVolume);
 
   const fetchContainers = async () => {
     setContainersLoading(true);

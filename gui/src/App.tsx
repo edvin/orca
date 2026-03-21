@@ -61,6 +61,10 @@ export default function App() {
       e.preventDefault();
       setShowCommandPalette((v) => !v);
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === "r") {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent("orca-refresh"));
+    }
   };
 
   const checkEnvironment = async () => {

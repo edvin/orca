@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Volume } from "../lib/types";
+import { useRefresh } from "../lib/useRefresh";
 import { formatTimestamp } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
@@ -28,6 +29,8 @@ export default function VolumesPage(props: VolumesPageProps) {
     } catch (e) {
     }
   };
+
+  useRefresh(refresh);
 
   onMount(refresh);
 

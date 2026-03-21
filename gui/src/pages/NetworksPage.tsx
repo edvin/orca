@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Network } from "../lib/types";
+import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import SortableHeader from "../components/SortableHeader";
@@ -26,6 +27,8 @@ export default function NetworksPage() {
       logError(`Failed to list networks: ${e}`);
     }
   };
+
+  useRefresh(refresh);
 
   onMount(refresh);
 

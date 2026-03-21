@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { ComposeProject } from "../lib/types";
+import { useRefresh } from "../lib/useRefresh";
 import { formatPorts } from "../lib/format";
 import { showToast } from "../components/Toast";
 import LogViewer from "../components/LogViewer";
@@ -32,6 +33,8 @@ export default function StackDetailPage(props: StackDetailPageProps) {
     } catch (e) {
     }
   };
+
+  useRefresh(fetchStack);
 
   const fetchComposeFile = async () => {
     const s = stack();

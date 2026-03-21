@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, ComposeProject } from "../lib/types";
+import { useRefresh } from "../lib/useRefresh";
 import { formatPorts, formatTimestamp, shortId, formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
@@ -63,6 +64,8 @@ export default function ContainersPage(props: ContainersPageProps) {
       logError(`Failed to list containers/stacks: ${e}`);
     }
   };
+
+  useRefresh(refresh);
 
   const deduplicatePorts = (ports: { host_ip?: string | null; host_port: number; container_port: number }[]) => {
     const seen = new Set<string>();

@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth } from "../lib/types";
+import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { logError } from "../lib/activityStore";
@@ -42,6 +43,8 @@ export default function EnvironmentPage() {
       setLoading(false);
     }
   };
+
+  useRefresh(refresh);
 
   const runFix = async (action: string, checkName: string) => {
     setActionName(checkName);

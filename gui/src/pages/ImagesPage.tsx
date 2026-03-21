@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Image, ImageSearchResult, ScanResult, ScanVulnerability } from "../lib/types";
+import { useRefresh } from "../lib/useRefresh";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
@@ -71,6 +72,8 @@ export default function ImagesPage(props: ImagesPageProps) {
     } catch (e) {
     }
   };
+
+  useRefresh(refresh);
 
   onMount(() => {
     refresh();

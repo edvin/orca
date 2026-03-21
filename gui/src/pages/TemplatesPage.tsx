@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import Spinner from "../components/Spinner";
 import { invoke } from "@tauri-apps/api/core";
+import { useRefresh } from "../lib/useRefresh";
 import type { AppTemplate } from "../lib/types";
 import { showToast } from "../components/Toast";
 import { logError, logInfo } from "../lib/activityStore";
@@ -54,6 +55,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       showToast("Failed to load templates", "error");
     }
   };
+
+  useRefresh(refreshTemplates);
 
   onMount(refreshTemplates);
 

@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show, createEffect } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../components/Toast";
+import { useRefresh } from "../lib/useRefresh";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError, logInfo } from "../lib/activityStore";
 import Spinner from "../components/Spinner";
@@ -61,6 +62,8 @@ export default function KubernetesPage() {
     } catch (e) {
     }
   };
+
+  useRefresh(refreshStatus);
 
   const refreshWorkloads = async () => {
     const s = status();

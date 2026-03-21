@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show, Index } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, Image, ComposeProject, SystemHealth } from "../lib/types";
+import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import { recordMetrics, getCpuHistory, getMemoryHistory, getAggregatedCpuHistory, getAggregatedMemoryHistory } from "../lib/metricsStore";
 import { logError } from "../lib/activityStore";
@@ -59,6 +60,8 @@ export default function DashboardPage(props: DashboardPageProps) {
       .then((v) => { setHealth(v); setHealthState("ready"); })
       .catch((e) => { setHealthError(String(e)); setHealthState("error"); logError("Dashboard: system health", String(e)); });
   };
+
+  useRefresh(fetchAll);
 
   const fetchStats = async () => {
     const running = containers().filter((c) => c.state === "Running");
