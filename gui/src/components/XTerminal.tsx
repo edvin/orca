@@ -29,6 +29,12 @@ export default function XTerminal(props: XTerminalProps) {
   };
 
   onMount(async () => {
+    // Wait for the font to load before initializing xterm
+    // (xterm.js measures glyphs on init — wrong font = wrong sizing)
+    try {
+      await document.fonts.load("13px 'JetBrains Mono NF'");
+    } catch {}
+
     const term = new Terminal({
       theme: {
         background: "#0d1117",
