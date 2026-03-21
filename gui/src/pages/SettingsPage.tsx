@@ -4,6 +4,7 @@ import type { MachineInfo, RegistryCredential } from "../lib/types";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
+import Spinner from "../components/Spinner";
 
 type SettingsTab = "general" | "ai" | "registries" | "about";
 
@@ -33,6 +34,9 @@ export default function SettingsPage() {
   const [aiSaving, setAiSaving] = createSignal(false);
   const [aiTesting, setAiTesting] = createSignal(false);
   const [aiTestResult, setAiTestResult] = createSignal<string | null>(null);
+  const [ollamaSetupRunning, setOllamaSetupRunning] = createSignal(false);
+  const [ollamaSetupStatus, setOllamaSetupStatus] = createSignal("");
+  const [ollamaSetupDone, setOllamaSetupDone] = createSignal(false);
   const [hasAnthropicKey, setHasAnthropicKey] = createSignal(false);
   const [hasOpenaiKey, setHasOpenaiKey] = createSignal(false);
   const [availableModels, setAvailableModels] = createSignal<string[]>([]);
@@ -227,6 +231,89 @@ export default function SettingsPage() {
     }
   };
 
+  const setupOllama = async () => {
+    setOllamaSetupRunning(true);
+    setOllamaSetupStatus("Deploying Ollama container...");
+    setOllamaSetupDone(false);
+    try {
+      // Step 1: Deploy Ollama container
+      setOllamaSetupStatus("Pulling Ollama image (this may take a few minutes)...");
+      try {
+        await invoke("pull_image", { reference: "ollama/ollama:latest" });
+      } catch {}
+
+      setOllamaSetupStatus("Creating Ollama container...");
+      try {
+        await invoke("deploy_template", {
+          id: "ollama",
+          name: "ollama",
+          ports: ["11434:11434"],
+          env: null,
+          volumes: ["ollama-models:/root/.ollama"],
+        });
+      } catch (e) {
+        const err = String(e);
+        if (!err.includes("already in use")) {
+          throw e;
+        }
+        // Container exists — try to start it
+        try { await invoke("start_container", { id: "ollama" }); } catch {}
+      }
+
+      // Step 2: Wait for Ollama API to be ready
+      setOllamaSetupStatus("Waiting for Ollama API...");
+      let ready = false;
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const resp = await fetch("http://localhost:11434/api/tags");
+          if (resp.ok) { ready = true; break; }
+        } catch {}
+        setOllamaSetupStatus(`Waiting for Ollama API... (${(i + 1) * 2}s)`);
+      }
+
+      if (!ready) {
+        setOllamaSetupStatus("Ollama container started but API not responding yet. It may still be initializing.");
+        // Still configure settings even if API isn't ready yet
+      }
+
+      // Step 3: Pull a model
+      if (ready) {
+        setOllamaSetupStatus("Pulling llama3.2 model (this will take a few minutes)...");
+        try {
+          const resp = await fetch("http://localhost:11434/api/pull", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: "llama3.2", stream: false }),
+          });
+          if (resp.ok) {
+            setOllamaSetupStatus("Model pulled successfully!");
+          } else {
+            setOllamaSetupStatus("Model pull may still be in progress. Check back shortly.");
+          }
+        } catch {
+          setOllamaSetupStatus("Could not pull model automatically. Run: docker exec ollama ollama pull llama3.2");
+        }
+      }
+
+      // Step 4: Configure AI settings
+      setAiProvider("custom");
+      setAiUrl("http://localhost:11434/v1");
+      setAiModel("llama3.2");
+      setAiApiKey("ollama");
+      await saveAiSettings();
+
+      setOllamaSetupDone(true);
+      setOllamaSetupStatus("Ollama is ready! AI assistant is now using your local model.");
+      showToast("Ollama set up successfully — AI assistant is ready", "success");
+    } catch (e) {
+      setOllamaSetupStatus(`Setup failed: ${e}`);
+      showToast(`Ollama setup failed: ${e}`, "error");
+    } finally {
+      setOllamaSetupRunning(false);
+    }
+  };
+
   const copyToClipboard = async (text: string, setter: (v: boolean) => void) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -362,6 +449,7 @@ export default function SettingsPage() {
                               setAiModel("llama3.2");
                               setAiUrl("http://localhost:11434/v1");
                               setAiApiKey("ollama");
+                              setOllamaSetupDone(false);
                             }
                             else setAiModel("");
                           }}
@@ -371,6 +459,42 @@ export default function SettingsPage() {
                       ))}
                     </div>
                   </div>
+
+                  {/* Ollama one-click setup */}
+                  <Show when={aiProvider() === "ollama" || (aiProvider() === "custom" && aiUrl().includes("11434"))}>
+                    <div style={{
+                      background: "linear-gradient(135deg, rgba(88, 166, 255, 0.06) 0%, rgba(139, 92, 246, 0.06) 100%)",
+                      border: "1px solid rgba(88, 166, 255, 0.15)",
+                      "border-radius": "10px",
+                      padding: "16px 18px",
+                    }}>
+                      <div style={{ display: "flex", "align-items": "center", gap: "10px", "margin-bottom": "8px" }}>
+                        <span style={{ "font-size": "20px" }}>{"\u{1F9E0}"}</span>
+                        <div>
+                          <div style={{ "font-weight": "600", "font-size": "14px" }}>Run AI Locally with Ollama</div>
+                          <div style={{ "font-size": "12px", color: "#8b949e" }}>No API keys, no cloud, no costs — runs on your machine</div>
+                        </div>
+                      </div>
+                      <Show when={ollamaSetupStatus()}>
+                        <div style={{ "font-size": "12px", color: ollamaSetupDone() ? "#3fb950" : "#8b949e", "margin": "10px 0", display: "flex", "align-items": "center", gap: "6px" }}>
+                          <Show when={ollamaSetupRunning()}><Spinner size={12} /></Show>
+                          <Show when={ollamaSetupDone()}><span style={{ color: "#3fb950" }}>{"\u2713"}</span></Show>
+                          {ollamaSetupStatus()}
+                        </div>
+                      </Show>
+                      <button
+                        class="btn btn-primary btn-sm"
+                        onClick={setupOllama}
+                        disabled={ollamaSetupRunning()}
+                        style={{ "margin-top": "6px" }}
+                      >
+                        {ollamaSetupRunning() ? "Setting up..." : ollamaSetupDone() ? "Set up again" : "Set up Ollama"}
+                      </button>
+                      <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "8px" }}>
+                        Deploys Ollama container, pulls llama3.2 model (~2GB), and configures the AI assistant automatically.
+                      </div>
+                    </div>
+                  </Show>
 
                   {/* Custom URL field */}
                   <Show when={aiProvider() === "custom"}>

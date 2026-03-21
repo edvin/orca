@@ -386,6 +386,15 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
     ];
     for t in &mut templates {
         t.is_builtin = true;
+        // Replace placeholder passwords with generated ones
+        let pw = generate_token();
+        let short_pw = &pw[..16]; // 16 chars is enough for a password
+        for env in &mut t.default_env {
+            if env.contains("changeme") {
+                *env = env.replace("changeme", short_pw);
+            }
+        }
+        t.notes = t.notes.replace("changeme", short_pw);
     }
     templates
 }
