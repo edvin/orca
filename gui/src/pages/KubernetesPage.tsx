@@ -392,73 +392,48 @@ export default function KubernetesPage() {
         </div>
       </Show>
 
-      {/* Hero Card: Running */}
+      {/* Compact status bar when running */}
       <Show when={status()?.running}>
-        <div class="hero-card hero-card-running">
-          <div style={{
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "space-between",
-            "margin-bottom": "20px",
-            position: "relative",
-          }}>
-            <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-              <span style={{
-                width: "10px",
-                height: "10px",
-                "border-radius": "50%",
-                background: "#3fb950",
-                display: "inline-block",
-                "box-shadow": "0 0 8px #3fb95044",
-              }} />
-              <span style={{ "font-size": "18px", "font-weight": "600", color: "#e6edf3" }}>
-                Cluster Running
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <Show when={status()?.traefik_dashboard}>
-                <a
-                  href={status()!.traefik_dashboard!}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="btn"
-                  style={{ "text-decoration": "none" }}
-                >
-                  Traefik Dashboard
-                </a>
-              </Show>
-              <button class="btn btn-danger" onClick={handleReset}>
-                Reset
-              </button>
-              <button class="btn btn-danger" onClick={handleDisable}>
-                Disable
-              </button>
-            </div>
+        <div style={{
+          display: "flex",
+          "align-items": "center",
+          gap: "16px",
+          padding: "10px 16px",
+          background: "rgba(22, 27, 34, 0.5)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          "border-radius": "10px",
+          "margin-bottom": "16px",
+          "flex-wrap": "wrap",
+        }}>
+          <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+            <span style={{
+              width: "8px", height: "8px", "border-radius": "50%",
+              background: "#3fb950", "box-shadow": "0 0 6px #3fb95044",
+            }} />
+            <span style={{ "font-weight": "600", "font-size": "13px" }}>
+              {status()?.version || "Kubernetes"}
+            </span>
           </div>
-
-          <div class="hero-status-grid">
-            <div class="hero-stat">
-              <div class="hero-stat-label">Version</div>
-              <div class="hero-stat-value">{status()?.version || "-"}</div>
-            </div>
-            <div class="hero-stat">
-              <div class="hero-stat-label">Node</div>
-              <div class="hero-stat-value">{status()?.node_name || "-"}</div>
-              <div class="hero-stat-sub">{status()?.node_status || ""}</div>
-            </div>
-            <div class="hero-stat">
-              <div class="hero-stat-label">Pods Running</div>
-              <div class="hero-stat-value" style={{ color: "#3fb950" }}>
-                {status()?.pods_running}
-                <span style={{ color: "#8b949e", "font-size": "14px", "font-weight": "400" }}>
-                  {" / "}{status()?.pods_total}
-                </span>
-              </div>
-            </div>
-            <div class="hero-stat">
-              <div class="hero-stat-label">Namespaces</div>
-              <div class="hero-stat-value">{namespaces().length}</div>
-            </div>
+          <span class="status-bar-separator" />
+          <span style={{ "font-size": "12px", color: "#8b949e" }}>
+            {status()?.node_name}
+          </span>
+          <span class="status-bar-separator" />
+          <span style={{ "font-size": "12px", color: "#3fb950" }}>
+            {status()?.pods_running}/{status()?.pods_total} pods
+          </span>
+          <div style={{ "margin-left": "auto", display: "flex", gap: "6px" }}>
+            <Show when={status()?.traefik_dashboard}>
+              <a href={status()!.traefik_dashboard!} target="_blank" class="btn btn-sm" style={{ "text-decoration": "none", "font-size": "11px" }}>
+                Traefik
+              </a>
+            </Show>
+            <button class="btn btn-sm" onClick={() => { refreshStatus(); refreshWorkloads(); }} style={{ "font-size": "11px" }}>
+              Refresh
+            </button>
+            <button class="btn btn-sm" onClick={handleDisable} style={{ "font-size": "11px", color: "#f85149" }}>
+              Disable
+            </button>
           </div>
         </div>
       </Show>
