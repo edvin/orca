@@ -468,7 +468,7 @@ export default function SettingsPage() {
                     <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Memory</label>
                     <input
                       type="text"
-                      class="input"
+                      class="form-input"
                       placeholder="e.g. 8GB"
                       value={wslMemory()}
                       onInput={(e) => setWslMemory(e.currentTarget.value)}
@@ -479,7 +479,7 @@ export default function SettingsPage() {
                     <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Processors</label>
                     <input
                       type="text"
-                      class="input"
+                      class="form-input"
                       placeholder="e.g. 4"
                       value={wslProcessors()}
                       onInput={(e) => setWslProcessors(e.currentTarget.value)}
@@ -490,7 +490,7 @@ export default function SettingsPage() {
                     <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Swap</label>
                     <input
                       type="text"
-                      class="input"
+                      class="form-input"
                       placeholder="e.g. 2GB"
                       value={wslSwap()}
                       onInput={(e) => setWslSwap(e.currentTarget.value)}
