@@ -7,6 +7,7 @@ import { logError, logInfo } from "../lib/activityStore";
 import Spinner from "../components/Spinner";
 import YamlEditor from "../components/YamlEditor";
 import Dropdown from "../components/Dropdown";
+import CopyButton from "../components/CopyButton";
 import type {
   ClusterStatus,
   Pod,
@@ -16,9 +17,12 @@ import type {
   Namespace,
   PersistentVolumeClaim,
   PersistentVolume,
+  K8sEvent,
+  K8sConfigMap,
+  K8sSecret,
 } from "../lib/types";
 
-type Tab = "pods" | "deployments" | "services" | "ingresses" | "storage";
+type Tab = "pods" | "deployments" | "services" | "ingresses" | "storage" | "events" | "config";
 
 export default function KubernetesPage() {
   const [status, setStatus] = createSignal<ClusterStatus | null>(null);
@@ -44,6 +48,17 @@ export default function KubernetesPage() {
   const [portDialogSvc, setPortDialogSvc] = createSignal<K8sService | null>(null);
   const [portDialogLocalPorts, setPortDialogLocalPorts] = createSignal<Record<number, string>>({});
   const [yamlResource, setYamlResource] = createSignal<{ kind: string; name: string; namespace: string; yaml: string } | null>(null);
+  const [events, setEvents] = createSignal<K8sEvent[]>([]);
+  const [configMaps, setConfigMaps] = createSignal<K8sConfigMap[]>([]);
+  const [secrets, setSecrets] = createSignal<K8sSecret[]>([]);
+  const [configSubTab, setConfigSubTab] = createSignal<"configmaps" | "secrets">("configmaps");
+  const [deployYamlOpen, setDeployYamlOpen] = createSignal(false);
+  const [createNsOpen, setCreateNsOpen] = createSignal(false);
+  const [newNsName, setNewNsName] = createSignal("");
+  const [shellPod, setShellPod] = createSignal<{ name: string; namespace: string } | null>(null);
+  const [viewConfigMap, setViewConfigMap] = createSignal<K8sConfigMap | null>(null);
+  const [viewSecret, setViewSecret] = createSignal<K8sSecret | null>(null);
+  const [revealedKeys, setRevealedKeys] = createSignal<Set<string>>(new Set());
 
   // Setup progress dialog
   const [setupDialogOpen, setSetupDialogOpen] = createSignal(false);
@@ -114,6 +129,15 @@ export default function KubernetesPage() {
         ]);
         setPvcs(pvcResult);
         setPvs(pvResult);
+      } else if (currentTab === "events") {
+        setEvents((await invoke("k8s_events", { namespace: ns })) as K8sEvent[]);
+      } else if (currentTab === "config") {
+        const [cmResult, secResult] = await Promise.all([
+          invoke("k8s_configmaps", { namespace: ns }) as Promise<K8sConfigMap[]>,
+          invoke("k8s_secrets", { namespace: ns }) as Promise<K8sSecret[]>,
+        ]);
+        setConfigMaps(cmResult);
+        setSecrets(secResult);
       }
     } catch (e) {
     } finally {
@@ -393,6 +417,50 @@ export default function KubernetesPage() {
     }
   };
 
+  const handleDeployYaml = async (yaml: string) => {
+    try {
+      await invoke("k8s_apply_yaml", { yaml });
+      showToast("YAML deployed successfully", "success");
+      setDeployYamlOpen(false);
+      refreshWorkloads();
+    } catch (e) {
+      showToast(`Failed to deploy: ${e}`, "error");
+      throw e;
+    }
+  };
+
+  const handleCreateNamespace = async () => {
+    const name = newNsName().trim();
+    if (!name) return;
+    try {
+      await invoke("k8s_create_namespace", { name });
+      showToast(`Namespace '${name}' created`, "success");
+      setCreateNsOpen(false);
+      setNewNsName("");
+      await refreshStatus();
+      setSelectedNs(name);
+    } catch (e) {
+      logError(`Failed to create namespace: ${e}`);
+      showToast(`Failed to create namespace: ${e}`, "error");
+    }
+  };
+
+  const handleDeleteNamespace = async () => {
+    const ns = selectedNs();
+    if (!await confirmDanger("Delete Namespace", `Delete namespace '${ns}'? This will destroy ALL resources within it.`)) return;
+    try {
+      await invoke("k8s_delete_namespace", { name: ns });
+      showToast(`Namespace '${ns}' deleted`, "success");
+      setSelectedNs("default");
+      await refreshStatus();
+    } catch (e) {
+      logError(`Failed to delete namespace: ${e}`);
+      showToast(`Failed to delete namespace: ${e}`, "error");
+    }
+  };
+
+  const systemNamespaces = new Set(["default", "kube-system", "kube-public", "kube-node-lease"]);
+
   const podStatusColor = (s: string) => {
     switch (s) {
       case "Running": return "#3fb950";
@@ -409,6 +477,8 @@ export default function KubernetesPage() {
     { id: "services", label: "Services", icon: "\u29BF" },
     { id: "ingresses", label: "Ingresses", icon: "\u21C4" },
     { id: "storage", label: "Storage", icon: "\u25A8" },
+    { id: "events", label: "Events", icon: "\u26A0" },
+    { id: "config", label: "Config", icon: "\u2699" },
   ];
 
   const emptyMessages: Record<Tab, { title: string; desc: string }> = {
@@ -417,6 +487,8 @@ export default function KubernetesPage() {
     services: { title: "No services in this namespace", desc: "Services provide stable networking endpoints for your pods." },
     ingresses: { title: "No ingresses in this namespace", desc: "Ingresses route external HTTP traffic to your services via Traefik." },
     storage: { title: "No storage resources", desc: "Persistent Volume Claims will appear when workloads request storage." },
+    events: { title: "No events in this namespace", desc: "Events will appear when Kubernetes resources change state." },
+    config: { title: "No ConfigMaps or Secrets", desc: "ConfigMaps and Secrets store configuration data for your workloads." },
   };
 
   return (
@@ -562,6 +634,33 @@ export default function KubernetesPage() {
             onChange={(v) => setSelectedNs(v)}
             style={{ "min-width": "160px" }}
           />
+          <button
+            class="action-icon"
+            title="Create namespace"
+            onClick={() => { setNewNsName(""); setCreateNsOpen(true); }}
+            style={{ color: "#3fb950", "font-size": "16px" }}
+          >
+            +
+          </button>
+          <Show when={!systemNamespaces.has(selectedNs())}>
+            <button
+              class="action-icon action-icon-delete"
+              title="Delete namespace"
+              onClick={handleDeleteNamespace}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </Show>
+          <div style={{ "margin-left": "auto" }}>
+            <button
+              class="btn btn-sm btn-primary"
+              title="Deploy from YAML"
+              onClick={() => setDeployYamlOpen(true)}
+              style={{ "font-size": "12px", padding: "4px 12px" }}
+            >
+              + Deploy
+            </button>
+          </div>
         </div>
 
         {/* Tab bar */}
@@ -654,6 +753,13 @@ export default function KubernetesPage() {
                             onClick={() => viewYaml("pod", pod.name, pod.namespace)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                          </button>
+                          <button
+                            class="action-icon"
+                            title="Terminal"
+                            onClick={() => setShellPod({ name: pod.name, namespace: pod.namespace })}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
                           </button>
                         </div>
                       </td>
@@ -1060,6 +1166,179 @@ export default function KubernetesPage() {
             </table>
           </Show>
         </Show>
+
+        {/* Events Tab */}
+        <Show when={tab() === "events"}>
+          <Show
+            when={events().length > 0}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.events.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.events.desc}</div>
+              </div>
+            }
+          >
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Reason</th>
+                  <th>Object</th>
+                  <th>Message</th>
+                  <th>Count</th>
+                  <th>Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={events()}>
+                  {(evt) => (
+                    <tr>
+                      <td>
+                        <span style={{
+                          color: evt.type === "Warning" ? "#d29922" : "#3fb950",
+                          "font-weight": "500",
+                        }}>
+                          {evt.type}
+                        </span>
+                      </td>
+                      <td style={{ "font-weight": "500" }}>{evt.reason}</td>
+                      <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{evt.object}</td>
+                      <td style={{ "font-size": "12px", "max-width": "400px" }}>{evt.message}</td>
+                      <td class="mono">{evt.count}</td>
+                      <td style={{ color: "#8b949e" }}>{evt.age}</td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </Show>
+        </Show>
+
+        {/* Config Tab */}
+        <Show when={tab() === "config"}>
+          <div style={{ display: "flex", gap: "8px", "margin-bottom": "16px" }}>
+            <button
+              class={`btn btn-sm ${configSubTab() === "configmaps" ? "btn-primary" : ""}`}
+              onClick={() => setConfigSubTab("configmaps")}
+              style={{ "font-size": "12px" }}
+            >
+              ConfigMaps ({configMaps().length})
+            </button>
+            <button
+              class={`btn btn-sm ${configSubTab() === "secrets" ? "btn-primary" : ""}`}
+              onClick={() => setConfigSubTab("secrets")}
+              style={{ "font-size": "12px" }}
+            >
+              Secrets ({secrets().length})
+            </button>
+          </div>
+
+          <Show when={configSubTab() === "configmaps"}>
+            <Show
+              when={configMaps().length > 0}
+              fallback={
+                <div class="empty-state-tab">
+                  <div class="empty-state-tab-title">No ConfigMaps in this namespace</div>
+                  <div class="empty-state-tab-desc">ConfigMaps store non-sensitive configuration data.</div>
+                </div>
+              }
+            >
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Keys</th>
+                    <th>Age</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={configMaps()}>
+                    {(cm) => (
+                      <tr>
+                        <td style={{ "font-weight": "500" }}>{cm.name}</td>
+                        <td class="mono" style={{ color: "#8b949e" }}>{cm.keys.length}</td>
+                        <td style={{ color: "#8b949e" }}>{cm.age}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: "4px" }}>
+                            <button
+                              class="action-icon"
+                              title="View data"
+                              onClick={() => setViewConfigMap(cm)}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                            </button>
+                            <button
+                              class="action-icon"
+                              title="View/Edit YAML"
+                              onClick={() => viewYaml("configmap", cm.name, cm.namespace)}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
+          </Show>
+
+          <Show when={configSubTab() === "secrets"}>
+            <Show
+              when={secrets().length > 0}
+              fallback={
+                <div class="empty-state-tab">
+                  <div class="empty-state-tab-title">No Secrets in this namespace</div>
+                  <div class="empty-state-tab-desc">Secrets store sensitive data like passwords and API keys.</div>
+                </div>
+              }
+            >
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Keys</th>
+                    <th>Age</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={secrets()}>
+                    {(sec) => (
+                      <tr>
+                        <td style={{ "font-weight": "500" }}>{sec.name}</td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{sec.secret_type}</td>
+                        <td class="mono" style={{ color: "#8b949e" }}>{sec.keys.length}</td>
+                        <td style={{ color: "#8b949e" }}>{sec.age}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: "4px" }}>
+                            <button
+                              class="action-icon"
+                              title="View secret values"
+                              onClick={() => { setRevealedKeys(new Set<string>()); setViewSecret(sec); }}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                            <button
+                              class="action-icon"
+                              title="View/Edit YAML"
+                              onClick={() => viewYaml("secret", sec.name, sec.namespace)}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
+          </Show>
+        </Show>
       </Show>
 
       {/* Multi-Port Forward Dialog */}
@@ -1308,6 +1587,199 @@ export default function KubernetesPage() {
                   This may take several minutes — downloading k3s and waiting for the cluster...
                 </span>
               </Show>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Deploy from YAML Modal */}
+      <Show when={deployYamlOpen()}>
+        <div class="modal-overlay" onClick={() => setDeployYamlOpen(false)}>
+          <div class="modal-dialog" style={{ width: "800px", "max-width": "90vw", height: "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+            <YamlEditor
+              value={"# Enter your Kubernetes YAML here\n# Example:\n# apiVersion: v1\n# kind: Pod\n# metadata:\n#   name: my-pod\n# spec:\n#   containers:\n#   - name: my-container\n#     image: nginx\n"}
+              title="Deploy from YAML"
+              onSave={handleDeployYaml}
+              onClose={() => setDeployYamlOpen(false)}
+            />
+          </div>
+        </div>
+      </Show>
+
+      {/* Create Namespace Modal */}
+      <Show when={createNsOpen()}>
+        <div class="modal-overlay" onClick={() => setCreateNsOpen(false)}>
+          <div class="modal-dialog" style={{ "max-width": "400px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Create Namespace</span>
+              <button class="modal-close" onClick={() => setCreateNsOpen(false)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px" }}>
+              <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "6px" }}>Namespace name</label>
+              <input
+                type="text"
+                class="form-input"
+                placeholder="my-namespace"
+                value={newNsName()}
+                onInput={(e) => setNewNsName(e.currentTarget.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreateNamespace(); }}
+                ref={(el) => setTimeout(() => el.focus(), 50)}
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setCreateNsOpen(false)}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                onClick={handleCreateNamespace}
+                disabled={!newNsName().trim()}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Pod Shell Modal */}
+      <Show when={shellPod()}>
+        <div class="modal-overlay" onClick={() => setShellPod(null)}>
+          <div class="modal-dialog" style={{ "max-width": "500px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Terminal: {shellPod()!.name}</span>
+              <button class="modal-close" onClick={() => setShellPod(null)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px" }}>
+              <div style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "12px" }}>
+                Open a shell in pod <strong style={{ color: "#e6edf3" }}>{shellPod()!.name}</strong>
+              </div>
+              <div style={{
+                background: "#0d1117",
+                border: "1px solid #21262d",
+                "border-radius": "6px",
+                padding: "12px",
+                "font-family": "'JetBrains Mono NF', monospace",
+                "font-size": "12px",
+                color: "#e6edf3",
+                display: "flex",
+                "align-items": "center",
+                gap: "8px",
+              }}>
+                <code style={{ flex: "1", "word-break": "break-all" }}>
+                  kubectl exec -it {shellPod()!.name} -n {shellPod()!.namespace} -- sh
+                </code>
+                <CopyButton text={`kubectl exec -it ${shellPod()!.name} -n ${shellPod()!.namespace} -- sh`} label="Copy command" />
+              </div>
+              <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "8px" }}>
+                Run this command in your terminal to access the pod shell.
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setShellPod(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* ConfigMap Viewer Modal */}
+      <Show when={viewConfigMap()}>
+        <div class="modal-overlay" onClick={() => setViewConfigMap(null)}>
+          <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "max-height": "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">ConfigMap: {viewConfigMap()!.name}</span>
+              <button class="modal-close" onClick={() => setViewConfigMap(null)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px", overflow: "auto", flex: "1" }}>
+              <For each={Object.entries(viewConfigMap()!.data)}>
+                {([key, value]) => (
+                  <div style={{ "margin-bottom": "16px" }}>
+                    <div style={{
+                      "font-size": "12px", "font-weight": "600", color: "#58a6ff",
+                      "margin-bottom": "4px", display: "flex", "align-items": "center", gap: "8px",
+                    }}>
+                      {key}
+                      <CopyButton text={value} label="Copy value" />
+                    </div>
+                    <pre style={{
+                      background: "#0d1117", border: "1px solid #21262d",
+                      "border-radius": "6px", padding: "10px",
+                      "font-family": "'JetBrains Mono NF', monospace",
+                      "font-size": "12px", color: "#c9d1d9",
+                      "white-space": "pre-wrap", "word-break": "break-all",
+                      margin: 0, "max-height": "200px", overflow: "auto",
+                    }}>{value}</pre>
+                  </div>
+                )}
+              </For>
+              <Show when={Object.keys(viewConfigMap()!.data).length === 0}>
+                <div style={{ color: "#8b949e", "font-size": "13px" }}>No data in this ConfigMap</div>
+              </Show>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setViewConfigMap(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Secret Viewer Modal */}
+      <Show when={viewSecret()}>
+        <div class="modal-overlay" onClick={() => setViewSecret(null)}>
+          <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "max-height": "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Secret: {viewSecret()!.name}</span>
+              <button class="modal-close" onClick={() => setViewSecret(null)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px", overflow: "auto", flex: "1" }}>
+              <div style={{ "font-size": "11px", color: "#d29922", "margin-bottom": "12px" }}>
+                Type: {viewSecret()!.secret_type}
+              </div>
+              <For each={Object.entries(viewSecret()!.data)}>
+                {([key, value]) => {
+                  const isRevealed = () => revealedKeys().has(key);
+                  const decoded = () => {
+                    try { return atob(value); } catch { return value; }
+                  };
+                  return (
+                    <div style={{ "margin-bottom": "16px" }}>
+                      <div style={{
+                        "font-size": "12px", "font-weight": "600", color: "#58a6ff",
+                        "margin-bottom": "4px", display: "flex", "align-items": "center", gap: "8px",
+                      }}>
+                        {key}
+                        <button
+                          class="btn btn-sm"
+                          style={{ "font-size": "10px", padding: "1px 6px" }}
+                          onClick={() => {
+                            const next = new Set(revealedKeys());
+                            if (isRevealed()) next.delete(key); else next.add(key);
+                            setRevealedKeys(next);
+                          }}
+                        >
+                          {isRevealed() ? "Hide" : "Reveal"}
+                        </button>
+                        <Show when={isRevealed()}>
+                          <CopyButton text={decoded()} label="Copy decoded value" />
+                        </Show>
+                      </div>
+                      <pre style={{
+                        background: "#0d1117", border: "1px solid #21262d",
+                        "border-radius": "6px", padding: "10px",
+                        "font-family": "'JetBrains Mono NF', monospace",
+                        "font-size": "12px", color: "#c9d1d9",
+                        "white-space": "pre-wrap", "word-break": "break-all",
+                        margin: 0,
+                      }}>{isRevealed() ? decoded() : "\u2022".repeat(Math.min(decoded().length, 24))}</pre>
+                    </div>
+                  );
+                }}
+              </For>
+              <Show when={Object.keys(viewSecret()!.data).length === 0}>
+                <div style={{ color: "#8b949e", "font-size": "13px" }}>No data in this Secret</div>
+              </Show>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setViewSecret(null)}>Close</button>
             </div>
           </div>
         </div>

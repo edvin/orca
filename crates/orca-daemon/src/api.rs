@@ -180,6 +180,11 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/pvcs/{namespace}/{name}", delete(k8s_delete_pvc))
         .route("/k8s/pods/{namespace}/{name}/logs", get(k8s_pod_logs))
         .route("/k8s/apply", post(k8s_apply))
+        .route("/k8s/events/{namespace}", get(k8s_events))
+        .route("/k8s/namespaces", post(k8s_create_namespace))
+        .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
+        .route("/k8s/configmaps/{namespace}", get(k8s_configmaps))
+        .route("/k8s/secrets/{namespace}", get(k8s_secrets))
         // Environment
         .route("/environment/status", get(env_status))
         .route("/environment/fix", post(env_fix))
@@ -2095,6 +2100,51 @@ async fn k8s_apply(
 ) -> Result<impl IntoResponse, ApiError> {
     let output = state.k8s.apply_yaml(&body.yaml).await?;
     Ok(Json(serde_json::json!({ "output": output })))
+}
+
+async fn k8s_events(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let events = state.k8s.list_events(&namespace).await?;
+    Ok(Json(events))
+}
+
+#[derive(Deserialize)]
+struct CreateNamespaceRequest {
+    name: String,
+}
+
+async fn k8s_create_namespace(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CreateNamespaceRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.create_namespace(&body.name).await?;
+    Ok(StatusCode::CREATED)
+}
+
+async fn k8s_delete_namespace(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_namespace(&name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_configmaps(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let cms = state.k8s.list_configmaps(&namespace).await?;
+    Ok(Json(cms))
+}
+
+async fn k8s_secrets(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let secrets = state.k8s.list_secrets(&namespace).await?;
+    Ok(Json(secrets))
 }
 
 // --- Environment ---

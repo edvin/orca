@@ -181,6 +181,32 @@ export interface PersistentVolume {
   age: string;
 }
 
+export interface K8sEvent {
+  type: string;      // Normal, Warning
+  reason: string;
+  object: string;    // Pod/my-pod
+  message: string;
+  age: string;
+  count: number;
+}
+
+export interface K8sConfigMap {
+  name: string;
+  namespace: string;
+  keys: string[];
+  data: Record<string, string>;
+  age: string;
+}
+
+export interface K8sSecret {
+  name: string;
+  namespace: string;
+  secret_type: string;
+  keys: string[];
+  data: Record<string, string>;  // base64-encoded values
+  age: string;
+}
+
 // --- Image Scanning ---
 
 export interface ScanVulnerability {

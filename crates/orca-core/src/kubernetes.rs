@@ -120,6 +120,41 @@ pub struct PersistentVolume {
     pub age: String,
 }
 
+/// A Kubernetes event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct K8sEvent {
+    /// Normal, Warning, etc.
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub reason: String,
+    pub object: String,
+    pub message: String,
+    pub age: String,
+    pub count: u32,
+}
+
+/// A Kubernetes ConfigMap.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct K8sConfigMap {
+    pub name: String,
+    pub namespace: String,
+    pub keys: Vec<String>,
+    pub data: std::collections::HashMap<String, String>,
+    pub age: String,
+}
+
+/// A Kubernetes Secret.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct K8sSecret {
+    pub name: String,
+    pub namespace: String,
+    pub secret_type: String,
+    pub keys: Vec<String>,
+    /// base64-encoded values
+    pub data: std::collections::HashMap<String, String>,
+    pub age: String,
+}
+
 /// Trait for managing a Kubernetes cluster (k3s).
 #[trait_variant::make(Send)]
 pub trait K8sManager {
@@ -177,4 +212,19 @@ pub trait K8sManager {
 
     /// Delete a resource by YAML manifest.
     async fn delete_yaml(&self, yaml: &str) -> anyhow::Result<String>;
+
+    /// List events in a namespace.
+    async fn list_events(&self, namespace: &str) -> anyhow::Result<Vec<K8sEvent>>;
+
+    /// Create a namespace.
+    async fn create_namespace(&self, name: &str) -> anyhow::Result<()>;
+
+    /// Delete a namespace.
+    async fn delete_namespace(&self, name: &str) -> anyhow::Result<()>;
+
+    /// List ConfigMaps in a namespace.
+    async fn list_configmaps(&self, namespace: &str) -> anyhow::Result<Vec<K8sConfigMap>>;
+
+    /// List Secrets in a namespace.
+    async fn list_secrets(&self, namespace: &str) -> anyhow::Result<Vec<K8sSecret>>;
 }

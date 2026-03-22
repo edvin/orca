@@ -1732,6 +1732,194 @@ impl K8sManager for K3sManager {
             }
         }
     }
+
+    async fn list_events(&self, namespace: &str) -> anyhow::Result<Vec<K8sEvent>> {
+        #[cfg(target_os = "windows")]
+        {
+            let json = self.wsl_kubectl_json(&["get", "events", "-n", namespace]).await?;
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|e: &serde_json::Value| {
+                let involved = &e["involvedObject"];
+                let kind = involved["kind"].as_str().unwrap_or("");
+                let obj_name = involved["name"].as_str().unwrap_or("");
+                K8sEvent {
+                    event_type: e["type"].as_str().unwrap_or("Normal").to_string(),
+                    reason: e["reason"].as_str().unwrap_or("").to_string(),
+                    object: format!("{kind}/{obj_name}"),
+                    message: e["message"].as_str().unwrap_or("").to_string(),
+                    age: e["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    count: e["count"].as_u64().unwrap_or(1) as u32,
+                }
+            }).collect());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let client = self.get_client().await?;
+            let api: Api<k8s_openapi::api::core::v1::Event> = Api::namespaced(client.clone(), namespace);
+            let list = api.list(&ListParams::default()).await?;
+            Ok(list.items.iter().map(|e| {
+                let involved = e.involved_object.clone();
+                let kind = involved.kind.unwrap_or_default();
+                let obj_name = involved.name.unwrap_or_default();
+                K8sEvent {
+                    event_type: e.type_.clone().unwrap_or_else(|| "Normal".to_string()),
+                    reason: e.reason.clone().unwrap_or_default(),
+                    object: format!("{kind}/{obj_name}"),
+                    message: e.message.clone().unwrap_or_default(),
+                    age: format_k8s_age(&e.metadata.creation_timestamp),
+                    count: e.count.unwrap_or(1) as u32,
+                }
+            }).collect())
+        }
+    }
+
+    async fn create_namespace(&self, name: &str) -> anyhow::Result<()> {
+        #[cfg(target_os = "windows")]
+        {
+            let output = Command::new("wsl")
+                .args(["-u", "root", "--", "k3s", "kubectl", "create", "namespace", name])
+                .output()
+                .await?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("Failed to create namespace: {stderr}");
+            }
+            return Ok(());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let client = self.get_client().await?;
+            let api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(client.clone());
+            let ns = serde_json::json!({
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": { "name": name }
+            });
+            let data: k8s_openapi::api::core::v1::Namespace = serde_json::from_value(ns)?;
+            api.create(&kube::api::PostParams::default(), &data).await?;
+            Ok(())
+        }
+    }
+
+    async fn delete_namespace(&self, name: &str) -> anyhow::Result<()> {
+        #[cfg(target_os = "windows")]
+        {
+            let output = Command::new("wsl")
+                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "namespace", name])
+                .output()
+                .await?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("Failed to delete namespace: {stderr}");
+            }
+            return Ok(());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let client = self.get_client().await?;
+            let api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(client.clone());
+            api.delete(name, &DeleteParams::default()).await?;
+            Ok(())
+        }
+    }
+
+    async fn list_configmaps(&self, namespace: &str) -> anyhow::Result<Vec<K8sConfigMap>> {
+        #[cfg(target_os = "windows")]
+        {
+            let json = self.wsl_kubectl_json(&["get", "configmaps", "-n", namespace]).await?;
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|cm: &serde_json::Value| {
+                let data_obj = cm["data"].as_object();
+                let keys: Vec<String> = data_obj.map(|d| d.keys().cloned().collect()).unwrap_or_default();
+                let data: std::collections::HashMap<String, String> = data_obj
+                    .map(|d| d.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect())
+                    .unwrap_or_default();
+                K8sConfigMap {
+                    name: cm["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                    namespace: namespace.to_string(),
+                    keys,
+                    data,
+                    age: cm["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                }
+            }).collect());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let client = self.get_client().await?;
+            let api: Api<k8s_openapi::api::core::v1::ConfigMap> = Api::namespaced(client.clone(), namespace);
+            let list = api.list(&ListParams::default()).await?;
+            Ok(list.items.iter().map(|cm| {
+                let btree_data = cm.data.clone().unwrap_or_default();
+                let keys: Vec<String> = btree_data.keys().cloned().collect();
+                let data: std::collections::HashMap<String, String> = btree_data.into_iter().collect();
+                K8sConfigMap {
+                    name: cm.metadata.name.clone().unwrap_or_default(),
+                    namespace: namespace.to_string(),
+                    keys,
+                    data,
+                    age: format_k8s_age(&cm.metadata.creation_timestamp),
+                }
+            }).collect())
+        }
+    }
+
+    async fn list_secrets(&self, namespace: &str) -> anyhow::Result<Vec<K8sSecret>> {
+        #[cfg(target_os = "windows")]
+        {
+            let json = self.wsl_kubectl_json(&["get", "secrets", "-n", namespace]).await?;
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|s: &serde_json::Value| {
+                let data_obj = s["data"].as_object();
+                let keys: Vec<String> = data_obj.map(|d| d.keys().cloned().collect()).unwrap_or_default();
+                let data: std::collections::HashMap<String, String> = data_obj
+                    .map(|d| d.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect())
+                    .unwrap_or_default();
+                K8sSecret {
+                    name: s["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                    namespace: namespace.to_string(),
+                    secret_type: s["type"].as_str().unwrap_or("Opaque").to_string(),
+                    keys,
+                    data,
+                    age: s["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                }
+            }).collect());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            use k8s_openapi::ByteString;
+            let client = self.get_client().await?;
+            let api: Api<k8s_openapi::api::core::v1::Secret> = Api::namespaced(client.clone(), namespace);
+            let list = api.list(&ListParams::default()).await?;
+            Ok(list.items.iter().map(|s| {
+                let raw_data = s.data.clone().unwrap_or_default();
+                let keys: Vec<String> = raw_data.keys().cloned().collect();
+                // Return base64-encoded values (frontend will decode for reveal)
+                let data: std::collections::HashMap<String, String> = raw_data
+                    .iter()
+                    .map(|(k, ByteString(v))| {
+                        use base64::Engine;
+                        (k.clone(), base64::engine::general_purpose::STANDARD.encode(v))
+                    })
+                    .collect();
+                K8sSecret {
+                    name: s.metadata.name.clone().unwrap_or_default(),
+                    namespace: namespace.to_string(),
+                    secret_type: s.type_.clone().unwrap_or_else(|| "Opaque".to_string()),
+                    keys,
+                    data,
+                    age: format_k8s_age(&s.metadata.creation_timestamp),
+                }
+            }).collect())
+        }
+    }
 }
 
 impl K3sManager {

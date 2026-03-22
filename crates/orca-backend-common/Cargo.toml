@@ -21,3 +21,4 @@ kube = { version = "0.98", features = ["client", "runtime", "derive"] }
 k8s-openapi = { version = "0.24", features = ["latest"] }
 reqwest.workspace = true
 urlencoding.workspace = true
+base64.workspace = true

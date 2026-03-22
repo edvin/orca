@@ -965,6 +965,43 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+#[tauri::command]
+pub async fn k8s_events(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/events/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_create_namespace(name: String) -> Result<(), String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}/k8s/namespaces"))
+        .json(&serde_json::json!({ "name": name }))
+        .send()
+        .await
+        .map_err(|e| format!("Create namespace failed: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}
+
+#[tauri::command]
+pub async fn k8s_delete_namespace(name: String) -> Result<(), String> {
+    delete(&format!("/k8s/namespaces/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_configmaps(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/configmaps/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_secrets(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/secrets/{namespace}")).await
+}
+
 // --- K8s Port Forwarding ---
 
 #[tauri::command]
