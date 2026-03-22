@@ -69,7 +69,9 @@ export default function KubernetesPage() {
     const s = status();
     if (!s?.running) return;
     const ns = selectedNs();
-    setLoading(true);
+    // Only show spinner on first load, not on refresh
+    const isFirstLoad = pods().length === 0 && deployments().length === 0;
+    if (isFirstLoad) setLoading(true);
     try {
       const currentTab = tab();
       if (currentTab === "pods") {

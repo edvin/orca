@@ -974,35 +974,92 @@ impl K8sManager for K3sManager {
         Ok(dest_file)
     }
 
+    // --- WSL kubectl helper (Windows) ---
+
+    #[cfg(target_os = "windows")]
+    async fn wsl_kubectl_json(&self, args: &[&str]) -> anyhow::Result<serde_json::Value> {
+        let mut cmd_args = vec!["-u", "root", "--", "k3s", "kubectl"];
+        cmd_args.extend_from_slice(args);
+        cmd_args.extend_from_slice(&["-o", "json"]);
+        let output = Command::new("wsl")
+            .args(&cmd_args)
+            .output()
+            .await?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("kubectl failed: {stderr}");
+        }
+        Ok(serde_json::from_slice(&output.stdout)?)
+    }
+
     // --- Workload queries ---
 
     async fn list_namespaces(&self) -> anyhow::Result<Vec<Namespace>> {
-        let client = self.get_client().await?;
-        let api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(client.clone());
-        let list = api.list(&ListParams::default()).await?;
+        #[cfg(target_os = "windows")]
+        {
+            let json = self.wsl_kubectl_json(&["get", "namespaces"]).await?;
+            let items = json["items"].as_array().unwrap_or(&vec![]);
+            return Ok(items.iter().map(|ns| {
+                Namespace {
+                    name: ns["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                    status: ns["status"]["phase"].as_str().unwrap_or("Active").to_string(),
+                    age: ns["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                }
+            }).collect());
+        }
 
-        Ok(list
-            .items
-            .iter()
-            .map(|ns| {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let client = self.get_client().await?;
+            let api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(client.clone());
+            let list = api.list(&ListParams::default()).await?;
+            Ok(list.items.iter().map(|ns| {
                 let name = ns.metadata.name.clone().unwrap_or_default();
-                let status = ns
-                    .status
-                    .as_ref()
-                    .and_then(|s| s.phase.clone())
-                    .unwrap_or_else(|| "Active".to_string());
+                let status = ns.status.as_ref().and_then(|s| s.phase.clone()).unwrap_or_else(|| "Active".to_string());
                 let age = format_k8s_age(&ns.metadata.creation_timestamp);
                 Namespace { name, status, age }
-            })
-            .collect())
+            }).collect())
+        }
     }
 
     async fn list_pods(&self, namespace: &str) -> anyhow::Result<Vec<Pod>> {
-        let client = self.get_client().await?;
-        let api: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(client.clone(), namespace);
-        let list = api.list(&ListParams::default()).await?;
+        #[cfg(target_os = "windows")]
+        {
+            let json = self.wsl_kubectl_json(&["get", "pods", "-n", namespace]).await?;
+            let items = json["items"].as_array().unwrap_or(&vec![]);
+            return Ok(items.iter().map(|p| {
+                let name = p["metadata"]["name"].as_str().unwrap_or("").to_string();
+                let phase = p["status"]["phase"].as_str().unwrap_or("Unknown").to_string();
+                let containers: Vec<_> = p["spec"]["containers"].as_array()
+                    .map(|c| c.iter().filter_map(|c| c["name"].as_str().map(|s| s.to_string())).collect())
+                    .unwrap_or_default();
+                let ready = p["status"]["containerStatuses"].as_array()
+                    .map(|cs| cs.iter().filter(|c| c["ready"].as_bool().unwrap_or(false)).count() as u32)
+                    .unwrap_or(0);
+                let total = containers.len() as u32;
+                let restarts = p["status"]["containerStatuses"].as_array()
+                    .map(|cs| cs.iter().map(|c| c["restartCount"].as_u64().unwrap_or(0) as u32).sum())
+                    .unwrap_or(0);
+                let image = p["spec"]["containers"].as_array()
+                    .and_then(|c| c.first())
+                    .and_then(|c| c["image"].as_str())
+                    .unwrap_or("").to_string();
+                let age = p["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string();
+                Pod {
+                    name, namespace: namespace.to_string(), status: phase,
+                    ready, total, restarts, image, age,
+                    node: p["spec"]["nodeName"].as_str().unwrap_or("").to_string(),
+                }
+            }).collect());
+        }
 
-        Ok(list.items.iter().map(|p| k8s_pod_to_pod(p, namespace)).collect())
+        #[cfg(not(target_os = "windows"))]
+        {
+            let client = self.get_client().await?;
+            let api: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(client.clone(), namespace);
+            let list = api.list(&ListParams::default()).await?;
+            Ok(list.items.iter().map(|p| k8s_pod_to_pod(p, namespace)).collect())
+        }
     }
 
     async fn list_deployments(&self, namespace: &str) -> anyhow::Result<Vec<Deployment>> {
