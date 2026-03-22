@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
+import { createSignal, onMount, onCleanup, For, Show, createMemo } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, ComposeProject } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
@@ -13,6 +13,7 @@ import Sparkline from "../components/Sparkline";
 import LastUpdated from "../components/LastUpdated";
 import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
 import { logError } from "../lib/activityStore";
+import MultiLogViewer from "../components/MultiLogViewer";
 
 interface ContainersPageProps {
   onNavigate?: (page: string) => void;
@@ -39,6 +40,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set(["__standalone__"]));
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const [containerMenuOpen, setContainerMenuOpen] = createSignal<string | null>(null);
+  const [showMultiLog, setShowMultiLog] = createSignal(false);
 
   const refresh = async () => {
     try {
@@ -247,6 +249,10 @@ export default function ContainersPage(props: ContainersPageProps) {
   const runningCount = () => (containers() || []).filter((c) => c.state === "Running").length;
   const stoppedCount = () => (containers() || []).filter((c) => c.state !== "Running").length;
 
+  const runningContainers = createMemo(() =>
+    (containers() || []).filter((c) => c.state === "Running")
+  );
+
   const toggleExpand = (name: string) => {
     const next = new Set(expanded());
     if (next.has(name)) next.delete(name);
@@ -357,6 +363,32 @@ export default function ContainersPage(props: ContainersPageProps) {
         <td class="mono" style={{ color: "#8b949e" }}>{c.image}</td>
         <td>
           <span class={`state-badge ${stateClass(c.state)}`}>{c.state}</span>
+          <Show when={c.health_status && c.health_status !== "none" && c.health_status !== ""}>
+            <span
+              title={
+                c.health_status === "unhealthy"
+                  ? `Unhealthy${c.health_log?.[0]?.output ? ": " + c.health_log[0].output.trim() : ""}`
+                  : c.health_status === "healthy"
+                  ? "Healthy"
+                  : "Health check starting..."
+              }
+              style={{
+                "margin-left": "6px",
+                "font-size": "10px",
+                color:
+                  c.health_status === "healthy"
+                    ? "#3fb950"
+                    : c.health_status === "unhealthy"
+                    ? "#f85149"
+                    : "#d29922",
+                ...(c.health_status === "starting"
+                  ? { animation: "pulse 1.5s ease-in-out infinite" }
+                  : {}),
+              }}
+            >
+              {"\u25CF"}
+            </span>
+          </Show>
         </td>
         <td>
           <Show when={c.state === "Running" && cStats()} fallback={
@@ -561,6 +593,11 @@ export default function ContainersPage(props: ContainersPageProps) {
               </button>
             </Show>
           </div>
+          <Show when={runningContainers().length >= 2}>
+            <button class="btn" onClick={() => setShowMultiLog(true)}>
+              Combined Logs
+            </button>
+          </Show>
           <button class="btn btn-primary" onClick={() => setShowRunDialog(true)}>
             Run
           </button>
@@ -765,6 +802,13 @@ export default function ContainersPage(props: ContainersPageProps) {
         <RunContainerDialog
           onClose={() => setShowRunDialog(false)}
           onCreated={refresh}
+        />
+      </Show>
+
+      <Show when={showMultiLog()}>
+        <MultiLogViewer
+          containers={runningContainers().map((c) => ({ id: c.id, name: c.name }))}
+          onClose={() => setShowMultiLog(false)}
         />
       </Show>
     </div>

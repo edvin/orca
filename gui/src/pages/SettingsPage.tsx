@@ -8,7 +8,7 @@ import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, update
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 
-type SettingsTab = "general" | "ai" | "registries" | "about";
+type SettingsTab = "general" | "ai" | "registries" | "maintenance" | "about";
 
 export default function SettingsPage() {
   const [tab, setTab] = createSignal<SettingsTab>("general");
@@ -21,6 +21,16 @@ export default function SettingsPage() {
   const [regName, setRegName] = createSignal("");
   const [regUsername, setRegUsername] = createSignal("");
   const [regPassword, setRegPassword] = createSignal("");
+
+  // Maintenance / System Prune
+  const [pruneContainers, setPruneContainers] = createSignal(false);
+  const [pruneImages, setPruneImages] = createSignal(false);
+  const [pruneVolumes, setPruneVolumes] = createSignal(false);
+  const [pruneNetworks, setPruneNetworks] = createSignal(false);
+  const [pruneBuildCache, setPruneBuildCache] = createSignal(false);
+  const [pruneRunning, setPruneRunning] = createSignal(false);
+  const [pruneResults, setPruneResults] = createSignal<string[]>([]);
+  const [pruneShowConfirm, setPruneShowConfirm] = createSignal(false);
 
   // General settings
   const [startOnLogin, setStartOnLogin] = createSignal(false);
@@ -410,6 +420,7 @@ export default function SettingsPage() {
         <button class={`tab-item ${tab() === "general" ? "active" : ""}`} onClick={() => setTab("general")}>General</button>
         <button class={`tab-item ${tab() === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>AI & Agents</button>
         <button class={`tab-item ${tab() === "registries" ? "active" : ""}`} onClick={() => setTab("registries")}>Registries</button>
+        <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
         <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
       </div>
 
@@ -882,6 +893,259 @@ export default function SettingsPage() {
                       <button class="btn" onClick={() => setShowAddRegistry(false)}>Cancel</button>
                     </div>
                   </div>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
+
+        {/* === Maintenance Tab === */}
+        <Show when={tab() === "maintenance"}>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
+            <div class="settings-section">
+              <h2 class="settings-section-title">System Cleanup</h2>
+              <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
+                Remove unused Docker resources to free up disk space. Select what to clean up and click "Run Cleanup".
+              </p>
+
+              <div style={{ display: "flex", "flex-direction": "column", gap: "1px" }}>
+                {/* Stopped Containers - Safe */}
+                <div style={{
+                  background: "#161b22",
+                  "border-left": "3px solid #3fb950",
+                  padding: "14px 16px",
+                  "border-radius": "6px 6px 0 0",
+                  display: "flex",
+                  "align-items": "flex-start",
+                  gap: "12px",
+                  cursor: "pointer",
+                }} onClick={() => setPruneContainers(!pruneContainers())}>
+                  <input
+                    type="checkbox"
+                    checked={pruneContainers()}
+                    onChange={(e) => { e.stopPropagation(); setPruneContainers(e.currentTarget.checked); }}
+                    style={{ "margin-top": "2px", "accent-color": "#3fb950", cursor: "pointer" }}
+                  />
+                  <div style={{ flex: "1" }}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Stopped Containers</span>
+                      <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#3fb95020", color: "#3fb950" }}>Safe</span>
+                    </div>
+                    <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all stopped containers (exited, dead, created)</div>
+                  </div>
+                </div>
+
+                {/* Dangling Images - Safe */}
+                <div style={{
+                  background: "#161b22",
+                  "border-left": "3px solid #3fb950",
+                  padding: "14px 16px",
+                  display: "flex",
+                  "align-items": "flex-start",
+                  gap: "12px",
+                  cursor: "pointer",
+                }} onClick={() => setPruneImages(!pruneImages())}>
+                  <input
+                    type="checkbox"
+                    checked={pruneImages()}
+                    onChange={(e) => { e.stopPropagation(); setPruneImages(e.currentTarget.checked); }}
+                    style={{ "margin-top": "2px", "accent-color": "#3fb950", cursor: "pointer" }}
+                  />
+                  <div style={{ flex: "1" }}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Dangling Images</span>
+                      <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#3fb95020", color: "#3fb950" }}>Safe</span>
+                    </div>
+                    <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove images not tagged and not referenced by any container</div>
+                  </div>
+                </div>
+
+                {/* Unused Networks - Moderate */}
+                <div style={{
+                  background: "#161b22",
+                  "border-left": "3px solid #d29922",
+                  padding: "14px 16px",
+                  display: "flex",
+                  "align-items": "flex-start",
+                  gap: "12px",
+                  cursor: "pointer",
+                }} onClick={() => setPruneNetworks(!pruneNetworks())}>
+                  <input
+                    type="checkbox"
+                    checked={pruneNetworks()}
+                    onChange={(e) => { e.stopPropagation(); setPruneNetworks(e.currentTarget.checked); }}
+                    style={{ "margin-top": "2px", "accent-color": "#d29922", cursor: "pointer" }}
+                  />
+                  <div style={{ flex: "1" }}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d29922" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="M12 8v4M5.5 16.5l4-7M18.5 16.5l-4-7"/></svg>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Unused Networks</span>
+                      <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#d2992220", color: "#d29922" }}>Moderate</span>
+                    </div>
+                    <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all custom networks not used by any container</div>
+                  </div>
+                </div>
+
+                {/* Build Cache - Safe */}
+                <div style={{
+                  background: "#161b22",
+                  "border-left": "3px solid #3fb950",
+                  padding: "14px 16px",
+                  display: "flex",
+                  "align-items": "flex-start",
+                  gap: "12px",
+                  cursor: "pointer",
+                }} onClick={() => setPruneBuildCache(!pruneBuildCache())}>
+                  <input
+                    type="checkbox"
+                    checked={pruneBuildCache()}
+                    onChange={(e) => { e.stopPropagation(); setPruneBuildCache(e.currentTarget.checked); }}
+                    style={{ "margin-top": "2px", "accent-color": "#3fb950", cursor: "pointer" }}
+                  />
+                  <div style={{ flex: "1" }}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20M5 20V8l7-5 7 5v12"/><path d="M9 20v-6h6v6"/></svg>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Build Cache</span>
+                      <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#3fb95020", color: "#3fb950" }}>Safe</span>
+                    </div>
+                    <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove Docker build cache to free disk space</div>
+                  </div>
+                </div>
+
+                {/* Unused Volumes - Dangerous */}
+                <div style={{
+                  background: "#161b22",
+                  "border-left": "3px solid #f85149",
+                  padding: "14px 16px",
+                  "border-radius": "0 0 6px 6px",
+                  display: "flex",
+                  "align-items": "flex-start",
+                  gap: "12px",
+                  cursor: "pointer",
+                }} onClick={() => setPruneVolumes(!pruneVolumes())}>
+                  <input
+                    type="checkbox"
+                    checked={pruneVolumes()}
+                    onChange={(e) => { e.stopPropagation(); setPruneVolumes(e.currentTarget.checked); }}
+                    style={{ "margin-top": "2px", "accent-color": "#f85149", cursor: "pointer" }}
+                  />
+                  <div style={{ flex: "1" }}>
+                    <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Unused Volumes</span>
+                      <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#f8514920", color: "#f85149" }}>Dangerous</span>
+                    </div>
+                    <div style={{ "font-size": "12px", color: "#f85149" }}>Remove all volumes not used by any container. This will permanently delete data!</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action area */}
+              <div style={{ "margin-top": "20px", display: "flex", "align-items": "center", gap: "12px" }}>
+                <Show when={!pruneShowConfirm()}>
+                  <button
+                    class="btn btn-primary"
+                    disabled={pruneRunning() || (!pruneContainers() && !pruneImages() && !pruneVolumes() && !pruneNetworks() && !pruneBuildCache())}
+                    onClick={() => setPruneShowConfirm(true)}
+                  >
+                    Run Cleanup
+                  </button>
+                </Show>
+                <Show when={pruneShowConfirm()}>
+                  <div style={{
+                    flex: "1",
+                    background: "#da363318",
+                    border: "1px solid #da363344",
+                    "border-radius": "8px",
+                    padding: "12px 16px",
+                  }}>
+                    <div style={{ "font-size": "13px", "font-weight": "600", color: "#f85149", "margin-bottom": "8px" }}>Confirm cleanup</div>
+                    <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "12px" }}>
+                      This will remove:
+                      <ul style={{ margin: "4px 0 0 16px", padding: "0" }}>
+                        <Show when={pruneContainers()}><li>Stopped containers</li></Show>
+                        <Show when={pruneImages()}><li>Dangling images</li></Show>
+                        <Show when={pruneNetworks()}><li>Unused networks</li></Show>
+                        <Show when={pruneBuildCache()}><li>Build cache</li></Show>
+                        <Show when={pruneVolumes()}><li style={{ color: "#f85149" }}>Unused volumes (data loss!)</li></Show>
+                      </ul>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button class="btn" onClick={() => setPruneShowConfirm(false)}>Cancel</button>
+                      <button
+                        class="btn"
+                        style={{ background: "#da3633", "border-color": "#da3633", color: "#fff" }}
+                        disabled={pruneRunning()}
+                        onClick={async () => {
+                          setPruneShowConfirm(false);
+                          setPruneRunning(true);
+                          setPruneResults([]);
+                          const results: string[] = [];
+                          try {
+                            if (pruneContainers()) {
+                              const r = (await invoke("cleanup", { scope: "containers" })) as { log: string[] };
+                              results.push(...r.log);
+                            }
+                            if (pruneImages()) {
+                              const r = (await invoke("cleanup", { scope: "images" })) as { log: string[] };
+                              results.push(...r.log);
+                            }
+                            if (pruneNetworks()) {
+                              const r = (await invoke("cleanup", { scope: "networks" })) as { log: string[] };
+                              results.push(...r.log);
+                            }
+                            if (pruneBuildCache()) {
+                              const r = (await invoke("cleanup", { scope: "build_cache" })) as { log: string[] };
+                              results.push(...r.log);
+                            }
+                            if (pruneVolumes()) {
+                              const r = (await invoke("cleanup", { scope: "volumes" })) as { log: string[] };
+                              results.push(...r.log);
+                            }
+                            showToast("System cleanup complete", "success");
+                          } catch (e) {
+                            results.push(`Error: ${e}`);
+                            logError(`System cleanup failed: ${e}`);
+                            showToast(`Cleanup failed: ${e}`, "error");
+                          }
+                          setPruneResults(results);
+                          setPruneRunning(false);
+                          // Reset checkboxes
+                          setPruneContainers(false);
+                          setPruneImages(false);
+                          setPruneVolumes(false);
+                          setPruneNetworks(false);
+                          setPruneBuildCache(false);
+                        }}
+                      >
+                        {pruneRunning() ? "Cleaning..." : "Confirm & Clean"}
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+                <Show when={pruneRunning()}>
+                  <Spinner />
+                  <span style={{ "font-size": "13px", color: "#8b949e" }}>Running cleanup...</span>
+                </Show>
+              </div>
+
+              {/* Results */}
+              <Show when={pruneResults().length > 0}>
+                <div style={{
+                  "margin-top": "16px",
+                  background: "#0d1117",
+                  border: "1px solid #30363d",
+                  "border-radius": "8px",
+                  padding: "12px 16px",
+                }}>
+                  <div style={{ "font-size": "13px", "font-weight": "600", color: "#3fb950", "margin-bottom": "8px" }}>Cleanup Results</div>
+                  <For each={pruneResults()}>
+                    {(line) => (
+                      <div style={{ "font-size": "12px", color: "#8b949e", padding: "2px 0" }} class="mono">{line}</div>
+                    )}
+                  </For>
                 </div>
               </Show>
             </div>

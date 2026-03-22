@@ -612,7 +612,7 @@
     <div class="hero-buttons">
       <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download v0.5.0
+        Download v0.6.0
       </a>
       <a href="https://github.com/edvin/orca" class="btn btn-secondary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
@@ -649,7 +649,7 @@
         <div class="hero-stat-label">Platforms</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-value">10+</div>
+        <div class="hero-stat-value">15+</div>
         <div class="hero-stat-label">K8s Resource Types</div>
       </div>
       <div class="hero-stat">
@@ -694,7 +694,7 @@
 
       <!-- Legend + Table header -->
       <div style="padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; color: #484f58; display: flex; justify-content: space-between; align-items: center;">
-        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features &mdash; v0.5.0</span>
+        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features &mdash; v0.6.0</span>
         <span><span class="ft-unique" style="display: inline;">&#10003;</span> = unique to Orca Desktop</span>
       </div>
 
@@ -705,7 +705,10 @@
       <div class="ft-row"><span>Live resource monitoring (CPU, memory, network I/O)</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Live resource editing</strong> — change memory, CPU, restart policy on running containers</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span>Interactive terminal (exec shell)</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Log viewer with search, tail control, auto-scroll</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Log viewer</strong> — regex search, match highlighting, case-sensitive filter</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Multi-container logs</strong> — combined, color-coded log view across containers</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Health checks</strong> — live status indicator, health history, check output</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Restart policy</strong> — display, edit, and restart count tracking</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>AI-powered diagnostics</strong> — click to analyze any container with logs</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span>Export as <code>docker run</code> / <code>docker-compose.yml</code></span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Docker Hub browser</strong> — search and pull images directly from Docker Hub</span><span class="ft-check">&#10003;</span></div>
@@ -715,7 +718,8 @@
       <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Images &amp; Security</div>
 
       <div class="ft-row"><span>Pull with Docker Hub search dialog</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Build from Dockerfile with streaming log</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Build with live output</strong> — real-time streaming build logs in-app</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Image layer visualization</strong> — stacked bar chart with Dockerfile instructions</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Vulnerability scanning</strong> — one-click CVE scan with Trivy</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>HTML vulnerability report</strong> — exportable, opens in browser</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Distinct severity colors</strong> — Critical, High, Medium, Low at a glance</span><span class="ft-check">&#10003;</span></div>
@@ -735,10 +739,11 @@
       <div class="ft-row"><span><strong>Deploy from YAML</strong> — Monaco editor with syntax highlighting</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Helm management</strong> — list releases, install charts, uninstall</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Visual topology</strong> — Service &rarr; Deployment &rarr; Pods relationship map</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Jobs &amp; CronJobs</strong> — manage, trigger manually, suspend/resume, view logs</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Namespace management</strong> — create, delete, switch between namespaces</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>YAML editor for all resources</strong> — syntax highlighted, apply changes live</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Volume management with file browser</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Network management with subnet configuration</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Volume management with file browser and export</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Network topology</strong> — visual diagram of networks and connected containers</span><span class="ft-check ft-unique">&#10003;</span></div>
 
       <!-- Category: AI -->
       <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">AI &amp; Automation</div>
@@ -764,7 +769,8 @@
       <div class="ft-row"><span><strong>WSL2 resource management</strong> — configure memory, CPU, and swap</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Docker auto-start</strong> — automatic startup on Windows reboot</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>JetBrains Mono Nerd Font</strong> — in terminal and log viewers</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Collapsible sidebar</strong>, <code>Ctrl+R</code> refresh, <code>Ctrl+K</code> command palette</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Resource history charts</strong> — CPU and memory time-series with hover tooltips</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Keyboard shortcuts</strong> — <code>Ctrl+K</code> palette, <code>Ctrl+R</code> refresh, <code>?</code> shortcut guide</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Glassmorphism UI — frosted glass, smooth animations</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row" style="border: none;"><span><strong>Open source</strong> — MIT licensed, free forever, no telemetry</span><span class="ft-check ft-unique">&#10003;</span></div>
     </div>
@@ -782,6 +788,7 @@
         <li>Helm chart management — install, upgrade, and uninstall releases</li>
         <li>Monaco YAML editor with live apply for all K8s resources</li>
         <li>Scale deployments, rollback, and port-forward services instantly</li>
+        <li>Jobs and CronJobs — trigger, suspend, view logs and status</li>
         <li>Events timeline, ConfigMaps, Secrets, and namespace management</li>
       </ul>
     </div>
@@ -892,7 +899,7 @@ setting <span style="color: #3fb950">worker_rlimit_nofile</span> to 1024.
   <h2>Ready to try it?</h2>
   <p>Free, open source, and works with your existing Docker and Kubernetes setup.</p>
   <div class="hero-buttons" style="justify-content: center;">
-    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop v0.5.0</a>
+    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop v0.6.0</a>
     <a href="https://github.com/edvin/orca" class="btn btn-secondary">Star on GitHub</a>
   </div>
 </section>

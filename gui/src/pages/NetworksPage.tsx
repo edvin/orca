@@ -10,6 +10,16 @@ import { logError } from "../lib/activityStore";
 import Dropdown from "../components/Dropdown";
 
 const DEFAULT_NETWORKS = ["bridge", "host", "none"];
+const NETWORK_COLORS = ["#58a6ff", "#3fb950", "#d29922", "#f85149", "#bc8cff", "#79c0ff"];
+
+interface TopologyNetwork {
+  id: string;
+  name: string;
+  driver: string;
+  subnet: string | null;
+  gateway: string | null;
+  containers: Array<{ id: string; name: string; ip: string }>;
+}
 
 export default function NetworksPage() {
   const [networks, setNetworks] = createSignal<Network[]>([]);
@@ -18,6 +28,9 @@ export default function NetworksPage() {
   const [createDriver, setCreateDriver] = createSignal("bridge");
   const [creating, setCreating] = createSignal(false);
   const [expandedNetwork, setExpandedNetwork] = createSignal<string | null>(null);
+  const [topologyView, setTopologyView] = createSignal(false);
+  const [topology, setTopology] = createSignal<TopologyNetwork[]>([]);
+  const [hoveredNode, setHoveredNode] = createSignal<{ type: "network" | "container"; name: string; details: string; x: number; y: number } | null>(null);
   const { sortField, sortDir, toggleSort, sortFn } = useSort<Network>("name");
 
   const refresh = async () => {
@@ -29,9 +42,27 @@ export default function NetworksPage() {
     }
   };
 
-  useRefresh(refresh);
+  const refreshTopology = async () => {
+    try {
+      const result = (await invoke("network_topology")) as TopologyNetwork[];
+      setTopology(result);
+    } catch (e) {
+      logError(`Failed to load topology: ${e}`);
+    }
+  };
+
+  useRefresh(() => {
+    refresh();
+    if (topologyView()) refreshTopology();
+  });
 
   onMount(refresh);
+
+  const toggleTopology = () => {
+    const next = !topologyView();
+    setTopologyView(next);
+    if (next) refreshTopology();
+  };
 
   const removeNetwork = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
@@ -62,6 +93,7 @@ export default function NetworksPage() {
       setCreateDriver("bridge");
       setShowCreate(false);
       await refresh();
+      if (topologyView()) refreshTopology();
     } catch (err) {
       logError(`Failed to create network: ${err}`, `Network "${name}", driver "${createDriver()}"`);
       showToast(`Failed to create network: ${err}`, "error");
@@ -93,6 +125,40 @@ export default function NetworksPage() {
     });
   };
 
+  // Build shared-container connections for the topology SVG
+  const sharedContainerLines = () => {
+    const topo = topology();
+    // Map container ID to list of network indices
+    const containerNetworks: Record<string, number[]> = {};
+    topo.forEach((net, ni) => {
+      net.containers.forEach((c) => {
+        if (!containerNetworks[c.id]) containerNetworks[c.id] = [];
+        containerNetworks[c.id].push(ni);
+      });
+    });
+    // For containers on multiple networks, draw lines between their positions
+    const lines: Array<{ x1: number; y1: number; x2: number; y2: number; color: string }> = [];
+    const cols = 3;
+    for (const [, netIndices] of Object.entries(containerNetworks)) {
+      if (netIndices.length < 2) continue;
+      for (let a = 0; a < netIndices.length - 1; a++) {
+        const ni1 = netIndices[a];
+        const ni2 = netIndices[a + 1];
+        const x1 = 150 + (ni1 % cols) * 250;
+        const y1 = 80 + Math.floor(ni1 / cols) * 200 + 52;
+        const x2 = 150 + (ni2 % cols) * 250;
+        const y2 = 80 + Math.floor(ni2 / cols) * 200 + 52;
+        lines.push({ x1, y1, x2, y2, color: "#484f58" });
+      }
+    }
+    return lines;
+  };
+
+  const svgHeight = () => {
+    const rows = Math.ceil(topology().length / 3);
+    return Math.max(300, rows * 200 + 80);
+  };
+
   return (
     <div>
       <div class="page-header">
@@ -103,102 +169,243 @@ export default function NetworksPage() {
           </span>
         </h1>
         <div class="page-actions">
+          <button
+            class="btn"
+            onClick={toggleTopology}
+            style={{
+              background: topologyView() ? "#1f6feb" : undefined,
+              color: topologyView() ? "#fff" : undefined,
+              "border-color": topologyView() ? "#1f6feb" : undefined,
+            }}
+            title="Toggle topology view"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px", "vertical-align": "-2px" }}>
+              <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+              <line x1="12" y1="7" x2="12" y2="12"/><path d="M12 12L5 17"/><path d="M12 12l7 5"/>
+            </svg>
+            Topology
+          </button>
           <button class="btn btn-primary" onClick={() => setShowCreate(true)}>
             Create
           </button>
-          <button class="btn" onClick={refresh}>Refresh</button>
+          <button class="btn" onClick={() => { refresh(); if (topologyView()) refreshTopology(); }}>Refresh</button>
         </div>
       </div>
 
-      <Show
-        when={networks().length > 0}
-        fallback={
-          <div class="empty">
-            <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="12" y2="12"/><path d="M12 12L5 17"/><path d="M12 12l7 5"/></svg></div>
-            <p class="empty-title">No custom networks</p>
-            <p>The default bridge, host, and none networks are managed by Docker</p>
-          </div>
-        }
-      >
-        <table class="table">
-          <thead>
-            <tr>
-              <SortableHeader label="Name" field="name" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <th>ID</th>
-              <SortableHeader label="Driver" field="driver" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <SortableHeader label="Subnet" field="subnet" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <th>Gateway</th>
-              <th style={{ "text-align": "right" }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <For each={sorted()}>
-              {(n) => (<>
-                <tr
-                  onClick={() => setExpandedNetwork(expandedNetwork() === n.id ? null : n.id)}
-                  style={{ cursor: "pointer" }}
-                >
-                  <td style={{ "font-weight": "500" }}>
-                    <span class={`expand-arrow ${expandedNetwork() === n.id ? "expanded" : ""}`} style={{ "margin-right": "6px", "font-size": "10px" }}>
-                      {"\u25B6"}
-                    </span>
-                    {n.name}
-                  </td>
-                  <td class="mono" style={{ color: "#8b949e" }}>{n.id.substring(0, 12)}</td>
-                  <td>{n.driver}</td>
-                  <td class="mono">{n.subnet || "-"}</td>
-                  <td class="mono">{n.gateway || "-"}</td>
-                  <td style={{ "text-align": "right" }}>
-                    <Show when={!isDefaultNetwork(n.name)}>
-                      <button
-                        class="action-icon action-icon-delete"
-                        title="Remove network"
-                        onClick={(e) => removeNetwork(n.name, e)}
-                        style={{ color: "#f85149" }}
-                      ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
-                    </Show>
-                  </td>
-                </tr>
-                <Show when={expandedNetwork() === n.id}>
-                  <tr>
-                    <td colspan="6" style={{ padding: "12px 16px 12px 36px", background: "#161b22", "border-top": "none" }}>
-                      <div style={{ display: "grid", "grid-template-columns": "repeat(3, 1fr)", gap: "12px", "font-size": "13px" }}>
-                        <div>
-                          <span style={{ color: "#8b949e" }}>Full ID</span>
-                          <div class="mono" style={{ "word-break": "break-all", "margin-top": "2px" }}>{n.id}</div>
-                        </div>
-                        <div>
-                          <span style={{ color: "#8b949e" }}>Subnet</span>
-                          <div class="mono" style={{ "margin-top": "2px" }}>{n.subnet || "None"}</div>
-                        </div>
-                        <div>
-                          <span style={{ color: "#8b949e" }}>Gateway</span>
-                          <div class="mono" style={{ "margin-top": "2px" }}>{n.gateway || "None"}</div>
-                        </div>
-                        <div>
-                          <span style={{ color: "#8b949e" }}>Driver</span>
-                          <div style={{ "margin-top": "2px" }}>{n.driver}</div>
-                        </div>
-                        <div>
-                          <span style={{ color: "#8b949e" }}>Scope</span>
-                          <div style={{ "margin-top": "2px" }}>{isDefaultNetwork(n.name) ? "Default" : "Custom"}</div>
-                        </div>
-                        <div>
-                          <span style={{ color: "#8b949e" }}>Labels</span>
-                          <div class="mono" style={{ "margin-top": "2px" }}>
-                            {Object.keys(n.labels).length > 0
-                              ? Object.entries(n.labels).map(([k, v]) => `${k}=${v}`).join(", ")
-                              : "None"}
-                          </div>
-                        </div>
-                      </div>
+      <Show when={topologyView()} fallback={
+        <Show
+          when={networks().length > 0}
+          fallback={
+            <div class="empty">
+              <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="12" y2="12"/><path d="M12 12L5 17"/><path d="M12 12l7 5"/></svg></div>
+              <p class="empty-title">No custom networks</p>
+              <p>The default bridge, host, and none networks are managed by Docker</p>
+            </div>
+          }
+        >
+          <table class="table">
+            <thead>
+              <tr>
+                <SortableHeader label="Name" field="name" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+                <th>ID</th>
+                <SortableHeader label="Driver" field="driver" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+                <SortableHeader label="Subnet" field="subnet" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+                <th>Gateway</th>
+                <th style={{ "text-align": "right" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <For each={sorted()}>
+                {(n) => (<>
+                  <tr
+                    onClick={() => setExpandedNetwork(expandedNetwork() === n.id ? null : n.id)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <td style={{ "font-weight": "500" }}>
+                      <span class={`expand-arrow ${expandedNetwork() === n.id ? "expanded" : ""}`} style={{ "margin-right": "6px", "font-size": "10px" }}>
+                        {"\u25B6"}
+                      </span>
+                      {n.name}
+                    </td>
+                    <td class="mono" style={{ color: "#8b949e" }}>{n.id.substring(0, 12)}</td>
+                    <td>{n.driver}</td>
+                    <td class="mono">{n.subnet || "-"}</td>
+                    <td class="mono">{n.gateway || "-"}</td>
+                    <td style={{ "text-align": "right" }}>
+                      <Show when={!isDefaultNetwork(n.name)}>
+                        <button
+                          class="action-icon action-icon-delete"
+                          title="Remove network"
+                          onClick={(e) => removeNetwork(n.name, e)}
+                          style={{ color: "#f85149" }}
+                        ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                      </Show>
                     </td>
                   </tr>
-                </Show>
-              </>)}
-            </For>
-          </tbody>
-        </table>
+                  <Show when={expandedNetwork() === n.id}>
+                    <tr>
+                      <td colspan="6" style={{ padding: "12px 16px 12px 36px", background: "#161b22", "border-top": "none" }}>
+                        <div style={{ display: "grid", "grid-template-columns": "repeat(3, 1fr)", gap: "12px", "font-size": "13px" }}>
+                          <div>
+                            <span style={{ color: "#8b949e" }}>Full ID</span>
+                            <div class="mono" style={{ "word-break": "break-all", "margin-top": "2px" }}>{n.id}</div>
+                          </div>
+                          <div>
+                            <span style={{ color: "#8b949e" }}>Subnet</span>
+                            <div class="mono" style={{ "margin-top": "2px" }}>{n.subnet || "None"}</div>
+                          </div>
+                          <div>
+                            <span style={{ color: "#8b949e" }}>Gateway</span>
+                            <div class="mono" style={{ "margin-top": "2px" }}>{n.gateway || "None"}</div>
+                          </div>
+                          <div>
+                            <span style={{ color: "#8b949e" }}>Driver</span>
+                            <div style={{ "margin-top": "2px" }}>{n.driver}</div>
+                          </div>
+                          <div>
+                            <span style={{ color: "#8b949e" }}>Scope</span>
+                            <div style={{ "margin-top": "2px" }}>{isDefaultNetwork(n.name) ? "Default" : "Custom"}</div>
+                          </div>
+                          <div>
+                            <span style={{ color: "#8b949e" }}>Labels</span>
+                            <div class="mono" style={{ "margin-top": "2px" }}>
+                              {Object.keys(n.labels).length > 0
+                                ? Object.entries(n.labels).map(([k, v]) => `${k}=${v}`).join(", ")
+                                : "None"}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </Show>
+                </>)}
+              </For>
+            </tbody>
+          </table>
+        </Show>
+      }>
+        {/* Topology View */}
+        <div style={{ position: "relative" }}>
+          <Show when={topology().length > 0} fallback={
+            <div class="empty">
+              <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="12" y2="12"/><path d="M12 12L5 17"/><path d="M12 12l7 5"/></svg></div>
+              <p class="empty-title">Loading topology...</p>
+            </div>
+          }>
+            <svg
+              viewBox={`0 0 800 ${svgHeight()}`}
+              style={{ width: "100%", height: `${svgHeight()}px`, background: "#0d1117", "border-radius": "8px", border: "1px solid #21262d" }}
+              onMouseLeave={() => setHoveredNode(null)}
+            >
+              {/* Connection lines for containers on multiple networks */}
+              <For each={sharedContainerLines()}>
+                {(line) => (
+                  <line
+                    x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2}
+                    stroke={line.color} stroke-width={1.5} stroke-dasharray="4,4" opacity={0.6}
+                  />
+                )}
+              </For>
+
+              {/* Network nodes */}
+              <For each={topology()}>
+                {(net, i) => {
+                  const cols = 3;
+                  const x = 150 + (i() % cols) * 250;
+                  const y = 80 + Math.floor(i() / cols) * 200;
+                  const color = NETWORK_COLORS[i() % NETWORK_COLORS.length];
+                  const containerCount = net.containers.length;
+                  const netWidth = Math.max(200, containerCount * 50 + 20);
+                  const halfW = netWidth / 2;
+
+                  return (
+                    <g>
+                      {/* Network rectangle */}
+                      <rect
+                        x={x - halfW} y={y - 35}
+                        width={netWidth} height={containerCount > 0 ? 100 : 70}
+                        rx={8}
+                        fill="#161b22" stroke={color} stroke-width={2}
+                        onMouseEnter={(e) => setHoveredNode({
+                          type: "network", name: net.name,
+                          details: `Driver: ${net.driver}\nSubnet: ${net.subnet || "none"}\nGateway: ${net.gateway || "none"}\nContainers: ${containerCount}`,
+                          x: e.clientX, y: e.clientY,
+                        })}
+                        onMouseLeave={() => setHoveredNode(null)}
+                        style={{ cursor: "pointer" }}
+                      />
+                      {/* Network name */}
+                      <text x={x} y={y - 10} text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600" style={{ "pointer-events": "none" }}>
+                        {net.name}
+                      </text>
+                      {/* Network info */}
+                      <text x={x} y={y + 8} text-anchor="middle" fill="#8b949e" font-size="11" style={{ "pointer-events": "none" }}>
+                        {net.driver}{net.subnet ? ` | ${net.subnet}` : ""}
+                      </text>
+
+                      {/* Connected containers */}
+                      <For each={net.containers}>
+                        {(container, j) => {
+                          const maxPerRow = Math.max(1, Math.floor(netWidth / 50));
+                          const cx = x - halfW + 25 + (j() % maxPerRow) * 50;
+                          const cy = y + 30 + Math.floor(j() / maxPerRow) * 28;
+                          const shortName = container.name.length > 7 ? container.name.slice(0, 7) : container.name;
+                          return (
+                            <g
+                              onMouseEnter={(e) => setHoveredNode({
+                                type: "container", name: container.name,
+                                details: `ID: ${container.id.substring(0, 12)}\nIP: ${container.ip || "none"}`,
+                                x: e.clientX, y: e.clientY,
+                              })}
+                              onMouseLeave={() => setHoveredNode(null)}
+                              style={{ cursor: "pointer" }}
+                            >
+                              <rect
+                                x={cx - 20} y={cy - 10}
+                                width={40} height={20} rx={4}
+                                fill="#0d2818" stroke="#3fb950" stroke-width={1}
+                              />
+                              <text x={cx} y={cy + 4} text-anchor="middle" fill="#c9d1d9" font-size="8" style={{ "pointer-events": "none" }}>
+                                {shortName}
+                              </text>
+                            </g>
+                          );
+                        }}
+                      </For>
+                    </g>
+                  );
+                }}
+              </For>
+            </svg>
+
+            {/* Hover tooltip */}
+            <Show when={hoveredNode()}>
+              {(node) => (
+                <div style={{
+                  position: "fixed",
+                  left: `${node().x + 12}px`,
+                  top: `${node().y - 10}px`,
+                  background: "#1c2128",
+                  border: "1px solid #30363d",
+                  "border-radius": "6px",
+                  padding: "8px 12px",
+                  "font-size": "12px",
+                  color: "#e6edf3",
+                  "z-index": "1000",
+                  "pointer-events": "none",
+                  "white-space": "pre-line",
+                  "max-width": "300px",
+                  "box-shadow": "0 4px 12px rgba(0,0,0,0.4)",
+                }}>
+                  <div style={{ "font-weight": "600", "margin-bottom": "4px", color: node().type === "network" ? "#58a6ff" : "#3fb950" }}>
+                    {node().name}
+                  </div>
+                  <div style={{ color: "#8b949e" }}>{node().details}</div>
+                </div>
+              )}
+            </Show>
+          </Show>
+        </div>
       </Show>
 
       {/* Create Network Dialog */}

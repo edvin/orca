@@ -16,7 +16,25 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
   const handleEscape = (e: KeyboardEvent) => {
     if (e.key === "Escape" && stage() === "form") props.onClose();
   };
-  onMount(() => document.addEventListener("keydown", handleEscape));
+  onMount(() => {
+    document.addEventListener("keydown", handleEscape);
+    // Fetch available networks
+    (async () => {
+      try {
+        const nets = (await invoke("list_networks")) as Array<{ name: string; driver: string }>;
+        const builtIn = ["bridge", "host", "none"];
+        const options = builtIn.map((n) => ({ value: n, label: n }));
+        for (const net of nets) {
+          if (!builtIn.includes(net.name)) {
+            options.push({ value: net.name, label: `${net.name} (${net.driver})` });
+          }
+        }
+        setAvailableNetworks(options);
+      } catch {
+        // Keep defaults if fetch fails
+      }
+    })();
+  });
   onCleanup(() => document.removeEventListener("keydown", handleEscape));
 
   const [image, setImage] = createSignal(props.initialImage || "");
@@ -28,6 +46,12 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
   const [restartPolicy, setRestartPolicy] = createSignal("no");
   const [cpuLimit, setCpuLimit] = createSignal("");
   const [memoryLimit, setMemoryLimit] = createSignal("");
+  const [network, setNetwork] = createSignal("bridge");
+  const [availableNetworks, setAvailableNetworks] = createSignal<Array<{ value: string; label: string }>>([
+    { value: "bridge", label: "bridge" },
+    { value: "host", label: "host" },
+    { value: "none", label: "none" },
+  ]);
   const [showAdvanced, setShowAdvanced] = createSignal(false);
   const [stage, setStage] = createSignal<RunStage>("form");
   const [stageMessage, setStageMessage] = createSignal("");
@@ -82,6 +106,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
         restartPolicy: restartPolicy() !== "no" ? restartPolicy() : null,
         cpuLimit: cpuLimit().trim() ? parseFloat(cpuLimit().trim()) : null,
         memoryLimit: memoryLimit().trim() || null,
+        network: network() !== "bridge" ? network() : null,
       });
 
       // Stage 4: Done
@@ -258,6 +283,15 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                     rows={2}
                   />
                   <span class="form-hint">host:container, one per line</span>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Network</label>
+                  <Dropdown
+                    value={network()}
+                    options={availableNetworks()}
+                    onChange={(v) => setNetwork(v)}
+                  />
                 </div>
 
                 <div class="form-row">

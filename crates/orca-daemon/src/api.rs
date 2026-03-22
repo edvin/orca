@@ -13,7 +13,7 @@ use axum::{
         IntoResponse,
         sse::{Event as SseEvent, KeepAlive, Sse},
     },
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use futures::{SinkExt, StreamExt as FuturesStreamExt};
 use serde::{Deserialize, Serialize};
@@ -140,6 +140,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/{id}/files", get(image_list_files))
         .route("/images/{id}/file", get(image_read_file))
         .route("/images/{id}/scan", get(scan_image))
+        .route("/images/{id}/history", get(image_history))
         // Volumes
         .route("/volumes", get(list_volumes).post(create_volume_handler))
         .route("/volumes/{name}", get(inspect_volume))
@@ -149,6 +150,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/volumes/{name}/containers", get(volume_containers))
         // Networks
         .route("/networks", get(list_networks).post(create_network_handler))
+        .route("/networks/topology", get(network_topology))
         .route("/networks/{name}", get(inspect_network))
         .route("/networks/{name}", delete(remove_network_handler))
         // Stacks (compose projects)
@@ -172,7 +174,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/deployments/{namespace}", get(k8s_deployments))
         .route("/k8s/services/{namespace}", get(k8s_services))
         .route("/k8s/ingresses/{namespace}", get(k8s_ingresses))
-        .route("/k8s/pvcs/{namespace}", get(k8s_pvcs))
+        .route("/k8s/pvcs/{namespace}", get(k8s_pvcs).post(k8s_create_pvc))
         .route("/k8s/pvs", get(k8s_pvs))
         .route("/k8s/pods/{namespace}/{name}", delete(k8s_delete_pod))
         .route("/k8s/deployments/{namespace}/{name}/scale", post(k8s_scale))
@@ -184,7 +186,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/namespaces", post(k8s_create_namespace))
         .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
         .route("/k8s/configmaps/{namespace}", get(k8s_configmaps))
-        .route("/k8s/secrets/{namespace}", get(k8s_secrets))
+        .route("/k8s/secrets/{namespace}", get(k8s_secrets).post(k8s_create_secret))
+        .route("/k8s/secrets/{namespace}/{name}", delete(k8s_delete_secret).put(k8s_update_secret))
         .route("/k8s/metrics/{namespace}", get(k8s_pod_metrics))
         .route("/k8s/deployments/{namespace}/{name}/history", get(k8s_rollout_history))
         .route("/k8s/deployments/{namespace}/{name}/rollback", post(k8s_rollout_undo))
@@ -192,6 +195,12 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/helm/uninstall", post(k8s_helm_uninstall))
         .route("/k8s/helm/available", get(k8s_helm_available))
         .route("/k8s/helm/install", post(k8s_helm_install))
+        .route("/k8s/jobs/{namespace}", get(k8s_jobs))
+        .route("/k8s/cronjobs/{namespace}", get(k8s_cronjobs))
+        .route("/k8s/cronjobs/{namespace}/{name}/trigger", post(k8s_trigger_cronjob))
+        .route("/k8s/jobs/{namespace}/{name}", delete(k8s_delete_job))
+        .route("/k8s/cronjobs/{namespace}/{name}", delete(k8s_delete_cronjob))
+        .route("/k8s/cronjobs/{namespace}/{name}/suspend", put(k8s_suspend_cronjob))
         .route("/k8s/pods/{namespace}/{name}/terminal", get(k8s_pod_terminal_ws))
         // Environment
         .route("/environment/status", get(env_status))
@@ -769,6 +778,15 @@ async fn inspect_image(
     Ok(Json(raw))
 }
 
+async fn image_history(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let history = state.runtime.docker.image_history(&id).await
+        .map_err(|e| anyhow::anyhow!("Failed to get image history: {e}"))?;
+    Ok(Json(history))
+}
+
 async fn remove_image(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -847,6 +865,8 @@ struct BuildRequest {
     context_path: String,
     dockerfile: Option<String>,
     tag: Option<String>,
+    #[serde(default)]
+    build_args: Option<HashMap<String, String>>,
 }
 
 async fn build_image(
@@ -858,6 +878,7 @@ async fn build_image(
         &body.context_path,
         body.dockerfile.as_deref(),
         body.tag.as_deref(),
+        body.build_args,
     )
     .await?;
 
@@ -1100,14 +1121,15 @@ async fn volume_list_files(
     use orca_core::runtime::{ContainerCreateOpts, VolumeMount};
 
     let subpath = query.path.unwrap_or_default();
-    let mut sanitized = subpath.replace('\0', "");
-    while sanitized.contains("..") {
-        sanitized = sanitized.replace("..", "");
-    }
-    let data_path = if sanitized.is_empty() || sanitized == "/" {
+    let sanitized: String = subpath
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+        .collect::<Vec<_>>()
+        .join("/");
+    let data_path = if sanitized.is_empty() {
         "/data".to_string()
     } else {
-        format!("/data/{}", sanitized.trim_start_matches('/'))
+        format!("/data/{}", sanitized)
     };
 
     // Ensure alpine is available
@@ -1231,8 +1253,12 @@ async fn volume_read_file(
     use orca_core::runtime::{ContainerCreateOpts, VolumeMount};
 
     let file_path = query.path.unwrap_or_default();
-    let sanitized = file_path.replace("..", "").replace('\0', "");
-    let data_path = format!("/data/{}", sanitized.trim_start_matches('/'));
+    let sanitized: String = file_path
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+        .collect::<Vec<_>>()
+        .join("/");
+    let data_path = format!("/data/{}", sanitized);
 
     ensure_image(&state, "alpine:latest").await?;
 
@@ -1295,14 +1321,15 @@ async fn image_list_files(
     let image_ref = resolve_image_ref(&state, &image_id).await?;
 
     let subpath = query.path.unwrap_or_default();
-    let mut sanitized = subpath.replace('\0', "");
-    while sanitized.contains("..") {
-        sanitized = sanitized.replace("..", "");
-    }
-    let browse_path = if sanitized.is_empty() || sanitized == "/" {
+    let sanitized: String = subpath
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+        .collect::<Vec<_>>()
+        .join("/");
+    let browse_path = if sanitized.is_empty() {
         "/".to_string()
     } else {
-        format!("/{}", sanitized.trim_start_matches('/'))
+        format!("/{}", sanitized)
     };
 
     let lines = run_in_image(&state.runtime.docker, &image_ref,
@@ -1354,8 +1381,12 @@ async fn image_read_file(
     let image_ref = resolve_image_ref(&state, &image_id).await?;
 
     let file_path = query.path.unwrap_or_default();
-    let sanitized = file_path.replace("..", "").replace('\0', "");
-    let full_path = format!("/{}", sanitized.trim_start_matches('/'));
+    let sanitized: String = file_path
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+        .collect::<Vec<_>>()
+        .join("/");
+    let full_path = format!("/{}", sanitized);
 
     let lines = run_in_image(&state.runtime.docker, &image_ref,
         vec!["cat", &full_path]).await?;
@@ -1715,6 +1746,57 @@ async fn remove_network_handler(
 ) -> Result<impl IntoResponse, ApiError> {
     NetworkManager::remove(state.runtime.as_ref(), &name).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn network_topology(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let networks = state.runtime.docker.list_networks::<String>(None).await
+        .map_err(|e| ApiError(anyhow::anyhow!("Failed to list networks: {e}")))?;
+
+    let mut topology = Vec::new();
+    for net in &networks {
+        let net_name = net.name.clone().unwrap_or_default();
+        let net_id = net.id.clone().unwrap_or_default();
+        let driver = net.driver.clone().unwrap_or_default();
+
+        let (subnet, gateway) = net
+            .ipam
+            .as_ref()
+            .and_then(|ipam| ipam.config.as_ref())
+            .and_then(|configs: &Vec<_>| configs.first())
+            .map(|c| (c.subnet.clone(), c.gateway.clone()))
+            .unwrap_or((None, None));
+
+        // Inspect the network to get connected containers (list doesn't include them)
+        let mut containers = Vec::new();
+        if let Ok(detail) = state.runtime.docker.inspect_network::<String>(&net_id, None).await {
+            if let Some(ref cmap) = detail.containers {
+                for (cid, endpoint) in cmap {
+                    let cname = endpoint.name.clone()
+                        .unwrap_or_else(|| cid[..12.min(cid.len())].to_string());
+                    let ip = endpoint.ipv4_address.clone()
+                        .unwrap_or_default();
+                    containers.push(serde_json::json!({
+                        "id": cid,
+                        "name": cname,
+                        "ip": ip,
+                    }));
+                }
+            }
+        }
+
+        topology.push(serde_json::json!({
+            "id": net_id,
+            "name": net_name,
+            "driver": driver,
+            "subnet": subnet,
+            "gateway": gateway,
+            "containers": containers,
+        }));
+    }
+
+    Ok(Json(topology))
 }
 
 // --- Stacks (Compose Projects) ---
@@ -2155,6 +2237,68 @@ async fn k8s_secrets(
     Ok(Json(secrets))
 }
 
+#[derive(Deserialize)]
+struct CreateSecretRequest {
+    name: String,
+    data: HashMap<String, String>,
+    #[serde(default)]
+    secret_type: Option<String>,
+}
+
+async fn k8s_create_secret(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+    Json(body): Json<CreateSecretRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    state
+        .k8s
+        .create_secret(&namespace, &body.name, body.data, body.secret_type.as_deref())
+        .await?;
+    Ok(StatusCode::CREATED)
+}
+
+async fn k8s_delete_secret(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_secret(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct UpdateSecretRequest {
+    data: HashMap<String, String>,
+}
+
+async fn k8s_update_secret(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+    Json(body): Json<UpdateSecretRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.update_secret(&namespace, &name, body.data).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct CreatePvcRequest {
+    name: String,
+    storage_class: String,
+    size: String,
+    access_modes: Vec<String>,
+}
+
+async fn k8s_create_pvc(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+    Json(body): Json<CreatePvcRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    state
+        .k8s
+        .create_pvc(&namespace, &body.name, &body.storage_class, &body.size, body.access_modes)
+        .await?;
+    Ok(StatusCode::CREATED)
+}
+
 async fn k8s_pod_metrics(
     State(state): State<Arc<AppState>>,
     Path(namespace): Path<String>,
@@ -2183,6 +2327,62 @@ async fn k8s_rollout_undo(
 ) -> Result<impl IntoResponse, ApiError> {
     let result = state.k8s.rollout_undo(&namespace, &name, body.revision).await?;
     Ok(Json(serde_json::json!({ "output": result })))
+}
+
+// --- Jobs / CronJobs ---
+
+async fn k8s_jobs(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let jobs = state.k8s.list_jobs(&namespace).await?;
+    Ok(Json(jobs))
+}
+
+async fn k8s_cronjobs(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let cronjobs = state.k8s.list_cronjobs(&namespace).await?;
+    Ok(Json(cronjobs))
+}
+
+async fn k8s_trigger_cronjob(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    let job_name = state.k8s.trigger_cronjob(&namespace, &name).await?;
+    Ok(Json(serde_json::json!({ "job": job_name })))
+}
+
+async fn k8s_delete_job(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_job(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_delete_cronjob(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_cronjob(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct SuspendCronJobRequest {
+    suspend: bool,
+}
+
+async fn k8s_suspend_cronjob(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+    Json(body): Json<SuspendCronJobRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.suspend_cronjob(&namespace, &name, body.suspend).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 async fn k8s_helm_list(
@@ -3182,12 +3382,14 @@ async fn get_ai_settings(
 
 #[derive(Deserialize)]
 struct CleanupRequest {
-    /// What to clean up: "config", "vms", "templates", "all"
+    /// What to clean up: "config", "vms", "templates", "all",
+    /// or Docker resource scopes: "containers", "images", "volumes", "networks", "build_cache"
     #[serde(default)]
     scope: String,
 }
 
 async fn cleanup(
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CleanupRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut log = Vec::new();
@@ -3259,6 +3461,84 @@ async fn cleanup(
         if config_path.exists() {
             log.push(format!("Removing config at {}", config_path.display()));
             let _ = std::fs::remove_dir_all(&config_path);
+        }
+    }
+
+    // Docker resource pruning: stopped containers
+    if scope == "containers" {
+        let containers = state.runtime.list_containers(true).await?;
+        let mut removed = 0u64;
+        for c in &containers {
+            if matches!(c.state, orca_core::runtime::ContainerState::Exited | orca_core::runtime::ContainerState::Dead | orca_core::runtime::ContainerState::Created) {
+                if let Err(e) = state.runtime.remove_container(&c.id, true).await {
+                    log.push(format!("Failed to remove container {}: {e}", &c.id[..12.min(c.id.len())]));
+                } else {
+                    removed += 1;
+                }
+            }
+        }
+        log.push(format!("Removed {removed} stopped container(s)"));
+    }
+
+    // Docker resource pruning: images
+    if scope == "images" {
+        match ImageManager::prune(state.runtime.as_ref()).await {
+            Ok(result) => {
+                let count = result.images_deleted.len();
+                let bytes = result.space_reclaimed;
+                log.push(format!("Removed {count} image(s), reclaimed {bytes} bytes"));
+            }
+            Err(e) => log.push(format!("Failed to prune images: {e}")),
+        }
+    }
+
+    // Docker resource pruning: volumes
+    if scope == "volumes" {
+        match VolumeManager::prune(state.runtime.as_ref()).await {
+            Ok(bytes) => log.push(format!("Pruned volumes, reclaimed {bytes} bytes")),
+            Err(e) => log.push(format!("Failed to prune volumes: {e}")),
+        }
+    }
+
+    // Docker resource pruning: networks
+    if scope == "networks" {
+        match state.runtime.docker.prune_networks::<String>(None).await {
+            Ok(result) => {
+                let count = result.networks_deleted.map(|n| n.len()).unwrap_or(0);
+                log.push(format!("Removed {count} unused network(s)"));
+            }
+            Err(e) => log.push(format!("Failed to prune networks: {e}")),
+        }
+    }
+
+    // Docker resource pruning: build cache (via CLI since bollard doesn't expose this)
+    if scope == "build_cache" {
+        use std::process::Stdio;
+        let runtime_cmd = if state.runtime.kind() == orca_core::runtime::RuntimeKind::Podman {
+            "podman"
+        } else {
+            "docker"
+        };
+        match tokio::process::Command::new(runtime_cmd)
+            .args(["builder", "prune", "-f"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+        {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if output.status.success() {
+                    let reclaimed_line = stdout.lines()
+                        .find(|l| l.contains("reclaimed") || l.contains("Total:"))
+                        .unwrap_or("Build cache cleared");
+                    log.push(reclaimed_line.to_string());
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log.push(format!("Build cache prune failed: {stderr}"));
+                }
+            }
+            Err(e) => log.push(format!("Failed to run build cache prune: {e}")),
         }
     }
 

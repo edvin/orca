@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, Index, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Image, ImageSearchResult, ScanResult, ScanVulnerability } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
@@ -35,12 +35,14 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [buildTag, setBuildTag] = createSignal("");
   const [building, setBuilding] = createSignal(false);
   const [buildLog, setBuildLog] = createSignal<string[]>([]);
+  const [buildOutput, setBuildOutput] = createSignal<string[]>([]);
   const [showAuth, setShowAuth] = createSignal(false);
   const [authUsername, setAuthUsername] = createSignal("");
   const [authPassword, setAuthPassword] = createSignal("");
   const [runImage, setRunImage] = createSignal<string | null>(null);
   const [inspecting, setInspecting] = createSignal<string | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
+  const [imageHistoryData, setImageHistoryData] = createSignal<any[]>([]);
   const [searchResults, setSearchResults] = createSignal<ImageSearchResult[]>([]);
   const [selectedResultIndex, setSelectedResultIndex] = createSignal(-1);
   const [searching, setSearching] = createSignal(false);
@@ -65,6 +67,17 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [scanning, setScanning] = createSignal(false);
   const [scanImageId, setScanImageId] = createSignal<string | null>(null);
 
+  // Tag dialog state
+  const [showTagDialog, setShowTagDialog] = createSignal(false);
+  const [tagSource, setTagSource] = createSignal("");
+  const [tagSourceLabel, setTagSourceLabel] = createSignal("");
+  const [tagRepo, setTagRepo] = createSignal("");
+  const [tagValue, setTagValue] = createSignal("latest");
+  const [tagging, setTagging] = createSignal(false);
+
+  // Build args state
+  const [buildArgs, setBuildArgs] = createSignal<Array<{key: string, value: string}>>([]);
+
   const refresh = async () => {
     try {
       const result = (await invoke("list_images")) as Image[];
@@ -75,6 +88,16 @@ export default function ImagesPage(props: ImagesPageProps) {
   };
 
   useRefresh(refresh);
+
+  // Auto-scroll build output to bottom when new lines arrive
+  createEffect(() => {
+    buildOutput(); // track dependency
+    if (buildOutputRef) {
+      requestAnimationFrame(() => {
+        buildOutputRef!.scrollTop = buildOutputRef!.scrollHeight;
+      });
+    }
+  });
 
   onMount(() => {
     refresh();
@@ -233,27 +256,79 @@ export default function ImagesPage(props: ImagesPageProps) {
     setPulling(false);
   };
 
+  let buildOutputRef: HTMLDivElement | undefined;
+
   const doBuild = async () => {
     const path = buildPath().trim();
     if (!path) return;
     setBuilding(true);
+    setBuildOutput([]);
     setBuildLog([]);
     try {
-      const result = (await invoke("build_image", {
-        contextPath: path,
-        dockerfile: buildDockerfile().trim() || null,
-        tag: buildTag().trim() || null,
-      })) as any;
-      setBuildLog(result.logs || []);
-      if (result.success) {
+      const token = await invoke("get_api_token") as string;
+      const response = await fetch("http://127.0.0.1:9477/api/v1/images/build", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          context_path: path,
+          dockerfile: buildDockerfile().trim() || undefined,
+          tag: buildTag().trim() || undefined,
+          build_args: buildArgs().reduce((acc, { key, value }) => {
+            if (key.trim()) acc[key.trim()] = value;
+            return acc;
+          }, {} as Record<string, string>),
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let hadError = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "{}") continue;
+            try {
+              const parsed = JSON.parse(data);
+              const text = parsed.stream || parsed.error || parsed.status || "";
+              if (parsed.error) hadError = true;
+              if (text) {
+                setBuildOutput(prev => [...prev, text]);
+              }
+            } catch {
+              if (data.trim()) {
+                setBuildOutput(prev => [...prev, data]);
+              }
+            }
+          }
+        }
+      }
+
+      if (hadError) {
+        showToast("Build failed -- check build output", "error");
+      } else {
         showToast("Image built successfully", "success");
         await refresh();
-      } else {
-        showToast("Build failed -- check build log", "error");
       }
     } catch (e) {
       logError(`Failed to build image: ${e}`, `Context "${path}"${buildTag().trim() ? `, tag "${buildTag().trim()}"` : ""}`);
       showToast(`Build error: ${e}`, "error");
+      setBuildOutput(prev => [...prev, `Error: ${e}`]);
     }
     setBuilding(false);
   };
@@ -508,13 +583,19 @@ export default function ImagesPage(props: ImagesPageProps) {
     if (inspecting() === id) {
       setInspecting(null);
       setInspectData(null);
+      setImageHistoryData([]);
       return;
     }
     setInspecting(id);
     setInspectData(null);
+    setImageHistoryData([]);
     try {
-      const data = await invoke("inspect_image", { id });
+      const [data, history] = await Promise.all([
+        invoke("inspect_image", { id }),
+        invoke("image_history", { id }).catch(() => []),
+      ]);
       setInspectData(data);
+      setImageHistoryData(Array.isArray(history) ? history : []);
     } catch (e) {
       logError(`Failed to inspect image: ${e}`, `Image ${id}`);
     }
@@ -591,6 +672,54 @@ export default function ImagesPage(props: ImagesPageProps) {
                 />
               </div>
             </div>
+            <div>
+              <button
+                class="btn"
+                style={{ "font-size": "12px", padding: "4px 10px" }}
+                onClick={() => setBuildArgs([...buildArgs(), { key: "", value: "" }])}
+              >
+                + Add build arg
+              </button>
+              <Show when={buildArgs().length > 0}>
+                <div style={{ "margin-top": "8px" }}>
+                  <Index each={buildArgs()}>
+                    {(arg, i) => (
+                      <div style={{ display: "flex", gap: "8px", "margin-bottom": "6px" }}>
+                        <input
+                          class="form-input"
+                          placeholder="ARG_NAME"
+                          value={arg().key}
+                          onInput={(e) => {
+                            const next = [...buildArgs()];
+                            next[i] = { ...next[i], key: e.currentTarget.value };
+                            setBuildArgs(next);
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                        <input
+                          class="form-input"
+                          placeholder="value"
+                          value={arg().value}
+                          onInput={(e) => {
+                            const next = [...buildArgs()];
+                            next[i] = { ...next[i], value: e.currentTarget.value };
+                            setBuildArgs(next);
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                        <button
+                          class="action-icon"
+                          onClick={() => setBuildArgs(buildArgs().filter((_, j) => j !== i))}
+                          style={{ color: "#f85149" }}
+                        >
+                          {"\u00d7"}
+                        </button>
+                      </div>
+                    )}
+                  </Index>
+                </div>
+              </Show>
+            </div>
             <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
               <button
                 class="btn btn-primary"
@@ -602,18 +731,46 @@ export default function ImagesPage(props: ImagesPageProps) {
               <button class="btn" onClick={() => setShowBuild(false)}>
                 Cancel
               </button>
+              <Show when={buildOutput().length > 0 && !building()}>
+                <button class="btn" onClick={() => setBuildOutput([])}>
+                  Clear Output
+                </button>
+              </Show>
             </div>
-            <Show when={buildLog().length > 0}>
-              <pre class="log-content" style={{
-                "max-height": "200px",
-                background: "#0d1117",
-                border: "1px solid #21262d",
-                "border-radius": "6px",
-                padding: "8px",
-                "font-size": "11px",
-              }}>
-                {buildLog().join("")}
-              </pre>
+            <Show when={buildOutput().length > 0 || building()}>
+              <div
+                ref={buildOutputRef}
+                style={{
+                  background: "#0d1117",
+                  border: "1px solid #21262d",
+                  "border-radius": "6px",
+                  padding: "12px",
+                  "max-height": "400px",
+                  overflow: "auto",
+                  "font-family": "'JetBrains Mono NF', monospace",
+                  "font-size": "12px",
+                  color: "#c9d1d9",
+                  "white-space": "pre-wrap",
+                  "margin-top": "12px",
+                }}
+              >
+                <For each={buildOutput()}>
+                  {(line) => (
+                    <div style={{
+                      color: (line.includes("Error") || line.includes("error") || line.includes("ERROR"))
+                        ? "#f85149"
+                        : line.includes("Step ") || line.includes("Successfully")
+                          ? "#58a6ff"
+                          : "#c9d1d9",
+                    }}>{line}</div>
+                  )}
+                </For>
+                <Show when={building()}>
+                  <div style={{ color: "#8b949e", "margin-top": "4px" }}>
+                    <Spinner size={10} />{" "}Building...
+                  </div>
+                </Show>
+              </div>
             </Show>
           </div>
         </div>
@@ -727,6 +884,18 @@ export default function ImagesPage(props: ImagesPageProps) {
                           >▶</button>
                         </Show>
                         <button
+                          class="action-icon"
+                          title="Tag image"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTagSource(img.id);
+                            setTagSourceLabel(img.repo_tags[0] || img.id.slice(0, 12));
+                            setTagRepo("");
+                            setTagValue("latest");
+                            setShowTagDialog(true);
+                          }}
+                        ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></button>
+                        <button
                           class="action-icon action-icon-delete"
                           title="Remove image"
                           onClick={(e) => removeImage(img.id, img.repo_tags[0] || img.id, e)}
@@ -784,6 +953,127 @@ export default function ImagesPage(props: ImagesPageProps) {
                                     {Array.isArray(layers) ? layers.length : 0} layer{Array.isArray(layers) && layers.length !== 1 ? "s" : ""}
                                   </div>
                                 </div>
+
+                                {/* Layer visualization */}
+                                <Show when={imageHistoryData().length > 0}>
+                                  {(() => {
+                                    const history = imageHistoryData();
+                                    // History is returned newest-first; reverse for display
+                                    const historyItems = [...history].reverse();
+                                    const maxSize = Math.max(...historyItems.map((h: any) => h.Size || h.size || 0), 1);
+                                    const totalSize = historyItems.reduce((sum: number, h: any) => sum + (h.Size || h.size || 0), 0);
+
+                                    return (
+                                      <div style={{ "margin-top": "16px" }}>
+                                        <div style={{
+                                          display: "flex", "align-items": "center", "justify-content": "space-between",
+                                          "margin-bottom": "10px",
+                                        }}>
+                                          <span style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>
+                                            Image Layers
+                                          </span>
+                                          <span style={{ "font-size": "12px", color: "#8b949e" }}>
+                                            Total: {formatBytes(totalSize)}
+                                          </span>
+                                        </div>
+                                        <div style={{
+                                          background: "#0d1117",
+                                          border: "1px solid #21262d",
+                                          "border-radius": "8px",
+                                          padding: "8px",
+                                          "max-height": "320px",
+                                          overflow: "auto",
+                                        }}>
+                                          <For each={historyItems}>
+                                            {(item: any, idx) => {
+                                              const layerSize = item.Size || item.size || 0;
+                                              const createdBy = item.CreatedBy || item.created_by || "";
+                                              // Parse instruction from the created_by field
+                                              const instruction = (() => {
+                                                if (!createdBy) return "unknown";
+                                                // Docker buildkit format: /bin/sh -c #(nop)  CMD ["node"]
+                                                const nopMatch = createdBy.match(/#\(nop\)\s+(.+)/);
+                                                if (nopMatch) return nopMatch[1].trim();
+                                                // Regular RUN command
+                                                const shMatch = createdBy.match(/\/bin\/sh\s+-c\s+(.+)/);
+                                                if (shMatch) return `RUN ${shMatch[1].trim()}`;
+                                                // Buildkit format
+                                                if (createdBy.startsWith("RUN ") || createdBy.startsWith("COPY ") || createdBy.startsWith("ADD ") || createdBy.startsWith("CMD ") || createdBy.startsWith("ENTRYPOINT ") || createdBy.startsWith("ENV ") || createdBy.startsWith("EXPOSE ") || createdBy.startsWith("WORKDIR ") || createdBy.startsWith("LABEL ") || createdBy.startsWith("ARG ")) {
+                                                  return createdBy;
+                                                }
+                                                return createdBy.length > 80 ? createdBy.slice(0, 80) + "..." : createdBy;
+                                              })();
+                                              // Determine if this is a "base" layer (empty_layer tag or early layers)
+                                              const isEmptyLayer = item.empty_layer === true || (item.Tags && item.Tags !== null);
+                                              const isBaseLayer = idx() < Math.max(1, historyItems.length - 4) && layerSize > 0;
+                                              const barWidth = maxSize > 0 ? Math.max(2, (layerSize / maxSize) * 100) : 2;
+                                              const barColor = isBaseLayer ? "#30363d" : "#1f6feb";
+                                              const borderColor = isBaseLayer ? "#484f58" : "#58a6ff";
+
+                                              return (
+                                                <div
+                                                  title={createdBy}
+                                                  style={{
+                                                    position: "relative",
+                                                    "margin-bottom": "4px",
+                                                    "border-left": `4px solid ${borderColor}`,
+                                                    "border-radius": "0 4px 4px 0",
+                                                    overflow: "hidden",
+                                                    "min-height": "28px",
+                                                  }}
+                                                >
+                                                  {/* Size bar background */}
+                                                  <div style={{
+                                                    position: "absolute",
+                                                    top: 0,
+                                                    left: 0,
+                                                    height: "100%",
+                                                    width: `${barWidth}%`,
+                                                    background: barColor,
+                                                    opacity: "0.15",
+                                                    "border-radius": "0 4px 4px 0",
+                                                  }} />
+                                                  {/* Content */}
+                                                  <div style={{
+                                                    position: "relative",
+                                                    display: "flex",
+                                                    "align-items": "center",
+                                                    "justify-content": "space-between",
+                                                    padding: "4px 10px",
+                                                    gap: "12px",
+                                                  }}>
+                                                    <span style={{
+                                                      "font-family": "'JetBrains Mono NF', monospace",
+                                                      "font-size": "11px",
+                                                      color: isBaseLayer ? "#8b949e" : "#c9d1d9",
+                                                      overflow: "hidden",
+                                                      "text-overflow": "ellipsis",
+                                                      "white-space": "nowrap",
+                                                      flex: "1",
+                                                      "min-width": "0",
+                                                    }}>
+                                                      {instruction}
+                                                    </span>
+                                                    <span style={{
+                                                      "font-family": "'JetBrains Mono NF', monospace",
+                                                      "font-size": "11px",
+                                                      color: layerSize > 0 ? (isBaseLayer ? "#8b949e" : "#58a6ff") : "#484f58",
+                                                      "flex-shrink": "0",
+                                                      "white-space": "nowrap",
+                                                    }}>
+                                                      {layerSize > 0 ? formatBytes(layerSize) : "0 B"}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                              );
+                                            }}
+                                          </For>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                </Show>
+
                                 <div style={{ "margin-top": "12px", display: "flex", gap: "8px", "align-items": "center", "flex-wrap": "wrap" }}>
                                   <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); openFileBrowser(img.id); }}>
                                     Browse Files
@@ -1002,6 +1292,71 @@ export default function ImagesPage(props: ImagesPageProps) {
           onClose={() => setRunImage(null)}
           onCreated={refresh}
         />
+      </Show>
+
+      {/* Tag Image Dialog */}
+      <Show when={showTagDialog()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !tagging()) setShowTagDialog(false); (e.currentTarget as any).__mdOverlay = false; }}
+        >
+          <div class="modal-dialog" style={{ "max-width": "500px" }}>
+            <div class="modal-header">
+              <span class="modal-title">Tag Image</span>
+              <button class="modal-close" onClick={() => { if (!tagging()) setShowTagDialog(false); }}>{"\u00d7"}</button>
+            </div>
+            <div class="modal-body">
+              <div style={{ "margin-bottom": "14px", color: "#8b949e", "font-size": "13px" }}>
+                Source: <span class="mono" style={{ color: "#e6edf3" }}>{tagSourceLabel()}</span>
+              </div>
+              <div class="form-group" style={{ "margin-bottom": "12px" }}>
+                <label class="form-label">Repository</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="myregistry.com/myapp"
+                  value={tagRepo()}
+                  onInput={(e) => setTagRepo(e.currentTarget.value)}
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tag</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="latest"
+                  value={tagValue()}
+                  onInput={(e) => setTagValue(e.currentTarget.value)}
+                />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => { if (!tagging()) setShowTagDialog(false); }} disabled={tagging()}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                disabled={tagging() || !tagRepo().trim()}
+                onClick={async () => {
+                  setTagging(true);
+                  try {
+                    await invoke("tag_image", {
+                      source: tagSource(),
+                      repo: tagRepo().trim(),
+                      tag: tagValue().trim() || "latest",
+                    });
+                    showToast("Image tagged successfully", "success");
+                    setShowTagDialog(false);
+                    await refresh();
+                  } catch (e) {
+                    showToast(`Tag failed: ${e}`, "error");
+                  }
+                  setTagging(false);
+                }}
+              >
+                {tagging() ? (<><Spinner size={12} />{" Tagging..."}</>) : "Tag"}
+              </button>
+            </div>
+          </div>
+        </div>
       </Show>
 
       {/* Prune Confirmation Dialog */}

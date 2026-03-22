@@ -1,5 +1,6 @@
 //! Container image management.
 
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,5 +72,6 @@ pub trait ImageManager {
         context_path: &str,
         dockerfile: Option<&str>,
         tag: Option<&str>,
+        build_args: Option<HashMap<String, String>>,
     ) -> anyhow::Result<tokio::sync::mpsc::Receiver<BuildProgress>>;
 }

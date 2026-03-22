@@ -158,6 +158,30 @@ pub struct RolloutRevision {
     pub change_cause: Option<String>,
 }
 
+/// A Kubernetes Job.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Job {
+    pub name: String,
+    pub namespace: String,
+    pub status: String,       // "Active" | "Succeeded" | "Failed"
+    pub completions: String,  // "1/1" format
+    pub duration: String,
+    pub start_time: Option<String>,
+    pub created_at: String,
+}
+
+/// A Kubernetes CronJob.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CronJob {
+    pub name: String,
+    pub namespace: String,
+    pub schedule: String,
+    pub suspend: bool,
+    pub active: u32,
+    pub last_schedule: Option<String>,
+    pub created_at: String,
+}
+
 /// A Helm release.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HelmRelease {
@@ -263,4 +287,52 @@ pub trait K8sManager {
 
     /// Rollback a deployment to a specific revision (or previous if None).
     async fn rollout_undo(&self, namespace: &str, name: &str, revision: Option<u32>) -> anyhow::Result<String>;
+
+    /// List Jobs in a namespace.
+    async fn list_jobs(&self, namespace: &str) -> anyhow::Result<Vec<Job>>;
+
+    /// List CronJobs in a namespace.
+    async fn list_cronjobs(&self, namespace: &str) -> anyhow::Result<Vec<CronJob>>;
+
+    /// Manually trigger a CronJob (creates a Job from it).
+    async fn trigger_cronjob(&self, namespace: &str, name: &str) -> anyhow::Result<String>;
+
+    /// Delete a Job.
+    async fn delete_job(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
+    /// Delete a CronJob.
+    async fn delete_cronjob(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
+    /// Suspend or unsuspend a CronJob.
+    async fn suspend_cronjob(&self, namespace: &str, name: &str, suspend: bool) -> anyhow::Result<()>;
+
+    /// Create a Secret in a namespace.
+    async fn create_secret(
+        &self,
+        namespace: &str,
+        name: &str,
+        data: std::collections::HashMap<String, String>,
+        secret_type: Option<&str>,
+    ) -> anyhow::Result<()>;
+
+    /// Delete a Secret.
+    async fn delete_secret(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
+    /// Update a Secret's data.
+    async fn update_secret(
+        &self,
+        namespace: &str,
+        name: &str,
+        data: std::collections::HashMap<String, String>,
+    ) -> anyhow::Result<()>;
+
+    /// Create a PersistentVolumeClaim.
+    async fn create_pvc(
+        &self,
+        namespace: &str,
+        name: &str,
+        storage_class: &str,
+        size: &str,
+        access_modes: Vec<String>,
+    ) -> anyhow::Result<()>;
 }

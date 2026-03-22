@@ -583,7 +583,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
 
             {/* Container info grid */}
             <Show when={container()}>
-              {(c) => (
+              {(c) => (<>
                 <div class="detail-info-section">
                   <h3 class="detail-section-title">Container Info</h3>
                   <div class="card-grid">
@@ -629,8 +629,147 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                       </Show>
                     </div>
                   </div>
+
+                  {/* Restart Policy & Restart Count */}
+                  <div style={{ display: "flex", "align-items": "center", gap: "12px", "margin-top": "16px" }}>
+                    <Show when={c().restart_policy && c().restart_policy !== "no"}>
+                      <span style={{
+                        display: "inline-flex",
+                        "align-items": "center",
+                        padding: "3px 10px",
+                        "border-radius": "12px",
+                        "font-size": "11px",
+                        "font-weight": "500",
+                        background: "rgba(88, 166, 255, 0.1)",
+                        color: "#58a6ff",
+                        border: "1px solid rgba(88, 166, 255, 0.2)",
+                      }}>
+                        Restart: {c().restart_policy}
+                      </span>
+                    </Show>
+                    <Show when={c().restart_count !== undefined && c().restart_count !== null && c().restart_count! > 0}>
+                      <span style={{
+                        "font-size": "12px",
+                        color: "#d29922",
+                      }}>
+                        Restarted {c().restart_count} {c().restart_count === 1 ? "time" : "times"}
+                      </span>
+                    </Show>
+                  </div>
                 </div>
-              )}
+
+                {/* Health Check Section */}
+                <Show when={inspectData()}>
+                  <div class="detail-info-section">
+                    <h3 class="detail-section-title">Health</h3>
+                    <Show when={inspectData()?.health_status && inspectData()?.health_status !== "none" && inspectData()?.health_status !== ""}
+                      fallback={
+                        <div style={{ color: "#484f58", "font-size": "13px", padding: "8px 0" }}>
+                          No health check configured
+                        </div>
+                      }
+                    >
+                      <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
+                        {/* Health status badge */}
+                        <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                          <span style={{
+                            display: "inline-flex",
+                            "align-items": "center",
+                            gap: "6px",
+                            padding: "4px 12px",
+                            "border-radius": "12px",
+                            "font-size": "12px",
+                            "font-weight": "600",
+                            background:
+                              inspectData()?.health_status === "healthy"
+                                ? "rgba(63, 185, 80, 0.15)"
+                                : inspectData()?.health_status === "unhealthy"
+                                ? "rgba(248, 81, 73, 0.15)"
+                                : "rgba(210, 153, 34, 0.15)",
+                            color:
+                              inspectData()?.health_status === "healthy"
+                                ? "#3fb950"
+                                : inspectData()?.health_status === "unhealthy"
+                                ? "#f85149"
+                                : "#d29922",
+                            border: `1px solid ${
+                              inspectData()?.health_status === "healthy"
+                                ? "rgba(63, 185, 80, 0.3)"
+                                : inspectData()?.health_status === "unhealthy"
+                                ? "rgba(248, 81, 73, 0.3)"
+                                : "rgba(210, 153, 34, 0.3)"
+                            }`,
+                          }}>
+                            <span style={{ "font-size": "10px" }}>{"\u25CF"}</span>
+                            {inspectData()?.health_status === "healthy"
+                              ? "Healthy"
+                              : inspectData()?.health_status === "unhealthy"
+                              ? "Unhealthy"
+                              : "Starting"}
+                          </span>
+                        </div>
+
+                        {/* Health check log table */}
+                        <Show when={inspectData()?.health_log && inspectData()?.health_log.length > 0}>
+                          <div style={{ "overflow-x": "auto" }}>
+                            <table style={{
+                              width: "100%",
+                              "border-collapse": "collapse",
+                              "font-size": "12px",
+                            }}>
+                              <thead>
+                                <tr style={{ "border-bottom": "1px solid rgba(255,255,255,0.06)" }}>
+                                  <th style={{ padding: "6px 10px", "text-align": "left", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Time</th>
+                                  <th style={{ padding: "6px 10px", "text-align": "center", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Exit Code</th>
+                                  <th style={{ padding: "6px 10px", "text-align": "left", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Output</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <For each={inspectData()?.health_log || []}>
+                                  {(entry: { output: string; exit_code: number; started_at: string; finished_at: string }) => (
+                                    <tr style={{ "border-bottom": "1px solid rgba(255,255,255,0.03)" }}>
+                                      <td style={{
+                                        padding: "6px 10px",
+                                        color: "#8b949e",
+                                        "white-space": "nowrap",
+                                        "font-size": "11px",
+                                      }}>
+                                        {entry.started_at ? formatTimestamp(entry.started_at) : "-"}
+                                      </td>
+                                      <td style={{
+                                        padding: "6px 10px",
+                                        "text-align": "center",
+                                        color: entry.exit_code === 0 ? "#3fb950" : "#f85149",
+                                        "font-weight": "600",
+                                      }}>
+                                        {entry.exit_code}
+                                      </td>
+                                      <td style={{
+                                        padding: "6px 10px",
+                                        color: "#e6edf3",
+                                        "max-width": "400px",
+                                        overflow: "hidden",
+                                        "text-overflow": "ellipsis",
+                                        "white-space": "nowrap",
+                                        "font-family": "monospace",
+                                        "font-size": "11px",
+                                      }}
+                                        title={entry.output?.trim() || ""}
+                                      >
+                                        {entry.output?.trim() || "-"}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </For>
+                              </tbody>
+                            </table>
+                          </div>
+                        </Show>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+              </>)}
             </Show>
           </div>
         </Show>

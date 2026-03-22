@@ -1,11 +1,11 @@
-import { createSignal, onMount, onCleanup, For, Show, Index } from "solid-js";
+import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, Image, ComposeProject, SystemHealth } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
-import { recordMetrics, getCpuHistory, getMemoryHistory, getAggregatedCpuHistory, getAggregatedMemoryHistory } from "../lib/metricsStore";
+import { recordMetrics } from "../lib/metricsStore";
 
-import Sparkline from "../components/Sparkline";
+import TimeChart from "../components/TimeChart";
 import LastUpdated from "../components/LastUpdated";
 
 /** Wrap an invoke call with a timeout (ms). Rejects on timeout. */
@@ -31,6 +31,11 @@ export default function DashboardPage(props: DashboardPageProps) {
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
   const [containerStats, setContainerStats] = createSignal<Record<string, ContainerStats>>({});
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
+
+  const [cpuHistory, setCpuHistory] = createSignal<Array<{time: number, value: number}>>([]);
+  const [memHistory, setMemHistory] = createSignal<Array<{time: number, value: number}>>([]);
+  const [perContainerCpuHistory, setPerContainerCpuHistory] = createSignal<Record<string, Array<{time: number, value: number}>>>({});
+  const [perContainerMemHistory, setPerContainerMemHistory] = createSignal<Record<string, Array<{time: number, value: number}>>>({});
 
   const [containersState, setContainersState] = createSignal<CardState>("loading");
   const [imagesState, setImagesState] = createSignal<CardState>("loading");
@@ -104,6 +109,32 @@ export default function DashboardPage(props: DashboardPageProps) {
       }
     });
     setContainerStats(newStats);
+
+    // Update time-series history
+    const now = Date.now();
+    const aggCpu = Object.values(newStats).reduce((sum, s) => sum + s.cpu_percent, 0);
+    const aggMem = Object.values(newStats).reduce((sum, s) => sum + s.memory_usage_bytes, 0);
+
+    setCpuHistory(prev => [...prev, { time: now, value: aggCpu }].slice(-60));
+    setMemHistory(prev => [...prev, { time: now, value: aggMem }].slice(-60));
+
+    // Per-container history
+    setPerContainerCpuHistory(prev => {
+      const next = { ...prev };
+      for (const [id, s] of Object.entries(newStats)) {
+        const existing = next[id] || [];
+        next[id] = [...existing, { time: now, value: s.cpu_percent }].slice(-60);
+      }
+      return next;
+    });
+    setPerContainerMemHistory(prev => {
+      const next = { ...prev };
+      for (const [id, s] of Object.entries(newStats)) {
+        const existing = next[id] || [];
+        next[id] = [...existing, { time: now, value: s.memory_usage_bytes }].slice(-60);
+      }
+      return next;
+    });
   };
 
   onMount(() => {
@@ -151,6 +182,14 @@ export default function DashboardPage(props: DashboardPageProps) {
 
   const memPercent = (s: ContainerStats) =>
     s.memory_limit_bytes > 0 ? (s.memory_usage_bytes / s.memory_limit_bytes) * 100 : 0;
+
+  const memoryMax = () => {
+    const h = health();
+    if (h?.system_resources) return h.system_resources.memory_total_bytes;
+    const hist = memHistory();
+    if (hist.length === 0) return 1;
+    return Math.max(...hist.map(d => d.value)) * 1.5;
+  };
 
   return (
     <div>
@@ -280,27 +319,39 @@ export default function DashboardPage(props: DashboardPageProps) {
       {/* Resource usage charts */}
       <div class="dashboard-chart-row">
         <div class="dashboard-chart-card">
-          <div class="dashboard-chart-label">Combined CPU Usage</div>
-          <div class="dashboard-chart-value">{totalCpu().toFixed(1)}%</div>
-          <Sparkline
-            data={getAggregatedCpuHistory()}
-            width={480}
-            height={48}
-            color="#58a6ff"
-            fillOpacity={0.15}
-          />
+          <div style={{ padding: "16px" }}>
+            <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "12px" }}>
+              <span style={{ color: "#8b949e", "font-size": "13px" }}>CPU Usage</span>
+              <span style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>{totalCpu().toFixed(1)}%</span>
+            </div>
+            <TimeChart
+              data={cpuHistory()}
+              height={120}
+              color="#58a6ff"
+              fillColor="#58a6ff"
+              maxValue={100}
+              unit="%"
+              formatValue={(v) => `${v.toFixed(0)}%`}
+            />
+          </div>
         </div>
 
         <div class="dashboard-chart-card">
-          <div class="dashboard-chart-label">Combined Memory Usage</div>
-          <div class="dashboard-chart-value">{formatBytes(totalMemory())}</div>
-          <Sparkline
-            data={getAggregatedMemoryHistory()}
-            width={480}
-            height={48}
-            color="#a371f7"
-            fillOpacity={0.15}
-          />
+          <div style={{ padding: "16px" }}>
+            <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "12px" }}>
+              <span style={{ color: "#8b949e", "font-size": "13px" }}>Memory Usage</span>
+              <span style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>{formatBytes(totalMemory())}</span>
+            </div>
+            <TimeChart
+              data={memHistory()}
+              height={120}
+              color="#3fb950"
+              fillColor="#3fb950"
+              maxValue={memoryMax()}
+              unit="B"
+              formatValue={(v) => formatBytes(v)}
+            />
+          </div>
         </div>
       </div>
 
@@ -333,12 +384,13 @@ export default function DashboardPage(props: DashboardPageProps) {
                         {item.stats.cpu_percent.toFixed(1)}%
                       </td>
                       <td>
-                        <Sparkline
-                          data={getCpuHistory(item.container.id)}
-                          width={70}
-                          height={20}
+                        <TimeChart
+                          data={perContainerCpuHistory()[item.container.id] || []}
+                          height={40}
                           color="#58a6ff"
-                          max={100}
+                          fillColor="#58a6ff"
+                          maxValue={100}
+                          mini
                         />
                       </td>
                     </tr>
@@ -379,12 +431,12 @@ export default function DashboardPage(props: DashboardPageProps) {
                         </span>
                       </td>
                       <td>
-                        <Sparkline
-                          data={getMemoryHistory(item.container.id)}
-                          width={70}
-                          height={20}
-                          color="#a371f7"
-                          max={100}
+                        <TimeChart
+                          data={perContainerMemHistory()[item.container.id] || []}
+                          height={40}
+                          color="#3fb950"
+                          fillColor="#3fb950"
+                          mini
                         />
                       </td>
                     </tr>

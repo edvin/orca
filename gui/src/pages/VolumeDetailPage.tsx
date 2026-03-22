@@ -152,6 +152,39 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
 
   const pathSegments = () => currentPath().split("/").filter(Boolean);
 
+  const exportFileListing = async () => {
+    try {
+      // Fetch root-level files if not already loaded
+      let entries = files();
+      if (!fileBrowsingStarted() || entries.length === 0) {
+        const result = (await invoke("volume_list_files", {
+          name: props.volumeName,
+          path: null,
+        })) as { entries: FileEntry[]; path: string };
+        entries = result.entries;
+      }
+      // Format as text
+      const lines = [`Volume: ${props.volumeName}`, `Path: /${currentPath() || ""}`, ""];
+      lines.push("Name".padEnd(40) + "Size".padEnd(12) + "Permissions".padEnd(14) + "Modified");
+      lines.push("-".repeat(90));
+      for (const f of entries) {
+        const prefix = f.is_dir ? "[DIR] " : "      ";
+        lines.push(`${prefix}${f.name}`.padEnd(40) + f.size.padEnd(12) + f.permissions.padEnd(14) + f.modified);
+      }
+      // Download as text file
+      const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `volume-${props.volumeName}-listing.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("File listing exported", "success");
+    } catch (e) {
+      showToast(`Failed to export listing: ${e}`, "error");
+    }
+  };
+
   const stateClass = (state: string) => {
     switch (state) {
       case "Running": return "state-running";
@@ -194,6 +227,13 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
               </span>
 
               <div class="detail-page-actions">
+                <button
+                  class="btn btn-sm"
+                  onClick={exportFileListing}
+                  title="Export file listing as text"
+                >
+                  Export Listing
+                </button>
                 <button
                   class="btn btn-sm btn-danger"
                   onClick={doRemove}

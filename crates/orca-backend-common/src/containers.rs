@@ -376,6 +376,9 @@ fn summary_to_container(c: &bollard::models::ContainerSummary) -> Container {
         memory_limit: None,
         cpu_limit: None,
         restart_policy: None,
+        health_status: None,
+        health_log: None,
+        restart_count: None,
     }
 }
 
@@ -464,6 +467,31 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
             _ => "no".to_string(),
         });
 
+    // Extract health check status and log
+    let health_status = state_info
+        .and_then(|s| s.health.as_ref())
+        .and_then(|h| h.status.as_ref())
+        .map(|s| s.to_string());
+
+    let health_log = state_info
+        .and_then(|s| s.health.as_ref())
+        .and_then(|h| h.log.as_ref())
+        .map(|logs| {
+            logs.iter()
+                .rev()
+                .take(5)
+                .map(|entry| HealthLogEntry {
+                    output: entry.output.clone().unwrap_or_default(),
+                    exit_code: entry.exit_code.unwrap_or(-1),
+                    started_at: entry.start.as_ref().map(|d| d.to_string()).unwrap_or_default(),
+                    finished_at: entry.end.as_ref().map(|d| d.to_string()).unwrap_or_default(),
+                })
+                .collect()
+        });
+
+    // Extract restart count
+    let restart_count = info.restart_count;
+
     Container {
         id: info.id.clone().unwrap_or_default(),
         name: info
@@ -491,5 +519,8 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
         memory_limit,
         cpu_limit,
         restart_policy,
+        health_status,
+        health_log,
+        restart_count,
     }
 }

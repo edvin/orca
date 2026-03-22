@@ -120,6 +120,7 @@ impl ImageManager for BollardRuntime {
         context_path: &str,
         dockerfile: Option<&str>,
         tag: Option<&str>,
+        build_args: Option<std::collections::HashMap<String, String>>,
     ) -> anyhow::Result<tokio::sync::mpsc::Receiver<BuildProgress>> {
         let tar_bytes = create_build_context(context_path).await?;
 
@@ -130,6 +131,7 @@ impl ImageManager for BollardRuntime {
             dockerfile,
             rm: true,
             t: tag,
+            buildargs: build_args.unwrap_or_default(),
             ..Default::default()
         };
 

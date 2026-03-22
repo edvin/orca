@@ -1,5 +1,6 @@
-import { createSignal, onMount, onCleanup, For, Show, createEffect } from "solid-js";
+import { createSignal, onMount, onCleanup, For, Index, Show, createEffect } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "../components/Toast";
 import { useRefresh } from "../lib/useRefresh";
 import { confirmDanger } from "../components/ConfirmDialog";
@@ -24,9 +25,11 @@ import type {
   PodMetrics,
   RolloutRevision,
   HelmRelease,
+  K8sJob,
+  K8sCronJob,
 } from "../lib/types";
 
-type Tab = "pods" | "deployments" | "services" | "ingresses" | "storage" | "events" | "config" | "helm" | "topology";
+type Tab = "pods" | "deployments" | "services" | "ingresses" | "storage" | "events" | "config" | "helm" | "jobs" | "topology";
 
 export default function KubernetesPage() {
   const [status, setStatus] = createSignal<ClusterStatus | null>(null);
@@ -64,6 +67,24 @@ export default function KubernetesPage() {
   const [viewSecret, setViewSecret] = createSignal<K8sSecret | null>(null);
   const [revealedKeys, setRevealedKeys] = createSignal<Set<string>>(new Set());
 
+  // Secret Create/Edit
+  const [secretDialogOpen, setSecretDialogOpen] = createSignal(false);
+  const [secretDialogMode, setSecretDialogMode] = createSignal<"create" | "edit">("create");
+  const [secretDialogName, setSecretDialogName] = createSignal("");
+  const [secretDialogType, setSecretDialogType] = createSignal("Opaque");
+  const [secretDialogEntries, setSecretDialogEntries] = createSignal<{ key: string; value: string }[]>([{ key: "", value: "" }]);
+  const [secretDialogRevealed, setSecretDialogRevealed] = createSignal<Set<number>>(new Set());
+  const [secretDialogSaving, setSecretDialogSaving] = createSignal(false);
+
+  // PVC Create
+  const [pvcDialogOpen, setPvcDialogOpen] = createSignal(false);
+  const [pvcName, setPvcName] = createSignal("");
+  const [pvcStorageClass, setPvcStorageClass] = createSignal("");
+  const [pvcSizeValue, setPvcSizeValue] = createSignal("1");
+  const [pvcSizeUnit, setPvcSizeUnit] = createSignal("Gi");
+  const [pvcAccessModes, setPvcAccessModes] = createSignal<Set<string>>(new Set(["ReadWriteOnce"]));
+  const [pvcCreating, setPvcCreating] = createSignal(false);
+
   // Feature 1: Pod Metrics
   const [podMetrics, setPodMetrics] = createSignal<Record<string, PodMetrics>>({});
 
@@ -89,6 +110,10 @@ export default function KubernetesPage() {
   const [helmInstallNs, setHelmInstallNs] = createSignal("default");
   const [helmSetValues, setHelmSetValues] = createSignal<{ key: string; value: string }[]>([]);
   const [helmInstalling, setHelmInstalling] = createSignal(false);
+
+  // Jobs / CronJobs
+  const [jobs, setJobs] = createSignal<K8sJob[]>([]);
+  const [cronJobs, setCronJobs] = createSignal<K8sCronJob[]>([]);
 
   // Topology hover
   const [topoHover, setTopoHover] = createSignal<string | null>(null);
@@ -219,6 +244,13 @@ export default function KubernetesPage() {
             setHelmReleases((await invoke("k8s_helm_list")) as HelmRelease[]);
           }
         } catch { /* helm not available */ }
+      } else if (currentTab === "jobs") {
+        const [jobData, cronData] = await Promise.all([
+          invoke("k8s_jobs", { namespace: ns }) as Promise<K8sJob[]>,
+          invoke("k8s_cronjobs", { namespace: ns }) as Promise<K8sCronJob[]>,
+        ]);
+        setJobs(jobData);
+        setCronJobs(cronData);
       } else if (currentTab === "topology") {
         // Topology needs pods, deployments, services, and optionally metrics
         const [p, d, s, m] = await Promise.allSettled([
@@ -472,6 +504,92 @@ export default function KubernetesPage() {
     }
   };
 
+  // --- Secret handlers ---
+  const openCreateSecretDialog = () => {
+    setSecretDialogMode("create");
+    setSecretDialogName("");
+    setSecretDialogType("Opaque");
+    setSecretDialogEntries([{ key: "", value: "" }]);
+    setSecretDialogRevealed(new Set<number>());
+    setSecretDialogOpen(true);
+  };
+
+  const openEditSecretDialog = (sec: K8sSecret) => {
+    setSecretDialogMode("edit");
+    setSecretDialogName(sec.name);
+    setSecretDialogType(sec.secret_type);
+    const entries = Object.entries(sec.data).map(([key, value]) => {
+      try { return { key, value: atob(value) }; } catch { return { key, value }; }
+    });
+    setSecretDialogEntries(entries.length > 0 ? entries : [{ key: "", value: "" }]);
+    setSecretDialogRevealed(new Set<number>());
+    setSecretDialogOpen(true);
+  };
+
+  const handleSaveSecret = async () => {
+    const name = secretDialogName().trim();
+    if (!name) { showToast("Secret name is required", "error"); return; }
+    const entries = secretDialogEntries().filter(e => e.key.trim());
+    if (entries.length === 0) { showToast("At least one key-value entry is required", "error"); return; }
+    const data: Record<string, string> = {};
+    for (const e of entries) data[e.key.trim()] = e.value;
+    setSecretDialogSaving(true);
+    try {
+      if (secretDialogMode() === "create") {
+        await invoke("k8s_create_secret", { namespace: selectedNs(), name, data, secretType: secretDialogType() });
+        showToast(`Secret '${name}' created`, "success");
+      } else {
+        await invoke("k8s_update_secret", { namespace: selectedNs(), name, data });
+        showToast(`Secret '${name}' updated`, "success");
+      }
+      setSecretDialogOpen(false);
+      await refreshWorkloads();
+    } catch (e) {
+      showToast(`Failed to save secret: ${e}`, "error");
+    } finally {
+      setSecretDialogSaving(false);
+    }
+  };
+
+  const handleDeleteSecret = async (namespace: string, name: string) => {
+    if (!await confirmDanger("Delete Secret", `Delete secret '${name}'? This cannot be undone.`)) return;
+    try {
+      await invoke("k8s_delete_secret", { namespace, name });
+      showToast(`Secret '${name}' deleted`, "success");
+      await refreshWorkloads();
+    } catch (e) {
+      logError(`Failed to delete secret: ${e}`, `Secret "${name}" in namespace "${namespace}"`);
+      showToast(`Failed to delete secret: ${e}`, "error");
+    }
+  };
+
+  // --- PVC Create handler ---
+  const handleCreatePvc = async () => {
+    const name = pvcName().trim();
+    if (!name) { showToast("PVC name is required", "error"); return; }
+    const storageClass = pvcStorageClass().trim();
+    if (!storageClass) { showToast("Storage class is required", "error"); return; }
+    const size = `${pvcSizeValue()}${pvcSizeUnit()}`;
+    const accessModes = Array.from(pvcAccessModes());
+    if (accessModes.length === 0) { showToast("Select at least one access mode", "error"); return; }
+    setPvcCreating(true);
+    try {
+      await invoke("k8s_create_pvc", { namespace: selectedNs(), name, storageClass, size, accessModes });
+      showToast(`PVC '${name}' created`, "success");
+      setPvcDialogOpen(false);
+      setPvcName("");
+      setPvcStorageClass("");
+      setPvcSizeValue("1");
+      setPvcSizeUnit("Gi");
+      setPvcAccessModes(new Set(["ReadWriteOnce"]));
+      await refreshWorkloads();
+    } catch (e) {
+      showToast(`Failed to create PVC: ${e}`, "error");
+    } finally {
+      setPvcCreating(false);
+    }
+  };
+
   const handleViewLogs = async (namespace: string, name: string) => {
     setLogPod(name);
     setLogFollow(false);
@@ -648,7 +766,7 @@ spec:
     const dashUrl = status()?.traefik_dashboard;
     if (dashUrl) {
       // Non-Windows: URL is directly accessible
-      window.open(dashUrl, "_blank");
+      await shellOpen(dashUrl);
       return;
     }
     // Windows / no direct URL: port-forward traefik service port 9000, then open
@@ -659,14 +777,16 @@ spec:
     }
     // Check if already forwarded
     if (isForwarded("kube-system", "traefik", 9000)) {
-      window.open("http://localhost:9000/dashboard/", "_blank");
+      await shellOpen("http://localhost:9000/dashboard/");
       return;
     }
     setTraefikForwarding(true);
     try {
       await invoke("k8s_port_forward", { namespace: "kube-system", service: "traefik", port: 9000, localPort: 9000 });
       await refreshPortForwards();
-      window.open("http://localhost:9000/dashboard/", "_blank");
+      // Give port-forward a moment to bind before opening browser
+      await new Promise(r => setTimeout(r, 1500));
+      await shellOpen("http://localhost:9000/dashboard/");
     } catch (e) {
       showToast(`Failed to forward Traefik dashboard: ${e}`, "error");
     } finally {
@@ -762,6 +882,7 @@ spec:
     { id: "events", label: "Events", icon: "\u26A0" },
     { id: "config", label: "Config", icon: "\u2699" },
     { id: "helm", label: "Helm", icon: "\u2388" },
+    { id: "jobs", label: "Jobs", icon: "\u23F0" },
     { id: "topology", label: "Topology", icon: "\u25CE" },
   ];
 
@@ -774,6 +895,7 @@ spec:
     events: { title: "No events in this namespace", desc: "Events will appear when Kubernetes resources change state." },
     config: { title: "No ConfigMaps or Secrets", desc: "ConfigMaps and Secrets store configuration data for your workloads." },
     helm: { title: "No Helm releases", desc: "Install Helm charts using the helm CLI to manage releases here." },
+    jobs: { title: "No Jobs or CronJobs", desc: "Jobs and CronJobs will appear here when you create batch workloads." },
     topology: { title: "No resources to visualize", desc: "Deploy workloads to see a visual topology of your namespace." },
   };
 
@@ -1388,9 +1510,14 @@ spec:
 
         {/* Storage Tab */}
         <Show when={tab() === "storage"}>
-          <h3 style={{ color: "#e6edf3", "font-size": "14px", "margin-bottom": "12px" }}>
-            Persistent Volume Claims
-          </h3>
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "12px" }}>
+            <h3 style={{ color: "#e6edf3", "font-size": "14px", margin: "0" }}>
+              Persistent Volume Claims
+            </h3>
+            <button class="btn btn-sm btn-primary" onClick={() => setPvcDialogOpen(true)}>
+              + Create PVC
+            </button>
+          </div>
           <Show
             when={pvcs().length > 0}
             fallback={
@@ -1547,7 +1674,7 @@ spec:
 
         {/* Config Tab */}
         <Show when={tab() === "config"}>
-          <div style={{ display: "flex", gap: "8px", "margin-bottom": "16px" }}>
+          <div style={{ display: "flex", gap: "8px", "margin-bottom": "16px", "align-items": "center" }}>
             <button
               class={`btn btn-sm ${configSubTab() === "configmaps" ? "btn-primary" : ""}`}
               onClick={() => setConfigSubTab("configmaps")}
@@ -1562,6 +1689,13 @@ spec:
             >
               Secrets ({secrets().length})
             </button>
+            <Show when={configSubTab() === "secrets"}>
+              <div style={{ "margin-left": "auto" }}>
+                <button class="btn btn-sm btn-primary" onClick={openCreateSecretDialog}>
+                  + Create Secret
+                </button>
+              </div>
+            </Show>
           </div>
 
           <Show when={configSubTab() === "configmaps"}>
@@ -1655,10 +1789,24 @@ spec:
                             </button>
                             <button
                               class="action-icon"
+                              title="Edit secret data"
+                              onClick={() => openEditSecretDialog(sec)}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                            <button
+                              class="action-icon"
                               title="View/Edit YAML"
                               onClick={() => viewYaml("secret", sec.name, sec.namespace)}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                            </button>
+                            <button
+                              class="action-icon action-icon-delete"
+                              title="Delete secret"
+                              onClick={() => handleDeleteSecret(sec.namespace, sec.name)}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             </button>
                           </div>
                         </td>
@@ -1756,6 +1904,210 @@ spec:
                             class="action-icon action-icon-delete"
                             title="Uninstall release"
                             onClick={() => handleHelmUninstall(rel.name, rel.namespace)}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
+          </Show>
+        </Show>
+
+        {/* Jobs Tab */}
+        <Show when={tab() === "jobs"}>
+          <Show
+            when={cronJobs().length > 0 || jobs().length > 0}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.jobs.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.jobs.desc}</div>
+              </div>
+            }
+          >
+            {/* CronJobs Section */}
+            <Show when={cronJobs().length > 0}>
+              <h3 style={{ margin: "16px 0 8px", color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>CronJobs</h3>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Schedule</th>
+                    <th>Suspend</th>
+                    <th>Active</th>
+                    <th>Last Scheduled</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={cronJobs()}>
+                    {(cj) => (
+                      <tr style={{ opacity: cj.suspend ? 0.5 : 1 }}>
+                        <td style={{ "font-weight": "500" }}>
+                          {cj.name}
+                          <Show when={cj.suspend}>
+                            <span style={{
+                              "margin-left": "8px",
+                              "font-size": "10px",
+                              padding: "2px 6px",
+                              "border-radius": "4px",
+                              background: "#30363d",
+                              color: "#8b949e",
+                            }}>Suspended</span>
+                          </Show>
+                        </td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{cj.schedule}</td>
+                        <td>
+                          <span style={{ color: cj.suspend ? "#f85149" : "#3fb950", "font-weight": "500" }}>
+                            {cj.suspend ? "Yes" : "No"}
+                          </span>
+                        </td>
+                        <td>{cj.active}</td>
+                        <td style={{ color: "#8b949e", "font-size": "12px" }}>
+                          {cj.last_schedule ? new Date(cj.last_schedule).toLocaleString() : "Never"}
+                        </td>
+                        <td style={{ display: "flex", gap: "4px" }}>
+                          <button
+                            class="action-icon"
+                            title="Trigger Job now"
+                            onClick={async () => {
+                              try {
+                                const result = await invoke("k8s_trigger_cronjob", { namespace: cj.namespace, name: cj.name }) as { job: string };
+                                showToast(`Job created: ${result.job}`, "success");
+                                logInfo(`Triggered CronJob ${cj.name} -> ${result.job}`);
+                                refreshWorkloads();
+                              } catch (e) {
+                                showToast(`Failed to trigger: ${e}`, "error");
+                              }
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                          </button>
+                          <button
+                            class="action-icon"
+                            title={cj.suspend ? "Resume CronJob" : "Suspend CronJob"}
+                            onClick={async () => {
+                              try {
+                                await invoke("k8s_suspend_cronjob", { namespace: cj.namespace, name: cj.name, suspend: !cj.suspend });
+                                showToast(`CronJob ${cj.name} ${cj.suspend ? "resumed" : "suspended"}`, "success");
+                                logInfo(`${cj.suspend ? "Resumed" : "Suspended"} CronJob ${cj.name}`);
+                                refreshWorkloads();
+                              } catch (e) {
+                                showToast(`Failed: ${e}`, "error");
+                              }
+                            }}
+                          >
+                            <Show when={cj.suspend}
+                              fallback={
+                                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                              }
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            </Show>
+                          </button>
+                          <button
+                            class="action-icon"
+                            title="View YAML"
+                            onClick={() => viewYaml("CronJob", cj.name, cj.namespace)}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                          </button>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Delete CronJob"
+                            onClick={async () => {
+                              if (!await confirmDanger(`Delete CronJob "${cj.name}"?`, "This will remove the CronJob and stop future scheduling.")) return;
+                              try {
+                                await invoke("k8s_delete_cronjob", { namespace: cj.namespace, name: cj.name });
+                                showToast(`CronJob ${cj.name} deleted`, "success");
+                                logInfo(`Deleted CronJob ${cj.name}`);
+                                refreshWorkloads();
+                              } catch (e) {
+                                showToast(`Delete failed: ${e}`, "error");
+                              }
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
+
+            {/* Jobs Section */}
+            <Show when={jobs().length > 0}>
+              <h3 style={{ margin: "16px 0 8px", color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>Jobs</h3>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Completions</th>
+                    <th>Duration</th>
+                    <th>Started</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={jobs()}>
+                    {(job) => (
+                      <tr>
+                        <td style={{ "font-weight": "500" }}>{job.name}</td>
+                        <td>
+                          <span style={{
+                            color: job.status === "Succeeded" ? "#3fb950" : job.status === "Failed" ? "#f85149" : "#d29922",
+                            "font-weight": "500",
+                          }}>
+                            {job.status}
+                          </span>
+                        </td>
+                        <td class="mono" style={{ "font-size": "12px" }}>{job.completions}</td>
+                        <td style={{ color: "#8b949e", "font-size": "12px" }}>{job.duration}</td>
+                        <td style={{ color: "#8b949e", "font-size": "12px" }}>
+                          {job.start_time ? new Date(job.start_time).toLocaleString() : "-"}
+                        </td>
+                        <td style={{ display: "flex", gap: "4px" }}>
+                          <button
+                            class="action-icon"
+                            title="View Logs"
+                            onClick={() => {
+                              setLogPod(job.name);
+                              setLogLines([]);
+                              setLogFollow(false);
+                              invoke("k8s_pod_logs", { namespace: job.namespace, name: job.name, tail: logTail() })
+                                .then((lines) => setLogLines(lines as string[]))
+                                .catch((e) => showToast(`Failed to get logs: ${e}`, "error"));
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                          </button>
+                          <button
+                            class="action-icon"
+                            title="View YAML"
+                            onClick={() => viewYaml("Job", job.name, job.namespace)}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                          </button>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Delete Job"
+                            onClick={async () => {
+                              if (!await confirmDanger(`Delete Job "${job.name}"?`, "This will remove the Job and its pods.")) return;
+                              try {
+                                await invoke("k8s_delete_job", { namespace: job.namespace, name: job.name });
+                                showToast(`Job ${job.name} deleted`, "success");
+                                logInfo(`Deleted Job ${job.name}`);
+                                refreshWorkloads();
+                              } catch (e) {
+                                showToast(`Delete failed: ${e}`, "error");
+                              }
+                            }}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                           </button>
@@ -2895,6 +3247,239 @@ spec:
                 disabled={ingressCreating() || !ingressName().trim() || !ingressHostname().trim() || !ingressServiceName() || !ingressServicePort()}
               >
                 {ingressCreating() ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Secret Create/Edit Dialog */}
+      <Show when={secretDialogOpen()}>
+        <div class="modal-overlay" onClick={() => setSecretDialogOpen(false)}>
+          <div class="modal-dialog" style={{ "max-width": "600px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">{secretDialogMode() === "create" ? "Create Secret" : `Edit Secret: ${secretDialogName()}`}</span>
+              <button class="modal-close" onClick={() => setSecretDialogOpen(false)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px", "max-height": "60vh", overflow: "auto" }}>
+              <Show when={secretDialogMode() === "create"}>
+                <div>
+                  <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Name</label>
+                  <input
+                    type="text"
+                    class="form-input"
+                    placeholder="my-secret"
+                    value={secretDialogName()}
+                    onInput={(e) => setSecretDialogName(e.currentTarget.value)}
+                    ref={(el) => setTimeout(() => el.focus(), 50)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Type</label>
+                  <Dropdown
+                    value={secretDialogType()}
+                    onChange={(v) => {
+                      setSecretDialogType(v);
+                      if (v === "kubernetes.io/tls") {
+                        setSecretDialogEntries([{ key: "tls.crt", value: "" }, { key: "tls.key", value: "" }]);
+                      } else if (v === "kubernetes.io/dockerconfigjson") {
+                        setSecretDialogEntries([{ key: ".dockerconfigjson", value: "" }]);
+                      }
+                    }}
+                    options={[
+                      { value: "Opaque", label: "Opaque" },
+                      { value: "kubernetes.io/tls", label: "kubernetes.io/tls" },
+                      { value: "kubernetes.io/dockerconfigjson", label: "kubernetes.io/dockerconfigjson" },
+                    ]}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </Show>
+
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "8px" }}>Data Entries</label>
+                <Index each={secretDialogEntries()}>
+                  {(entry, i) => {
+                    const isTls = () => secretDialogType() === "kubernetes.io/tls" && (entry().key === "tls.crt" || entry().key === "tls.key");
+                    const isRevealed = () => secretDialogRevealed().has(i);
+                    return (
+                      <div style={{ display: "flex", gap: "8px", "margin-bottom": "8px", "align-items": "flex-start" }}>
+                        <input
+                          type="text"
+                          class="form-input"
+                          placeholder="Key"
+                          value={entry().key}
+                          onInput={(e) => {
+                            const entries = [...secretDialogEntries()];
+                            entries[i] = { ...entries[i], key: e.currentTarget.value };
+                            setSecretDialogEntries(entries);
+                          }}
+                          disabled={isTls()}
+                          style={{ width: "140px", "flex-shrink": "0" }}
+                        />
+                        <Show when={isTls()} fallback={
+                          <div style={{ flex: "1", position: "relative", display: "flex", gap: "4px" }}>
+                            <input
+                              type={isRevealed() ? "text" : "password"}
+                              class="form-input"
+                              placeholder="Value"
+                              value={entry().value}
+                              onInput={(e) => {
+                                const entries = [...secretDialogEntries()];
+                                entries[i] = { ...entries[i], value: e.currentTarget.value };
+                                setSecretDialogEntries(entries);
+                              }}
+                              style={{ width: "100%", "padding-right": "32px" }}
+                            />
+                            <button
+                              class="btn btn-sm"
+                              style={{ "font-size": "10px", padding: "2px 6px", position: "absolute", right: "4px", top: "50%", transform: "translateY(-50%)" }}
+                              onClick={() => {
+                                const next = new Set(secretDialogRevealed());
+                                if (isRevealed()) next.delete(i); else next.add(i);
+                                setSecretDialogRevealed(next);
+                              }}
+                            >
+                              {isRevealed() ? "Hide" : "Show"}
+                            </button>
+                          </div>
+                        }>
+                          <textarea
+                            class="form-input"
+                            placeholder={entry().key === "tls.crt" ? "Paste certificate PEM..." : "Paste private key PEM..."}
+                            value={entry().value}
+                            onInput={(e) => {
+                              const entries = [...secretDialogEntries()];
+                              entries[i] = { ...entries[i], value: e.currentTarget.value };
+                              setSecretDialogEntries(entries);
+                            }}
+                            style={{ flex: "1", "min-height": "80px", "font-family": "'JetBrains Mono NF', monospace", "font-size": "11px" }}
+                          />
+                        </Show>
+                        <button
+                          class="action-icon action-icon-delete"
+                          title="Remove entry"
+                          disabled={isTls()}
+                          onClick={() => {
+                            const entries = secretDialogEntries().filter((_, idx) => idx !== i);
+                            setSecretDialogEntries(entries.length > 0 ? entries : [{ key: "", value: "" }]);
+                          }}
+                          style={{ "margin-top": "6px", opacity: isTls() ? "0.3" : "1" }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                      </div>
+                    );
+                  }}
+                </Index>
+                <button
+                  class="btn btn-sm"
+                  style={{ "font-size": "12px" }}
+                  onClick={() => setSecretDialogEntries([...secretDialogEntries(), { key: "", value: "" }])}
+                >
+                  + Add Entry
+                </button>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setSecretDialogOpen(false)}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                onClick={handleSaveSecret}
+                disabled={secretDialogSaving() || !secretDialogName().trim()}
+              >
+                {secretDialogSaving() ? "Saving..." : secretDialogMode() === "create" ? "Create" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Create PVC Dialog */}
+      <Show when={pvcDialogOpen()}>
+        <div class="modal-overlay" onClick={() => setPvcDialogOpen(false)}>
+          <div class="modal-dialog" style={{ "max-width": "480px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Create Persistent Volume Claim</span>
+              <button class="modal-close" onClick={() => setPvcDialogOpen(false)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Name</label>
+                <input
+                  type="text"
+                  class="form-input"
+                  placeholder="my-pvc"
+                  value={pvcName()}
+                  onInput={(e) => setPvcName(e.currentTarget.value)}
+                  ref={(el) => setTimeout(() => el.focus(), 50)}
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Storage Class</label>
+                <input
+                  type="text"
+                  class="form-input"
+                  placeholder="e.g. local-path (k3s default)"
+                  value={pvcStorageClass()}
+                  onInput={(e) => setPvcStorageClass(e.currentTarget.value)}
+                  style={{ width: "100%" }}
+                />
+                <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>
+                  Common: local-path (k3s), standard (minikube), gp2/gp3 (AWS)
+                </div>
+              </div>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Size</label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="number"
+                    class="form-input"
+                    min="1"
+                    value={pvcSizeValue()}
+                    onInput={(e) => setPvcSizeValue(e.currentTarget.value)}
+                    style={{ width: "100px" }}
+                  />
+                  <Dropdown
+                    value={pvcSizeUnit()}
+                    onChange={setPvcSizeUnit}
+                    options={[
+                      { value: "Mi", label: "Mi" },
+                      { value: "Gi", label: "Gi" },
+                      { value: "Ti", label: "Ti" },
+                    ]}
+                    style={{ width: "80px" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "8px" }}>Access Modes</label>
+                {(["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany"] as const).map((mode) => (
+                  <label style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "6px", "font-size": "13px", color: "#c9d1d9", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={pvcAccessModes().has(mode)}
+                      onChange={(e) => {
+                        const next = new Set(pvcAccessModes());
+                        if (e.currentTarget.checked) next.add(mode); else next.delete(mode);
+                        setPvcAccessModes(next);
+                      }}
+                    />
+                    {mode}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setPvcDialogOpen(false)}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                onClick={handleCreatePvc}
+                disabled={pvcCreating() || !pvcName().trim() || !pvcStorageClass().trim()}
+              >
+                {pvcCreating() ? "Creating..." : "Create"}
               </button>
             </div>
           </div>

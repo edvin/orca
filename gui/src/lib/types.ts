@@ -9,6 +9,9 @@ export interface Container {
   memory_limit?: number;
   cpu_limit?: number;
   restart_policy?: string;
+  health_status?: string;  // "healthy" | "unhealthy" | "starting" | "none" | null
+  health_log?: Array<{ output: string; exit_code: number; started_at: string; finished_at: string }>;
+  restart_count?: number;
 }
 
 export interface PortMapping {
@@ -226,6 +229,28 @@ export interface HelmRelease {
   revision: string;
   updated: string;
   app_version: string;
+}
+
+// --- K8s Jobs / CronJobs ---
+
+export interface K8sJob {
+  name: string;
+  namespace: string;
+  status: string;  // "Active" | "Succeeded" | "Failed"
+  completions: string;  // "1/1" format
+  duration: string;
+  start_time?: string;
+  created_at: string;
+}
+
+export interface K8sCronJob {
+  name: string;
+  namespace: string;
+  schedule: string;
+  suspend: boolean;
+  active: number;
+  last_schedule?: string;
+  created_at: string;
 }
 
 // --- Image Scanning ---

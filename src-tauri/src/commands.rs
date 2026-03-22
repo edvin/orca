@@ -278,6 +278,7 @@ pub async fn create_and_run_container(
     cpu_limit: Option<f64>,
     memory_limit: Option<String>,
     gpu: Option<bool>,
+    network: Option<String>,
 ) -> Result<serde_json::Value, String> {
     // Build the create request body
     let mut body = serde_json::json!({
@@ -358,6 +359,11 @@ pub async fn create_and_run_container(
     }
     if gpu.unwrap_or(false) {
         body["gpu"] = serde_json::json!(true);
+    }
+    if let Some(net) = network {
+        if !net.is_empty() {
+            body["network"] = serde_json::json!(net);
+        }
     }
 
     // Create the container
@@ -522,10 +528,29 @@ pub async fn prune_images() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+pub async fn tag_image(source: String, repo: String, tag: String) -> Result<(), String> {
+    let resp = client()
+        .post(format!(
+            "{DAEMON_URL}/images/{}/tag",
+            urlencoding::encode(&source)
+        ))
+        .json(&serde_json::json!({ "repo": repo, "tag": tag }))
+        .send()
+        .await
+        .map_err(|e| format!("Tag failed: {e}"))?;
+    if !resp.status().is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("Tag failed: {text}"));
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn build_image(
     context_path: String,
     dockerfile: Option<String>,
     tag: Option<String>,
+    build_args: Option<HashMap<String, String>>,
 ) -> Result<serde_json::Value, String> {
     let resp = client()
         .post(format!("{DAEMON_URL}/images/build"))
@@ -533,6 +558,7 @@ pub async fn build_image(
             "context_path": context_path,
             "dockerfile": dockerfile,
             "tag": tag,
+            "build_args": build_args,
         }))
         .send()
         .await
@@ -620,6 +646,11 @@ pub async fn inspect_image(id: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+pub async fn image_history(id: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/images/{id}/history")).await
+}
+
+#[tauri::command]
 pub async fn image_list_files(id: String, path: Option<String>) -> Result<serde_json::Value, String> {
     let encoded_id = urlencoding::encode(&id);
     let path_param = path.map(|p| format!("?path={}", urlencoding::encode(&p))).unwrap_or_default();
@@ -696,6 +727,11 @@ pub async fn create_network(name: String, driver: Option<String>) -> Result<serd
 #[tauri::command]
 pub async fn remove_network(name: String) -> Result<(), String> {
     delete(&format!("/networks/{name}")).await
+}
+
+#[tauri::command]
+pub async fn network_topology() -> Result<serde_json::Value, String> {
+    get_json("/networks/topology").await
 }
 
 // --- Stacks (Compose Projects) ---
@@ -935,8 +971,57 @@ pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+fn validate_k8s_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name.len() > 253 {
+        return Err("Invalid Kubernetes name: length".into());
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.') {
+        return Err(format!("Invalid Kubernetes name: {name}"));
+    }
+    Ok(())
+}
+
+const ALLOWED_K8S_KINDS: &[&str] = &[
+    "pod", "pods",
+    "service", "services", "svc",
+    "deployment", "deployments", "deploy",
+    "statefulset", "statefulsets", "sts",
+    "daemonset", "daemonsets", "ds",
+    "replicaset", "replicasets", "rs",
+    "job", "jobs",
+    "cronjob", "cronjobs", "cj",
+    "configmap", "configmaps", "cm",
+    "secret", "secrets",
+    "ingress", "ingresses", "ing",
+    "persistentvolumeclaim", "persistentvolumeclaims", "pvc",
+    "persistentvolume", "persistentvolumes", "pv",
+    "namespace", "namespaces", "ns",
+    "node", "nodes",
+    "serviceaccount", "serviceaccounts", "sa",
+    "role", "roles",
+    "rolebinding", "rolebindings",
+    "clusterrole", "clusterroles",
+    "clusterrolebinding", "clusterrolebindings",
+    "networkpolicy", "networkpolicies", "netpol",
+    "horizontalpodautoscaler", "horizontalpodautoscalers", "hpa",
+    "endpoint", "endpoints", "ep",
+    "event", "events", "ev",
+    "storageclass", "storageclasses", "sc",
+];
+
+fn validate_k8s_kind(kind: &str) -> Result<(), String> {
+    if !ALLOWED_K8S_KINDS.contains(&kind.to_lowercase().as_str()) {
+        return Err(format!("Invalid Kubernetes resource kind: {kind}"));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Result<String, String> {
+    validate_k8s_kind(&kind)?;
+    validate_k8s_name(&name)?;
+    validate_k8s_name(&namespace)?;
+
     let output = {
         #[cfg(target_os = "windows")]
         {
@@ -979,11 +1064,13 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
 
 #[tauri::command]
 pub async fn k8s_events(namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
     get_json(&format!("/k8s/events/{namespace}")).await
 }
 
 #[tauri::command]
 pub async fn k8s_create_namespace(name: String) -> Result<(), String> {
+    validate_k8s_name(&name)?;
     let resp = client()
         .post(format!("{DAEMON_URL}/k8s/namespaces"))
         .json(&serde_json::json!({ "name": name }))
@@ -1001,6 +1088,7 @@ pub async fn k8s_create_namespace(name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn k8s_delete_namespace(name: String) -> Result<(), String> {
+    validate_k8s_name(&name)?;
     delete(&format!("/k8s/namespaces/{name}")).await
 }
 
@@ -1012,6 +1100,72 @@ pub async fn k8s_configmaps(namespace: String) -> Result<serde_json::Value, Stri
 #[tauri::command]
 pub async fn k8s_secrets(namespace: String) -> Result<serde_json::Value, String> {
     get_json(&format!("/k8s/secrets/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_create_secret(namespace: String, name: String, data: serde_json::Value, secret_type: Option<String>) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    let resp = client()
+        .post(format!("{DAEMON_URL}/k8s/secrets/{namespace}"))
+        .json(&serde_json::json!({ "name": name, "data": data, "secret_type": secret_type }))
+        .send()
+        .await
+        .map_err(|e| format!("Create secret failed: {e}"))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}
+
+#[tauri::command]
+pub async fn k8s_delete_secret(namespace: String, name: String) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/secrets/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_update_secret(namespace: String, name: String, data: serde_json::Value) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    let resp = client()
+        .put(format!("{DAEMON_URL}/k8s/secrets/{namespace}/{name}"))
+        .json(&serde_json::json!({ "data": data }))
+        .send()
+        .await
+        .map_err(|e| format!("Update secret failed: {e}"))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}
+
+#[tauri::command]
+pub async fn k8s_create_pvc(namespace: String, name: String, storage_class: String, size: String, access_modes: Vec<String>) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    let resp = client()
+        .post(format!("{DAEMON_URL}/k8s/pvcs/{namespace}"))
+        .json(&serde_json::json!({
+            "name": name,
+            "storage_class": storage_class,
+            "size": size,
+            "access_modes": access_modes,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Create PVC failed: {e}"))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
 }
 
 // --- K8s Metrics, Rollback, Helm ---
@@ -1041,6 +1195,63 @@ pub async fn k8s_rollout_undo(
         .send()
         .await
         .map_err(|e| format!("Rollback failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+// --- K8s Jobs / CronJobs ---
+
+#[tauri::command]
+pub async fn k8s_jobs(namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/jobs/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_cronjobs(namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/cronjobs/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_trigger_cronjob(namespace: String, name: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    client()
+        .post(format!("{DAEMON_URL}/k8s/cronjobs/{namespace}/{name}/trigger"))
+        .send()
+        .await
+        .map_err(|e| format!("Trigger failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn k8s_delete_job(namespace: String, name: String) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/jobs/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_delete_cronjob(namespace: String, name: String) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/cronjobs/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_suspend_cronjob(namespace: String, name: String, suspend: bool) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    client()
+        .put(format!("{DAEMON_URL}/k8s/cronjobs/{namespace}/{name}/suspend"))
+        .json(&serde_json::json!({ "suspend": suspend }))
+        .send()
+        .await
+        .map_err(|e| format!("Suspend failed: {e}"))?
         .json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))
@@ -1100,9 +1311,13 @@ pub async fn k8s_port_forward(
     service: String,
     port: u16,
     local_port: Option<u16>,
+    expose: Option<bool>,
 ) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&service)?;
     let local = local_port.unwrap_or(port);
     let key = format!("{namespace}/{service}/{local}");
+    let address = if expose.unwrap_or(false) { "0.0.0.0" } else { "127.0.0.1" };
 
     {
         let map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
@@ -1112,18 +1327,23 @@ pub async fn k8s_port_forward(
     }
 
     let child = if cfg!(target_os = "windows") {
-        std::process::Command::new("wsl")
-            .args(["-u", "root", "--", "k3s", "kubectl", "port-forward",
+        let mut cmd = std::process::Command::new("wsl");
+        cmd.args(["-u", "root", "--", "k3s", "kubectl", "port-forward",
                 &format!("svc/{service}"), &format!("{local}:{port}"),
-                "-n", &namespace, "--address=0.0.0.0"])
+                "-n", &namespace, &format!("--address={address}")])
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
+            .stderr(std::process::Stdio::null());
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        cmd.spawn()
             .map_err(|e| format!("Failed to start port-forward: {e}"))?
     } else {
         std::process::Command::new("kubectl")
             .args(["port-forward", &format!("svc/{service}"),
-                &format!("{local}:{port}"), "-n", &namespace, "--address=0.0.0.0"])
+                &format!("{local}:{port}"), "-n", &namespace, &format!("--address={address}")])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -1142,6 +1362,8 @@ pub async fn k8s_stop_port_forward(
     service: String,
     port: u16,
 ) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&service)?;
     let key = format!("{namespace}/{service}/{port}");
     let mut map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
     if let Some(mut child) = map.remove(&key) {
@@ -1267,6 +1489,23 @@ pub async fn ai_ask(
     context: Option<serde_json::Value>,
     history: Option<Vec<serde_json::Value>>,
 ) -> Result<serde_json::Value, String> {
+    // Validate request size
+    if let Some(ref ctx) = context {
+        let ctx_str = serde_json::to_string(ctx).unwrap_or_default();
+        if ctx_str.len() > 100_000 {
+            return Err("Context too large (max 100KB)".into());
+        }
+    }
+    if let Some(ref hist) = history {
+        if hist.len() > 100 {
+            return Err("History too long (max 100 messages)".into());
+        }
+        let hist_str = serde_json::to_string(hist).unwrap_or_default();
+        if hist_str.len() > 500_000 {
+            return Err("History too large (max 500KB)".into());
+        }
+    }
+
     // AI requests can be slow — local models need time to load into memory
     let ai_client = {
         let mut headers = reqwest::header::HeaderMap::new();
@@ -1353,8 +1592,35 @@ pub async fn get_wsl_config() -> Result<serde_json::Value, String> {
     }))
 }
 
+fn validate_wsl_value(val: &str, allow_unit: bool) -> Result<(), String> {
+    let val = val.trim();
+    if val.is_empty() { return Ok(()); }
+    if val.contains('\n') || val.contains('\r') || val.contains('=') || val.contains('[') {
+        return Err(format!("Invalid value: {val}"));
+    }
+    if allow_unit {
+        // e.g. "4GB", "512MB", "2"
+        let numeric_end = val.find(|c: char| !c.is_ascii_digit()).unwrap_or(val.len());
+        if numeric_end == 0 { return Err(format!("Invalid value: {val}")); }
+        let unit = &val[numeric_end..];
+        if !unit.is_empty() && !["GB", "MB", "KB", "TB"].contains(&unit.to_uppercase().as_str()) {
+            return Err(format!("Invalid unit in: {val}"));
+        }
+    } else {
+        if !val.chars().all(|c| c.is_ascii_digit()) {
+            return Err(format!("Invalid value: {val}"));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn save_wsl_config(memory: String, processors: String, swap: String) -> Result<(), String> {
+    // Validate inputs before writing to config file
+    validate_wsl_value(&memory, true)?;
+    validate_wsl_value(&processors, false)?;
+    validate_wsl_value(&swap, true)?;
+
     let userprofile = std::env::var("USERPROFILE")
         .map_err(|_| "USERPROFILE environment variable not set".to_string())?;
     let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
@@ -1540,13 +1806,30 @@ pub async fn get_api_token() -> Result<String, String> {
 #[tauri::command]
 pub async fn write_temp_file(name: String, content: String) -> Result<String, String> {
     let dir = std::env::temp_dir();
-    let path = dir.join(&name);
+    // Sanitize: use only the filename component, reject path traversal
+    let safe_name = std::path::Path::new(&name)
+        .file_name()
+        .ok_or("Invalid filename")?
+        .to_str()
+        .ok_or("Invalid filename encoding")?;
+    let path = dir.join(safe_name);
     std::fs::write(&path, &content).map_err(|e| format!("Failed to write temp file: {e}"))?;
     Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub async fn open_file_in_browser(path: String) -> Result<(), String> {
+    // Allow URLs
+    if path.starts_with("http://") || path.starts_with("https://") {
+        return open::that(&path).map_err(|e| format!("Failed to open URL: {e}"));
+    }
+    // For file paths, only allow temp directory
+    let canonical = std::fs::canonicalize(&path)
+        .map_err(|e| format!("Invalid path: {e}"))?;
+    let temp_dir = std::env::temp_dir();
+    if !canonical.starts_with(&temp_dir) {
+        return Err("Access denied: only temp directory files can be opened".into());
+    }
     open::that(&path).map_err(|e| format!("Failed to open file: {e}"))
 }
 
@@ -1564,6 +1847,10 @@ pub async fn reconnect_runtime() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
+    const ALLOWED_SCOPES: &[&str] = &["containers", "images", "volumes", "networks", "build_cache", "all"];
+    if !ALLOWED_SCOPES.contains(&scope.as_str()) {
+        return Err(format!("Invalid cleanup scope: {scope}"));
+    }
     client()
         .post(format!("{DAEMON_URL}/settings/cleanup"))
         .json(&serde_json::json!({ "scope": scope }))

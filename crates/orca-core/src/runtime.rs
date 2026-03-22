@@ -49,6 +49,24 @@ pub struct Container {
     /// Restart policy name: "no", "always", "unless-stopped", "on-failure".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restart_policy: Option<String>,
+    /// Health check status: "healthy", "unhealthy", "starting", "none".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_status: Option<String>,
+    /// Recent health check log entries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_log: Option<Vec<HealthLogEntry>>,
+    /// Number of times the container has been restarted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart_count: Option<i64>,
+}
+
+/// A single health check log entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthLogEntry {
+    pub output: String,
+    pub exit_code: i64,
+    pub started_at: String,
+    pub finished_at: String,
 }
 
 /// A bind mount or volume mount on a container.

@@ -12,6 +12,51 @@ import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
   },
 };
 
+// Register YAML language with monarch tokenizer for syntax highlighting
+monaco.languages.register({ id: "yaml" });
+monaco.languages.setMonarchTokensProvider("yaml", {
+  tokenizer: {
+    root: [
+      // Comments
+      [/#.*$/, "comment"],
+      // Document markers
+      [/^---\s*$/, "keyword"],
+      [/^\.\.\.\s*$/, "keyword"],
+      // Timestamps
+      [/\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?/, "number.date"],
+      // Keys (before colon)
+      [/[^\s#:][^:]*(?=\s*:(\s|$))/, "type"],
+      // Booleans
+      [/\b(true|false|yes|no|on|off|null|~)\b/i, "keyword"],
+      // Numbers
+      [/[+-]?\d+(\.\d+)?([eE][+-]?\d+)?/, "number"],
+      [/0[xX][0-9a-fA-F]+/, "number.hex"],
+      [/0[oO][0-7]+/, "number.octal"],
+      // Strings
+      [/"/, "string", "@doubleQuoteString"],
+      [/'/, "string", "@singleQuoteString"],
+      // Anchors and aliases
+      [/[&*][^\s]+/, "tag"],
+      // Tags
+      [/![^\s]+/, "tag"],
+      // Block scalars
+      [/[|>][+-]?\d*/, "operator"],
+      // List items
+      [/^\s*-\s/, "operator"],
+    ],
+    doubleQuoteString: [
+      [/[^\\"]+/, "string"],
+      [/\\./, "string.escape"],
+      [/"/, "string", "@pop"],
+    ],
+    singleQuoteString: [
+      [/[^\\']+/, "string"],
+      [/\\./, "string.escape"],
+      [/'/, "string", "@pop"],
+    ],
+  },
+});
+
 interface YamlEditorProps {
   value: string;
   readOnly?: boolean;
@@ -31,24 +76,43 @@ export default function YamlEditor(props: YamlEditorProps) {
 
   onMount(() => {
     try {
-    // Configure YAML-friendly dark theme
+    // Configure YAML-friendly dark theme matching the app
     monaco.editor.defineTheme("orca-dark", {
       base: "vs-dark",
       inherit: true,
-      rules: [],
+      rules: [
+        { token: "comment", foreground: "6e7681", fontStyle: "italic" },
+        { token: "type", foreground: "79c0ff" },         // keys
+        { token: "keyword", foreground: "ff7b72" },       // booleans, doc markers
+        { token: "number", foreground: "d2a8ff" },        // numbers
+        { token: "number.date", foreground: "d2a8ff" },   // timestamps
+        { token: "string", foreground: "a5d6ff" },        // strings
+        { token: "string.escape", foreground: "79c0ff" }, // escape sequences
+        { token: "tag", foreground: "7ee787" },           // anchors, tags
+        { token: "operator", foreground: "8b949e" },      // block scalars, list dashes
+      ],
       colors: {
         "editor.background": "#0d1117",
         "editor.foreground": "#e6edf3",
-        "editor.lineHighlightBackground": "#161b2255",
-        "editorLineNumber.foreground": "#484f58",
-        "editorLineNumber.activeForeground": "#8b949e",
+        "editor.lineHighlightBackground": "#161b2266",
+        "editor.lineHighlightBorder": "#00000000",
+        "editorLineNumber.foreground": "#3b4048",
+        "editorLineNumber.activeForeground": "#e6edf3",
         "editor.selectionBackground": "#1f6feb44",
+        "editor.selectionHighlightBackground": "#1f6feb22",
         "editorCursor.foreground": "#58a6ff",
         "editorWidget.background": "#161b22",
         "editorWidget.border": "#30363d",
+        "editorIndentGuide.background": "#21262d",
+        "editorIndentGuide.activeBackground": "#30363d",
+        "editorBracketMatch.background": "#1f6feb22",
+        "editorBracketMatch.border": "#1f6feb66",
         "input.background": "#0d1117",
         "input.border": "#30363d",
         "dropdown.background": "#161b22",
+        "scrollbarSlider.background": "#484f5833",
+        "scrollbarSlider.hoverBackground": "#484f5866",
+        "scrollbarSlider.activeBackground": "#484f5899",
       },
     });
 
@@ -59,20 +123,40 @@ export default function YamlEditor(props: YamlEditorProps) {
       readOnly: props.readOnly ?? false,
       minimap: { enabled: false },
       fontSize: 13,
-      fontFamily: "'JetBrains Mono NF', monospace",
+      fontFamily: "'JetBrains Mono NF', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontLigatures: false,
       lineNumbers: "on",
+      lineNumbersMinChars: 3,
+      glyphMargin: false,
+      folding: true,
+      foldingHighlight: false,
       scrollBeyondLastLine: false,
       wordWrap: "on",
       automaticLayout: true,
       tabSize: 2,
       renderLineHighlight: "line",
+      renderLineHighlightOnlyWhenFocus: false,
       overviewRulerLanes: 0,
+      overviewRulerBorder: false,
       hideCursorInOverviewRuler: true,
+      dragAndDrop: false,
+      links: false,
+      occurrencesHighlight: "off" as any,
+      selectionHighlight: false,
+      matchBrackets: "never" as any,
+      renderWhitespace: "none",
+      guides: { indentation: true, bracketPairs: false },
+      contextmenu: false,
       scrollbar: {
         verticalScrollbarSize: 6,
         horizontalScrollbarSize: 6,
+        useShadows: false,
       },
       padding: { top: 8, bottom: 8 },
+      smoothScrolling: true,
+      cursorBlinking: "smooth",
+      cursorSmoothCaretAnimation: "on",
+      roundedSelection: true,
     });
 
     editorInstance.onDidChangeModelContent(() => {

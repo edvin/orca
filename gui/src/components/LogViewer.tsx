@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, Show, createEffect } from "solid-js";
+import { createSignal, onMount, onCleanup, Show, createEffect, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { copyToClipboard } from "../lib/clipboard";
 import Dropdown from "./Dropdown";
@@ -9,16 +9,66 @@ interface LogViewerProps {
   onClose?: () => void;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlightLine(line: string, filter: string, isRegex: boolean, caseSensitive: boolean): string {
+  if (!filter) return escapeHtml(line);
+  try {
+    const flags = caseSensitive ? "g" : "gi";
+    const regex = isRegex ? new RegExp(`(${filter})`, flags) : new RegExp(`(${escapeRegex(filter)})`, flags);
+    const parts = line.split(regex);
+    return parts
+      .map((part, i) => {
+        const escaped = escapeHtml(part);
+        return i % 2 === 1
+          ? `<mark style="background:#d29922;color:#0d1117;border-radius:2px;padding:0 1px">${escaped}</mark>`
+          : escaped;
+      })
+      .join("");
+  } catch {
+    return escapeHtml(line);
+  }
+}
+
+function countMatches(lines: string[], filter: string, isRegex: boolean, caseSensitive: boolean): number {
+  if (!filter) return 0;
+  try {
+    const flags = caseSensitive ? "g" : "gi";
+    const regex = isRegex ? new RegExp(filter, flags) : new RegExp(escapeRegex(filter), flags);
+    let count = 0;
+    for (const line of lines) {
+      const matches = line.match(regex);
+      if (matches) count += matches.length;
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
 export default function LogViewer(props: LogViewerProps) {
   const [lines, setLines] = createSignal<string[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [autoScroll, setAutoScroll] = createSignal(true);
   const [filter, setFilter] = createSignal("");
+  const [useRegex, setUseRegex] = createSignal(false);
+  const [caseSensitive, setCaseSensitive] = createSignal(false);
   const [tail, setTail] = createSignal(500);
   const [fontSize, setFontSize] = createSignal(
     parseInt(localStorage.getItem("log-font-size") || "13", 10)
   );
-  let logContainer: HTMLPreElement | undefined;
+  let logContainer: HTMLDivElement | undefined;
   let filterRef: HTMLInputElement | undefined;
 
   const changeFontSize = (delta: number) => {
@@ -75,16 +125,29 @@ export default function LogViewer(props: LogViewerProps) {
   });
 
   const filtered = () => {
-    const q = filter().toLowerCase();
+    const f = filter();
     let result = lines();
-    if (q) {
-      result = result.filter((l) => l.toLowerCase().includes(q));
+    if (f) {
+      try {
+        const flags = caseSensitive() ? "" : "i";
+        const regex = useRegex()
+          ? new RegExp(f, flags)
+          : new RegExp(escapeRegex(f), flags);
+        result = result.filter((l) => regex.test(l));
+      } catch {
+        // Invalid regex, fall back to no filtering
+      }
     }
     // Remove consecutive empty lines
     return result.filter((line, i, arr) => {
       if (line.trim() === "" && i > 0 && arr[i - 1].trim() === "") return false;
       return true;
     });
+  };
+
+  const matchCount = () => {
+    if (!filter()) return 0;
+    return countMatches(filtered(), filter(), useRegex(), caseSensitive());
   };
 
   const handleScroll = () => {
@@ -116,6 +179,22 @@ export default function LogViewer(props: LogViewerProps) {
     URL.revokeObjectURL(url);
   };
 
+  const toggleBtnStyle = (active: boolean) => ({
+    background: active ? "#388bfd30" : "transparent",
+    color: active ? "#58a6ff" : "#8b949e",
+    border: active ? "1px solid #388bfd" : "1px solid #30363d",
+    "border-radius": "4px",
+    padding: "2px 6px",
+    cursor: "pointer",
+    "font-size": "12px",
+    "font-family": "'JetBrains Mono NF', monospace",
+    "font-weight": "600",
+    "line-height": "1",
+    height: "26px",
+    display: "inline-flex",
+    "align-items": "center",
+  });
+
   return (
     <div class="log-viewer">
       <div class="log-header">
@@ -124,7 +203,7 @@ export default function LogViewer(props: LogViewerProps) {
           <span class="log-count">{filtered().length} lines</span>
         </div>
         <div class="log-header-right">
-          <div style={{ position: "relative", display: "inline-flex", "align-items": "center" }}>
+          <div style={{ position: "relative", display: "inline-flex", "align-items": "center", gap: "4px" }}>
             <input
               ref={filterRef}
               class="search-input"
@@ -143,6 +222,25 @@ export default function LogViewer(props: LogViewerProps) {
               >
                 &times;
               </button>
+            </Show>
+            <button
+              onClick={() => setUseRegex(!useRegex())}
+              title={useRegex() ? "Regex mode (click to switch to plain text)" : "Plain text mode (click to switch to regex)"}
+              style={toggleBtnStyle(useRegex())}
+            >
+              .*
+            </button>
+            <button
+              onClick={() => setCaseSensitive(!caseSensitive())}
+              title={caseSensitive() ? "Case sensitive (click for insensitive)" : "Case insensitive (click for sensitive)"}
+              style={toggleBtnStyle(caseSensitive())}
+            >
+              Aa
+            </button>
+            <Show when={filter().length > 0}>
+              <span style={{ "font-size": "11px", color: "#8b949e", "white-space": "nowrap" }}>
+                {matchCount()} matches
+              </span>
             </Show>
           </div>
           <Dropdown
@@ -197,14 +295,51 @@ export default function LogViewer(props: LogViewerProps) {
           <div class="log-loading">Loading logs...</div>
         }
       >
-        <pre
+        <div
           class="log-content"
           ref={logContainer}
           onScroll={handleScroll}
-          style={{ "font-size": `${fontSize()}px` }}
+          style={{ "font-size": `${fontSize()}px`, overflow: "auto" }}
         >
-          {filtered().join("\n") || "(no log output)"}
-        </pre>
+          <Show when={filtered().length > 0} fallback={
+            <div style={{ "font-family": "'JetBrains Mono NF', monospace", "font-size": `${fontSize()}px`, color: "#8b949e", padding: "8px" }}>
+              (no log output)
+            </div>
+          }>
+            <For each={filtered()}>
+              {(line) => {
+                const f = filter();
+                if (f) {
+                  return (
+                    <div
+                      style={{
+                        "font-family": "'JetBrains Mono NF', monospace",
+                        "font-size": `${fontSize()}px`,
+                        "white-space": "pre-wrap",
+                        "word-break": "break-all",
+                        "line-height": "1.4",
+                      }}
+                      innerHTML={highlightLine(line, f, useRegex(), caseSensitive())}
+                    />
+                  );
+                }
+                return (
+                  <div
+                    style={{
+                      "font-family": "'JetBrains Mono NF', monospace",
+                      "font-size": `${fontSize()}px`,
+                      "white-space": "pre-wrap",
+                      "word-break": "break-all",
+                      "line-height": "1.4",
+                    }}
+                  >
+                    {line}
+                  </div>
+                );
+              }}
+            </For>
+          </Show>
+        </div>
       </Show>
     </div>
   );

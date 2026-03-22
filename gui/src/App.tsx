@@ -28,6 +28,7 @@ import CommandPalette from "./components/CommandPalette";
 import AiAssistant from "./components/AiAssistant";
 import type { AiAssistantApi } from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
+import KeyboardShortcuts from "./components/KeyboardShortcuts";
 
 export type Page = "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "kubernetes" | "environment" | "activity" | "settings";
 
@@ -37,6 +38,7 @@ export default function App() {
   const [daemonStatus, setDaemonStatus] = createSignal<string>("connecting");
   const [breadcrumbStack, setBreadcrumbStack] = createSignal<string | null>(null);
   const [showCommandPalette, setShowCommandPalette] = createSignal(false);
+  const [showShortcuts, setShowShortcuts] = createSignal(false);
   const [environmentChecked, setEnvironmentChecked] = createSignal(false);
   let aiApi: AiAssistantApi | undefined;
 
@@ -64,6 +66,14 @@ export default function App() {
     if ((e.ctrlKey || e.metaKey) && e.key === "r") {
       e.preventDefault();
       document.dispatchEvent(new CustomEvent("orca-refresh"));
+    }
+    if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const editable = (e.target as HTMLElement)?.getAttribute("contenteditable");
+      if (tag !== "INPUT" && tag !== "TEXTAREA" && editable !== "true") {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
+      }
     }
   };
 
@@ -244,6 +254,9 @@ export default function App() {
       <StatusBar onNavigate={(p) => navigate(p)} />
       <ToastContainer />
       <ConfirmDialog />
+      <Show when={showShortcuts()}>
+        <KeyboardShortcuts onClose={() => setShowShortcuts(false)} />
+      </Show>
       <div class="resize-handle" onMouseDown={startResize} />
     </div>
   );
