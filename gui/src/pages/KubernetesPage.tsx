@@ -37,6 +37,8 @@ export default function KubernetesPage() {
   const [portForwardLocalPort, setPortForwardLocalPort] = createSignal("");
   const [logPod, setLogPod] = createSignal<string | null>(null);
   const [logLines, setLogLines] = createSignal<string[]>([]);
+  const [portDialogSvc, setPortDialogSvc] = createSignal<K8sService | null>(null);
+  const [portDialogLocalPorts, setPortDialogLocalPorts] = createSignal<Record<number, string>>({});
 
   // Setup progress dialog
   const [setupDialogOpen, setSetupDialogOpen] = createSignal(false);
@@ -59,12 +61,15 @@ export default function KubernetesPage() {
       if (s.running) {
         try {
           const ns = (await invoke("k8s_namespaces")) as Namespace[];
-          setNamespaces(ns);
-          if (!ns.find((n) => n.name === selectedNs())) {
-            setSelectedNs(ns.length > 0 ? ns[0].name : "default");
+          if (ns.length > 0) {
+            setNamespaces(ns);
+            // Only auto-select on first load (when still on default with no data)
+            if (!ns.find((n: Namespace) => n.name === selectedNs()) && namespaces().length === 0) {
+              setSelectedNs(ns[0].name);
+            }
           }
         } catch {
-          // If namespace listing fails, provide defaults
+          // If namespace listing fails and we have nothing, provide defaults
           if (namespaces().length === 0) {
             setNamespaces([
               { name: "default", status: "Active", age: "" },
@@ -116,14 +121,25 @@ export default function KubernetesPage() {
     refreshWorkloads();
   });
 
+  // Close K8s menu on outside click
+  const handleDocClick = (e: MouseEvent) => {
+    if (k8sMenuOpen() && !(e.target as HTMLElement)?.closest?.(".dropdown-wrapper")) {
+      setK8sMenuOpen(false);
+    }
+  };
+
   onMount(() => {
+    document.addEventListener("click", handleDocClick);
     refreshStatus();
     refreshPortForwards();
     const interval = setInterval(() => {
       refreshStatus();
       refreshWorkloads();
     }, 5000);
-    onCleanup(() => clearInterval(interval));
+    onCleanup(() => {
+      clearInterval(interval);
+      document.removeEventListener("click", handleDocClick);
+    });
   });
 
   const handleEnable = async () => {
@@ -374,9 +390,6 @@ export default function KubernetesPage() {
     <div>
       <div class="page-header">
         <h1 class="page-title">Kubernetes</h1>
-        <button class="btn" onClick={() => { refreshStatus(); refreshWorkloads(); }}>
-          Refresh
-        </button>
       </div>
 
       {/* Hero Card: Not installed / Enabling */}
@@ -472,7 +485,7 @@ export default function KubernetesPage() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
               </button>
               <Show when={k8sMenuOpen()}>
-                <div class="dropdown-menu" onClick={() => setK8sMenuOpen(false)}>
+                <div class="dropdown-menu" style={{ "min-width": "200px" }} onClick={() => setK8sMenuOpen(false)}>
                   <button class="dropdown-item" onClick={() => { refreshStatus(); refreshWorkloads(); }}>
                     {"\u21BB"} Refresh
                   </button>
@@ -513,7 +526,7 @@ export default function KubernetesPage() {
           <select
             value={selectedNs()}
             onChange={(e) => setSelectedNs(e.currentTarget.value)}
-            class="form-select"
+            class="form-input"
             style={{ padding: "6px 28px 6px 10px", "font-size": "13px", "min-width": "140px" }}
           >
             <For each={namespaces()}>
@@ -586,16 +599,25 @@ export default function KubernetesPage() {
                       <td>
                         <div style={{ display: "flex", gap: "4px" }}>
                           <button
-                            class="btn btn-sm"
+                            class="action-icon"
+                            title="View logs"
                             onClick={() => handleViewLogs(pod.namespace, pod.name)}
                           >
-                            Logs
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
                           </button>
                           <button
-                            class="btn btn-sm btn-danger"
+                            class="action-icon action-icon-restart"
+                            title="Restart pod"
                             onClick={() => handleDeletePod(pod.namespace, pod.name)}
                           >
-                            Delete
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                          </button>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Delete pod"
+                            onClick={() => handleDeletePod(pod.namespace, pod.name)}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                           </button>
                         </div>
                       </td>
@@ -733,75 +755,90 @@ export default function KubernetesPage() {
                       </td>
                       <td style={{ color: "#8b949e" }}>{svc.age}</td>
                       <td style={{ "text-align": "right" }}>
-                        <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end", "flex-wrap": "wrap", "align-items": "center" }}>
-                          <For each={svc.ports}>
-                            {(p) => {
-                              const editKey = () => `${svc.name}/${p.port}`;
-                              const isEditing = () => portForwardEditing() === editKey();
-                              return (
-                                <Show when={isForwarded(selectedNs(), svc.name, p.port)} fallback={
-                                  <Show when={isEditing()} fallback={
-                                    <button
-                                      class="btn btn-sm"
-                                      style={{ "font-size": "11px", padding: "2px 8px" }}
-                                      onClick={() => {
-                                        setPortForwardLocalPort(String(p.port));
-                                        setPortForwardEditing(editKey());
-                                      }}
-                                      title={`Forward port ${p.port} — click to configure`}
-                                    >
-                                      :{p.port}
-                                    </button>
-                                  }>
-                                    <div style={{ display: "flex", "align-items": "center", gap: "2px" }}>
-                                      <input
-                                        type="number"
-                                        class="form-input"
-                                        style={{ width: "70px", "font-size": "11px", padding: "2px 6px", "text-align": "center" }}
-                                        value={portForwardLocalPort()}
-                                        onInput={(e) => setPortForwardLocalPort(e.currentTarget.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") {
-                                            startPortForward(selectedNs(), svc.name, p.port, parseInt(portForwardLocalPort()) || p.port);
-                                            setPortForwardEditing(null);
-                                          }
-                                          if (e.key === "Escape") setPortForwardEditing(null);
-                                        }}
-                                        ref={(el) => setTimeout(() => el.focus(), 50)}
-                                      />
-                                      <button
-                                        class="btn btn-sm btn-primary"
-                                        style={{ "font-size": "11px", padding: "2px 6px" }}
-                                        onClick={() => {
-                                          startPortForward(selectedNs(), svc.name, p.port, parseInt(portForwardLocalPort()) || p.port);
-                                          setPortForwardEditing(null);
-                                        }}
-                                      >
-                                        {"\u25B6"}
-                                      </button>
+                        <Show when={svc.ports.length > 1} fallback={
+                          <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end", "flex-wrap": "wrap", "align-items": "center" }}>
+                            <For each={svc.ports}>
+                              {(p) => {
+                                const editKey = () => `${svc.name}/${p.port}`;
+                                const isEditing = () => portForwardEditing() === editKey();
+                                return (
+                                  <Show when={isForwarded(selectedNs(), svc.name, p.port)} fallback={
+                                    <Show when={isEditing()} fallback={
                                       <button
                                         class="btn btn-sm"
-                                        style={{ "font-size": "11px", padding: "2px 6px" }}
-                                        onClick={() => setPortForwardEditing(null)}
+                                        style={{ "font-size": "11px", padding: "2px 8px" }}
+                                        onClick={() => {
+                                          setPortForwardLocalPort(String(p.port));
+                                          setPortForwardEditing(editKey());
+                                        }}
+                                        title={`Forward port ${p.port} — click to configure`}
                                       >
-                                        {"\u2715"}
+                                        :{p.port}
                                       </button>
-                                    </div>
+                                    }>
+                                      <div style={{ display: "flex", "align-items": "center", gap: "2px" }}>
+                                        <input
+                                          type="number"
+                                          class="form-input"
+                                          style={{ width: "70px", "font-size": "11px", padding: "2px 6px", "text-align": "center" }}
+                                          value={portForwardLocalPort()}
+                                          onInput={(e) => setPortForwardLocalPort(e.currentTarget.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              startPortForward(selectedNs(), svc.name, p.port, parseInt(portForwardLocalPort()) || p.port);
+                                              setPortForwardEditing(null);
+                                            }
+                                            if (e.key === "Escape") setPortForwardEditing(null);
+                                          }}
+                                          ref={(el) => setTimeout(() => el.focus(), 50)}
+                                        />
+                                        <button
+                                          class="btn btn-sm btn-primary"
+                                          style={{ "font-size": "11px", padding: "2px 6px" }}
+                                          onClick={() => {
+                                            startPortForward(selectedNs(), svc.name, p.port, parseInt(portForwardLocalPort()) || p.port);
+                                            setPortForwardEditing(null);
+                                          }}
+                                        >
+                                          {"\u25B6"}
+                                        </button>
+                                        <button
+                                          class="btn btn-sm"
+                                          style={{ "font-size": "11px", padding: "2px 6px" }}
+                                          onClick={() => setPortForwardEditing(null)}
+                                        >
+                                          {"\u2715"}
+                                        </button>
+                                      </div>
+                                    </Show>
+                                  }>
+                                    <button
+                                      class="btn btn-sm btn-primary"
+                                      style={{ "font-size": "11px", padding: "2px 8px" }}
+                                      onClick={() => stopPortForward(selectedNs(), svc.name, p.port)}
+                                      title={`Stop forwarding port ${p.port}`}
+                                    >
+                                      :{p.port} {"\u2713"}
+                                    </button>
                                   </Show>
-                                }>
-                                  <button
-                                    class="btn btn-sm btn-primary"
-                                    style={{ "font-size": "11px", padding: "2px 8px" }}
-                                    onClick={() => stopPortForward(selectedNs(), svc.name, p.port)}
-                                    title={`Stop forwarding port ${p.port}`}
-                                  >
-                                    :{p.port} {"\u2713"}
-                                  </button>
-                                </Show>
-                              );
+                                );
+                              }}
+                            </For>
+                          </div>
+                        }>
+                          <button
+                            class="btn btn-sm"
+                            style={{ "font-size": "11px", padding: "2px 8px" }}
+                            onClick={() => {
+                              const locals: Record<number, string> = {};
+                              svc.ports.forEach((p) => { locals[p.port] = String(p.port); });
+                              setPortDialogLocalPorts(locals);
+                              setPortDialogSvc(svc);
                             }}
-                          </For>
-                        </div>
+                          >
+                            {svc.ports.length} ports
+                          </button>
+                        </Show>
                       </td>
                     </tr>
                   )}
@@ -894,10 +931,11 @@ export default function KubernetesPage() {
                       <td style={{ color: "#8b949e" }}>{pvc.age}</td>
                       <td>
                         <button
-                          class="btn btn-sm btn-danger"
+                          class="action-icon action-icon-delete"
+                          title="Delete PVC"
                           onClick={() => handleDeletePvc(pvc.namespace, pvc.name)}
                         >
-                          Delete
+                          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                         </button>
                       </td>
                     </tr>
@@ -957,6 +995,69 @@ export default function KubernetesPage() {
             </table>
           </Show>
         </Show>
+      </Show>
+
+      {/* Multi-Port Forward Dialog */}
+      <Show when={portDialogSvc()}>
+        <div class="modal-overlay" onClick={() => setPortDialogSvc(null)}>
+          <div class="modal-dialog" style={{ "max-width": "420px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Port Forward: {portDialogSvc()!.name}</span>
+              <button class="modal-close" onClick={() => setPortDialogSvc(null)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px" }}>
+              <For each={portDialogSvc()!.ports}>
+                {(p) => {
+                  const forwarded = () => isForwarded(selectedNs(), portDialogSvc()!.name, p.port);
+                  const localVal = () => portDialogLocalPorts()[p.port] || String(p.port);
+                  return (
+                    <div style={{
+                      display: "flex", "align-items": "center", gap: "10px",
+                      padding: "10px 0",
+                      "border-bottom": "1px solid rgba(255,255,255,0.06)",
+                    }}>
+                      <span class="mono" style={{ "font-size": "12px", "min-width": "80px", color: "#e6edf3" }}>
+                        :{p.port}/{p.protocol}
+                      </span>
+                      <input
+                        type="number"
+                        class="form-input"
+                        style={{ width: "80px", "font-size": "12px", padding: "4px 8px", "text-align": "center" }}
+                        value={localVal()}
+                        disabled={forwarded()}
+                        onInput={(e) => {
+                          setPortDialogLocalPorts((prev) => ({ ...prev, [p.port]: e.currentTarget.value }));
+                        }}
+                      />
+                      <button
+                        class={forwarded() ? "btn btn-sm btn-danger" : "btn btn-sm btn-primary"}
+                        style={{ "font-size": "11px", padding: "4px 12px", "min-width": "60px" }}
+                        onClick={async () => {
+                          if (forwarded()) {
+                            await stopPortForward(selectedNs(), portDialogSvc()!.name, p.port);
+                          } else {
+                            await startPortForward(selectedNs(), portDialogSvc()!.name, p.port, parseInt(localVal()) || p.port);
+                          }
+                        }}
+                      >
+                        {forwarded() ? "Stop" : "Forward"}
+                      </button>
+                      <Show when={forwarded()}>
+                        <a
+                          href={`http://localhost:${localVal()}`}
+                          target="_blank"
+                          style={{ "font-size": "11px", color: "#58a6ff", "text-decoration": "none", "white-space": "nowrap" }}
+                        >
+                          Open in browser
+                        </a>
+                      </Show>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
+        </div>
       </Show>
 
       {/* Log Viewer Modal */}
