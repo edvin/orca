@@ -7,7 +7,7 @@
   <meta name="description" content="Open source container management desktop app with built-in AI. Manage Docker, Podman, Compose, and Kubernetes from one place.">
   <meta property="og:title" content="Orca Desktop — Container Management Desktop App">
   <meta property="og:description" content="Open source container management app with built-in AI assistant and agent APIs.">
-  <meta property="og:image" content="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png">
+  <meta property="og:image" content="https://raw.githubusercontent.com/edvin/orca/main/screenshots/01-dashboard.png">
   <meta property="og:url" content="https://orca-desktop.com">
   <link rel="icon" href="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-icon-whale.png">
   <style>
@@ -576,10 +576,126 @@
     .footer a { color: #6e7681; }
     .footer a:hover { color: #8b949e; }
 
+    /* Screenshot showcase */
+    .showcase {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    .hero-screenshot {
+      max-width: 1060px;
+      margin: 0 auto 0;
+      padding: 0 20px;
+      position: relative;
+    }
+
+    .hero-screenshot img {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .hero-screenshot::after {
+      content: '';
+      position: absolute;
+      bottom: -40px;
+      left: 10%;
+      right: 10%;
+      height: 40px;
+      background: radial-gradient(ellipse at center, rgba(88, 166, 255, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .screenshot-card {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+      cursor: pointer;
+      background: #0d1117;
+    }
+
+    .screenshot-card:hover {
+      transform: translateY(-4px) scale(1.02);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(88, 166, 255, 0.2);
+      border-color: rgba(88, 166, 255, 0.3);
+      z-index: 2;
+    }
+
+    .screenshot-card img {
+      width: 100%;
+      display: block;
+    }
+
+    .screenshot-card .screenshot-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 24px 12px 10px;
+      background: linear-gradient(transparent, rgba(10, 14, 20, 0.95));
+      font-size: 12px;
+      font-weight: 600;
+      color: #e6edf3;
+      letter-spacing: 0.3px;
+    }
+
+    .screenshot-card .screenshot-label span {
+      color: #8b949e;
+      font-weight: 400;
+      display: block;
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
+    /* Fullscreen lightbox */
+    .lightbox {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.92);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      cursor: zoom-out;
+    }
+
+    .lightbox.active { display: flex; }
+
+    .lightbox img {
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 12px;
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5);
+    }
+
+    .highlight-screenshot {
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+      overflow: hidden;
+    }
+
+    .highlight-screenshot img {
+      width: 100%;
+      display: block;
+    }
+
     /* Responsive */
     @media (max-width: 900px) {
       .feature-grid { grid-template-columns: 1fr 1fr; }
       .highlight-row { grid-template-columns: 1fr; gap: 24px; }
+      .screenshot-grid { grid-template-columns: 1fr 1fr; }
     }
 
     @media (max-width: 600px) {
@@ -589,6 +705,7 @@
       .hero-content { padding: 40px 24px; margin: 0 12px; }
       .feature-grid { grid-template-columns: 1fr; }
       .section-header h2 { font-size: 30px; }
+      .screenshot-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -665,6 +782,11 @@
     </div>
   </div>
 </section>
+
+<!-- Hero screenshot -->
+<div class="hero-screenshot">
+  <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/01-dashboard.png" alt="Orca Desktop Dashboard" loading="lazy">
+</div>
 
 <section class="features">
   <div class="section-header">
@@ -802,18 +924,8 @@
         <li>Events timeline, ConfigMaps, Secrets, and namespace management</li>
       </ul>
     </div>
-    <div class="highlight-visual">
-<span style="color: #6e7681">// Visual topology — how Orca maps your cluster</span>
-
-<span style="color: #79c0ff">Service</span> <span style="color: #8b949e">:443</span> &rarr; <span style="color: #a5d6ff">forward to localhost:8443</span>
-  &boxvr;&horbar; <span style="color: #d2a8ff">Deployment</span> <span style="color: #8b949e">nginx (3 replicas)</span>
-  &boxv;   &boxvr;&horbar; <span style="color: #3fb950">Pod</span> nginx-7d4f8b <span style="color: #3fb950">Running</span> <span style="color: #8b949e">CPU: 12m  Mem: 48Mi</span>
-  &boxv;   &boxvr;&horbar; <span style="color: #3fb950">Pod</span> nginx-9c2e1a <span style="color: #3fb950">Running</span> <span style="color: #8b949e">CPU:  8m  Mem: 44Mi</span>
-  &boxv;   &boxur;&horbar; <span style="color: #3fb950">Pod</span> nginx-b5f3d7 <span style="color: #3fb950">Running</span> <span style="color: #8b949e">CPU: 10m  Mem: 46Mi</span>
-
-<span style="color: #6e7681">// Helm releases</span>
-<span style="color: #d29922">helm</span> list &rarr; <span style="color: #a5d6ff">nginx-ingress</span>  v1.12.0  <span style="color: #3fb950">deployed</span>
-             <span style="color: #a5d6ff">cert-manager</span>   v1.14.3  <span style="color: #3fb950">deployed</span>
+    <div class="highlight-screenshot">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/10-kubernetes.png" alt="Kubernetes management" loading="lazy">
     </div>
   </div>
 
@@ -829,23 +941,8 @@
         <li>Conversation history with sliding window context</li>
       </ul>
     </div>
-    <div class="highlight-visual" style="direction: ltr;">
-<span style="color: #6e7681">// AI assistant with tool calling</span>
-
-<span style="color: #58a6ff">You:</span> Why is my nginx container using so much memory?
-
-<span style="color: #a371f7">Orca AI:</span> Let me check...
-  <span style="color: #d29922">[tool]</span> list_containers()
-  <span style="color: #d29922">[tool]</span> inspect_container("nginx-prod")
-  <span style="color: #d29922">[tool]</span> container_logs("nginx-prod", tail=100)
-
-Your nginx container is using <span style="color: #f85149">847 MB</span> because
-worker_connections is set to 4096 with 4 worker
-processes. I recommend reducing workers to 2 and
-setting <span style="color: #3fb950">worker_rlimit_nofile</span> to 1024.
-
-<span style="color: #6e7681">// GPU status bar</span>
-<span style="color: #3fb950">NVIDIA RTX 4090</span> &mdash; VRAM: 6.2 / 24 GB &mdash; <span style="color: #3fb950">Ollama running</span>
+    <div class="highlight-screenshot" style="direction: ltr;">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/03-container-detail.png" alt="Container detail with AI diagnostics" loading="lazy">
     </div>
   </div>
 
@@ -861,20 +958,8 @@ setting <span style="color: #3fb950">worker_rlimit_nofile</span> to 1024.
         <li>Private registry support for enterprise workflows</li>
       </ul>
     </div>
-    <div class="highlight-visual">
-<span style="color: #6e7681">// Vulnerability scan results</span>
-
-<span style="color: #e6edf3">Image:</span> <span style="color: #a5d6ff">nginx:1.25.3</span>
-<span style="color: #e6edf3">Scanned:</span> 142 packages
-
-<span style="color: #f85149; font-weight: bold;">CRITICAL</span>  CVE-2024-1234  openssl 3.0.12  <span style="color: #8b949e">→ fix: 3.0.13</span>
-<span style="color: #f85149; font-weight: bold;">CRITICAL</span>  CVE-2024-5678  curl 8.4.0     <span style="color: #8b949e">→ fix: 8.5.0</span>
-<span style="color: #d29922; font-weight: bold;">HIGH    </span>  CVE-2024-2345  zlib 1.3       <span style="color: #8b949e">→ fix: 1.3.1</span>
-<span style="color: #d29922; font-weight: bold;">HIGH    </span>  CVE-2024-3456  libxml2 2.11   <span style="color: #8b949e">→ fix: 2.12</span>
-<span style="color: #e3b341; font-weight: bold;">MEDIUM  </span>  CVE-2024-4567  pcre2 10.42    <span style="color: #8b949e">→ fix: 10.43</span>
-<span style="color: #8b949e; font-weight: bold;">LOW     </span>  CVE-2024-6789  bash 5.2.15    <span style="color: #8b949e">→ fix: 5.2.21</span>
-
-<span style="color: #3fb950">[Export HTML Report]</span>  <span style="color: #58a6ff">[Open in Browser]</span>
+    <div class="highlight-screenshot">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/06-images.png" alt="Image management with vulnerability scanning" loading="lazy">
     </div>
   </div>
 
@@ -889,21 +974,64 @@ setting <span style="color: #3fb950">worker_rlimit_nofile</span> to 1024.
         <li>Bearer token authentication</li>
       </ul>
     </div>
-    <div class="highlight-visual" style="direction: ltr;">
-<span style="color: #6e7681">// Add to your MCP config</span>
-{
-  "<span style="color: #a5d6ff">mcpServers</span>": {
-    "<span style="color: #a5d6ff">orca</span>": {
-      "<span style="color: #a5d6ff">url</span>": "<span style="color: #79c0ff">http://127.0.0.1:9477/api/v1/agent/mcp</span>",
-      "<span style="color: #a5d6ff">headers</span>": {
-        "<span style="color: #a5d6ff">Authorization</span>": "<span style="color: #79c0ff">Bearer YOUR_TOKEN</span>"
-      }
-    }
-  }
-}
+    <div class="highlight-screenshot" style="direction: ltr;">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/19-settings.png" alt="Settings with MCP configuration" loading="lazy">
     </div>
   </div>
 </section>
+
+<!-- Screenshot Gallery -->
+<section class="showcase">
+  <div class="section-header">
+    <h2>See it in action</h2>
+    <p>Real screenshots from a live environment. Click to enlarge.</p>
+  </div>
+  <div class="screenshot-grid">
+    <div class="screenshot-card" onclick="openLightbox(this)">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/02-containers.png" alt="Containers" loading="lazy">
+      <div class="screenshot-label">Containers<span>Compose stacks, live CPU/memory, port links</span></div>
+    </div>
+    <div class="screenshot-card" onclick="openLightbox(this)">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/04-container-logs.png" alt="Container Logs" loading="lazy">
+      <div class="screenshot-label">Log Viewer<span>Regex search, match highlighting, auto-scroll</span></div>
+    </div>
+    <div class="screenshot-card" onclick="openLightbox(this)">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/09-network-topology.png" alt="Network Topology" loading="lazy">
+      <div class="screenshot-label">Network Topology<span>Visual diagram of networks and containers</span></div>
+    </div>
+    <div class="screenshot-card" onclick="openLightbox(this)">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/16-app-catalog.png" alt="App Catalog" loading="lazy">
+      <div class="screenshot-label">App Catalog<span>One-click templates with auto-generated passwords</span></div>
+    </div>
+    <div class="screenshot-card" onclick="openLightbox(this)">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/21-settings-maintenance.png" alt="System Cleanup" loading="lazy">
+      <div class="screenshot-label">System Cleanup<span>Prune containers, images, volumes, build cache</span></div>
+    </div>
+    <div class="screenshot-card" onclick="openLightbox(this)">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/22-keyboard-shortcuts.png" alt="Keyboard Shortcuts" loading="lazy">
+      <div class="screenshot-label">Keyboard Shortcuts<span>Command palette, shortcuts overlay</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="Screenshot">
+</div>
+
+<script>
+function openLightbox(card) {
+  const src = card.querySelector('img').src;
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('active');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('active');
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeLightbox();
+});
+</script>
 
 <section class="cta">
   <h2>Ready to try it?</h2>
