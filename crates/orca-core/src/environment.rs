@@ -39,6 +39,16 @@ pub struct SystemHealth {
     pub disk_usage: Option<DiskUsage>,
     pub system_resources: Option<SystemResources>,
     pub warnings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<GpuInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GpuInfo {
+    pub name: String,
+    pub memory_used_mb: u64,
+    pub memory_total_mb: u64,
+    pub utilization_percent: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

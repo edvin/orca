@@ -129,6 +129,17 @@ export default function StatusBar(props: StatusBarProps) {
           </span>
         </Show>
 
+        <Show when={health()?.gpu}>
+          <span class="status-bar-separator" />
+          <span class="status-bar-item" title={`GPU: ${health()!.gpu!.name}`}>
+            GPU
+            <span class="status-bar-mini-bar">
+              <span class="status-bar-mini-fill" style={{ width: `${Math.round(health()!.gpu!.memory_used_mb / health()!.gpu!.memory_total_mb * 100)}%`, background: barColor(Math.round(health()!.gpu!.memory_used_mb / health()!.gpu!.memory_total_mb * 100)) }} />
+            </span>
+            {(health()!.gpu!.memory_used_mb / 1024).toFixed(1)}G
+          </span>
+        </Show>
+
         <Show when={health()?.warnings && health()!.warnings.length > 0}>
           <span class="status-bar-separator" />
           <span

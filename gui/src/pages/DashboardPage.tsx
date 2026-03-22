@@ -248,6 +248,22 @@ export default function DashboardPage(props: DashboardPageProps) {
             </Show>
           </Show>
         </div>
+        <Show when={health()?.gpu}>
+          {(gpu) => (
+            <div class="dashboard-stat-card">
+              <div class="dashboard-stat-label">GPU</div>
+              <div class="dashboard-stat-value" style={{ "font-size": "16px" }}>
+                {gpu().utilization_percent}%
+              </div>
+              <div class="dashboard-stat-sub">
+                {(gpu().memory_used_mb / 1024).toFixed(1)} / {(gpu().memory_total_mb / 1024).toFixed(1)} GB VRAM
+              </div>
+              <div style={{ "font-size": "10px", color: "#6e7681", "margin-top": "2px" }}>
+                {gpu().name}
+              </div>
+            </div>
+          )}
+        </Show>
       </div>
 
       {/* Resource usage charts */}

@@ -230,12 +230,20 @@ export interface ImageSearchResult {
 
 // --- System Health ---
 
+export interface GpuInfo {
+  name: string;
+  memory_used_mb: number;
+  memory_total_mb: number;
+  utilization_percent: number;
+}
+
 export interface SystemHealth {
   docker_connected: boolean;
   docker_version: string | null;
   disk_usage: DiskUsage | null;
   system_resources: SystemResources | null;
   warnings: string[];
+  gpu?: GpuInfo;
 }
 
 export interface DiskUsage {

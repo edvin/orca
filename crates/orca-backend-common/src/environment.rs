@@ -1746,12 +1746,41 @@ pub async fn check_system_health() -> SystemHealth {
         }
     }
 
+    // GPU info (if NVIDIA GPU available)
+    let gpu = get_gpu_info().await;
+
     SystemHealth {
         docker_connected: connected,
         docker_version: version,
         disk_usage: disk,
         system_resources: resources,
         warnings,
+        gpu,
+    }
+}
+
+async fn get_gpu_info() -> Option<GpuInfo> {
+    let output = if cfg!(target_os = "windows") {
+        run_cmd("wsl", &["-u", "root", "--", "nvidia-smi",
+            "--query-gpu=name,memory.used,memory.total,utilization.gpu",
+            "--format=csv,noheader,nounits"]).await
+    } else {
+        run_cmd("nvidia-smi", &[
+            "--query-gpu=name,memory.used,memory.total,utilization.gpu",
+            "--format=csv,noheader,nounits"]).await
+    };
+
+    let text = output.ok()?;
+    let parts: Vec<&str> = text.trim().split(", ").collect();
+    if parts.len() >= 4 {
+        Some(GpuInfo {
+            name: parts[0].trim().to_string(),
+            memory_used_mb: parts[1].trim().parse().unwrap_or(0),
+            memory_total_mb: parts[2].trim().parse().unwrap_or(0),
+            utilization_percent: parts[3].trim().parse().unwrap_or(0),
+        })
+    } else {
+        None
     }
 }
 
