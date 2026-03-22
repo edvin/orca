@@ -1,5 +1,16 @@
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
-import loader from "@monaco-editor/loader";
+import * as monaco from "monaco-editor";
+
+// Configure Monaco workers for Vite bundling
+import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
+
+(self as any).MonacoEnvironment = {
+  getWorker(_: string, label: string) {
+    if (label === "json") return new jsonWorker();
+    return new editorWorker();
+  },
+};
 
 interface YamlEditorProps {
   value: string;
@@ -16,9 +27,10 @@ export default function YamlEditor(props: YamlEditorProps) {
   const [saving, setSaving] = createSignal(false);
   const [modified, setModified] = createSignal(false);
 
-  onMount(async () => {
-    const monaco = await loader.init();
+  const [loadError, setLoadError] = createSignal<string | null>(null);
 
+  onMount(() => {
+    try {
     // Configure YAML-friendly dark theme
     monaco.editor.defineTheme("orca-dark", {
       base: "vs-dark",
@@ -80,6 +92,9 @@ export default function YamlEditor(props: YamlEditorProps) {
     onCleanup(() => {
       editorInstance?.dispose();
     });
+    } catch (e) {
+      setLoadError(String(e));
+    }
   });
 
   const handleSave = async () => {
@@ -127,10 +142,26 @@ export default function YamlEditor(props: YamlEditorProps) {
           </div>
         </div>
       </Show>
-      <div
-        ref={containerRef}
-        style={{ flex: "1", "min-height": props.height || "300px" }}
-      />
+      <Show when={loadError()}>
+        <div style={{
+          padding: "16px", color: "#f85149", background: "rgba(248,81,73,0.08)",
+          border: "1px solid rgba(248,81,73,0.2)", "border-radius": "8px", margin: "12px",
+        }}>
+          <strong>Editor failed to load:</strong> {loadError()}
+          <pre style={{
+            "margin-top": "12px", background: "#0d1117", padding: "12px", "border-radius": "6px",
+            "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px",
+            color: "#c9d1d9", "white-space": "pre-wrap", "word-break": "break-all",
+            "max-height": "60vh", overflow: "auto",
+          }}>{props.value}</pre>
+        </div>
+      </Show>
+      <Show when={!loadError()}>
+        <div
+          ref={containerRef}
+          style={{ flex: "1", "min-height": props.height || "300px" }}
+        />
+      </Show>
     </div>
   );
 }

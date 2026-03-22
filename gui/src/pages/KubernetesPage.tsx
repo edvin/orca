@@ -2380,7 +2380,7 @@ export default function KubernetesPage() {
       {/* YAML Editor Modal */}
       <Show when={yamlResource()}>
         <div class="modal-overlay" onClick={() => setYamlResource(null)}>
-          <div class="modal-dialog" style={{ width: "800px", "max-width": "90vw", height: "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+          <div class="modal-dialog" style={{ width: "800px", "max-width": "90vw", height: "80vh", display: "flex", "flex-direction": "column", background: "#0d1117" }} onClick={(e) => e.stopPropagation()}>
             <YamlEditor
               value={yamlResource()!.yaml}
               title={`${yamlResource()!.kind}/${yamlResource()!.name}`}
