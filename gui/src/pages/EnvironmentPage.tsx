@@ -217,13 +217,21 @@ export default function EnvironmentPage() {
   const restartDocker = async () => {
     setRestartingDocker(true);
     try {
-      showToast("Restarting Docker...", "info");
-      // Platform-appropriate Docker restart
-      try {
-        await invoke("reconnect_runtime");
-      } catch {}
+      showToast("Restarting Docker and Orca daemon...", "info");
+
+      // Stop the Orca daemon first
+      try { await invoke("stop_daemon"); } catch {}
+      await new Promise(r => setTimeout(r, 1000));
+
+      // Restart Docker (uses the env_fix "start_docker" action which configures TCP on Windows)
+      try { await invoke("env_fix", { action: "start_docker" }); } catch {}
       await new Promise(r => setTimeout(r, 3000));
-      showToast("Docker restarted — restart Orca daemon to reconnect", "success");
+
+      // Start the Orca daemon (it will connect to the fresh Docker)
+      try { await invoke("start_daemon"); } catch {}
+      await new Promise(r => setTimeout(r, 3000));
+
+      showToast("Docker and Orca daemon restarted", "success");
       await refresh();
     } catch (e) {
       logError(`Failed to restart Docker: ${e}`);
