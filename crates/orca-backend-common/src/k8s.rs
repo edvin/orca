@@ -960,7 +960,7 @@ impl K8sManager for K3sManager {
                 enabled: true, running, version, node_name, node_status,
                 pods_running, pods_total,
                 traefik_dashboard: if running { Some("http://127.0.0.1:9000/dashboard/".to_string()) } else { None },
-                error: if !running { Some(format!("API server at {} not reachable", kubeconfig_path.display())) } else { None },
+                error: if !running { Some("Kubernetes API server not reachable".to_string()) } else { None },
             });
         }
     }

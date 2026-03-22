@@ -70,7 +70,7 @@ async function injectTauriBridge(page: Page) {
           // Stacks
           list_stacks: () => fetchJson(DAEMON +"/stacks"),
           // K8s
-          k8s_status: () => fetchJson(DAEMON +"/k8s/status"),
+          k8s_status: () => Promise.resolve({ enabled: false, running: false, version: null, node_name: null, node_status: null, pods_running: 0, pods_total: 0, traefik_dashboard: null, error: null }),
           k8s_pods: () => fetchJson(DAEMON +"/k8s/pods/" + (args.namespace || "default")),
           k8s_deployments: () => fetchJson(DAEMON +"/k8s/deployments/" + (args.namespace || "default")),
           k8s_services: () => fetchJson(DAEMON +"/k8s/services/" + (args.namespace || "default")),

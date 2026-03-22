@@ -758,21 +758,38 @@
 
     /* Collapsible feature categories */
     .ft-category {
-      padding: 10px 24px;
+      padding: 12px 24px;
       background: rgba(255,255,255,0.02);
-      font-size: 11px;
+      font-size: 13px;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: #58a6ff;
-      font-weight: 600;
+      letter-spacing: 0.6px;
+      color: #e6edf3;
+      font-weight: 700;
       cursor: pointer;
       display: flex;
       justify-content: space-between;
       align-items: center;
       user-select: none;
       transition: background 0.15s;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
     }
     .ft-category:hover { background: rgba(255,255,255,0.04); }
+    .ft-category-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ft-count {
+      font-size: 10px;
+      font-weight: 600;
+      color: #58a6ff;
+      background: rgba(88, 166, 255, 0.1);
+      border: 1px solid rgba(88, 166, 255, 0.2);
+      padding: 1px 8px;
+      border-radius: 10px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
     .ft-chevron {
       font-size: 10px;
       transition: transform 0.2s;
@@ -923,7 +940,7 @@
 
       <!-- Category: Container Management -->
       <div class="ft-category" onclick="toggleCategory(this)">
-        <span>Containers</span>
+        <span class="ft-category-left"><span>Containers</span><span class="ft-count">14</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -944,8 +961,8 @@
       </div>
 
       <!-- Category: Images -->
-      <div class="ft-category" onclick="toggleCategory(this)">
-        <span>Images &amp; Security</span>
+      <div class="ft-category collapsed" onclick="toggleCategory(this)">
+        <span class="ft-category-left"><span>Images &amp; Security</span><span class="ft-count">10</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -962,8 +979,8 @@
       </div>
 
       <!-- Category: Orchestration -->
-      <div class="ft-category" onclick="toggleCategory(this)">
-        <span>Orchestration</span>
+      <div class="ft-category collapsed" onclick="toggleCategory(this)">
+        <span class="ft-category-left"><span>Orchestration</span><span class="ft-count">19</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -989,8 +1006,8 @@
       </div>
 
       <!-- Category: AI -->
-      <div class="ft-category" onclick="toggleCategory(this)">
-        <span>AI &amp; Automation</span>
+      <div class="ft-category collapsed" onclick="toggleCategory(this)">
+        <span class="ft-category-left"><span>AI &amp; Automation</span><span class="ft-count">8</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -1005,8 +1022,8 @@
       </div>
 
       <!-- Category: Platform -->
-      <div class="ft-category" onclick="toggleCategory(this)">
-        <span>Platform</span>
+      <div class="ft-category collapsed" onclick="toggleCategory(this)">
+        <span class="ft-category-left"><span>Platform</span><span class="ft-count">15</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
