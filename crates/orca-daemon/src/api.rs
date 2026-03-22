@@ -2462,22 +2462,24 @@ async fn system_health(
 ) -> Result<impl IntoResponse, ApiError> {
     let mut health = orca_backend_common::environment::check_system_health().await;
 
-    // Try to connect to Docker via the daemon's existing connection
+    // Check the daemon's ACTUAL Docker connection (what the app uses)
     if let Ok(version) = state.runtime.docker.version().await {
         health.docker_connected = true;
         health.docker_version = version.version;
-        health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable"));
+        health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable") && !w.contains("Restart"));
     } else {
-        // The daemon's connection is dead — try fresh connections.
-        // This handles the case where Docker was installed after the daemon started.
+        // The daemon's connection is dead. Docker might still be running
+        // (e.g. in WSL) but the daemon can't reach it.
+        health.docker_connected = false;
+
+        // Check if Docker is available via other means
         let connected = try_docker_connection().await;
         if let Some((version, _)) = connected {
-            health.docker_connected = true;
             health.docker_version = Some(version);
+            // Docker IS running but daemon can't connect — show as disconnected
+            // with a clear warning
             health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable"));
-            if !health.warnings.iter().any(|w| w.contains("Restart")) {
-                health.warnings.push("Docker is available but not connected. Click 'Restart Docker' on System Health to reconnect.".to_string());
-            }
+            health.warnings.push("Docker is running but Orca is disconnected. Click 'Restart Docker' to reconnect.".to_string());
         }
     }
 
