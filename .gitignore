@@ -8,3 +8,5 @@ gui/dist/
 .claude/worktrees/
 src-tauri/gen/
 src-tauri/binaries/
+gui/test-results/
+test-results/

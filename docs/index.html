@@ -663,20 +663,84 @@
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0, 0, 0, 0.92);
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(12px);
       z-index: 1000;
       justify-content: center;
       align-items: center;
-      cursor: zoom-out;
+      opacity: 0;
+      transition: opacity 0.3s;
     }
-
-    .lightbox.active { display: flex; }
+    .lightbox.active { display: flex; opacity: 1; }
 
     .lightbox img {
-      max-width: 90vw;
-      max-height: 90vh;
+      max-width: 85vw;
+      max-height: 80vh;
       border-radius: 12px;
-      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+      transition: opacity 0.2s;
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 20px; right: 24px;
+      background: none; border: none;
+      color: #8b949e; font-size: 32px;
+      cursor: pointer; z-index: 1001;
+      transition: color 0.2s;
+    }
+    .lightbox-close:hover { color: #e6edf3; }
+
+    .lightbox-counter {
+      position: absolute;
+      top: 24px; left: 50%;
+      transform: translateX(-50%);
+      color: #6e7681;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      z-index: 1001;
+    }
+
+    .lightbox-prev, .lightbox-next {
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #e6edf3;
+      font-size: 28px;
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, transform 0.2s;
+      z-index: 1001;
+      backdrop-filter: blur(8px);
+    }
+    .lightbox-prev { left: 20px; }
+    .lightbox-next { right: 20px; }
+    .lightbox-prev:hover, .lightbox-next:hover {
+      background: rgba(255,255,255,0.12);
+      transform: translateY(-50%) scale(1.1);
+    }
+
+    .lightbox-caption {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 20px 32px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.8));
+      backdrop-filter: blur(8px);
+      text-align: center;
+      z-index: 1001;
+    }
+    .lightbox-caption strong {
+      color: #e6edf3;
+      font-size: 16px;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .lightbox-caption span {
+      color: #8b949e;
+      font-size: 13px;
     }
 
     .highlight-screenshot {
@@ -684,12 +748,46 @@
       border: 1px solid rgba(255, 255, 255, 0.06);
       box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
       overflow: hidden;
+      cursor: pointer;
     }
 
     .highlight-screenshot img {
       width: 100%;
       display: block;
     }
+
+    /* Collapsible feature categories */
+    .ft-category {
+      padding: 10px 24px;
+      background: rgba(255,255,255,0.02);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #58a6ff;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .ft-category:hover { background: rgba(255,255,255,0.04); }
+    .ft-chevron {
+      font-size: 10px;
+      transition: transform 0.2s;
+      color: #484f58;
+    }
+    .ft-category.collapsed .ft-chevron { transform: rotate(-90deg); }
+    .ft-category-rows { overflow: hidden; transition: max-height 0.3s ease; }
+    .ft-category.collapsed + .ft-category-rows { max-height: 0 !important; }
+    .ft-toggle-all {
+      color: #484f58;
+      font-size: 12px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .ft-toggle-all:hover { color: #8b949e; text-decoration: underline; }
 
     /* Responsive */
     @media (max-width: 900px) {
@@ -817,12 +915,18 @@
       <!-- Legend + Table header -->
       <div style="padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; color: #484f58; display: flex; justify-content: space-between; align-items: center;">
         <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features &mdash; v0.6.1</span>
-        <span><span class="ft-unique" style="display: inline;">&#10003;</span> = unique to Orca Desktop</span>
+        <span style="display: flex; align-items: center; gap: 16px;">
+          <span class="ft-toggle-all" onclick="toggleAllCategories(false)" id="ft-toggle-link">Collapse All</span>
+          <span><span class="ft-unique" style="display: inline;">&#10003;</span> = unique to Orca Desktop</span>
+        </span>
       </div>
 
       <!-- Category: Container Management -->
-      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Containers</div>
-
+      <div class="ft-category" onclick="toggleCategory(this)">
+        <span>Containers</span>
+        <span class="ft-chevron">&#9662;</span>
+      </div>
+      <div class="ft-category-rows">
       <div class="ft-row"><span>Full container lifecycle (create, start, stop, restart, kill, remove)</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Live resource monitoring (CPU, memory, network I/O)</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Live resource editing</strong> — change memory, CPU, restart policy on running containers</span><span class="ft-check ft-unique">&#10003;</span></div>
@@ -837,10 +941,14 @@
       <div class="ft-row"><span>Export as <code>docker run</code> / <code>docker-compose.yml</code></span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Docker Hub browser</strong> — search and pull images directly from Docker Hub</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>App Catalog</strong> — curated templates with auto-generated passwords</span><span class="ft-check ft-unique">&#10003;</span></div>
+      </div>
 
       <!-- Category: Images -->
-      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Images &amp; Security</div>
-
+      <div class="ft-category" onclick="toggleCategory(this)">
+        <span>Images &amp; Security</span>
+        <span class="ft-chevron">&#9662;</span>
+      </div>
+      <div class="ft-category-rows">
       <div class="ft-row"><span>Pull with Docker Hub search dialog</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Build with live output</strong> — streaming logs, build args, Dockerfile selection</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Image layer visualization</strong> — stacked bar chart with Dockerfile instructions</span><span class="ft-check ft-unique">&#10003;</span></div>
@@ -851,10 +959,14 @@
       <div class="ft-row"><span><strong>Import from tar</strong> — load images from tar archives</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Image tagging</strong> — tag images with custom repository and version</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Private registry auth (Docker Hub, GitHub, GitLab, ECR)</span><span class="ft-check">&#10003;</span></div>
+      </div>
 
       <!-- Category: Orchestration -->
-      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Orchestration</div>
-
+      <div class="ft-category" onclick="toggleCategory(this)">
+        <span>Orchestration</span>
+        <span class="ft-chevron">&#9662;</span>
+      </div>
+      <div class="ft-category-rows">
       <div class="ft-row"><span><strong>Compose stacks</strong> — auto-detect, up/down/pull, inline YAML editing with restart</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>One-click Kubernetes (k3s) with Traefik ingress</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Pods</strong> — CPU/memory metrics, logs with follow mode, in-browser terminal</span><span class="ft-check">&#10003;</span></div>
@@ -874,10 +986,14 @@
       <div class="ft-row"><span>Volume management with file browser and export</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Network topology</strong> — visual diagram of networks and connected containers</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Network selection</strong> — choose network when creating containers</span><span class="ft-check">&#10003;</span></div>
+      </div>
 
       <!-- Category: AI -->
-      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">AI &amp; Automation</div>
-
+      <div class="ft-category" onclick="toggleCategory(this)">
+        <span>AI &amp; Automation</span>
+        <span class="ft-chevron">&#9662;</span>
+      </div>
+      <div class="ft-category-rows">
       <div class="ft-row"><span><strong>AI assistant</strong> — floating window, drag to any monitor</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>5 AI providers</strong> — Claude, GPT, Gemini, Ollama (local), custom OpenAI-compatible</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>One-click Ollama setup</strong> — local AI with GPU acceleration</span><span class="ft-check ft-unique">&#10003;</span></div>
@@ -886,10 +1002,14 @@
       <div class="ft-row"><span><strong>MCP server</strong> — 27 tools for Claude Code / Claude Desktop</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>OpenAI-compatible endpoint</strong> — works with any agent framework</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>App templates</strong> — one-click deploy + create your own</span><span class="ft-check ft-unique">&#10003;</span></div>
+      </div>
 
       <!-- Category: Platform -->
-      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Platform</div>
-
+      <div class="ft-category" onclick="toggleCategory(this)">
+        <span>Platform</span>
+        <span class="ft-chevron">&#9662;</span>
+      </div>
+      <div class="ft-category-rows">
       <div class="ft-row"><span>Linux, macOS, Windows — native on all platforms</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Guided setup wizard with streaming progress</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Signed auto-updates</span><span class="ft-check">&#10003;</span></div>
@@ -905,6 +1025,7 @@
       <div class="ft-row"><span><strong>Command palette</strong> — fuzzy search pages, resources, and actions</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Glassmorphism UI — frosted glass, smooth animations</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row" style="border: none;"><span><strong>Open source</strong> — MIT licensed, free forever, no telemetry</span><span class="ft-check ft-unique">&#10003;</span></div>
+      </div>
     </div>
 
   </div>
@@ -975,7 +1096,7 @@
       </ul>
     </div>
     <div class="highlight-screenshot" style="direction: ltr;">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/19-settings.png" alt="Settings with MCP configuration" loading="lazy">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/20-settings-ai.png" alt="AI & Agents settings with MCP configuration" loading="lazy">
     </div>
   </div>
 </section>
@@ -987,27 +1108,27 @@
     <p>Real screenshots from a live environment. Click to enlarge.</p>
   </div>
   <div class="screenshot-grid">
-    <div class="screenshot-card" onclick="openLightbox(this)">
+    <div class="screenshot-card">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/02-containers.png" alt="Containers" loading="lazy">
       <div class="screenshot-label">Containers<span>Compose stacks, live CPU/memory, port links</span></div>
     </div>
-    <div class="screenshot-card" onclick="openLightbox(this)">
+    <div class="screenshot-card">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/04-container-logs.png" alt="Container Logs" loading="lazy">
       <div class="screenshot-label">Log Viewer<span>Regex search, match highlighting, auto-scroll</span></div>
     </div>
-    <div class="screenshot-card" onclick="openLightbox(this)">
+    <div class="screenshot-card">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/09-network-topology.png" alt="Network Topology" loading="lazy">
       <div class="screenshot-label">Network Topology<span>Visual diagram of networks and containers</span></div>
     </div>
-    <div class="screenshot-card" onclick="openLightbox(this)">
+    <div class="screenshot-card">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/16-app-catalog.png" alt="App Catalog" loading="lazy">
       <div class="screenshot-label">App Catalog<span>One-click templates with auto-generated passwords</span></div>
     </div>
-    <div class="screenshot-card" onclick="openLightbox(this)">
+    <div class="screenshot-card">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/21-settings-maintenance.png" alt="System Cleanup" loading="lazy">
       <div class="screenshot-label">System Cleanup<span>Prune containers, images, volumes, build cache</span></div>
     </div>
-    <div class="screenshot-card" onclick="openLightbox(this)">
+    <div class="screenshot-card">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/22-keyboard-shortcuts.png" alt="Keyboard Shortcuts" loading="lazy">
       <div class="screenshot-label">Keyboard Shortcuts<span>Command palette, shortcuts overlay</span></div>
     </div>
@@ -1015,29 +1136,108 @@
 </section>
 
 <!-- Lightbox -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <img id="lightbox-img" src="" alt="Screenshot">
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+  <div class="lightbox-counter" id="lightbox-counter">1 / 12</div>
+  <button class="lightbox-prev" onclick="prevImage(event)">&lsaquo;</button>
+  <button class="lightbox-next" onclick="nextImage(event)">&rsaquo;</button>
+  <img id="lightbox-img" src="" alt="">
+  <div class="lightbox-caption" id="lightbox-caption">
+    <strong id="lightbox-title"></strong>
+    <span id="lightbox-desc"></span>
+  </div>
 </div>
 
 <script>
-function openLightbox(card) {
-  const src = card.querySelector('img').src;
-  document.getElementById('lightbox-img').src = src;
-  document.getElementById('lightbox').classList.add('active');
+function toggleCategory(el) {
+  el.classList.toggle('collapsed');
+  updateToggleLink();
 }
+function toggleAllCategories(expand) {
+  document.querySelectorAll('.ft-category').forEach(el => {
+    if (expand) el.classList.remove('collapsed');
+    else el.classList.add('collapsed');
+  });
+  updateToggleLink();
+}
+function updateToggleLink() {
+  const link = document.getElementById('ft-toggle-link');
+  if (!link) return;
+  const allCollapsed = [...document.querySelectorAll('.ft-category')].every(el => el.classList.contains('collapsed'));
+  link.textContent = allCollapsed ? 'Expand All' : 'Collapse All';
+  link.setAttribute('onclick', allCollapsed ? 'toggleAllCategories(true)' : 'toggleAllCategories(false)');
+}
+
+let galleryImages = [];
+let currentIndex = 0;
+
+function initGallery() {
+  document.querySelectorAll('.hero-screenshot, .highlight-screenshot, .screenshot-card').forEach(el => {
+    const img = el.querySelector('img');
+    if (!img) return;
+    const label = el.querySelector('.screenshot-label');
+    galleryImages.push({
+      src: img.src,
+      title: label ? label.childNodes[0]?.textContent?.trim() || img.alt : img.alt,
+      description: label ? label.querySelector('span')?.textContent?.trim() || '' : '',
+    });
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      currentIndex = galleryImages.findIndex(g => g.src === img.src);
+      showLightbox();
+    });
+  });
+}
+
+function showLightbox() {
+  const img = galleryImages[currentIndex];
+  document.getElementById('lightbox-img').src = img.src;
+  document.getElementById('lightbox-title').textContent = img.title;
+  document.getElementById('lightbox-desc').textContent = img.description;
+  document.getElementById('lightbox-counter').textContent = `${currentIndex + 1} / ${galleryImages.length}`;
+  const lb = document.getElementById('lightbox');
+  lb.style.display = 'flex';
+  requestAnimationFrame(() => { lb.classList.add('active'); });
+}
+
 function closeLightbox() {
-  document.getElementById('lightbox').classList.remove('active');
+  const lb = document.getElementById('lightbox');
+  lb.classList.remove('active');
+  setTimeout(() => { lb.style.display = 'none'; }, 300);
 }
+
+function prevImage(e) {
+  e.stopPropagation();
+  currentIndex = (currentIndex - 1 + galleryImages.length) % galleryImages.length;
+  showLightbox();
+}
+
+function nextImage(e) {
+  e.stopPropagation();
+  currentIndex = (currentIndex + 1) % galleryImages.length;
+  showLightbox();
+}
+
 document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('lightbox').classList.contains('active')) return;
   if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') prevImage(e);
+  if (e.key === 'ArrowRight') nextImage(e);
 });
+
+document.getElementById('lightbox').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('lightbox')) closeLightbox();
+});
+
+document.addEventListener('DOMContentLoaded', initGallery);
 </script>
 
 <section class="cta">
   <h2>Ready to try it?</h2>
   <p>Free, open source, and works with your existing Docker and Kubernetes setup.</p>
   <div class="hero-buttons" style="justify-content: center;">
-    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop v0.6.0</a>
+    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop v0.6.1</a>
     <a href="https://github.com/edvin/orca" class="btn btn-secondary">Star on GitHub</a>
   </div>
 </section>

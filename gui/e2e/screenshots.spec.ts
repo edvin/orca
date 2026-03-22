@@ -1,24 +1,33 @@
 import { test, Page } from "@playwright/test";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SCREENSHOT_DIR = path.join(__dirname, "../../screenshots");
 
-// Use relative URL — Vite proxy forwards /api/v1/* to daemon, avoiding CORS
-const DAEMON_URL = "/api/v1";
+// Read API token from daemon config (Node.js context)
+function readApiToken(): string {
+  try {
+    const configPath = path.join(process.env.HOME || "~", ".config/orca/config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    return config.api_token || "test";
+  } catch {
+    return "test";
+  }
+}
+
+const API_TOKEN = readApiToken();
 
 // Mock the Tauri IPC bridge so invoke() calls go to the daemon's REST API
 async function injectTauriBridge(page: Page) {
-  await page.addInitScript(`
+  await page.addInitScript((token) => {
     // Mock Tauri globals before the app loads
-    console.log("[MOCK] Setting up Tauri bridge mock");
-    window.__TAURI_INTERNALS__ = {
-      invoke: async (cmd, args) => {
-        console.log("[MOCK] invoke:", cmd, JSON.stringify(args || {}).slice(0, 100));
+    (window as any).__TAURI_INTERNALS__ = {
+      invoke: async (cmd: string, args: any) => {
         const DAEMON = "/api/v1";
-        const AUTH = { "Authorization": "Bearer a2cd73492a5a5fee9832dd79e216b523" };
+        const AUTH = { "Authorization": "Bearer " + token };
         const fetchJson = (url) => fetch(url, { headers: AUTH }).then(r => r.ok ? r.json() : []);
 
         // Route commands to REST endpoints
@@ -30,8 +39,17 @@ async function injectTauriBridge(page: Page) {
           subscribe_events: () => Promise.resolve({}),
           // Containers
           list_containers: () => fetchJson(DAEMON +"/containers"),
-          container_stats: () => fetchJson(DAEMON +"/containers/" + args.id + "/stats"),
-          container_logs: () => fetchJson(DAEMON +"/containers/" + args.id + "/logs?tail=" + (args.tail || 100)),
+          container_stats: () => fetchJson(DAEMON +"/containers/" + (args?.id || "") + "/stats")
+            .catch(() => ({ cpu_percent: 0, memory_usage_bytes: 0, memory_limit_bytes: 0 })),
+          container_logs: () => fetch(DAEMON +"/containers/" + args.id + "/logs?follow=false&tail=" + (args.tail || 100), { headers: AUTH })
+            .then(r => r.text())
+            .then(text => {
+              const lines = [];
+              text.split(String.fromCharCode(10)).forEach(l => {
+                if (l.startsWith("data:")) lines.push(l.substring(5));
+              });
+              return lines;
+            }),
           start_container: () => Promise.resolve({}),
           stop_container: () => Promise.resolve({}),
           inspect_container: () => fetchJson(DAEMON +"/containers/" + args.id),
@@ -110,10 +128,10 @@ async function injectTauriBridge(page: Page) {
     };
 
     // Mock @tauri-apps/api/event listen function
-    if (!window.__TAURI_INTERNALS__.event) {
-      window.__TAURI_INTERNALS__.event = {};
+    if (!(window as any).__TAURI_INTERNALS__.event) {
+      (window as any).__TAURI_INTERNALS__.event = {};
     }
-  `);
+  }, API_TOKEN);
 }
 
 // Helper: wait for page to settle
@@ -160,8 +178,8 @@ test.describe("Orca Desktop Screenshots", () => {
   });
 
   test("01 - Dashboard", async ({ page }) => {
-    // Dashboard is the default page — wait extra for stats to load
-    await page.waitForTimeout(3000);
+    // Dashboard is the default page — wait extra for system health and stats to load
+    await page.waitForTimeout(8000);
     await screenshot(page, "01-dashboard");
   });
 
@@ -172,7 +190,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("03 - Container detail", async ({ page }) => {
     await navigateTo(page, "Containers");
-    const row = page.locator("tr").filter({ has: page.locator("td") }).first();
+    const row = page.locator("tr").filter({ has: page.locator("text=Running") }).first();
     if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
       await row.click();
       await waitForPageLoad(page);
@@ -182,14 +200,15 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("04 - Container logs", async ({ page }) => {
     await navigateTo(page, "Containers");
-    const row = page.locator("tr").filter({ has: page.locator("td") }).first();
-    if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await row.click();
+    // Click a running container (look for "Running" badge)
+    const runningRow = page.locator("tr").filter({ has: page.locator("text=Running") }).first();
+    if (await runningRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await runningRow.click();
       await waitForPageLoad(page);
       const tab = page.getByText("Logs", { exact: true }).first();
       if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
         await tab.click();
-        await waitForPageLoad(page);
+        await waitForPageLoad(page, 8000);
         await screenshot(page, "04-container-logs");
       }
     }
@@ -197,7 +216,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("05 - Container files", async ({ page }) => {
     await navigateTo(page, "Containers");
-    const row = page.locator("tr").filter({ has: page.locator("td") }).first();
+    const row = page.locator("tr").filter({ has: page.locator("text=Running") }).first();
     if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
       await row.click();
       await waitForPageLoad(page);
@@ -312,7 +331,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("20 - Settings AI", async ({ page }) => {
     await navigateTo(page, "Settings");
-    const tab = page.getByText("AI", { exact: true }).first();
+    const tab = page.locator("button", { hasText: "AI & Agents" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
       await waitForPageLoad(page);
