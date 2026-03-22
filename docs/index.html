@@ -694,7 +694,7 @@
 
       <!-- Legend + Table header -->
       <div style="padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; color: #484f58; display: flex; justify-content: space-between; align-items: center;">
-        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features &mdash; v0.6.0</span>
+        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features &mdash; v0.6.1</span>
         <span><span class="ft-unique" style="display: inline;">&#10003;</span> = unique to Orca Desktop</span>
       </div>
 
@@ -720,7 +720,7 @@
       <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Images &amp; Security</div>
 
       <div class="ft-row"><span>Pull with Docker Hub search dialog</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Build with live output</strong> — real-time streaming build logs in-app</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Build with live output</strong> — streaming logs, build args, Dockerfile selection</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Image layer visualization</strong> — stacked bar chart with Dockerfile instructions</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Vulnerability scanning</strong> — one-click CVE scan with Trivy</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>HTML vulnerability report</strong> — exportable, opens in browser</span><span class="ft-check ft-unique">&#10003;</span></div>
@@ -739,7 +739,10 @@
       <div class="ft-row"><span><strong>Deployments</strong> — scale dialog, restart, rollback history</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Services</strong> — per-port forwarding with configurable local port</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Events timeline</strong> — color-coded warnings and errors</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>ConfigMaps &amp; Secrets</strong> — view and edit with reveal toggle</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>ConfigMaps &amp; Secrets</strong> — full CRUD, reveal toggle, type selection (Opaque, TLS, Docker)</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Create Ingress</strong> — service/port dropdowns, hostname, TLS toggle</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>PVC provisioning</strong> — storage class, size, access modes</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Traefik dashboard</strong> — auto-detection with one-click access</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Deploy from YAML</strong> — Monaco editor with syntax highlighting</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Helm management</strong> — list releases, install charts, uninstall</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Visual topology</strong> — Service &rarr; Deployment &rarr; Pods relationship map</span><span class="ft-check ft-unique">&#10003;</span></div>
@@ -748,6 +751,7 @@
       <div class="ft-row"><span><strong>YAML editor for all resources</strong> — syntax highlighted, apply changes live</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Volume management with file browser and export</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Network topology</strong> — visual diagram of networks and connected containers</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Network selection</strong> — choose network when creating containers</span><span class="ft-check">&#10003;</span></div>
 
       <!-- Category: AI -->
       <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">AI &amp; Automation</div>
@@ -775,6 +779,8 @@
       <div class="ft-row"><span><strong>JetBrains Mono Nerd Font</strong> — in terminal and log viewers</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Resource history charts</strong> — CPU and memory time-series with hover tooltips</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Keyboard shortcuts</strong> — <code>Ctrl+K</code> palette, <code>Ctrl+R</code> refresh, <code>?</code> shortcut guide</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>System cleanup</strong> — prune containers, images, volumes, networks, build cache</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Command palette</strong> — fuzzy search pages, resources, and actions</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Glassmorphism UI — frosted glass, smooth animations</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row" style="border: none;"><span><strong>Open source</strong> — MIT licensed, free forever, no telemetry</span><span class="ft-check ft-unique">&#10003;</span></div>
     </div>
