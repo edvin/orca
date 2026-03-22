@@ -76,6 +76,7 @@ pub fn run() {
             commands::k8s_restart_deployment,
             commands::k8s_pod_logs,
             commands::k8s_apply_yaml,
+            commands::k8s_get_yaml,
             commands::k8s_port_forward,
             commands::k8s_stop_port_forward,
             commands::k8s_list_port_forwards,

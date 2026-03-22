@@ -935,6 +935,32 @@ pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+#[tauri::command]
+pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("wsl")
+            .args(["-u", "root", "--", "k3s", "kubectl", "get", &kind, &name, "-n", &namespace, "-o", "yaml"])
+            .output()
+            .map_err(|e| format!("kubectl failed: {e}"))?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).to_string());
+        }
+        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = std::process::Command::new("kubectl")
+            .args(["get", &kind, &name, "-n", &namespace, "-o", "yaml"])
+            .output()
+            .map_err(|e| format!("kubectl failed: {e}"))?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).to_string());
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+}
+
 // --- K8s Port Forwarding ---
 
 #[tauri::command]

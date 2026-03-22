@@ -5,6 +5,7 @@ import { useRefresh } from "../lib/useRefresh";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError, logInfo } from "../lib/activityStore";
 import Spinner from "../components/Spinner";
+import YamlEditor from "../components/YamlEditor";
 import type {
   ClusterStatus,
   Pod,
@@ -39,6 +40,7 @@ export default function KubernetesPage() {
   const [logLines, setLogLines] = createSignal<string[]>([]);
   const [portDialogSvc, setPortDialogSvc] = createSignal<K8sService | null>(null);
   const [portDialogLocalPorts, setPortDialogLocalPorts] = createSignal<Record<number, string>>({});
+  const [yamlResource, setYamlResource] = createSignal<{ kind: string; name: string; namespace: string; yaml: string } | null>(null);
 
   // Setup progress dialog
   const [setupDialogOpen, setSetupDialogOpen] = createSignal(false);
@@ -360,6 +362,27 @@ export default function KubernetesPage() {
     }
   };
 
+  const viewYaml = async (kind: string, name: string, namespace: string) => {
+    try {
+      const yaml = await invoke("k8s_get_yaml", { kind, name, namespace }) as string;
+      setYamlResource({ kind, name, namespace, yaml });
+    } catch (e) {
+      showToast(`Failed to get YAML: ${e}`, "error");
+    }
+  };
+
+  const applyYaml = async (yaml: string) => {
+    try {
+      await invoke("k8s_apply_yaml", { yaml });
+      showToast("YAML applied successfully", "success");
+      setYamlResource(null);
+      refreshWorkloads();
+    } catch (e) {
+      showToast(`Failed to apply: ${e}`, "error");
+      throw e;
+    }
+  };
+
   const podStatusColor = (s: string) => {
     switch (s) {
       case "Running": return "#3fb950";
@@ -619,6 +642,13 @@ export default function KubernetesPage() {
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                           </button>
+                          <button
+                            class="action-icon"
+                            title="View/Edit YAML"
+                            onClick={() => viewYaml("pod", pod.name, pod.namespace)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -693,6 +723,13 @@ export default function KubernetesPage() {
                           >
                             Restart
                           </button>
+                          <button
+                            class="action-icon"
+                            title="View/Edit YAML"
+                            onClick={() => viewYaml("deployment", dep.name, dep.namespace)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -723,6 +760,7 @@ export default function KubernetesPage() {
                   <th>Ports</th>
                   <th>Age</th>
                   <th style={{ "text-align": "right" }}>Access</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -840,6 +878,15 @@ export default function KubernetesPage() {
                           </button>
                         </Show>
                       </td>
+                      <td>
+                        <button
+                          class="action-icon"
+                          title="View/Edit YAML"
+                          onClick={() => viewYaml("service", svc.name, svc.namespace)}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        </button>
+                      </td>
                     </tr>
                   )}
                 </For>
@@ -866,6 +913,7 @@ export default function KubernetesPage() {
                   <th>Hosts</th>
                   <th>Address</th>
                   <th>Age</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -876,6 +924,15 @@ export default function KubernetesPage() {
                       <td class="mono">{ing.hosts.join(", ") || "-"}</td>
                       <td class="mono" style={{ color: "#8b949e" }}>{ing.address || "-"}</td>
                       <td style={{ color: "#8b949e" }}>{ing.age}</td>
+                      <td>
+                        <button
+                          class="action-icon"
+                          title="View/Edit YAML"
+                          onClick={() => viewYaml("ingress", ing.name, ing.namespace)}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        </button>
+                      </td>
                     </tr>
                   )}
                 </For>
@@ -1114,6 +1171,20 @@ export default function KubernetesPage() {
                 </For>
               </Show>
             </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* YAML Editor Modal */}
+      <Show when={yamlResource()}>
+        <div class="modal-overlay" onClick={() => setYamlResource(null)}>
+          <div class="modal-dialog" style={{ width: "800px", "max-width": "90vw", height: "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+            <YamlEditor
+              value={yamlResource()!.yaml}
+              title={`${yamlResource()!.kind}/${yamlResource()!.name}`}
+              onSave={applyYaml}
+              onClose={() => setYamlResource(null)}
+            />
           </div>
         </div>
       </Show>
