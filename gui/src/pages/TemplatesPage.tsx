@@ -484,9 +484,23 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     </div>
   );
 
-  const TemplateCard = (props: { template: AppTemplate }) => (
+  const categoryColors: Record<string, { bg: string; color: string; border: string }> = {
+    "Database": { bg: "rgba(88, 166, 255, 0.1)", color: "#58a6ff", border: "rgba(88, 166, 255, 0.15)" },
+    "Web Server": { bg: "rgba(63, 185, 80, 0.1)", color: "#3fb950", border: "rgba(63, 185, 80, 0.15)" },
+    "Monitoring": { bg: "rgba(210, 169, 34, 0.1)", color: "#d29922", border: "rgba(210, 169, 34, 0.15)" },
+    "Storage": { bg: "rgba(163, 113, 247, 0.1)", color: "#a371f7", border: "rgba(163, 113, 247, 0.15)" },
+    "Tools": { bg: "rgba(139, 148, 158, 0.1)", color: "#8b949e", border: "rgba(139, 148, 158, 0.15)" },
+    "Development": { bg: "rgba(248, 81, 73, 0.1)", color: "#f85149", border: "rgba(248, 81, 73, 0.15)" },
+    "Message Queue": { bg: "rgba(210, 169, 34, 0.1)", color: "#d29922", border: "rgba(210, 169, 34, 0.15)" },
+    "Search": { bg: "rgba(121, 192, 255, 0.1)", color: "#79c0ff", border: "rgba(121, 192, 255, 0.15)" },
+    "AI": { bg: "rgba(163, 113, 247, 0.1)", color: "#a371f7", border: "rgba(163, 113, 247, 0.15)" },
+  };
+
+  const TemplateCard = (props: { template: AppTemplate }) => {
+    const colors = () => categoryColors[props.template.category] || categoryColors["Tools"];
+    return (
     <div class="template-card" onClick={() => openDeploy(props.template)} style={{ position: "relative" }}>
-      <div class="template-icon">{props.template.icon}</div>
+      <div class="template-icon" style={{ background: colors().bg, color: colors().color, "border-color": colors().border }}>{props.template.icon}</div>
       <div class="template-name">{props.template.name}</div>
       <div class="template-desc">{props.template.description}</div>
       <Show when={!props.template.is_builtin}>
@@ -496,7 +510,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         </div>
       </Show>
     </div>
-  );
+    );
+  };
 
   return (
     <div>
