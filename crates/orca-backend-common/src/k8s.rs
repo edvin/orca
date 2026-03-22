@@ -974,32 +974,15 @@ impl K8sManager for K3sManager {
         Ok(dest_file)
     }
 
-    // --- WSL kubectl helper (Windows) ---
-
-    #[cfg(target_os = "windows")]
-    async fn wsl_kubectl_json(&self, args: &[&str]) -> anyhow::Result<serde_json::Value> {
-        let mut cmd_args = vec!["-u", "root", "--", "k3s", "kubectl"];
-        cmd_args.extend_from_slice(args);
-        cmd_args.extend_from_slice(&["-o", "json"]);
-        let output = Command::new("wsl")
-            .args(&cmd_args)
-            .output()
-            .await?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("kubectl failed: {stderr}");
-        }
-        Ok(serde_json::from_slice(&output.stdout)?)
-    }
-
     // --- Workload queries ---
 
     async fn list_namespaces(&self) -> anyhow::Result<Vec<Namespace>> {
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "namespaces"]).await?;
-            let items = json["items"].as_array().unwrap_or(&vec![]);
-            return Ok(items.iter().map(|ns| {
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|ns: &serde_json::Value| {
                 Namespace {
                     name: ns["metadata"]["name"].as_str().unwrap_or("").to_string(),
                     status: ns["status"]["phase"].as_str().unwrap_or("Active").to_string(),
@@ -1026,29 +1009,65 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "pods", "-n", namespace]).await?;
-            let items = json["items"].as_array().unwrap_or(&vec![]);
-            return Ok(items.iter().map(|p| {
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|p: &serde_json::Value| {
                 let name = p["metadata"]["name"].as_str().unwrap_or("").to_string();
                 let phase = p["status"]["phase"].as_str().unwrap_or("Unknown").to_string();
-                let containers: Vec<_> = p["spec"]["containers"].as_array()
-                    .map(|c| c.iter().filter_map(|c| c["name"].as_str().map(|s| s.to_string())).collect())
-                    .unwrap_or_default();
-                let ready = p["status"]["containerStatuses"].as_array()
-                    .map(|cs| cs.iter().filter(|c| c["ready"].as_bool().unwrap_or(false)).count() as u32)
-                    .unwrap_or(0);
-                let total = containers.len() as u32;
-                let restarts = p["status"]["containerStatuses"].as_array()
-                    .map(|cs| cs.iter().map(|c| c["restartCount"].as_u64().unwrap_or(0) as u32).sum())
-                    .unwrap_or(0);
-                let image = p["spec"]["containers"].as_array()
-                    .and_then(|c| c.first())
-                    .and_then(|c| c["image"].as_str())
-                    .unwrap_or("").to_string();
+
+                let empty_containers: Vec<serde_json::Value> = vec![];
+                let container_statuses = p["status"]["containerStatuses"]
+                    .as_array()
+                    .unwrap_or(&empty_containers);
+
+                let ready_count = container_statuses
+                    .iter()
+                    .filter(|c: &&serde_json::Value| c["ready"].as_bool().unwrap_or(false))
+                    .count();
+
+                let spec_containers = p["spec"]["containers"]
+                    .as_array()
+                    .unwrap_or(&empty_containers);
+                let total_count = spec_containers.len();
+
+                let restarts: u32 = container_statuses
+                    .iter()
+                    .map(|c: &serde_json::Value| c["restartCount"].as_u64().unwrap_or(0) as u32)
+                    .sum();
+
+                let containers: Vec<PodContainer> = container_statuses
+                    .iter()
+                    .map(|cs: &serde_json::Value| {
+                        let state = if cs["state"]["running"].is_object() {
+                            "Running"
+                        } else if cs["state"]["waiting"].is_object() {
+                            "Waiting"
+                        } else if cs["state"]["terminated"].is_object() {
+                            "Terminated"
+                        } else {
+                            "Unknown"
+                        };
+                        PodContainer {
+                            name: cs["name"].as_str().unwrap_or("").to_string(),
+                            image: cs["image"].as_str().unwrap_or("").to_string(),
+                            ready: cs["ready"].as_bool().unwrap_or(false),
+                            restart_count: cs["restartCount"].as_u64().unwrap_or(0) as u32,
+                            state: state.to_string(),
+                        }
+                    })
+                    .collect();
+
                 let age = p["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string();
                 Pod {
-                    name, namespace: namespace.to_string(), status: phase,
-                    ready, total, restarts, image, age,
-                    node: p["spec"]["nodeName"].as_str().unwrap_or("").to_string(),
+                    name,
+                    namespace: namespace.to_string(),
+                    status: phase,
+                    ready: format!("{ready_count}/{total_count}"),
+                    restarts,
+                    age,
+                    node: p["spec"]["nodeName"].as_str().map(|s: &str| s.to_string()),
+                    ip: p["status"]["podIP"].as_str().map(|s: &str| s.to_string()),
+                    containers,
                 }
             }).collect());
         }
@@ -1066,15 +1085,19 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "deployments", "-n", namespace]).await?;
-            let items = json["items"].as_array().unwrap_or(&vec![]);
-            return Ok(items.iter().map(|d| {
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|d: &serde_json::Value| {
                 let name = d["metadata"]["name"].as_str().unwrap_or("").to_string();
                 let replicas_ready = d["status"]["readyReplicas"].as_u64().unwrap_or(0) as u32;
                 let replicas_desired = d["spec"]["replicas"].as_u64().unwrap_or(1) as u32;
                 let age = d["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string();
-                let images = d["spec"]["template"]["spec"]["containers"].as_array()
-                    .map(|cs| cs.iter().filter_map(|c| c["image"].as_str().map(|s| s.to_string())).collect())
-                    .unwrap_or_default();
+                let empty_containers: Vec<serde_json::Value> = vec![];
+                let images: Vec<String> = d["spec"]["template"]["spec"]["containers"].as_array()
+                    .unwrap_or(&empty_containers)
+                    .iter()
+                    .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
+                    .collect();
                 Deployment { name, namespace: namespace.to_string(), replicas_ready, replicas_desired, age, images }
             }).collect());
         }
@@ -1128,32 +1151,36 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "services", "-n", namespace]).await?;
-            let items = json["items"].as_array().unwrap_or(&vec![]);
-            return Ok(items.iter().map(|s| {
-                let ports = s["spec"]["ports"].as_array()
-                    .map(|ps| ps.iter().map(|p| ServicePort {
-                        name: p["name"].as_str().map(|s| s.to_string()),
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|svc: &serde_json::Value| {
+                let empty_ports: Vec<serde_json::Value> = vec![];
+                let ports: Vec<ServicePort> = svc["spec"]["ports"].as_array()
+                    .unwrap_or(&empty_ports)
+                    .iter()
+                    .map(|p: &serde_json::Value| ServicePort {
+                        name: p["name"].as_str().map(|s: &str| s.to_string()),
                         port: p["port"].as_i64().unwrap_or(0) as i32,
                         target_port: p["targetPort"].as_i64()
-                            .map(|i| i.to_string())
-                            .or_else(|| p["targetPort"].as_str().map(|s| s.to_string()))
+                            .map(|i: i64| i.to_string())
+                            .or_else(|| p["targetPort"].as_str().map(|s: &str| s.to_string()))
                             .unwrap_or_default(),
-                        node_port: p["nodePort"].as_i64().map(|n| n as i32),
+                        node_port: p["nodePort"].as_i64().map(|n: i64| n as i32),
                         protocol: p["protocol"].as_str().unwrap_or("TCP").to_string(),
-                    }).collect())
-                    .unwrap_or_default();
-                let external_ip = s["status"]["loadBalancer"]["ingress"].as_array()
-                    .and_then(|ing| ing.first())
-                    .and_then(|i| i["ip"].as_str())
-                    .map(|s| s.to_string());
+                    })
+                    .collect();
+                let external_ip = svc["status"]["loadBalancer"]["ingress"].as_array()
+                    .and_then(|ing: &Vec<serde_json::Value>| ing.first())
+                    .and_then(|i: &serde_json::Value| i["ip"].as_str())
+                    .map(|s: &str| s.to_string());
                 Service {
-                    name: s["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                    name: svc["metadata"]["name"].as_str().unwrap_or("").to_string(),
                     namespace: namespace.to_string(),
-                    service_type: s["spec"]["type"].as_str().unwrap_or("ClusterIP").to_string(),
-                    cluster_ip: s["spec"]["clusterIP"].as_str().map(|s| s.to_string()),
+                    service_type: svc["spec"]["type"].as_str().unwrap_or("ClusterIP").to_string(),
+                    cluster_ip: svc["spec"]["clusterIP"].as_str().map(|s: &str| s.to_string()),
                     external_ip,
                     ports,
-                    age: s["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    age: svc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
                 }
             }).collect());
         }
@@ -1219,21 +1246,25 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "ingresses", "-n", namespace]).await?;
-            let items = json["items"].as_array().unwrap_or(&vec![]);
-            return Ok(items.iter().map(|i| {
-                let hosts = i["spec"]["rules"].as_array()
-                    .map(|rules| rules.iter().filter_map(|r| r["host"].as_str().map(|s| s.to_string())).collect())
-                    .unwrap_or_default();
-                let address = i["status"]["loadBalancer"]["ingress"].as_array()
-                    .and_then(|ing| ing.first())
-                    .and_then(|i| i["ip"].as_str())
-                    .map(|s| s.to_string());
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|ing: &serde_json::Value| {
+                let empty_rules: Vec<serde_json::Value> = vec![];
+                let hosts: Vec<String> = ing["spec"]["rules"].as_array()
+                    .unwrap_or(&empty_rules)
+                    .iter()
+                    .filter_map(|r: &serde_json::Value| r["host"].as_str().map(|s: &str| s.to_string()))
+                    .collect();
+                let address = ing["status"]["loadBalancer"]["ingress"].as_array()
+                    .and_then(|arr: &Vec<serde_json::Value>| arr.first())
+                    .and_then(|i: &serde_json::Value| i["ip"].as_str())
+                    .map(|s: &str| s.to_string());
                 Ingress {
-                    name: i["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                    name: ing["metadata"]["name"].as_str().unwrap_or("").to_string(),
                     namespace: namespace.to_string(),
                     hosts,
                     address,
-                    age: i["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    age: ing["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
                 }
             }).collect());
         }
@@ -1285,19 +1316,23 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "pvc", "-n", namespace]).await?;
-            let items = json["items"].as_array().unwrap_or(&vec![]);
-            return Ok(items.iter().map(|pvc| {
-                let access_modes = pvc["spec"]["accessModes"].as_array()
-                    .map(|modes| modes.iter().filter_map(|m| m.as_str().map(|s| s.to_string())).collect())
-                    .unwrap_or_default();
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|pvc: &serde_json::Value| {
+                let empty_modes: Vec<serde_json::Value> = vec![];
+                let access_modes: Vec<String> = pvc["spec"]["accessModes"].as_array()
+                    .unwrap_or(&empty_modes)
+                    .iter()
+                    .filter_map(|m: &serde_json::Value| m.as_str().map(|s: &str| s.to_string()))
+                    .collect();
                 PersistentVolumeClaim {
                     name: pvc["metadata"]["name"].as_str().unwrap_or("").to_string(),
                     namespace: namespace.to_string(),
                     status: pvc["status"]["phase"].as_str().unwrap_or("Pending").to_string(),
-                    volume: pvc["spec"]["volumeName"].as_str().map(|s| s.to_string()),
-                    capacity: pvc["status"]["capacity"]["storage"].as_str().map(|s| s.to_string()),
+                    volume: pvc["spec"]["volumeName"].as_str().map(|s: &str| s.to_string()),
+                    capacity: pvc["status"]["capacity"]["storage"].as_str().map(|s: &str| s.to_string()),
                     access_modes,
-                    storage_class: pvc["spec"]["storageClassName"].as_str().map(|s| s.to_string()),
+                    storage_class: pvc["spec"]["storageClassName"].as_str().map(|s: &str| s.to_string()),
                     age: pvc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
                 }
             }).collect());
@@ -1343,24 +1378,28 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "pv"]).await?;
-            let items = json["items"].as_array().unwrap_or(&vec![]);
-            return Ok(items.iter().map(|pv| {
-                let access_modes = pv["spec"]["accessModes"].as_array()
-                    .map(|modes| modes.iter().filter_map(|m| m.as_str().map(|s| s.to_string())).collect())
-                    .unwrap_or_default();
-                let claim = pv["spec"]["claimRef"].as_object().map(|cr| {
+            let empty_vec = vec![];
+            let items = json["items"].as_array().unwrap_or(&empty_vec);
+            return Ok(items.iter().map(|pv: &serde_json::Value| {
+                let empty_modes: Vec<serde_json::Value> = vec![];
+                let access_modes: Vec<String> = pv["spec"]["accessModes"].as_array()
+                    .unwrap_or(&empty_modes)
+                    .iter()
+                    .filter_map(|m: &serde_json::Value| m.as_str().map(|s: &str| s.to_string()))
+                    .collect();
+                let claim = pv["spec"]["claimRef"].as_object().map(|cr: &serde_json::Map<String, serde_json::Value>| {
                     format!("{}/{}",
-                        cr.get("namespace").and_then(|v| v.as_str()).unwrap_or("default"),
-                        cr.get("name").and_then(|v| v.as_str()).unwrap_or(""))
+                        cr.get("namespace").and_then(|v: &serde_json::Value| v.as_str()).unwrap_or("default"),
+                        cr.get("name").and_then(|v: &serde_json::Value| v.as_str()).unwrap_or(""))
                 });
                 PersistentVolume {
                     name: pv["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    capacity: pv["spec"]["capacity"]["storage"].as_str().map(|s| s.to_string()),
+                    capacity: pv["spec"]["capacity"]["storage"].as_str().map(|s: &str| s.to_string()),
                     access_modes,
-                    reclaim_policy: pv["spec"]["persistentVolumeReclaimPolicy"].as_str().map(|s| s.to_string()),
+                    reclaim_policy: pv["spec"]["persistentVolumeReclaimPolicy"].as_str().map(|s: &str| s.to_string()),
                     status: pv["status"]["phase"].as_str().unwrap_or("Available").to_string(),
                     claim,
-                    storage_class: pv["spec"]["storageClassName"].as_str().map(|s| s.to_string()),
+                    storage_class: pv["spec"]["storageClassName"].as_str().map(|s: &str| s.to_string()),
                     age: pv["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
                 }
             }).collect());
@@ -1696,6 +1735,24 @@ impl K8sManager for K3sManager {
 }
 
 impl K3sManager {
+    // --- WSL kubectl helper (Windows) ---
+
+    #[cfg(target_os = "windows")]
+    async fn wsl_kubectl_json(&self, args: &[&str]) -> anyhow::Result<serde_json::Value> {
+        let mut cmd_args = vec!["-u", "root", "--", "k3s", "kubectl"];
+        cmd_args.extend_from_slice(args);
+        cmd_args.extend_from_slice(&["-o", "json"]);
+        let output = Command::new("wsl")
+            .args(&cmd_args)
+            .output()
+            .await?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("kubectl failed: {stderr}");
+        }
+        Ok(serde_json::from_slice(&output.stdout)?)
+    }
+
     /// Enable the Traefik dashboard by patching the Traefik deployment.
     async fn enable_traefik_dashboard(&self) -> anyhow::Result<()> {
         // Expose Traefik dashboard via IngressRoute
