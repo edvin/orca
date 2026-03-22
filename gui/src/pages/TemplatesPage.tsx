@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from "solid-js";
+import { createSignal, onMount, For, Index, Show } from "solid-js";
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 import { invoke } from "@tauri-apps/api/core";
@@ -208,23 +208,30 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   };
 
   // Deploy env/port/volume helpers
+  // Mutate in-place to avoid SolidJS For re-rendering (which steals focus)
   const updateEnv = (index: number, field: "key" | "value", val: string) => {
-    setDeployEnv((prev) => prev.map((e, i) => i === index ? { ...e, [field]: val } : e));
+    const arr = deployEnv().slice();
+    (arr[index] as any)[field] = val;
+    setDeployEnv(arr);
   };
-  const addEnv = () => setDeployEnv((prev) => [...prev, { key: "", value: "" }]);
-  const removeEnv = (index: number) => setDeployEnv((prev) => prev.filter((_, i) => i !== index));
+  const addEnv = () => setDeployEnv([...deployEnv(), { key: "", value: "" }]);
+  const removeEnv = (index: number) => setDeployEnv(deployEnv().filter((_, i) => i !== index));
 
   const updateVolume = (index: number, field: "source" | "target", val: string) => {
-    setDeployVolumes((prev) => prev.map((v, i) => i === index ? { ...v, [field]: val } : v));
+    const arr = deployVolumes().slice();
+    (arr[index] as any)[field] = val;
+    setDeployVolumes(arr);
   };
-  const addVolume = () => setDeployVolumes((prev) => [...prev, { source: "", target: "" }]);
-  const removeVolume = (index: number) => setDeployVolumes((prev) => prev.filter((_, i) => i !== index));
+  const addVolume = () => setDeployVolumes([...deployVolumes(), { source: "", target: "" }]);
+  const removeVolume = (index: number) => setDeployVolumes(deployVolumes().filter((_, i) => i !== index));
 
   const updatePort = (index: number, field: "host" | "container", val: string) => {
-    setDeployPorts((prev) => prev.map((p, i) => i === index ? { ...p, [field]: val } : p));
+    const arr = deployPorts().slice();
+    (arr[index] as any)[field] = val;
+    setDeployPorts(arr);
   };
-  const addPort = () => setDeployPorts((prev) => [...prev, { host: "", container: "" }]);
-  const removePort = (index: number) => setDeployPorts((prev) => prev.filter((_, i) => i !== index));
+  const addPort = () => setDeployPorts([...deployPorts(), { host: "", container: "" }]);
+  const removePort = (index: number) => setDeployPorts(deployPorts().filter((_, i) => i !== index));
 
   // Editor env/port/volume helpers
   const updateEditorEnv = (index: number, field: "key" | "value", val: string) => {
@@ -397,16 +404,16 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             <span style={{ flex: "1" }}>Container Port</span>
             <span style={{ width: "28px" }} />
           </div>
-          <For each={props.ports()}>
+          <Index each={props.ports()}>
             {(port, i) => (
               <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-                <input class="form-input" style={{ flex: "1" }} value={port.host} onInput={(e) => props.update(i(), "host", e.currentTarget.value)} placeholder="8080" />
+                <input class="form-input" style={{ flex: "1" }} value={port().host} onInput={(e) => props.update(i, "host", e.currentTarget.value)} placeholder="8080" />
                 <span style={{ color: "#484f58" }}>:</span>
-                <input class="form-input" style={{ flex: "1" }} value={port.container} onInput={(e) => props.update(i(), "container", e.currentTarget.value)} placeholder="80" />
-                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <input class="form-input" style={{ flex: "1" }} value={port().container} onInput={(e) => props.update(i, "container", e.currentTarget.value)} placeholder="80" />
+                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
-          </For>
+          </Index>
         </div>
       </Show>
     </div>
@@ -427,16 +434,16 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             <span style={{ flex: "3" }}>Value</span>
             <span style={{ width: "28px" }} />
           </div>
-          <For each={props.env()}>
+          <Index each={props.env()}>
             {(entry, i) => (
               <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-                <input class="form-input" style={{ flex: "2", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={entry.key} onInput={(e) => props.update(i(), "key", e.currentTarget.value)} placeholder="KEY" />
+                <input class="form-input" style={{ flex: "2", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={entry().key} onInput={(e) => props.update(i, "key", e.currentTarget.value)} placeholder="KEY" />
                 <span style={{ color: "#484f58" }}>=</span>
-                <input class="form-input" style={{ flex: "3", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} type={entry.key.toLowerCase().includes("password") || entry.key.toLowerCase().includes("secret") ? "password" : "text"} value={entry.value} onInput={(e) => props.update(i(), "value", e.currentTarget.value)} placeholder="value" />
-                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <input class="form-input" style={{ flex: "3", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} type={entry().key.toLowerCase().includes("password") || entry().key.toLowerCase().includes("secret") ? "password" : "text"} value={entry().value} onInput={(e) => props.update(i, "value", e.currentTarget.value)} placeholder="value" />
+                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
-          </For>
+          </Index>
         </div>
       </Show>
       <Show when={props.showWarning}>
@@ -462,16 +469,16 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             <span style={{ flex: "1" }}>Container Path</span>
             <span style={{ width: "28px" }} />
           </div>
-          <For each={props.volumes()}>
+          <Index each={props.volumes()}>
             {(vol, i) => (
               <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-                <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol.source} onInput={(e) => props.update(i(), "source", e.currentTarget.value)} placeholder="volume-name" />
+                <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol().source} onInput={(e) => props.update(i, "source", e.currentTarget.value)} placeholder="volume-name" />
                 <span style={{ color: "#484f58" }}>:</span>
-                <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol.target} onInput={(e) => props.update(i(), "target", e.currentTarget.value)} placeholder="/data" />
-                <button class="action-icon" onClick={() => props.remove(i())} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol().target} onInput={(e) => props.update(i, "target", e.currentTarget.value)} placeholder="/data" />
+                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
-          </For>
+          </Index>
         </div>
       </Show>
     </div>
@@ -509,16 +516,16 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         </Show>
       </div>
 
-      {/* Source tabs */}
-      <div class="tab-bar" style="margin-bottom: 20px">
+      {/* Source pills */}
+      <div class="filter-pills" style={{ "margin-bottom": "20px" }}>
         <button
-          class={`tab-item ${activeTab() === "curated" ? "active" : ""}`}
+          class={`filter-pill ${activeTab() === "curated" ? "active" : ""}`}
           onClick={() => setActiveTab("curated")}
         >
           Curated
         </button>
         <button
-          class={`tab-item ${activeTab() === "dockerhub" ? "active" : ""}`}
+          class={`filter-pill ${activeTab() === "dockerhub" ? "active" : ""}`}
           onClick={() => {
             setActiveTab("dockerhub");
             if (!hubSearched()) searchDockerHub("");
