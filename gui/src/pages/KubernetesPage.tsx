@@ -32,6 +32,7 @@ export default function KubernetesPage() {
   const [loading, setLoading] = createSignal(false);
   const [enabling, setEnabling] = createSignal(false);
   const [portForwards, setPortForwards] = createSignal<Set<string>>(new Set());
+  const [k8sMenuOpen, setK8sMenuOpen] = createSignal(false);
   const [portForwardEditing, setPortForwardEditing] = createSignal<string | null>(null);
   const [portForwardLocalPort, setPortForwardLocalPort] = createSignal("");
   const [logPod, setLogPod] = createSignal<string | null>(null);
@@ -461,12 +462,30 @@ export default function KubernetesPage() {
                 Traefik
               </a>
             </Show>
-            <button class="btn btn-sm" onClick={() => { refreshStatus(); refreshWorkloads(); }} style={{ "font-size": "11px" }}>
-              Refresh
-            </button>
-            <button class="btn btn-sm" onClick={handleDisable} style={{ "font-size": "11px", color: "#f85149" }}>
-              Disable
-            </button>
+            <div class="dropdown-wrapper">
+              <button
+                class="action-icon"
+                onClick={() => setK8sMenuOpen(!k8sMenuOpen())}
+                title="More actions"
+                style={{ color: "#8b949e" }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
+              </button>
+              <Show when={k8sMenuOpen()}>
+                <div class="dropdown-menu" onClick={() => setK8sMenuOpen(false)}>
+                  <button class="dropdown-item" onClick={() => { refreshStatus(); refreshWorkloads(); }}>
+                    {"\u21BB"} Refresh
+                  </button>
+                  <div class="dropdown-divider" />
+                  <button class="dropdown-item dropdown-item-danger" onClick={handleReset}>
+                    {"\u26A0"} Reset Cluster
+                  </button>
+                  <button class="dropdown-item dropdown-item-danger" onClick={handleDisable}>
+                    {"\u2715"} Disable Kubernetes
+                  </button>
+                </div>
+              </Show>
+            </div>
           </div>
         </div>
       </Show>
