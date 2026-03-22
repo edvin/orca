@@ -1542,8 +1542,8 @@ export default function KubernetesPage() {
           </Show>
           <Show when={helmAvailable()}>
             <div style={{ display: "flex", "justify-content": "flex-end", "margin-bottom": "8px" }}>
-              <button class="btn btn-primary" onClick={() => { setHelmInstallNs(selectedNs()); setHelmInstallOpen(true); }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px" }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <button class="btn btn-primary" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={() => { setHelmInstallNs(selectedNs()); setHelmInstallOpen(true); }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Install Chart
               </button>
             </div>
@@ -1995,8 +1995,8 @@ export default function KubernetesPage() {
               <span class="modal-title">Install Helm Chart</span>
               <button class="modal-close" onClick={() => setHelmInstallOpen(false)}>{"\u00d7"}</button>
             </div>
-            <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "12px" }}>
-              <div>
+            <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
+              <div class="form-group">
                 <label class="form-label">Release Name</label>
                 <input
                   class="form-input"
@@ -2004,9 +2004,10 @@ export default function KubernetesPage() {
                   placeholder="my-release"
                   value={helmReleaseName()}
                   onInput={(e) => setHelmReleaseName(e.currentTarget.value)}
+                  style={{ width: "100%" }}
                 />
               </div>
-              <div>
+              <div class="form-group">
                 <label class="form-label">Chart</label>
                 <input
                   class="form-input"
@@ -2014,15 +2015,18 @@ export default function KubernetesPage() {
                   placeholder="bitnami/nginx"
                   value={helmChartName()}
                   onInput={(e) => setHelmChartName(e.currentTarget.value)}
+                  style={{ width: "100%" }}
                 />
+                <span class="form-hint">e.g. bitnami/nginx, ingress-nginx/ingress-nginx</span>
               </div>
-              <div>
+              <div class="form-group">
                 <label class="form-label">Namespace</label>
                 <Dropdown
                   options={namespaces().map((n) => ({ value: n.name, label: n.name }))}
                   value={helmInstallNs()}
                   onChange={(v) => setHelmInstallNs(v)}
                   placeholder="Select namespace"
+                  style={{ width: "100%" }}
                 />
               </div>
               <div>
