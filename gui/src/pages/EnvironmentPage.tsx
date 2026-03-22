@@ -126,12 +126,14 @@ export default function EnvironmentPage() {
   const closeActionDialog = async () => {
     setActionDialogOpen(false);
     if (actionSuccess()) {
+      showToast("Restarting Orca daemon to reconnect to Docker...", "info");
       try {
         await invoke("stop_daemon");
-        await new Promise(r => setTimeout(r, 1000));
-        await invoke("start_daemon");
         await new Promise(r => setTimeout(r, 2000));
+        await invoke("start_daemon");
+        await new Promise(r => setTimeout(r, 3000));
       } catch {}
+      showToast("Daemon restarted", "success");
     }
     await refresh();
   };
@@ -564,7 +566,7 @@ export default function EnvironmentPage() {
       {/* Action Progress Dialog */}
       <Show when={actionDialogOpen()}>
         <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
-          <div class="modal-dialog" style={{ "max-width": "720px" }}>
+          <div class="modal-dialog" style={{ "max-width": "900px", width: "90vw" }}>
             <div class="modal-header">
               <span class="modal-title">
                 <Show when={actionRunning()} fallback={

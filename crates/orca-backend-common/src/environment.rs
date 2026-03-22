@@ -347,7 +347,28 @@ pub async fn run_fix_streaming(
             }
 
             send("\n>>> NVIDIA Container Toolkit installed!\n".into()).await;
-            send("Restart any running Ollama containers to use GPU acceleration.\n".into()).await;
+            send(">>> Waiting for Docker to come back online...\n".into()).await;
+
+            // Docker was restarted as part of the install — wait for it to be ready
+            for i in 0..15 {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let check = {
+                    #[cfg(target_os = "windows")]
+                    { run_cmd("wsl", &["-u", "root", "--", "docker", "info"]).await }
+                    #[cfg(not(target_os = "windows"))]
+                    { run_cmd("docker", &["info"]).await }
+                };
+                if check.is_ok() {
+                    send("    Docker is back online.\n".into()).await;
+                    break;
+                }
+                if i % 3 == 2 {
+                    send(format!("    Waiting... ({}s)\n", (i + 1) * 2)).await;
+                }
+            }
+
+            send("\n>>> Done! Close this dialog to restart Orca and reconnect.\n".into()).await;
+            send("    Then restart any Ollama containers to use GPU acceleration.\n".into()).await;
         }
         "setup_docker_macos" => {
             send(">>> Setting up Docker on macOS via Lima\n".into()).await;
