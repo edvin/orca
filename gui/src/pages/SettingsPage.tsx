@@ -6,6 +6,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, updateOllamaSetup } from "../lib/ollamaSetup";
 import Spinner from "../components/Spinner";
+import Dropdown from "../components/Dropdown";
 
 type SettingsTab = "general" | "ai" | "registries" | "about";
 
@@ -678,15 +679,11 @@ export default function SettingsPage() {
                         Save your API key first — available models will load as a dropdown
                       </div>
                     }>
-                      <select
-                        class="form-input"
+                      <Dropdown
                         value={aiModel()}
-                        onChange={(e) => setAiModel(e.currentTarget.value)}
-                      >
-                        <For each={availableModels()}>
-                          {(model) => <option value={model}>{model}</option>}
-                        </For>
-                      </select>
+                        options={availableModels().map((model) => ({ value: model, label: model }))}
+                        onChange={(v) => setAiModel(v)}
+                      />
                     </Show>
                   </div>
 

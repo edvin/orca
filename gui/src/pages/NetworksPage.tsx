@@ -7,6 +7,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 import { logError } from "../lib/activityStore";
+import Dropdown from "../components/Dropdown";
 
 const DEFAULT_NETWORKS = ["bridge", "host", "none"];
 
@@ -228,17 +229,17 @@ export default function NetworksPage() {
 
                 <div class="form-group">
                   <label class="form-label">Driver</label>
-                  <select
-                    class="form-select"
+                  <Dropdown
                     value={createDriver()}
-                    onChange={(e) => setCreateDriver(e.currentTarget.value)}
-                  >
-                    <option value="bridge">bridge</option>
-                    <option value="host">host</option>
-                    <option value="macvlan">macvlan</option>
-                    <option value="ipvlan">ipvlan</option>
-                    <option value="none">none</option>
-                  </select>
+                    options={[
+                      { value: "bridge", label: "bridge" },
+                      { value: "host", label: "host" },
+                      { value: "macvlan", label: "macvlan" },
+                      { value: "ipvlan", label: "ipvlan" },
+                      { value: "none", label: "none" },
+                    ]}
+                    onChange={(v) => setCreateDriver(v)}
+                  />
                 </div>
               </div>
 

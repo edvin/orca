@@ -2,6 +2,7 @@ import { createSignal, Show, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import Spinner from "./Spinner";
+import Dropdown from "./Dropdown";
 
 interface RunContainerDialogProps {
   onClose: () => void;
@@ -262,16 +263,16 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                 <div class="form-row">
                   <div class="form-group" style={{ flex: 1 }}>
                     <label class="form-label">Restart Policy</label>
-                    <select
-                      class="form-select"
+                    <Dropdown
                       value={restartPolicy()}
-                      onChange={(e) => setRestartPolicy(e.currentTarget.value)}
-                    >
-                      <option value="no">No</option>
-                      <option value="always">Always</option>
-                      <option value="unless-stopped">Unless Stopped</option>
-                      <option value="on-failure">On Failure</option>
-                    </select>
+                      options={[
+                        { value: "no", label: "No" },
+                        { value: "always", label: "Always" },
+                        { value: "unless-stopped", label: "Unless Stopped" },
+                        { value: "on-failure", label: "On Failure" },
+                      ]}
+                      onChange={(v) => setRestartPolicy(v)}
+                    />
                   </div>
                   <div class="form-group" style={{ flex: 1 }}>
                     <label class="form-label">CPU Limit</label>

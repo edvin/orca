@@ -14,6 +14,7 @@ import Sparkline from "../components/Sparkline";
 import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
 import { copyToClipboard } from "../lib/clipboard";
 import Breadcrumb from "../components/Breadcrumb";
+import Dropdown from "../components/Dropdown";
 import { logError } from "../lib/activityStore";
 
 interface ContainerDetailPageProps {
@@ -1001,16 +1002,16 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                       </span>
                     </Show>
                   </div>
-                  <select
-                    class="form-select"
+                  <Dropdown
                     value={editRestart()}
-                    onChange={(e) => setEditRestart(e.currentTarget.value)}
-                  >
-                    <option value="no">No</option>
-                    <option value="always">Always</option>
-                    <option value="unless-stopped">Unless Stopped</option>
-                    <option value="on-failure">On Failure</option>
-                  </select>
+                    options={[
+                      { value: "no", label: "No" },
+                      { value: "always", label: "Always" },
+                      { value: "unless-stopped", label: "Unless Stopped" },
+                      { value: "on-failure", label: "On Failure" },
+                    ]}
+                    onChange={(v) => setEditRestart(v)}
+                  />
                   <div style={{ color: "#484f58", "font-size": "11px", "margin-top": "6px" }}>
                     Controls whether the container restarts automatically after exiting or on system reboot.
                   </div>

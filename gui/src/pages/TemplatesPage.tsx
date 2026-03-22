@@ -1,5 +1,6 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import Spinner from "../components/Spinner";
+import Dropdown from "../components/Dropdown";
 import { invoke } from "@tauri-apps/api/core";
 import { useRefresh } from "../lib/useRefresh";
 import type { AppTemplate, ImageSearchResult } from "../lib/types";
@@ -744,11 +745,11 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 </div>
                 <div class="form-group" style={{ width: "150px", "flex-shrink": "0" }}>
                   <label class="form-label">Category</label>
-                  <select class="form-input" value={editorCategory()} onChange={(e) => setEditorCategory(e.currentTarget.value)}>
-                    <For each={CATEGORIES.filter((c) => c !== "All")}>
-                      {(cat) => <option value={cat}>{cat}</option>}
-                    </For>
-                  </select>
+                  <Dropdown
+                    value={editorCategory()}
+                    options={CATEGORIES.filter((c) => c !== "All").map((cat) => ({ value: cat, label: cat }))}
+                    onChange={(v) => setEditorCategory(v)}
+                  />
                 </div>
               </div>
 

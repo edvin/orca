@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, Show, createEffect } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { copyToClipboard } from "../lib/clipboard";
+import Dropdown from "./Dropdown";
 
 interface LogViewerProps {
   containerId: string;
@@ -144,20 +145,20 @@ export default function LogViewer(props: LogViewerProps) {
               </button>
             </Show>
           </div>
-          <select
-            class="form-input"
-            style={{ width: "120px", "font-size": "12px", padding: "5px 32px 5px 8px" }}
-            value={tail()}
-            onChange={(e) => {
-              setTail(Number(e.currentTarget.value));
+          <Dropdown
+            value={String(tail())}
+            options={[
+              { value: "100", label: "100 lines" },
+              { value: "500", label: "500 lines" },
+              { value: "2000", label: "2,000 lines" },
+              { value: "10000", label: "10,000 lines" },
+            ]}
+            onChange={(v) => {
+              setTail(Number(v));
               fetchLogs();
             }}
-          >
-            <option value={100}>100 lines</option>
-            <option value={500}>500 lines</option>
-            <option value={2000}>2,000 lines</option>
-            <option value={10000}>10,000 lines</option>
-          </select>
+            style={{ width: "120px", "font-size": "12px" }}
+          />
           <button
             class={`btn btn-sm ${autoScroll() ? "btn-primary" : ""}`}
             onClick={() => {
