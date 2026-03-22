@@ -86,13 +86,14 @@ export default function KubernetesPage() {
 
   useRefresh(refreshStatus);
 
+  let hasLoadedOnce = false;
+
   const refreshWorkloads = async () => {
     const s = status();
     if (!s?.running) return;
     const ns = selectedNs();
-    // Only show spinner on first load, not on refresh
-    const isFirstLoad = pods().length === 0 && deployments().length === 0;
-    if (isFirstLoad) setLoading(true);
+    // Only show spinner on first load — never on refresh
+    if (!hasLoadedOnce) setLoading(true);
     try {
       const currentTab = tab();
       if (currentTab === "pods") {
@@ -114,6 +115,7 @@ export default function KubernetesPage() {
     } catch (e) {
     } finally {
       setLoading(false);
+      hasLoadedOnce = true;
     }
   };
 
@@ -572,15 +574,15 @@ export default function KubernetesPage() {
           </For>
         </div>
 
-        {/* Loading indicator */}
-        <Show when={loading()}>
+        {/* Loading indicator — only on first load */}
+        <Show when={loading() && !hasLoadedOnce}>
           <div style={{ color: "#8b949e", "text-align": "center", padding: "20px" }}>
             <Spinner />
           </div>
         </Show>
 
         {/* Pods Tab */}
-        <Show when={tab() === "pods" && !loading()}>
+        <Show when={tab() === "pods"}>
           <Show
             when={pods().length > 0}
             fallback={
@@ -660,7 +662,7 @@ export default function KubernetesPage() {
         </Show>
 
         {/* Deployments Tab */}
-        <Show when={tab() === "deployments" && !loading()}>
+        <Show when={tab() === "deployments"}>
           <Show
             when={deployments().length > 0}
             fallback={
@@ -741,7 +743,7 @@ export default function KubernetesPage() {
         </Show>
 
         {/* Services Tab */}
-        <Show when={tab() === "services" && !loading()}>
+        <Show when={tab() === "services"}>
           <Show
             when={services().length > 0}
             fallback={
@@ -896,7 +898,7 @@ export default function KubernetesPage() {
         </Show>
 
         {/* Ingresses Tab */}
-        <Show when={tab() === "ingresses" && !loading()}>
+        <Show when={tab() === "ingresses"}>
           <Show
             when={ingresses().length > 0}
             fallback={
@@ -942,7 +944,7 @@ export default function KubernetesPage() {
         </Show>
 
         {/* Storage Tab */}
-        <Show when={tab() === "storage" && !loading()}>
+        <Show when={tab() === "storage"}>
           <h3 style={{ color: "#e6edf3", "font-size": "14px", "margin-bottom": "12px" }}>
             Persistent Volume Claims
           </h3>
