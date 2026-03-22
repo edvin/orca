@@ -959,10 +959,22 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
                 .map_err(|e| format!("kubectl failed: {e}"))?
         }
     };
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+        return Err(if stderr.trim().is_empty() {
+            format!("kubectl exited with code {}: {}", output.status, stdout)
+        } else {
+            stderr
+        });
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+
+    if stdout.trim().is_empty() {
+        return Err(format!("kubectl returned no output for {} {}/{}", kind, namespace, name));
+    }
+
+    Ok(stdout)
 }
 
 #[tauri::command]

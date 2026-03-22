@@ -1417,6 +1417,19 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
 
             Ok(format!("NVIDIA Container Toolkit installed!\n\nRestart any running Ollama containers to use GPU.\n\n{output}"))
         }
+        "install_helm" => {
+            #[cfg(target_os = "windows")]
+            let output = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+                "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
+            ]).await.map_err(|e| anyhow::anyhow!("Helm install failed: {e}"))?;
+
+            #[cfg(not(target_os = "windows"))]
+            let output = run_cmd("bash", &["-c",
+                "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | sudo bash"
+            ]).await.map_err(|e| anyhow::anyhow!("Helm install failed: {e}"))?;
+
+            Ok(format!("Helm installed!\n\n{output}"))
+        }
         _ => anyhow::bail!("Unknown fix action: {action}"),
     }
 }

@@ -1515,11 +1515,24 @@ export default function KubernetesPage() {
             <div class="empty-state-tab">
               <div class="empty-state-tab-title">Helm is not installed</div>
               <div class="empty-state-tab-desc">
-                Install Helm to manage Kubernetes packages:<br />
-                <code style={{ background: "#0d1117", padding: "4px 8px", "border-radius": "4px", "font-size": "12px", "margin-top": "8px", display: "inline-block" }}>
-                  curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-                </code>
+                Helm is the package manager for Kubernetes — install it to deploy charts.
               </div>
+              <button
+                class="btn btn-primary"
+                style={{ "margin-top": "12px" }}
+                onClick={async () => {
+                  showToast("Installing Helm — this may take a minute...", "info");
+                  try {
+                    await invoke("env_fix", { action: "install_helm" });
+                    showToast("Helm installed!", "success");
+                    setHelmAvailable(true);
+                  } catch (e) {
+                    showToast(`Helm install failed: ${e}`, "error");
+                  }
+                }}
+              >
+                Install Helm
+              </button>
             </div>
           </Show>
           <Show when={helmAvailable() === null}>
