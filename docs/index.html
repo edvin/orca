@@ -119,6 +119,7 @@
       margin-top: 32px;
       padding-top: 28px;
       border-top: 1px solid rgba(255, 255, 255, 0.06);
+      flex-wrap: wrap;
     }
 
     .hero-stat {
@@ -175,7 +176,7 @@
     .hero-tagline {
       font-size: 18px;
       color: #8b949e;
-      max-width: 480px;
+      max-width: 520px;
       line-height: 1.6;
       margin: 0 auto 36px;
     }
@@ -599,17 +600,18 @@
       <span class="hero-pill"><span class="hero-pill-dot" style="background: #58a6ff;"></span> Built-in AI</span>
       <span class="hero-pill"><span class="hero-pill-dot" style="background: #a371f7;"></span> MCP Agent APIs</span>
       <span class="hero-pill"><span class="hero-pill-dot" style="background: #d29922;"></span> Cross-Platform</span>
+      <span class="hero-pill"><span class="hero-pill-dot" style="background: #f85149;"></span> GPU Accelerated</span>
     </div>
     <img src="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png" alt="Orca Desktop" class="hero-logo">
     <h1>Orca Desktop</h1>
     <p class="hero-tagline">
       The open source container management app with built-in AI.
-      Manage Docker, Compose, Kubernetes, and more — from a single, beautiful interface.
+      Manage Docker, Kubernetes, Helm, and GPU-accelerated AI workloads — from a single, beautiful interface.
     </p>
     <div class="hero-buttons">
       <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download
+        Download v0.5.0
       </a>
       <a href="https://github.com/edvin/orca" class="btn btn-secondary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
@@ -638,12 +640,16 @@
         <div class="hero-stat-label">AI Agent Tools</div>
       </div>
       <div class="hero-stat">
+        <div class="hero-stat-value">5</div>
+        <div class="hero-stat-label">AI Providers</div>
+      </div>
+      <div class="hero-stat">
         <div class="hero-stat-value">3</div>
         <div class="hero-stat-label">Platforms</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-value">4</div>
-        <div class="hero-stat-label">AI Providers</div>
+        <div class="hero-stat-value">10+</div>
+        <div class="hero-stat-label">K8s Resource Types</div>
       </div>
       <div class="hero-stat">
         <div class="hero-stat-value">~15MB</div>
@@ -662,7 +668,7 @@
 <section class="features">
   <div class="section-header">
     <h2>Why Orca Desktop</h2>
-    <p>Free forever. Lightweight. Open source. Just containers.</p>
+    <p>Free forever. Lightweight. Open source. Containers and Kubernetes.</p>
   </div>
 
   <!-- Punchy value props -->
@@ -687,7 +693,7 @@
 
       <!-- Legend + Table header -->
       <div style="padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; color: #484f58; display: flex; justify-content: space-between; align-items: center;">
-        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features</span>
+        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features &mdash; v0.5.0</span>
         <span><span class="ft-unique" style="display: inline;">&#10003;</span> = unique to Orca Desktop</span>
       </div>
 
@@ -701,13 +707,17 @@
       <div class="ft-row"><span>Log viewer with search, tail control, auto-scroll</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>AI-powered diagnostics</strong> — click to analyze any container with logs</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span>Export as <code>docker run</code> / <code>docker-compose.yml</code></span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Docker Hub browser</strong> — search and pull images directly from Docker Hub</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>App Catalog</strong> — curated templates with auto-generated passwords</span><span class="ft-check ft-unique">&#10003;</span></div>
 
       <!-- Category: Images -->
-      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Images & Security</div>
+      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">Images &amp; Security</div>
 
       <div class="ft-row"><span>Pull with Docker Hub search dialog</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Build from Dockerfile with streaming log</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Vulnerability scanning</strong> — one-click CVE scan with Trivy</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>HTML vulnerability report</strong> — exportable, opens in browser</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Distinct severity colors</strong> — Critical, High, Medium, Low at a glance</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Image file browser</strong> — explore filesystem without running</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Private registry auth (Docker Hub, GitHub, GitLab, ECR)</span><span class="ft-check">&#10003;</span></div>
 
@@ -716,15 +726,27 @@
 
       <div class="ft-row"><span>Compose stacks — auto-detect, up/down/pull, service health</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>One-click Kubernetes (k3s) with Traefik ingress</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Pods, deployments, services, ingresses, PVCs, YAML apply</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Pods</strong> — CPU/memory metrics, logs with follow mode, in-browser terminal</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Deployments</strong> — scale dialog, restart, rollback history</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Services</strong> — per-port forwarding with configurable local port</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Events timeline</strong> — color-coded warnings and errors</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>ConfigMaps &amp; Secrets</strong> — view and edit with reveal toggle</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Deploy from YAML</strong> — Monaco editor with syntax highlighting</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Helm management</strong> — list releases, install charts, uninstall</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Visual topology</strong> — Service &rarr; Deployment &rarr; Pods relationship map</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Namespace management</strong> — create, delete, switch between namespaces</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>YAML editor for all resources</strong> — syntax highlighted, apply changes live</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Volume management with file browser</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Network management with subnet configuration</span><span class="ft-check">&#10003;</span></div>
 
       <!-- Category: AI -->
-      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">AI & Automation</div>
+      <div style="padding: 10px 24px; background: rgba(255,255,255,0.02); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #58a6ff; font-weight: 600;">AI &amp; Automation</div>
 
       <div class="ft-row"><span><strong>AI assistant</strong> — floating window, drag to any monitor</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>4 AI providers</strong> — Claude, GPT, Gemini, custom OpenAI-compatible</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>5 AI providers</strong> — Claude, GPT, Gemini, Ollama (local), custom OpenAI-compatible</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>One-click Ollama setup</strong> — local AI with GPU acceleration</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Tool calling</strong> — AI can list containers, inspect, and manage resources</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Conversation history</strong> — sliding window context for multi-turn sessions</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>MCP server</strong> — 27 tools for Claude Code / Claude Desktop</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>OpenAI-compatible endpoint</strong> — works with any agent framework</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>App templates</strong> — one-click deploy + create your own</span><span class="ft-check ft-unique">&#10003;</span></div>
@@ -736,6 +758,12 @@
       <div class="ft-row"><span>Guided setup wizard with streaming progress</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Signed auto-updates</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>macOS: Apple Virtualization.framework + VirtioFS + proxy passthrough</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>NVIDIA GPU detection</strong> — Container Toolkit auto-install</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>GPU VRAM monitoring</strong> — dashboard and status bar display</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>WSL2 resource management</strong> — configure memory, CPU, and swap</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Docker auto-start</strong> — automatic startup on Windows reboot</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>JetBrains Mono Nerd Font</strong> — in terminal and log viewers</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Collapsible sidebar</strong>, <code>Ctrl+R</code> refresh, <code>Ctrl+K</code> command palette</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Glassmorphism UI — frosted glass, smooth animations</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row" style="border: none;"><span><strong>Open source</strong> — MIT licensed, free forever, no telemetry</span><span class="ft-check ft-unique">&#10003;</span></div>
     </div>
@@ -746,6 +774,94 @@
 <section class="highlights">
   <div class="highlight-row">
     <div class="highlight-text">
+      <h3>Full Kubernetes management</h3>
+      <p>Orca Desktop gives you a complete Kubernetes dashboard without the complexity. Visualize your cluster topology, manage Helm releases, and edit any resource with a syntax-highlighted YAML editor — all from one window.</p>
+      <ul>
+        <li>Visual topology map — Service, Deployment, and Pods at a glance</li>
+        <li>Helm chart management — install, upgrade, and uninstall releases</li>
+        <li>Monaco YAML editor with live apply for all K8s resources</li>
+        <li>Scale deployments, rollback, and port-forward services instantly</li>
+        <li>Events timeline, ConfigMaps, Secrets, and namespace management</li>
+      </ul>
+    </div>
+    <div class="highlight-visual">
+<span style="color: #6e7681">// Visual topology — how Orca maps your cluster</span>
+
+<span style="color: #79c0ff">Service</span> <span style="color: #8b949e">:443</span> &rarr; <span style="color: #a5d6ff">forward to localhost:8443</span>
+  &boxvr;&horbar; <span style="color: #d2a8ff">Deployment</span> <span style="color: #8b949e">nginx (3 replicas)</span>
+  &boxv;   &boxvr;&horbar; <span style="color: #3fb950">Pod</span> nginx-7d4f8b <span style="color: #3fb950">Running</span> <span style="color: #8b949e">CPU: 12m  Mem: 48Mi</span>
+  &boxv;   &boxvr;&horbar; <span style="color: #3fb950">Pod</span> nginx-9c2e1a <span style="color: #3fb950">Running</span> <span style="color: #8b949e">CPU:  8m  Mem: 44Mi</span>
+  &boxv;   &boxur;&horbar; <span style="color: #3fb950">Pod</span> nginx-b5f3d7 <span style="color: #3fb950">Running</span> <span style="color: #8b949e">CPU: 10m  Mem: 46Mi</span>
+
+<span style="color: #6e7681">// Helm releases</span>
+<span style="color: #d29922">helm</span> list &rarr; <span style="color: #a5d6ff">nginx-ingress</span> v1.12.0  <span style="color: #3fb950">deployed</span>
+                <span style="color: #a5d6ff">cert-manager</span>  v1.14.3  <span style="color: #3fb950">deployed</span>
+    </div>
+  </div>
+
+  <div class="highlight-row" style="direction: rtl;">
+    <div class="highlight-text" style="direction: ltr;">
+      <h3>AI assistant with local GPU power</h3>
+      <p>Get AI-powered container diagnostics and management with your choice of provider. Run Ollama locally with GPU acceleration for private, zero-latency AI — or connect to Claude, GPT, or Gemini for cloud intelligence.</p>
+      <ul>
+        <li>One-click Ollama setup with NVIDIA GPU auto-detection</li>
+        <li>Tool calling — AI can list, inspect, and manage your containers</li>
+        <li>5 providers — Claude, GPT, Gemini, Ollama (local), custom</li>
+        <li>MCP server with 27 tools for Claude Code integration</li>
+        <li>Conversation history with sliding window context</li>
+      </ul>
+    </div>
+    <div class="highlight-visual" style="direction: ltr;">
+<span style="color: #6e7681">// AI assistant with tool calling</span>
+
+<span style="color: #58a6ff">You:</span> Why is my nginx container using so much memory?
+
+<span style="color: #a371f7">Orca AI:</span> Let me check...
+  <span style="color: #d29922">[tool]</span> list_containers()
+  <span style="color: #d29922">[tool]</span> inspect_container("nginx-prod")
+  <span style="color: #d29922">[tool]</span> container_logs("nginx-prod", tail=100)
+
+Your nginx container is using <span style="color: #f85149">847 MB</span> because
+worker_connections is set to 4096 with 4 worker
+processes. I recommend reducing workers to 2 and
+setting <span style="color: #3fb950">worker_rlimit_nofile</span> to 1024.
+
+<span style="color: #6e7681">// GPU status bar</span>
+<span style="color: #3fb950">NVIDIA RTX 4090</span> &mdash; VRAM: 6.2 / 24 GB &mdash; <span style="color: #3fb950">Ollama running</span>
+    </div>
+  </div>
+
+  <div class="highlight-row">
+    <div class="highlight-text">
+      <h3>Security scanning with exportable reports</h3>
+      <p>Scan any image for vulnerabilities with one click. Orca Desktop uses Trivy to find CVEs, displays results with distinct severity colors, and generates full HTML reports you can share with your team or open in any browser.</p>
+      <ul>
+        <li>One-click vulnerability scan powered by Trivy</li>
+        <li>Critical, High, Medium, Low — color-coded at a glance</li>
+        <li>Exportable HTML report — opens directly in your browser</li>
+        <li>Image file browser — explore layers without running</li>
+        <li>Private registry support for enterprise workflows</li>
+      </ul>
+    </div>
+    <div class="highlight-visual">
+<span style="color: #6e7681">// Vulnerability scan results</span>
+
+<span style="color: #e6edf3">Image:</span> <span style="color: #a5d6ff">nginx:1.25.3</span>
+<span style="color: #e6edf3">Scanned:</span> 142 packages
+
+<span style="color: #f85149; font-weight: bold;">CRITICAL</span>  CVE-2024-1234  openssl 3.0.12  <span style="color: #8b949e">→ fix: 3.0.13</span>
+<span style="color: #f85149; font-weight: bold;">CRITICAL</span>  CVE-2024-5678  curl 8.4.0     <span style="color: #8b949e">→ fix: 8.5.0</span>
+<span style="color: #d29922; font-weight: bold;">HIGH    </span>  CVE-2024-2345  zlib 1.3       <span style="color: #8b949e">→ fix: 1.3.1</span>
+<span style="color: #d29922; font-weight: bold;">HIGH    </span>  CVE-2024-3456  libxml2 2.11   <span style="color: #8b949e">→ fix: 2.12</span>
+<span style="color: #e3b341; font-weight: bold;">MEDIUM  </span>  CVE-2024-4567  pcre2 10.42    <span style="color: #8b949e">→ fix: 10.43</span>
+<span style="color: #8b949e; font-weight: bold;">LOW     </span>  CVE-2024-6789  bash 5.2.15    <span style="color: #8b949e">→ fix: 5.2.21</span>
+
+<span style="color: #3fb950">[Export HTML Report]</span>  <span style="color: #58a6ff">[Open in Browser]</span>
+    </div>
+  </div>
+
+  <div class="highlight-row" style="direction: rtl;">
+    <div class="highlight-text" style="direction: ltr;">
       <h3>Built for AI agents</h3>
       <p>Orca Desktop exposes a full container management API that any AI agent can use. Connect Claude Code, OpenAI agents, or any MCP-compatible client.</p>
       <ul>
@@ -755,7 +871,7 @@
         <li>Bearer token authentication</li>
       </ul>
     </div>
-    <div class="highlight-visual">
+    <div class="highlight-visual" style="direction: ltr;">
 <span style="color: #6e7681">// Add to your MCP config</span>
 {
   "<span style="color: #a5d6ff">mcpServers</span>": {
@@ -769,42 +885,13 @@
 }
     </div>
   </div>
-
-  <div class="highlight-row" style="direction: rtl;">
-    <div class="highlight-text" style="direction: ltr;">
-      <h3>Cross-platform, native performance</h3>
-      <p>Built with Rust and Tauri for minimal resource usage. No Electron. Runs natively on all platforms with platform-specific container runtime integration.</p>
-      <ul>
-        <li>Linux — native Docker/Podman, no VM needed</li>
-        <li>macOS — Lima VM with Apple Virtualization</li>
-        <li>Windows — WSL2 with Docker</li>
-        <li>Signed auto-updates with one-click install</li>
-      </ul>
-    </div>
-    <div class="highlight-visual" style="direction: ltr; text-align: center; padding: 40px;">
-      <div style="display: flex; justify-content: center; gap: 32px; flex-wrap: wrap;">
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; color: #8b949e; font-size: 12px;">
-          <span style="font-size: 32px;">🦀</span> Rust
-        </div>
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; color: #8b949e; font-size: 12px;">
-          <span style="font-size: 32px;">⚡</span> Tauri 2
-        </div>
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; color: #8b949e; font-size: 12px;">
-          <span style="font-size: 32px;">💎</span> SolidJS
-        </div>
-      </div>
-      <div style="margin-top: 24px; font-size: 13px; color: #6e7681;">
-        ~15 MB installer · ~30 MB RAM · instant startup
-      </div>
-    </div>
-  </div>
 </section>
 
 <section class="cta">
   <h2>Ready to try it?</h2>
-  <p>Free, open source, and works with your existing Docker setup.</p>
+  <p>Free, open source, and works with your existing Docker and Kubernetes setup.</p>
   <div class="hero-buttons" style="justify-content: center;">
-    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop</a>
+    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop v0.5.0</a>
     <a href="https://github.com/edvin/orca" class="btn btn-secondary">Star on GitHub</a>
   </div>
 </section>
