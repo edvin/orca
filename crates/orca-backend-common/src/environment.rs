@@ -318,6 +318,7 @@ pub async fn run_fix_streaming(
             #[cfg(target_os = "windows")]
             {
                 send("Installing inside WSL2...\n".into()).await;
+                // Re-apply TCP override after nvidia-ctk (it may modify Docker config)
                 let script = r#"
                     curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null && \
                     curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
@@ -325,6 +326,9 @@ pub async fn run_fix_streaming(
                         tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null && \
                     apt-get update && apt-get install -y nvidia-container-toolkit && \
                     nvidia-ctk runtime configure --runtime=docker && \
+                    mkdir -p /etc/systemd/system/docker.service.d && \
+                    echo -e '[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                    systemctl daemon-reload && \
                     systemctl restart docker
                 "#;
                 run_cmd_streaming("wsl", &["-u", "root", "--", "bash", "-c", script], &tx).await
