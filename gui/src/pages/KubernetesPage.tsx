@@ -35,6 +35,8 @@ export default function KubernetesPage() {
   const [enabling, setEnabling] = createSignal(false);
   const [portForwards, setPortForwards] = createSignal<Set<string>>(new Set());
   const [k8sMenuOpen, setK8sMenuOpen] = createSignal(false);
+  const [scaleTarget, setScaleTarget] = createSignal<{ namespace: string; name: string; current: number } | null>(null);
+  const [scaleValue, setScaleValue] = createSignal(1);
   const [portForwardEditing, setPortForwardEditing] = createSignal<string | null>(null);
   const [portForwardLocalPort, setPortForwardLocalPort] = createSignal("");
   const [logPod, setLogPod] = createSignal<string | null>(null);
@@ -307,20 +309,21 @@ export default function KubernetesPage() {
     }
   };
 
-  const handleScale = async (namespace: string, name: string) => {
-    const input = prompt(`Scale deployment "${name}" — enter replica count:`);
-    if (input === null) return;
-    const replicas = parseInt(input, 10);
-    if (isNaN(replicas) || replicas < 0) {
-      showToast("Invalid replica count", "error");
-      return;
-    }
+  const openScaleDialog = (namespace: string, name: string, currentReplicas: number) => {
+    setScaleTarget({ namespace, name, current: currentReplicas });
+    setScaleValue(currentReplicas);
+  };
+
+  const doScale = async () => {
+    const target = scaleTarget();
+    if (!target) return;
     try {
-      await invoke("k8s_scale_deployment", { namespace, name, replicas });
-      showToast(`Scaled ${name} to ${replicas} replicas`, "success");
+      await invoke("k8s_scale_deployment", { namespace: target.namespace, name: target.name, replicas: scaleValue() });
+      showToast(`Scaled ${target.name} to ${scaleValue()} replicas`, "success");
+      setScaleTarget(null);
       await refreshWorkloads();
     } catch (e) {
-      logError(`Failed to scale deployment: ${e}`, `Deployment "${name}" in "${namespace}" to ${replicas} replicas`);
+      logError(`Failed to scale deployment: ${e}`, `Deployment "${target.name}" in "${target.namespace}"`);
       showToast(`Failed to scale: ${e}`, "error");
     }
   };
@@ -368,9 +371,13 @@ export default function KubernetesPage() {
   const viewYaml = async (kind: string, name: string, namespace: string) => {
     try {
       const yaml = await invoke("k8s_get_yaml", { kind, name, namespace }) as string;
+      if (!yaml || yaml.trim().length === 0) {
+        showToast(`No YAML returned for ${kind}/${name}`, "error");
+        return;
+      }
       setYamlResource({ kind, name, namespace, yaml });
     } catch (e) {
-      showToast(`Failed to get YAML: ${e}`, "error");
+      showToast(`Failed to get YAML for ${kind}/${name}: ${e}`, "error");
     }
   };
 
@@ -709,18 +716,20 @@ export default function KubernetesPage() {
                       </td>
                       <td style={{ color: "#8b949e" }}>{dep.age}</td>
                       <td>
-                        <div style={{ display: "flex", gap: "4px" }}>
+                        <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
                           <button
                             class="btn btn-sm"
-                            onClick={() => handleScale(dep.namespace, dep.name)}
+                            style={{ "font-size": "11px" }}
+                            onClick={() => openScaleDialog(dep.namespace, dep.name, dep.replicas_desired)}
                           >
                             Scale
                           </button>
                           <button
-                            class="btn btn-sm"
+                            class="action-icon"
+                            title="Restart deployment"
                             onClick={() => handleRestart(dep.namespace, dep.name)}
                           >
-                            Restart
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
                           </button>
                           <button
                             class="action-icon"
@@ -1169,6 +1178,69 @@ export default function KubernetesPage() {
                   {(line) => <div>{line}</div>}
                 </For>
               </Show>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Scale Dialog */}
+      <Show when={scaleTarget()}>
+        <div class="modal-overlay" onClick={() => setScaleTarget(null)}>
+          <div class="modal-dialog" style={{ "max-width": "340px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Scale: {scaleTarget()!.name}</span>
+              <button class="modal-close" onClick={() => setScaleTarget(null)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "24px", "text-align": "center" }}>
+              <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "16px" }}>
+                Current: {scaleTarget()!.current} replica{scaleTarget()!.current !== 1 ? "s" : ""}
+              </div>
+              <div style={{ display: "flex", "align-items": "center", "justify-content": "center", gap: "12px" }}>
+                <button
+                  class="action-icon"
+                  style={{
+                    width: "36px", height: "36px", "border-radius": "50%",
+                    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                    display: "flex", "align-items": "center", "justify-content": "center",
+                    "font-size": "18px", color: "#e6edf3",
+                  }}
+                  onClick={() => setScaleValue(Math.max(0, scaleValue() - 1))}
+                >
+                  &minus;
+                </button>
+                <div style={{
+                  "font-size": "32px", "font-weight": "700", color: "#e6edf3",
+                  "min-width": "60px", "text-align": "center",
+                  "font-family": "'JetBrains Mono NF', monospace",
+                }}>
+                  {scaleValue()}
+                </div>
+                <button
+                  class="action-icon"
+                  style={{
+                    width: "36px", height: "36px", "border-radius": "50%",
+                    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                    display: "flex", "align-items": "center", "justify-content": "center",
+                    "font-size": "18px", color: "#e6edf3",
+                  }}
+                  onClick={() => setScaleValue(scaleValue() + 1)}
+                >
+                  +
+                </button>
+              </div>
+              <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "12px" }}>
+                {scaleValue() === 0 ? "This will stop all pods" : `${scaleValue()} replica${scaleValue() !== 1 ? "s" : ""} will be running`}
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setScaleTarget(null)}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                onClick={doScale}
+                disabled={scaleValue() === scaleTarget()!.current}
+              >
+                Scale to {scaleValue()}
+              </button>
             </div>
           </div>
         </div>
