@@ -22,16 +22,11 @@ export default function K8sTerminal(props: K8sTerminalProps) {
     const next = Math.max(9, Math.min(24, fontSize() + delta));
     setFontSize(next);
     localStorage.setItem("terminal-font-size", String(next));
-    if (termInstance) {
+    if (termInstance && fitAddonInstance) {
       termInstance.options.fontSize = next;
-      const font = termInstance.options.fontFamily;
       termInstance.options.fontFamily = "monospace";
-      requestAnimationFrame(() => {
-        if (termInstance) {
-          termInstance.options.fontFamily = font;
-          fitAddonInstance?.fit();
-        }
-      });
+      termInstance.options.fontFamily = "JetBrains Mono NF, monospace";
+      fitAddonInstance.fit();
     }
   };
 
@@ -53,6 +48,14 @@ export default function K8sTerminal(props: K8sTerminalProps) {
         magenta: "#bc8cff",
         cyan: "#39c5cf",
         white: "#b8c0cc",
+        brightBlack: "#6e7681",
+        brightRed: "#ffa198",
+        brightGreen: "#56d364",
+        brightYellow: "#e3b341",
+        brightBlue: "#79c0ff",
+        brightMagenta: "#d2a8ff",
+        brightCyan: "#56d4dd",
+        brightWhite: "#c9d1d9",
       },
       fontFamily: "JetBrains Mono NF, monospace",
       fontSize: fontSize(),
