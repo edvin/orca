@@ -120,6 +120,20 @@ export default function EnvironmentPage() {
       }
     } finally {
       setActionRunning(false);
+      // Auto-restart daemon after successful fix (Docker may have been restarted)
+      if (actionSuccess()) {
+        setActionLog((prev) => prev + "\n>>> Restarting Orca daemon...\n");
+        try {
+          await invoke("stop_daemon");
+          await new Promise(r => setTimeout(r, 2000));
+          await invoke("start_daemon");
+          await new Promise(r => setTimeout(r, 3000));
+          setActionLog((prev) => prev + ">>> Daemon restarted successfully.\n");
+        } catch {
+          setActionLog((prev) => prev + ">>> Daemon restart failed. Close and reopen Orca Desktop.\n");
+        }
+        await refresh();
+      }
     }
   };
 

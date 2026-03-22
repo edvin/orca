@@ -41,18 +41,29 @@ export default function DashboardPage(props: DashboardPageProps) {
   const [stacksError, setStacksError] = createSignal("");
   const [healthError, setHealthError] = createSignal("");
 
+  let connectionFailCount = 0;
+
   const isConnectionError = (e: string) =>
     e.includes("hyper") || e.includes("Connect") || e.includes("connection") ||
-    e.includes("not running") || e.includes("timed out");
+    e.includes("not running") || e.includes("timed out") || e.includes("500");
 
-  const friendlyError = (e: string) =>
-    isConnectionError(e) ? "Waiting for Docker..." : e;
+  const friendlyError = (e: string) => {
+    if (isConnectionError(e)) {
+      connectionFailCount++;
+      if (connectionFailCount > 6) {
+        return "Docker not reachable. Try Restart Orca on System Health page.";
+      }
+      return "Waiting for Docker...";
+    }
+    connectionFailCount = 0;
+    return e;
+  };
 
   const fetchAll = () => {
     // Each card fetches independently — no waiting for the others
     // Don't log connection errors to Activity (they're transient during startup)
     invokeWithTimeout<Container[]>("list_containers")
-      .then((v) => { setContainers(v || []); setContainersState("ready"); })
+      .then((v) => { setContainers(v || []); setContainersState("ready"); connectionFailCount = 0; })
       .catch((e) => { setContainersError(friendlyError(String(e))); setContainersState("error"); })
       .finally(() => setLastUpdated(new Date()));
 
