@@ -885,106 +885,54 @@ impl K8sManager for K3sManager {
 
         // Non-Windows: use the kube client directly
         #[cfg(not(target_os = "windows"))]
-        let api_result = client.apiserver_version().await;
-        #[cfg(not(target_os = "windows"))]
-        let running = api_result.is_ok();
-        #[cfg(not(target_os = "windows"))]
-        match &api_result {
-            Ok(ver) => tracing::info!("K8s status: API server reachable, version {}.{}", ver.major, ver.minor),
-            Err(e) => tracing::info!("K8s status: API server not reachable: {e}"),
-        }
+        {
+            let api_result = client.apiserver_version().await;
+            let running = api_result.is_ok();
+            match &api_result {
+                Ok(ver) => tracing::info!("K8s status: API server reachable, version {}.{}", ver.major, ver.minor),
+                Err(e) => tracing::info!("K8s status: API server not reachable: {e}"),
+            }
 
-        // Get version
-        let version = if running {
-            client
-                .apiserver_version()
-                .await
-                .ok()
-                .map(|v| format!("v{}.{}", v.major, v.minor))
-        } else {
-            None
-        };
+            let version = if running {
+                client.apiserver_version().await.ok().map(|v| format!("v{}.{}", v.major, v.minor))
+            } else { None };
 
-        // Get node info
-        let (node_name, node_status) = if running {
-            let nodes: Api<k8s_openapi::api::core::v1::Node> = Api::all(client.clone());
-            nodes
-                .list(&ListParams::default())
-                .await
-                .ok()
-                .and_then(|list| {
-                    list.items.first().map(|n| {
+            let (node_name, node_status) = if running {
+                let nodes: Api<k8s_openapi::api::core::v1::Node> = Api::all(client.clone());
+                nodes.list(&ListParams::default()).await.ok()
+                    .and_then(|list| list.items.first().map(|n| {
                         let name = n.metadata.name.clone().unwrap_or_default();
-                        let status = n
-                            .status
-                            .as_ref()
+                        let status = n.status.as_ref()
                             .and_then(|s| s.conditions.as_ref())
-                            .and_then(|conds| {
-                                conds
-                                    .iter()
-                                    .find(|c| c.type_ == "Ready")
-                                    .map(|c| {
-                                        if c.status == "True" {
-                                            "Ready".to_string()
-                                        } else {
-                                            "NotReady".to_string()
-                                        }
-                                    })
-                            })
+                            .and_then(|conds| conds.iter().find(|c| c.type_ == "Ready")
+                                .map(|c| if c.status == "True" { "Ready".to_string() } else { "NotReady".to_string() }))
                             .unwrap_or_else(|| "Unknown".to_string());
                         (name, status)
+                    }))
+                    .map(|(n, s)| (Some(n), Some(s)))
+                    .unwrap_or((None, None))
+            } else { (None, None) };
+
+            let (pods_running, pods_total) = if running {
+                let pods: Api<k8s_openapi::api::core::v1::Pod> = Api::all(client.clone());
+                pods.list(&ListParams::default()).await.ok()
+                    .map(|list| {
+                        let total = list.items.len() as u32;
+                        let r = list.items.iter()
+                            .filter(|p| p.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Running"))
+                            .count() as u32;
+                        (r, total)
                     })
-                })
-                .map(|(n, s)| (Some(n), Some(s)))
-                .unwrap_or((None, None))
-        } else {
-            (None, None)
-        };
+                    .unwrap_or((0, 0))
+            } else { (0, 0) };
 
-        // Count pods
-        let (pods_running, pods_total) = if running {
-            let pods: Api<k8s_openapi::api::core::v1::Pod> = Api::all(client.clone());
-            pods.list(&ListParams::default())
-                .await
-                .ok()
-                .map(|list| {
-                    let total = list.items.len() as u32;
-                    let running = list
-                        .items
-                        .iter()
-                        .filter(|p| {
-                            p.status
-                                .as_ref()
-                                .and_then(|s| s.phase.as_deref())
-                                == Some("Running")
-                        })
-                        .count() as u32;
-                    (running, total)
-                })
-                .unwrap_or((0, 0))
-        } else {
-            (0, 0)
-        };
-
-        Ok(ClusterStatus {
-            enabled: true,
-            running,
-            version,
-            node_name,
-            node_status,
-            pods_running,
-            pods_total,
-            traefik_dashboard: if running {
-                Some("http://127.0.0.1:9000/dashboard/".to_string())
-            } else {
-                None
-            },
-            error: if !running {
-                Some(format!("API server at {} not reachable", kubeconfig_path.display()))
-            } else {
-                None
-            },
-        })
+            return Ok(ClusterStatus {
+                enabled: true, running, version, node_name, node_status,
+                pods_running, pods_total,
+                traefik_dashboard: if running { Some("http://127.0.0.1:9000/dashboard/".to_string()) } else { None },
+                error: if !running { Some(format!("API server at {} not reachable", kubeconfig_path.display())) } else { None },
+            });
+        }
     }
 
     async fn kubeconfig(&self) -> anyhow::Result<String> {
