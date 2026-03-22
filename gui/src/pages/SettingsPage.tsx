@@ -925,44 +925,30 @@ export default function SettingsPage() {
             </div>
 
             <div class="settings-section">
-              <h2 class="settings-section-title">Configuration</h2>
+              <h2 class="settings-section-title">Paths</h2>
               <div class="card">
-                <div class="card-grid">
-                  <span class="card-label">Config File</span>
-                  <span class="card-value mono">~/.config/orca/config.json</span>
-                  <span class="card-label">Data Directory</span>
-                  <span class="card-value mono">~/.local/share/orca/</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="settings-section">
-              <h2 class="settings-section-title">Daemon Log</h2>
-              <div class="card">
-                <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "8px" }}>
-                  <span style={{ "font-size": "12px", color: "#6e7681" }}>Last 100 lines from daemon process output</span>
-                  <button class="btn btn-sm" onClick={async () => {
-                    try {
-                      const info = (await invoke("get_daemon_info")) as any;
-                      setDaemonLog(info.log_tail || "(empty)");
-                      setDaemonLogPath(info.log_path || "");
-                    } catch (e) { logError(`Failed to load daemon log: ${e}`); showToast(`Failed: ${e}`, "error"); }
-                  }} style={{ "font-size": "11px" }}>Load Log</button>
-                </div>
-                <Show when={daemonLog()}>
-                  <pre style={{
-                    background: "#0d1117", border: "1px solid rgba(255,255,255,0.06)",
-                    "border-radius": "8px", padding: "12px", margin: 0,
-                    "font-family": "'JetBrains Mono NF', monospace", "font-size": "11px",
-                    "line-height": "1.5", color: "#8b949e", "max-height": "300px",
-                    overflow: "auto", "white-space": "pre-wrap", "word-break": "break-all",
-                  }}>{daemonLog()}</pre>
-                  <Show when={daemonLogPath()}>
-                    <div style={{ "font-size": "11px", color: "#484f58", "margin-top": "6px" }}>
-                      {daemonLogPath()}
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                  {([
+                    ["Config File", "~/.config/orca/config.json"],
+                    ["Data Directory", "~/.local/share/orca/"],
+                    ["Daemon Log", daemonLogPath() || "~/.config/orca/daemon.log"],
+                  ] as [string, string][]).map(([label, path]) => (
+                    <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                      <div>
+                        <div style={{ "font-size": "11px", color: "#6e7681" }}>{label}</div>
+                        <span class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{path}</span>
+                      </div>
+                      <button
+                        class="action-icon"
+                        style={{ color: "#8b949e", "flex-shrink": "0" }}
+                        onClick={() => { navigator.clipboard.writeText(path); showToast("Path copied", "success"); }}
+                        title="Copy path"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                      </button>
                     </div>
-                  </Show>
-                </Show>
+                  ))}
+                </div>
               </div>
             </div>
 
