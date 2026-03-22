@@ -47,6 +47,11 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [selectedResultIndex, setSelectedResultIndex] = createSignal(-1);
   const [searching, setSearching] = createSignal(false);
   const [showSearchDropdown, setShowSearchDropdown] = createSignal(false);
+
+  // Import state
+  const [showImport, setShowImport] = createSignal(false);
+  const [importPath, setImportPath] = createSignal("");
+  const [importing, setImporting] = createSignal(false);
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
   const { sortField, sortDir, toggleSort, sortFn } = useSort<Image>("tag");
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -331,6 +336,24 @@ export default function ImagesPage(props: ImagesPageProps) {
       setBuildOutput(prev => [...prev, `Error: ${e}`]);
     }
     setBuilding(false);
+  };
+
+  const doImport = async () => {
+    const path = importPath().trim();
+    if (!path) return;
+    setImporting(true);
+    try {
+      await invoke("import_image", { path });
+      showToast("Image imported successfully", "success");
+      setShowImport(false);
+      setImportPath("");
+      await refresh();
+    } catch (e) {
+      logError(`Failed to import image: ${e}`, `Path "${path}"`);
+      showToast(`Import failed: ${e}`, "error");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handlePullKeyDown = (e: KeyboardEvent) => {
@@ -625,6 +648,9 @@ export default function ImagesPage(props: ImagesPageProps) {
           <button class="btn" onClick={() => setShowBuild(!showBuild())}>
             Build
           </button>
+          <button class="btn" onClick={() => setShowImport(!showImport())}>
+            Import
+          </button>
           <button class="btn" onClick={() => setShowPruneConfirm(true)}>
             Prune
           </button>
@@ -772,6 +798,38 @@ export default function ImagesPage(props: ImagesPageProps) {
                 </Show>
               </div>
             </Show>
+          </div>
+        </div>
+      </Show>
+
+      {/* Import panel */}
+      <Show when={showImport()}>
+        <div class="card" style={{ "margin-bottom": "16px" }}>
+          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Import Image from Tar</div>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
+            <div class="form-group">
+              <label class="form-label">Path to tar file</label>
+              <input
+                class="form-input"
+                type="text"
+                placeholder="/path/to/image.tar"
+                value={importPath()}
+                onInput={(e) => setImportPath(e.currentTarget.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") doImport(); }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+              <button
+                class="btn btn-primary"
+                onClick={doImport}
+                disabled={importing() || !importPath().trim()}
+              >
+                {importing() ? (<><Spinner size={12} />{" Importing..."}</>) : "Import"}
+              </button>
+              <button class="btn" onClick={() => setShowImport(false)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       </Show>

@@ -124,6 +124,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}/terminal", get(container_terminal_ws))
         .route("/containers/{id}/export/run", get(export_docker_run))
         .route("/containers/{id}/export/compose", get(export_compose))
+        .route("/containers/{id}/files", get(container_list_files))
+        .route("/containers/{id}/file", get(container_read_file))
+        .route("/containers/{id}/commit", post(commit_container))
         // Registries
         .route("/registries", get(list_registries).post(add_registry))
         .route("/registries/{server}", delete(remove_registry_handler))
@@ -139,6 +142,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/{source}/tag", post(tag_image))
         .route("/images/{id}/files", get(image_list_files))
         .route("/images/{id}/file", get(image_read_file))
+        .route("/images/import", post(import_image))
         .route("/images/{id}/scan", get(scan_image))
         .route("/images/{id}/history", get(image_history))
         // Volumes
@@ -1499,6 +1503,206 @@ fn shell_escape(s: &str) -> String {
     } else {
         format!("'{}'", s.replace('\'', "'\\''"))
     }
+}
+
+// --- Container File Browsing ---
+
+async fn container_list_files(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(query): Query<VolumeFilesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let subpath = query.path.unwrap_or_default();
+    let sanitized: String = subpath
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+        .collect::<Vec<_>>()
+        .join("/");
+    let browse_path = if sanitized.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", sanitized)
+    };
+
+    let lines = run_in_container(&state.runtime.docker, &id,
+        vec!["ls", "-la", &browse_path]).await?;
+
+    let mut entries = Vec::new();
+    for line in &lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("total") {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() >= 9 {
+            let permissions = parts[0];
+            let is_dir = permissions.starts_with('d');
+            let size_str = parts[4];
+            let modified = format!("{} {} {}", parts[5], parts[6], parts[7]);
+            let name_part = parts[8..].join(" ");
+            if name_part == "." || name_part == ".." {
+                continue;
+            }
+            let display_name = if let Some(arrow) = name_part.find(" -> ") {
+                &name_part[..arrow]
+            } else {
+                &name_part
+            };
+            let is_link = permissions.starts_with('l');
+            entries.push(serde_json::json!({
+                "name": display_name,
+                "size": size_str,
+                "permissions": permissions,
+                "modified": &modified,
+                "is_dir": is_dir || is_link,
+                "link_target": if is_link { name_part.find(" -> ").map(|i| &name_part[i+4..]) } else { None },
+            }));
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "entries": entries, "path": sanitized })))
+}
+
+async fn container_read_file(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(query): Query<VolumeFilesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let file_path = query.path.unwrap_or_default();
+    let sanitized: String = file_path
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+        .collect::<Vec<_>>()
+        .join("/");
+    let full_path = format!("/{}", sanitized);
+
+    let lines = run_in_container(&state.runtime.docker, &id,
+        vec!["cat", &full_path]).await?;
+
+    Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
+}
+
+/// Run a command inside a running container using docker exec,
+/// collecting stdout and returning lines.
+async fn run_in_container(
+    docker: &bollard::Docker,
+    container_id: &str,
+    cmd: Vec<&str>,
+) -> anyhow::Result<Vec<String>> {
+    use bollard::exec::{CreateExecOptions, StartExecResults};
+    use futures::StreamExt;
+
+    let exec = docker.create_exec(container_id, CreateExecOptions {
+        cmd: Some(cmd.iter().map(|s| s.to_string()).collect()),
+        attach_stdout: Some(true),
+        attach_stderr: Some(true),
+        ..Default::default()
+    }).await.map_err(|e| anyhow::anyhow!("Failed to create exec: {e}"))?;
+
+    let output = docker.start_exec(&exec.id, None).await
+        .map_err(|e| anyhow::anyhow!("Failed to start exec: {e}"))?;
+
+    let mut stdout_lines = Vec::new();
+    let mut stderr_lines = Vec::new();
+
+    if let StartExecResults::Attached { mut output, .. } = output {
+        while let Some(Ok(msg)) = output.next().await {
+            let is_stderr = matches!(msg, bollard::container::LogOutput::StdErr { .. });
+            let text = msg.to_string();
+            for line in text.lines() {
+                if !line.is_empty() {
+                    if is_stderr {
+                        stderr_lines.push(line.to_string());
+                    } else {
+                        stdout_lines.push(line.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Check exit code
+    let inspect = docker.inspect_exec(&exec.id).await
+        .map_err(|e| anyhow::anyhow!("Failed to inspect exec: {e}"))?;
+
+    if let Some(code) = inspect.exit_code {
+        if code != 0 {
+            let stderr = stderr_lines.join("\n");
+            let msg = if stderr.is_empty() {
+                format!("Command failed with exit code {code}")
+            } else {
+                format!("Command failed with exit code {code}: {stderr}")
+            };
+            return Err(anyhow::anyhow!("{msg}"));
+        }
+    }
+
+    Ok(stdout_lines)
+}
+
+// --- Container Commit ---
+
+#[derive(Deserialize)]
+struct CommitRequest {
+    repo: String,
+    #[serde(default)]
+    tag: Option<String>,
+}
+
+async fn commit_container(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<CommitRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    use bollard::image::CommitContainerOptions;
+    use bollard::container::Config;
+
+    let tag_value = body.tag.unwrap_or_else(|| "latest".into());
+    let options = CommitContainerOptions {
+        container: id.clone(),
+        repo: body.repo.clone(),
+        tag: tag_value.clone(),
+        comment: String::new(),
+        author: String::new(),
+        pause: true,
+        changes: None,
+    };
+    let config = Config::<String> {
+        ..Default::default()
+    };
+    let result = state.runtime.docker.commit_container(options, config).await
+        .map_err(|e| anyhow::anyhow!("Commit failed: {e}"))?;
+
+    Ok(Json(serde_json::json!({ "id": result.id.unwrap_or_default() })))
+}
+
+// --- Image Import ---
+
+#[derive(Deserialize)]
+struct ImportImageRequest {
+    path: String,
+}
+
+async fn import_image(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<ImportImageRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let file = tokio::fs::read(&body.path).await
+        .map_err(|e| anyhow::anyhow!("Failed to read file: {e}"))?;
+    let mut stream = state.runtime.docker.import_image(
+        bollard::image::ImportImageOptions { quiet: false },
+        file.into(),
+        None,
+    );
+    use futures::StreamExt;
+    let mut messages = Vec::new();
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(info) => if let Some(status) = info.status { messages.push(status); },
+            Err(e) => messages.push(format!("Error: {e}")),
+        }
+    }
+    Ok(Json(serde_json::json!({ "messages": messages })))
 }
 
 /// Resolve an image ID to a usable reference (repo:tag or full sha).

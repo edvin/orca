@@ -7,6 +7,7 @@ import { showToast } from "../components/Toast";
 import LogViewer from "../components/LogViewer";
 import Spinner from "../components/Spinner";
 import Breadcrumb from "../components/Breadcrumb";
+import YamlEditor from "../components/YamlEditor";
 import { logError } from "../lib/activityStore";
 
 interface StackDetailPageProps {
@@ -25,6 +26,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
   const [logsFor, setLogsFor] = createSignal<{ id: string; name: string } | null>(null);
   const [composeContent, setComposeContent] = createSignal<string | null>(null);
   const [logServiceFilter, setLogServiceFilter] = createSignal<string | null>(null);
+  const [savedSinceLastRestart, setSavedSinceLastRestart] = createSignal(false);
 
   const fetchStack = async () => {
     try {
@@ -433,13 +435,12 @@ export default function StackDetailPage(props: StackDetailPageProps) {
         <Show when={activeTab() === "compose"}>
           <div class="detail-overview">
             <Show when={stack()?.config_file}>
-              <div class="detail-info-section" style={{ "margin-bottom": "16px" }}>
-                <div class="detail-section-title">Compose File Path</div>
+              <div class="detail-info-section" style={{ "margin-bottom": "12px" }}>
                 <code
                   class="mono"
                   style={{
                     color: "#8b949e",
-                    "font-size": "13px",
+                    "font-size": "12px",
                     "word-break": "break-all",
                   }}
                 >
@@ -460,13 +461,62 @@ export default function StackDetailPage(props: StackDetailPageProps) {
               </div>
             </Show>
 
-            <Show when={composeContent()}>
-              <div class="detail-export-block">
-                <pre class="detail-export-code">{composeContent()}</pre>
+            <Show when={savedSinceLastRestart()}>
+              <div
+                style={{
+                  display: "flex",
+                  "align-items": "center",
+                  gap: "12px",
+                  padding: "8px 12px",
+                  background: "rgba(210, 169, 34, 0.1)",
+                  border: "1px solid rgba(210, 169, 34, 0.2)",
+                  "border-radius": "6px",
+                  "font-size": "13px",
+                  color: "#d29922",
+                  "margin-bottom": "8px",
+                }}
+              >
+                <span>Compose file has been modified. Restart the stack to apply changes.</span>
+                <button
+                  class="btn btn-sm btn-primary"
+                  onClick={() => {
+                    doStackAction("restart_stack");
+                    setSavedSinceLastRestart(false);
+                  }}
+                  disabled={actionInProgress()}
+                >
+                  Restart Stack
+                </button>
               </div>
             </Show>
 
-            <Show when={stack()?.config_file && !composeContent()}>
+            <Show when={composeContent() !== null}>
+              <div style={{ height: "calc(100vh - 320px)", "min-height": "300px", "border-radius": "8px", overflow: "hidden", border: "1px solid #21262d" }}>
+                <YamlEditor
+                  value={composeContent()!}
+                  readOnly={false}
+                  title={`${props.stackName} — docker-compose.yml`}
+                  onSave={async (content: string) => {
+                    const configFile = stack()?.config_file;
+                    if (!configFile) {
+                      showToast("No compose file path available", "error");
+                      return;
+                    }
+                    try {
+                      await invoke("save_compose_file", { path: configFile, content });
+                      setComposeContent(content);
+                      setSavedSinceLastRestart(true);
+                      showToast("Compose file saved", "success");
+                    } catch (e) {
+                      showToast(`Failed to save: ${e}`, "error");
+                      throw e;
+                    }
+                  }}
+                />
+              </div>
+            </Show>
+
+            <Show when={stack()?.config_file && composeContent() === null}>
               <div
                 style={{
                   color: "#484f58",

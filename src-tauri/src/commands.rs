@@ -638,6 +638,33 @@ pub async fn volume_containers(name: String) -> Result<serde_json::Value, String
     get_json(&format!("/volumes/{name}/containers")).await
 }
 
+// --- Container File Browsing ---
+
+#[tauri::command]
+pub async fn container_list_files(id: String, path: Option<String>) -> Result<serde_json::Value, String> {
+    let encoded_id = urlencoding::encode(&id);
+    let path_param = path.map(|p| format!("?path={}", urlencoding::encode(&p))).unwrap_or_default();
+    get_json(&format!("/containers/{encoded_id}/files{path_param}")).await
+}
+
+#[tauri::command]
+pub async fn container_read_file(id: String, path: String) -> Result<serde_json::Value, String> {
+    let encoded_id = urlencoding::encode(&id);
+    let encoded_path = urlencoding::encode(&path);
+    get_json(&format!("/containers/{encoded_id}/file?path={encoded_path}")).await
+}
+
+// --- Container Commit ---
+
+#[tauri::command]
+pub async fn commit_container(id: String, repo: String, tag: Option<String>) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/containers/{}/commit", urlencoding::encode(&id)))
+        .json(&serde_json::json!({ "repo": repo, "tag": tag.unwrap_or_else(|| "latest".into()) }))
+        .send().await.map_err(|e| format!("{e}"))?
+        .json().await.map_err(|e| format!("{e}"))
+}
+
 // --- Images (inspect) ---
 
 #[tauri::command]
@@ -662,6 +689,18 @@ pub async fn image_read_file(id: String, path: String) -> Result<serde_json::Val
     let encoded_id = urlencoding::encode(&id);
     let encoded_path = urlencoding::encode(&path);
     get_json(&format!("/images/{encoded_id}/file?path={encoded_path}")).await
+}
+
+// --- Image Import ---
+
+#[tauri::command]
+pub async fn import_image(path: String) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/images/import"))
+        .json(&serde_json::json!({ "path": path }))
+        .timeout(std::time::Duration::from_secs(300))
+        .send().await.map_err(|e| format!("{e}"))?
+        .json().await.map_err(|e| format!("{e}"))
 }
 
 // --- Image Scanning ---
@@ -1860,4 +1899,38 @@ pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
         .json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn read_file(path: String) -> Result<String, String> {
+    // Only allow reading YAML files (compose files, etc.)
+    let p = std::path::Path::new(&path);
+    let fname = p.file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+    if !(fname.ends_with(".yml") || fname.ends_with(".yaml")) {
+        return Err("Only .yml/.yaml files can be read".to_string());
+    }
+    tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| format!("Failed to read file: {e}"))
+}
+
+#[tauri::command]
+pub async fn save_compose_file(path: String, content: String) -> Result<(), String> {
+    // Validate the path points to a compose/yaml file
+    let p = std::path::Path::new(&path);
+    let fname = p.file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+    if !(fname.ends_with(".yml") || fname.ends_with(".yaml")) {
+        return Err("Only .yml/.yaml files can be saved".to_string());
+    }
+    // Basic validation: content must not be empty
+    if content.trim().is_empty() {
+        return Err("Content cannot be empty".to_string());
+    }
+    tokio::fs::write(&path, &content)
+        .await
+        .map_err(|e| format!("Failed to save compose file: {e}"))
 }

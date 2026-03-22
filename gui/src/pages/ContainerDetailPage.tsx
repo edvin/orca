@@ -24,7 +24,7 @@ interface ContainerDetailPageProps {
   breadcrumbStack?: string | null;
 }
 
-type DetailTab = "overview" | "logs" | "terminal" | "inspect" | "volumes" | "resources" | "export";
+type DetailTab = "overview" | "logs" | "terminal" | "inspect" | "volumes" | "resources" | "export" | "files";
 
 export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [container, setContainer] = createSignal<Container | null>(null);
@@ -41,6 +41,21 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [editCpu, setEditCpu] = createSignal("");
   const [editRestart, setEditRestart] = createSignal("no");
   const [resourceSaving, setResourceSaving] = createSignal(false);
+
+  // File browser state
+  interface FileEntry { name: string; size: string; permissions: string; modified: string; is_dir: boolean; link_target?: string }
+  const [fileBrowserPath, setFileBrowserPath] = createSignal("/");
+  const [files, setFiles] = createSignal<FileEntry[]>([]);
+  const [filesLoading, setFilesLoading] = createSignal(false);
+  const [fileError, setFileError] = createSignal<string | null>(null);
+  const [fileContent, setFileContent] = createSignal<string | null>(null);
+  const [fileContentPath, setFileContentPath] = createSignal("");
+
+  // Commit dialog state
+  const [showCommitDialog, setShowCommitDialog] = createSignal(false);
+  const [commitRepo, setCommitRepo] = createSignal("");
+  const [commitTag, setCommitTag] = createSignal("latest");
+  const [committing, setCommitting] = createSignal(false);
 
   let statsInterval: ReturnType<typeof setInterval> | undefined;
 
@@ -136,6 +151,12 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     if (tab === "export") {
       fetchExportData();
     }
+    if (tab === "files") {
+      setFileBrowserPath("/");
+      setFileContent(null);
+      setFileError(null);
+      fetchContainerFiles("/");
+    }
   };
 
   const fetchExportData = async () => {
@@ -175,6 +196,79 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     }
     // Restart policy
     setEditRestart(data.restart_policy || "no");
+  };
+
+  // --- File Browser ---
+  const fetchContainerFiles = async (path: string) => {
+    setFilesLoading(true);
+    setFileContent(null);
+    setFileError(null);
+    try {
+      const result = (await invoke("container_list_files", { id: props.containerId, path })) as { entries: FileEntry[]; path: string };
+      setFiles(result.entries);
+      setFileBrowserPath(path || "/");
+    } catch (e) {
+      const msg = typeof e === "string" ? e : (e as any)?.message || String(e);
+      logError(`Failed to browse container files: ${msg}`, `Container ${props.containerId}, path "${path}"`);
+      setFileError(msg);
+      setFiles([]);
+    } finally {
+      setFilesLoading(false);
+    }
+  };
+
+  const navigateToDir = (dirName: string) => {
+    const current = fileBrowserPath();
+    const newPath = current === "/" ? `/${dirName}` : `${current}/${dirName}`;
+    fetchContainerFiles(newPath);
+  };
+
+  const navigateUp = () => {
+    const current = fileBrowserPath();
+    const parent = current.substring(0, current.lastIndexOf("/")) || "/";
+    fetchContainerFiles(parent);
+  };
+
+  const navigateToSegment = (index: number) => {
+    const segments = fileBrowserPath().split("/").filter(Boolean);
+    const newPath = "/" + segments.slice(0, index + 1).join("/");
+    fetchContainerFiles(newPath);
+  };
+
+  const readContainerFile = async (filePath: string) => {
+    const current = fileBrowserPath();
+    const fullPath = current === "/" ? `/${filePath}` : `${current}/${filePath}`;
+    try {
+      const result = (await invoke("container_read_file", { id: props.containerId, path: fullPath })) as { content: string };
+      setFileContent(result.content);
+      setFileContentPath(filePath);
+    } catch (e) {
+      logError(`Failed to read container file: ${e}`, `Container ${props.containerId}, path "${fullPath}"`);
+      showToast(`Failed to read file: ${e}`, "error");
+    }
+  };
+
+  // --- Container Commit ---
+  const doCommit = async () => {
+    const repo = commitRepo().trim();
+    if (!repo) {
+      showToast("Repository name is required", "error");
+      return;
+    }
+    setCommitting(true);
+    try {
+      const tag = commitTag().trim() || "latest";
+      await invoke("commit_container", { id: props.containerId, repo, tag });
+      showToast(`Image created: ${repo}:${tag}`, "success");
+      setShowCommitDialog(false);
+      setCommitRepo("");
+      setCommitTag("latest");
+    } catch (e) {
+      logError(`Failed to commit container: ${e}`, `Container ${container()?.name || props.containerId}`);
+      showToast(`Commit failed: ${e}`, "error");
+    } finally {
+      setCommitting(false);
+    }
   };
 
   const saveResources = async () => {
@@ -416,6 +510,14 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                   </button>
                 </Show>
+                <button
+                  class="action-icon"
+                  onClick={() => setShowCommitDialog(true)}
+                  disabled={actionInProgress()}
+                  title="Save as Image"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                </button>
               </div>
             </>
           )}
@@ -442,6 +544,14 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
             onClick={() => switchTab("terminal")}
           >
             Terminal
+          </button>
+        </Show>
+        <Show when={container()?.state === "Running"}>
+          <button
+            class={`detail-tab-item ${activeTab() === "files" ? "active" : ""}`}
+            onClick={() => switchTab("files")}
+          >
+            Files
           </button>
         </Show>
         <button
@@ -1178,6 +1288,118 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
           </div>
         </Show>
 
+        {/* Files tab */}
+        <Show when={activeTab() === "files"}>
+          <Show when={container()?.state === "Running"} fallback={
+            <div style={{ padding: "24px", "text-align": "center", color: "#8b949e" }}>
+              File browser is only available for running containers.
+            </div>
+          }>
+            <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
+              {/* Breadcrumb */}
+              <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", "font-size": "12px", display: "flex", "align-items": "center", gap: "2px", "flex-wrap": "wrap" }}>
+                <button
+                  style={{ background: "none", border: "none", color: fileBrowserPath() === "/" || fileBrowserPath() === "" ? "#e6edf3" : "#58a6ff", cursor: "pointer", padding: "2px 6px", "font-size": "12px", "border-radius": "4px" }}
+                  onClick={() => fetchContainerFiles("/")}
+                  title="Root"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle" }}><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                </button>
+                <For each={fileBrowserPath().split("/").filter(Boolean)}>
+                  {(segment, i) => {
+                    const segments = () => fileBrowserPath().split("/").filter(Boolean);
+                    const isLast = () => i() === segments().length - 1;
+                    return (
+                      <>
+                        <span style={{ color: "#484f58", "font-size": "10px" }}>{"\u203A"}</span>
+                        <button
+                          style={{
+                            background: "none", border: "none",
+                            color: isLast() ? "#e6edf3" : "#58a6ff",
+                            cursor: "pointer", padding: "2px 6px", "font-size": "12px", "border-radius": "4px",
+                            "font-weight": isLast() ? "600" : "400",
+                          }}
+                          onClick={() => navigateToSegment(i())}
+                        >{segment}</button>
+                      </>
+                    );
+                  }}
+                </For>
+              </div>
+
+              <div style={{ flex: "1", overflow: "auto" }}>
+                <Show when={fileContent() !== null} fallback={
+                  <Show when={!filesLoading()} fallback={
+                    <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}><Spinner size={14} /> Loading files...</div>
+                  }>
+                    <Show when={files().length > 0} fallback={
+                      <Show when={fileError()} fallback={
+                        <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}>Empty directory</div>
+                      }>
+                        <div style={{ padding: "16px 20px", color: "#f85149", background: "rgba(248, 81, 73, 0.1)", "border-radius": "6px", margin: "12px 16px", "font-size": "13px" }}>
+                          <strong>Error:</strong> {fileError()}
+                        </div>
+                      </Show>
+                    }>
+                      {/* Back button */}
+                      <Show when={fileBrowserPath() !== "/"}>
+                        <div
+                          class="file-browser-row"
+                          style={{ color: "#8b949e" }}
+                          onClick={navigateUp}
+                        >
+                          <span style={{ color: "#8b949e", width: "16px", "text-align": "center", "flex-shrink": "0", "font-size": "10px" }}>{"\u25C0"}</span>
+                          <span>.. (parent)</span>
+                        </div>
+                      </Show>
+                      <For each={files()}>
+                        {(f) => (
+                          <div
+                            class="file-browser-row"
+                            onClick={() => f.is_dir ? navigateToDir(f.name) : readContainerFile(f.name)}
+                          >
+                            <span style={{ color: f.is_dir ? "#58a6ff" : "#8b949e", width: "16px", "text-align": "center", "flex-shrink": "0" }}>
+                              {f.is_dir ? "\u{1F4C1}" : "\u{1F4C4}"}
+                            </span>
+                            <span style={{ flex: "1", color: f.is_dir ? "#58a6ff" : "#e6edf3", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                              {f.name}
+                              <Show when={f.link_target}>
+                                <span style={{ color: "#484f58", "margin-left": "6px" }}>{"\u2192"} {f.link_target}</span>
+                              </Show>
+                            </span>
+                            <span class="mono" style={{ color: "#484f58", "font-size": "11px", "flex-shrink": "0" }}>{f.permissions}</span>
+                            <span style={{ color: "#484f58", "font-size": "11px", "flex-shrink": "0", "min-width": "60px", "text-align": "right" }}>{f.size}</span>
+                          </div>
+                        )}
+                      </For>
+                    </Show>
+                  </Show>
+                }>
+                  {/* File content viewer */}
+                  <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
+                    <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+                      <span style={{ "font-size": "12px", color: "#e6edf3" }}>{fileContentPath()}</span>
+                      <button class="btn btn-sm" onClick={() => setFileContent(null)} style={{ "font-size": "11px", padding: "2px 8px" }}>Back</button>
+                    </div>
+                    <pre style={{
+                      padding: "12px 16px",
+                      margin: 0,
+                      "font-family": "'JetBrains Mono NF', monospace",
+                      "font-size": "12px",
+                      "line-height": "1.5",
+                      color: "#c9d1d9",
+                      "white-space": "pre-wrap",
+                      "word-break": "break-all",
+                      overflow: "auto",
+                      flex: "1",
+                    }}>{fileContent()}</pre>
+                  </div>
+                </Show>
+              </div>
+            </div>
+          </Show>
+        </Show>
+
         {/* Export tab */}
         <Show when={activeTab() === "export"}>
           <div class="detail-export">
@@ -1219,6 +1441,52 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
           </div>
         </Show>
       </div>
+
+      {/* Commit Container Dialog */}
+      <Show when={showCommitDialog()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowCommitDialog(false); (e.currentTarget as any).__mdOverlay = false; }}
+        >
+          <div class="modal-dialog" style={{ "max-width": "460px" }}>
+            <div class="modal-header">
+              <span class="modal-title">Save as Image</span>
+              <button class="modal-close" onClick={() => setShowCommitDialog(false)}>{"\u00d7"}</button>
+            </div>
+            <div class="modal-body">
+              <p style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "16px" }}>
+                Create a new image from this container's current state.
+              </p>
+              <div class="form-group" style={{ "margin-bottom": "12px" }}>
+                <label class="form-label">Repository</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="e.g. myapp"
+                  value={commitRepo()}
+                  onInput={(e) => setCommitRepo(e.currentTarget.value)}
+                />
+              </div>
+              <div class="form-group" style={{ "margin-bottom": "16px" }}>
+                <label class="form-label">Tag</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="latest"
+                  value={commitTag()}
+                  onInput={(e) => setCommitTag(e.currentTarget.value)}
+                />
+              </div>
+              <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
+                <button class="btn" onClick={() => setShowCommitDialog(false)} disabled={committing()}>Cancel</button>
+                <button class="btn btn-primary" onClick={doCommit} disabled={committing() || !commitRepo().trim()}>
+                  {committing() ? "Saving..." : "Save as Image"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 }

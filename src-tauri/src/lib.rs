@@ -25,6 +25,9 @@ pub fn run() {
             commands::update_container,
             commands::export_docker_run,
             commands::export_compose,
+            commands::container_list_files,
+            commands::container_read_file,
+            commands::commit_container,
             commands::create_and_run_container,
             commands::container_logs,
             commands::list_registries,
@@ -48,6 +51,7 @@ pub fn run() {
             commands::image_history,
             commands::image_list_files,
             commands::image_read_file,
+            commands::import_image,
             commands::scan_image,
             commands::list_networks,
             commands::create_network,
@@ -129,6 +133,8 @@ pub fn run() {
             commands::reconnect_runtime,
             commands::get_wsl_config,
             commands::save_wsl_config,
+            commands::read_file,
+            commands::save_compose_file,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;
