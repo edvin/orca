@@ -32,6 +32,8 @@ export default function KubernetesPage() {
   const [loading, setLoading] = createSignal(false);
   const [enabling, setEnabling] = createSignal(false);
   const [portForwards, setPortForwards] = createSignal<Set<string>>(new Set());
+  const [portForwardEditing, setPortForwardEditing] = createSignal<string | null>(null);
+  const [portForwardLocalPort, setPortForwardLocalPort] = createSignal("");
   const [logPod, setLogPod] = createSignal<string | null>(null);
   const [logLines, setLogLines] = createSignal<string[]>([]);
 
@@ -226,10 +228,11 @@ export default function KubernetesPage() {
     } catch {}
   };
 
-  const startPortForward = async (namespace: string, service: string, port: number) => {
+  const startPortForward = async (namespace: string, service: string, port: number, localPort?: number) => {
+    const local = localPort || port;
     try {
-      await invoke("k8s_port_forward", { namespace, service, port });
-      showToast(`Port ${port} forwarded — accessible at localhost:${port}`, "success");
+      await invoke("k8s_port_forward", { namespace, service, port, localPort: local });
+      showToast(`Port forwarded — accessible at localhost:${local}`, "success");
       await refreshPortForwards();
     } catch (e) {
       showToast(`Port forward failed: ${e}`, "error");
@@ -711,29 +714,73 @@ export default function KubernetesPage() {
                       </td>
                       <td style={{ color: "#8b949e" }}>{svc.age}</td>
                       <td style={{ "text-align": "right" }}>
-                        <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end", "flex-wrap": "wrap" }}>
+                        <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end", "flex-wrap": "wrap", "align-items": "center" }}>
                           <For each={svc.ports}>
-                            {(p) => (
-                              <Show when={isForwarded(selectedNs(), svc.name, p.port)} fallback={
-                                <button
-                                  class="btn btn-sm"
-                                  style={{ "font-size": "11px", padding: "2px 8px" }}
-                                  onClick={() => startPortForward(selectedNs(), svc.name, p.port)}
-                                  title={`Forward port ${p.port} to localhost:${p.port}`}
-                                >
-                                  :{p.port}
-                                </button>
-                              }>
-                                <button
-                                  class="btn btn-sm btn-primary"
-                                  style={{ "font-size": "11px", padding: "2px 8px" }}
-                                  onClick={() => stopPortForward(selectedNs(), svc.name, p.port)}
-                                  title={`Stop forwarding port ${p.port}`}
-                                >
-                                  :{p.port} {"\u2713"}
-                                </button>
-                              </Show>
-                            )}
+                            {(p) => {
+                              const editKey = () => `${svc.name}/${p.port}`;
+                              const isEditing = () => portForwardEditing() === editKey();
+                              return (
+                                <Show when={isForwarded(selectedNs(), svc.name, p.port)} fallback={
+                                  <Show when={isEditing()} fallback={
+                                    <button
+                                      class="btn btn-sm"
+                                      style={{ "font-size": "11px", padding: "2px 8px" }}
+                                      onClick={() => {
+                                        setPortForwardLocalPort(String(p.port));
+                                        setPortForwardEditing(editKey());
+                                      }}
+                                      title={`Forward port ${p.port} — click to configure`}
+                                    >
+                                      :{p.port}
+                                    </button>
+                                  }>
+                                    <div style={{ display: "flex", "align-items": "center", gap: "2px" }}>
+                                      <input
+                                        type="number"
+                                        class="form-input"
+                                        style={{ width: "70px", "font-size": "11px", padding: "2px 6px", "text-align": "center" }}
+                                        value={portForwardLocalPort()}
+                                        onInput={(e) => setPortForwardLocalPort(e.currentTarget.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            startPortForward(selectedNs(), svc.name, p.port, parseInt(portForwardLocalPort()) || p.port);
+                                            setPortForwardEditing(null);
+                                          }
+                                          if (e.key === "Escape") setPortForwardEditing(null);
+                                        }}
+                                        ref={(el) => setTimeout(() => el.focus(), 50)}
+                                      />
+                                      <button
+                                        class="btn btn-sm btn-primary"
+                                        style={{ "font-size": "11px", padding: "2px 6px" }}
+                                        onClick={() => {
+                                          startPortForward(selectedNs(), svc.name, p.port, parseInt(portForwardLocalPort()) || p.port);
+                                          setPortForwardEditing(null);
+                                        }}
+                                      >
+                                        {"\u25B6"}
+                                      </button>
+                                      <button
+                                        class="btn btn-sm"
+                                        style={{ "font-size": "11px", padding: "2px 6px" }}
+                                        onClick={() => setPortForwardEditing(null)}
+                                      >
+                                        {"\u2715"}
+                                      </button>
+                                    </div>
+                                  </Show>
+                                }>
+                                  <button
+                                    class="btn btn-sm btn-primary"
+                                    style={{ "font-size": "11px", padding: "2px 8px" }}
+                                    onClick={() => stopPortForward(selectedNs(), svc.name, p.port)}
+                                    title={`Stop forwarding port ${p.port}`}
+                                  >
+                                    :{p.port} {"\u2713"}
+                                  </button>
+                                </Show>
+                              );
+                            }}
                           </For>
                         </div>
                       </td>
