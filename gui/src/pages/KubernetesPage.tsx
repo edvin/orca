@@ -100,6 +100,23 @@ export default function KubernetesPage() {
   const [setupLog, setSetupLog] = createSignal("");
   const [setupRunning, setSetupRunning] = createSignal(false);
   const [setupSuccess, setSetupSuccess] = createSignal<boolean | null>(null);
+  // Create Ingress dialog
+  const [createIngressOpen, setCreateIngressOpen] = createSignal(false);
+  const [ingressName, setIngressName] = createSignal("");
+  const [ingressHostname, setIngressHostname] = createSignal("");
+  const [ingressServiceName, setIngressServiceName] = createSignal("");
+  const [ingressServicePort, setIngressServicePort] = createSignal("");
+  const [ingressPath, setIngressPath] = createSignal("/");
+  const [ingressPathType, setIngressPathType] = createSignal("Prefix");
+  const [ingressTls, setIngressTls] = createSignal(false);
+  const [ingressCreating, setIngressCreating] = createSignal(false);
+  const [ingressServices, setIngressServices] = createSignal<K8sService[]>([]);
+
+  // Traefik info panel
+  const [traefikInfoOpen, setTraefikInfoOpen] = createSignal(false);
+  const [traefikService, setTraefikService] = createSignal<K8sService | null>(null);
+  const [traefikForwarding, setTraefikForwarding] = createSignal(false);
+
   let mouseDownOnOverlay = false;
   let setupLogRef: HTMLPreElement | undefined;
 
@@ -131,6 +148,14 @@ export default function KubernetesPage() {
               { name: "kube-system", status: "Active", age: "" },
             ]);
           }
+        }
+        // Detect Traefik service in kube-system
+        try {
+          const sysServices = (await invoke("k8s_services", { namespace: "kube-system" })) as K8sService[];
+          const traefik = sysServices.find((svc) => svc.name === "traefik");
+          setTraefikService(traefik || null);
+        } catch {
+          setTraefikService(null);
         }
       }
     } catch (e) {
@@ -539,6 +564,116 @@ export default function KubernetesPage() {
     }
   };
 
+  // Open the Create Ingress dialog, optionally pre-filled from a service
+  const openCreateIngress = async (prefillService?: K8sService) => {
+    // Load services for the current namespace
+    try {
+      const svcs = (await invoke("k8s_services", { namespace: selectedNs() })) as K8sService[];
+      setIngressServices(svcs);
+    } catch {
+      setIngressServices([]);
+    }
+    if (prefillService) {
+      setIngressServiceName(prefillService.name);
+      setIngressName(`${prefillService.name}-ingress`);
+      if (prefillService.ports.length > 0) {
+        setIngressServicePort(String(prefillService.ports[0].port));
+      }
+    } else {
+      setIngressServiceName("");
+      setIngressName("");
+      setIngressServicePort("");
+    }
+    setIngressHostname("");
+    setIngressPath("/");
+    setIngressPathType("Prefix");
+    setIngressTls(false);
+    setCreateIngressOpen(true);
+  };
+
+  const handleCreateIngress = async () => {
+    const name = ingressName().trim();
+    const hostname = ingressHostname().trim();
+    const svcName = ingressServiceName();
+    const svcPort = parseInt(ingressServicePort());
+    const path = ingressPath().trim() || "/";
+    const pathType = ingressPathType();
+
+    if (!name || !hostname || !svcName || !svcPort) {
+      showToast("Name, hostname, service, and port are required", "error");
+      return;
+    }
+
+    let yaml = `apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${name}
+  namespace: ${selectedNs()}
+spec:
+  rules:
+  - host: ${hostname}
+    http:
+      paths:
+      - path: ${path}
+        pathType: ${pathType}
+        backend:
+          service:
+            name: ${svcName}
+            port:
+              number: ${svcPort}`;
+
+    if (ingressTls()) {
+      yaml += `
+  tls:
+  - hosts:
+    - ${hostname}
+    secretName: ${hostname}-tls`;
+    }
+
+    setIngressCreating(true);
+    try {
+      await invoke("k8s_apply_yaml", { yaml });
+      showToast(`Ingress '${name}' created`, "success");
+      setCreateIngressOpen(false);
+      await refreshWorkloads();
+    } catch (e) {
+      showToast(`Failed to create ingress: ${e}`, "error");
+    } finally {
+      setIngressCreating(false);
+    }
+  };
+
+  // Traefik dashboard: on Windows, port-forward first then open; otherwise just open
+  const openTraefikDashboard = async () => {
+    const dashUrl = status()?.traefik_dashboard;
+    if (dashUrl) {
+      // Non-Windows: URL is directly accessible
+      window.open(dashUrl, "_blank");
+      return;
+    }
+    // Windows / no direct URL: port-forward traefik service port 9000, then open
+    const tSvc = traefikService();
+    if (!tSvc) {
+      showToast("Traefik service not found in kube-system", "error");
+      return;
+    }
+    // Check if already forwarded
+    if (isForwarded("kube-system", "traefik", 9000)) {
+      window.open("http://localhost:9000/dashboard/", "_blank");
+      return;
+    }
+    setTraefikForwarding(true);
+    try {
+      await invoke("k8s_port_forward", { namespace: "kube-system", service: "traefik", port: 9000, localPort: 9000 });
+      await refreshPortForwards();
+      window.open("http://localhost:9000/dashboard/", "_blank");
+    } catch (e) {
+      showToast(`Failed to forward Traefik dashboard: ${e}`, "error");
+    } finally {
+      setTraefikForwarding(false);
+    }
+  };
+
   const viewYaml = async (kind: string, name: string, namespace: string) => {
     try {
       const yaml = await invoke("k8s_get_yaml", { kind, name, namespace }) as string;
@@ -726,10 +861,15 @@ export default function KubernetesPage() {
             {status()?.pods_running}/{status()?.pods_total} pods
           </span>
           <div style={{ "margin-left": "auto", display: "flex", gap: "6px" }}>
-            <Show when={status()?.traefik_dashboard}>
-              <a href={status()!.traefik_dashboard!} target="_blank" class="btn btn-sm" style={{ "text-decoration": "none", "font-size": "11px" }}>
-                Traefik
-              </a>
+            <Show when={status()?.traefik_dashboard || traefikService()}>
+              <button
+                class="btn btn-sm"
+                style={{ "font-size": "11px" }}
+                onClick={openTraefikDashboard}
+                disabled={traefikForwarding()}
+              >
+                {traefikForwarding() ? "Connecting..." : "Traefik Dashboard"}
+              </button>
             </Show>
             <div class="dropdown-wrapper">
               <button
@@ -745,6 +885,11 @@ export default function KubernetesPage() {
                   <button class="dropdown-item" onClick={() => { refreshStatus(); refreshWorkloads(); }}>
                     {"\u21BB"} Refresh
                   </button>
+                  <Show when={traefikService()}>
+                    <button class="dropdown-item" onClick={() => setTraefikInfoOpen(true)}>
+                      {"\u29BF"} Traefik Info
+                    </button>
+                  </Show>
                   <div class="dropdown-divider" />
                   <button class="dropdown-item dropdown-item-danger" onClick={handleReset}>
                     {"\u26A0"} Reset Cluster
@@ -1161,7 +1306,15 @@ export default function KubernetesPage() {
                           </button>
                         </Show>
                       </td>
-                      <td>
+                      <td style={{ display: "flex", gap: "4px", "align-items": "center" }}>
+                        <button
+                          class="btn btn-sm"
+                          style={{ "font-size": "11px", padding: "2px 8px" }}
+                          title="Create an Ingress to expose this service"
+                          onClick={() => openCreateIngress(svc)}
+                        >
+                          Expose
+                        </button>
                         <button
                           class="action-icon"
                           title="View/Edit YAML"
@@ -1180,6 +1333,15 @@ export default function KubernetesPage() {
 
         {/* Ingresses Tab */}
         <Show when={tab() === "ingresses"}>
+          <div style={{ display: "flex", "justify-content": "flex-end", "margin-bottom": "12px" }}>
+            <button
+              class="btn btn-sm btn-primary"
+              style={{ "font-size": "12px", padding: "4px 12px" }}
+              onClick={() => openCreateIngress()}
+            >
+              + Create Ingress
+            </button>
+          </div>
           <Show
             when={ingresses().length > 0}
             fallback={
@@ -2607,6 +2769,196 @@ export default function KubernetesPage() {
             </div>
             <div class="modal-footer">
               <button class="btn" onClick={() => setViewSecret(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Create Ingress Dialog */}
+      <Show when={createIngressOpen()}>
+        <div class="modal-overlay" onClick={() => setCreateIngressOpen(false)}>
+          <div class="modal-dialog" style={{ "max-width": "520px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Create Ingress</span>
+              <button class="modal-close" onClick={() => setCreateIngressOpen(false)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Ingress Name</label>
+                <input
+                  type="text"
+                  class="form-input"
+                  placeholder="my-app-ingress"
+                  value={ingressName()}
+                  onInput={(e) => setIngressName(e.currentTarget.value)}
+                  style={{ width: "100%" }}
+                  ref={(el) => setTimeout(() => el.focus(), 50)}
+                />
+              </div>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Hostname</label>
+                <input
+                  type="text"
+                  class="form-input"
+                  placeholder="myapp.local"
+                  value={ingressHostname()}
+                  onInput={(e) => setIngressHostname(e.currentTarget.value)}
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ flex: "1" }}>
+                  <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Service</label>
+                  <Dropdown
+                    value={ingressServiceName()}
+                    options={ingressServices().map((s) => ({ value: s.name, label: s.name }))}
+                    onChange={(v) => {
+                      setIngressServiceName(v);
+                      // Auto-select first port of the chosen service
+                      const svc = ingressServices().find((s) => s.name === v);
+                      if (svc && svc.ports.length > 0) {
+                        setIngressServicePort(String(svc.ports[0].port));
+                      } else {
+                        setIngressServicePort("");
+                      }
+                    }}
+                    placeholder="Select service..."
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div style={{ "min-width": "120px" }}>
+                  <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Port</label>
+                  <Dropdown
+                    value={ingressServicePort()}
+                    options={(() => {
+                      const svc = ingressServices().find((s) => s.name === ingressServiceName());
+                      if (!svc) return [];
+                      return svc.ports.map((p) => ({
+                        value: String(p.port),
+                        label: p.name ? `${p.port} (${p.name})` : String(p.port),
+                      }));
+                    })()}
+                    onChange={(v) => setIngressServicePort(v)}
+                    placeholder="Port"
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ flex: "1" }}>
+                  <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Path</label>
+                  <input
+                    type="text"
+                    class="form-input"
+                    placeholder="/"
+                    value={ingressPath()}
+                    onInput={(e) => setIngressPath(e.currentTarget.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div style={{ "min-width": "180px" }}>
+                  <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Path Type</label>
+                  <Dropdown
+                    value={ingressPathType()}
+                    options={[
+                      { value: "Prefix", label: "Prefix" },
+                      { value: "Exact", label: "Exact" },
+                      { value: "ImplementationSpecific", label: "ImplementationSpecific" },
+                    ]}
+                    onChange={(v) => setIngressPathType(v)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                <input
+                  type="checkbox"
+                  id="ingress-tls"
+                  checked={ingressTls()}
+                  onChange={(e) => setIngressTls(e.currentTarget.checked)}
+                />
+                <label for="ingress-tls" style={{ "font-size": "12px", color: "#c9d1d9", cursor: "pointer" }}>
+                  Enable TLS
+                </label>
+                <Show when={ingressTls() && ingressHostname().trim()}>
+                  <span style={{ "font-size": "11px", color: "#8b949e" }}>
+                    (secret: {ingressHostname().trim()}-tls)
+                  </span>
+                </Show>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setCreateIngressOpen(false)}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                onClick={handleCreateIngress}
+                disabled={ingressCreating() || !ingressName().trim() || !ingressHostname().trim() || !ingressServiceName() || !ingressServicePort()}
+              >
+                {ingressCreating() ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Traefik Info Panel */}
+      <Show when={traefikInfoOpen() && traefikService()}>
+        <div class="modal-overlay" onClick={() => setTraefikInfoOpen(false)}>
+          <div class="modal-dialog" style={{ "max-width": "480px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Traefik Ingress Controller</span>
+              <button class="modal-close" onClick={() => setTraefikInfoOpen(false)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px" }}>
+              <div style={{ "margin-bottom": "16px" }}>
+                <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px" }}>Entrypoints</div>
+                <table class="table" style={{ "margin-bottom": "0" }}>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Port</th>
+                      <th>Protocol</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <For each={traefikService()!.ports}>
+                      {(p) => (
+                        <tr>
+                          <td style={{ "font-weight": "500" }}>
+                            {p.name || (p.port === 80 ? "web" : p.port === 443 ? "websecure" : `port-${p.port}`)}
+                          </td>
+                          <td class="mono">{p.port}{p.node_port ? ` (NodePort: ${p.node_port})` : ""}</td>
+                          <td style={{ color: "#8b949e" }}>{p.protocol}</td>
+                        </tr>
+                      )}
+                    </For>
+                  </tbody>
+                </table>
+              </div>
+              <div style={{
+                padding: "10px 12px",
+                background: "rgba(88, 166, 255, 0.06)",
+                border: "1px solid rgba(88, 166, 255, 0.15)",
+                "border-radius": "6px",
+                "font-size": "12px",
+                color: "#8b949e",
+                "line-height": "1.5",
+              }}>
+                Traefik is the default ingress controller for k3s. It listens on the entrypoints above
+                and routes traffic based on Ingress rules. To add custom entrypoints, edit the Traefik
+                HelmChartConfig in the kube-system namespace.
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setTraefikInfoOpen(false)}>Close</button>
+              <button
+                class="btn btn-primary"
+                style={{ "font-size": "12px" }}
+                onClick={openTraefikDashboard}
+                disabled={traefikForwarding()}
+              >
+                {traefikForwarding() ? "Connecting..." : "Open Dashboard"}
+              </button>
             </div>
           </div>
         </div>
