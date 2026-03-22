@@ -1057,6 +1057,29 @@ pub async fn k8s_helm_available() -> Result<serde_json::Value, String> {
     get_json("/k8s/helm/available").await
 }
 
+#[tauri::command]
+pub async fn k8s_helm_install(
+    release_name: String,
+    chart: String,
+    namespace: String,
+    set_values: Option<Vec<String>>,
+) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/k8s/helm/install"))
+        .json(&serde_json::json!({
+            "release_name": release_name,
+            "chart": chart,
+            "namespace": namespace,
+            "set_values": set_values,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Helm install failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
 // --- K8s Port Forwarding ---
 
 #[tauri::command]

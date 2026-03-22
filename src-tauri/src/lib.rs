@@ -88,6 +88,7 @@ pub fn run() {
             commands::k8s_helm_list,
             commands::k8s_helm_uninstall,
             commands::k8s_helm_available,
+            commands::k8s_helm_install,
             commands::k8s_port_forward,
             commands::k8s_stop_port_forward,
             commands::k8s_list_port_forwards,

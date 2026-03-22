@@ -2127,6 +2127,59 @@ impl K3sManager {
         Ok(stdout.trim().to_string())
     }
 
+    /// Install a Helm chart.
+    pub async fn helm_install(
+        &self,
+        release_name: &str,
+        chart: &str,
+        namespace: &str,
+        set_values: Option<&[String]>,
+    ) -> anyhow::Result<String> {
+        #[cfg(target_os = "windows")]
+        let output = {
+            let mut args = vec![
+                "-u".to_string(), "root".to_string(), "--".to_string(),
+                "helm".to_string(), "install".to_string(),
+                release_name.to_string(), chart.to_string(),
+                "-n".to_string(), namespace.to_string(),
+                "--create-namespace".to_string(),
+            ];
+            if let Some(vals) = set_values {
+                for v in vals {
+                    args.push("--set".to_string());
+                    args.push(v.to_string());
+                }
+            }
+            Command::new("wsl")
+                .args(&args)
+                .output()
+                .await?
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let output = {
+            let mut cmd = Command::new("helm");
+            cmd.args(["install", release_name, chart, "-n", namespace, "--create-namespace"]);
+            if let Some(vals) = set_values {
+                for v in vals {
+                    cmd.args(["--set", v]);
+                }
+            }
+            if self.kubeconfig_path().exists() {
+                cmd.env("KUBECONFIG", self.kubeconfig_path());
+            }
+            cmd.output().await?
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("helm install failed: {stderr}");
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.trim().to_string())
+    }
+
     /// Check if helm CLI is available.
     pub async fn helm_available(&self) -> bool {
         #[cfg(target_os = "windows")]

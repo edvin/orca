@@ -8,6 +8,7 @@ import Spinner from "../components/Spinner";
 import YamlEditor from "../components/YamlEditor";
 import Dropdown from "../components/Dropdown";
 import CopyButton from "../components/CopyButton";
+import K8sTerminal from "../components/K8sTerminal";
 import type {
   ClusterStatus,
   Pod,
@@ -80,6 +81,17 @@ export default function KubernetesPage() {
   // Feature 4: Helm
   const [helmReleases, setHelmReleases] = createSignal<HelmRelease[]>([]);
   const [helmAvailable, setHelmAvailable] = createSignal<boolean | null>(null);
+
+  // Helm Install
+  const [helmInstallOpen, setHelmInstallOpen] = createSignal(false);
+  const [helmReleaseName, setHelmReleaseName] = createSignal("");
+  const [helmChartName, setHelmChartName] = createSignal("");
+  const [helmInstallNs, setHelmInstallNs] = createSignal("default");
+  const [helmSetValues, setHelmSetValues] = createSignal<{ key: string; value: string }[]>([]);
+  const [helmInstalling, setHelmInstalling] = createSignal(false);
+
+  // Topology hover
+  const [topoHover, setTopoHover] = createSignal<string | null>(null);
 
   // Feature 5: Topology (data computed from existing signals)
 
@@ -183,15 +195,21 @@ export default function KubernetesPage() {
           }
         } catch { /* helm not available */ }
       } else if (currentTab === "topology") {
-        // Topology needs pods, deployments, and services
-        const [p, d, s] = await Promise.all([
+        // Topology needs pods, deployments, services, and optionally metrics
+        const [p, d, s, m] = await Promise.allSettled([
           invoke("k8s_pods", { namespace: ns }) as Promise<Pod[]>,
           invoke("k8s_deployments", { namespace: ns }) as Promise<Deployment[]>,
           invoke("k8s_services", { namespace: ns }) as Promise<K8sService[]>,
+          invoke("k8s_pod_metrics", { namespace: ns }) as Promise<PodMetrics[]>,
         ]);
-        setPods(p);
-        setDeployments(d);
-        setServices(s);
+        if (p.status === "fulfilled") setPods(p.value);
+        if (d.status === "fulfilled") setDeployments(d.value);
+        if (s.status === "fulfilled") setServices(s.value);
+        if (m.status === "fulfilled") {
+          const map: Record<string, PodMetrics> = {};
+          for (const met of m.value) map[met.name] = met;
+          setPodMetrics(map);
+        }
       }
     } catch (e) {
     } finally {
@@ -487,6 +505,37 @@ export default function KubernetesPage() {
       await refreshWorkloads();
     } catch (e) {
       showToast(`Helm uninstall failed: ${e}`, "error");
+    }
+  };
+
+  const handleHelmInstall = async () => {
+    const relName = helmReleaseName().trim();
+    const chart = helmChartName().trim();
+    if (!relName || !chart) {
+      showToast("Release name and chart are required", "error");
+      return;
+    }
+    setHelmInstalling(true);
+    try {
+      const setVals = helmSetValues()
+        .filter((v) => v.key.trim() && v.value.trim())
+        .map((v) => `${v.key.trim()}=${v.value.trim()}`);
+      await invoke("k8s_helm_install", {
+        releaseName: relName,
+        chart,
+        namespace: helmInstallNs(),
+        setValues: setVals.length > 0 ? setVals : null,
+      });
+      showToast(`Helm release '${relName}' installed`, "success");
+      setHelmInstallOpen(false);
+      setHelmReleaseName("");
+      setHelmChartName("");
+      setHelmSetValues([]);
+      await refreshWorkloads();
+    } catch (e) {
+      showToast(`Helm install failed: ${e}`, "error");
+    } finally {
+      setHelmInstalling(false);
     }
   };
 
@@ -1479,13 +1528,19 @@ export default function KubernetesPage() {
             </div>
           </Show>
           <Show when={helmAvailable()}>
+            <div style={{ display: "flex", "justify-content": "flex-end", "margin-bottom": "8px" }}>
+              <button class="btn btn-primary" onClick={() => { setHelmInstallNs(selectedNs()); setHelmInstallOpen(true); }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px" }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Install Chart
+              </button>
+            </div>
             <Show
               when={helmReleases().length > 0}
               fallback={
                 <div class="empty-state-tab">
                   <div class="empty-state-tab-title">{emptyMessages.helm.title}</div>
                   <div class="empty-state-tab-desc">
-                    Use <code style={{ background: "#0d1117", padding: "2px 6px", "border-radius": "4px" }}>helm install</code> CLI to add releases, then manage them here.
+                    Click "Install Chart" above or use <code style={{ background: "#0d1117", padding: "2px 6px", "border-radius": "4px" }}>helm install</code> CLI to add releases.
                   </div>
                 </div>
               }
@@ -1550,93 +1605,181 @@ export default function KubernetesPage() {
               </div>
             }
           >
-            <div style={{ padding: "8px 0" }}>
+            <div style={{ padding: "12px 0" }}>
               <For each={services()}>
                 {(svc) => {
-                  // Find deployments that might be targeted by this service
-                  // (simplified: match by name prefix or label overlap)
                   const matchedDeps = () => deployments().filter((d) =>
                     svc.name.includes(d.name) || d.name.includes(svc.name) || svc.name === d.name
                   );
+                  const svcKey = `svc-${svc.name}`;
+                  const isHighlighted = (key: string) => {
+                    const h = topoHover();
+                    if (!h) return false;
+                    return h === key || h === svcKey || matchedDeps().some((d) => h === `dep-${d.name}` || h === svcKey);
+                  };
                   return (
                     <div style={{
-                      display: "flex", "align-items": "flex-start", gap: "0",
-                      "margin-bottom": "16px", "flex-wrap": "wrap",
+                      display: "flex", "align-items": "stretch", gap: "0",
+                      "margin-bottom": "20px", "flex-wrap": "wrap", position: "relative",
                     }}>
                       {/* Service card */}
                       <div
                         style={{
-                          background: "#1c2333", border: "1px solid #30363d",
-                          "border-radius": "8px", padding: "10px 14px",
-                          "min-width": "160px", cursor: "pointer",
+                          background: "#1c2333",
+                          border: `2px solid ${isHighlighted(svcKey) ? "#58a6ff" : "#30363d"}`,
+                          "border-radius": "10px", padding: "14px 18px",
+                          "min-width": "200px", cursor: "pointer",
+                          transition: "border-color 0.2s, box-shadow 0.2s, transform 0.15s",
+                          "box-shadow": isHighlighted(svcKey) ? "0 0 12px rgba(88,166,255,0.2)" : "none",
+                          transform: isHighlighted(svcKey) ? "scale(1.02)" : "scale(1)",
                         }}
                         onClick={() => setTab("services")}
-                        title="View services"
+                        onMouseEnter={() => setTopoHover(svcKey)}
+                        onMouseLeave={() => setTopoHover(null)}
+                        title="Click to view services"
                       >
-                        <div style={{ "font-size": "10px", color: "#79c0ff", "margin-bottom": "4px" }}>Service</div>
-                        <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{svc.name}</div>
-                        <div style={{ "font-size": "11px", color: "#8b949e" }}>
-                          {svc.service_type} {svc.ports.map((p) => `:${p.port}`).join(", ")}
+                        <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "6px" }}>
+                          <span style={{ "font-size": "14px" }}>{"\u29BF"}</span>
+                          <span style={{ "font-size": "10px", color: "#79c0ff", "text-transform": "uppercase", "letter-spacing": "0.5px", "font-weight": "600" }}>Service</span>
                         </div>
+                        <div style={{ "font-weight": "600", "font-size": "14px", color: "#e6edf3", "margin-bottom": "6px" }}>{svc.name}</div>
+                        <div style={{ "font-size": "11px", color: "#8b949e", "margin-bottom": "4px" }}>
+                          Type: {svc.service_type}
+                        </div>
+                        <div style={{ display: "flex", "flex-wrap": "wrap", gap: "4px" }}>
+                          <For each={svc.ports}>
+                            {(p) => (
+                              <span style={{
+                                background: "#0d419d33", color: "#79c0ff", "font-size": "10px",
+                                padding: "2px 6px", "border-radius": "4px", "font-family": "'JetBrains Mono NF', monospace",
+                              }}>
+                                {p.name ? `${p.name}: ` : ""}{p.port}{p.node_port ? ` -> ${p.node_port}` : ""}/{p.protocol}
+                              </span>
+                            )}
+                          </For>
+                        </div>
+                        <Show when={svc.cluster_ip}>
+                          <div style={{ "font-size": "10px", color: "#6e7681", "margin-top": "4px", "font-family": "'JetBrains Mono NF', monospace" }}>
+                            {svc.cluster_ip}
+                          </div>
+                        </Show>
                       </div>
 
                       <Show when={matchedDeps().length > 0}>
-                        <div style={{ display: "flex", "align-items": "center", padding: "0 8px", color: "#484f58", "font-size": "18px", "align-self": "center" }}>
-                          {"\u2192"}
-                        </div>
+                        {/* SVG connector line */}
+                        <svg width="40" height="100%" style={{ "min-height": "40px", "align-self": "center", flex: "0 0 40px" }}>
+                          <line x1="0" y1="50%" x2="40" y2="50%" stroke="#30363d" stroke-width="2" stroke-dasharray="4 3" />
+                          <circle cx="38" cy="50%" r="3" fill="#58a6ff" />
+                        </svg>
                       </Show>
 
                       <For each={matchedDeps()}>
                         {(dep) => {
                           const depPods = () => pods().filter((p) => p.name.startsWith(dep.name));
+                          const depKey = `dep-${dep.name}`;
+                          const depHealthy = dep.replicas_ready === dep.replicas_desired && dep.replicas_desired > 0;
+                          const depDegraded = dep.replicas_ready > 0 && dep.replicas_ready < dep.replicas_desired;
+                          const depBorderColor = depHealthy ? "#2d4a2d" : depDegraded ? "#5c4a1e" : "#5c1e1e";
+                          const depGlowColor = depHealthy ? "rgba(63,185,80,0.15)" : depDegraded ? "rgba(210,153,34,0.15)" : "rgba(248,81,73,0.15)";
                           return (
-                            <div style={{ display: "flex", "align-items": "flex-start", gap: "0" }}>
+                            <div style={{ display: "flex", "align-items": "stretch", gap: "0" }}>
                               <div
                                 style={{
-                                  background: "#1f2a1f", border: "1px solid #2d4a2d",
-                                  "border-radius": "8px", padding: "10px 14px",
-                                  "min-width": "160px", cursor: "pointer",
+                                  background: "#1f2a1f",
+                                  border: `2px solid ${isHighlighted(depKey) || isHighlighted(svcKey) ? (depHealthy ? "#3fb950" : depDegraded ? "#d29922" : "#f85149") : depBorderColor}`,
+                                  "border-radius": "10px", padding: "14px 18px",
+                                  "min-width": "200px", cursor: "pointer",
+                                  transition: "border-color 0.2s, box-shadow 0.2s, transform 0.15s",
+                                  "box-shadow": isHighlighted(depKey) || isHighlighted(svcKey) ? `0 0 12px ${depGlowColor}` : "none",
+                                  transform: isHighlighted(depKey) || isHighlighted(svcKey) ? "scale(1.02)" : "scale(1)",
+                                  position: "relative",
                                 }}
                                 onClick={() => setTab("deployments")}
-                                title="View deployments"
+                                onMouseEnter={() => setTopoHover(depKey)}
+                                onMouseLeave={() => setTopoHover(null)}
+                                title="Click to view deployments"
                               >
-                                <div style={{ "font-size": "10px", color: "#3fb950", "margin-bottom": "4px" }}>Deployment</div>
-                                <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{dep.name}</div>
-                                <div style={{ "font-size": "11px", color: "#8b949e" }}>
-                                  {dep.replicas_ready}/{dep.replicas_desired} ready
+                                <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "6px" }}>
+                                  <span style={{ "font-size": "14px" }}>{"\u25A6"}</span>
+                                  <span style={{ "font-size": "10px", color: "#3fb950", "text-transform": "uppercase", "letter-spacing": "0.5px", "font-weight": "600" }}>Deployment</span>
+                                </div>
+                                <div style={{ "font-weight": "600", "font-size": "14px", color: "#e6edf3", "margin-bottom": "6px" }}>{dep.name}</div>
+                                <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                                  <span style={{
+                                    background: depHealthy ? "#23882e22" : depDegraded ? "#d2992222" : "#f8514922",
+                                    color: depHealthy ? "#3fb950" : depDegraded ? "#d29922" : "#f85149",
+                                    "font-size": "11px", "font-weight": "600",
+                                    padding: "2px 8px", "border-radius": "10px",
+                                  }}>
+                                    {dep.replicas_ready}/{dep.replicas_desired} ready
+                                  </span>
+                                  <Show when={dep.replicas_desired > 1}>
+                                    <span style={{
+                                      background: "#30363d", color: "#8b949e",
+                                      "font-size": "10px", padding: "2px 6px", "border-radius": "8px",
+                                    }}>
+                                      {dep.replicas_desired} replicas
+                                    </span>
+                                  </Show>
                                 </div>
                               </div>
 
                               <Show when={depPods().length > 0}>
-                                <div style={{ display: "flex", "align-items": "center", padding: "0 8px", color: "#484f58", "font-size": "18px", "align-self": "center" }}>
-                                  {"\u2192"}
-                                </div>
-                                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
+                                <svg width="40" height="100%" style={{ "min-height": "40px", "align-self": "center", flex: "0 0 40px" }}>
+                                  <line x1="0" y1="50%" x2="40" y2="50%" stroke="#30363d" stroke-width="2" stroke-dasharray="4 3" />
+                                  <circle cx="38" cy="50%" r="3" fill="#3fb950" />
+                                </svg>
+                                <div style={{ display: "flex", "flex-direction": "column", gap: "6px", "justify-content": "center" }}>
                                   <For each={depPods()}>
-                                    {(pod) => (
-                                      <div
-                                        style={{
-                                          background: "#161b22", border: "1px solid #30363d",
-                                          "border-radius": "6px", padding: "6px 12px",
-                                          "min-width": "180px", cursor: "pointer",
-                                        }}
-                                        onClick={() => setTab("pods")}
-                                        title="View pods"
-                                      >
-                                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                                          <span style={{
-                                            width: "6px", height: "6px", "border-radius": "50%",
-                                            background: podStatusColor(pod.status),
-                                          }} />
-                                          <span style={{ "font-size": "12px", color: "#e6edf3", "font-weight": "500" }}>
-                                            {pod.name.length > 30 ? pod.name.slice(0, 28) + ".." : pod.name}
-                                          </span>
+                                    {(pod) => {
+                                      const podKey = `pod-${pod.name}`;
+                                      const podBorder = pod.status === "Running" ? "#2d4a2d" : pod.status === "Pending" ? "#5c4a1e" : pod.status === "Failed" ? "#5c1e1e" : "#30363d";
+                                      const metrics = () => podMetrics()[pod.name];
+                                      return (
+                                        <div
+                                          style={{
+                                            background: "#161b22",
+                                            border: `2px solid ${isHighlighted(podKey) || isHighlighted(depKey) || isHighlighted(svcKey) ? podStatusColor(pod.status) : podBorder}`,
+                                            "border-radius": "8px", padding: "10px 14px",
+                                            "min-width": "220px", cursor: "pointer",
+                                            transition: "border-color 0.2s, box-shadow 0.2s, transform 0.15s",
+                                            transform: isHighlighted(podKey) ? "scale(1.03)" : "scale(1)",
+                                          }}
+                                          onClick={() => setTab("pods")}
+                                          onMouseEnter={() => setTopoHover(podKey)}
+                                          onMouseLeave={() => setTopoHover(null)}
+                                          title="Click to view pods"
+                                        >
+                                          <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "4px" }}>
+                                            <span style={{
+                                              width: "8px", height: "8px", "border-radius": "50%",
+                                              background: podStatusColor(pod.status),
+                                              "box-shadow": `0 0 6px ${podStatusColor(pod.status)}`,
+                                            }} />
+                                            <span style={{ "font-size": "12px", color: "#e6edf3", "font-weight": "600" }}>
+                                              {pod.name.length > 35 ? pod.name.slice(0, 33) + ".." : pod.name}
+                                            </span>
+                                          </div>
+                                          <div style={{ display: "flex", gap: "8px", "padding-left": "14px", "font-size": "10px", color: "#8b949e" }}>
+                                            <span>{pod.status}</span>
+                                            <span>{pod.ready}</span>
+                                            <Show when={pod.restarts > 0}>
+                                              <span style={{ color: pod.restarts > 5 ? "#f85149" : "#d29922" }}>{pod.restarts} restarts</span>
+                                            </Show>
+                                          </div>
+                                          <Show when={metrics()}>
+                                            <div style={{ display: "flex", gap: "10px", "padding-left": "14px", "margin-top": "4px" }}>
+                                              <span style={{ "font-size": "10px", color: "#58a6ff", "font-family": "'JetBrains Mono NF', monospace" }}>
+                                                CPU: {metrics()!.cpu}
+                                              </span>
+                                              <span style={{ "font-size": "10px", color: "#bc8cff", "font-family": "'JetBrains Mono NF', monospace" }}>
+                                                Mem: {metrics()!.memory}
+                                              </span>
+                                            </div>
+                                          </Show>
                                         </div>
-                                        <div style={{ "font-size": "10px", color: "#8b949e", "margin-top": "2px", "padding-left": "12px" }}>
-                                          {pod.status} | {pod.ready}
-                                        </div>
-                                      </div>
-                                    )}
+                                      );
+                                    }}
                                   </For>
                                 </div>
                               </Show>
@@ -1649,59 +1792,113 @@ export default function KubernetesPage() {
                 }}
               </For>
 
-              {/* Show deployments without a matching service */}
+              {/* Deployments without a matching service */}
               <For each={deployments().filter((d) => !services().some((s) => s.name.includes(d.name) || d.name.includes(s.name)))}>
                 {(dep) => {
                   const depPods = () => pods().filter((p) => p.name.startsWith(dep.name));
+                  const depKey = `dep-${dep.name}`;
+                  const depHealthy = dep.replicas_ready === dep.replicas_desired && dep.replicas_desired > 0;
+                  const depDegraded = dep.replicas_ready > 0 && dep.replicas_ready < dep.replicas_desired;
+                  const depBorderColor = depHealthy ? "#2d4a2d" : depDegraded ? "#5c4a1e" : "#5c1e1e";
                   return (
                     <div style={{
-                      display: "flex", "align-items": "flex-start", gap: "0",
-                      "margin-bottom": "16px", "flex-wrap": "wrap",
+                      display: "flex", "align-items": "stretch", gap: "0",
+                      "margin-bottom": "20px", "flex-wrap": "wrap",
                     }}>
                       <div
                         style={{
-                          background: "#1f2a1f", border: "1px solid #2d4a2d",
-                          "border-radius": "8px", padding: "10px 14px",
-                          "min-width": "160px", cursor: "pointer",
+                          background: "#1f2a1f",
+                          border: `2px solid ${topoHover() === depKey ? (depHealthy ? "#3fb950" : depDegraded ? "#d29922" : "#f85149") : depBorderColor}`,
+                          "border-radius": "10px", padding: "14px 18px",
+                          "min-width": "200px", cursor: "pointer",
+                          transition: "border-color 0.2s, box-shadow 0.2s, transform 0.15s",
+                          transform: topoHover() === depKey ? "scale(1.02)" : "scale(1)",
+                          position: "relative",
                         }}
                         onClick={() => setTab("deployments")}
+                        onMouseEnter={() => setTopoHover(depKey)}
+                        onMouseLeave={() => setTopoHover(null)}
                       >
-                        <div style={{ "font-size": "10px", color: "#3fb950", "margin-bottom": "4px" }}>Deployment</div>
-                        <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{dep.name}</div>
-                        <div style={{ "font-size": "11px", color: "#8b949e" }}>
-                          {dep.replicas_ready}/{dep.replicas_desired} ready
+                        <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "6px" }}>
+                          <span style={{ "font-size": "14px" }}>{"\u25A6"}</span>
+                          <span style={{ "font-size": "10px", color: "#3fb950", "text-transform": "uppercase", "letter-spacing": "0.5px", "font-weight": "600" }}>Deployment</span>
+                        </div>
+                        <div style={{ "font-weight": "600", "font-size": "14px", color: "#e6edf3", "margin-bottom": "6px" }}>{dep.name}</div>
+                        <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                          <span style={{
+                            background: depHealthy ? "#23882e22" : depDegraded ? "#d2992222" : "#f8514922",
+                            color: depHealthy ? "#3fb950" : depDegraded ? "#d29922" : "#f85149",
+                            "font-size": "11px", "font-weight": "600",
+                            padding: "2px 8px", "border-radius": "10px",
+                          }}>
+                            {dep.replicas_ready}/{dep.replicas_desired} ready
+                          </span>
+                          <Show when={dep.replicas_desired > 1}>
+                            <span style={{
+                              background: "#30363d", color: "#8b949e",
+                              "font-size": "10px", padding: "2px 6px", "border-radius": "8px",
+                            }}>
+                              {dep.replicas_desired} replicas
+                            </span>
+                          </Show>
                         </div>
                       </div>
 
                       <Show when={depPods().length > 0}>
-                        <div style={{ display: "flex", "align-items": "center", padding: "0 8px", color: "#484f58", "font-size": "18px", "align-self": "center" }}>
-                          {"\u2192"}
-                        </div>
-                        <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
+                        <svg width="40" height="100%" style={{ "min-height": "40px", "align-self": "center", flex: "0 0 40px" }}>
+                          <line x1="0" y1="50%" x2="40" y2="50%" stroke="#30363d" stroke-width="2" stroke-dasharray="4 3" />
+                          <circle cx="38" cy="50%" r="3" fill="#3fb950" />
+                        </svg>
+                        <div style={{ display: "flex", "flex-direction": "column", gap: "6px", "justify-content": "center" }}>
                           <For each={depPods()}>
-                            {(pod) => (
-                              <div
-                                style={{
-                                  background: "#161b22", border: "1px solid #30363d",
-                                  "border-radius": "6px", padding: "6px 12px",
-                                  "min-width": "180px", cursor: "pointer",
-                                }}
-                                onClick={() => setTab("pods")}
-                              >
-                                <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                                  <span style={{
-                                    width: "6px", height: "6px", "border-radius": "50%",
-                                    background: podStatusColor(pod.status),
-                                  }} />
-                                  <span style={{ "font-size": "12px", color: "#e6edf3", "font-weight": "500" }}>
-                                    {pod.name.length > 30 ? pod.name.slice(0, 28) + ".." : pod.name}
-                                  </span>
+                            {(pod) => {
+                              const podKey = `pod-${pod.name}`;
+                              const podBorder = pod.status === "Running" ? "#2d4a2d" : pod.status === "Pending" ? "#5c4a1e" : pod.status === "Failed" ? "#5c1e1e" : "#30363d";
+                              const metrics = () => podMetrics()[pod.name];
+                              return (
+                                <div
+                                  style={{
+                                    background: "#161b22",
+                                    border: `2px solid ${topoHover() === podKey || topoHover() === depKey ? podStatusColor(pod.status) : podBorder}`,
+                                    "border-radius": "8px", padding: "10px 14px",
+                                    "min-width": "220px", cursor: "pointer",
+                                    transition: "border-color 0.2s, box-shadow 0.2s, transform 0.15s",
+                                    transform: topoHover() === podKey ? "scale(1.03)" : "scale(1)",
+                                  }}
+                                  onClick={() => setTab("pods")}
+                                  onMouseEnter={() => setTopoHover(podKey)}
+                                  onMouseLeave={() => setTopoHover(null)}
+                                >
+                                  <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "4px" }}>
+                                    <span style={{
+                                      width: "8px", height: "8px", "border-radius": "50%",
+                                      background: podStatusColor(pod.status),
+                                      "box-shadow": `0 0 6px ${podStatusColor(pod.status)}`,
+                                    }} />
+                                    <span style={{ "font-size": "12px", color: "#e6edf3", "font-weight": "600" }}>
+                                      {pod.name.length > 35 ? pod.name.slice(0, 33) + ".." : pod.name}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: "flex", gap: "8px", "padding-left": "14px", "font-size": "10px", color: "#8b949e" }}>
+                                    <span>{pod.status}</span>
+                                    <span>{pod.ready}</span>
+                                    <Show when={pod.restarts > 0}>
+                                      <span style={{ color: pod.restarts > 5 ? "#f85149" : "#d29922" }}>{pod.restarts} restarts</span>
+                                    </Show>
+                                  </div>
+                                  <Show when={metrics()}>
+                                    <div style={{ display: "flex", gap: "10px", "padding-left": "14px", "margin-top": "4px" }}>
+                                      <span style={{ "font-size": "10px", color: "#58a6ff", "font-family": "'JetBrains Mono NF', monospace" }}>
+                                        CPU: {metrics()!.cpu}
+                                      </span>
+                                      <span style={{ "font-size": "10px", color: "#bc8cff", "font-family": "'JetBrains Mono NF', monospace" }}>
+                                        Mem: {metrics()!.memory}
+                                      </span>
+                                    </div>
+                                  </Show>
                                 </div>
-                                <div style={{ "font-size": "10px", color: "#8b949e", "margin-top": "2px", "padding-left": "12px" }}>
-                                  {pod.status} | {pod.ready}
-                                </div>
-                              </div>
-                            )}
+                              );
+                            }}
                           </For>
                         </div>
                       </Show>
@@ -1716,28 +1913,56 @@ export default function KubernetesPage() {
                 const orphanPods = pods().filter((p) => !depNames.some((dn) => p.name.startsWith(dn)));
                 return (
                   <Show when={orphanPods.length > 0}>
-                    <div style={{ "margin-top": "8px" }}>
-                      <div style={{ "font-size": "11px", color: "#8b949e", "margin-bottom": "8px" }}>Standalone Pods</div>
-                      <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                    <div style={{ "margin-top": "12px" }}>
+                      <div style={{ "font-size": "11px", color: "#8b949e", "margin-bottom": "10px", "text-transform": "uppercase", "letter-spacing": "0.5px", "font-weight": "600" }}>Standalone Pods</div>
+                      <div style={{ display: "flex", gap: "10px", "flex-wrap": "wrap" }}>
                         <For each={orphanPods}>
-                          {(pod) => (
-                            <div
-                              style={{
-                                background: "#161b22", border: "1px solid #30363d",
-                                "border-radius": "6px", padding: "6px 12px",
-                                cursor: "pointer",
-                              }}
-                              onClick={() => setTab("pods")}
-                            >
-                              <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                                <span style={{
-                                  width: "6px", height: "6px", "border-radius": "50%",
-                                  background: podStatusColor(pod.status),
-                                }} />
-                                <span style={{ "font-size": "12px", color: "#e6edf3" }}>{pod.name}</span>
+                          {(pod) => {
+                            const podKey = `pod-${pod.name}`;
+                            const podBorder = pod.status === "Running" ? "#2d4a2d" : pod.status === "Pending" ? "#5c4a1e" : pod.status === "Failed" ? "#5c1e1e" : "#30363d";
+                            const metrics = () => podMetrics()[pod.name];
+                            return (
+                              <div
+                                style={{
+                                  background: "#161b22",
+                                  border: `2px solid ${topoHover() === podKey ? podStatusColor(pod.status) : podBorder}`,
+                                  "border-radius": "8px", padding: "10px 14px",
+                                  "min-width": "200px", cursor: "pointer",
+                                  transition: "border-color 0.2s, box-shadow 0.2s, transform 0.15s",
+                                  transform: topoHover() === podKey ? "scale(1.03)" : "scale(1)",
+                                }}
+                                onClick={() => setTab("pods")}
+                                onMouseEnter={() => setTopoHover(podKey)}
+                                onMouseLeave={() => setTopoHover(null)}
+                              >
+                                <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "4px" }}>
+                                  <span style={{
+                                    width: "8px", height: "8px", "border-radius": "50%",
+                                    background: podStatusColor(pod.status),
+                                    "box-shadow": `0 0 6px ${podStatusColor(pod.status)}`,
+                                  }} />
+                                  <span style={{ "font-size": "12px", color: "#e6edf3", "font-weight": "600" }}>{pod.name}</span>
+                                </div>
+                                <div style={{ display: "flex", gap: "8px", "padding-left": "14px", "font-size": "10px", color: "#8b949e" }}>
+                                  <span>{pod.status}</span>
+                                  <span>{pod.ready}</span>
+                                  <Show when={pod.restarts > 0}>
+                                    <span style={{ color: pod.restarts > 5 ? "#f85149" : "#d29922" }}>{pod.restarts} restarts</span>
+                                  </Show>
+                                </div>
+                                <Show when={metrics()}>
+                                  <div style={{ display: "flex", gap: "10px", "padding-left": "14px", "margin-top": "4px" }}>
+                                    <span style={{ "font-size": "10px", color: "#58a6ff", "font-family": "'JetBrains Mono NF', monospace" }}>
+                                      CPU: {metrics()!.cpu}
+                                    </span>
+                                    <span style={{ "font-size": "10px", color: "#bc8cff", "font-family": "'JetBrains Mono NF', monospace" }}>
+                                      Mem: {metrics()!.memory}
+                                    </span>
+                                  </div>
+                                </Show>
                               </div>
-                            </div>
-                          )}
+                            );
+                          }}
                         </For>
                       </div>
                     </div>
@@ -1747,6 +1972,113 @@ export default function KubernetesPage() {
             </div>
           </Show>
         </Show>
+      </Show>
+
+      {/* Helm Install Modal */}
+      <Show when={helmInstallOpen()}>
+        <div class="modal-overlay" onClick={() => setHelmInstallOpen(false)}>
+          <div class="modal-dialog" style={{ "max-width": "520px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Install Helm Chart</span>
+              <button class="modal-close" onClick={() => setHelmInstallOpen(false)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "12px" }}>
+              <div>
+                <label class="form-label">Release Name</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="my-release"
+                  value={helmReleaseName()}
+                  onInput={(e) => setHelmReleaseName(e.currentTarget.value)}
+                />
+              </div>
+              <div>
+                <label class="form-label">Chart</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="bitnami/nginx"
+                  value={helmChartName()}
+                  onInput={(e) => setHelmChartName(e.currentTarget.value)}
+                />
+              </div>
+              <div>
+                <label class="form-label">Namespace</label>
+                <Dropdown
+                  options={namespaces().map((n) => ({ value: n.name, label: n.name }))}
+                  value={helmInstallNs()}
+                  onChange={(v) => setHelmInstallNs(v)}
+                  placeholder="Select namespace"
+                />
+              </div>
+              <div>
+                <label class="form-label">
+                  Set Values <span style={{ color: "#6e7681", "font-weight": "400" }}>(optional)</span>
+                </label>
+                <For each={helmSetValues()}>
+                  {(entry, i) => (
+                    <div style={{ display: "flex", gap: "6px", "margin-bottom": "6px", "align-items": "center" }}>
+                      <input
+                        class="form-input"
+                        type="text"
+                        placeholder="key"
+                        value={entry.key}
+                        onInput={(e) => {
+                          const vals = [...helmSetValues()];
+                          vals[i()] = { ...vals[i()], key: e.currentTarget.value };
+                          setHelmSetValues(vals);
+                        }}
+                        style={{ flex: "1" }}
+                      />
+                      <span style={{ color: "#6e7681" }}>=</span>
+                      <input
+                        class="form-input"
+                        type="text"
+                        placeholder="value"
+                        value={entry.value}
+                        onInput={(e) => {
+                          const vals = [...helmSetValues()];
+                          vals[i()] = { ...vals[i()], value: e.currentTarget.value };
+                          setHelmSetValues(vals);
+                        }}
+                        style={{ flex: "1" }}
+                      />
+                      <button
+                        class="action-icon action-icon-delete"
+                        onClick={() => {
+                          const vals = [...helmSetValues()];
+                          vals.splice(i(), 1);
+                          setHelmSetValues(vals);
+                        }}
+                        title="Remove"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  )}
+                </For>
+                <button
+                  class="btn btn-sm"
+                  style={{ "font-size": "12px" }}
+                  onClick={() => setHelmSetValues([...helmSetValues(), { key: "", value: "" }])}
+                >
+                  + Add Value
+                </button>
+              </div>
+              <div style={{ "font-size": "11px", color: "#6e7681", background: "#0d1117", padding: "8px 10px", "border-radius": "6px", border: "1px solid #21262d" }}>
+                Add chart repos first, e.g.:<br />
+                <code style={{ "font-size": "11px" }}>helm repo add bitnami https://charts.bitnami.com/bitnami</code>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setHelmInstallOpen(false)}>Cancel</button>
+              <button class="btn btn-primary" onClick={handleHelmInstall} disabled={helmInstalling()}>
+                {helmInstalling() ? "Installing..." : "Install"}
+              </button>
+            </div>
+          </div>
+        </div>
       </Show>
 
       {/* Rollback History Modal */}
@@ -2144,41 +2476,16 @@ export default function KubernetesPage() {
         </div>
       </Show>
 
-      {/* Pod Shell Modal */}
+      {/* Pod Shell Terminal Modal */}
       <Show when={shellPod()}>
         <div class="modal-overlay" onClick={() => setShellPod(null)}>
-          <div class="modal-dialog" style={{ "max-width": "500px" }} onClick={(e) => e.stopPropagation()}>
+          <div class="modal-dialog" style={{ width: "800px", height: "600px", "max-width": "90vw", "max-height": "85vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
             <div class="modal-header">
               <span class="modal-title">Terminal: {shellPod()!.name}</span>
               <button class="modal-close" onClick={() => setShellPod(null)}>{"\u00d7"}</button>
             </div>
-            <div style={{ padding: "16px" }}>
-              <div style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "12px" }}>
-                Open a shell in pod <strong style={{ color: "#e6edf3" }}>{shellPod()!.name}</strong>
-              </div>
-              <div style={{
-                background: "#0d1117",
-                border: "1px solid #21262d",
-                "border-radius": "6px",
-                padding: "12px",
-                "font-family": "'JetBrains Mono NF', monospace",
-                "font-size": "12px",
-                color: "#e6edf3",
-                display: "flex",
-                "align-items": "center",
-                gap: "8px",
-              }}>
-                <code style={{ flex: "1", "word-break": "break-all" }}>
-                  kubectl exec -it {shellPod()!.name} -n {shellPod()!.namespace} -- sh
-                </code>
-                <CopyButton text={`kubectl exec -it ${shellPod()!.name} -n ${shellPod()!.namespace} -- sh`} label="Copy command" />
-              </div>
-              <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "8px" }}>
-                Run this command in your terminal to access the pod shell.
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button class="btn" onClick={() => setShellPod(null)}>Close</button>
+            <div style={{ flex: "1", "min-height": "0" }}>
+              <K8sTerminal podName={shellPod()!.name} namespace={shellPod()!.namespace} />
             </div>
           </div>
         </div>

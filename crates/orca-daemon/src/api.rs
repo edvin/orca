@@ -17,7 +17,7 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt as FuturesStreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use orca_core::compose::{self, ComposeRunner};
 use orca_core::image::ImageManager;
 use orca_core::kubernetes::K8sManager;
@@ -191,6 +191,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/helm/releases", get(k8s_helm_list))
         .route("/k8s/helm/uninstall", post(k8s_helm_uninstall))
         .route("/k8s/helm/available", get(k8s_helm_available))
+        .route("/k8s/helm/install", post(k8s_helm_install))
+        .route("/k8s/pods/{namespace}/{name}/terminal", get(k8s_pod_terminal_ws))
         // Environment
         .route("/environment/status", get(env_status))
         .route("/environment/fix", post(env_fix))
@@ -2209,6 +2211,197 @@ async fn k8s_helm_available(
 ) -> Result<impl IntoResponse, ApiError> {
     let available = state.k8s.helm_available().await;
     Ok(Json(serde_json::json!({ "available": available })))
+}
+
+// --- Helm Install ---
+
+#[derive(Deserialize)]
+struct HelmInstallRequest {
+    release_name: String,
+    chart: String,
+    namespace: String,
+    set_values: Option<Vec<String>>,
+}
+
+async fn k8s_helm_install(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<HelmInstallRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let result = state
+        .k8s
+        .helm_install(&body.release_name, &body.chart, &body.namespace, body.set_values.as_deref())
+        .await?;
+    Ok(Json(serde_json::json!({ "output": result })))
+}
+
+// --- K8s Pod Terminal WebSocket ---
+
+async fn k8s_pod_terminal_ws(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+    Query(params): Query<HashMap<String, String>>,
+    ws: WebSocketUpgrade,
+) -> Result<impl IntoResponse, StatusCode> {
+    // Auth via query param (same as container terminal)
+    let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
+    use subtle::ConstantTimeEq;
+    if !state.api_token.is_empty()
+        && (state.api_token.len() != token.len()
+            || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+    {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(ws.on_upgrade(move |socket| handle_k8s_pod_terminal(socket, namespace, name)))
+}
+
+async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: String) {
+    use tokio::process::Command as TokioCommand;
+
+    // Spawn kubectl exec process
+    #[cfg(target_os = "windows")]
+    let child_result = {
+        TokioCommand::new("wsl")
+            .args(["-u", "root", "--", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--", "sh"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let child_result = {
+        TokioCommand::new("kubectl")
+            .args(["exec", "-it", &name, "-n", &namespace, "--", "sh"])
+            .env("TERM", "xterm-256color")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+    };
+
+    let mut child = match child_result {
+        Ok(c) => c,
+        Err(e) => {
+            let (mut ws_sender, _) = socket.split();
+            let _ = ws_sender
+                .send(Message::Text(format!("\r\nFailed to spawn kubectl: {e}\r\n").into()))
+                .await;
+            return;
+        }
+    };
+
+    let mut stdin = match child.stdin.take() {
+        Some(s) => s,
+        None => {
+            let (mut ws_sender, _) = socket.split();
+            let _ = ws_sender
+                .send(Message::Text("\r\nFailed to capture stdin\r\n".into()))
+                .await;
+            return;
+        }
+    };
+    let mut stdout = match child.stdout.take() {
+        Some(s) => s,
+        None => {
+            let (mut ws_sender, _) = socket.split();
+            let _ = ws_sender
+                .send(Message::Text("\r\nFailed to capture stdout\r\n".into()))
+                .await;
+            return;
+        }
+    };
+    let mut stderr = match child.stderr.take() {
+        Some(s) => s,
+        None => {
+            let (mut ws_sender, _) = socket.split();
+            let _ = ws_sender
+                .send(Message::Text("\r\nFailed to capture stderr\r\n".into()))
+                .await;
+            return;
+        }
+    };
+
+    let (mut ws_sender, mut ws_receiver) = socket.split();
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(64);
+
+    // Stdout -> channel
+    let tx_stdout = tx.clone();
+    let stdout_task = tokio::spawn(async move {
+        let mut buf = [0u8; 4096];
+        loop {
+            match stdout.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    if tx_stdout.send(buf[..n].to_vec()).await.is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    // Stderr -> channel
+    let tx_stderr = tx.clone();
+    let stderr_task = tokio::spawn(async move {
+        let mut buf = [0u8; 4096];
+        loop {
+            match stderr.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    if tx_stderr.send(buf[..n].to_vec()).await.is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    // Channel -> WebSocket
+    let output_task = tokio::spawn(async move {
+        while let Some(data) = rx.recv().await {
+            if ws_sender.send(Message::Binary(data.into())).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    // WebSocket -> stdin
+    let input_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = ws_receiver.next().await {
+            match msg {
+                Message::Text(text) => {
+                    // Ignore resize JSON messages (kubectl exec doesn't support dynamic resize)
+                    if text.starts_with('{') {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if val.get("cols").is_some() && val.get("rows").is_some() {
+                                continue;
+                            }
+                        }
+                    }
+                    if stdin.write_all(text.as_bytes()).await.is_err() {
+                        break;
+                    }
+                }
+                Message::Binary(data) => {
+                    if stdin.write_all(&data).await.is_err() {
+                        break;
+                    }
+                }
+                Message::Close(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = output_task => {}
+        _ = input_task => {}
+        _ = stdout_task => {}
+        _ = stderr_task => {}
+        _ = child.wait() => {}
+    }
 }
 
 // --- Environment ---
