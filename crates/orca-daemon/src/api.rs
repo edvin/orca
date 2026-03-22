@@ -185,6 +185,12 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
         .route("/k8s/configmaps/{namespace}", get(k8s_configmaps))
         .route("/k8s/secrets/{namespace}", get(k8s_secrets))
+        .route("/k8s/metrics/{namespace}", get(k8s_pod_metrics))
+        .route("/k8s/deployments/{namespace}/{name}/history", get(k8s_rollout_history))
+        .route("/k8s/deployments/{namespace}/{name}/rollback", post(k8s_rollout_undo))
+        .route("/k8s/helm/releases", get(k8s_helm_list))
+        .route("/k8s/helm/uninstall", post(k8s_helm_uninstall))
+        .route("/k8s/helm/available", get(k8s_helm_available))
         // Environment
         .route("/environment/status", get(env_status))
         .route("/environment/fix", post(env_fix))
@@ -2145,6 +2151,64 @@ async fn k8s_secrets(
 ) -> Result<impl IntoResponse, ApiError> {
     let secrets = state.k8s.list_secrets(&namespace).await?;
     Ok(Json(secrets))
+}
+
+async fn k8s_pod_metrics(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let metrics = state.k8s.list_pod_metrics(&namespace).await?;
+    Ok(Json(metrics))
+}
+
+async fn k8s_rollout_history(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    let history = state.k8s.rollout_history(&namespace, &name).await?;
+    Ok(Json(history))
+}
+
+#[derive(Deserialize)]
+struct RollbackRequest {
+    revision: Option<u32>,
+}
+
+async fn k8s_rollout_undo(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+    Json(body): Json<RollbackRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let result = state.k8s.rollout_undo(&namespace, &name, body.revision).await?;
+    Ok(Json(serde_json::json!({ "output": result })))
+}
+
+async fn k8s_helm_list(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let releases = state.k8s.helm_list().await?;
+    Ok(Json(releases))
+}
+
+#[derive(Deserialize)]
+struct HelmUninstallRequest {
+    name: String,
+    namespace: String,
+}
+
+async fn k8s_helm_uninstall(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<HelmUninstallRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let result = state.k8s.helm_uninstall(&body.name, &body.namespace).await?;
+    Ok(Json(serde_json::json!({ "output": result })))
+}
+
+async fn k8s_helm_available(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let available = state.k8s.helm_available().await;
+    Ok(Json(serde_json::json!({ "available": available })))
 }
 
 // --- Environment ---

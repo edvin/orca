@@ -207,6 +207,27 @@ export interface K8sSecret {
   age: string;
 }
 
+export interface PodMetrics {
+  name: string;
+  cpu: string;
+  memory: string;
+}
+
+export interface RolloutRevision {
+  revision: number;
+  change_cause: string | null;
+}
+
+export interface HelmRelease {
+  name: string;
+  namespace: string;
+  chart: string;
+  status: string;
+  revision: string;
+  updated: string;
+  app_version: string;
+}
+
 // --- Image Scanning ---
 
 export interface ScanVulnerability {

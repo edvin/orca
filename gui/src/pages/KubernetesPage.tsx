@@ -20,9 +20,12 @@ import type {
   K8sEvent,
   K8sConfigMap,
   K8sSecret,
+  PodMetrics,
+  RolloutRevision,
+  HelmRelease,
 } from "../lib/types";
 
-type Tab = "pods" | "deployments" | "services" | "ingresses" | "storage" | "events" | "config";
+type Tab = "pods" | "deployments" | "services" | "ingresses" | "storage" | "events" | "config" | "helm" | "topology";
 
 export default function KubernetesPage() {
   const [status, setStatus] = createSignal<ClusterStatus | null>(null);
@@ -59,6 +62,26 @@ export default function KubernetesPage() {
   const [viewConfigMap, setViewConfigMap] = createSignal<K8sConfigMap | null>(null);
   const [viewSecret, setViewSecret] = createSignal<K8sSecret | null>(null);
   const [revealedKeys, setRevealedKeys] = createSignal<Set<string>>(new Set());
+
+  // Feature 1: Pod Metrics
+  const [podMetrics, setPodMetrics] = createSignal<Record<string, PodMetrics>>({});
+
+  // Feature 2: Deployment Rollback
+  const [rollbackDep, setRollbackDep] = createSignal<{ namespace: string; name: string } | null>(null);
+  const [rollbackHistory, setRollbackHistory] = createSignal<RolloutRevision[]>([]);
+  const [rollbackLoading, setRollbackLoading] = createSignal(false);
+
+  // Feature 3: Log Follow
+  const [logFollow, setLogFollow] = createSignal(false);
+  const [logTail, setLogTail] = createSignal(200);
+  let logFollowInterval: ReturnType<typeof setInterval> | null = null;
+  let logContainerRef: HTMLDivElement | undefined;
+
+  // Feature 4: Helm
+  const [helmReleases, setHelmReleases] = createSignal<HelmRelease[]>([]);
+  const [helmAvailable, setHelmAvailable] = createSignal<boolean | null>(null);
+
+  // Feature 5: Topology (data computed from existing signals)
 
   // Setup progress dialog
   const [setupDialogOpen, setSetupDialogOpen] = createSignal(false);
@@ -115,7 +138,18 @@ export default function KubernetesPage() {
     try {
       const currentTab = tab();
       if (currentTab === "pods") {
-        setPods((await invoke("k8s_pods", { namespace: ns })) as Pod[]);
+        const [podResult, metricsResult] = await Promise.allSettled([
+          invoke("k8s_pods", { namespace: ns }) as Promise<Pod[]>,
+          invoke("k8s_pod_metrics", { namespace: ns }) as Promise<PodMetrics[]>,
+        ]);
+        if (podResult.status === "fulfilled") setPods(podResult.value);
+        if (metricsResult.status === "fulfilled") {
+          const map: Record<string, PodMetrics> = {};
+          for (const m of metricsResult.value) {
+            map[m.name] = m;
+          }
+          setPodMetrics(map);
+        }
       } else if (currentTab === "deployments") {
         setDeployments((await invoke("k8s_deployments", { namespace: ns })) as Deployment[]);
       } else if (currentTab === "services") {
@@ -138,6 +172,26 @@ export default function KubernetesPage() {
         ]);
         setConfigMaps(cmResult);
         setSecrets(secResult);
+      } else if (currentTab === "helm") {
+        try {
+          if (helmAvailable() === null) {
+            const avail = (await invoke("k8s_helm_available")) as { available: boolean };
+            setHelmAvailable(avail.available);
+          }
+          if (helmAvailable()) {
+            setHelmReleases((await invoke("k8s_helm_list")) as HelmRelease[]);
+          }
+        } catch { /* helm not available */ }
+      } else if (currentTab === "topology") {
+        // Topology needs pods, deployments, and services
+        const [p, d, s] = await Promise.all([
+          invoke("k8s_pods", { namespace: ns }) as Promise<Pod[]>,
+          invoke("k8s_deployments", { namespace: ns }) as Promise<Deployment[]>,
+          invoke("k8s_services", { namespace: ns }) as Promise<K8sService[]>,
+        ]);
+        setPods(p);
+        setDeployments(d);
+        setServices(s);
       }
     } catch (e) {
     } finally {
@@ -377,6 +431,9 @@ export default function KubernetesPage() {
 
   const handleViewLogs = async (namespace: string, name: string) => {
     setLogPod(name);
+    setLogFollow(false);
+    setLogTail(200);
+    if (logFollowInterval) { clearInterval(logFollowInterval); logFollowInterval = null; }
     try {
       const lines = (await invoke("k8s_pod_logs", {
         namespace,
@@ -389,6 +446,47 @@ export default function KubernetesPage() {
       logError(`Failed to fetch pod logs: ${e}`, `Pod "${name}" in namespace "${namespace}"`);
       showToast(`Failed to get logs: ${e}`, "error");
       setLogPod(null);
+    }
+  };
+
+  // Feature 2: Rollback handler
+  const handleShowHistory = async (namespace: string, name: string) => {
+    setRollbackDep({ namespace, name });
+    setRollbackLoading(true);
+    try {
+      const history = (await invoke("k8s_rollout_history", { namespace, name })) as RolloutRevision[];
+      setRollbackHistory(history);
+    } catch (e) {
+      showToast(`Failed to get rollout history: ${e}`, "error");
+      setRollbackDep(null);
+    } finally {
+      setRollbackLoading(false);
+    }
+  };
+
+  const handleRollback = async (revision: number) => {
+    const dep = rollbackDep();
+    if (!dep) return;
+    if (!await confirmDanger("Rollback Deployment", `Rollback '${dep.name}' to revision ${revision}?`)) return;
+    try {
+      await invoke("k8s_rollout_undo", { namespace: dep.namespace, name: dep.name, revision });
+      showToast(`Rolling back ${dep.name} to revision ${revision}`, "success");
+      setRollbackDep(null);
+      await refreshWorkloads();
+    } catch (e) {
+      showToast(`Rollback failed: ${e}`, "error");
+    }
+  };
+
+  // Feature 4: Helm uninstall handler
+  const handleHelmUninstall = async (name: string, namespace: string) => {
+    if (!await confirmDanger("Uninstall Helm Release", `Uninstall '${name}' from namespace '${namespace}'?`)) return;
+    try {
+      await invoke("k8s_helm_uninstall", { name, namespace });
+      showToast(`Helm release '${name}' uninstalled`, "success");
+      await refreshWorkloads();
+    } catch (e) {
+      showToast(`Helm uninstall failed: ${e}`, "error");
     }
   };
 
@@ -479,6 +577,8 @@ export default function KubernetesPage() {
     { id: "storage", label: "Storage", icon: "\u25A8" },
     { id: "events", label: "Events", icon: "\u26A0" },
     { id: "config", label: "Config", icon: "\u2699" },
+    { id: "helm", label: "Helm", icon: "\u2388" },
+    { id: "topology", label: "Topology", icon: "\u25CE" },
   ];
 
   const emptyMessages: Record<Tab, { title: string; desc: string }> = {
@@ -489,6 +589,8 @@ export default function KubernetesPage() {
     storage: { title: "No storage resources", desc: "Persistent Volume Claims will appear when workloads request storage." },
     events: { title: "No events in this namespace", desc: "Events will appear when Kubernetes resources change state." },
     config: { title: "No ConfigMaps or Secrets", desc: "ConfigMaps and Secrets store configuration data for your workloads." },
+    helm: { title: "No Helm releases", desc: "Install Helm charts using the helm CLI to manage releases here." },
+    topology: { title: "No resources to visualize", desc: "Deploy workloads to see a visual topology of your namespace." },
   };
 
   return (
@@ -701,6 +803,8 @@ export default function KubernetesPage() {
                   <th>Name</th>
                   <th>Ready</th>
                   <th>Status</th>
+                  <th>CPU</th>
+                  <th>Memory</th>
                   <th>Restarts</th>
                   <th>Age</th>
                   <th>IP</th>
@@ -709,7 +813,9 @@ export default function KubernetesPage() {
               </thead>
               <tbody>
                 <For each={pods()}>
-                  {(pod) => (
+                  {(pod) => {
+                    const metrics = () => podMetrics()[pod.name];
+                    return (
                     <tr>
                       <td style={{ "font-weight": "500" }}>{pod.name}</td>
                       <td class="mono">{pod.ready}</td>
@@ -720,6 +826,12 @@ export default function KubernetesPage() {
                         }}>
                           {pod.status}
                         </span>
+                      </td>
+                      <td class="mono" style={{ color: "#8b949e", "font-size": "12px" }}>
+                        {metrics()?.cpu || "\u2014"}
+                      </td>
+                      <td class="mono" style={{ color: "#8b949e", "font-size": "12px" }}>
+                        {metrics()?.memory || "\u2014"}
                       </td>
                       <td class="mono">{pod.restarts}</td>
                       <td style={{ color: "#8b949e" }}>{pod.age}</td>
@@ -764,7 +876,8 @@ export default function KubernetesPage() {
                         </div>
                       </td>
                     </tr>
-                  )}
+                    );
+                  }}
                 </For>
               </tbody>
             </table>
@@ -836,6 +949,13 @@ export default function KubernetesPage() {
                             onClick={() => handleRestart(dep.namespace, dep.name)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                          </button>
+                          <button
+                            class="action-icon"
+                            title="Rollout history"
+                            onClick={() => handleShowHistory(dep.namespace, dep.name)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                           </button>
                           <button
                             class="action-icon"
@@ -1339,6 +1459,350 @@ export default function KubernetesPage() {
             </Show>
           </Show>
         </Show>
+
+        {/* Helm Tab */}
+        <Show when={tab() === "helm"}>
+          <Show when={helmAvailable() === false}>
+            <div class="empty-state-tab">
+              <div class="empty-state-tab-title">Helm is not installed</div>
+              <div class="empty-state-tab-desc">
+                Install Helm to manage Kubernetes packages:<br />
+                <code style={{ background: "#0d1117", padding: "4px 8px", "border-radius": "4px", "font-size": "12px", "margin-top": "8px", display: "inline-block" }}>
+                  curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                </code>
+              </div>
+            </div>
+          </Show>
+          <Show when={helmAvailable() === null}>
+            <div style={{ color: "#8b949e", "text-align": "center", padding: "20px" }}>
+              <Spinner />
+            </div>
+          </Show>
+          <Show when={helmAvailable()}>
+            <Show
+              when={helmReleases().length > 0}
+              fallback={
+                <div class="empty-state-tab">
+                  <div class="empty-state-tab-title">{emptyMessages.helm.title}</div>
+                  <div class="empty-state-tab-desc">
+                    Use <code style={{ background: "#0d1117", padding: "2px 6px", "border-radius": "4px" }}>helm install</code> CLI to add releases, then manage them here.
+                  </div>
+                </div>
+              }
+            >
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Namespace</th>
+                    <th>Chart</th>
+                    <th>Status</th>
+                    <th>Revision</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={helmReleases()}>
+                    {(rel) => (
+                      <tr>
+                        <td style={{ "font-weight": "500" }}>{rel.name}</td>
+                        <td style={{ color: "#8b949e" }}>{rel.namespace}</td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{rel.chart}</td>
+                        <td>
+                          <span style={{
+                            color: rel.status === "deployed" ? "#3fb950" : rel.status === "failed" ? "#f85149" : "#d29922",
+                            "font-weight": "500",
+                          }}>
+                            {rel.status}
+                          </span>
+                        </td>
+                        <td class="mono">{rel.revision}</td>
+                        <td style={{ color: "#8b949e", "font-size": "12px" }}>
+                          {rel.updated ? rel.updated.split(".")[0] : ""}
+                        </td>
+                        <td>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Uninstall release"
+                            onClick={() => handleHelmUninstall(rel.name, rel.namespace)}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
+          </Show>
+        </Show>
+
+        {/* Topology Tab */}
+        <Show when={tab() === "topology"}>
+          <Show
+            when={deployments().length > 0 || services().length > 0 || pods().length > 0}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.topology.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.topology.desc}</div>
+              </div>
+            }
+          >
+            <div style={{ padding: "8px 0" }}>
+              <For each={services()}>
+                {(svc) => {
+                  // Find deployments that might be targeted by this service
+                  // (simplified: match by name prefix or label overlap)
+                  const matchedDeps = () => deployments().filter((d) =>
+                    svc.name.includes(d.name) || d.name.includes(svc.name) || svc.name === d.name
+                  );
+                  return (
+                    <div style={{
+                      display: "flex", "align-items": "flex-start", gap: "0",
+                      "margin-bottom": "16px", "flex-wrap": "wrap",
+                    }}>
+                      {/* Service card */}
+                      <div
+                        style={{
+                          background: "#1c2333", border: "1px solid #30363d",
+                          "border-radius": "8px", padding: "10px 14px",
+                          "min-width": "160px", cursor: "pointer",
+                        }}
+                        onClick={() => setTab("services")}
+                        title="View services"
+                      >
+                        <div style={{ "font-size": "10px", color: "#79c0ff", "margin-bottom": "4px" }}>Service</div>
+                        <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{svc.name}</div>
+                        <div style={{ "font-size": "11px", color: "#8b949e" }}>
+                          {svc.service_type} {svc.ports.map((p) => `:${p.port}`).join(", ")}
+                        </div>
+                      </div>
+
+                      <Show when={matchedDeps().length > 0}>
+                        <div style={{ display: "flex", "align-items": "center", padding: "0 8px", color: "#484f58", "font-size": "18px", "align-self": "center" }}>
+                          {"\u2192"}
+                        </div>
+                      </Show>
+
+                      <For each={matchedDeps()}>
+                        {(dep) => {
+                          const depPods = () => pods().filter((p) => p.name.startsWith(dep.name));
+                          return (
+                            <div style={{ display: "flex", "align-items": "flex-start", gap: "0" }}>
+                              <div
+                                style={{
+                                  background: "#1f2a1f", border: "1px solid #2d4a2d",
+                                  "border-radius": "8px", padding: "10px 14px",
+                                  "min-width": "160px", cursor: "pointer",
+                                }}
+                                onClick={() => setTab("deployments")}
+                                title="View deployments"
+                              >
+                                <div style={{ "font-size": "10px", color: "#3fb950", "margin-bottom": "4px" }}>Deployment</div>
+                                <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{dep.name}</div>
+                                <div style={{ "font-size": "11px", color: "#8b949e" }}>
+                                  {dep.replicas_ready}/{dep.replicas_desired} ready
+                                </div>
+                              </div>
+
+                              <Show when={depPods().length > 0}>
+                                <div style={{ display: "flex", "align-items": "center", padding: "0 8px", color: "#484f58", "font-size": "18px", "align-self": "center" }}>
+                                  {"\u2192"}
+                                </div>
+                                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
+                                  <For each={depPods()}>
+                                    {(pod) => (
+                                      <div
+                                        style={{
+                                          background: "#161b22", border: "1px solid #30363d",
+                                          "border-radius": "6px", padding: "6px 12px",
+                                          "min-width": "180px", cursor: "pointer",
+                                        }}
+                                        onClick={() => setTab("pods")}
+                                        title="View pods"
+                                      >
+                                        <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                                          <span style={{
+                                            width: "6px", height: "6px", "border-radius": "50%",
+                                            background: podStatusColor(pod.status),
+                                          }} />
+                                          <span style={{ "font-size": "12px", color: "#e6edf3", "font-weight": "500" }}>
+                                            {pod.name.length > 30 ? pod.name.slice(0, 28) + ".." : pod.name}
+                                          </span>
+                                        </div>
+                                        <div style={{ "font-size": "10px", color: "#8b949e", "margin-top": "2px", "padding-left": "12px" }}>
+                                          {pod.status} | {pod.ready}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </For>
+                                </div>
+                              </Show>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
+                  );
+                }}
+              </For>
+
+              {/* Show deployments without a matching service */}
+              <For each={deployments().filter((d) => !services().some((s) => s.name.includes(d.name) || d.name.includes(s.name)))}>
+                {(dep) => {
+                  const depPods = () => pods().filter((p) => p.name.startsWith(dep.name));
+                  return (
+                    <div style={{
+                      display: "flex", "align-items": "flex-start", gap: "0",
+                      "margin-bottom": "16px", "flex-wrap": "wrap",
+                    }}>
+                      <div
+                        style={{
+                          background: "#1f2a1f", border: "1px solid #2d4a2d",
+                          "border-radius": "8px", padding: "10px 14px",
+                          "min-width": "160px", cursor: "pointer",
+                        }}
+                        onClick={() => setTab("deployments")}
+                      >
+                        <div style={{ "font-size": "10px", color: "#3fb950", "margin-bottom": "4px" }}>Deployment</div>
+                        <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{dep.name}</div>
+                        <div style={{ "font-size": "11px", color: "#8b949e" }}>
+                          {dep.replicas_ready}/{dep.replicas_desired} ready
+                        </div>
+                      </div>
+
+                      <Show when={depPods().length > 0}>
+                        <div style={{ display: "flex", "align-items": "center", padding: "0 8px", color: "#484f58", "font-size": "18px", "align-self": "center" }}>
+                          {"\u2192"}
+                        </div>
+                        <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
+                          <For each={depPods()}>
+                            {(pod) => (
+                              <div
+                                style={{
+                                  background: "#161b22", border: "1px solid #30363d",
+                                  "border-radius": "6px", padding: "6px 12px",
+                                  "min-width": "180px", cursor: "pointer",
+                                }}
+                                onClick={() => setTab("pods")}
+                              >
+                                <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                                  <span style={{
+                                    width: "6px", height: "6px", "border-radius": "50%",
+                                    background: podStatusColor(pod.status),
+                                  }} />
+                                  <span style={{ "font-size": "12px", color: "#e6edf3", "font-weight": "500" }}>
+                                    {pod.name.length > 30 ? pod.name.slice(0, 28) + ".." : pod.name}
+                                  </span>
+                                </div>
+                                <div style={{ "font-size": "10px", color: "#8b949e", "margin-top": "2px", "padding-left": "12px" }}>
+                                  {pod.status} | {pod.ready}
+                                </div>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
+                    </div>
+                  );
+                }}
+              </For>
+
+              {/* Orphan pods (not matching any deployment) */}
+              {(() => {
+                const depNames = deployments().map((d) => d.name);
+                const orphanPods = pods().filter((p) => !depNames.some((dn) => p.name.startsWith(dn)));
+                return (
+                  <Show when={orphanPods.length > 0}>
+                    <div style={{ "margin-top": "8px" }}>
+                      <div style={{ "font-size": "11px", color: "#8b949e", "margin-bottom": "8px" }}>Standalone Pods</div>
+                      <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                        <For each={orphanPods}>
+                          {(pod) => (
+                            <div
+                              style={{
+                                background: "#161b22", border: "1px solid #30363d",
+                                "border-radius": "6px", padding: "6px 12px",
+                                cursor: "pointer",
+                              }}
+                              onClick={() => setTab("pods")}
+                            >
+                              <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                                <span style={{
+                                  width: "6px", height: "6px", "border-radius": "50%",
+                                  background: podStatusColor(pod.status),
+                                }} />
+                                <span style={{ "font-size": "12px", color: "#e6edf3" }}>{pod.name}</span>
+                              </div>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
+                );
+              })()}
+            </div>
+          </Show>
+        </Show>
+      </Show>
+
+      {/* Rollback History Modal */}
+      <Show when={rollbackDep()}>
+        <div class="modal-overlay" onClick={() => setRollbackDep(null)}>
+          <div class="modal-dialog" style={{ "max-width": "500px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Rollout History: {rollbackDep()!.name}</span>
+              <button class="modal-close" onClick={() => setRollbackDep(null)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px" }}>
+              <Show when={rollbackLoading()}>
+                <div style={{ "text-align": "center", padding: "20px" }}><Spinner /></div>
+              </Show>
+              <Show when={!rollbackLoading()}>
+                <Show when={rollbackHistory().length > 0} fallback={
+                  <div style={{ color: "#8b949e", "font-size": "13px" }}>No rollout history available</div>
+                }>
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Revision</th>
+                        <th>Change Cause</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <For each={rollbackHistory()}>
+                        {(rev) => (
+                          <tr>
+                            <td class="mono">{rev.revision}</td>
+                            <td style={{ color: "#8b949e", "font-size": "12px" }}>
+                              {rev.change_cause || "\u2014"}
+                            </td>
+                            <td>
+                              <button
+                                class="btn btn-sm"
+                                style={{ "font-size": "11px" }}
+                                onClick={() => handleRollback(rev.revision)}
+                              >
+                                Rollback
+                              </button>
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </Show>
+              </Show>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setRollbackDep(null)}>Close</button>
+            </div>
+          </div>
+        </div>
       </Show>
 
       {/* Multi-Port Forward Dialog */}
@@ -1414,7 +1878,11 @@ export default function KubernetesPage() {
           "align-items": "center",
           "justify-content": "center",
           "z-index": "1000",
-        }} onClick={() => setLogPod(null)}>
+        }} onClick={() => {
+          setLogPod(null);
+          setLogFollow(false);
+          if (logFollowInterval) { clearInterval(logFollowInterval); logFollowInterval = null; }
+        }}>
           <div style={{
             background: "#161b22",
             border: "1px solid #30363d",
@@ -1432,13 +1900,48 @@ export default function KubernetesPage() {
               "justify-content": "space-between",
               padding: "12px 16px",
               "border-bottom": "1px solid #30363d",
+              gap: "8px",
             }}>
               <span style={{ color: "#e6edf3", "font-weight": "600" }}>
                 Logs: {logPod()}
               </span>
-              <button class="btn btn-sm" onClick={() => setLogPod(null)}>Close</button>
+              <div style={{ display: "flex", gap: "6px", "align-items": "center" }}>
+                <button
+                  class={`btn btn-sm ${logFollow() ? "btn-primary" : ""}`}
+                  onClick={() => {
+                    const next = !logFollow();
+                    setLogFollow(next);
+                    if (next) {
+                      // Start polling
+                      const podName = logPod();
+                      const ns = selectedNs();
+                      const poll = async () => {
+                        try {
+                          setLogTail((t) => Math.min(t + 100, 5000));
+                          const lines = (await invoke("k8s_pod_logs", {
+                            namespace: ns, name: podName, container: null, tail: logTail(),
+                          })) as string[];
+                          setLogLines(lines);
+                          if (logContainerRef) logContainerRef.scrollTop = logContainerRef.scrollHeight;
+                        } catch { /* ignore follow errors */ }
+                      };
+                      logFollowInterval = setInterval(poll, 2000);
+                    } else {
+                      if (logFollowInterval) { clearInterval(logFollowInterval); logFollowInterval = null; }
+                    }
+                  }}
+                  style={{ "font-size": "11px" }}
+                >
+                  {logFollow() ? "Following..." : "Follow"}
+                </button>
+                <button class="btn btn-sm" onClick={() => {
+                  setLogPod(null);
+                  setLogFollow(false);
+                  if (logFollowInterval) { clearInterval(logFollowInterval); logFollowInterval = null; }
+                }}>Close</button>
+              </div>
             </div>
-            <div style={{
+            <div ref={logContainerRef} style={{
               flex: "1",
               overflow: "auto",
               padding: "12px 16px",

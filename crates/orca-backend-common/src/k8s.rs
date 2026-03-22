@@ -1920,6 +1920,238 @@ impl K8sManager for K3sManager {
             }).collect())
         }
     }
+
+    async fn list_pod_metrics(&self, namespace: &str) -> anyhow::Result<Vec<PodMetrics>> {
+        // kubectl top does NOT support -o json, so we parse text output
+        #[cfg(target_os = "windows")]
+        let output = {
+            Command::new("wsl")
+                .args(["-u", "root", "--", "k3s", "kubectl", "top", "pods", "-n", namespace, "--no-headers"])
+                .output()
+                .await?
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let output = {
+            self.kubectl_command()
+                .args(["top", "pods", "-n", namespace, "--no-headers"])
+                .env("KUBECONFIG", self.kubeconfig_path())
+                .output()
+                .await?
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Metrics server not installed is a common case, return empty
+            if stderr.contains("Metrics API not available") || stderr.contains("metrics") || stderr.contains("not found") {
+                return Ok(vec![]);
+            }
+            anyhow::bail!("kubectl top pods failed: {stderr}");
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let metrics: Vec<PodMetrics> = stdout
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    Some(PodMetrics {
+                        name: parts[0].to_string(),
+                        cpu: parts[1].to_string(),
+                        memory: parts[2].to_string(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(metrics)
+    }
+
+    async fn rollout_history(&self, namespace: &str, name: &str) -> anyhow::Result<Vec<RolloutRevision>> {
+        let dep_arg = format!("deployment/{name}");
+
+        #[cfg(target_os = "windows")]
+        let output = {
+            Command::new("wsl")
+                .args(["-u", "root", "--", "k3s", "kubectl", "rollout", "history", &dep_arg, "-n", namespace])
+                .output()
+                .await?
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let output = {
+            self.kubectl_command()
+                .args(["rollout", "history", &dep_arg, "-n", namespace])
+                .env("KUBECONFIG", self.kubeconfig_path())
+                .output()
+                .await?
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("kubectl rollout history failed: {stderr}");
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Output format:
+        // deployment.apps/name
+        // REVISION  CHANGE-CAUSE
+        // 1         <none>
+        // 2         kubectl set image...
+        let revisions: Vec<RolloutRevision> = stdout
+            .lines()
+            .skip(1) // skip header line "deployment.apps/..."
+            .filter(|l| !l.trim().is_empty() && !l.starts_with("REVISION"))
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.splitn(2, char::is_whitespace).collect();
+                let rev_str = parts.first()?.trim();
+                let revision: u32 = rev_str.parse().ok()?;
+                let change_cause = parts.get(1)
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty() && s != "<none>");
+                Some(RolloutRevision { revision, change_cause })
+            })
+            .collect();
+
+        Ok(revisions)
+    }
+
+    async fn rollout_undo(&self, namespace: &str, name: &str, revision: Option<u32>) -> anyhow::Result<String> {
+        let dep_arg = format!("deployment/{name}");
+
+        #[cfg(target_os = "windows")]
+        let output = {
+            let mut args: Vec<&str> = vec!["-u", "root", "--", "k3s", "kubectl", "rollout", "undo", &dep_arg, "-n", namespace];
+            let rev_arg;
+            if let Some(rev) = revision {
+                rev_arg = format!("--to-revision={rev}");
+                args.push(&rev_arg);
+            }
+            Command::new("wsl")
+                .args(&args)
+                .output()
+                .await?
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let output = {
+            let mut cmd = self.kubectl_command();
+            cmd.args(["rollout", "undo", &dep_arg, "-n", namespace])
+                .env("KUBECONFIG", self.kubeconfig_path());
+            if let Some(rev) = revision {
+                cmd.arg(format!("--to-revision={rev}"));
+            }
+            cmd.output().await?
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("kubectl rollout undo failed: {stderr}");
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.trim().to_string())
+    }
+}
+
+// --- Helm functions (not part of K8sManager trait) ---
+
+impl K3sManager {
+    /// List installed Helm releases across all namespaces.
+    pub async fn helm_list(&self) -> anyhow::Result<Vec<HelmRelease>> {
+        // Check if helm is available
+        #[cfg(target_os = "windows")]
+        let output = {
+            Command::new("wsl")
+                .args(["-u", "root", "--", "helm", "list", "-A", "-o", "json"])
+                .output()
+                .await?
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let output = {
+            let mut cmd = Command::new("helm");
+            cmd.args(["list", "-A", "-o", "json"]);
+            if self.kubeconfig_path().exists() {
+                cmd.env("KUBECONFIG", self.kubeconfig_path());
+            }
+            cmd.output().await?
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("helm list failed: {stderr}");
+        }
+
+        let releases: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout)?;
+        Ok(releases.iter().map(|r| HelmRelease {
+            name: r["name"].as_str().unwrap_or("").to_string(),
+            namespace: r["namespace"].as_str().unwrap_or("").to_string(),
+            chart: r["chart"].as_str().unwrap_or("").to_string(),
+            status: r["status"].as_str().unwrap_or("").to_string(),
+            revision: r["revision"].as_str().unwrap_or("").to_string(),
+            updated: r["updated"].as_str().unwrap_or("").to_string(),
+            app_version: r["app_version"].as_str().unwrap_or("").to_string(),
+        }).collect())
+    }
+
+    /// Uninstall a Helm release.
+    pub async fn helm_uninstall(&self, name: &str, namespace: &str) -> anyhow::Result<String> {
+        #[cfg(target_os = "windows")]
+        let output = {
+            Command::new("wsl")
+                .args(["-u", "root", "--", "helm", "uninstall", name, "-n", namespace])
+                .output()
+                .await?
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let output = {
+            let mut cmd = Command::new("helm");
+            cmd.args(["uninstall", name, "-n", namespace]);
+            if self.kubeconfig_path().exists() {
+                cmd.env("KUBECONFIG", self.kubeconfig_path());
+            }
+            cmd.output().await?
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("helm uninstall failed: {stderr}");
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.trim().to_string())
+    }
+
+    /// Check if helm CLI is available.
+    pub async fn helm_available(&self) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("wsl")
+                .args(["-u", "root", "--", "which", "helm"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await
+                .is_ok_and(|s| s.success())
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Command::new("helm")
+                .arg("version")
+                .args(["--short"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await
+                .is_ok_and(|s| s.success())
+        }
+    }
 }
 
 impl K3sManager {

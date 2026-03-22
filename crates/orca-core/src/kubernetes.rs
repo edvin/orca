@@ -143,6 +143,33 @@ pub struct K8sConfigMap {
     pub age: String,
 }
 
+/// Pod resource metrics (from kubectl top).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodMetrics {
+    pub name: String,
+    pub cpu: String,      // e.g. "50m", "250m"
+    pub memory: String,   // e.g. "128Mi", "1Gi"
+}
+
+/// A rollout revision for a deployment.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RolloutRevision {
+    pub revision: u32,
+    pub change_cause: Option<String>,
+}
+
+/// A Helm release.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HelmRelease {
+    pub name: String,
+    pub namespace: String,
+    pub chart: String,
+    pub status: String,
+    pub revision: String,
+    pub updated: String,
+    pub app_version: String,
+}
+
 /// A Kubernetes Secret.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct K8sSecret {
@@ -227,4 +254,13 @@ pub trait K8sManager {
 
     /// List Secrets in a namespace.
     async fn list_secrets(&self, namespace: &str) -> anyhow::Result<Vec<K8sSecret>>;
+
+    /// Get pod resource metrics (kubectl top pods).
+    async fn list_pod_metrics(&self, namespace: &str) -> anyhow::Result<Vec<PodMetrics>>;
+
+    /// Get rollout history for a deployment.
+    async fn rollout_history(&self, namespace: &str, name: &str) -> anyhow::Result<Vec<RolloutRevision>>;
+
+    /// Rollback a deployment to a specific revision (or previous if None).
+    async fn rollout_undo(&self, namespace: &str, name: &str, revision: Option<u32>) -> anyhow::Result<String>;
 }

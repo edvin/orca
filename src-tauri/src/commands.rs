@@ -1002,6 +1002,61 @@ pub async fn k8s_secrets(namespace: String) -> Result<serde_json::Value, String>
     get_json(&format!("/k8s/secrets/{namespace}")).await
 }
 
+// --- K8s Metrics, Rollback, Helm ---
+
+#[tauri::command]
+pub async fn k8s_pod_metrics(namespace: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/metrics/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_rollout_history(
+    namespace: String,
+    name: String,
+) -> Result<serde_json::Value, String> {
+    get_json(&format!("/k8s/deployments/{namespace}/{name}/history")).await
+}
+
+#[tauri::command]
+pub async fn k8s_rollout_undo(
+    namespace: String,
+    name: String,
+    revision: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/k8s/deployments/{namespace}/{name}/rollback"))
+        .json(&serde_json::json!({ "revision": revision }))
+        .send()
+        .await
+        .map_err(|e| format!("Rollback failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn k8s_helm_list() -> Result<serde_json::Value, String> {
+    get_json("/k8s/helm/releases").await
+}
+
+#[tauri::command]
+pub async fn k8s_helm_uninstall(name: String, namespace: String) -> Result<serde_json::Value, String> {
+    client()
+        .post(format!("{DAEMON_URL}/k8s/helm/uninstall"))
+        .json(&serde_json::json!({ "name": name, "namespace": namespace }))
+        .send()
+        .await
+        .map_err(|e| format!("Helm uninstall failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn k8s_helm_available() -> Result<serde_json::Value, String> {
+    get_json("/k8s/helm/available").await
+}
+
 // --- K8s Port Forwarding ---
 
 #[tauri::command]
