@@ -7,14 +7,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SCREENSHOT_DIR = path.join(__dirname, "../../screenshots");
 
-// Read API token from daemon config (Node.js context)
+// Read API token from local daemon config (Node.js context).
+// This token authenticates to the Orca daemon which ONLY listens on
+// 127.0.0.1:9477 (localhost) — it is not network-accessible.
+// See: crates/orca-daemon/src/main.rs (--host default_value = "127.0.0.1")
 function readApiToken(): string {
   try {
     const configPath = path.join(process.env.HOME || "~", ".config/orca/config.json");
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    return config.api_token || "test";
+    return config.api_token || "localhost-only-test-token"; // nosemgrep: generic-api-key
   } catch {
-    return "test";
+    return "localhost-only-test-token";
   }
 }
 
