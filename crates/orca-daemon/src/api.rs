@@ -2168,9 +2168,8 @@ async fn system_health(
             health.docker_connected = true;
             health.docker_version = Some(version);
             health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable"));
-            // Add a hint that the daemon needs restart for full functionality
-            if !health.warnings.iter().any(|w| w.contains("restart")) {
-                health.warnings.push("Docker is available but Orca Desktop needs a restart to connect. Close and reopen the app.".to_string());
+            if !health.warnings.iter().any(|w| w.contains("Restart")) {
+                health.warnings.push("Docker is available but not connected. Click 'Restart Docker' on System Health to reconnect.".to_string());
             }
         }
     }
