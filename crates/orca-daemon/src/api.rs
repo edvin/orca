@@ -750,8 +750,10 @@ async fn inspect_image(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let image = ImageManager::inspect(state.runtime.as_ref(), &id).await?;
-    Ok(Json(image))
+    // Return raw Docker inspect data (includes RootFS, Config, etc.)
+    let raw = state.runtime.docker.inspect_image(&id).await
+        .map_err(|e| anyhow::anyhow!("Failed to inspect image: {e}"))?;
+    Ok(Json(raw))
 }
 
 async fn remove_image(

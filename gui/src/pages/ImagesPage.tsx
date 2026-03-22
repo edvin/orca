@@ -750,7 +750,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                               const imageId = d?.id || d?.Id || img.id;
                               const created = d?.created_at || d?.Created || img.created_at;
                               const size = d?.size_bytes || d?.Size || img.size_bytes;
-                              const layers = d?.rootfs?.Layers || d?.rootfs?.layers || d?.layers || [];
+                              const layers = d?.RootFS?.Layers || d?.rootfs?.Layers || d?.rootfs?.layers || d?.layers || [];
                               return (<>
                                 <div class="card-grid">
                                   <div class="card-label">Image ID</div>
