@@ -53,10 +53,20 @@ export default function KubernetesPage() {
       const s = (await invoke("k8s_status")) as ClusterStatus;
       setStatus(s);
       if (s.running) {
-        const ns = (await invoke("k8s_namespaces")) as Namespace[];
-        setNamespaces(ns);
-        if (!ns.find((n) => n.name === selectedNs())) {
-          setSelectedNs(ns.length > 0 ? ns[0].name : "default");
+        try {
+          const ns = (await invoke("k8s_namespaces")) as Namespace[];
+          setNamespaces(ns);
+          if (!ns.find((n) => n.name === selectedNs())) {
+            setSelectedNs(ns.length > 0 ? ns[0].name : "default");
+          }
+        } catch {
+          // If namespace listing fails, provide defaults
+          if (namespaces().length === 0) {
+            setNamespaces([
+              { name: "default", status: "Active", age: "" },
+              { name: "kube-system", status: "Active", age: "" },
+            ]);
+          }
         }
       }
     } catch (e) {

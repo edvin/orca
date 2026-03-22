@@ -868,7 +868,7 @@ impl K8sManager for K3sManager {
                         node_status: if wsl_ready { Some("Ready".to_string()) } else { Some("NotReady".to_string()) },
                         pods_running: pods_r,
                         pods_total: pods_t,
-                        traefik_dashboard: if wsl_ready { Some("http://127.0.0.1:9000/dashboard/".to_string()) } else { None },
+                        traefik_dashboard: None, // Not accessible from Windows (WSL2 port forwarding)
                         error: None,
                     });
                 }
