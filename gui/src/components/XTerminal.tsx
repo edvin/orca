@@ -65,7 +65,7 @@ export default function XTerminal(props: XTerminalProps) {
       cursorBlink: true,
       cursorStyle: "bar",
       scrollback: 10000,
-      convertEol: true,
+      convertEol: false,
       // Skip xterm's internal font validation — we know the font is loaded via CSS
       allowProposedApi: true,
     });

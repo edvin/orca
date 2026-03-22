@@ -6,6 +6,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import { logError, logInfo } from "../lib/activityStore";
 import Spinner from "../components/Spinner";
 import YamlEditor from "../components/YamlEditor";
+import Dropdown from "../components/Dropdown";
 import type {
   ClusterStatus,
   Pod,
@@ -548,16 +549,12 @@ export default function KubernetesPage() {
           "margin-bottom": "0",
         }}>
           <label style={{ color: "#8b949e", "font-size": "13px" }}>Namespace:</label>
-          <select
+          <Dropdown
             value={selectedNs()}
-            onChange={(e) => setSelectedNs(e.currentTarget.value)}
-            class="form-input"
-            style={{ padding: "6px 28px 6px 10px", "font-size": "13px", "min-width": "140px" }}
-          >
-            <For each={namespaces()}>
-              {(ns) => <option value={ns.name}>{ns.name}</option>}
-            </For>
-          </select>
+            options={namespaces().map((ns) => ({ value: ns.name, label: ns.name }))}
+            onChange={(v) => setSelectedNs(v)}
+            style={{ "min-width": "160px" }}
+          />
         </div>
 
         {/* Tab bar */}

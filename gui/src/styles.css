@@ -2938,6 +2938,64 @@ select option {
 }
 
 /* ==================== File Browser ==================== */
+/* ==================== Custom Dropdown ==================== */
+.custom-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.custom-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.custom-dropdown-value {
+  flex: 1;
+}
+
+.custom-dropdown-arrow {
+  flex-shrink: 0;
+  color: #8b949e;
+  transition: transform 0.15s;
+}
+
+.custom-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  padding: 4px;
+}
+
+.custom-dropdown-item {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #c9d1d9;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.custom-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.custom-dropdown-item.active {
+  background: rgba(31, 111, 235, 0.15);
+  color: #58a6ff;
+}
+
 .file-browser-row {
   padding: 6px 16px;
   cursor: pointer;
