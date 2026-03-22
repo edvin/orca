@@ -43,7 +43,9 @@ export default function ActivityPage() {
     try {
       const info = (await invoke("get_daemon_info")) as { log_tail?: string };
       if (info?.log_tail) {
-        setDaemonLog(info.log_tail.split("\n").filter((l) => l.length > 0));
+        // Strip ANSI escape codes from tracing output
+        const stripped = info.log_tail.replace(/\x1b\[[0-9;]*m/g, "");
+        setDaemonLog(stripped.split("\n").filter((l) => l.length > 0));
       }
     } catch {}
     setLogLoading(false);

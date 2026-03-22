@@ -937,28 +937,32 @@ pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let output = std::process::Command::new("wsl")
-            .args(["-u", "root", "--", "k3s", "kubectl", "get", &kind, &name, "-n", &namespace, "-o", "yaml"])
-            .output()
-            .map_err(|e| format!("kubectl failed: {e}"))?;
-        if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    let output = {
+        #[cfg(target_os = "windows")]
+        {
+            let mut cmd = tokio::process::Command::new("wsl");
+            cmd.args(["-u", "root", "--", "k3s", "kubectl", "get", &kind, &name, "-n", &namespace, "-o", "yaml"]);
+            // Hide console window
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
+            cmd.output().await.map_err(|e| format!("kubectl failed: {e}"))?
         }
-        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let output = std::process::Command::new("kubectl")
-            .args(["get", &kind, &name, "-n", &namespace, "-o", "yaml"])
-            .output()
-            .map_err(|e| format!("kubectl failed: {e}"))?;
-        if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).to_string());
+        #[cfg(not(target_os = "windows"))]
+        {
+            tokio::process::Command::new("kubectl")
+                .args(["get", &kind, &name, "-n", &namespace, "-o", "yaml"])
+                .output()
+                .await
+                .map_err(|e| format!("kubectl failed: {e}"))?
         }
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    };
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 // --- K8s Port Forwarding ---
