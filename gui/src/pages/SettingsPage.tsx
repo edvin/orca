@@ -723,16 +723,27 @@ export default function SettingsPage() {
                     <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 8px 0", "line-height": "1.5" }}>
                       Add this to your Claude Code or Claude Desktop MCP configuration.
                     </p>
-                    <pre style={{
-                      background: "#161b22", border: "1px solid #21262d", "border-radius": "6px",
-                      padding: "12px", "font-size": "12px", "line-height": "1.5",
-                      overflow: "auto", color: "#e6edf3", margin: 0,
-                    }}>
-                      {mcpConfig()}
-                    </pre>
-                    <button class="btn btn-sm" style={{ "margin-top": "8px" }} onClick={() => copyToClipboard(mcpConfig(), setMcpCopied)}>
-                      {mcpCopied() ? "Copied!" : "Copy Config"}
-                    </button>
+                    <div style={{ position: "relative" }}>
+                      <pre style={{
+                        background: "#161b22", border: "1px solid #21262d", "border-radius": "6px",
+                        padding: "12px", "padding-right": "40px", "font-size": "12px", "line-height": "1.5",
+                        overflow: "auto", color: "#e6edf3", margin: 0,
+                      }}>
+                        {mcpConfig()}
+                      </pre>
+                      <button
+                        class="action-icon"
+                        style={{ position: "absolute", top: "8px", right: "8px", color: mcpCopied() ? "#3fb950" : "#8b949e" }}
+                        onClick={() => copyToClipboard(mcpConfig(), setMcpCopied)}
+                        title="Copy to clipboard"
+                      >
+                        <Show when={mcpCopied()} fallback={
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                        }>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        </Show>
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ "border-top": "1px solid #21262d", "padding-top": "16px" }}>
@@ -742,19 +753,49 @@ export default function SettingsPage() {
                     <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 8px 0", "line-height": "1.5" }}>
                       Use this endpoint with any OpenAI-compatible agent or tool.
                     </p>
-                    <div class="card-grid" style={{ "font-size": "12px" }}>
-                      <span class="card-label">Endpoint</span>
-                      <span class="card-value mono" style={{ "font-size": "11px", "word-break": "break-all" }}>{openaiEndpoint}</span>
-                      <span class="card-label">Auth</span>
-                      <span class="card-value mono" style={{ "font-size": "11px" }}>Bearer {apiToken() || "YOUR_TOKEN_HERE"}</span>
-                    </div>
-                    <div style={{ display: "flex", gap: "8px", "margin-top": "8px" }}>
-                      <button class="btn btn-sm" onClick={() => copyToClipboard(openaiEndpoint, setEndpointCopied)}>
-                        {endpointCopied() ? "Copied!" : "Copy Endpoint"}
-                      </button>
-                      <button class="btn btn-sm" onClick={() => copyToClipboard(apiToken(), setTokenCopied)}>
-                        {tokenCopied() ? "Copied!" : "Copy Token"}
-                      </button>
+                    <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                      <div style={{
+                        display: "flex", "align-items": "center", "justify-content": "space-between",
+                        background: "#161b22", border: "1px solid #21262d", "border-radius": "6px", padding: "8px 12px",
+                      }}>
+                        <div>
+                          <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>Endpoint</div>
+                          <span class="mono" style={{ "font-size": "11px", color: "#e6edf3", "word-break": "break-all" }}>{openaiEndpoint}</span>
+                        </div>
+                        <button
+                          class="action-icon"
+                          style={{ color: endpointCopied() ? "#3fb950" : "#8b949e", "flex-shrink": "0" }}
+                          onClick={() => copyToClipboard(openaiEndpoint, setEndpointCopied)}
+                          title="Copy endpoint"
+                        >
+                          <Show when={endpointCopied()} fallback={
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                          }>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                          </Show>
+                        </button>
+                      </div>
+                      <div style={{
+                        display: "flex", "align-items": "center", "justify-content": "space-between",
+                        background: "#161b22", border: "1px solid #21262d", "border-radius": "6px", padding: "8px 12px",
+                      }}>
+                        <div>
+                          <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>API Token</div>
+                          <span class="mono" style={{ "font-size": "11px", color: "#e6edf3" }}>{apiToken() || "Loading..."}</span>
+                        </div>
+                        <button
+                          class="action-icon"
+                          style={{ color: tokenCopied() ? "#3fb950" : "#8b949e", "flex-shrink": "0" }}
+                          onClick={() => copyToClipboard(apiToken(), setTokenCopied)}
+                          title="Copy token"
+                        >
+                          <Show when={tokenCopied()} fallback={
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                          }>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                          </Show>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
