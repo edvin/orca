@@ -70,7 +70,7 @@ async function injectTauriBridge(page: Page) {
           // Stacks
           list_stacks: () => fetchJson(DAEMON +"/stacks"),
           // K8s
-          k8s_status: () => Promise.resolve({ enabled: false, running: false, version: null, node_name: null, node_status: null, pods_running: 0, pods_total: 0, traefik_dashboard: null, error: null }),
+          k8s_status: () => fetchJson(DAEMON +"/k8s/status"),
           k8s_pods: () => fetchJson(DAEMON +"/k8s/pods/" + (args.namespace || "default")),
           k8s_deployments: () => fetchJson(DAEMON +"/k8s/deployments/" + (args.namespace || "default")),
           k8s_services: () => fetchJson(DAEMON +"/k8s/services/" + (args.namespace || "default")),
@@ -160,6 +160,20 @@ async function navigateTo(page: Page, label: string) {
   }
   await navLabel.click();
   await waitForPageLoad(page);
+}
+
+// Helper: select K8s namespace
+async function selectK8sNamespace(page: Page, ns: string) {
+  const nsDropdown = page.locator("text=Namespace:").locator("..").locator("button, .dropdown-trigger").first();
+  if (await nsDropdown.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await nsDropdown.click();
+    await page.waitForTimeout(400);
+    const option = page.getByText(ns, { exact: true }).first();
+    if (await option.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await option.click();
+      await waitForPageLoad(page);
+    }
+  }
 }
 
 // Helper: screenshot
@@ -259,11 +273,13 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("10 - Kubernetes", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
+    await selectK8sNamespace(page, "demo");
     await screenshot(page, "10-kubernetes");
   });
 
   test("11 - K8s Deployments", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
+    await selectK8sNamespace(page, "demo");
     const tab = page.locator(".filter-pill", { hasText: "Deployments" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
@@ -274,6 +290,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("12 - K8s Services", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
+    await selectK8sNamespace(page, "demo");
     const tab = page.locator(".filter-pill", { hasText: "Services" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
@@ -304,6 +321,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("15 - K8s Topology", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
+    await selectK8sNamespace(page, "demo");
     const tab = page.locator(".filter-pill", { hasText: "Topology" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
