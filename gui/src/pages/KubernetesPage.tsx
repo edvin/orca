@@ -31,6 +31,7 @@ export default function KubernetesPage() {
   const [pvs, setPvs] = createSignal<PersistentVolume[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [enabling, setEnabling] = createSignal(false);
+  const [portForwards, setPortForwards] = createSignal<Set<string>>(new Set());
   const [logPod, setLogPod] = createSignal<string | null>(null);
   const [logLines, setLogLines] = createSignal<string[]>([]);
 
@@ -114,6 +115,7 @@ export default function KubernetesPage() {
 
   onMount(() => {
     refreshStatus();
+    refreshPortForwards();
     const interval = setInterval(() => {
       refreshStatus();
       refreshWorkloads();
@@ -216,6 +218,34 @@ export default function KubernetesPage() {
     setSetupDialogOpen(false);
     await refreshStatus();
   };
+
+  const refreshPortForwards = async () => {
+    try {
+      const fwds = (await invoke("k8s_list_port_forwards")) as { namespace: string; service: string; port: string }[];
+      setPortForwards(new Set(fwds.map((f) => `${f.namespace}/${f.service}/${f.port}`)));
+    } catch {}
+  };
+
+  const startPortForward = async (namespace: string, service: string, port: number) => {
+    try {
+      await invoke("k8s_port_forward", { namespace, service, port });
+      showToast(`Port ${port} forwarded — accessible at localhost:${port}`, "success");
+      await refreshPortForwards();
+    } catch (e) {
+      showToast(`Port forward failed: ${e}`, "error");
+    }
+  };
+
+  const stopPortForward = async (namespace: string, service: string, port: number) => {
+    try {
+      await invoke("k8s_stop_port_forward", { namespace, service, port });
+      showToast(`Port forward stopped`, "info");
+      await refreshPortForwards();
+    } catch {}
+  };
+
+  const isForwarded = (namespace: string, service: string, port: number) =>
+    portForwards().has(`${namespace}/${service}/${port}`);
 
   const handleDisable = async () => {
     try {
@@ -648,6 +678,7 @@ export default function KubernetesPage() {
                   <th>Cluster IP</th>
                   <th>Ports</th>
                   <th>Age</th>
+                  <th style={{ "text-align": "right" }}>Access</th>
                 </tr>
               </thead>
               <tbody>
@@ -679,6 +710,33 @@ export default function KubernetesPage() {
                         }).join(", ")}
                       </td>
                       <td style={{ color: "#8b949e" }}>{svc.age}</td>
+                      <td style={{ "text-align": "right" }}>
+                        <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end", "flex-wrap": "wrap" }}>
+                          <For each={svc.ports}>
+                            {(p) => (
+                              <Show when={isForwarded(selectedNs(), svc.name, p.port)} fallback={
+                                <button
+                                  class="btn btn-sm"
+                                  style={{ "font-size": "11px", padding: "2px 8px" }}
+                                  onClick={() => startPortForward(selectedNs(), svc.name, p.port)}
+                                  title={`Forward port ${p.port} to localhost:${p.port}`}
+                                >
+                                  :{p.port}
+                                </button>
+                              }>
+                                <button
+                                  class="btn btn-sm btn-primary"
+                                  style={{ "font-size": "11px", padding: "2px 8px" }}
+                                  onClick={() => stopPortForward(selectedNs(), svc.name, p.port)}
+                                  title={`Stop forwarding port ${p.port}`}
+                                >
+                                  :{p.port} {"\u2713"}
+                                </button>
+                              </Show>
+                            )}
+                          </For>
+                        </div>
+                      </td>
                     </tr>
                   )}
                 </For>

@@ -1,12 +1,20 @@
 //! Tauri commands — callable from the frontend via `invoke()`.
 //! These proxy to the Orca daemon's HTTP API.
 
-use std::sync::{Arc, OnceLock};
+use std::collections::HashMap;
+use std::sync::{Arc, OnceLock, Mutex};
 
 use serde::Deserialize;
 use tauri::Manager;
 
 use crate::daemon;
+
+/// Active port-forward processes, keyed by "namespace/service/port"
+static PORT_FORWARDS: OnceLock<Mutex<HashMap<String, std::process::Child>>> = OnceLock::new();
+
+fn port_forward_map() -> &'static Mutex<HashMap<String, std::process::Child>> {
+    PORT_FORWARDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 const DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
 
@@ -925,6 +933,79 @@ pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
         .json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))
+}
+
+// --- K8s Port Forwarding ---
+
+#[tauri::command]
+pub async fn k8s_port_forward(
+    namespace: String,
+    service: String,
+    port: u16,
+    local_port: Option<u16>,
+) -> Result<serde_json::Value, String> {
+    let local = local_port.unwrap_or(port);
+    let key = format!("{namespace}/{service}/{local}");
+
+    {
+        let map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
+        if map.contains_key(&key) {
+            return Ok(serde_json::json!({ "status": "already_running", "port": local }));
+        }
+    }
+
+    let child = if cfg!(target_os = "windows") {
+        std::process::Command::new("wsl")
+            .args(["-u", "root", "--", "k3s", "kubectl", "port-forward",
+                &format!("svc/{service}"), &format!("{local}:{port}"),
+                "-n", &namespace, "--address=0.0.0.0"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Failed to start port-forward: {e}"))?
+    } else {
+        std::process::Command::new("kubectl")
+            .args(["port-forward", &format!("svc/{service}"),
+                &format!("{local}:{port}"), "-n", &namespace, "--address=0.0.0.0"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Failed to start port-forward: {e}"))?
+    };
+
+    let pid = child.id();
+    port_forward_map().lock().map_err(|e| format!("{e}"))?.insert(key, child);
+
+    Ok(serde_json::json!({ "status": "started", "port": local, "pid": pid }))
+}
+
+#[tauri::command]
+pub async fn k8s_stop_port_forward(
+    namespace: String,
+    service: String,
+    port: u16,
+) -> Result<(), String> {
+    let key = format!("{namespace}/{service}/{port}");
+    let mut map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
+    if let Some(mut child) = map.remove(&key) {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn k8s_list_port_forwards() -> Result<serde_json::Value, String> {
+    let map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
+    let forwards: Vec<serde_json::Value> = map.keys().map(|k| {
+        let parts: Vec<&str> = k.split('/').collect();
+        serde_json::json!({
+            "namespace": parts.first().unwrap_or(&""),
+            "service": parts.get(1).unwrap_or(&""),
+            "port": parts.get(2).unwrap_or(&""),
+        })
+    }).collect();
+    Ok(serde_json::json!(forwards))
 }
 
 // --- System Health ---
