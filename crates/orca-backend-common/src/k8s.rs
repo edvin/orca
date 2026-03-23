@@ -624,26 +624,58 @@ impl K3sManager {
                                         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
                                         let kube_dir = format!("{home}/.kube");
                                         let _ = std::fs::create_dir_all(&kube_dir);
-                                        // Write temp file, then merge as "orca" context
-                                        let tmp_path = format!("{kube_dir}/.orca-k3s-temp");
+                                        let config_path = format!("{kube_dir}/config");
+
+                                        // k3s config has server: https://127.0.0.1:6443
+                                        // Lima VZ forwards ports, so localhost:6443 works on the host
                                         let fixed = kubeconfig.replace("127.0.0.1", "localhost");
+
+                                        // Use kubectl config set commands for reliable merge
+                                        // This avoids issues with KUBECONFIG merge + rename
+                                        let tmp_path = format!("{kube_dir}/.orca-k3s-temp");
                                         std::fs::write(&tmp_path, &fixed)
                                             .map_err(|e| anyhow::anyhow!("Failed to write temp kubeconfig: {e}"))?;
-                                        let config_path = format!("{kube_dir}/config");
-                                        let merge_env = if std::path::Path::new(&config_path).exists() {
-                                            format!("{tmp_path}:{config_path}")
-                                        } else {
-                                            tmp_path.clone()
-                                        };
+
+                                        // Extract certs from the k3s config and set them on our "orca" context
                                         let _ = std::process::Command::new("kubectl")
-                                            .env("KUBECONFIG", &merge_env)
-                                            .args(["config", "view", "--flatten"])
+                                            .args(["--kubeconfig", &tmp_path, "config", "view", "--raw", "-o", "json"])
                                             .output()
-                                            .and_then(|o| { if o.status.success() { std::fs::write(&config_path, &o.stdout)?; } Ok(o) });
-                                        let _ = std::process::Command::new("kubectl").args(["config", "rename-context", "default", "orca"]).output();
+                                            .and_then(|o| {
+                                                if o.status.success() {
+                                                    if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&o.stdout) {
+                                                        let server = v["clusters"][0]["cluster"]["server"].as_str().unwrap_or("https://localhost:6443");
+                                                        let ca = v["clusters"][0]["cluster"]["certificate-authority-data"].as_str().unwrap_or("");
+                                                        let cert = v["users"][0]["user"]["client-certificate-data"].as_str().unwrap_or("");
+                                                        let key = v["users"][0]["user"]["client-key-data"].as_str().unwrap_or("");
+
+                                                        let _ = std::process::Command::new("kubectl").args(["config", "set-cluster", "orca", &format!("--server={server}")]).output();
+                                                        let _ = std::process::Command::new("kubectl").args(["config", "set", "clusters.orca.certificate-authority-data", ca]).output();
+                                                        let _ = std::process::Command::new("kubectl").args(["config", "set", "users.orca.client-certificate-data", cert]).output();
+                                                        let _ = std::process::Command::new("kubectl").args(["config", "set", "users.orca.client-key-data", key]).output();
+                                                        let _ = std::process::Command::new("kubectl").args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"]).output();
+                                                    }
+                                                }
+                                                Ok(o)
+                                            });
                                         let _ = std::fs::remove_file(&tmp_path);
-                                        send("Added 'orca' context to ~/.kube/config".into()).await;
-                                        send("Use: kubectl --context orca get pods".into()).await;
+
+                                        // Verify the context was created
+                                        let verify = std::process::Command::new("kubectl")
+                                            .args(["--context", "orca", "cluster-info"])
+                                            .output();
+                                        match verify {
+                                            Ok(o) if o.status.success() => {
+                                                send("Added 'orca' context to ~/.kube/config".into()).await;
+                                                send("Use: kubectl --context orca get pods".into()).await;
+                                            }
+                                            _ => {
+                                                send("Warning: 'orca' context may not be properly configured".into()).await;
+                                                tracing::warn!("kubectl --context orca cluster-info failed after kubeconfig merge");
+                                            }
+                                        }
+
+                                        // Clear cached K8s client so status check uses the new config
+                                        *self.client.lock().await = None;
                                     }
                                     Err(e) => {
                                         send(format!("Warning: could not copy kubeconfig: {e}")).await;
