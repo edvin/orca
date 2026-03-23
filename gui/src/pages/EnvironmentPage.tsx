@@ -308,8 +308,8 @@ export default function EnvironmentPage() {
       >
         {(s) => (
           <div>
-            {/* === READY STATE === */}
-            <Show when={s().ready && health()?.docker_connected !== false}>
+            {/* === READY STATE — only show when daemon can actually reach Docker === */}
+            <Show when={health()?.docker_connected === true}>
               {/* Hero status card */}
               <div style={{
                 background: "linear-gradient(135deg, rgba(63, 185, 80, 0.06) 0%, rgba(88, 166, 255, 0.04) 100%)",
@@ -357,9 +357,13 @@ export default function EnvironmentPage() {
                 </div>
               </Show>
 
-              {/* Health check grid */}
+              {/* Health check grid — filter out irrelevant items */}
               <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
-                <For each={s().checks}>
+                <For each={s().checks.filter(c => {
+                  if (c.name.includes("Docker Desktop") && c.status === "Pass" && !c.details) return false;
+                  if (c.description?.includes("Not installed") && !c.fix_action) return false;
+                  return true;
+                })}>
                   {(check) => (
                     <div style={{
                       background: "#161b22",
@@ -476,8 +480,8 @@ export default function EnvironmentPage() {
               </div>
             </Show>
 
-            {/* === SETUP / RECONNECT STATE === */}
-            <Show when={!s().ready || health()?.docker_connected === false}>
+            {/* === SETUP / RECONNECT STATE — show when daemon can't reach Docker === */}
+            <Show when={health()?.docker_connected !== true}>
               <div style={{
                 "margin-bottom": "24px",
                 background: s().ready
@@ -503,7 +507,12 @@ export default function EnvironmentPage() {
                 </div>
 
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
-                  <For each={s().checks}>
+                  <For each={s().checks.filter(c => {
+                    // Hide irrelevant checks: "Not installed" items with no fix action
+                    if (c.name.includes("Docker Desktop") && c.status === "Pass" && !c.details) return false;
+                    if (c.description?.includes("Not installed") && !c.fix_action) return false;
+                    return true;
+                  })}>
                     {(check, i) => (
                       <div style={{
                         display: "flex", "align-items": "center", gap: "14px",

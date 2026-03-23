@@ -32,14 +32,11 @@ impl DaemonManager {
                 }
                 Some(v) => {
                     tracing::info!("Daemon version mismatch: running v{v}, app is v{expected_version} — restarting");
-                    self.stop();
-                    // Wait for old daemon to fully exit
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    self.kill_existing_daemon().await;
                 }
                 None => {
                     tracing::info!("Orca daemon already running (version unknown) — restarting to ensure correct version");
-                    self.stop();
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    self.kill_existing_daemon().await;
                 }
             }
         }
@@ -114,6 +111,37 @@ impl DaemonManager {
             ).await;
             tracing::info!("orca-daemon stopped");
         }
+    }
+
+    /// Kill any existing daemon process — even one spawned by a previous app version.
+    async fn kill_existing_daemon(&self) {
+        // First try our tracked child
+        self.stop();
+
+        // Also kill by process name (catches daemons from previous app installs)
+        #[cfg(target_os = "windows")]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/f", "/im", "orca-daemon.exe"])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output();
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::process::Command::new("pkill")
+                .args(["-f", "orca-daemon"])
+                .output();
+        }
+
+        // Wait for the process to fully exit and release the port
+        for _ in 0..10 {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            if !self.health_check().await {
+                tracing::info!("Old daemon has exited");
+                return;
+            }
+        }
+        tracing::warn!("Old daemon may still be running after kill attempts");
     }
 
     /// Get the version of the running daemon, if available.
