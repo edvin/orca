@@ -252,38 +252,6 @@ test.describe("Orca Desktop Screenshots", () => {
     await screenshot(page, "06-images");
   });
 
-  test("06b - Image scan results", async ({ page }) => {
-    await navigateTo(page, "Images");
-    // Click the composer:2 row to expand it
-    const composerRow = page.locator("tr", { hasText: "composer" }).first();
-    if (await composerRow.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await composerRow.click();
-      await page.waitForTimeout(1000);
-      // Click "Scan for Vulnerabilities" button in the expanded detail
-      const scanBtn = page.getByText("Scan for Vulnerabilities").first();
-      if (await scanBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await scanBtn.click();
-        // Wait for scan results to appear (Trivy can take a while)
-        try {
-          await page.waitForSelector("text=CRITICAL", { timeout: 120000 });
-        } catch {
-          // Maybe no CRITICAL vulns, look for any result
-          try {
-            await page.waitForSelector("text=No vulnerabilities", { timeout: 5000 });
-          } catch {}
-        }
-        await page.waitForTimeout(500);
-        // Scroll the CRITICAL text into view to show the vulnerability table
-        const criticalEl = page.getByText("CRITICAL").first();
-        if (await criticalEl.isVisible({ timeout: 1000 }).catch(() => false)) {
-          await criticalEl.scrollIntoViewIfNeeded();
-          await page.waitForTimeout(500);
-        }
-        await screenshot(page, "06b-image-scan");
-      }
-    }
-  });
-
   test("07 - Volumes", async ({ page }) => {
     await navigateTo(page, "Volumes");
     await screenshot(page, "07-volumes");
@@ -413,5 +381,35 @@ test.describe("Orca Desktop Screenshots", () => {
     await page.keyboard.press("Control+k");
     await page.waitForTimeout(800);
     await screenshot(page, "23-command-palette");
+  });
+
+  // Scan test last — Trivy can take a while on first run
+  test("24 - Image scan results", async ({ page }) => {
+    await navigateTo(page, "Images");
+    // Use nginx:alpine — small image, likely has a few vulns
+    const row = page.locator("tr", { hasText: "nginx" }).first();
+    if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await row.click();
+      await page.waitForTimeout(1000);
+      const scanBtn = page.getByText("Scan for Vulnerabilities").first();
+      if (await scanBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await scanBtn.click();
+        // Wait for any scan result (CRITICAL, HIGH, MEDIUM, LOW, or "No vulnerabilities")
+        try {
+          await page.waitForSelector("text=/CRITICAL|HIGH|MEDIUM|LOW|No vulnerabilities/", { timeout: 120000 });
+        } catch {}
+        await page.waitForTimeout(500);
+        // Try to scroll results into view
+        for (const sev of ["CRITICAL", "HIGH", "MEDIUM"]) {
+          const el = page.getByText(sev).first();
+          if (await el.isVisible({ timeout: 500 }).catch(() => false)) {
+            await el.scrollIntoViewIfNeeded();
+            break;
+          }
+        }
+        await page.waitForTimeout(500);
+        await screenshot(page, "06b-image-scan");
+      }
+    }
   });
 });
