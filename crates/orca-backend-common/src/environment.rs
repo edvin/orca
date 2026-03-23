@@ -943,18 +943,40 @@ pub async fn check_environment() -> EnvironmentStatus {
                 checks.push(docker_check);
                 checks.push(docker_desktop_check);
             } else {
-                // No Docker Desktop — don't show it (Orca is the replacement).
-                // Check for standalone Docker CLI and show alternatives.
-                let docker_check = check_docker_installed().await;
-                checks.push(docker_check);
+                // No Docker Desktop — check if Docker is available via Lima or other means
+                let docker_cli = check_docker_installed().await;
+                let docker_running = if docker_cli.status == CheckStatus::Pass {
+                    // CLI exists, but is Docker actually running?
+                    match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
+                        Ok(version) => Some(version.trim().to_string()),
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(version) = docker_running {
+                    // Docker is running (probably via Lima or another VM)
+                    checks.push(HealthCheck {
+                        name: "Docker Runtime".to_string(),
+                        description: "Docker engine is running".to_string(),
+                        status: CheckStatus::Pass,
+                        fix_action: None,
+                        details: Some(format!("Server version: {version}")),
+                    });
+                } else {
+                    // Docker not running — offer to set up via Lima
+                    checks.push(HealthCheck {
+                        name: "Docker Runtime".to_string(),
+                        description: "Docker is not running. Set up a lightweight Linux VM to run containers.".to_string(),
+                        status: CheckStatus::Fail,
+                        fix_action: Some("setup_docker_macos".to_string()),
+                        details: Some("Click Fix to set up Docker via Lima (Apple Virtualization)".to_string()),
+                    });
+                }
 
                 checks.push(check_brew_installed().await);
-                let mut lima = check_lima_installed().await;
-                lima.name = "Lima (optional)".to_string();
-                lima.description = "Run containers via a lightweight Linux VM".to_string();
-                if lima.status == CheckStatus::Warning || lima.status == CheckStatus::Fail {
-                    lima.status = CheckStatus::Warning;
-                }
+                let lima = check_lima_installed().await;
                 checks.push(lima);
             }
         }
