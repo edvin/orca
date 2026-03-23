@@ -925,55 +925,30 @@ pub async fn check_environment() -> EnvironmentStatus {
             if gpu.details.is_some() { checks.push(gpu); }
         }
         "macos" => {
-            let docker_desktop_check = check_docker_desktop().await;
-            let has_docker_desktop = docker_desktop_check.status == CheckStatus::Pass;
+            // Always check if Docker is actually running — regardless of Docker Desktop
+            let docker_running = match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
+                Ok(version) => Some(version.trim().to_string()),
+                Err(_) => None,
+            };
 
-            if has_docker_desktop {
-                // Docker Desktop is installed — it provides everything needed.
-                let mut docker_check = HealthCheck {
+            if let Some(version) = docker_running {
+                // Docker is running (via Docker Desktop, Lima, Colima, etc.)
+                checks.push(HealthCheck {
                     name: "Docker Runtime".to_string(),
-                    description: "Provided by Docker Desktop".to_string(),
+                    description: "Docker engine is running".to_string(),
                     status: CheckStatus::Pass,
                     fix_action: None,
-                    details: Some("Docker Desktop provides the Docker runtime".to_string()),
-                };
-                if let Ok(version) = run_cmd("docker", &["--version"]).await {
-                    docker_check.details = Some(version);
-                }
-                checks.push(docker_check);
-                checks.push(docker_desktop_check);
+                    details: Some(format!("Server version: {version}")),
+                });
             } else {
-                // No Docker Desktop — check if Docker is available via Lima or other means
-                let docker_cli = check_docker_installed().await;
-                let docker_running = if docker_cli.status == CheckStatus::Pass {
-                    // CLI exists, but is Docker actually running?
-                    match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
-                        Ok(version) => Some(version.trim().to_string()),
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                };
-
-                if let Some(version) = docker_running {
-                    // Docker is running (probably via Lima or another VM)
-                    checks.push(HealthCheck {
-                        name: "Docker Runtime".to_string(),
-                        description: "Docker engine is running".to_string(),
-                        status: CheckStatus::Pass,
-                        fix_action: None,
-                        details: Some(format!("Server version: {version}")),
-                    });
-                } else {
-                    // Docker not running — offer to set up via Lima
-                    checks.push(HealthCheck {
-                        name: "Docker Runtime".to_string(),
-                        description: "Docker is not running. Set up a lightweight Linux VM to run containers.".to_string(),
-                        status: CheckStatus::Fail,
-                        fix_action: Some("setup_docker_macos".to_string()),
-                        details: Some("Click Fix to set up Docker via Lima (Apple Virtualization)".to_string()),
-                    });
-                }
+                // Docker not running — offer to set up via Lima
+                checks.push(HealthCheck {
+                    name: "Docker Runtime".to_string(),
+                    description: "Docker is not running. Click Fix to set up a lightweight Linux VM.".to_string(),
+                    status: CheckStatus::Fail,
+                    fix_action: Some("setup_docker_macos".to_string()),
+                    details: Some("Sets up Docker via Lima with Apple Virtualization — fast, lightweight, no Docker Desktop needed".to_string()),
+                });
 
                 checks.push(check_brew_installed().await);
                 let lima = check_lima_installed().await;
