@@ -109,6 +109,7 @@ impl K3sManager {
             c
         } else {
             let mut c = Command::new("kubectl");
+            c.env("PATH", Self::extended_path());
             // Use our context (k3s kubectl doesn't need this — it only has one context)
             c.arg("--context").arg(Self::CONTEXT_NAME);
             c

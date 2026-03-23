@@ -1073,8 +1073,10 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
         }
         #[cfg(not(target_os = "windows"))]
         {
+            let path = std::env::var("PATH").unwrap_or_default();
             tokio::process::Command::new("kubectl")
-                .args(["get", &kind, &name, "-n", &namespace, "-o", "yaml"])
+                .env("PATH", format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{path}"))
+                .args(["--context", "orca", "get", &kind, &name, "-n", &namespace, "-o", "yaml"])
                 .output()
                 .await
                 .map_err(|e| format!("kubectl failed: {e}"))?

@@ -490,37 +490,35 @@ pub async fn run_fix_streaming(
                 vm_name = vm_name
             );
 
-            if std::path::Path::new(&socket_path).exists() {
-                send(format!("    Docker socket: {socket_path}\n")).await;
-
-                // Create/update docker context
-                let _ = run_cmd("docker", &["context", "create", "lima",
-                    "--docker", &format!("host=unix://{socket_path}"),
-                ]).await;
-                let _ = run_cmd("docker", &["context", "use", "lima"]).await;
-                send("    Docker context 'lima' configured.\n".into()).await;
-            } else {
-                // The socket might be at a different path with newer Lima
+            // Wait for socket to appear
+            if !std::path::Path::new(&socket_path).exists() {
                 send("    Waiting for Docker socket...\n".into()).await;
                 for i in 0..15 {
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                    if std::path::Path::new(&socket_path).exists() {
-                        send(format!("    Docker socket ready: {socket_path}\n")).await;
-                        let _ = run_cmd("docker", &["context", "create", "lima",
-                            "--docker", &format!("host=unix://{socket_path}"),
-                        ]).await;
-                        let _ = run_cmd("docker", &["context", "use", "lima"]).await;
-                        break;
-                    }
-                    if i % 3 == 2 {
-                        send(format!("    Waiting... ({}s)\n", (i + 1) * 2)).await;
-                    }
+                    if std::path::Path::new(&socket_path).exists() { break; }
+                    if i % 3 == 2 { send(format!("    Waiting... ({}s)\n", (i + 1) * 2)).await; }
                 }
             }
 
-            // Verify Docker works
+            if std::path::Path::new(&socket_path).exists() {
+                send(format!("    Docker socket: {socket_path}\n")).await;
+
+                // Remove stale contexts, create fresh one pointing to the correct socket
+                let _ = run_cmd("docker", &["context", "rm", "-f", "lima"]).await;
+                let _ = run_cmd("docker", &["context", "rm", "-f", "lima-orca"]).await;
+                let _ = run_cmd("docker", &["context", "rm", "-f", "lima-docker"]).await;
+                let _ = run_cmd("docker", &["context", "create", "lima-orca",
+                    "--docker", &format!("host=unix://{socket_path}"),
+                ]).await;
+                let _ = run_cmd("docker", &["context", "use", "lima-orca"]).await;
+                send("    Docker context 'lima-orca' configured.\n".into()).await;
+            } else {
+                send(format!("    Warning: Docker socket not found at {socket_path}\n")).await;
+            }
+
+            // Verify Docker works via the correct socket directly
             send("\n>>> Verifying Docker connection...\n".into()).await;
-            match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
+            match run_cmd("docker", &["-H", &format!("unix://{socket_path}"), "info", "--format", "{{.ServerVersion}}"]).await {
                 Ok(version) => {
                     send(format!("    Docker {} is ready!\n", version.trim())).await;
                     send("\n>>> Setup complete. Orca Desktop is ready to use.\n".into()).await;
