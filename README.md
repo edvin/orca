@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <img src="screenshots/01-dashboard.png" alt="Orca Desktop Dashboard" width="800" />
+</p>
+
+<p align="center">
   <img src="https://github.com/edvin/orca/actions/workflows/build.yml/badge.svg" alt="Build" />
   <img src="https://img.shields.io/github/license/edvin/orca" alt="License" />
 </p>
@@ -27,20 +31,25 @@
 - **Live resource editing** — change memory limits, CPU cores, and restart policy on running containers
 - **Live resource monitoring** — CPU, memory, network I/O with per-container stats
 - **Exec terminal** — interactive shell inside containers
-- **Log viewer** with search, tail size control, auto-scroll, and log download
+- **Log viewer** with regex search, match highlighting, case sensitivity toggle, and download
+- **Multi-container log view** — combined, color-coded logs across containers
+- **Health checks** — live status indicator, health history, check output
+- **Restart policy** display, editing, and restart count tracking
+- **Container file browser** — explore filesystem of running containers
+- **Save as Image** — commit container state to a new image
 - **AI-powered diagnostics** — click the AI button on any container to analyze logs and troubleshoot
-- **Multi-stage progress** when running containers (pull → create → start)
-- **Container diagnostics** for failed containers — exit code, OOM detection, error messages
 - **Copy as `docker run`** / **Export as `docker-compose.yml`** for any running container
 - Real-time event streaming (instant UI updates on container state changes)
 
 ### Image Management
 
 - **Pull images** with Docker Hub search dialog and progress tracking
-- **Build images** from Dockerfile with `.dockerignore` support and streaming build log
+- **Build images** from Dockerfile with streaming output, build args, and Dockerfile selection
 - **Vulnerability scanning** — one-click CVE scan powered by Trivy with severity badges
+- **Image layer visualization** — stacked bar chart with Dockerfile instructions
 - **Browse image files** — explore any image's filesystem without running it
-- **Tag, remove, batch delete** with multi-select checkboxes
+- **Tag images** with custom repository and version
+- **Import from tar** — load images from tar archives
 - **Prune** unused images with confirmation dialog and space reclaimed reporting
 - **Registry authentication** for private registries (Docker Hub, GitHub, GitLab, AWS ECR)
 
@@ -53,13 +62,17 @@
 
 ### Kubernetes (k3s)
 
-- **One-click k3s cluster** with Traefik ingress controller (bundled) and progress dialog
-- Manage **pods, deployments, services, ingresses** across namespaces
-- **Persistent volume** and PVC management
-- Scale deployments, restart rollouts, delete pods
-- **Pod logs** with container selection
-- Apply/delete YAML manifests
-- Kubeconfig export
+- **One-click k3s cluster** with Traefik ingress controller and progress dialog
+- **20+ resource types**: Pods, Deployments, DaemonSets, StatefulSets, ReplicaSets, Services, Ingresses, Jobs, CronJobs, ConfigMaps, Secrets, PVCs, PVs, Storage Classes, HPAs, Network Policies, CRDs, Helm releases
+- **HPA autoscaling** — create, monitor, target CPU with min/max replicas
+- **Secrets management** — full CRUD with type selection (Opaque, TLS, Docker) and reveal toggle
+- **CRD browser** — list Custom Resource Definitions with group, kind, scope
+- **Helm management** — list releases, install charts, uninstall
+- **Visual topology** — Service → Deployment → Pods relationship map
+- **Pod terminal** — interactive shell into running pods
+- **Deploy from YAML** — Monaco editor with syntax highlighting
+- Uses "orca" context in standard `~/.kube/config` — never touches user's remote clusters
+- `kubectl --context orca get pods` works out of the box
 
 ### App Templates
 
@@ -72,10 +85,12 @@
 ### AI Assistant
 
 - **Separate floating window** — drag anywhere, resize, pin to another monitor
-- **4 providers** — Claude (Anthropic), GPT (OpenAI), Gemini (Google), or any custom OpenAI-compatible endpoint
+- **5 providers** — Claude (Anthropic), GPT (OpenAI), Gemini (Google), Ollama (local), or any custom OpenAI-compatible endpoint
+- **One-click Ollama setup** — local AI with GPU acceleration, no API keys needed
+- **Tool calling** — AI can list containers, inspect, and manage resources
 - **Context-aware** — click the AI button on any container to chat about it with logs pre-loaded
 - **Model picker** — dropdown fetched from provider's API
-- Natural language container troubleshooting with actionable suggestions
+- **Conversation history** with sliding window context
 
 ### AI Agent API
 
@@ -87,9 +102,10 @@
 
 ### Dashboard
 
-- System overview with sparkline charts
-- Top CPU and memory consumers
-- Container, image, and stack counts at a glance
+- **Resource history charts** — CPU and memory time-series with hover tooltips
+- **Top CPU and memory consumers** with per-container mini charts
+- Container, image, stack counts, and GPU status at a glance
+- **System cleanup** — prune containers, images, volumes, networks, build cache
 
 ### Environment Management
 
@@ -113,10 +129,11 @@
 - **System tray** — close to tray, not quit
 - **Auto-updates** with signature verification and seamless daemon restart
 - Notification bell with activity feed
-- **Command palette** (Ctrl+K)
+- **Command palette** (Ctrl+K) — fuzzy search pages, resources, and actions
+- **Keyboard shortcuts** — `?` to show all shortcuts, `Ctrl+R` to refresh
+- **Network topology** — visual diagram of networks and connected containers
 - Toast notifications with actions
-- Keyboard shortcuts (Escape closes modals)
-- Dark theme with polished UI
+- Dark glassmorphism theme with smooth animations
 
 ### Cross-Platform
 
@@ -125,6 +142,24 @@
 - **Windows**: WSL2 with Docker, auto-configured TCP bridge
 - Signed auto-updates on all platforms
 - Guided setup wizard with real-time streaming progress
+
+## Screenshots
+
+<details>
+<summary>Click to expand</summary>
+
+| | |
+|---|---|
+| ![Containers](screenshots/02-containers.png) | ![Container Detail](screenshots/03-container-detail.png) |
+| **Containers** — Compose stacks, live CPU/memory | **Container Detail** — Overview, logs, terminal, files |
+| ![Images](screenshots/06-images.png) | ![Kubernetes](screenshots/10-kubernetes.png) |
+| **Images** — Pull, build, scan, tag, layers | **Kubernetes** — Pods, deployments, services, helm |
+| ![Network Topology](screenshots/09-network-topology.png) | ![App Catalog](screenshots/16-app-catalog.png) |
+| **Network Topology** — Visual network diagram | **App Catalog** — One-click templates |
+| ![Settings AI](screenshots/20-settings-ai.png) | ![System Health](screenshots/17-system-health.png) |
+| **AI & Agents** — 5 providers, MCP server | **System Health** — Diagnostics and setup |
+
+</details>
 
 ## Architecture
 
