@@ -167,7 +167,7 @@ export default function Sidebar(props: SidebarProps) {
             >
               <span class="nav-icon">{icons[item.id]?.()}</span>
               <span class="nav-label">{item.label}</span>
-              <Show when={badgeFor(item.id)}>
+              <Show when={!collapsed() && badgeFor(item.id)}>
                 {(count) => <span class="nav-badge">{count()}</span>}
               </Show>
             </button>
