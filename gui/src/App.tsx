@@ -156,10 +156,28 @@ export default function App() {
       }
     });
 
-    // Try to auto-start daemon, then check status
-    invoke("start_daemon").catch(() => {}).finally(() => {
-      checkDaemon();
-    });
+    // Auto-start daemon — keep "connecting" state until it responds or times out
+    const startAndWait = async () => {
+      try {
+        await invoke("start_daemon");
+      } catch {}
+      // Poll for readiness — daemon may take a moment after start returns
+      for (let i = 0; i < 10; i++) {
+        try {
+          const status = (await invoke("get_status")) as any;
+          if (status.daemon_running) {
+            setDaemonStatus("running");
+            // On Windows, Docker in WSL might need a reconnect
+            try { await invoke("reconnect_runtime"); } catch {}
+            return;
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 500));
+      }
+      // After 5 seconds of trying, mark as stopped
+      setDaemonStatus("stopped");
+    };
+    startAndWait();
 
     const interval = setInterval(() => {
       if (daemonStatus() !== "running") {
@@ -196,7 +214,12 @@ export default function App() {
   return (
     <div class={`app-root ${navigator.platform.includes("Mac") ? "platform-macos" : ""}`}>
       <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => navigate(p)} />
-      {daemonStatus() !== "running" ? (
+      {daemonStatus() === "connecting" ? (
+        <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "calc(100vh - 40px)", gap: "16px" }}>
+          <img src="/orca-logo-full.png" alt="Orca" style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
+          <div style={{ color: "#8b949e", "font-size": "14px" }}>Starting Orca...</div>
+        </div>
+      ) : daemonStatus() !== "running" ? (
         <ConnectionScreen status={daemonStatus()} onRetry={checkDaemon} />
       ) : (
         <>

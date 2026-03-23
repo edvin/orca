@@ -490,10 +490,10 @@ export default function EnvironmentPage() {
                 </div>
                 <div style={{ "font-size": "14px", color: "var(--text-muted)", "margin-bottom": "24px", "line-height": "1.5" }}>
                   {s().platform === "macos"
-                    ? "Orca Desktop needs a container runtime. Set up Docker via Lima on macOS."
+                    ? "Set up a container runtime to get started. Orca uses a lightweight Linux VM via Lima on macOS."
                     : s().platform === "windows"
-                    ? "Orca Desktop needs Docker running inside WSL2 to manage containers on Windows."
-                    : "Orca Desktop needs a container runtime. Install Docker or Podman to get started."}
+                    ? "Set up Docker in WSL2 to get started. Orca manages containers via the Windows Subsystem for Linux."
+                    : "Set up a container runtime to get started. Install Docker or Podman on your system."}
                 </div>
 
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
