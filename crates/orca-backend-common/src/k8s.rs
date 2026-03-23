@@ -159,17 +159,83 @@ impl K3sManager {
 
         let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path)
             .map_err(|e| { tracing::warn!("K8s: failed to parse kubeconfig: {e}"); e })?;
-        let config = kube::Config::from_custom_kubeconfig(
-            kubeconfig,
+
+        // Try to create a client from kubeconfig — may fail with exec-based auth
+        let config = match kube::Config::from_custom_kubeconfig(
+            kubeconfig.clone(),
             &kube::config::KubeConfigOptions::default(),
-        )
-        .await
-        .map_err(|e| { tracing::warn!("K8s: failed to create config from kubeconfig: {e}"); e })?;
+        ).await {
+            Ok(config) => config,
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("auth exec") || err_str.contains("No such file") {
+                    // Exec-based auth failed (Docker Desktop, cloud providers)
+                    // Try inferring config from the cluster/user data directly
+                    tracing::warn!("K8s: exec auth failed ({e}), trying in-cluster or default config");
+                    // Try the default config which handles more auth methods
+                    kube::Config::infer().await
+                        .map_err(|e2| { tracing::warn!("K8s: infer config also failed: {e2}"); e })?
+                } else {
+                    tracing::warn!("K8s: failed to create config from kubeconfig: {e}");
+                    return Err(e.into());
+                }
+            }
+        };
+
         let client = Client::try_from(config)
             .map_err(|e| { tracing::warn!("K8s: failed to create client: {e}"); e })?;
         tracing::info!("K8s: client created successfully");
         *cached = Some(client.clone());
         Ok(client)
+    }
+
+    /// Fallback: get cluster status via kubectl CLI when kube client fails
+    /// (e.g., Docker Desktop exec-based auth on macOS).
+    async fn status_via_kubectl(&self) -> anyhow::Result<ClusterStatus> {
+        let mut cmd = self.kubectl_command();
+        cmd.args(["get", "nodes", "-o",
+            "jsonpath={.items[0].metadata.name},{.items[0].status.conditions[?(@.type==\"Ready\")].status},{range .items[0].status.nodeInfo}{.kubeletVersion}{end}"]);
+        let output = cmd.output().await;
+
+        if let Ok(output) = output {
+            let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !text.is_empty() && output.status.success() {
+                let parts: Vec<&str> = text.split(',').collect();
+                let node_name = parts.first().unwrap_or(&"").to_string();
+                let ready = parts.get(1).map(|s| *s == "True").unwrap_or(false);
+                let version = parts.get(2).unwrap_or(&"").to_string();
+                tracing::info!("K8s via kubectl CLI: node={node_name}, ready={ready}, version={version}");
+
+                // Get pod counts
+                let mut pod_cmd = self.kubectl_command();
+                pod_cmd.args(["get", "pods", "-A", "--no-headers"]);
+                let (pods_r, pods_t) = if let Ok(pod_out) = pod_cmd.output().await {
+                    let pod_text = String::from_utf8_lossy(&pod_out.stdout);
+                    (pod_text.lines().filter(|l| l.contains("Running")).count() as u32,
+                     pod_text.lines().count() as u32)
+                } else { (0, 0) };
+
+                return Ok(ClusterStatus {
+                    enabled: true,
+                    running: ready,
+                    version: if version.is_empty() { None } else { Some(version) },
+                    node_name: if node_name.is_empty() { None } else { Some(node_name) },
+                    node_status: if ready { Some("Ready".to_string()) } else { Some("NotReady".to_string()) },
+                    pods_running: pods_r,
+                    pods_total: pods_t,
+                    traefik_dashboard: None,
+                    error: None,
+                });
+            }
+        }
+
+        Ok(ClusterStatus {
+            enabled: true,
+            running: false,
+            version: None, node_name: None, node_status: None,
+            pods_running: 0, pods_total: 0, traefik_dashboard: None,
+            error: Some("Kubernetes detected but not reachable — check your cluster".to_string()),
+        })
     }
 
     async fn is_k3s_installed(&self) -> bool {
@@ -839,19 +905,9 @@ impl K8sManager for K3sManager {
         let client = match self.get_client().await {
             Ok(c) => c,
             Err(e) => {
-                let err_msg = format!("Kubeconfig found at {} but client creation failed: {e}", kubeconfig_path.display());
-                tracing::warn!("K8s status: {}", err_msg);
-                return Ok(ClusterStatus {
-                    enabled: true,
-                    running: false,
-                    version: None,
-                    node_name: None,
-                    node_status: None,
-                    pods_running: 0,
-                    pods_total: 0,
-                    traefik_dashboard: None,
-                    error: Some(err_msg),
-                });
+                tracing::warn!("K8s status: kube client failed ({e}), trying kubectl CLI fallback");
+                // Fall back to kubectl CLI — handles exec-based auth (Docker Desktop, GKE, etc.)
+                return self.status_via_kubectl().await;
             }
         };
 
