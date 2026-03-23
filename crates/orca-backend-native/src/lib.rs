@@ -69,7 +69,7 @@ impl NativeBackend {
             // macOS Docker Desktop
             candidates.push(PathBuf::from(format!("{home}/.docker/run/docker.sock")));
             // Lima VMs
-            for vm in &["docker", "default", "colima"] {
+            for vm in &["orca", "docker", "default", "colima"] {
                 candidates.push(PathBuf::from(format!("{home}/.lima/{vm}/sock/docker.sock")));
             }
             // Colima

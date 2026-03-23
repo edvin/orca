@@ -119,6 +119,13 @@ impl K3sManager {
     /// Our context name in ~/.kube/config
     const CONTEXT_NAME: &'static str = "orca";
 
+    /// Extended PATH that includes common binary locations.
+    /// macOS app bundles have a minimal PATH that misses /opt/homebrew/bin.
+    fn extended_path() -> String {
+        let current = std::env::var("PATH").unwrap_or_default();
+        format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/sbin:{current}")
+    }
+
     fn kubeconfig_path(&self) -> PathBuf {
         if let Some(path) = &self.kubeconfig_override {
             return path.clone();
@@ -186,6 +193,7 @@ impl K3sManager {
         // Use kubectl config commands to add our context
         // Set cluster
         let mut cmd = std::process::Command::new("kubectl");
+        cmd.env("PATH", Self::extended_path());
         cmd.args(["config", "set-cluster", "orca", &format!("--server={server}")]);
         if let Some(ca) = &ca_data {
             // Write CA to a temp approach: embed directly
@@ -198,6 +206,7 @@ impl K3sManager {
         // Set certificate-authority-data directly via config set
         if let Some(ca) = &ca_data {
             let _ = std::process::Command::new("kubectl")
+                .env("PATH", Self::extended_path())
                 .args(["config", "set", "clusters.orca.certificate-authority-data", ca])
                 .output();
         }
@@ -205,17 +214,20 @@ impl K3sManager {
         // Set user credentials
         if let Some(cert) = &client_cert {
             let _ = std::process::Command::new("kubectl")
+                .env("PATH", Self::extended_path())
                 .args(["config", "set", "users.orca.client-certificate-data", cert])
                 .output();
         }
         if let Some(key) = &client_key {
             let _ = std::process::Command::new("kubectl")
+                .env("PATH", Self::extended_path())
                 .args(["config", "set", "users.orca.client-key-data", key])
                 .output();
         }
 
         // Set context
         let _ = std::process::Command::new("kubectl")
+            .env("PATH", Self::extended_path())
             .args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"])
             .output();
 
@@ -638,6 +650,7 @@ impl K3sManager {
 
                                         // Extract certs from the k3s config and set them on our "orca" context
                                         let _ = std::process::Command::new("kubectl")
+                                            .env("PATH", Self::extended_path())
                                             .args(["--kubeconfig", &tmp_path, "config", "view", "--raw", "-o", "json"])
                                             .output()
                                             .and_then(|o| {
@@ -648,11 +661,11 @@ impl K3sManager {
                                                         let cert = v["users"][0]["user"]["client-certificate-data"].as_str().unwrap_or("");
                                                         let key = v["users"][0]["user"]["client-key-data"].as_str().unwrap_or("");
 
-                                                        let _ = std::process::Command::new("kubectl").args(["config", "set-cluster", "orca", &format!("--server={server}")]).output();
-                                                        let _ = std::process::Command::new("kubectl").args(["config", "set", "clusters.orca.certificate-authority-data", ca]).output();
-                                                        let _ = std::process::Command::new("kubectl").args(["config", "set", "users.orca.client-certificate-data", cert]).output();
-                                                        let _ = std::process::Command::new("kubectl").args(["config", "set", "users.orca.client-key-data", key]).output();
-                                                        let _ = std::process::Command::new("kubectl").args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"]).output();
+                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set-cluster", "orca", &format!("--server={server}")]).output();
+                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set", "clusters.orca.certificate-authority-data", ca]).output();
+                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set", "users.orca.client-certificate-data", cert]).output();
+                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set", "users.orca.client-key-data", key]).output();
+                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"]).output();
                                                     }
                                                 }
                                                 Ok(o)
@@ -661,6 +674,7 @@ impl K3sManager {
 
                                         // Verify the context was created
                                         let verify = std::process::Command::new("kubectl")
+                                            .env("PATH", Self::extended_path())
                                             .args(["--context", "orca", "cluster-info"])
                                             .output();
                                         match verify {
@@ -830,6 +844,7 @@ impl K3sManager {
 
                     // Flatten merged config and rename default context to "orca"
                     let _ = std::process::Command::new("kubectl")
+                        .env("PATH", Self::extended_path())
                         .env("KUBECONFIG", &merge_env)
                         .args(["config", "view", "--flatten"])
                         .output()
@@ -842,6 +857,7 @@ impl K3sManager {
 
                     // Rename the k3s default context/cluster/user to "orca"
                     let _ = std::process::Command::new("kubectl")
+                        .env("PATH", Self::extended_path())
                         .args(["config", "rename-context", "default", "orca"])
                         .output();
 
@@ -1222,11 +1238,13 @@ impl K8sManager for K3sManager {
             tmp_file.display().to_string()
         };
         let _ = std::process::Command::new("kubectl")
+            .env("PATH", Self::extended_path())
             .env("KUBECONFIG", &merge_env)
             .args(["config", "view", "--flatten"])
             .output()
             .and_then(|o| { if o.status.success() { std::fs::write(&dest_file, &o.stdout)?; } Ok(o) });
         let _ = std::process::Command::new("kubectl")
+            .env("PATH", Self::extended_path())
             .args(["config", "rename-context", "default", "orca"])
             .output();
         let _ = tokio::fs::remove_file(&tmp_file).await;

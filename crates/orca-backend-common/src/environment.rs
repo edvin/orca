@@ -426,17 +426,28 @@ pub async fn run_fix_streaming(
             // Check if a Lima VM already exists
             let existing_vms = run_cmd("limactl", &["list", "--format", "{{.Name}}"]).await
                 .unwrap_or_default();
-            let has_docker_vm = existing_vms.lines().any(|l| l.trim() == "docker" || l.trim() == "default");
-
-            if has_docker_vm {
-                send("    Lima VM already exists.\n".into()).await;
+            let has_orca_vm = existing_vms.lines().any(|l| {
+                let name = l.trim();
+                name == "orca" || name == "docker" || name == "default"
+            });
+            // Determine the VM name — prefer "orca", fall back to existing
+            let vm_name = if existing_vms.lines().any(|l| l.trim() == "orca") {
+                "orca"
+            } else if existing_vms.lines().any(|l| l.trim() == "docker") {
+                "docker" // Legacy name from earlier versions
             } else {
-                send("    Creating 'docker' VM with Apple Virtualization...\n".into()).await;
+                "orca"
+            };
+
+            if has_orca_vm {
+                send(format!("    Lima VM '{}' already exists.\n", vm_name).into()).await;
+            } else {
+                send("    Creating 'orca' VM with Apple Virtualization...\n".into()).await;
                 send("    This downloads a lightweight Linux image (~150MB)\n\n".into()).await;
 
                 // Use Lima's built-in docker template with Apple VZ
                 let create_result = run_cmd_streaming(
-                    "limactl", &["create", "--name=docker", "--vm-type=vz",
+                    "limactl", &["create", "--name=orca", "--vm-type=vz",
                         "--rosetta", "--mount-writable",
                         "--mount-type=virtiofs",
                         "template://docker"],
@@ -452,13 +463,6 @@ pub async fn run_fix_streaming(
 
             // Step 4: Start the VM
             send(">>> Step 4/5: Starting Lima VM...\n".into()).await;
-            let vm_name = if existing_vms.lines().any(|l| l.trim() == "docker") {
-                "docker"
-            } else if has_docker_vm {
-                "default"
-            } else {
-                "docker"
-            };
 
             let start_result = run_cmd_streaming(
                 "limactl", &["start", vm_name],
@@ -1459,16 +1463,19 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
 
             // Create/start Lima VM
             let vms = run_cmd("limactl", &["list", "--format", "{{.Name}}"]).await.unwrap_or_default();
-            if !vms.lines().any(|l| l.trim() == "docker" || l.trim() == "default") {
-                output.push_str("Creating Lima VM...\n");
-                match run_cmd("limactl", &["create", "--name=docker", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs", "template://docker"]).await {
+            let vm_name = if vms.lines().any(|l| l.trim() == "orca") { "orca" }
+                else if vms.lines().any(|l| l.trim() == "docker") { "docker" }
+                else { "orca" };
+            if !vms.lines().any(|l| l.trim() == "orca" || l.trim() == "docker" || l.trim() == "default") {
+                output.push_str("Creating Lima VM 'orca'...\n");
+                match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs", "template://docker"]).await {
                     Ok(_) => output.push_str("VM created.\n"),
                     Err(e) => output.push_str(&format!("VM creation failed: {e}\n")),
                 }
             }
 
-            output.push_str("Starting Lima VM...\n");
-            let _ = run_cmd("limactl", &["start", "docker"]).await;
+            output.push_str(&format!("Starting Lima VM '{vm_name}'...\n"));
+            let _ = run_cmd("limactl", &["start", vm_name]).await;
 
             // Verify
             match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
