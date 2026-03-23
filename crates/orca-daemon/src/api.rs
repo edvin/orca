@@ -1259,12 +1259,7 @@ async fn volume_list_files(
         }
     }
 
-    // If we got output but no parsed entries, include raw output for debugging
-    if entries.is_empty() && !lines.is_empty() {
-        let raw = lines.join("\n");
-        return Err(anyhow::anyhow!("Could not parse directory listing.\nExit code: {exit_code:?}\nRaw output:\n{raw}").into());
-    }
-
+    // Empty entries is valid — directory might just be empty (only . and ..)
     Ok(Json(serde_json::json!({ "entries": entries, "path": sanitized })))
 }
 
@@ -1836,6 +1831,7 @@ async fn scan_image(
                 let pull_opts = CreateImageOptions {
                     from_image: "aquasec/trivy",
                     tag: "latest",
+                    platform: "linux/amd64", // Trivy works best on amd64, even on Apple Silicon via emulation
                     ..Default::default()
                 };
                 let mut pull_stream = docker.create_image(Some(pull_opts), None, None);

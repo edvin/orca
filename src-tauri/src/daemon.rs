@@ -37,8 +37,9 @@ impl DaemonManager {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
                 None => {
-                    tracing::info!("Orca daemon already running (version unknown)");
-                    return Ok(());
+                    tracing::info!("Orca daemon already running (version unknown) — restarting to ensure correct version");
+                    self.stop();
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             }
         }
@@ -118,7 +119,7 @@ impl DaemonManager {
     /// Get the version of the running daemon, if available.
     async fn daemon_version(&self) -> Option<String> {
         let resp = reqwest::Client::new()
-            .get("http://127.0.0.1:9477/api/v1/health")
+            .get("http://127.0.0.1:9477/health")
             .timeout(std::time::Duration::from_secs(2))
             .send()
             .await
@@ -129,7 +130,7 @@ impl DaemonManager {
 
     async fn health_check(&self) -> bool {
         reqwest::Client::new()
-            .get("http://127.0.0.1:9477/api/v1/health")
+            .get("http://127.0.0.1:9477/health")
             .timeout(std::time::Duration::from_secs(2))
             .send()
             .await

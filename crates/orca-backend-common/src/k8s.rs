@@ -245,7 +245,10 @@ impl K3sManager {
         let kubeconfig_path = self.kubeconfig_path();
         tracing::info!("K8s get_client: loading kubeconfig from {}", kubeconfig_path.display());
         if !kubeconfig_path.exists() {
-            anyhow::bail!("Kubernetes not enabled — kubeconfig not found at {}", kubeconfig_path.display());
+            anyhow::bail!("Kubernetes not enabled — no kubeconfig found");
+        }
+        if !self.has_orca_context() {
+            anyhow::bail!("Kubernetes not enabled — no 'orca' context in kubeconfig. Enable Kubernetes from the Orca UI.");
         }
 
         let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path)
