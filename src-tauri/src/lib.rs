@@ -150,6 +150,7 @@ pub fn run() {
             commands::save_wsl_config,
             commands::read_file,
             commands::save_compose_file,
+            commands::check_ports,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

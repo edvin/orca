@@ -2068,3 +2068,16 @@ pub async fn save_compose_file(path: String, content: String) -> Result<(), Stri
         .await
         .map_err(|e| format!("Failed to save compose file: {e}"))
 }
+
+#[tauri::command]
+pub async fn check_ports(ports: Vec<u16>) -> Result<serde_json::Value, String> {
+    let mut conflicts = Vec::new();
+    for port in &ports {
+        // Try to bind — if it fails, the port is in use
+        match std::net::TcpListener::bind(("127.0.0.1", *port)) {
+            Ok(_) => {} // Port is available (listener drops immediately)
+            Err(_) => conflicts.push(*port),
+        }
+    }
+    Ok(serde_json::json!({ "conflicts": conflicts }))
+}

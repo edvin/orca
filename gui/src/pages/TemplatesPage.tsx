@@ -262,6 +262,19 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       const env = deployEnv().filter((e) => e.key).map((e) => `${e.key}=${e.value}`);
       const volumes = deployVolumes().filter((v) => v.source || v.target).map((v) => `${v.source}:${v.target}`);
 
+      // Pre-check: verify host ports are available
+      const hostPorts = deployPorts().filter((p) => p.host).map((p) => parseInt(p.host)).filter((p) => !isNaN(p));
+      if (hostPorts.length > 0) {
+        try {
+          const result = await invoke("check_ports", { ports: hostPorts }) as { conflicts: number[] };
+          if (result.conflicts && result.conflicts.length > 0) {
+            showToast(`Port${result.conflicts.length > 1 ? "s" : ""} ${result.conflicts.join(", ")} already in use. Change the port mappings and try again.`, "error");
+            setDeploying(false);
+            return;
+          }
+        } catch { /* port check failed, proceed anyway */ }
+      }
+
       // Step 1: Pull image with progress
       setDeployStatus(`Pulling ${template.image}...`);
       try {
@@ -295,9 +308,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       }
     } catch (e: any) {
       const err = String(e);
-      const isConflict = err.includes("is already in use") || err.includes("Conflict");
-      const displayMsg = isConflict
+      const isNameConflict = err.includes("is already in use") || err.includes("Conflict");
+      const isPortConflict = err.includes("port is already allocated") || err.includes("address already in use") || err.includes("Bind for");
+      const displayMsg = isNameConflict
         ? `A container named "${deployName() || template.id}" already exists. Remove or rename it first.`
+        : isPortConflict
+        ? `Port conflict — one of the ports is already in use. Edit the port mappings above and try again.`
         : err;
       logError(`Deploy failed: ${displayMsg}`, `Template "${template.name}" (${template.image})`);
       showToast(displayMsg, "error");
