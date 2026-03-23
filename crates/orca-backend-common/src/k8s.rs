@@ -127,52 +127,27 @@ impl K3sManager {
             return PathBuf::from(path);
         }
 
-        // Check all candidate paths in order of preference:
-        // 1. Our dedicated orca-k3s-config (written by the enable flow)
-        // 2. Standard ~/.kube/config (only if it has our "orca" context)
-        // 3. k3s default config
-        let mut candidates = Vec::new();
+        // Standard kubeconfig path — we merge our "orca" context into it
+        // on all platforms. We only connect if it has our context.
 
         // Windows
         if let Ok(profile) = std::env::var("USERPROFILE") {
-            let base = PathBuf::from(profile).join(".kube");
-            candidates.push(base.join("orca-k3s-config"));
-            candidates.push(base.join("config"));
+            let p = PathBuf::from(profile).join(".kube").join("config");
+            if p.exists() { return p; }
         }
         // Unix
         if let Some(home) = dirs::home_dir() {
-            let base = home.join(".kube");
-            candidates.push(base.join("orca-k3s-config"));
-            candidates.push(base.join("config"));
+            let p = home.join(".kube").join("config");
+            if p.exists() { return p; }
         }
-        // Linux native k3s
-        candidates.push(PathBuf::from("/etc/rancher/k3s/k3s.yaml"));
-
-        for path in &candidates {
-            if !path.exists() { continue; }
-            // For orca-k3s-config and k3s.yaml — always use (it's ours)
-            let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
-            if filename == "orca-k3s-config" || filename == "k3s.yaml" {
-                return path.clone();
-            }
-            // For standard config — only use if it has our "orca" context
-            if filename == "config" {
-                if let Ok(contents) = std::fs::read_to_string(path) {
-                    if contents.contains("name: orca") {
-                        return path.clone();
-                    }
-                }
-                // Has config but no orca context — skip (don't use user's remote clusters)
-            }
+        // Linux native k3s (direct install, not merged yet)
+        if PathBuf::from("/etc/rancher/k3s/k3s.yaml").exists() {
+            return PathBuf::from("/etc/rancher/k3s/k3s.yaml");
         }
-
-        // Fallback — our preferred path (won't exist = K8s not enabled)
-        if let Ok(profile) = std::env::var("USERPROFILE") {
-            return PathBuf::from(profile).join(".kube").join("orca-k3s-config");
-        }
+        // Fallback — standard path (won't exist = K8s not enabled)
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("/root"))
-            .join(".kube").join("orca-k3s-config")
+            .join(".kube").join("config")
     }
 
     /// Merge k3s kubeconfig into ~/.kube/config as the "orca" context.
@@ -253,13 +228,13 @@ impl K3sManager {
         let path = self.kubeconfig_path();
         if !path.exists() { return false; }
         let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
-        // orca-k3s-config and k3s.yaml are always ours
-        if filename == "orca-k3s-config" || filename == "k3s.yaml" {
+        // k3s.yaml is always ours (direct install, not yet merged)
+        if filename == "k3s.yaml" {
             return true;
         }
-        // For standard config, check for our context name
+        // Check for our "orca" context in the kubeconfig
         if let Ok(contents) = std::fs::read_to_string(&path) {
-            return contents.contains(&format!("name: {}", Self::CONTEXT_NAME));
+            return contents.contains("name: orca");
         }
         false
     }
@@ -282,13 +257,13 @@ impl K3sManager {
         let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path)
             .map_err(|e| { tracing::warn!("K8s: failed to parse kubeconfig: {e}"); e })?;
 
-        // Use our "orca" context from standard config, or default context from our own files
+        // Use our "orca" context, or default for k3s.yaml (direct install)
         let filename = kubeconfig_path.file_name().and_then(|f| f.to_str()).unwrap_or("");
-        let kube_opts = if filename == "orca-k3s-config" || filename == "k3s.yaml" {
-            // Our dedicated config files — use their default context
+        let kube_opts = if filename == "k3s.yaml" {
+            // Direct k3s install — uses "default" context
             kube::config::KubeConfigOptions::default()
         } else {
-            // Standard ~/.kube/config — use our "orca" context specifically
+            // Standard ~/.kube/config — use our "orca" context
             kube::config::KubeConfigOptions {
                 context: Some(Self::CONTEXT_NAME.to_string()),
                 ..Default::default()
@@ -649,19 +624,26 @@ impl K3sManager {
                                         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
                                         let kube_dir = format!("{home}/.kube");
                                         let _ = std::fs::create_dir_all(&kube_dir);
-                                        let default_path = format!("{kube_dir}/config");
-                                        let kube_path = if std::path::Path::new(&default_path).exists() {
-                                            let alt = format!("{kube_dir}/orca-k3s-config");
-                                            send(format!("Existing kubeconfig found, writing to {alt}")).await;
-                                            alt
-                                        } else {
-                                            default_path
-                                        };
-                                        // Replace localhost with the Lima VM IP
+                                        // Write temp file, then merge as "orca" context
+                                        let tmp_path = format!("{kube_dir}/.orca-k3s-temp");
                                         let fixed = kubeconfig.replace("127.0.0.1", "localhost");
-                                        std::fs::write(&kube_path, &fixed)
-                                            .map_err(|e| anyhow::anyhow!("Failed to write kubeconfig: {e}"))?;
-                                        send(format!("Kubeconfig written to {kube_path}")).await;
+                                        std::fs::write(&tmp_path, &fixed)
+                                            .map_err(|e| anyhow::anyhow!("Failed to write temp kubeconfig: {e}"))?;
+                                        let config_path = format!("{kube_dir}/config");
+                                        let merge_env = if std::path::Path::new(&config_path).exists() {
+                                            format!("{tmp_path}:{config_path}")
+                                        } else {
+                                            tmp_path.clone()
+                                        };
+                                        let _ = std::process::Command::new("kubectl")
+                                            .env("KUBECONFIG", &merge_env)
+                                            .args(["config", "view", "--flatten"])
+                                            .output()
+                                            .and_then(|o| { if o.status.success() { std::fs::write(&config_path, &o.stdout)?; } Ok(o) });
+                                        let _ = std::process::Command::new("kubectl").args(["config", "rename-context", "default", "orca"]).output();
+                                        let _ = std::fs::remove_file(&tmp_path);
+                                        send("Added 'orca' context to ~/.kube/config".into()).await;
+                                        send("Use: kubectl --context orca get pods".into()).await;
                                     }
                                     Err(e) => {
                                         send(format!("Warning: could not copy kubeconfig: {e}")).await;
@@ -800,17 +782,42 @@ impl K3sManager {
                     let home = std::env::var("USERPROFILE").unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| "C:\\Users\\Default".into()));
                     let kube_dir = format!("{home}\\.kube");
                     let _ = std::fs::create_dir_all(&kube_dir);
-                    let default_path = format!("{kube_dir}\\config");
-                    let kube_path = if std::path::Path::new(&default_path).exists() {
-                        let alt = format!("{kube_dir}\\orca-k3s-config");
-                        send(format!("    Existing kubeconfig found, writing to {alt}")).await;
-                        alt
+
+                    // Write k3s config as temp file, then merge as "orca" context
+                    let tmp_path = format!("{kube_dir}\\orca-k3s-temp");
+                    std::fs::write(&tmp_path, &kubeconfig)
+                        .map_err(|e| anyhow::anyhow!("Failed to write temp kubeconfig: {e}"))?;
+
+                    // Merge into ~/.kube/config using KUBECONFIG env trick
+                    let config_path = format!("{kube_dir}\\config");
+                    let merge_env = if std::path::Path::new(&config_path).exists() {
+                        format!("{tmp_path};{config_path}")
                     } else {
-                        default_path
+                        tmp_path.clone()
                     };
-                    std::fs::write(&kube_path, &kubeconfig)
-                        .map_err(|e| anyhow::anyhow!("Failed to write kubeconfig: {e}"))?;
-                    send(format!("    Kubeconfig written to {kube_path}")).await;
+
+                    // Flatten merged config and rename default context to "orca"
+                    let _ = std::process::Command::new("kubectl")
+                        .env("KUBECONFIG", &merge_env)
+                        .args(["config", "view", "--flatten"])
+                        .output()
+                        .and_then(|o| {
+                            if o.status.success() {
+                                std::fs::write(&config_path, &o.stdout)?;
+                            }
+                            Ok(o)
+                        });
+
+                    // Rename the k3s default context/cluster/user to "orca"
+                    let _ = std::process::Command::new("kubectl")
+                        .args(["config", "rename-context", "default", "orca"])
+                        .output();
+
+                    // Clean up temp file
+                    let _ = std::fs::remove_file(&tmp_path);
+
+                    send(format!("    Added 'orca' context to {config_path}")).await;
+                    send("    Use: kubectl --context orca get pods".into()).await;
                 }
                 _ => {
                     send("    Warning: could not copy kubeconfig yet (cluster may still be starting)".into()).await;
@@ -1173,21 +1180,25 @@ impl K8sManager for K3sManager {
 
         let dest_file = dest.join("config");
 
-        // If no existing kubeconfig, just write ours
-        if !dest_file.exists() {
-            tokio::fs::write(&dest_file, &kubeconfig).await?;
-            tracing::info!("Wrote kubeconfig to {}", dest_file.display());
+        // Merge into ~/.kube/config as "orca" context
+        let tmp_file = dest.join(".orca-k3s-temp");
+        tokio::fs::write(&tmp_file, &kubeconfig).await?;
+        let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+        let merge_env = if dest_file.exists() {
+            format!("{}{sep}{}", tmp_file.display(), dest_file.display())
         } else {
-            // Write as a separate file and let the user merge
-            let orca_config = dest.join("orca-k3s-config");
-            tokio::fs::write(&orca_config, &kubeconfig).await?;
-            tracing::info!(
-                "Wrote k3s kubeconfig to {}. Set KUBECONFIG={}:{} to use both.",
-                orca_config.display(),
-                dest_file.display(),
-                orca_config.display()
-            );
-        }
+            tmp_file.display().to_string()
+        };
+        let _ = std::process::Command::new("kubectl")
+            .env("KUBECONFIG", &merge_env)
+            .args(["config", "view", "--flatten"])
+            .output()
+            .and_then(|o| { if o.status.success() { std::fs::write(&dest_file, &o.stdout)?; } Ok(o) });
+        let _ = std::process::Command::new("kubectl")
+            .args(["config", "rename-context", "default", "orca"])
+            .output();
+        let _ = tokio::fs::remove_file(&tmp_file).await;
+        tracing::info!("Merged k3s kubeconfig as 'orca' context in {}", dest_file.display());
 
         Ok(dest_file)
     }
