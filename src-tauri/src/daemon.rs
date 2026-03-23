@@ -121,6 +121,7 @@ impl DaemonManager {
         // Also kill by process name (catches daemons from previous app installs)
         #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
             let _ = std::process::Command::new("taskkill")
                 .args(["/f", "/im", "orca-daemon.exe"])
                 .creation_flags(0x08000000) // CREATE_NO_WINDOW
