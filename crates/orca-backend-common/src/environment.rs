@@ -941,18 +941,14 @@ pub async fn check_environment() -> EnvironmentStatus {
                     details: Some(format!("Server version: {version}")),
                 });
             } else {
-                // Docker not running — offer to set up via Lima
+                // Docker not running — single action to set up everything
                 checks.push(HealthCheck {
                     name: "Docker Runtime".to_string(),
-                    description: "Docker is not running. Click Fix to set up a lightweight Linux VM.".to_string(),
+                    description: "Docker is not running. Click Fix to install and configure automatically.".to_string(),
                     status: CheckStatus::Fail,
                     fix_action: Some("setup_docker_macos".to_string()),
-                    details: Some("Sets up Docker via Lima with Apple Virtualization — fast, lightweight, no Docker Desktop needed".to_string()),
+                    details: Some("Installs Homebrew, Lima, and Docker in a lightweight Linux VM using Apple Virtualization".to_string()),
                 });
-
-                checks.push(check_brew_installed().await);
-                let lima = check_lima_installed().await;
-                checks.push(lima);
             }
         }
         "windows" => {
