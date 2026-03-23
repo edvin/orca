@@ -800,8 +800,13 @@ async fn image_history(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
+    tracing::debug!("image_history: id={id}");
     let history = state.runtime.docker.image_history(&id).await
-        .map_err(|e| anyhow::anyhow!("Failed to get image history: {e}"))?;
+        .map_err(|e| {
+            tracing::error!("image_history failed for {id}: {e}");
+            anyhow::anyhow!("Failed to get image history: {e}")
+        })?;
+    tracing::debug!("image_history: got {} layers for {id}", history.len());
     Ok(Json(history))
 }
 
@@ -1425,9 +1430,10 @@ async fn run_in_image(
 
     // Use /bin/sh -c to run the command, bypassing the image's entrypoint
     let shell_cmd = cmd.iter().map(|s| shell_escape(s)).collect::<Vec<_>>().join(" ");
+    tracing::debug!("run_in_image: image={image}, cmd={shell_cmd}");
     let config = Config {
         image: Some(image.to_string()),
-        entrypoint: Some(vec!["/bin/sh".to_string(), "-c".to_string(), shell_cmd]),
+        entrypoint: Some(vec!["/bin/sh".to_string(), "-c".to_string(), shell_cmd.clone()]),
         cmd: Some(vec![]),
         ..Default::default()
     };
@@ -1435,12 +1441,18 @@ async fn run_in_image(
     let container = docker
         .create_container(None::<CreateContainerOptions<String>>, config)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to create container: {e}"))?;
+        .map_err(|e| {
+            tracing::error!("run_in_image: failed to create container for {image}: {e}");
+            anyhow::anyhow!("Failed to create container: {e}")
+        })?;
 
     let id = &container.id;
 
     docker.start_container::<String>(id, None).await
-        .map_err(|e| anyhow::anyhow!("Failed to start container: {e}"))?;
+        .map_err(|e| {
+            tracing::error!("run_in_image: failed to start container {id}: {e}");
+            anyhow::anyhow!("Failed to start container: {e}")
+        })?;
 
     // Wait for the container to finish (max 10 seconds)
     let wait_opts = WaitContainerOptions { condition: "not-running" };
@@ -1744,8 +1756,24 @@ async fn scan_image(
     use bollard::models::{HostConfig, Mount, MountTypeEnum};
     use futures::StreamExt;
 
+    tracing::info!("scan_image: starting scan for {image_id}");
     let image_ref = resolve_image_ref(&state, &image_id).await?;
     let docker = &state.runtime.docker;
+
+    // Find the Docker socket path — varies by platform
+    let socket_path = if std::path::Path::new("/var/run/docker.sock").exists() {
+        "/var/run/docker.sock".to_string()
+    } else if let Ok(home) = std::env::var("HOME") {
+        let dd_sock = std::path::PathBuf::from(&home).join(".docker/run/docker.sock");
+        if dd_sock.exists() {
+            dd_sock.to_string_lossy().to_string()
+        } else {
+            "/var/run/docker.sock".to_string()
+        }
+    } else {
+        "/var/run/docker.sock".to_string()
+    };
+    tracing::debug!("scan_image: using docker socket at {socket_path}");
 
     // Run Trivy as a container with access to the Docker socket
     let config = Config {
@@ -1760,7 +1788,7 @@ async fn scan_image(
         host_config: Some(HostConfig {
             mounts: Some(vec![Mount {
                 target: Some("/var/run/docker.sock".to_string()),
-                source: Some("/var/run/docker.sock".to_string()),
+                source: Some(socket_path),
                 typ: Some(MountTypeEnum::BIND),
                 read_only: Some(true),
                 ..Default::default()
@@ -1780,19 +1808,34 @@ async fn scan_image(
             if err_str.contains("404") || err_str.contains("No such image") {
                 // Auto-pull the Trivy image
                 use bollard::image::CreateImageOptions;
+                tracing::info!("scan_image: pulling aquasec/trivy:latest...");
                 let pull_opts = CreateImageOptions {
                     from_image: "aquasec/trivy",
                     tag: "latest",
                     ..Default::default()
                 };
                 let mut pull_stream = docker.create_image(Some(pull_opts), None, None);
-                while let Some(_) = pull_stream.next().await {}
+                while let Some(result) = pull_stream.next().await {
+                    match result {
+                        Ok(info) => {
+                            if let Some(status) = &info.status {
+                                tracing::debug!("scan_image pull: {status}");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("scan_image: pull error: {e}");
+                            return Err(anyhow::anyhow!("Failed to pull Trivy image: {e}").into());
+                        }
+                    }
+                }
+                tracing::info!("scan_image: pull complete, retrying container creation");
 
                 // Retry container creation
                 docker
                     .create_container(None::<CreateContainerOptions<String>>, config)
                     .await
                     .map_err(|e2| {
+                        tracing::error!("scan_image: still can't create container after pull: {e2}");
                         anyhow::anyhow!(
                             "Failed to create Trivy container after pulling image: {e2}"
                         )
@@ -1808,7 +1851,10 @@ async fn scan_image(
     let id = &container.id;
 
     docker.start_container::<String>(id, None).await
-        .map_err(|e| anyhow::anyhow!("Failed to start Trivy container: {e}"))?;
+        .map_err(|e| {
+            tracing::error!("scan_image: failed to start Trivy container: {e}");
+            anyhow::anyhow!("Failed to start Trivy container: {e}")
+        })?;
 
     // Trivy scans can take a while — wait up to 5 minutes
     let wait_opts = WaitContainerOptions { condition: "not-running" };

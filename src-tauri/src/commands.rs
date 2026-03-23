@@ -674,7 +674,7 @@ pub async fn inspect_image(id: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn image_history(id: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/images/{id}/history")).await
+    get_json(&format!("/images/{}/history", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
