@@ -231,6 +231,39 @@ export interface HelmRelease {
   app_version: string;
 }
 
+// --- K8s DaemonSets / StatefulSets / ReplicaSets ---
+
+export interface K8sDaemonSet {
+  name: string;
+  namespace: string;
+  desired: number;
+  current: number;
+  ready: number;
+  node_selector?: string;
+  images: string[];
+  created_at: string;
+}
+
+export interface K8sStatefulSet {
+  name: string;
+  namespace: string;
+  ready: string;  // "2/3" format
+  replicas: number;
+  images: string[];
+  created_at: string;
+}
+
+export interface K8sReplicaSet {
+  name: string;
+  namespace: string;
+  desired: number;
+  current: number;
+  ready: number;
+  images: string[];
+  owner?: string;
+  created_at: string;
+}
+
 // --- K8s Jobs / CronJobs ---
 
 export interface K8sJob {
@@ -250,6 +283,46 @@ export interface K8sCronJob {
   suspend: boolean;
   active: number;
   last_schedule?: string;
+  created_at: string;
+}
+
+// --- K8s HPAs, Network Policies, Storage Classes, CRDs ---
+
+export interface HorizontalPodAutoscaler {
+  name: string;
+  namespace: string;
+  reference: string;      // "Deployment/nginx"
+  min_replicas: number;
+  max_replicas: number;
+  current_replicas: number;
+  target_cpu?: string;    // "50%"
+  current_cpu?: string;   // "30%"
+  created_at: string;
+}
+
+export interface NetworkPolicy {
+  name: string;
+  namespace: string;
+  pod_selector: string;
+  policy_types: string[];  // ["Ingress", "Egress"]
+  created_at: string;
+}
+
+export interface StorageClass {
+  name: string;
+  provisioner: string;
+  reclaim_policy: string;
+  volume_binding_mode: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface CustomResourceDefinition {
+  name: string;
+  group: string;
+  kind: string;
+  scope: string;  // "Namespaced" or "Cluster"
+  versions: string[];
   created_at: string;
 }
 

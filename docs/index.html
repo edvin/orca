@@ -881,7 +881,7 @@
         <div class="hero-stat-label">Platforms</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-value">15+</div>
+        <div class="hero-stat-value">20+</div>
         <div class="hero-stat-label">K8s Resource Types</div>
       </div>
       <div class="hero-stat">
@@ -931,7 +931,7 @@
 
       <!-- Legend + Table header -->
       <div style="padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; color: #484f58; display: flex; justify-content: space-between; align-items: center;">
-        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features &mdash; v0.6.1</span>
+        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features &mdash; v0.7.0</span>
         <span style="display: flex; align-items: center; gap: 16px;">
           <span class="ft-toggle-all" onclick="toggleAllCategories(false)" id="ft-toggle-link">Collapse All</span>
           <span><span class="ft-unique" style="display: inline;">&#10003;</span> = unique to Orca Desktop</span>
@@ -980,19 +980,26 @@
 
       <!-- Category: Orchestration -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Orchestration</span><span class="ft-count">19</span></span>
+        <span class="ft-category-left"><span>Orchestration</span><span class="ft-count">27</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
       <div class="ft-row"><span><strong>Compose stacks</strong> — auto-detect, up/down/pull, inline YAML editing with restart</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>One-click Kubernetes (k3s) with Traefik ingress</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Pods</strong> — CPU/memory metrics, logs with follow mode, in-browser terminal</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Deployments</strong> — scale dialog, restart, rollback history</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Services</strong> — per-port forwarding with configurable local port</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Deployments</strong> — scale dialog, restart, rollback history, HPA autoscaling</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>DaemonSets</strong> — node-level workload management</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>StatefulSets</strong> — scale, restart, ordered pod management</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>ReplicaSets</strong> — owner tracking, replica status</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Services</strong> — per-port forwarding, network policies</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Events timeline</strong> — color-coded warnings and errors</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>ConfigMaps &amp; Secrets</strong> — full CRUD, reveal toggle, type selection (Opaque, TLS, Docker)</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Create Ingress</strong> — service/port dropdowns, hostname, TLS toggle</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>PVC provisioning</strong> — storage class, size, access modes</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Storage Classes</strong> — provisioner, reclaim policy, default class indicator</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>HPA autoscaling</strong> — create, monitor, target CPU with min/max replicas</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Network Policies</strong> — pod selector, ingress/egress rules</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>CRD browser</strong> — list all Custom Resource Definitions with group, kind, scope</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Traefik dashboard</strong> — auto-detection with one-click access</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Deploy from YAML</strong> — Monaco editor with syntax highlighting</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Helm management</strong> — list releases, install charts, uninstall</span><span class="ft-check">&#10003;</span></div>
@@ -1254,7 +1261,7 @@ document.addEventListener('DOMContentLoaded', initGallery);
   <h2>Ready to try it?</h2>
   <p>Free, open source, and works with your existing Docker and Kubernetes setup.</p>
   <div class="hero-buttons" style="justify-content: center;">
-    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop v0.6.1</a>
+    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop v0.7.0</a>
     <a href="https://github.com/edvin/orca" class="btn btn-secondary">Star on GitHub</a>
   </div>
 </section>

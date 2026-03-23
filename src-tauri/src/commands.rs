@@ -1046,6 +1046,7 @@ const ALLOWED_K8S_KINDS: &[&str] = &[
     "endpoint", "endpoints", "ep",
     "event", "events", "ev",
     "storageclass", "storageclasses", "sc",
+    "customresourcedefinition", "customresourcedefinitions", "crd", "crds",
 ];
 
 fn validate_k8s_kind(kind: &str) -> Result<(), String> {
@@ -1237,6 +1238,139 @@ pub async fn k8s_rollout_undo(
         .json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))
+}
+
+// --- K8s DaemonSets / StatefulSets / ReplicaSets ---
+
+#[tauri::command]
+pub async fn k8s_daemonsets(namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/daemonsets/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_statefulsets(namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/statefulsets/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_replicasets(namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/replicasets/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_scale_statefulset(
+    namespace: String,
+    name: String,
+    replicas: u32,
+) -> Result<(), String> {
+    let resp = client()
+        .post(format!("{DAEMON_URL}/k8s/statefulsets/{namespace}/{name}/scale"))
+        .json(&serde_json::json!({ "replicas": replicas }))
+        .send()
+        .await
+        .map_err(|e| format!("Scale failed: {e}"))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}
+
+#[tauri::command]
+pub async fn k8s_restart_statefulset(namespace: String, name: String) -> Result<(), String> {
+    post_empty(&format!("/k8s/statefulsets/{namespace}/{name}/restart")).await
+}
+
+#[tauri::command]
+pub async fn k8s_delete_daemonset(namespace: String, name: String) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/daemonsets/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_delete_statefulset(namespace: String, name: String) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/statefulsets/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_delete_replicaset(namespace: String, name: String) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/replicasets/{namespace}/{name}")).await
+}
+
+// --- K8s HPAs, Network Policies, Storage Classes, CRDs ---
+
+#[tauri::command]
+pub async fn k8s_hpas(namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/hpas/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_create_hpa(
+    namespace: String,
+    name: String,
+    deployment: String,
+    min: i32,
+    max: i32,
+    cpu_target: i32,
+) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    validate_k8s_name(&deployment)?;
+    client()
+        .post(format!("{DAEMON_URL}/k8s/hpas/{namespace}"))
+        .json(&serde_json::json!({
+            "name": name,
+            "deployment": deployment,
+            "min": min,
+            "max": max,
+            "cpu_target": cpu_target,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Create HPA failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn k8s_delete_hpa(namespace: String, name: String) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/hpas/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_network_policies(namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/network-policies/{namespace}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_delete_network_policy(namespace: String, name: String) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/network-policies/{namespace}/{name}")).await
+}
+
+#[tauri::command]
+pub async fn k8s_storage_classes() -> Result<serde_json::Value, String> {
+    get_json("/k8s/storage-classes").await
+}
+
+#[tauri::command]
+pub async fn k8s_crds() -> Result<serde_json::Value, String> {
+    get_json("/k8s/crds").await
 }
 
 // --- K8s Jobs / CronJobs ---

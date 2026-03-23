@@ -27,9 +27,16 @@ import type {
   HelmRelease,
   K8sJob,
   K8sCronJob,
+  K8sDaemonSet,
+  K8sStatefulSet,
+  K8sReplicaSet,
+  HorizontalPodAutoscaler,
+  NetworkPolicy,
+  StorageClass,
+  CustomResourceDefinition,
 } from "../lib/types";
 
-type Tab = "pods" | "deployments" | "services" | "ingresses" | "storage" | "events" | "config" | "helm" | "jobs" | "topology";
+type Tab = "pods" | "deployments" | "daemonsets" | "statefulsets" | "replicasets" | "services" | "ingresses" | "storage" | "events" | "config" | "helm" | "jobs" | "crds" | "topology";
 
 export default function KubernetesPage() {
   const [status, setStatus] = createSignal<ClusterStatus | null>(null);
@@ -114,6 +121,26 @@ export default function KubernetesPage() {
   // Jobs / CronJobs
   const [jobs, setJobs] = createSignal<K8sJob[]>([]);
   const [cronJobs, setCronJobs] = createSignal<K8sCronJob[]>([]);
+
+  // DaemonSets / StatefulSets / ReplicaSets
+  const [daemonSets, setDaemonSets] = createSignal<K8sDaemonSet[]>([]);
+  const [statefulSets, setStatefulSets] = createSignal<K8sStatefulSet[]>([]);
+  const [replicaSets, setReplicaSets] = createSignal<K8sReplicaSet[]>([]);
+
+  // HPAs, Network Policies, Storage Classes, CRDs
+  const [hpas, setHpas] = createSignal<HorizontalPodAutoscaler[]>([]);
+  const [networkPolicies, setNetworkPolicies] = createSignal<NetworkPolicy[]>([]);
+  const [storageClasses, setStorageClasses] = createSignal<StorageClass[]>([]);
+  const [crds, setCrds] = createSignal<CustomResourceDefinition[]>([]);
+
+  // HPA Create dialog
+  const [hpaDialogOpen, setHpaDialogOpen] = createSignal(false);
+  const [hpaName, setHpaName] = createSignal("");
+  const [hpaDeployment, setHpaDeployment] = createSignal("");
+  const [hpaMin, setHpaMin] = createSignal("1");
+  const [hpaMax, setHpaMax] = createSignal("5");
+  const [hpaCpuTarget, setHpaCpuTarget] = createSignal("50");
+  const [hpaCreating, setHpaCreating] = createSignal(false);
 
   // Topology hover
   const [topoHover, setTopoHover] = createSignal<string | null>(null);
@@ -213,18 +240,32 @@ export default function KubernetesPage() {
           setPodMetrics(map);
         }
       } else if (currentTab === "deployments") {
-        setDeployments((await invoke("k8s_deployments", { namespace: ns })) as Deployment[]);
+        const [depResult, hpaResult] = await Promise.allSettled([
+          invoke("k8s_deployments", { namespace: ns }) as Promise<Deployment[]>,
+          invoke("k8s_hpas", { namespace: ns }) as Promise<HorizontalPodAutoscaler[]>,
+        ]);
+        if (depResult.status === "fulfilled") setDeployments(depResult.value);
+        if (hpaResult.status === "fulfilled") setHpas(hpaResult.value);
       } else if (currentTab === "services") {
-        setServices((await invoke("k8s_services", { namespace: ns })) as K8sService[]);
+        const [svcResult, npResult] = await Promise.allSettled([
+          invoke("k8s_services", { namespace: ns }) as Promise<K8sService[]>,
+          invoke("k8s_network_policies", { namespace: ns }) as Promise<NetworkPolicy[]>,
+        ]);
+        if (svcResult.status === "fulfilled") setServices(svcResult.value);
+        if (npResult.status === "fulfilled") setNetworkPolicies(npResult.value);
       } else if (currentTab === "ingresses") {
         setIngresses((await invoke("k8s_ingresses", { namespace: ns })) as Ingress[]);
       } else if (currentTab === "storage") {
-        const [pvcResult, pvResult] = await Promise.all([
+        const [pvcResult, pvResult, scResult] = await Promise.allSettled([
           invoke("k8s_pvcs", { namespace: ns }) as Promise<PersistentVolumeClaim[]>,
           invoke("k8s_pvs") as Promise<PersistentVolume[]>,
+          invoke("k8s_storage_classes") as Promise<StorageClass[]>,
         ]);
-        setPvcs(pvcResult);
-        setPvs(pvResult);
+        if (pvcResult.status === "fulfilled") setPvcs(pvcResult.value);
+        if (pvResult.status === "fulfilled") setPvs(pvResult.value);
+        if (scResult.status === "fulfilled") setStorageClasses(scResult.value);
+      } else if (currentTab === "crds") {
+        setCrds((await invoke("k8s_crds")) as CustomResourceDefinition[]);
       } else if (currentTab === "events") {
         setEvents((await invoke("k8s_events", { namespace: ns })) as K8sEvent[]);
       } else if (currentTab === "config") {
@@ -251,6 +292,12 @@ export default function KubernetesPage() {
         ]);
         setJobs(jobData);
         setCronJobs(cronData);
+      } else if (currentTab === "daemonsets") {
+        setDaemonSets((await invoke("k8s_daemonsets", { namespace: ns })) as K8sDaemonSet[]);
+      } else if (currentTab === "statefulsets") {
+        setStatefulSets((await invoke("k8s_statefulsets", { namespace: ns })) as K8sStatefulSet[]);
+      } else if (currentTab === "replicasets") {
+        setReplicaSets((await invoke("k8s_replicasets", { namespace: ns })) as K8sReplicaSet[]);
       } else if (currentTab === "topology") {
         // Topology needs pods, deployments, services, and optionally metrics
         const [p, d, s, m] = await Promise.allSettled([
@@ -471,12 +518,15 @@ export default function KubernetesPage() {
     const target = scaleTarget();
     if (!target) return;
     try {
-      await invoke("k8s_scale_deployment", { namespace: target.namespace, name: target.name, replicas: scaleValue() });
+      const command = tab() === "statefulsets" ? "k8s_scale_statefulset" : "k8s_scale_deployment";
+      const kind = tab() === "statefulsets" ? "StatefulSet" : "Deployment";
+      await invoke(command, { namespace: target.namespace, name: target.name, replicas: scaleValue() });
       showToast(`Scaled ${target.name} to ${scaleValue()} replicas`, "success");
       setScaleTarget(null);
       await refreshWorkloads();
     } catch (e) {
-      logError(`Failed to scale deployment: ${e}`, `Deployment "${target.name}" in "${target.namespace}"`);
+      const kind = tab() === "statefulsets" ? "StatefulSet" : "Deployment";
+      logError(`Failed to scale ${kind}: ${e}`, `${kind} "${target.name}" in "${target.namespace}"`);
       showToast(`Failed to scale: ${e}`, "error");
     }
   };
@@ -876,6 +926,9 @@ spec:
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: "pods", label: "Pods", icon: "\u2B22" },
     { id: "deployments", label: "Deployments", icon: "\u25A6" },
+    { id: "daemonsets", label: "DaemonSets", icon: "\u25C9" },
+    { id: "statefulsets", label: "StatefulSets", icon: "\u25A3" },
+    { id: "replicasets", label: "ReplicaSets", icon: "\u25A7" },
     { id: "services", label: "Services", icon: "\u29BF" },
     { id: "ingresses", label: "Ingresses", icon: "\u21C4" },
     { id: "storage", label: "Storage", icon: "\u25A8" },
@@ -883,12 +936,16 @@ spec:
     { id: "config", label: "Config", icon: "\u2699" },
     { id: "helm", label: "Helm", icon: "\u2388" },
     { id: "jobs", label: "Jobs", icon: "\u23F0" },
+    { id: "crds", label: "CRDs", icon: "\u2756" },
     { id: "topology", label: "Topology", icon: "\u25CE" },
   ];
 
   const emptyMessages: Record<Tab, { title: string; desc: string }> = {
     pods: { title: "No pods in this namespace", desc: "Pods will appear here when you deploy workloads to this namespace." },
     deployments: { title: "No deployments in this namespace", desc: "Create a deployment to manage replicated pods." },
+    daemonsets: { title: "No DaemonSets in this namespace", desc: "DaemonSets ensure a pod runs on every (or selected) node." },
+    statefulsets: { title: "No StatefulSets in this namespace", desc: "StatefulSets manage stateful applications with stable network identities." },
+    replicasets: { title: "No ReplicaSets in this namespace", desc: "ReplicaSets maintain a stable set of replica pods. Usually managed by Deployments." },
     services: { title: "No services in this namespace", desc: "Services provide stable networking endpoints for your pods." },
     ingresses: { title: "No ingresses in this namespace", desc: "Ingresses route external HTTP traffic to your services via Traefik." },
     storage: { title: "No storage resources", desc: "Persistent Volume Claims will appear when workloads request storage." },
@@ -896,6 +953,7 @@ spec:
     config: { title: "No ConfigMaps or Secrets", desc: "ConfigMaps and Secrets store configuration data for your workloads." },
     helm: { title: "No Helm releases", desc: "Install Helm charts using the helm CLI to manage releases here." },
     jobs: { title: "No Jobs or CronJobs", desc: "Jobs and CronJobs will appear here when you create batch workloads." },
+    crds: { title: "No Custom Resource Definitions", desc: "CRDs extend the Kubernetes API with custom resource types." },
     topology: { title: "No resources to visualize", desc: "Deploy workloads to see a visual topology of your namespace." },
   };
 
@@ -1288,6 +1346,391 @@ spec:
               </tbody>
             </table>
           </Show>
+
+          {/* Autoscalers sub-section */}
+          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-top": "24px", "margin-bottom": "12px" }}>
+            <h3 style={{ color: "#e6edf3", "font-size": "14px", margin: "0" }}>
+              Autoscalers
+            </h3>
+            <button class="btn btn-sm btn-primary" onClick={() => {
+              setHpaName("");
+              setHpaDeployment(deployments().length > 0 ? deployments()[0].name : "");
+              setHpaMin("1");
+              setHpaMax("5");
+              setHpaCpuTarget("50");
+              setHpaDialogOpen(true);
+            }}>
+              + Create HPA
+            </button>
+          </div>
+          <Show
+            when={hpas().length > 0}
+            fallback={
+              <div class="empty-state-tab" style={{ padding: "32px 20px" }}>
+                <div class="empty-state-tab-title">No autoscalers in this namespace</div>
+                <div class="empty-state-tab-desc">Create an HPA to automatically scale deployments based on CPU usage.</div>
+              </div>
+            }
+          >
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Reference</th>
+                  <th>Min</th>
+                  <th>Max</th>
+                  <th>Current</th>
+                  <th>Target CPU</th>
+                  <th>Current CPU</th>
+                  <th>Age</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={hpas()}>
+                  {(hpa) => (
+                    <tr>
+                      <td style={{ "font-weight": "500" }}>{hpa.name}</td>
+                      <td class="mono" style={{ color: "#8b949e", "font-size": "12px" }}>{hpa.reference}</td>
+                      <td class="mono">{hpa.min_replicas}</td>
+                      <td class="mono">{hpa.max_replicas}</td>
+                      <td class="mono">{hpa.current_replicas}</td>
+                      <td class="mono" style={{ color: "#8b949e" }}>{hpa.target_cpu || "-"}</td>
+                      <td class="mono" style={{ color: "#8b949e" }}>{hpa.current_cpu || "-"}</td>
+                      <td style={{ color: "#8b949e" }}>{hpa.created_at}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
+                          <button
+                            class="action-icon"
+                            title="View YAML"
+                            onClick={() => viewYaml("hpa", hpa.name, hpa.namespace)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                          </button>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Delete HPA"
+                            onClick={async () => {
+                              const ok = await confirmDanger(`Delete HPA "${hpa.name}"?`, "This will remove the autoscaler. The deployment will keep its current replica count.");
+                              if (!ok) return;
+                              try {
+                                await invoke("k8s_delete_hpa", { namespace: hpa.namespace, name: hpa.name });
+                                showToast(`Deleted HPA ${hpa.name}`, "success");
+                                refreshWorkloads();
+                              } catch (e) {
+                                showToast(`Failed to delete HPA: ${e}`, "error");
+                              }
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </Show>
+        </Show>
+
+        {/* DaemonSets Tab */}
+        <Show when={tab() === "daemonsets"}>
+          <Show
+            when={daemonSets().length > 0}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.daemonsets.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.daemonsets.desc}</div>
+              </div>
+            }
+          >
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Desired</th>
+                  <th>Current</th>
+                  <th>Ready</th>
+                  <th>Node Selector</th>
+                  <th>Images</th>
+                  <th>Age</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={daemonSets()}>
+                  {(ds) => (
+                    <tr>
+                      <td style={{ "font-weight": "500" }}>{ds.name}</td>
+                      <td class="mono">{ds.desired}</td>
+                      <td class="mono">{ds.current}</td>
+                      <td class="mono">
+                        <span style={{
+                          color: ds.ready === ds.desired ? "#3fb950" : "#d29922",
+                        }}>
+                          {ds.ready}
+                        </span>
+                      </td>
+                      <td style={{ "max-width": "200px", "font-size": "12px", color: "#8b949e" }}>
+                        {ds.node_selector || "-"}
+                      </td>
+                      <td style={{ "max-width": "300px" }}>
+                        <For each={ds.images}>
+                          {(img) => (
+                            <div class="mono" style={{
+                              "font-size": "12px",
+                              color: "#8b949e",
+                              "white-space": "nowrap",
+                              overflow: "hidden",
+                              "text-overflow": "ellipsis",
+                            }}>
+                              {img}
+                            </div>
+                          )}
+                        </For>
+                      </td>
+                      <td style={{ color: "#8b949e" }}>{ds.created_at}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
+                          <button
+                            class="action-icon"
+                            title="View/Edit YAML"
+                            onClick={() => viewYaml("daemonset", ds.name, ds.namespace)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                          </button>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Delete DaemonSet"
+                            onClick={async () => {
+                              if (!await confirmDanger(`Delete DaemonSet "${ds.name}"?`, "This will remove the DaemonSet and its pods.")) return;
+                              try {
+                                await invoke("k8s_delete_daemonset", { namespace: ds.namespace, name: ds.name });
+                                showToast(`DaemonSet ${ds.name} deleted`, "success");
+                                logInfo(`Deleted DaemonSet ${ds.name}`);
+                                refreshWorkloads();
+                              } catch (e) {
+                                showToast(`Delete failed: ${e}`, "error");
+                              }
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </Show>
+        </Show>
+
+        {/* StatefulSets Tab */}
+        <Show when={tab() === "statefulsets"}>
+          <Show
+            when={statefulSets().length > 0}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.statefulsets.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.statefulsets.desc}</div>
+              </div>
+            }
+          >
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Ready</th>
+                  <th>Replicas</th>
+                  <th>Images</th>
+                  <th>Age</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={statefulSets()}>
+                  {(sts) => {
+                    const [readyCount, totalCount] = sts.ready.split("/").map(Number);
+                    return (
+                      <tr>
+                        <td style={{ "font-weight": "500" }}>{sts.name}</td>
+                        <td class="mono">
+                          <span style={{
+                            color: readyCount === totalCount ? "#3fb950" : "#d29922",
+                          }}>
+                            {sts.ready}
+                          </span>
+                        </td>
+                        <td class="mono">{sts.replicas}</td>
+                        <td style={{ "max-width": "300px" }}>
+                          <For each={sts.images}>
+                            {(img) => (
+                              <div class="mono" style={{
+                                "font-size": "12px",
+                                color: "#8b949e",
+                                "white-space": "nowrap",
+                                overflow: "hidden",
+                                "text-overflow": "ellipsis",
+                              }}>
+                                {img}
+                              </div>
+                            )}
+                          </For>
+                        </td>
+                        <td style={{ color: "#8b949e" }}>{sts.created_at}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
+                            <button
+                              class="btn btn-sm"
+                              style={{ "font-size": "11px" }}
+                              onClick={() => openScaleDialog(sts.namespace, sts.name, sts.replicas)}
+                            >
+                              Scale
+                            </button>
+                            <button
+                              class="action-icon"
+                              title="Restart StatefulSet"
+                              onClick={async () => {
+                                try {
+                                  await invoke("k8s_restart_statefulset", { namespace: sts.namespace, name: sts.name });
+                                  showToast(`StatefulSet ${sts.name} restarting`, "success");
+                                  await refreshWorkloads();
+                                } catch (e) {
+                                  logError(`Failed to restart StatefulSet: ${e}`, `StatefulSet "${sts.name}" in "${sts.namespace}"`);
+                                  showToast(`Failed to restart: ${e}`, "error");
+                                }
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                            </button>
+                            <button
+                              class="action-icon"
+                              title="View/Edit YAML"
+                              onClick={() => viewYaml("statefulset", sts.name, sts.namespace)}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                            </button>
+                            <button
+                              class="action-icon action-icon-delete"
+                              title="Delete StatefulSet"
+                              onClick={async () => {
+                                if (!await confirmDanger(`Delete StatefulSet "${sts.name}"?`, "This will remove the StatefulSet and its pods.")) return;
+                                try {
+                                  await invoke("k8s_delete_statefulset", { namespace: sts.namespace, name: sts.name });
+                                  showToast(`StatefulSet ${sts.name} deleted`, "success");
+                                  logInfo(`Deleted StatefulSet ${sts.name}`);
+                                  refreshWorkloads();
+                                } catch (e) {
+                                  showToast(`Delete failed: ${e}`, "error");
+                                }
+                              }}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }}
+                </For>
+              </tbody>
+            </table>
+          </Show>
+        </Show>
+
+        {/* ReplicaSets Tab */}
+        <Show when={tab() === "replicasets"}>
+          <Show
+            when={replicaSets().length > 0}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.replicasets.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.replicasets.desc}</div>
+              </div>
+            }
+          >
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Desired</th>
+                  <th>Current</th>
+                  <th>Ready</th>
+                  <th>Owner</th>
+                  <th>Images</th>
+                  <th>Age</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={replicaSets()}>
+                  {(rs) => (
+                    <tr>
+                      <td style={{ "font-weight": "500" }}>{rs.name}</td>
+                      <td class="mono">{rs.desired}</td>
+                      <td class="mono">{rs.current}</td>
+                      <td class="mono">
+                        <span style={{
+                          color: rs.ready === rs.desired ? "#3fb950" : "#d29922",
+                        }}>
+                          {rs.ready}
+                        </span>
+                      </td>
+                      <td style={{ color: "#8b949e", "font-size": "12px" }}>
+                        {rs.owner || "-"}
+                      </td>
+                      <td style={{ "max-width": "300px" }}>
+                        <For each={rs.images}>
+                          {(img) => (
+                            <div class="mono" style={{
+                              "font-size": "12px",
+                              color: "#8b949e",
+                              "white-space": "nowrap",
+                              overflow: "hidden",
+                              "text-overflow": "ellipsis",
+                            }}>
+                              {img}
+                            </div>
+                          )}
+                        </For>
+                      </td>
+                      <td style={{ color: "#8b949e" }}>{rs.created_at}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
+                          <button
+                            class="action-icon"
+                            title="View/Edit YAML"
+                            onClick={() => viewYaml("replicaset", rs.name, rs.namespace)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                          </button>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Delete ReplicaSet"
+                            onClick={async () => {
+                              if (!await confirmDanger(`Delete ReplicaSet "${rs.name}"?`, "This will remove the ReplicaSet and its pods.")) return;
+                              try {
+                                await invoke("k8s_delete_replicaset", { namespace: rs.namespace, name: rs.name });
+                                showToast(`ReplicaSet ${rs.name} deleted`, "success");
+                                logInfo(`Deleted ReplicaSet ${rs.name}`);
+                                refreshWorkloads();
+                              } catch (e) {
+                                showToast(`Delete failed: ${e}`, "error");
+                              }
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </Show>
         </Show>
 
         {/* Services Tab */}
@@ -1444,6 +1887,88 @@ spec:
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                         </button>
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </Show>
+
+          {/* Network Policies sub-section */}
+          <h3 style={{ color: "#e6edf3", "font-size": "14px", "margin-top": "24px", "margin-bottom": "12px" }}>
+            Network Policies
+          </h3>
+          <Show
+            when={networkPolicies().length > 0}
+            fallback={
+              <div class="empty-state-tab" style={{ padding: "32px 20px" }}>
+                <div class="empty-state-tab-title">No network policies in this namespace</div>
+                <div class="empty-state-tab-desc">Network policies control traffic flow between pods.</div>
+              </div>
+            }
+          >
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Pod Selector</th>
+                  <th>Policy Types</th>
+                  <th>Age</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={networkPolicies()}>
+                  {(np) => (
+                    <tr>
+                      <td style={{ "font-weight": "500" }}>{np.name}</td>
+                      <td class="mono" style={{ color: "#8b949e", "font-size": "12px" }}>{np.pod_selector}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: "4px", "flex-wrap": "wrap" }}>
+                          <For each={np.policy_types}>
+                            {(pt) => (
+                              <span style={{
+                                background: pt === "Ingress" ? "#1c2333" : "#1f2d1f",
+                                color: pt === "Ingress" ? "#79c0ff" : "#3fb950",
+                                padding: "2px 8px",
+                                "border-radius": "10px",
+                                "font-size": "12px",
+                              }}>
+                                {pt}
+                              </span>
+                            )}
+                          </For>
+                        </div>
+                      </td>
+                      <td style={{ color: "#8b949e" }}>{np.created_at}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
+                          <button
+                            class="action-icon"
+                            title="View YAML"
+                            onClick={() => viewYaml("networkpolicy", np.name, np.namespace)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                          </button>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Delete Network Policy"
+                            onClick={async () => {
+                              const ok = await confirmDanger(`Delete network policy "${np.name}"?`, "This may affect network connectivity for pods in this namespace.");
+                              if (!ok) return;
+                              try {
+                                await invoke("k8s_delete_network_policy", { namespace: np.namespace, name: np.name });
+                                showToast(`Deleted network policy ${np.name}`, "success");
+                                refreshWorkloads();
+                              } catch (e) {
+                                showToast(`Failed to delete: ${e}`, "error");
+                              }
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -1617,6 +2142,61 @@ spec:
                       <td style={{ color: "#8b949e" }}>{pv.reclaim_policy || "-"}</td>
                       <td style={{ color: "#8b949e" }}>{pv.storage_class || "-"}</td>
                       <td style={{ color: "#8b949e" }}>{pv.age}</td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </Show>
+
+          {/* Storage Classes sub-section */}
+          <h3 style={{ color: "#e6edf3", "font-size": "14px", "margin-top": "24px", "margin-bottom": "12px" }}>
+            Storage Classes
+          </h3>
+          <Show
+            when={storageClasses().length > 0}
+            fallback={
+              <div class="empty-state-tab" style={{ padding: "32px 20px" }}>
+                <div class="empty-state-tab-title">No storage classes</div>
+                <div class="empty-state-tab-desc">Storage classes define how persistent volumes are provisioned.</div>
+              </div>
+            }
+          >
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Provisioner</th>
+                  <th>Reclaim Policy</th>
+                  <th>Binding Mode</th>
+                  <th>Default</th>
+                  <th>Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={storageClasses()}>
+                  {(sc) => (
+                    <tr>
+                      <td style={{ "font-weight": "500" }}>
+                        {sc.name}
+                        <Show when={sc.is_default}>
+                          <span style={{
+                            background: "#1f3a2a",
+                            color: "#3fb950",
+                            padding: "2px 6px",
+                            "border-radius": "10px",
+                            "font-size": "11px",
+                            "margin-left": "8px",
+                          }}>
+                            default
+                          </span>
+                        </Show>
+                      </td>
+                      <td class="mono" style={{ color: "#8b949e", "font-size": "12px" }}>{sc.provisioner}</td>
+                      <td style={{ color: "#8b949e" }}>{sc.reclaim_policy}</td>
+                      <td style={{ color: "#8b949e" }}>{sc.volume_binding_mode}</td>
+                      <td>{sc.is_default ? "Yes" : "No"}</td>
+                      <td style={{ color: "#8b949e" }}>{sc.created_at}</td>
                     </tr>
                   )}
                 </For>
@@ -2118,6 +2698,68 @@ spec:
                 </tbody>
               </table>
             </Show>
+          </Show>
+        </Show>
+
+        {/* CRDs Tab */}
+        <Show when={tab() === "crds"}>
+          <Show
+            when={crds().length > 0}
+            fallback={
+              <div class="empty-state-tab">
+                <div class="empty-state-tab-title">{emptyMessages.crds.title}</div>
+                <div class="empty-state-tab-desc">{emptyMessages.crds.desc}</div>
+              </div>
+            }
+          >
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Group</th>
+                  <th>Kind</th>
+                  <th>Scope</th>
+                  <th>Versions</th>
+                  <th>Age</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={crds()}>
+                  {(crd) => (
+                    <tr>
+                      <td style={{ "font-weight": "500", "max-width": "300px", "word-break": "break-all" }}>{crd.name}</td>
+                      <td class="mono" style={{ color: "#8b949e", "font-size": "12px" }}>{crd.group}</td>
+                      <td>{crd.kind}</td>
+                      <td>
+                        <span style={{
+                          background: crd.scope === "Namespaced" ? "#1c2333" : "#2d1f2d",
+                          color: crd.scope === "Namespaced" ? "#79c0ff" : "#d2a8ff",
+                          padding: "2px 8px",
+                          "border-radius": "10px",
+                          "font-size": "12px",
+                        }}>
+                          {crd.scope}
+                        </span>
+                      </td>
+                      <td class="mono" style={{ color: "#8b949e", "font-size": "12px" }}>
+                        {crd.versions.join(", ")}
+                      </td>
+                      <td style={{ color: "#8b949e" }}>{crd.created_at}</td>
+                      <td>
+                        <button
+                          class="action-icon"
+                          title="View YAML"
+                          onClick={() => viewYaml("crd", crd.name, "default")}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
           </Show>
         </Show>
 
@@ -3480,6 +4122,110 @@ spec:
                 disabled={pvcCreating() || !pvcName().trim() || !pvcStorageClass().trim()}
               >
                 {pvcCreating() ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Create HPA Dialog */}
+      <Show when={hpaDialogOpen()}>
+        <div class="modal-overlay" onClick={() => setHpaDialogOpen(false)}>
+          <div class="modal-dialog" style={{ "max-width": "480px" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Create Horizontal Pod Autoscaler</span>
+              <button class="modal-close" onClick={() => setHpaDialogOpen(false)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Deployment</label>
+                <Dropdown
+                  value={hpaDeployment()}
+                  onChange={setHpaDeployment}
+                  options={deployments().map((d) => ({ value: d.name, label: d.name }))}
+                  placeholder="Select deployment..."
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>HPA Name</label>
+                <input
+                  type="text"
+                  class="form-input"
+                  placeholder="my-hpa"
+                  value={hpaName()}
+                  onInput={(e) => setHpaName(e.currentTarget.value)}
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Min Replicas</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    min="1"
+                    value={hpaMin()}
+                    onInput={(e) => setHpaMin(e.currentTarget.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>Max Replicas</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    min="1"
+                    value={hpaMax()}
+                    onInput={(e) => setHpaMax(e.currentTarget.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "4px" }}>CPU Target %</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  min="1"
+                  max="100"
+                  value={hpaCpuTarget()}
+                  onInput={(e) => setHpaCpuTarget(e.currentTarget.value)}
+                  style={{ width: "120px" }}
+                />
+                <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>
+                  Average CPU utilization target across all pods (requires metrics-server)
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setHpaDialogOpen(false)}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                onClick={async () => {
+                  if (!hpaDeployment().trim() || !hpaName().trim()) return;
+                  setHpaCreating(true);
+                  try {
+                    await invoke("k8s_create_hpa", {
+                      namespace: selectedNs(),
+                      name: hpaName().trim(),
+                      deployment: hpaDeployment().trim(),
+                      min: parseInt(hpaMin()) || 1,
+                      max: parseInt(hpaMax()) || 5,
+                      cpuTarget: parseInt(hpaCpuTarget()) || 50,
+                    });
+                    showToast(`Created HPA ${hpaName()}`, "success");
+                    setHpaDialogOpen(false);
+                    refreshWorkloads();
+                  } catch (e) {
+                    showToast(`Failed to create HPA: ${e}`, "error");
+                  } finally {
+                    setHpaCreating(false);
+                  }
+                }}
+                disabled={hpaCreating() || !hpaName().trim() || !hpaDeployment().trim()}
+              >
+                {hpaCreating() ? "Creating..." : "Create"}
               </button>
             </div>
           </div>

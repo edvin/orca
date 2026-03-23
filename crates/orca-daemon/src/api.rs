@@ -199,12 +199,26 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/helm/uninstall", post(k8s_helm_uninstall))
         .route("/k8s/helm/available", get(k8s_helm_available))
         .route("/k8s/helm/install", post(k8s_helm_install))
+        .route("/k8s/daemonsets/{namespace}", get(k8s_daemonsets))
+        .route("/k8s/statefulsets/{namespace}", get(k8s_statefulsets))
+        .route("/k8s/replicasets/{namespace}", get(k8s_replicasets))
+        .route("/k8s/statefulsets/{namespace}/{name}/scale", post(k8s_scale_statefulset))
+        .route("/k8s/statefulsets/{namespace}/{name}/restart", post(k8s_restart_statefulset))
+        .route("/k8s/daemonsets/{namespace}/{name}", delete(k8s_delete_daemonset))
+        .route("/k8s/statefulsets/{namespace}/{name}", delete(k8s_delete_statefulset))
+        .route("/k8s/replicasets/{namespace}/{name}", delete(k8s_delete_replicaset))
         .route("/k8s/jobs/{namespace}", get(k8s_jobs))
         .route("/k8s/cronjobs/{namespace}", get(k8s_cronjobs))
         .route("/k8s/cronjobs/{namespace}/{name}/trigger", post(k8s_trigger_cronjob))
         .route("/k8s/jobs/{namespace}/{name}", delete(k8s_delete_job))
         .route("/k8s/cronjobs/{namespace}/{name}", delete(k8s_delete_cronjob))
         .route("/k8s/cronjobs/{namespace}/{name}/suspend", put(k8s_suspend_cronjob))
+        .route("/k8s/hpas/{namespace}", get(k8s_hpas).post(k8s_create_hpa))
+        .route("/k8s/hpas/{namespace}/{name}", delete(k8s_delete_hpa))
+        .route("/k8s/network-policies/{namespace}", get(k8s_network_policies))
+        .route("/k8s/network-policies/{namespace}/{name}", delete(k8s_delete_network_policy))
+        .route("/k8s/storage-classes", get(k8s_storage_classes))
+        .route("/k8s/crds", get(k8s_crds))
         .route("/k8s/pods/{namespace}/{name}/terminal", get(k8s_pod_terminal_ws))
         // Environment
         .route("/environment/status", get(env_status))
@@ -2533,6 +2547,76 @@ async fn k8s_rollout_undo(
     Ok(Json(serde_json::json!({ "output": result })))
 }
 
+// --- DaemonSets / StatefulSets / ReplicaSets ---
+
+async fn k8s_daemonsets(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let items = state.k8s.list_daemonsets(&namespace).await?;
+    Ok(Json(items))
+}
+
+async fn k8s_statefulsets(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let items = state.k8s.list_statefulsets(&namespace).await?;
+    Ok(Json(items))
+}
+
+async fn k8s_replicasets(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let items = state.k8s.list_replicasets(&namespace).await?;
+    Ok(Json(items))
+}
+
+async fn k8s_scale_statefulset(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+    Json(body): Json<ScaleRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    state
+        .k8s
+        .scale_statefulset(&namespace, &name, body.replicas)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_restart_statefulset(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.restart_statefulset(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_delete_daemonset(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_daemonset(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_delete_statefulset(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_statefulset(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_delete_replicaset(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_replicaset(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 // --- Jobs / CronJobs ---
 
 async fn k8s_jobs(
@@ -2587,6 +2671,72 @@ async fn k8s_suspend_cronjob(
 ) -> Result<impl IntoResponse, ApiError> {
     state.k8s.suspend_cronjob(&namespace, &name, body.suspend).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// --- HPAs, Network Policies, Storage Classes, CRDs ---
+
+async fn k8s_hpas(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let hpas = state.k8s.list_hpas(&namespace).await?;
+    Ok(Json(hpas))
+}
+
+#[derive(Deserialize)]
+struct CreateHpaRequest {
+    name: String,
+    deployment: String,
+    min: i32,
+    max: i32,
+    cpu_target: i32,
+}
+
+async fn k8s_create_hpa(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+    Json(body): Json<CreateHpaRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.create_hpa(&namespace, &body.name, &body.deployment, body.min, body.max, body.cpu_target).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+async fn k8s_delete_hpa(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_hpa(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_network_policies(
+    State(state): State<Arc<AppState>>,
+    Path(namespace): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let policies = state.k8s.list_network_policies(&namespace).await?;
+    Ok(Json(policies))
+}
+
+async fn k8s_delete_network_policy(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.delete_network_policy(&namespace, &name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_storage_classes(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let classes = state.k8s.list_storage_classes().await?;
+    Ok(Json(classes))
+}
+
+async fn k8s_crds(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let crds = state.k8s.list_crds().await?;
+    Ok(Json(crds))
 }
 
 async fn k8s_helm_list(

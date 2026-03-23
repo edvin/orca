@@ -182,6 +182,43 @@ pub struct CronJob {
     pub created_at: String,
 }
 
+/// A Kubernetes DaemonSet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonSet {
+    pub name: String,
+    pub namespace: String,
+    pub desired: i32,
+    pub current: i32,
+    pub ready: i32,
+    pub node_selector: Option<String>,
+    pub images: Vec<String>,
+    pub created_at: String,
+}
+
+/// A Kubernetes StatefulSet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatefulSet {
+    pub name: String,
+    pub namespace: String,
+    pub ready: String,  // "2/3" format
+    pub replicas: i32,
+    pub images: Vec<String>,
+    pub created_at: String,
+}
+
+/// A Kubernetes ReplicaSet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplicaSet {
+    pub name: String,
+    pub namespace: String,
+    pub desired: i32,
+    pub current: i32,
+    pub ready: i32,
+    pub images: Vec<String>,
+    pub owner: Option<String>,
+    pub created_at: String,
+}
+
 /// A Helm release.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HelmRelease {
@@ -204,6 +241,52 @@ pub struct K8sSecret {
     /// base64-encoded values
     pub data: std::collections::HashMap<String, String>,
     pub age: String,
+}
+
+/// A Kubernetes Horizontal Pod Autoscaler.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HorizontalPodAutoscaler {
+    pub name: String,
+    pub namespace: String,
+    pub reference: String,      // "Deployment/nginx"
+    pub min_replicas: i32,
+    pub max_replicas: i32,
+    pub current_replicas: i32,
+    pub target_cpu: Option<String>,   // "50%"
+    pub current_cpu: Option<String>,  // "30%"
+    pub created_at: String,
+}
+
+/// A Kubernetes Network Policy.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkPolicy {
+    pub name: String,
+    pub namespace: String,
+    pub pod_selector: String,
+    pub policy_types: Vec<String>,  // ["Ingress", "Egress"]
+    pub created_at: String,
+}
+
+/// A Kubernetes Storage Class.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageClass {
+    pub name: String,
+    pub provisioner: String,
+    pub reclaim_policy: String,
+    pub volume_binding_mode: String,
+    pub is_default: bool,
+    pub created_at: String,
+}
+
+/// A Kubernetes Custom Resource Definition.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomResourceDefinition {
+    pub name: String,
+    pub group: String,
+    pub kind: String,
+    pub scope: String,  // "Namespaced" or "Cluster"
+    pub versions: Vec<String>,
+    pub created_at: String,
 }
 
 /// Trait for managing a Kubernetes cluster (k3s).
@@ -294,6 +377,35 @@ pub trait K8sManager {
     /// List CronJobs in a namespace.
     async fn list_cronjobs(&self, namespace: &str) -> anyhow::Result<Vec<CronJob>>;
 
+    /// List DaemonSets in a namespace.
+    async fn list_daemonsets(&self, namespace: &str) -> anyhow::Result<Vec<DaemonSet>>;
+
+    /// List StatefulSets in a namespace.
+    async fn list_statefulsets(&self, namespace: &str) -> anyhow::Result<Vec<StatefulSet>>;
+
+    /// List ReplicaSets in a namespace.
+    async fn list_replicasets(&self, namespace: &str) -> anyhow::Result<Vec<ReplicaSet>>;
+
+    /// Scale a StatefulSet.
+    async fn scale_statefulset(
+        &self,
+        namespace: &str,
+        name: &str,
+        replicas: u32,
+    ) -> anyhow::Result<()>;
+
+    /// Restart a StatefulSet.
+    async fn restart_statefulset(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
+    /// Delete a DaemonSet.
+    async fn delete_daemonset(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
+    /// Delete a StatefulSet.
+    async fn delete_statefulset(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
+    /// Delete a ReplicaSet.
+    async fn delete_replicaset(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
     /// Manually trigger a CronJob (creates a Job from it).
     async fn trigger_cronjob(&self, namespace: &str, name: &str) -> anyhow::Result<String>;
 
@@ -335,4 +447,33 @@ pub trait K8sManager {
         size: &str,
         access_modes: Vec<String>,
     ) -> anyhow::Result<()>;
+
+    /// List Horizontal Pod Autoscalers in a namespace.
+    async fn list_hpas(&self, namespace: &str) -> anyhow::Result<Vec<HorizontalPodAutoscaler>>;
+
+    /// Create a Horizontal Pod Autoscaler.
+    async fn create_hpa(
+        &self,
+        namespace: &str,
+        name: &str,
+        deployment: &str,
+        min: i32,
+        max: i32,
+        cpu_target: i32,
+    ) -> anyhow::Result<()>;
+
+    /// Delete a Horizontal Pod Autoscaler.
+    async fn delete_hpa(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
+    /// List Network Policies in a namespace.
+    async fn list_network_policies(&self, namespace: &str) -> anyhow::Result<Vec<NetworkPolicy>>;
+
+    /// Delete a Network Policy.
+    async fn delete_network_policy(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
+
+    /// List Storage Classes (cluster-scoped).
+    async fn list_storage_classes(&self) -> anyhow::Result<Vec<StorageClass>>;
+
+    /// List Custom Resource Definitions (cluster-scoped).
+    async fn list_crds(&self) -> anyhow::Result<Vec<CustomResourceDefinition>>;
 }
