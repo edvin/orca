@@ -53,73 +53,18 @@ export default function EnvironmentPage() {
     setActionSuccess(null);
     setActionDialogOpen(true);
 
+    // Use the non-streaming Tauri invoke — more reliable than direct fetch
+    // which can fail in webviews. The 10-minute timeout handles long installs.
     try {
-      let token = "";
-      try { token = await invoke("get_api_token") as string; } catch {}
-
-      const resp = await fetch("http://127.0.0.1:9477/api/v1/environment/fix-stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ action }),
-      });
-
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
-
-      const reader = resp.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (reader) {
-        let done = false;
-        let success = true;
-        let receivedData = false;
-        let receivedDone = false;
-        while (!done) {
-          const { value, done: streamDone } = await reader.read();
-          done = streamDone;
-          if (value) {
-            const text = decoder.decode(value, { stream: !done });
-            for (const line of text.split("\n")) {
-              if (line.startsWith("data: ")) {
-                const data = line.slice(6);
-                receivedData = true;
-                if (data === "[DONE]") { receivedDone = true; done = true; }
-                else if (data === "[ERROR]") { success = false; done = true; }
-                else if (data.startsWith("[ERROR] ")) { setActionLog((prev) => prev + data.slice(8) + "\n"); success = false; done = true; }
-                else { setActionLog((prev) => prev + data + "\n"); }
-              }
-            }
-          }
-        }
-        if (!receivedData) {
-          setActionLog("No response from server.\n");
-          logError(`Environment fix failed: ${checkName} - no response from SSE stream`);
-          success = false;
-        } else if (!receivedDone && success) {
-          setActionLog((prev) => prev + "\nStream ended unexpectedly.\n");
-          logError(`Environment fix failed: ${checkName} - SSE stream ended without completion signal`);
-          success = false;
-        }
-        if (!success) {
-          logError(`Environment fix failed: ${checkName}`, actionLog());
-        }
-        setActionSuccess(success);
-      }
+      setActionLog("Running setup...\n\n");
+      const result = (await invoke("env_fix", { action })) as { output: string };
+      const output = result.output || "";
+      setActionLog(output || "Setup completed.\n");
+      setActionSuccess(!output.toLowerCase().includes("failed"));
     } catch (e) {
-      logError(`Environment fix SSE error for ${checkName}: ${e}`);
-      // SSE streaming failed — fall back to non-streaming invoke
-      try {
-        setActionLog(`Streaming unavailable, running directly...\n\n`);
-        const result = (await invoke("env_fix", { action })) as { output: string };
-        setActionLog((prev) => prev + (result.output || "(completed with no output)"));
-        setActionSuccess(true);
-      } catch (e2) {
-        logError(`Environment fix failed for ${checkName}: ${e2}`);
-        setActionLog((prev) => prev + `\nError: ${e2}\n`);
-        setActionSuccess(false);
-      }
+      logError(`Environment fix failed for ${checkName}: ${e}`);
+      setActionLog(`Error: ${e}\n`);
+      setActionSuccess(false);
     } finally {
       setActionRunning(false);
       // Auto-restart daemon after successful fix (Docker may have been restarted)
