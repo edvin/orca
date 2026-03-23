@@ -1,5 +1,6 @@
-import { createSignal, createEffect, onMount, For, Show } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
@@ -53,19 +54,47 @@ export default function EnvironmentPage() {
     setActionSuccess(null);
     setActionDialogOpen(true);
 
-    // Use the non-streaming Tauri invoke — more reliable than direct fetch
-    // which can fail in webviews. The 10-minute timeout handles long installs.
+    // Stream output via Tauri events for live feedback
+    const cleanup = { line: null as UnlistenFn | null, done: null as UnlistenFn | null };
+
     try {
-      setActionLog("Running setup...\n\n");
-      const result = (await invoke("env_fix", { action })) as { output: string };
-      const output = result.output || "";
-      setActionLog(output || "Setup completed.\n");
-      setActionSuccess(!output.toLowerCase().includes("failed"));
+      cleanup.line = await listen<string>("env-fix-line", (event) => {
+        setActionLog((prev) => prev + event.payload + "\n");
+      });
+
+      const donePromise = new Promise<boolean>((resolve) => {
+        listen<string>("env-fix-done", (event) => {
+          resolve(event.payload === "success");
+        }).then((unlisten) => { cleanup.done = unlisten; });
+      });
+
+      // Start the streaming fix (returns immediately, events stream in)
+      await invoke("env_fix_stream", { action });
+
+      // Wait for completion (events arrive as each step runs)
+      const success = await Promise.race([
+        donePromise,
+        new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error("timeout")), 600000)),
+      ]);
+
+      setActionSuccess(success);
     } catch (e) {
-      logError(`Environment fix failed for ${checkName}: ${e}`);
-      setActionLog(`Error: ${e}\n`);
-      setActionSuccess(false);
+      // Streaming failed — fall back to non-streaming invoke
+      logError(`Environment fix stream error for ${checkName}: ${e}`);
+      try {
+        setActionLog((prev) => prev || "");
+        setActionLog((prev) => prev + (prev ? "\nFalling back to direct method...\n\n" : "Setting up...\n\n"));
+        const result = (await invoke("env_fix", { action })) as { output: string };
+        setActionLog((prev) => prev + (result.output || "Setup completed.\n"));
+        setActionSuccess(true);
+      } catch (e2) {
+        logError(`Environment fix failed for ${checkName}: ${e2}`);
+        setActionLog((prev) => prev + `\nError: ${e2}\n`);
+        setActionSuccess(false);
+      }
     } finally {
+      cleanup.line?.();
+      cleanup.done?.();
       setActionRunning(false);
       // Auto-restart daemon after successful fix (Docker may have been restarted)
       if (actionSuccess()) {

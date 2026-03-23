@@ -1598,6 +1598,81 @@ pub async fn env_fix(action: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+/// Streaming fix action — emits "env-fix-line" events via Tauri as each line arrives.
+/// Returns immediately; frontend listens for events.
+#[tauri::command]
+pub async fn env_fix_stream(app: tauri::AppHandle, action: String) -> Result<(), String> {
+    use tauri::Emitter;
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = load_api_token() {
+        if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+            headers.insert(reqwest::header::AUTHORIZATION, val);
+        }
+    }
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .timeout(std::time::Duration::from_secs(600))
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    // Spawn the SSE reader in a background task
+    tokio::spawn(async move {
+        let resp = match client
+            .post(format!("{DAEMON_URL}/environment/fix-stream"))
+            .json(&serde_json::json!({ "action": action }))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = app.emit("env-fix-line", format!("Connection error: {e}"));
+                let _ = app.emit("env-fix-done", "error");
+                return;
+            }
+        };
+
+        let mut stream = resp.bytes_stream();
+        use futures_util::StreamExt;
+        let mut buffer = String::new();
+
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    buffer.push_str(&String::from_utf8_lossy(&bytes));
+                    // Process complete SSE lines
+                    while let Some(newline_pos) = buffer.find('\n') {
+                        let line = buffer[..newline_pos].to_string();
+                        buffer = buffer[newline_pos + 1..].to_string();
+
+                        if let Some(data) = line.strip_prefix("data: ") {
+                            if data == "[DONE]" {
+                                let _ = app.emit("env-fix-done", "success");
+                                return;
+                            } else if data == "[ERROR]" {
+                                let _ = app.emit("env-fix-done", "error");
+                                return;
+                            } else {
+                                let _ = app.emit("env-fix-line", data.to_string());
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = app.emit("env-fix-line", format!("Stream error: {e}"));
+                    let _ = app.emit("env-fix-done", "error");
+                    return;
+                }
+            }
+        }
+        // Stream ended without [DONE]
+        let _ = app.emit("env-fix-done", "success");
+    });
+
+    Ok(())
+}
+
 // --- Templates ---
 
 #[tauri::command]
