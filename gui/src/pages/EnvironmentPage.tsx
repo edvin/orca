@@ -269,8 +269,13 @@ export default function EnvironmentPage() {
       <div class="page-header">
         <h1 class="page-title">System Health</h1>
         <div class="page-actions">
-          <Show when={!health()?.docker_connected && navigator.platform.includes("Mac")}>
-            <button class="btn btn-primary" disabled={actionRunning()} onClick={() => runFix("setup_docker_macos", "Docker Setup")}>
+          <Show when={!health()?.docker_connected}>
+            <button class="btn btn-primary" disabled={actionRunning()} onClick={() => {
+              const action = navigator.platform.includes("Mac") ? "setup_docker_macos"
+                : navigator.platform.includes("Win") ? "install_docker"
+                : "install_docker_linux";
+              runFix(action, "Docker Setup");
+            }}>
               Set up Docker
             </button>
           </Show>
@@ -304,7 +309,7 @@ export default function EnvironmentPage() {
         {(s) => (
           <div>
             {/* === READY STATE === */}
-            <Show when={s().ready}>
+            <Show when={s().ready && health()?.docker_connected !== false}>
               {/* Hero status card */}
               <div style={{
                 background: "linear-gradient(135deg, rgba(63, 185, 80, 0.06) 0%, rgba(88, 166, 255, 0.04) 100%)",
@@ -472,7 +477,7 @@ export default function EnvironmentPage() {
             </Show>
 
             {/* === SETUP STATE === */}
-            <Show when={!s().ready}>
+            <Show when={!s().ready || health()?.docker_connected === false}>
               <div style={{
                 "margin-bottom": "24px",
                 background: "linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%)",

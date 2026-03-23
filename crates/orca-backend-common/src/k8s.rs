@@ -123,29 +123,56 @@ impl K3sManager {
         if let Some(path) = &self.kubeconfig_override {
             return path.clone();
         }
-        // Use the standard kubeconfig — we only connect using our "orca" context
-        // so we never accidentally hit the user's remote clusters.
         if let Ok(path) = std::env::var("KUBECONFIG") {
             return PathBuf::from(path);
         }
+
+        // Check all candidate paths in order of preference:
+        // 1. Our dedicated orca-k3s-config (written by the enable flow)
+        // 2. Standard ~/.kube/config (only if it has our "orca" context)
+        // 3. k3s default config
+        let mut candidates = Vec::new();
+
         // Windows
         if let Ok(profile) = std::env::var("USERPROFILE") {
-            let p = PathBuf::from(profile).join(".kube").join("config");
-            if p.exists() { return p; }
+            let base = PathBuf::from(profile).join(".kube");
+            candidates.push(base.join("orca-k3s-config"));
+            candidates.push(base.join("config"));
         }
         // Unix
         if let Some(home) = dirs::home_dir() {
-            let p = home.join(".kube").join("config");
-            if p.exists() { return p; }
+            let base = home.join(".kube");
+            candidates.push(base.join("orca-k3s-config"));
+            candidates.push(base.join("config"));
         }
         // Linux native k3s
-        if PathBuf::from("/etc/rancher/k3s/k3s.yaml").exists() {
-            return PathBuf::from("/etc/rancher/k3s/k3s.yaml");
+        candidates.push(PathBuf::from("/etc/rancher/k3s/k3s.yaml"));
+
+        for path in &candidates {
+            if !path.exists() { continue; }
+            // For orca-k3s-config and k3s.yaml — always use (it's ours)
+            let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+            if filename == "orca-k3s-config" || filename == "k3s.yaml" {
+                return path.clone();
+            }
+            // For standard config — only use if it has our "orca" context
+            if filename == "config" {
+                if let Ok(contents) = std::fs::read_to_string(path) {
+                    if contents.contains("name: orca") {
+                        return path.clone();
+                    }
+                }
+                // Has config but no orca context — skip (don't use user's remote clusters)
+            }
         }
-        // Fallback — standard path (won't exist = K8s not enabled)
+
+        // Fallback — our preferred path (won't exist = K8s not enabled)
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            return PathBuf::from(profile).join(".kube").join("orca-k3s-config");
+        }
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("/root"))
-            .join(".kube").join("config")
+            .join(".kube").join("orca-k3s-config")
     }
 
     /// Merge k3s kubeconfig into ~/.kube/config as the "orca" context.
@@ -225,12 +252,13 @@ impl K3sManager {
     fn has_orca_context(&self) -> bool {
         let path = self.kubeconfig_path();
         if !path.exists() { return false; }
-        // Quick check — look for our context name in the file
+        let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+        // orca-k3s-config and k3s.yaml are always ours
+        if filename == "orca-k3s-config" || filename == "k3s.yaml" {
+            return true;
+        }
+        // For standard config, check for our context name
         if let Ok(contents) = std::fs::read_to_string(&path) {
-            // For k3s default config, always treat as ours
-            if path == PathBuf::from("/etc/rancher/k3s/k3s.yaml") {
-                return true;
-            }
             return contents.contains(&format!("name: {}", Self::CONTEXT_NAME));
         }
         false
@@ -254,11 +282,13 @@ impl K3sManager {
         let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path)
             .map_err(|e| { tracing::warn!("K8s: failed to parse kubeconfig: {e}"); e })?;
 
-        // Use our "orca" context — never connect to the user's current-context
-        let kube_opts = if kubeconfig_path == PathBuf::from("/etc/rancher/k3s/k3s.yaml") {
-            // k3s default config has a "default" context
+        // Use our "orca" context from standard config, or default context from our own files
+        let filename = kubeconfig_path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+        let kube_opts = if filename == "orca-k3s-config" || filename == "k3s.yaml" {
+            // Our dedicated config files — use their default context
             kube::config::KubeConfigOptions::default()
         } else {
+            // Standard ~/.kube/config — use our "orca" context specifically
             kube::config::KubeConfigOptions {
                 context: Some(Self::CONTEXT_NAME.to_string()),
                 ..Default::default()
