@@ -174,6 +174,7 @@ pub async fn run_fix_streaming(
         async move { let _ = tx.send(msg).await; }
     };
 
+    tracing::info!("run_fix_streaming: action={action}");
     match action {
         "install_docker" => {
             #[cfg(target_os = "windows")]
@@ -1041,6 +1042,7 @@ pub async fn check_environment() -> EnvironmentStatus {
 
 /// Run an automated fix action.
 pub async fn run_fix(action: &str) -> anyhow::Result<String> {
+    tracing::info!("run_fix (non-streaming): action={action}");
     match action {
         "install_podman_linux" => {
             // Detect package manager and install

@@ -3057,13 +3057,16 @@ async fn env_fix(
     State(_state): State<Arc<AppState>>,
     Json(body): Json<FixRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    tracing::info!("env_fix: action={}", body.action);
     let output = orca_backend_common::environment::run_fix(&body.action).await?;
+    tracing::info!("env_fix: completed, output_len={}", output.len());
     Ok(Json(serde_json::json!({ "output": output })))
 }
 
 async fn env_fix_stream(
     Json(body): Json<FixRequest>,
 ) -> impl IntoResponse {
+    tracing::info!("env_fix_stream: action={}", body.action);
     use axum::response::sse::{Event, Sse};
     use tokio_stream::wrappers::ReceiverStream;
     use futures::StreamExt;
@@ -3072,9 +3075,14 @@ async fn env_fix_stream(
     let action = body.action.clone();
 
     tokio::spawn(async move {
+        tracing::info!("env_fix_stream: spawned task for action={action}");
         match orca_backend_common::environment::run_fix_streaming(&action, tx.clone()).await {
-            Ok(_) => { let _ = tx.send("[DONE]".into()).await; }
+            Ok(_) => {
+                tracing::info!("env_fix_stream: action={action} completed successfully");
+                let _ = tx.send("[DONE]".into()).await;
+            }
             Err(e) => {
+                tracing::error!("env_fix_stream: action={action} failed: {e}");
                 for line in e.to_string().lines() {
                     let _ = tx.send(line.to_string()).await;
                 }

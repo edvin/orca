@@ -1067,12 +1067,8 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
         {
             let mut cmd = tokio::process::Command::new("wsl");
             cmd.args(["-u", "root", "--", "k3s", "kubectl", "get", &kind, &name, "-n", &namespace, "-o", "yaml"]);
-            // Hide console window
             #[cfg(target_os = "windows")]
-            {
-                use std::os::windows::process::CommandExt;
-                cmd.creation_flags(0x08000000);
-            }
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             cmd.output().await.map_err(|e| format!("kubectl failed: {e}"))?
         }
         #[cfg(not(target_os = "windows"))]
