@@ -62,6 +62,7 @@ async function injectTauriBridge(page: Page) {
           list_images: () => fetchJson(DAEMON +"/images"),
           inspect_image: () => fetchJson(DAEMON +"/images/" + encodeURIComponent(args.id)),
           image_history: () => fetchJson(DAEMON +"/images/" + encodeURIComponent(args.id) + "/history"),
+          scan_image: () => fetchJson(DAEMON +"/images/" + encodeURIComponent(args.id) + "/scan"),
           // Volumes
           list_volumes: () => fetchJson(DAEMON +"/volumes"),
           // Networks
@@ -249,6 +250,38 @@ test.describe("Orca Desktop Screenshots", () => {
   test("06 - Images", async ({ page }) => {
     await navigateTo(page, "Images");
     await screenshot(page, "06-images");
+  });
+
+  test("06b - Image scan results", async ({ page }) => {
+    await navigateTo(page, "Images");
+    // Click the composer:2 row to expand it
+    const composerRow = page.locator("tr", { hasText: "composer" }).first();
+    if (await composerRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await composerRow.click();
+      await page.waitForTimeout(1000);
+      // Click "Scan for Vulnerabilities" button in the expanded detail
+      const scanBtn = page.getByText("Scan for Vulnerabilities").first();
+      if (await scanBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await scanBtn.click();
+        // Wait for scan results to appear (Trivy can take a while)
+        try {
+          await page.waitForSelector("text=CRITICAL", { timeout: 120000 });
+        } catch {
+          // Maybe no CRITICAL vulns, look for any result
+          try {
+            await page.waitForSelector("text=No vulnerabilities", { timeout: 5000 });
+          } catch {}
+        }
+        await page.waitForTimeout(500);
+        // Scroll the CRITICAL text into view to show the vulnerability table
+        const criticalEl = page.getByText("CRITICAL").first();
+        if (await criticalEl.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await criticalEl.scrollIntoViewIfNeeded();
+          await page.waitForTimeout(500);
+        }
+        await screenshot(page, "06b-image-scan");
+      }
+    }
   });
 
   test("07 - Volumes", async ({ page }) => {
