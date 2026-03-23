@@ -100,40 +100,40 @@ impl K3sManager {
     }
 
     /// Build a Command for kubectl, handling the "k3s kubectl" case properly.
+    /// Always uses our own kubeconfig to avoid picking up remote clusters.
     fn kubectl_command(&self) -> Command {
         let bin = self.kubectl_bin();
-        if bin.starts_with("k3s ") {
-            let mut cmd = Command::new("k3s");
-            cmd.arg("kubectl");
-            cmd
+        let mut cmd = if bin.starts_with("k3s ") {
+            let mut c = Command::new("k3s");
+            c.arg("kubectl");
+            c
         } else {
             Command::new("kubectl")
+        };
+        // Point kubectl to our kubeconfig — never use the user's default config
+        let kc = self.kubeconfig_path();
+        if kc.exists() {
+            cmd.env("KUBECONFIG", &kc);
         }
+        cmd
     }
 
     fn kubeconfig_path(&self) -> PathBuf {
         if let Some(path) = &self.kubeconfig_override {
             return path.clone();
         }
-        // Check KUBECONFIG env var
-        if let Ok(path) = std::env::var("KUBECONFIG") {
-            return PathBuf::from(path);
-        }
-        // Check all possible locations — works on any platform
+        // Only look for OUR kubeconfig — never use the user's ~/.kube/config
+        // which could point to a remote cluster (GKE, EKS, etc.) that may hang.
         let mut candidates = Vec::new();
-        // Windows: %USERPROFILE%\.kube\...
+        // Windows: %USERPROFILE%\.kube\orca-k3s-config
         if let Ok(profile) = std::env::var("USERPROFILE") {
-            let base = PathBuf::from(profile).join(".kube");
-            candidates.push(base.join("orca-k3s-config"));
-            candidates.push(base.join("config"));
+            candidates.push(PathBuf::from(profile).join(".kube").join("orca-k3s-config"));
         }
-        // Unix: ~/.kube/...
+        // Unix: ~/.kube/orca-k3s-config
         if let Some(home) = dirs::home_dir() {
-            let base = home.join(".kube");
-            candidates.push(base.join("orca-k3s-config"));
-            candidates.push(base.join("config"));
+            candidates.push(home.join(".kube").join("orca-k3s-config"));
         }
-        // Linux native k3s
+        // Linux native k3s (installed by us or system-wide)
         candidates.push(PathBuf::from("/etc/rancher/k3s/k3s.yaml"));
 
         for path in &candidates {
@@ -141,8 +141,12 @@ impl K3sManager {
                 return path.clone();
             }
         }
-        // Fallback (won't exist but gives a meaningful path)
-        candidates.into_iter().last().unwrap_or_else(|| PathBuf::from("/etc/rancher/k3s/k3s.yaml"))
+        // Return our preferred path (won't exist = K8s not enabled)
+        if let Some(home) = dirs::home_dir() {
+            home.join(".kube").join("orca-k3s-config")
+        } else {
+            PathBuf::from("/etc/rancher/k3s/k3s.yaml")
+        }
     }
 
     async fn get_client(&self) -> anyhow::Result<Client> {
@@ -379,6 +383,27 @@ impl K3sManager {
                     .stderr(Stdio::null())
                     .spawn()?;
                 log.push_str("    k3s server process spawned\n\n");
+            }
+        }
+
+        // Step 2b: Copy kubeconfig to ~/.kube/orca-k3s-config for user convenience
+        if let Some(home) = dirs::home_dir() {
+            let kube_dir = home.join(".kube");
+            let _ = std::fs::create_dir_all(&kube_dir);
+            let target = kube_dir.join("orca-k3s-config");
+            // Wait briefly for k3s to write the kubeconfig
+            for _ in 0..10 {
+                if std::path::Path::new("/etc/rancher/k3s/k3s.yaml").exists() {
+                    match std::fs::copy("/etc/rancher/k3s/k3s.yaml", &target) {
+                        Ok(_) => {
+                            log.push_str(&format!(">>> Kubeconfig copied to {}\n", target.display()));
+                            log.push_str("    Use: kubectl --kubeconfig ~/.kube/orca-k3s-config get pods\n\n");
+                            break;
+                        }
+                        Err(e) => tracing::debug!("Failed to copy kubeconfig: {e}"),
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         }
 
@@ -870,14 +895,10 @@ impl K8sManager for K3sManager {
         {
             let mut candidates = Vec::new();
             if let Ok(profile) = std::env::var("USERPROFILE") {
-                let base = PathBuf::from(&profile).join(".kube");
-                candidates.push(("USERPROFILE orca-k3s", base.join("orca-k3s-config")));
-                candidates.push(("USERPROFILE config", base.join("config")));
+                candidates.push(("USERPROFILE orca-k3s", PathBuf::from(&profile).join(".kube").join("orca-k3s-config")));
             }
             if let Some(home) = dirs::home_dir() {
-                let base = home.join(".kube");
-                candidates.push(("HOME orca-k3s", base.join("orca-k3s-config")));
-                candidates.push(("HOME config", base.join("config")));
+                candidates.push(("HOME orca-k3s", home.join(".kube").join("orca-k3s-config")));
             }
             candidates.push(("k3s default", PathBuf::from("/etc/rancher/k3s/k3s.yaml")));
             for (label, path) in &candidates {

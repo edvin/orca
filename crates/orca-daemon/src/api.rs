@@ -2279,8 +2279,23 @@ async fn compose_pull(
 async fn k8s_status(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let status = state.k8s.status().await?;
-    Ok(Json(status))
+    // Timeout prevents hanging when kubeconfig points to unreachable cluster
+    match tokio::time::timeout(
+        Duration::from_secs(10),
+        state.k8s.status(),
+    ).await {
+        Ok(result) => Ok(Json(result?)),
+        Err(_) => {
+            tracing::warn!("K8s status timed out after 10s");
+            Ok(Json(orca_core::kubernetes::ClusterStatus {
+                enabled: false,
+                running: false,
+                version: None, node_name: None, node_status: None,
+                pods_running: 0, pods_total: 0, traefik_dashboard: None,
+                error: Some("Kubernetes status check timed out".to_string()),
+            }))
+        }
+    }
 }
 
 async fn k8s_enable(
