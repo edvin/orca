@@ -1423,6 +1423,59 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
 
             Ok(format!("Helm installed!\n\n{output}"))
         }
+        // Long-running setup actions — these should use the SSE streaming endpoint.
+        // If we reach here it means streaming failed; run the core steps directly.
+        "setup_docker_macos" => {
+            let mut output = String::new();
+            output.push_str(">>> Setting up Docker on macOS via Lima\n\n");
+
+            // Check/install Homebrew
+            if run_cmd("brew", &["--version"]).await.is_err() {
+                output.push_str("Installing Homebrew...\n");
+                let _ = run_cmd("sh", &["-c", "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""]).await
+                    .map_err(|e| { output.push_str(&format!("Homebrew install failed: {e}\n")); })
+                    .ok();
+            } else {
+                output.push_str("Homebrew: installed\n");
+            }
+
+            // Install Lima + Docker CLI
+            let lima_ok = run_cmd("limactl", &["--version"]).await.is_ok();
+            let docker_ok = run_cmd("docker", &["--version"]).await.is_ok();
+            if !lima_ok || !docker_ok {
+                let mut pkgs = Vec::new();
+                if !lima_ok { pkgs.push("lima"); }
+                if !docker_ok { pkgs.push("docker"); }
+                output.push_str(&format!("Installing {}...\n", pkgs.join(", ")));
+                match run_cmd("brew", &[&["install"][..], &pkgs.iter().map(|s| s.as_ref()).collect::<Vec<&str>>()].concat()).await {
+                    Ok(o) => output.push_str(&format!("{o}\n")),
+                    Err(e) => output.push_str(&format!("brew install failed: {e}\n")),
+                }
+            } else {
+                output.push_str("Lima and Docker CLI: installed\n");
+            }
+
+            // Create/start Lima VM
+            let vms = run_cmd("limactl", &["list", "--format", "{{.Name}}"]).await.unwrap_or_default();
+            if !vms.lines().any(|l| l.trim() == "docker" || l.trim() == "default") {
+                output.push_str("Creating Lima VM...\n");
+                match run_cmd("limactl", &["create", "--name=docker", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs", "template://docker"]).await {
+                    Ok(_) => output.push_str("VM created.\n"),
+                    Err(e) => output.push_str(&format!("VM creation failed: {e}\n")),
+                }
+            }
+
+            output.push_str("Starting Lima VM...\n");
+            let _ = run_cmd("limactl", &["start", "docker"]).await;
+
+            // Verify
+            match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
+                Ok(v) => output.push_str(&format!("\nDocker {} is ready!\n", v.trim())),
+                Err(_) => output.push_str("\nDocker may still be starting. Restart Orca in a moment.\n"),
+            }
+
+            Ok(output)
+        }
         _ => anyhow::bail!("Unknown fix action: {action}"),
     }
 }

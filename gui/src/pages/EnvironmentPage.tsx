@@ -109,9 +109,11 @@ export default function EnvironmentPage() {
       }
     } catch (e) {
       logError(`Environment fix SSE error for ${checkName}: ${e}`);
+      // SSE streaming failed — fall back to non-streaming invoke
       try {
+        setActionLog(`Streaming unavailable, running directly...\n\n`);
         const result = (await invoke("env_fix", { action })) as { output: string };
-        setActionLog(result.output || "(no output)");
+        setActionLog((prev) => prev + (result.output || "(completed with no output)"));
         setActionSuccess(true);
       } catch (e2) {
         logError(`Environment fix failed for ${checkName}: ${e2}`);
