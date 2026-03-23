@@ -269,6 +269,11 @@ export default function EnvironmentPage() {
       <div class="page-header">
         <h1 class="page-title">System Health</h1>
         <div class="page-actions">
+          <Show when={!health()?.docker_connected && navigator.platform.includes("Mac")}>
+            <button class="btn btn-primary" disabled={actionRunning()} onClick={() => runFix("setup_docker_macos", "Docker Setup")}>
+              Set up Docker
+            </button>
+          </Show>
           <button class="btn" onClick={restartDocker} disabled={restartingDocker()}>
             {restartingDocker() ? "Restarting..." : "Restart Docker"}
           </button>
