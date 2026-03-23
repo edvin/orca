@@ -100,7 +100,7 @@ impl K3sManager {
     }
 
     /// Build a Command for kubectl, handling the "k3s kubectl" case properly.
-    /// Always uses our own kubeconfig to avoid picking up remote clusters.
+    /// Always uses --context orca to avoid connecting to the user's remote clusters.
     fn kubectl_command(&self) -> Command {
         let bin = self.kubectl_bin();
         let mut cmd = if bin.starts_with("k3s ") {
@@ -108,45 +108,132 @@ impl K3sManager {
             c.arg("kubectl");
             c
         } else {
-            Command::new("kubectl")
+            let mut c = Command::new("kubectl");
+            // Use our context (k3s kubectl doesn't need this — it only has one context)
+            c.arg("--context").arg(Self::CONTEXT_NAME);
+            c
         };
-        // Point kubectl to our kubeconfig — never use the user's default config
-        let kc = self.kubeconfig_path();
-        if kc.exists() {
-            cmd.env("KUBECONFIG", &kc);
-        }
         cmd
     }
+
+    /// Our context name in ~/.kube/config
+    const CONTEXT_NAME: &'static str = "orca";
 
     fn kubeconfig_path(&self) -> PathBuf {
         if let Some(path) = &self.kubeconfig_override {
             return path.clone();
         }
-        // Only look for OUR kubeconfig — never use the user's ~/.kube/config
-        // which could point to a remote cluster (GKE, EKS, etc.) that may hang.
-        let mut candidates = Vec::new();
-        // Windows: %USERPROFILE%\.kube\orca-k3s-config
+        // Use the standard kubeconfig — we only connect using our "orca" context
+        // so we never accidentally hit the user's remote clusters.
+        if let Ok(path) = std::env::var("KUBECONFIG") {
+            return PathBuf::from(path);
+        }
+        // Windows
         if let Ok(profile) = std::env::var("USERPROFILE") {
-            candidates.push(PathBuf::from(profile).join(".kube").join("orca-k3s-config"));
+            let p = PathBuf::from(profile).join(".kube").join("config");
+            if p.exists() { return p; }
         }
-        // Unix: ~/.kube/orca-k3s-config
+        // Unix
         if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join(".kube").join("orca-k3s-config"));
+            let p = home.join(".kube").join("config");
+            if p.exists() { return p; }
         }
-        // Linux native k3s (installed by us or system-wide)
-        candidates.push(PathBuf::from("/etc/rancher/k3s/k3s.yaml"));
+        // Linux native k3s
+        if PathBuf::from("/etc/rancher/k3s/k3s.yaml").exists() {
+            return PathBuf::from("/etc/rancher/k3s/k3s.yaml");
+        }
+        // Fallback — standard path (won't exist = K8s not enabled)
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("/root"))
+            .join(".kube").join("config")
+    }
 
-        for path in &candidates {
-            if path.exists() {
-                return path.clone();
-            }
-        }
-        // Return our preferred path (won't exist = K8s not enabled)
+    /// Merge k3s kubeconfig into ~/.kube/config as the "orca" context.
+    /// Uses kubectl config commands to safely modify the kubeconfig.
+    fn merge_kubeconfig_context() -> anyhow::Result<()> {
+        let k3s_config = "/etc/rancher/k3s/k3s.yaml";
+        let k3s_content = std::fs::read_to_string(k3s_config)?;
+
+        // Extract server URL from k3s config (usually https://127.0.0.1:6443)
+        let server = k3s_content.lines()
+            .find(|l| l.trim().starts_with("server:"))
+            .and_then(|l| l.split_once(':').map(|(_, v)| v.trim().trim_matches('"').to_string()))
+            .unwrap_or_else(|| "https://127.0.0.1:6443".to_string());
+        // The split_once on ':' only splits at the first colon, we need the full URL
+        let server = k3s_content.lines()
+            .find(|l| l.trim().starts_with("server:"))
+            .map(|l| l.trim().trim_start_matches("server:").trim().trim_matches('"').to_string())
+            .unwrap_or_else(|| "https://127.0.0.1:6443".to_string());
+
+        // Extract certificate-authority-data and client certs from k3s config
+        let ca_data = k3s_content.lines()
+            .find(|l| l.trim().starts_with("certificate-authority-data:"))
+            .map(|l| l.trim().trim_start_matches("certificate-authority-data:").trim().to_string());
+        let client_cert = k3s_content.lines()
+            .find(|l| l.trim().starts_with("client-certificate-data:"))
+            .map(|l| l.trim().trim_start_matches("client-certificate-data:").trim().to_string());
+        let client_key = k3s_content.lines()
+            .find(|l| l.trim().starts_with("client-key-data:"))
+            .map(|l| l.trim().trim_start_matches("client-key-data:").trim().to_string());
+
+        // Ensure ~/.kube directory exists
         if let Some(home) = dirs::home_dir() {
-            home.join(".kube").join("orca-k3s-config")
-        } else {
-            PathBuf::from("/etc/rancher/k3s/k3s.yaml")
+            let _ = std::fs::create_dir_all(home.join(".kube"));
         }
+
+        // Use kubectl config commands to add our context
+        // Set cluster
+        let mut cmd = std::process::Command::new("kubectl");
+        cmd.args(["config", "set-cluster", "orca", &format!("--server={server}")]);
+        if let Some(ca) = &ca_data {
+            // Write CA to a temp approach: embed directly
+            cmd.arg("--embed-certs=true");
+            // Actually, set-cluster with --certificate-authority needs a file, but we have base64 data.
+            // Use the simpler approach: set via config set
+        }
+        let _ = cmd.output();
+
+        // Set certificate-authority-data directly via config set
+        if let Some(ca) = &ca_data {
+            let _ = std::process::Command::new("kubectl")
+                .args(["config", "set", "clusters.orca.certificate-authority-data", ca])
+                .output();
+        }
+
+        // Set user credentials
+        if let Some(cert) = &client_cert {
+            let _ = std::process::Command::new("kubectl")
+                .args(["config", "set", "users.orca.client-certificate-data", cert])
+                .output();
+        }
+        if let Some(key) = &client_key {
+            let _ = std::process::Command::new("kubectl")
+                .args(["config", "set", "users.orca.client-key-data", key])
+                .output();
+        }
+
+        // Set context
+        let _ = std::process::Command::new("kubectl")
+            .args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"])
+            .output();
+
+        tracing::info!("Merged k3s config into ~/.kube/config as 'orca' context (server={server})");
+        Ok(())
+    }
+
+    /// Check if our "orca" context exists in the kubeconfig
+    fn has_orca_context(&self) -> bool {
+        let path = self.kubeconfig_path();
+        if !path.exists() { return false; }
+        // Quick check — look for our context name in the file
+        if let Ok(contents) = std::fs::read_to_string(&path) {
+            // For k3s default config, always treat as ours
+            if path == PathBuf::from("/etc/rancher/k3s/k3s.yaml") {
+                return true;
+            }
+            return contents.contains(&format!("name: {}", Self::CONTEXT_NAME));
+        }
+        false
     }
 
     async fn get_client(&self) -> anyhow::Result<Client> {
@@ -164,10 +251,21 @@ impl K3sManager {
         let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path)
             .map_err(|e| { tracing::warn!("K8s: failed to parse kubeconfig: {e}"); e })?;
 
-        // Try to create a client from kubeconfig — may fail with exec-based auth
+        // Use our "orca" context — never connect to the user's current-context
+        let kube_opts = if kubeconfig_path == PathBuf::from("/etc/rancher/k3s/k3s.yaml") {
+            // k3s default config has a "default" context
+            kube::config::KubeConfigOptions::default()
+        } else {
+            kube::config::KubeConfigOptions {
+                context: Some(Self::CONTEXT_NAME.to_string()),
+                ..Default::default()
+            }
+        };
+
+        // Try to create a client from kubeconfig with our specific context
         let config = match kube::Config::from_custom_kubeconfig(
             kubeconfig.clone(),
-            &kube::config::KubeConfigOptions::default(),
+            &kube_opts,
         ).await {
             Ok(config) => config,
             Err(e) => {
@@ -386,25 +484,19 @@ impl K3sManager {
             }
         }
 
-        // Step 2b: Copy kubeconfig to ~/.kube/orca-k3s-config for user convenience
-        if let Some(home) = dirs::home_dir() {
-            let kube_dir = home.join(".kube");
-            let _ = std::fs::create_dir_all(&kube_dir);
-            let target = kube_dir.join("orca-k3s-config");
-            // Wait briefly for k3s to write the kubeconfig
-            for _ in 0..10 {
-                if std::path::Path::new("/etc/rancher/k3s/k3s.yaml").exists() {
-                    match std::fs::copy("/etc/rancher/k3s/k3s.yaml", &target) {
-                        Ok(_) => {
-                            log.push_str(&format!(">>> Kubeconfig copied to {}\n", target.display()));
-                            log.push_str("    Use: kubectl --kubeconfig ~/.kube/orca-k3s-config get pods\n\n");
-                            break;
-                        }
-                        Err(e) => tracing::debug!("Failed to copy kubeconfig: {e}"),
+        // Step 2b: Merge k3s kubeconfig into ~/.kube/config as "orca" context
+        for _ in 0..10 {
+            if std::path::Path::new("/etc/rancher/k3s/k3s.yaml").exists() {
+                match Self::merge_kubeconfig_context() {
+                    Ok(()) => {
+                        log.push_str(">>> Added 'orca' context to ~/.kube/config\n");
+                        log.push_str("    Use: kubectl --context orca get pods\n\n");
+                        break;
                     }
+                    Err(e) => tracing::debug!("Failed to merge kubeconfig: {e}"),
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
 
         // Step 3: Wait for cluster readiness
@@ -888,25 +980,11 @@ impl K8sManager for K3sManager {
 
     async fn status(&self) -> anyhow::Result<ClusterStatus> {
         let kubeconfig_path = self.kubeconfig_path();
-        let kubeconfig_exists = kubeconfig_path.exists();
-        tracing::info!("K8s status: kubeconfig path={}, exists={}", kubeconfig_path.display(), kubeconfig_exists);
+        let has_context = self.has_orca_context();
+        tracing::info!("K8s status: kubeconfig={}, has_orca_context={}", kubeconfig_path.display(), has_context);
 
-        // Log all candidate paths for debugging
-        {
-            let mut candidates = Vec::new();
-            if let Ok(profile) = std::env::var("USERPROFILE") {
-                candidates.push(("USERPROFILE orca-k3s", PathBuf::from(&profile).join(".kube").join("orca-k3s-config")));
-            }
-            if let Some(home) = dirs::home_dir() {
-                candidates.push(("HOME orca-k3s", home.join(".kube").join("orca-k3s-config")));
-            }
-            candidates.push(("k3s default", PathBuf::from("/etc/rancher/k3s/k3s.yaml")));
-            for (label, path) in &candidates {
-                tracing::info!("  K8s candidate [{}]: {} (exists={})", label, path.display(), path.exists());
-            }
-        }
-
-        if !kubeconfig_exists {
+        // If the kubeconfig doesn't exist or doesn't have our context, K8s isn't enabled
+        if !kubeconfig_path.exists() || !has_context {
             // Check if k3s is installed (for direct installs)
             let installed = self.is_k3s_installed().await;
             tracing::info!("K8s status: no kubeconfig found, is_k3s_installed={}", installed);
