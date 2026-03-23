@@ -1996,12 +1996,14 @@ pub async fn open_file_in_browser(path: String) -> Result<(), String> {
     if path.starts_with("http://") || path.starts_with("https://") {
         return open::that(&path).map_err(|e| format!("Failed to open URL: {e}"));
     }
-    // For file paths, only allow temp directory
+    // For file paths, only allow temp directory.
+    // Canonicalize both paths to handle Windows UNC prefixes (\\?\)
     let canonical = std::fs::canonicalize(&path)
         .map_err(|e| format!("Invalid path: {e}"))?;
-    let temp_dir = std::env::temp_dir();
+    let temp_dir = std::fs::canonicalize(std::env::temp_dir())
+        .unwrap_or_else(|_| std::env::temp_dir());
     if !canonical.starts_with(&temp_dir) {
-        return Err("Access denied: only temp directory files can be opened".into());
+        return Err(format!("Access denied: only temp directory files can be opened (got: {}, temp: {})", canonical.display(), temp_dir.display()));
     }
     open::that(&path).map_err(|e| format!("Failed to open file: {e}"))
 }

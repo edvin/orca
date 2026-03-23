@@ -476,20 +476,26 @@ export default function EnvironmentPage() {
               </div>
             </Show>
 
-            {/* === SETUP STATE === */}
+            {/* === SETUP / RECONNECT STATE === */}
             <Show when={!s().ready || health()?.docker_connected === false}>
               <div style={{
                 "margin-bottom": "24px",
-                background: "linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%)",
-                border: "1px solid rgba(88, 166, 255, 0.2)",
+                background: s().ready
+                  ? "linear-gradient(135deg, rgba(210, 169, 34, 0.08) 0%, rgba(248, 81, 73, 0.05) 100%)"
+                  : "linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%)",
+                border: s().ready
+                  ? "1px solid rgba(210, 169, 34, 0.2)"
+                  : "1px solid rgba(88, 166, 255, 0.2)",
                 "border-radius": "12px",
                 padding: "32px",
               }}>
                 <div style={{ "font-size": "24px", "font-weight": "700", "margin-bottom": "8px", color: "var(--text-primary)" }}>
-                  Container Runtime Setup
+                  {s().ready ? "Docker Connection Issue" : "Container Runtime Setup"}
                 </div>
                 <div style={{ "font-size": "14px", color: "var(--text-muted)", "margin-bottom": "24px", "line-height": "1.5" }}>
-                  {s().platform === "macos"
+                  {s().ready
+                    ? "Docker is installed but Orca can't connect to it. Try restarting the Orca daemon or Docker service."
+                    : s().platform === "macos"
                     ? "Set up a container runtime to get started. Orca uses a lightweight Linux VM via Lima on macOS."
                     : s().platform === "windows"
                     ? "Set up Docker in WSL2 to get started. Orca manages containers via the Windows Subsystem for Linux."
