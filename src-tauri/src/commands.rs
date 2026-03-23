@@ -1633,8 +1633,8 @@ pub async fn env_fix_stream(app: tauri::AppHandle, action: String) -> Result<(),
             }
         };
 
-        let mut stream = resp.bytes_stream();
         use futures_util::StreamExt;
+        let mut stream = resp.bytes_stream();
         let mut buffer = String::new();
 
         while let Some(chunk) = stream.next().await {
