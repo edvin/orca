@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import * as monaco from "monaco-editor";
+import "monaco-editor/min/vs/editor/editor.main.css";
 
 // Configure Monaco workers for Vite bundling
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -132,7 +133,7 @@ export default function YamlEditor(props: YamlEditorProps) {
       foldingHighlight: false,
       scrollBeyondLastLine: false,
       wordWrap: "on",
-      automaticLayout: true,
+      automaticLayout: false,
       tabSize: 2,
       renderLineHighlight: "line",
       renderLineHighlightOnlyWhenFocus: false,
@@ -173,7 +174,29 @@ export default function YamlEditor(props: YamlEditorProps) {
       }
     );
 
+    // Manual layout on container resize (more reliable than automaticLayout)
+    const resizeObserver = new ResizeObserver(() => {
+      if (editorInstance && containerRef) {
+        editorInstance.layout({
+          width: containerRef.clientWidth,
+          height: containerRef.clientHeight,
+        });
+      }
+    });
+    if (containerRef) resizeObserver.observe(containerRef);
+
+    // Initial layout after a tick (modal animation may not be complete)
+    requestAnimationFrame(() => {
+      if (editorInstance && containerRef) {
+        editorInstance.layout({
+          width: containerRef.clientWidth,
+          height: containerRef.clientHeight,
+        });
+      }
+    });
+
     onCleanup(() => {
+      resizeObserver.disconnect();
       editorInstance?.dispose();
     });
     } catch (e) {
@@ -243,7 +266,7 @@ export default function YamlEditor(props: YamlEditorProps) {
       <Show when={!loadError()}>
         <div
           ref={containerRef}
-          style={{ flex: "1", "min-height": props.height || "300px" }}
+          style={{ flex: "1", "min-height": props.height || "300px", overflow: "hidden", position: "relative" }}
         />
       </Show>
     </div>
