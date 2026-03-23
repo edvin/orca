@@ -360,7 +360,9 @@ export default function ContainersPage(props: ContainersPageProps) {
           </span>
           <span style={{ "font-weight": "500", "margin-left": "6px" }}>{c.name}</span>
         </td>
-        <td class="mono" style={{ color: "#8b949e" }}>{c.image}</td>
+        <td class="mono" style={{ color: "#8b949e", "max-width": "280px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }} title={c.image}>
+          {c.image.startsWith("sha256:") ? c.image.slice(0, 19) + "..." : c.image}
+        </td>
         <td>
           <span class={`state-badge ${stateClass(c.state)}`}>{c.state}</span>
           <Show when={c.health_status && c.health_status !== "none" && c.health_status !== ""}>
