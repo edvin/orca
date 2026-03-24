@@ -445,14 +445,30 @@ pub async fn run_fix_streaming(
                 send("    Creating 'orca' VM with Apple Virtualization...\n".into()).await;
                 send("    This downloads a lightweight Linux image (~150MB)\n\n".into()).await;
 
-                // Use Lima's built-in docker template with Apple VZ
+                // Write a Lima override to forward 127.0.0.1-bound ports
+                // Docker Desktop does this transparently; Lima needs explicit config
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                let override_path = format!("{home}/.lima/_orca_override.yaml");
+                let override_content = "\
+# Orca: forward ports bound to 127.0.0.1 inside the VM to the macOS host\n\
+# This matches Docker Desktop behavior where 127.0.0.1:80:80 is accessible from the host\n\
+portForwards:\n\
+  - guestIPMustBeZero: false\n\
+    guestIP: \"127.0.0.1\"\n\
+    hostIP: \"127.0.0.1\"\n";
+                let _ = std::fs::write(&override_path, override_content);
+
+                // Use Lima's built-in docker template with Apple VZ + our port forwarding override
                 let create_result = run_cmd_streaming(
                     "limactl", &["create", "--name=orca", "--vm-type=vz",
                         "--rosetta", "--mount-writable",
                         "--mount-type=virtiofs",
+                        &format!("--override={override_path}"),
                         "template://docker"],
                     &tx
                 ).await;
+
+                let _ = std::fs::remove_file(&override_path);
 
                 if let Err(e) = create_result {
                     send(format!("\n    VM creation failed: {e}\n")).await;
@@ -1466,10 +1482,17 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 else { "orca" };
             if !vms.lines().any(|l| l.trim() == "orca" || l.trim() == "docker" || l.trim() == "default") {
                 output.push_str("Creating Lima VM 'orca'...\n");
-                match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs", "template://docker"]).await {
+                // Write port forwarding override (matches Docker Desktop behavior)
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                let override_path = format!("{home}/.lima/_orca_override.yaml");
+                let _ = std::fs::write(&override_path,
+                    "portForwards:\n  - guestIPMustBeZero: false\n    guestIP: \"127.0.0.1\"\n    hostIP: \"127.0.0.1\"\n");
+                match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs",
+                    &format!("--override={override_path}"), "template://docker"]).await {
                     Ok(_) => output.push_str("VM created.\n"),
                     Err(e) => output.push_str(&format!("VM creation failed: {e}\n")),
                 }
+                let _ = std::fs::remove_file(&override_path);
             }
 
             output.push_str(&format!("Starting Lima VM '{vm_name}'...\n"));
