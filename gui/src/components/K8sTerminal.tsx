@@ -5,6 +5,23 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke } from "@tauri-apps/api/core";
 import "@xterm/xterm/css/xterm.css";
 
+const TERM_FONT = "'JetBrains Mono NF', Menlo, Monaco, 'Courier New', monospace";
+
+// Load the Nerd Font via FontFace API for canvas rendering
+const fontFace = new FontFace(
+  "JetBrains Mono NF",
+  "url(/fonts/JetBrainsMonoNerdFont-Regular.ttf)",
+  { weight: "400", style: "normal" },
+);
+const fontFaceBold = new FontFace(
+  "JetBrains Mono NF",
+  "url(/fonts/JetBrainsMonoNerdFont-Bold.ttf)",
+  { weight: "700", style: "normal" },
+);
+document.fonts.add(fontFace);
+document.fonts.add(fontFaceBold);
+const fontsReady = Promise.all([fontFace.load(), fontFaceBold.load()]).catch(() => {});
+
 interface K8sTerminalProps {
   podName: string;
   namespace: string;
@@ -15,7 +32,7 @@ export default function K8sTerminal(props: K8sTerminalProps) {
   let termInstance: Terminal | undefined;
   let fitAddonInstance: FitAddon | undefined;
   const [fontSize, setFontSize] = createSignal(
-    parseInt(localStorage.getItem("terminal-font-size") || "13", 10)
+    parseInt(localStorage.getItem("terminal-font-size") || "14", 10)
   );
 
   const changeFontSize = (delta: number) => {
@@ -29,37 +46,34 @@ export default function K8sTerminal(props: K8sTerminalProps) {
   };
 
   onMount(async () => {
-    await document.fonts.ready;
+    await fontsReady;
 
     const term = new Terminal({
-      theme: {
-        background: "#0d1117",
-        foreground: "#b8c0cc",
-        cursor: "#58a6ff",
-        cursorAccent: "#0d1117",
-        selectionBackground: "#1f6feb44",
-        black: "#0d1117",
-        red: "#f85149",
-        green: "#3fb950",
-        yellow: "#d29922",
-        blue: "#58a6ff",
-        magenta: "#bc8cff",
-        cyan: "#39c5cf",
-        white: "#b8c0cc",
-        brightBlack: "#6e7681",
-        brightRed: "#ffa198",
-        brightGreen: "#56d364",
-        brightYellow: "#e3b341",
-        brightBlue: "#79c0ff",
-        brightMagenta: "#d2a8ff",
-        brightCyan: "#56d4dd",
-        brightWhite: "#c9d1d9",
-      },
-      fontFamily: "'JetBrains Mono NF', 'JetBrains Mono', 'Menlo', 'Consolas', monospace",
-      fontSize: fontSize(),
-      lineHeight: 1.1,
       cursorBlink: true,
-      cursorStyle: "bar",
+      fontFamily: TERM_FONT,
+      fontSize: fontSize(),
+      theme: {
+        background: "#1a1b26",
+        foreground: "#a9b1d6",
+        cursor: "#c0caf5",
+        selectionBackground: "#33467c",
+        black: "#15161e",
+        red: "#f7768e",
+        green: "#9ece6a",
+        yellow: "#e0af68",
+        blue: "#7aa2f7",
+        magenta: "#bb9af7",
+        cyan: "#7dcfff",
+        white: "#a9b1d6",
+        brightBlack: "#414868",
+        brightRed: "#f7768e",
+        brightGreen: "#9ece6a",
+        brightYellow: "#e0af68",
+        brightBlue: "#7aa2f7",
+        brightMagenta: "#bb9af7",
+        brightCyan: "#7dcfff",
+        brightWhite: "#c0caf5",
+      },
       scrollback: 10000,
       convertEol: false,
       allowProposedApi: true,
@@ -71,19 +85,13 @@ export default function K8sTerminal(props: K8sTerminalProps) {
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(termDiv!);
-
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-    });
-
+    fitAddon.fit();
     term.focus();
 
     let token = "";
     try {
       token = await invoke("get_api_token") as string;
-    } catch {
-      // Token may not be configured
-    }
+    } catch {}
 
     const wsUrl = `ws://127.0.0.1:9477/api/v1/k8s/pods/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.podName)}/terminal?token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(wsUrl);
@@ -91,10 +99,8 @@ export default function K8sTerminal(props: K8sTerminalProps) {
 
     ws.onopen = () => {
       term.writeln(`\x1b[36mConnected to pod ${props.podName}\x1b[0m`);
-      const dims = fitAddon.proposeDimensions();
-      if (dims) {
-        ws.send(JSON.stringify({ cols: dims.cols, rows: dims.rows }));
-      }
+      const dims = { cols: term.cols, rows: term.rows };
+      ws.send(JSON.stringify(dims));
     };
 
     ws.onmessage = (event: MessageEvent) => {
@@ -113,9 +119,10 @@ export default function K8sTerminal(props: K8sTerminalProps) {
       term.writeln("\r\n\x1b[31mWebSocket error\x1b[0m");
     };
 
+    // Send terminal input as binary (preserves byte sequences)
     term.onData((data: string) => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data);
+        ws.send(new TextEncoder().encode(data));
       }
     });
 
