@@ -1144,7 +1144,7 @@
     </div>
   </div>
 
-  <div class="highlight-row" style="grid-template-columns: 2fr 3fr;">
+  <div class="highlight-row">
     <div class="highlight-text">
       <h3>Fleet management</h3>
       <p>Install the Orca daemon on any Linux server and manage your entire fleet from one desktop. Tags, groups, bulk operations, health alerts — all built in.</p>
@@ -1156,26 +1156,8 @@
         <li>One-liner install — <code>apt install orca-daemon</code></li>
       </ul>
     </div>
-    <div class="highlight-visual" style="font-size: 12px;">
-<span style="color: #6e7681"># Install on any Linux server</span>
-<span style="color: #79c0ff">$</span> curl -1sLf <span style="color: #a5d6ff">'https://dl.cloudsmith.io/public/edvin/orca/setup.deb.sh'</span> | sudo bash
-<span style="color: #79c0ff">$</span> sudo apt install <span style="color: #a5d6ff">orca-daemon</span>
-
-<span style="color: #3fb950">=== Orca Daemon Ready ===</span>
-<span style="color: #8b949e">URL:</span>   <span style="color: #a5d6ff">http://10.0.1.5:9477/api/v1</span>
-<span style="color: #8b949e">Token:</span> <span style="color: #d2a8ff">a7b3c9d1e5f2...</span>
-
-<span style="color: #6e7681"># Set up TLS &mdash;</span> <span style="color: #58a6ff; cursor: pointer; text-decoration: underline;" onclick="document.getElementById('tls-caddy').style.display='block';document.getElementById('tls-nginx').style.display='none';this.style.fontWeight='bold';this.nextElementSibling.nextElementSibling.style.fontWeight='normal'">Caddy</span> <span style="color: #6e7681">|</span> <span style="color: #8b949e; cursor: pointer;" onclick="document.getElementById('tls-nginx').style.display='block';document.getElementById('tls-caddy').style.display='none';this.style.fontWeight='bold';this.previousElementSibling.previousElementSibling.style.fontWeight='normal'">nginx</span>
-<span id="tls-caddy"><span style="color: #79c0ff">$</span> echo <span style="color: #a5d6ff">'orca.example.com { reverse_proxy localhost:9477 }'</span> \
-  | sudo tee /etc/caddy/Caddyfile</span><span id="tls-nginx" style="display:none">server {
-  listen <span style="color: #ff9e64">443</span> ssl;
-  server_name <span style="color: #a5d6ff">orca.example.com</span>;
-  ssl_certificate     <span style="color: #9ece6a">/etc/letsencrypt/live/.../fullchain.pem</span>;
-  ssl_certificate_key <span style="color: #9ece6a">/etc/letsencrypt/live/.../privkey.pem</span>;
-  location / { proxy_pass <span style="color: #a5d6ff">http://127.0.0.1:9477</span>; }
-}</span>
-
-<span style="color: #6e7681"># Add in Orca Desktop → Settings → Remote Hosts</span>
+    <div class="highlight-screenshot" style="direction: ltr;">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/00-fleet.png" alt="Fleet dashboard with host cards, tags, and status" loading="lazy">
     </div>
   </div>
 </section>
@@ -1190,6 +1172,10 @@
     <div class="screenshot-card">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/02-containers.png" alt="Containers" loading="lazy">
       <div class="screenshot-label">Containers<span>Compose stacks, live CPU/memory, port links</span></div>
+    </div>
+    <div class="screenshot-card">
+      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/00-fleet.png" alt="Fleet Dashboard" loading="lazy">
+      <div class="screenshot-label">Fleet Dashboard<span>Manage all servers from one UI with tags and health</span></div>
     </div>
     <div class="screenshot-card">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/04-container-logs.png" alt="Container Logs" loading="lazy">

@@ -97,6 +97,24 @@ async function injectTauriBridge(page: Page) {
           list_templates: () => fetchJson(DAEMON +"/templates"),
           get_api_token: () => Promise.resolve("mock-token"),
           get_wsl_config: () => Promise.resolve({ memory: "", processors: "", swap: "" }),
+          // Fleet / remote hosts
+          list_remote_hosts: () => Promise.resolve([
+            { id: "fleet-1", name: "Production", url: "http://10.10.10.201:9477/api/v1", tls_verify: false, tags: ["production", "eu-west"] },
+            { id: "fleet-2", name: "Staging", url: "http://10.10.10.202:9477/api/v1", tls_verify: false, tags: ["staging", "eu-west"] },
+          ]),
+          get_active_host: () => Promise.resolve({ id: null, name: "Local", url: "http://127.0.0.1:9477/api/v1", is_remote: false }),
+          probe_host: () => Promise.resolve({
+            online: true, version: "0.16.0", docker_connected: true,
+            cpu_count: 4, memory_total: 8589934592, memory_available: 4294967296,
+            disk_usage_percent: 45.0, containers_running: 3, containers_total: 5,
+            images_total: 12, os: "linux", arch: "x86_64",
+          }),
+          probe_all_hosts: () => Promise.resolve([
+            { id: null, name: "Local", online: true, version: "0.16.0" },
+            { id: "fleet-1", name: "Production", online: true, version: "0.16.0" },
+            { id: "fleet-2", name: "Staging", online: true, version: "0.16.0" },
+          ]),
+          switch_host: () => Promise.resolve({ host: "Local", url: "http://127.0.0.1:9477/api/v1" }),
           env_status: () => Promise.resolve({ ready: true, checks: [{ name: "Docker", status: "ok", message: "Docker is running" }], all_passed: true }),
           // Activity
           get_activity: () => Promise.resolve([]),
@@ -193,6 +211,16 @@ test.describe("Orca Desktop Screenshots", () => {
     // Fix transparent background (Tauri uses transparent window + custom bg)
     await page.addStyleTag({ content: "body { background: #0a0e14 !important; }" });
     await waitForPageLoad(page);
+  });
+
+  test("00 - Fleet", async ({ page }) => {
+    // Fleet page only shows when remote hosts are configured
+    const fleetNav = page.locator(".nav-label", { hasText: "Fleet" });
+    if (await fleetNav.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await fleetNav.click();
+      await waitForPageLoad(page, 8000);
+      await screenshot(page, "00-fleet");
+    }
   });
 
   test("01 - Dashboard", async ({ page }) => {
