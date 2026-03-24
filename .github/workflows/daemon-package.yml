@@ -1,0 +1,149 @@
+name: Package orca-daemon
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-deb:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            target: x86_64-unknown-linux-gnu
+            deb_arch: amd64
+            runner: ubuntu-latest
+          - arch: aarch64
+            target: aarch64-unknown-linux-gnu
+            deb_arch: arm64
+            runner: ubuntu-latest
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools
+        if: matrix.arch == 'aarch64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build orca-daemon
+        run: |
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
+          cargo build --release --target ${{ matrix.target }} --bin orca-daemon
+        env:
+          CARGO_TERM_COLOR: always
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build .deb package
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          PKG_DIR="orca-daemon_${VERSION}_${{ matrix.deb_arch }}"
+
+          mkdir -p "$PKG_DIR/DEBIAN"
+          mkdir -p "$PKG_DIR/usr/local/bin"
+          mkdir -p "$PKG_DIR/etc/systemd/system"
+          mkdir -p "$PKG_DIR/etc/orca"
+
+          # Control file
+          cat > "$PKG_DIR/DEBIAN/control" << EOF
+          Package: orca-daemon
+          Version: ${VERSION}
+          Architecture: ${{ matrix.deb_arch }}
+          Maintainer: Edvin Syse <edvin@edvin.dev>
+          Description: Orca Container Management Daemon
+           REST API daemon for managing Docker containers, images, volumes,
+           networks, and Kubernetes. Part of Orca Desktop.
+          Homepage: https://orca-desktop.com
+          Section: admin
+          Priority: optional
+          Depends: docker.io | docker-ce | podman
+          EOF
+
+          # Post-install script
+          cat > "$PKG_DIR/DEBIAN/postinst" << 'EOF'
+          #!/bin/bash
+          set -e
+
+          # Generate API token if not exists
+          if [ ! -f /etc/orca/config.json ]; then
+              TOKEN=$(openssl rand -hex 32)
+              echo "{\"api_token\": \"$TOKEN\"}" > /etc/orca/config.json
+              chmod 600 /etc/orca/config.json
+              echo "Orca: Generated API token in /etc/orca/config.json"
+          fi
+
+          # Enable and start service
+          systemctl daemon-reload
+          systemctl enable orca-daemon
+          systemctl start orca-daemon || true
+
+          # Print connection info
+          TOKEN=$(grep -o '"api_token"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/orca/config.json | cut -d'"' -f4)
+          IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "YOUR_IP")
+          echo ""
+          echo "=== Orca Daemon Ready ==="
+          echo "URL:   http://$IP:9477/api/v1"
+          echo "Token: $TOKEN"
+          echo ""
+          echo "Add this host in Orca Desktop → Settings → Remote Hosts"
+          echo "For production: set up TLS with a reverse proxy (Caddy/nginx)"
+          EOF
+          chmod 755 "$PKG_DIR/DEBIAN/postinst"
+
+          # Pre-remove script
+          cat > "$PKG_DIR/DEBIAN/prerm" << 'EOF'
+          #!/bin/bash
+          set -e
+          systemctl stop orca-daemon 2>/dev/null || true
+          systemctl disable orca-daemon 2>/dev/null || true
+          EOF
+          chmod 755 "$PKG_DIR/DEBIAN/prerm"
+
+          # Binary
+          cp "target/${{ matrix.target }}/release/orca-daemon" "$PKG_DIR/usr/local/bin/"
+          chmod 755 "$PKG_DIR/usr/local/bin/orca-daemon"
+
+          # Systemd service
+          cp deploy/orca-daemon.service "$PKG_DIR/etc/systemd/system/"
+
+          # Build the .deb
+          dpkg-deb --build "$PKG_DIR"
+
+          echo "Built: ${PKG_DIR}.deb"
+
+      - name: Upload .deb to Cloudsmith
+        env:
+          CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+        run: |
+          pip install cloudsmith-cli
+          VERSION=${{ steps.version.outputs.version }}
+          DEB_FILE="orca-daemon_${VERSION}_${{ matrix.deb_arch }}.deb"
+
+          cloudsmith push deb edvin/orca/any-distro/any-version "$DEB_FILE" \
+            --api-key "$CLOUDSMITH_API_KEY" \
+            --republish
+
+      - name: Upload standalone binary to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          BINARY="target/${{ matrix.target }}/release/orca-daemon"
+          RELEASE_NAME="orca-daemon-linux-${{ matrix.arch }}"
+          cp "$BINARY" "$RELEASE_NAME"
+          gh release upload "v${VERSION}" "$RELEASE_NAME" --clobber || true
