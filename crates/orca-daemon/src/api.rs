@@ -2905,9 +2905,11 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
 
     #[cfg(not(target_os = "windows"))]
     let child_result = {
+        let path = std::env::var("PATH").unwrap_or_default();
         TokioCommand::new("kubectl")
-            .args(["exec", "-it", &name, "-n", &namespace, "--", "sh"])
+            .env("PATH", format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{path}"))
             .env("TERM", "xterm-256color")
+            .args(["--context", "orca", "exec", "-it", &name, "-n", &namespace, "--", "sh"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
