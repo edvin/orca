@@ -1,15 +1,7 @@
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import * as monaco from "monaco-editor";
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 
-// Configure Monaco workers for Vite bundling
-(self as any).MonacoEnvironment = {
-  getWorker(_: string, label: string) {
-    if (label === "json") return new jsonWorker();
-    return new editorWorker();
-  },
-};
+// Workers are configured by vite-plugin-monaco-editor
 
 // Register YAML language with monarch tokenizer for syntax highlighting
 let yamlRegistered = false;
