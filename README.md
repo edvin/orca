@@ -164,25 +164,25 @@
 ## Architecture
 
 ```
-┌──────────────────────────────────┐
-│     Tauri Desktop App (GUI)      │
-│     SolidJS + TypeScript         │
-├──────────────────────────────────┤
-│          Orca Daemon             │
-│   REST API + SSE + Agent APIs    │
-│         (port 9477)              │
-├──────────────────────────────────┤
-│      Platform Backend            │
-│  Linux: native Docker/Podman     │
-│  macOS: Lima VM                  │
-│  Windows: WSL2                   │
-├──────────────────────────────────┤
-│     Container Runtime            │
-│   Docker or Podman (your choice) │
-└──────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│              Orca Desktop (GUI)                         │
+│              SolidJS + TypeScript                       │
+│         Host selector: Local | Remote servers           │
+└───────────────┬─────────────────────┬───────────────────┘
+                │                     │
+        ┌───────▼───────┐     ┌───────▼───────┐
+        │  Local Daemon │     │ Remote Daemon  │ ← apt install orca-daemon
+        │  (port 9477)  │     │ (HTTPS/9477)   │
+        ├───────────────┤     ├────────────────┤
+        │   Platform    │     │   Linux        │
+        │  Linux/macOS/ │     │   Docker       │
+        │   Windows     │     │   (native)     │
+        ├───────────────┤     ├────────────────┤
+        │ Docker/Podman │     │ Docker/Podman  │
+        └───────────────┘     └────────────────┘
 ```
 
-The daemon talks to Docker/Podman via the standard API (bollard). On macOS it manages a Lima VM, on Windows a WSL2 distro. On Linux it talks directly to the runtime — no VM needed.
+The daemon talks to Docker/Podman via the standard API (bollard). On macOS it manages a Lima VM, on Windows a WSL2 distro. On Linux it talks directly to the runtime — no VM needed. Remote daemons are managed over HTTPS with bearer token authentication.
 
 ## Quick Start
 
@@ -202,7 +202,44 @@ Just download and launch Orca Desktop — it handles everything else:
 
 No manual setup required. The Environment page guides you through any needed steps with one-click fix buttons.
 
-### Run the daemon
+### Manage Remote Servers
+
+Install the Orca daemon on any Linux server and manage it from your desktop:
+
+```bash
+# One-liner install (Ubuntu/Debian)
+curl -1sLf 'https://dl.cloudsmith.io/public/edvin/orca/setup.deb.sh' | sudo bash
+sudo apt install orca-daemon
+```
+
+This installs the daemon as a systemd service that:
+- **Starts automatically** on boot and restarts on crash
+- **Generates an API token** at `/etc/orca/config.json`
+- **Prints connection details** (URL + token) after install
+
+Then in Orca Desktop: **Settings → Remote Hosts → Add Host** — paste the URL and token.
+
+**TLS for production:** Put a reverse proxy in front of the daemon:
+
+```bash
+# Caddy (automatic TLS)
+sudo apt install caddy
+echo 'orca.example.com { reverse_proxy localhost:9477 }' | sudo tee /etc/caddy/Caddyfile
+sudo systemctl restart caddy
+```
+
+See [deploy/caddy-example](deploy/caddy-example) and [deploy/nginx-example](deploy/nginx-example) for full configs. For a complete guide, see [docs/remote-management.md](docs/remote-management.md).
+
+**Updates:** Standard apt — `sudo apt update && sudo apt upgrade`
+
+**Management commands:**
+```bash
+systemctl status orca-daemon    # Check status
+journalctl -u orca-daemon -f    # View logs
+cat /etc/orca/config.json       # View API token
+```
+
+### Run the daemon (development)
 
 ```bash
 # Clone and build
