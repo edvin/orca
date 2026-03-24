@@ -8,7 +8,6 @@ on:
 jobs:
   build-deb:
     strategy:
-      fail-fast: false
       matrix:
         include:
           - arch: x86_64
