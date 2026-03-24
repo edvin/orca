@@ -1530,21 +1530,46 @@ fn find_docker_socket() -> String {
         }
     }
 
-    // 2. Check common socket paths in order of preference
+    // 2. Also check Docker context
+    let extended_path = format!(
+        "/opt/homebrew/bin:/usr/local/bin:{}",
+        std::env::var("PATH").unwrap_or_default()
+    );
+    if let Ok(output) = std::process::Command::new("docker")
+        .env("PATH", &extended_path)
+        .args(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"])
+        .output()
+    {
+        if output.status.success() {
+            let host = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if let Some(path) = host.strip_prefix("unix://") {
+                if std::path::Path::new(path).exists() {
+                    tracing::debug!("Docker socket from context: {path}");
+                    return path.to_string();
+                }
+            }
+        }
+    }
+
+    // 3. Check all common socket paths
+    let home = std::env::var("HOME").unwrap_or_default();
     let candidates = [
-        "/var/run/docker.sock",
-        // macOS Docker Desktop
-        &format!("{}/.docker/run/docker.sock", std::env::var("HOME").unwrap_or_default()),
-        // Colima
-        &format!("{}/.colima/default/docker.sock", std::env::var("HOME").unwrap_or_default()),
-        // Podman
-        &format!("{}/podman/podman.sock", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/1000".to_string())),
+        "/var/run/docker.sock".to_string(),
+        format!("{home}/.docker/run/docker.sock"),
+        format!("{home}/.docker/desktop/docker.sock"),
+        format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock"),
+        format!("{home}/.lima/orca/sock/docker.sock"),
+        format!("{home}/.lima/docker/sock/docker.sock"),
+        format!("{home}/.lima/default/sock/docker.sock"),
+        format!("{home}/.colima/default/docker.sock"),
+        format!("{home}/.colima/docker/docker.sock"),
+        format!("{}/podman/podman.sock", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/1000".to_string())),
     ];
 
     for path in &candidates {
-        if std::path::Path::new(path).exists() {
+        if std::path::Path::new(path.as_str()).exists() {
             tracing::debug!("Docker socket found at: {path}");
-            return path.to_string();
+            return path.clone();
         }
     }
 
@@ -4085,70 +4110,235 @@ async fn cleanup(
 
 // --- Runtime Reconnect ---
 
+/// Helper: extend PATH with common macOS binary locations.
+fn extended_path() -> String {
+    format!(
+        "/opt/homebrew/bin:/usr/local/bin:/opt/homebrew/sbin:/usr/local/sbin:{}",
+        std::env::var("PATH").unwrap_or_default()
+    )
+}
+
+/// Try to ping a Docker socket and return the server version on success.
+async fn try_socket_ping(socket_path: &str) -> Option<String> {
+    let docker = bollard::Docker::connect_with_socket(
+        socket_path, 120, bollard::API_DEFAULT_VERSION,
+    ).ok()?;
+    let ver = docker.version().await.ok()?;
+    ver.version
+}
+
 async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
     let mut log = Vec::new();
+    let mut connected_version: Option<String> = None;
+    let mut connected_method: Option<String> = None;
 
-    // Try each connection method and report results
-    log.push("Attempting to connect to container runtime...".to_string());
-
-    // 1. Local defaults (Unix socket / named pipe)
+    log.push("Checking Docker connectivity...".to_string());
     log.push("".to_string());
-    log.push("Method 1: Local socket".to_string());
-    match bollard::Docker::connect_with_local_defaults() {
-        Ok(docker) => {
-            match docker.version().await {
-                Ok(ver) => {
-                    let v = ver.version.unwrap_or_default();
-                    log.push(format!("  Connected! Docker {v}"));
-                    log.push("".to_string());
-                    log.push("Connection successful via local socket.".to_string());
-                    log.push("Restart Orca Desktop to use this connection for all operations.".to_string());
-                    return Ok(Json(serde_json::json!({
-                        "connected": true,
-                        "method": "local",
-                        "version": v,
-                        "log": log,
-                    })));
+
+    // 1. Check DOCKER_HOST env var
+    match std::env::var("DOCKER_HOST") {
+        Ok(host) => {
+            log.push(format!("DOCKER_HOST: {host}"));
+            if let Some(path) = host.strip_prefix("unix://") {
+                let exists = std::path::Path::new(path).exists();
+                if exists {
+                    match try_socket_ping(path).await {
+                        Some(v) => {
+                            log.push(format!("  Socket exists \u{2713} \u{2192} Docker {v} \u{2713}"));
+                            connected_version = Some(v);
+                            connected_method = Some(format!("DOCKER_HOST ({path})"));
+                        }
+                        None => log.push("  Socket exists but ping failed".to_string()),
+                    }
+                } else {
+                    log.push(format!("  Socket {path}: not found"));
                 }
-                Err(e) => log.push(format!("  Socket exists but ping failed: {e}")),
             }
         }
-        Err(e) => log.push(format!("  Not available: {e}")),
+        Err(_) => log.push("DOCKER_HOST: not set".to_string()),
     }
 
-    // 2. Named pipe (Windows Docker Desktop)
+    // 2. Check Docker context
+    let extended = extended_path();
+    match tokio::process::Command::new("docker")
+        .env("PATH", &extended)
+        .args(["context", "inspect", "--format", "{{.Name}} \u{2192} {{.Endpoints.docker.Host}}"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+    {
+        Ok(out) if out.status.success() => {
+            let ctx = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            log.push(format!("Docker context: {ctx}"));
+            // Try to extract socket path from context
+            if let Some(uri) = ctx.split('\u{2192}').nth(1) {
+                let uri = uri.trim();
+                if let Some(path) = uri.strip_prefix("unix://") {
+                    let exists = std::path::Path::new(path).exists();
+                    if exists && connected_version.is_none() {
+                        if let Some(v) = try_socket_ping(path).await {
+                            log.push(format!("  Context socket: found \u{2713} \u{2192} Docker {v} \u{2713}"));
+                            connected_version = Some(v);
+                            connected_method = Some(format!("Docker context ({path})"));
+                        } else {
+                            log.push("  Context socket: found but ping failed".to_string());
+                        }
+                    } else if !exists {
+                        log.push(format!("  Context socket {path}: not found (stale context?)"));
+                    }
+                }
+            }
+        }
+        _ => log.push("Docker context: not available".to_string()),
+    }
+    log.push("".to_string());
+
+    // 3. Check all known socket paths
+    let home = std::env::var("HOME").unwrap_or_default();
+    let socket_candidates: Vec<(&str, String)> = vec![
+        ("Standard Docker", "/var/run/docker.sock".to_string()),
+        ("Docker Desktop", format!("{home}/.docker/run/docker.sock")),
+        ("Docker Desktop (alt)", format!("{home}/.docker/desktop/docker.sock")),
+        ("Docker Desktop (legacy)", format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock")),
+        ("Lima VM 'orca'", format!("{home}/.lima/orca/sock/docker.sock")),
+        ("Lima VM 'docker'", format!("{home}/.lima/docker/sock/docker.sock")),
+        ("Lima VM 'default'", format!("{home}/.lima/default/sock/docker.sock")),
+        ("Lima VM 'colima'", format!("{home}/.lima/colima/sock/docker.sock")),
+        ("Colima default", format!("{home}/.colima/default/docker.sock")),
+        ("Colima docker", format!("{home}/.colima/docker/docker.sock")),
+    ];
+
+    // Podman sockets
+    let mut podman_candidates: Vec<(&str, String)> = Vec::new();
+    if let Ok(uid) = std::env::var("UID").or_else(|_| {
+        // UID isn't always set; try id -u
+        std::process::Command::new("id").arg("-u").output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .map_err(|e| e.to_string())
+    }) {
+        podman_candidates.push(("Podman (user)", format!("/run/user/{uid}/podman/podman.sock")));
+    }
+    podman_candidates.push(("Podman (root)", "/run/podman/podman.sock".to_string()));
+
+    for (label, path) in socket_candidates.iter().chain(podman_candidates.iter()) {
+        let exists = std::path::Path::new(path).exists();
+        if exists {
+            match try_socket_ping(path).await {
+                Some(v) => {
+                    log.push(format!("Socket {path}: found \u{2713} \u{2192} Docker {v} \u{2713}"));
+                    if connected_version.is_none() {
+                        connected_version = Some(v);
+                        connected_method = Some(format!("{label} ({path})"));
+                    }
+                }
+                None => log.push(format!("Socket {path}: found but ping failed")),
+            }
+        } else {
+            log.push(format!("Socket {path}: not found"));
+        }
+    }
+    log.push("".to_string());
+
+    // 4. On macOS, check Lima VMs and try to start if needed
+    #[cfg(target_os = "macos")]
+    if connected_version.is_none() {
+        // Check Lima VMs
+        match tokio::process::Command::new("limactl")
+            .env("PATH", &extended)
+            .args(["list", "--format", "{{.Name}} {{.Status}} {{.Memory}} {{.CPUs}}"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .await
+        {
+            Ok(out) if out.status.success() => {
+                let text = String::from_utf8_lossy(&out.stdout);
+                for line in text.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let name = parts[0];
+                        let status = parts[1];
+                        let extra = if parts.len() >= 4 {
+                            format!(" ({}, {} CPUs)", parts[2], parts[3])
+                        } else {
+                            String::new()
+                        };
+                        log.push(format!("Lima VM '{name}': {status}{extra}"));
+
+                        if status != "Running" && (name == "orca" || name == "docker") {
+                            log.push(format!("  Starting Lima VM '{name}'..."));
+                            match tokio::process::Command::new("limactl")
+                                .env("PATH", &extended)
+                                .args(["start", name])
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::piped())
+                                .output()
+                                .await
+                            {
+                                Ok(r) if r.status.success() => {
+                                    log.push(format!("  Lima VM '{name}' started successfully"));
+                                    // Wait for socket to appear
+                                    let socket = format!("{home}/.lima/{name}/sock/docker.sock");
+                                    for attempt in 1..=15 {
+                                        if std::path::Path::new(&socket).exists() {
+                                            if let Some(v) = try_socket_ping(&socket).await {
+                                                log.push(format!("  Socket ready \u{2713} \u{2192} Docker {v} \u{2713} (attempt {attempt})"));
+                                                connected_version = Some(v);
+                                                connected_method = Some(format!("Lima VM '{name}' ({socket})"));
+                                                break;
+                                            }
+                                        }
+                                        if attempt <= 14 {
+                                            tokio::time::sleep(Duration::from_secs(2)).await;
+                                        }
+                                    }
+                                    if connected_version.is_none() {
+                                        log.push(format!("  Socket not available after 30s"));
+                                    }
+                                }
+                                Ok(r) => {
+                                    let err = String::from_utf8_lossy(&r.stderr).trim().to_string();
+                                    log.push(format!("  Failed to start: {err}"));
+                                }
+                                Err(e) => log.push(format!("  Failed to start: {e}")),
+                            }
+                            if connected_version.is_some() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(_) => log.push("Lima: limactl returned an error".to_string()),
+            Err(_) => log.push("Lima: limactl not found".to_string()),
+        }
+        log.push("".to_string());
+    }
+
+    // Windows-specific checks
     #[cfg(target_os = "windows")]
     {
-        log.push("".to_string());
-        log.push("Method 2: Windows named pipe".to_string());
+        log.push("Method: Windows named pipe".to_string());
         match bollard::Docker::connect_with_named_pipe_defaults() {
             Ok(docker) => {
                 match docker.version().await {
                     Ok(ver) => {
                         let v = ver.version.unwrap_or_default();
                         log.push(format!("  Connected! Docker {v}"));
-                        log.push("".to_string());
-                        log.push("Connection successful via named pipe.".to_string());
-                        log.push("Restart Orca Desktop to use this connection.".to_string());
-                        return Ok(Json(serde_json::json!({
-                            "connected": true,
-                            "method": "pipe",
-                            "version": v,
-                            "log": log,
-                        })));
+                        if connected_version.is_none() {
+                            connected_version = Some(v);
+                            connected_method = Some("Windows named pipe".to_string());
+                        }
                     }
                     Err(e) => log.push(format!("  Pipe exists but ping failed: {e}")),
                 }
             }
             Err(e) => log.push(format!("  Not available: {e}")),
         }
-    }
 
-    // 3. TCP (Docker in WSL2 or remote)
-    #[cfg(target_os = "windows")]
-    {
         log.push("".to_string());
-        log.push("Method 3: TCP localhost:2375".to_string());
+        log.push("Method: TCP localhost:2375".to_string());
         match bollard::Docker::connect_with_http(
             "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
         ) {
@@ -4157,15 +4347,10 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                     Ok(ver) => {
                         let v = ver.version.unwrap_or_default();
                         log.push(format!("  Connected! Docker {v}"));
-                        log.push("".to_string());
-                        log.push("Connection successful via TCP.".to_string());
-                        log.push("Restart Orca Desktop to use this connection.".to_string());
-                        return Ok(Json(serde_json::json!({
-                            "connected": true,
-                            "method": "tcp",
-                            "version": v,
-                            "log": log,
-                        })));
+                        if connected_version.is_none() {
+                            connected_version = Some(v);
+                            connected_method = Some("TCP localhost:2375".to_string());
+                        }
                     }
                     Err(e) => log.push(format!("  TCP connection failed: {e}")),
                 }
@@ -4173,86 +4358,83 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
             Err(e) => log.push(format!("  Not available: {e}")),
         }
 
-        log.push("".to_string());
-        log.push("Method 4: Docker via WSL CLI".to_string());
-        match tokio::process::Command::new("wsl")
-            .args(["docker", "version", "--format", "{{.Server.Version}}"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output()
-            .await
-        {
-            Ok(out) if out.status.success() => {
-                let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                log.push(format!("  Docker {v} is running in WSL"));
-                log.push("".to_string());
-                log.push("Docker is running inside WSL but TCP listener not configured.".to_string());
-                log.push("Attempting to configure automatically...".to_string());
-                log.push("".to_string());
+        if connected_version.is_none() {
+            log.push("".to_string());
+            log.push("Method: Docker via WSL CLI".to_string());
+            match tokio::process::Command::new("wsl")
+                .args(["docker", "version", "--format", "{{.Server.Version}}"])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .await
+            {
+                Ok(out) if out.status.success() => {
+                    let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    log.push(format!("  Docker {v} is running in WSL"));
+                    log.push("  Attempting to configure TCP listener...".to_string());
 
-                // Auto-configure TCP listener
-                let configure_result = tokio::process::Command::new("wsl")
-                    .args(["-u", "root", "--", "bash", "-c",
-                        "mkdir -p /etc/systemd/system/docker.service.d && \
-                         echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' \
-                         > /etc/systemd/system/docker.service.d/override.conf && \
-                         systemctl daemon-reload && service docker restart"])
-                    .output()
-                    .await;
+                    let configure_result = tokio::process::Command::new("wsl")
+                        .args(["-u", "root", "--", "bash", "-c",
+                            "mkdir -p /etc/systemd/system/docker.service.d && \
+                             echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' \
+                             > /etc/systemd/system/docker.service.d/override.conf && \
+                             systemctl daemon-reload && service docker restart"])
+                        .output()
+                        .await;
 
-                match configure_result {
-                    Ok(r) if r.status.success() => {
-                        log.push("TCP listener configured and Docker restarted!".to_string());
-                        log.push("".to_string());
-                        // Wait a moment for Docker to restart
-                        tokio::time::sleep(Duration::from_secs(3)).await;
-                        // Try TCP again
-                        if let Ok(docker) = bollard::Docker::connect_with_http(
-                            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
-                        ) {
-                            if let Ok(ver) = docker.version().await {
-                                let v2 = ver.version.unwrap_or_default();
-                                log.push(format!("Connected via TCP! Docker {v2}"));
-                                log.push("Restart Orca Desktop to use this connection for all operations.".to_string());
-                                return Ok(Json(serde_json::json!({
-                                    "connected": true,
-                                    "method": "tcp",
-                                    "version": v2,
-                                    "log": log,
-                                })));
+                    match configure_result {
+                        Ok(r) if r.status.success() => {
+                            log.push("  TCP listener configured and Docker restarted!".to_string());
+                            tokio::time::sleep(Duration::from_secs(3)).await;
+                            if let Ok(docker) = bollard::Docker::connect_with_http(
+                                "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
+                            ) {
+                                if let Ok(ver) = docker.version().await {
+                                    let v2 = ver.version.unwrap_or_default();
+                                    log.push(format!("  Connected via TCP! Docker {v2}"));
+                                    connected_version = Some(v2);
+                                    connected_method = Some("TCP (auto-configured WSL)".to_string());
+                                }
+                            }
+                            if connected_version.is_none() {
+                                log.push("  TCP configured but connection still failing.".to_string());
                             }
                         }
-                        log.push("TCP configured but connection still failing. Restart Orca Desktop and try again.".to_string());
-                    }
-                    _ => {
-                        log.push("Failed to auto-configure. Please run manually in Ubuntu:".to_string());
-                        log.push("  sudo mkdir -p /etc/systemd/system/docker.service.d".to_string());
-                        log.push("  echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375' \\".to_string());
-                        log.push("    | sudo tee /etc/systemd/system/docker.service.d/override.conf".to_string());
-                        log.push("  sudo systemctl daemon-reload && sudo service docker restart".to_string());
-                        log.push("".to_string());
-                        log.push("Then restart Orca Desktop.".to_string());
+                        _ => {
+                            log.push("  Failed to auto-configure TCP listener.".to_string());
+                        }
                     }
                 }
+                Ok(out) => {
+                    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    log.push(format!("  Docker not running in WSL: {err}"));
+                }
+                Err(e) => log.push(format!("  WSL not available: {e}")),
             }
-            Ok(out) => {
-                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                log.push(format!("  Docker not running in WSL: {err}"));
-            }
-            Err(e) => log.push(format!("  WSL not available: {e}")),
         }
     }
 
+    // Summary
     log.push("".to_string());
-    log.push("No connection method succeeded.".to_string());
-    log.push("Install a container runtime via System Health, then restart Orca Desktop.".to_string());
-
-    Ok(Json(serde_json::json!({
-        "connected": false,
-        "method": serde_json::Value::Null,
-        "version": serde_json::Value::Null,
-        "log": log,
-    })))
+    if let (Some(version), Some(method)) = (&connected_version, &connected_method) {
+        log.push(format!("Result: Docker {version} is reachable via {method}."));
+        log.push("Action: Restart Orca daemon to reconnect.".to_string());
+        Ok(Json(serde_json::json!({
+            "connected": true,
+            "method": method,
+            "version": version,
+            "log": log,
+        })))
+    } else {
+        log.push("Result: No working Docker connection found.".to_string());
+        log.push("Action: Install a container runtime via System Health, then restart Orca.".to_string());
+        Ok(Json(serde_json::json!({
+            "connected": false,
+            "method": serde_json::Value::Null,
+            "version": serde_json::Value::Null,
+            "log": log,
+        })))
+    }
 }
 
 // --- Agent APIs (MCP + OpenAI-compatible) ---

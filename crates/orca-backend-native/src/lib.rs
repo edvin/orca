@@ -66,14 +66,17 @@ impl NativeBackend {
         ];
 
         if let Ok(home) = std::env::var("HOME") {
-            // macOS Docker Desktop
+            // macOS Docker Desktop (various versions use different paths)
             candidates.push(PathBuf::from(format!("{home}/.docker/run/docker.sock")));
+            candidates.push(PathBuf::from(format!("{home}/.docker/desktop/docker.sock")));
+            candidates.push(PathBuf::from(format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock")));
             // Lima VMs
             for vm in &["orca", "docker", "default", "colima"] {
                 candidates.push(PathBuf::from(format!("{home}/.lima/{vm}/sock/docker.sock")));
             }
             // Colima
             candidates.push(PathBuf::from(format!("{home}/.colima/default/docker.sock")));
+            candidates.push(PathBuf::from(format!("{home}/.colima/docker/docker.sock")));
         }
 
         // Podman sockets

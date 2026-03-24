@@ -955,9 +955,43 @@ pub async fn check_environment() -> EnvironmentStatus {
         }
         "macos" => {
             // Always check if Docker is actually running — regardless of Docker Desktop
+            // First try `docker info` which respects DOCKER_HOST and the active context
             let docker_running = match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
                 Ok(version) => Some(version.trim().to_string()),
-                Err(_) => None,
+                Err(_) => {
+                    // docker info failed — the Docker context may be stale (pointing
+                    // to a dead Docker Desktop socket). Try known Lima sockets directly.
+                    let mut found_version = None;
+                    if let Ok(home) = std::env::var("HOME") {
+                        for vm in &["orca", "docker", "default", "colima"] {
+                            let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
+                            if std::path::Path::new(&socket).exists() {
+                                let host_arg = format!("unix://{socket}");
+                                if let Ok(version) = run_cmd("docker", &["-H", &host_arg, "info", "--format", "{{.ServerVersion}}"]).await {
+                                    let v = version.trim().to_string();
+                                    if !v.is_empty() {
+                                        found_version = Some(v);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        // Also try Colima default socket
+                        if found_version.is_none() {
+                            let colima_sock = format!("{home}/.colima/default/docker.sock");
+                            if std::path::Path::new(&colima_sock).exists() {
+                                let host_arg = format!("unix://{colima_sock}");
+                                if let Ok(version) = run_cmd("docker", &["-H", &host_arg, "info", "--format", "{{.ServerVersion}}"]).await {
+                                    let v = version.trim().to_string();
+                                    if !v.is_empty() {
+                                        found_version = Some(v);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    found_version
+                },
             };
 
             if let Some(version) = docker_running {

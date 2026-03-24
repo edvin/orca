@@ -153,16 +153,63 @@ async fn main() -> anyhow::Result<()> {
 
 /// Connect to the container runtime, trying platform-appropriate methods.
 async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
+    tracing::info!("Searching for container runtime...");
+
+    // Log what socket paths we'll check
+    let home = std::env::var("HOME").unwrap_or_default();
+    if let Ok(host) = std::env::var("DOCKER_HOST") {
+        tracing::info!("DOCKER_HOST is set: {host}");
+    } else {
+        tracing::info!("DOCKER_HOST is not set");
+    }
+
+    // Log Docker context
+    let extended_path = format!(
+        "/opt/homebrew/bin:/usr/local/bin:/opt/homebrew/sbin:/usr/local/sbin:{}",
+        std::env::var("PATH").unwrap_or_default()
+    );
+    if let Ok(output) = std::process::Command::new("docker")
+        .env("PATH", &extended_path)
+        .args(["context", "inspect", "--format", "{{.Name}} -> {{.Endpoints.docker.Host}}"])
+        .output()
+    {
+        if output.status.success() {
+            let ctx = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            tracing::info!("Docker context: {ctx}");
+        } else {
+            tracing::debug!("Docker context not available");
+        }
+    }
+
+    // Log candidate socket paths
+    let socket_candidates = vec![
+        "/var/run/docker.sock".to_string(),
+        format!("{home}/.docker/run/docker.sock"),
+        format!("{home}/.docker/desktop/docker.sock"),
+        format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock"),
+        format!("{home}/.lima/orca/sock/docker.sock"),
+        format!("{home}/.lima/docker/sock/docker.sock"),
+        format!("{home}/.lima/default/sock/docker.sock"),
+        format!("{home}/.lima/colima/sock/docker.sock"),
+        format!("{home}/.colima/default/docker.sock"),
+        format!("{home}/.colima/docker/docker.sock"),
+    ];
+    for path in &socket_candidates {
+        let exists = std::path::Path::new(path).exists();
+        tracing::info!("Socket {path}: {}", if exists { "exists" } else { "not found" });
+    }
+
     // 1. Try native socket connection (Linux, macOS, or Docker Desktop on Windows)
     match orca_backend_native::NativeBackend::connect() {
         Ok(native) => {
+            let socket_path = native.socket_path.display().to_string();
             let rt = Arc::new(native.runtime);
             let kind = rt.detect_runtime().await;
-            tracing::info!("Connected to {kind:?} runtime via socket");
+            tracing::info!("Connected to {kind:?} runtime via socket: {socket_path}");
             return rt;
         }
         Err(e) => {
-            tracing::debug!("Native socket connection failed: {e}");
+            tracing::warn!("Native socket connection failed: {e}");
         }
     }
 
