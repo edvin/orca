@@ -131,7 +131,7 @@ export default function YamlEditor(props: YamlEditorProps) {
         folding: true,
         scrollBeyondLastLine: false,
         wordWrap: "on",
-        automaticLayout: true,
+        automaticLayout: false,
         tabSize: 2,
         renderLineHighlight: props.readOnly ? "none" : "line",
         overviewRulerLanes: 0,
@@ -163,7 +163,33 @@ export default function YamlEditor(props: YamlEditorProps) {
         }
       );
 
+      // Manual layout — avoids the rendering artifacts from automaticLayout
+      // in modal dialogs. We do an initial layout after the modal animation,
+      // then observe container size changes.
+      const doLayout = () => {
+        if (editorInstance && containerRef) {
+          editorInstance.layout({
+            width: containerRef.clientWidth,
+            height: containerRef.clientHeight,
+          });
+        }
+      };
+
+      // Layout after modal is fully rendered (multiple frames to be safe)
+      requestAnimationFrame(() => {
+        doLayout();
+        requestAnimationFrame(() => {
+          doLayout();
+          // One more after 100ms for any CSS transitions
+          setTimeout(doLayout, 100);
+        });
+      });
+
+      const resizeObserver = new ResizeObserver(doLayout);
+      if (containerRef) resizeObserver.observe(containerRef);
+
       onCleanup(() => {
+        resizeObserver.disconnect();
         editorInstance?.dispose();
         editorInstance = null;
       });

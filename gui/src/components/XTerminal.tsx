@@ -7,17 +7,9 @@ import "@xterm/xterm/css/xterm.css";
 
 const TERM_FONT = "'JetBrains Mono NF', Menlo, Monaco, 'Courier New', monospace";
 
-// Load the Nerd Font via FontFace API for canvas rendering
-const fontFace = new FontFace(
-  "JetBrains Mono NF",
-  "url(/fonts/JetBrainsMonoNerdFont-Regular.ttf)",
-  { weight: "400", style: "normal" },
-);
-const fontFaceBold = new FontFace(
-  "JetBrains Mono NF",
-  "url(/fonts/JetBrainsMonoNerdFont-Bold.ttf)",
-  { weight: "700", style: "normal" },
-);
+// Load fonts for canvas rendering
+const fontFace = new FontFace("JetBrains Mono NF", "url(/fonts/JetBrainsMonoNerdFont-Regular.ttf)", { weight: "400", style: "normal" });
+const fontFaceBold = new FontFace("JetBrains Mono NF", "url(/fonts/JetBrainsMonoNerdFont-Bold.ttf)", { weight: "700", style: "normal" });
 document.fonts.add(fontFace);
 document.fonts.add(fontFaceBold);
 const fontsReady = Promise.all([fontFace.load(), fontFaceBold.load()]).catch(() => {});
@@ -29,8 +21,9 @@ interface XTerminalProps {
 
 export default function XTerminal(props: XTerminalProps) {
   let termDiv: HTMLDivElement | undefined;
-  let termInstance: Terminal | undefined;
-  let fitAddonInstance: FitAddon | undefined;
+  let ws: WebSocket | undefined;
+  let term: Terminal | undefined;
+  let fitAddon: FitAddon | undefined;
   const [fontSize, setFontSize] = createSignal(
     parseInt(localStorage.getItem("terminal-font-size") || "14", 10)
   );
@@ -39,18 +32,21 @@ export default function XTerminal(props: XTerminalProps) {
     const next = Math.max(9, Math.min(24, fontSize() + delta));
     setFontSize(next);
     localStorage.setItem("terminal-font-size", String(next));
-    if (termInstance && fitAddonInstance) {
-      termInstance.options.fontSize = next;
-      fitAddonInstance.fit();
+    if (term && fitAddon) {
+      // Recreate the terminal with new font size — most reliable approach
+      const currentContent = ""; // Can't easily preserve scrollback
+      term.options.fontSize = next;
+      // Force xterm to remeasure character dimensions
+      (term as any)._core?._renderService?.clear();
+      fitAddon.fit();
     }
   };
 
   onMount(async () => {
     await fontsReady;
 
-    const term = new Terminal({
+    term = new Terminal({
       cursorBlink: true,
-      cursorStyle: "block",
       fontFamily: TERM_FONT,
       fontSize: fontSize(),
       theme: {
@@ -76,14 +72,9 @@ export default function XTerminal(props: XTerminalProps) {
         brightCyan: "#7dcfff",
         brightWhite: "#c0caf5",
       },
-      scrollback: 10000,
-      convertEol: false,
-      allowProposedApi: true,
     });
 
-    termInstance = term;
-    const fitAddon = new FitAddon();
-    fitAddonInstance = fitAddon;
+    fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(termDiv!);
@@ -91,62 +82,47 @@ export default function XTerminal(props: XTerminalProps) {
     term.focus();
 
     let token = "";
-    try {
-      token = await invoke("get_api_token") as string;
-    } catch {}
+    try { token = await invoke("get_api_token") as string; } catch {}
 
     const wsUrl = `ws://127.0.0.1:9477/api/v1/containers/${encodeURIComponent(props.containerId)}/terminal?token=${encodeURIComponent(token)}`;
-    const ws = new WebSocket(wsUrl);
+    ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
 
     ws.onopen = () => {
-      term.writeln(`\x1b[36mConnected to ${props.containerName}\x1b[0m`);
-      // Send initial resize after a brief delay (exec needs to be ready)
+      term!.writeln(`\x1b[36mConnected to ${props.containerName}\x1b[0m`);
       setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ cols: term.cols, rows: term.rows }));
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ cols: term!.cols, rows: term!.rows }));
         }
       }, 200);
     };
 
     ws.onmessage = (event: MessageEvent) => {
       if (event.data instanceof ArrayBuffer) {
-        term.write(new Uint8Array(event.data));
+        term!.write(new Uint8Array(event.data));
       } else {
-        term.write(event.data);
+        term!.write(event.data);
       }
     };
 
-    ws.onclose = () => {
-      term.writeln("\r\n\x1b[90mConnection closed\x1b[0m");
-    };
+    ws.onclose = () => term!.writeln("\r\n\x1b[90mConnection closed\x1b[0m");
+    ws.onerror = () => term!.writeln("\r\n\x1b[31mWebSocket error\x1b[0m");
 
-    ws.onerror = () => {
-      term.writeln("\r\n\x1b[31mWebSocket error\x1b[0m");
-    };
-
-    // Send terminal input as binary (preserves byte sequences)
     term.onData((data: string) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(new TextEncoder().encode(data));
-      }
+      if (ws?.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(data));
     });
 
     term.onResize(({ cols, rows }) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ cols, rows }));
-      }
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ cols, rows }));
     });
 
-    const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
-    });
-    if (termDiv) resizeObserver.observe(termDiv);
+    const observer = new ResizeObserver(() => fitAddon?.fit());
+    if (termDiv) observer.observe(termDiv);
 
     onCleanup(() => {
-      resizeObserver.disconnect();
-      ws.close();
-      term.dispose();
+      observer.disconnect();
+      ws?.close();
+      term?.dispose();
     });
   });
 
