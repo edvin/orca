@@ -1054,15 +1054,21 @@
 
       <!-- Category: Fleet -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">6</span></span>
+        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">12</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
-      <div class="ft-row"><span><strong>Fleet dashboard</strong> — overview of all hosts with status, CPU, memory, containers</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Remote host management</strong> — add, edit, test connection, switch hosts</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Deploy to any host</strong> — choose target server when deploying templates</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Health alerts</strong> — background polling, toast when hosts go offline or recover</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Fleet dashboard</strong> — grid overview of all hosts with status, CPU, memory, disk, containers</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Host groups &amp; tags</strong> — label hosts (production, staging, eu-west), filter fleet by tag</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Bulk operations</strong> — select mode, test selected, remove selected, test all</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>OS &amp; architecture detection</strong> — auto-detect Linux distro and CPU arch per host</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Deploy to any host</strong> — choose target server when deploying from App Catalog</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Health alerts</strong> — background polling with debounce, toast on host offline/online</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Staggered probing</strong> — batch-probe hosts in groups of 3, incremental status updates</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Version mismatch warning</strong> — alerts when hosts run different daemon versions</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Host selector</strong> — switch between local and remote in the titlebar, status bar indicator</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>One-liner server install</strong> — <code>apt install orca-daemon</code> via Cloudsmith</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Hot-swap reconnect</strong> — Diagnose button finds Docker and reconnects instantly</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row" style="border: none;"><span><strong>TLS ready</strong> — Caddy/nginx reverse proxy examples, bearer token auth</span><span class="ft-check">&#10003;</span></div>
       </div>
 
@@ -1140,14 +1146,14 @@
 
   <div class="highlight-row" style="grid-template-columns: 2fr 3fr;">
     <div class="highlight-text">
-      <h3>Manage remote servers</h3>
-      <p>Install the Orca daemon on any Linux server and manage it from your desktop. One command to install, automatic updates via apt.</p>
+      <h3>Fleet management</h3>
+      <p>Install the Orca daemon on any Linux server and manage your entire fleet from one desktop. Tags, groups, bulk operations, health alerts — all built in.</p>
       <ul>
-        <li>One-liner install via apt</li>
-        <li>Systemd service — auto-start on boot</li>
-        <li>Host selector — switch servers in one click</li>
-        <li>TLS via Caddy or nginx reverse proxy</li>
-        <li>Fleet management from one UI</li>
+        <li>Fleet dashboard — status, CPU, memory, OS, containers at a glance</li>
+        <li>Host groups &amp; tags — filter by production, staging, region</li>
+        <li>Bulk test &amp; manage — select hosts, test connectivity, deploy templates</li>
+        <li>Health alerts — automatic toast when hosts go offline or recover</li>
+        <li>One-liner install — <code>apt install orca-daemon</code></li>
       </ul>
     </div>
     <div class="highlight-visual" style="font-size: 12px;">

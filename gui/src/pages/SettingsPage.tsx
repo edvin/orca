@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [hostUrl, setHostUrl] = createSignal("");
   const [hostToken, setHostToken] = createSignal("");
   const [hostTlsVerify, setHostTlsVerify] = createSignal(true);
+  const [hostTags, setHostTags] = createSignal("");
   const [hostTesting, setHostTesting] = createSignal(false);
   const [hostTestResult, setHostTestResult] = createSignal<string | null>(null);
   const [showHostToken, setShowHostToken] = createSignal(false);
@@ -169,6 +170,7 @@ export default function SettingsPage() {
     setHostUrl("");
     setHostToken("");
     setHostTlsVerify(true);
+    setHostTags("");
     setHostTestResult(null);
     setEditingHost(null);
     setShowHostToken(false);
@@ -180,6 +182,7 @@ export default function SettingsPage() {
     setHostUrl(host.url);
     setHostToken("");  // Don't pre-fill token for security
     setHostTlsVerify(host.tls_verify);
+    setHostTags((host.tags || []).join(", "));
     setHostTestResult(null);
     setShowHostToken(false);
     setShowAddHost(true);
@@ -190,6 +193,7 @@ export default function SettingsPage() {
     const url = hostUrl().trim().replace(/\/+$/, "");
     const token = hostToken().trim();
     const tls_verify = hostTlsVerify();
+    const tags = hostTags().split(",").map(t => t.trim()).filter(t => t.length > 0);
     if (!name || !url) return;
 
     const editing = editingHost();
@@ -204,6 +208,7 @@ export default function SettingsPage() {
           url,
           token: token || "__KEEP__",
           tlsVerify: tls_verify,
+          tags,
         });
         showToast("Host updated", "success");
       } else {
@@ -211,7 +216,7 @@ export default function SettingsPage() {
           showToast("API token is required", "error");
           return;
         }
-        await invoke("add_remote_host", { name, url, token, tlsVerify: tls_verify });
+        await invoke("add_remote_host", { name, url, token, tlsVerify: tls_verify, tags });
         showToast("Host added", "success");
       }
       setShowAddHost(false);
@@ -1211,6 +1216,7 @@ export default function SettingsPage() {
                     <tr>
                       <th>Name</th>
                       <th>URL</th>
+                      <th>Tags</th>
                       <th>TLS</th>
                       <th style={{ "text-align": "right" }}>Actions</th>
                     </tr>
@@ -1221,6 +1227,23 @@ export default function SettingsPage() {
                         <tr>
                           <td style={{ "font-weight": 500 }}>{host.name}</td>
                           <td class="mono" style={{ "font-size": "12px" }}>{host.url}</td>
+                          <td>
+                            <div style={{ display: "flex", "flex-wrap": "wrap", gap: "3px" }}>
+                              <For each={host.tags || []}>
+                                {(tag) => (
+                                  <span style={{
+                                    padding: "1px 6px",
+                                    "border-radius": "10px",
+                                    "font-size": "10px",
+                                    "font-weight": "500",
+                                    background: "rgba(88, 166, 255, 0.1)",
+                                    color: "#58a6ff",
+                                    border: "1px solid rgba(88, 166, 255, 0.15)",
+                                  }}>{tag}</span>
+                                )}
+                              </For>
+                            </div>
+                          </td>
                           <td>{host.tls_verify ? "Verify" : "Skip"}</td>
                           <td style={{ "text-align": "right", display: "flex", gap: "4px", "justify-content": "flex-end" }}>
                             <button
@@ -1284,6 +1307,27 @@ export default function SettingsPage() {
                         <input type="checkbox" checked={hostTlsVerify()} onChange={(e) => setHostTlsVerify(e.currentTarget.checked)} />
                         <span class="toggle-slider" />
                       </label>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Tags <span style={{ color: "#484f58", "font-weight": "400" }}>(comma-separated)</span></label>
+                      <input class="form-input" type="text" placeholder="production, eu-west, staging" value={hostTags()} onInput={(e) => setHostTags(e.currentTarget.value)} />
+                      <Show when={hostTags().trim().length > 0}>
+                        <div style={{ display: "flex", "flex-wrap": "wrap", gap: "4px", "margin-top": "6px" }}>
+                          <For each={hostTags().split(",").map(t => t.trim()).filter(t => t.length > 0)}>
+                            {(tag) => (
+                              <span style={{
+                                padding: "2px 8px",
+                                "border-radius": "12px",
+                                "font-size": "11px",
+                                "font-weight": "500",
+                                background: "rgba(88, 166, 255, 0.1)",
+                                color: "#58a6ff",
+                                border: "1px solid rgba(88, 166, 255, 0.15)",
+                              }}>{tag}</span>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
                     </div>
                     <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
                       <button class="btn btn-primary" onClick={saveHost} disabled={!hostName().trim() || !hostUrl().trim()}>

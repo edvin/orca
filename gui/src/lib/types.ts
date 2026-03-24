@@ -460,6 +460,7 @@ export interface RemoteHost {
   name: string;
   url: string;
   tls_verify: boolean;
+  tags: string[];
 }
 
 export interface ActiveHost {
@@ -475,6 +476,7 @@ export interface HostStatus {
   id: string | null;  // null = local
   name: string;
   url: string;
+  tags?: string[];
   online: boolean;
   checking: boolean;
   version?: string;
@@ -486,6 +488,8 @@ export interface HostStatus {
   containers_running?: number;
   containers_total?: number;
   images_total?: number;
+  os?: string;
+  arch?: string;
   error?: string;
 }
 

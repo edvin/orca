@@ -3132,6 +3132,8 @@ async fn system_health(
     if let Ok(version) = state.rt().await.docker.version().await {
         health.docker_connected = true;
         health.docker_version = version.version;
+        health.os = version.os;
+        health.arch = version.arch;
         health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable") && !w.contains("Restart"));
     } else {
         // The daemon's connection is dead. Docker might still be running

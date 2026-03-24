@@ -2302,6 +2302,7 @@ pub async fn list_remote_hosts() -> Result<Vec<serde_json::Value>, String> {
                 "name": h.name,
                 "url": h.url,
                 "tls_verify": h.tls_verify,
+                "tags": h.tags,
             })
         })
         .collect())
@@ -2313,6 +2314,7 @@ pub async fn add_remote_host(
     url: String,
     token: String,
     tls_verify: bool,
+    tags: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     let mut config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
     // Generate a unique ID from timestamp + simple hash
@@ -2326,6 +2328,7 @@ pub async fn add_remote_host(
         url,
         token,
         tls_verify,
+        tags: tags.unwrap_or_default(),
     });
     config.save().map_err(|e| format!("{e}"))?;
     Ok(serde_json::json!({ "id": id }))
@@ -2338,6 +2341,7 @@ pub async fn update_remote_host(
     url: String,
     token: String,
     tls_verify: bool,
+    tags: Option<Vec<String>>,
 ) -> Result<(), String> {
     let mut config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
     let host = config
@@ -2352,6 +2356,9 @@ pub async fn update_remote_host(
         host.token = token;
     }
     host.tls_verify = tls_verify;
+    if let Some(t) = tags {
+        host.tags = t;
+    }
     config.save().map_err(|e| format!("{e}"))?;
 
     // If this host is currently active, update the override
@@ -2552,6 +2559,8 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
         "containers_running": running,
         "containers_total": total,
         "images_total": images_total,
+        "os": system.as_ref().and_then(|s| s.get("os").and_then(|v| v.as_str())),
+        "arch": system.as_ref().and_then(|s| s.get("arch").and_then(|v| v.as_str())),
     }))
 }
 

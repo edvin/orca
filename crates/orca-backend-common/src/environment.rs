@@ -1910,6 +1910,8 @@ pub async fn check_system_health() -> SystemHealth {
         system_resources: resources,
         warnings,
         gpu,
+        os: None,
+        arch: None,
     }
 }
 

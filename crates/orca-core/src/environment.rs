@@ -41,6 +41,12 @@ pub struct SystemHealth {
     pub warnings: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu: Option<GpuInfo>,
+    /// Operating system name (e.g., "linux", "windows").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os: Option<String>,
+    /// CPU architecture (e.g., "x86_64", "aarch64").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arch: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

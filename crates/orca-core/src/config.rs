@@ -21,6 +21,9 @@ pub struct RemoteHost {
     /// Whether to verify TLS certificates (default true).
     #[serde(default = "default_true")]
     pub tls_verify: bool,
+    /// User-defined tags for categorization (e.g., "production", "eu-west").
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 fn default_true() -> bool {
