@@ -397,27 +397,48 @@ pub async fn run_fix_streaming(
                 send("    Homebrew is installed.\n".into()).await;
             }
 
-            // Step 2: Install Lima + Docker CLI
-            send(">>> Step 2/5: Installing Lima and Docker CLI...\n".into()).await;
+            // Step 2: Install Lima + Docker CLI + Docker Compose
+            send(">>> Step 2/5: Installing Lima, Docker CLI, and Compose...\n".into()).await;
             let lima_installed = run_cmd("limactl", &["--version"]).await.is_ok();
             let docker_cli_installed = run_cmd("docker", &["--version"]).await.is_ok();
+            let compose_installed = run_cmd("docker", &["compose", "version"]).await.is_ok();
 
-            if !lima_installed || !docker_cli_installed {
+            {
                 let mut packages = Vec::new();
                 if !lima_installed { packages.push("lima"); }
                 if !docker_cli_installed { packages.push("docker"); }
-                send(format!("    Installing: {}\n", packages.join(", "))).await;
-                let install_result = run_cmd_streaming(
-                    "brew", &[&["install"][..], &packages.iter().map(|s| *s).collect::<Vec<_>>()].concat(),
-                    &tx
-                ).await;
-                if let Err(e) = install_result {
-                    send(format!("\n    brew install failed: {e}\n")).await;
-                    anyhow::bail!("Failed to install Lima/Docker via Homebrew: {e}");
+                if !compose_installed { packages.push("docker-compose"); }
+
+                if packages.is_empty() {
+                    send("    Lima, Docker CLI, and Compose already installed.\n".into()).await;
+                } else {
+                    send(format!("    Installing: {}\n", packages.join(", "))).await;
+                    let install_result = run_cmd_streaming(
+                        "brew", &[&["install"][..], &packages.iter().map(|s| *s).collect::<Vec<_>>()].concat(),
+                        &tx
+                    ).await;
+                    if let Err(e) = install_result {
+                        send(format!("\n    brew install failed: {e}\n")).await;
+                        anyhow::bail!("Failed to install Lima/Docker via Homebrew: {e}");
+                    }
+
+                    // Set up docker-compose as a CLI plugin (docker compose v2)
+                    if !compose_installed {
+                        send("    Configuring Docker Compose plugin...\n".into()).await;
+                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                        let plugins_dir = format!("{home}/.docker/cli-plugins");
+                        let _ = std::fs::create_dir_all(&plugins_dir);
+                        // Find the brew-installed docker-compose binary and symlink it
+                        if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-compose"]).await {
+                            let bin = format!("{}/bin/docker-compose", prefix.trim());
+                            let link = format!("{plugins_dir}/docker-compose");
+                            let _ = std::os::unix::fs::symlink(&bin, &link);
+                            send("    Docker Compose plugin linked.\n".into()).await;
+                        }
+                    }
+
+                    send("    Installation complete.\n".into()).await;
                 }
-                send("    Installation complete.\n".into()).await;
-            } else {
-                send("    Lima and Docker CLI already installed.\n".into()).await;
             }
 
             // Step 3: Create Lima VM with Docker
@@ -1459,20 +1480,36 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 output.push_str("Homebrew: installed\n");
             }
 
-            // Install Lima + Docker CLI
+            // Install Lima + Docker CLI + Docker Compose
             let lima_ok = run_cmd("limactl", &["--version"]).await.is_ok();
             let docker_ok = run_cmd("docker", &["--version"]).await.is_ok();
-            if !lima_ok || !docker_ok {
-                let mut pkgs = Vec::new();
+            let compose_ok = run_cmd("docker", &["compose", "version"]).await.is_ok();
+            {
+                let mut pkgs: Vec<&str> = Vec::new();
                 if !lima_ok { pkgs.push("lima"); }
                 if !docker_ok { pkgs.push("docker"); }
-                output.push_str(&format!("Installing {}...\n", pkgs.join(", ")));
-                match run_cmd("brew", &[&["install"][..], &pkgs.iter().map(|s| s.as_ref()).collect::<Vec<&str>>()].concat()).await {
-                    Ok(o) => output.push_str(&format!("{o}\n")),
-                    Err(e) => output.push_str(&format!("brew install failed: {e}\n")),
+                if !compose_ok { pkgs.push("docker-compose"); }
+                if pkgs.is_empty() {
+                    output.push_str("Lima, Docker CLI, and Compose: installed\n");
+                } else {
+                    output.push_str(&format!("Installing {}...\n", pkgs.join(", ")));
+                    match run_cmd("brew", &[&["install"][..], &pkgs].concat()).await {
+                        Ok(o) => output.push_str(&format!("{o}\n")),
+                        Err(e) => output.push_str(&format!("brew install failed: {e}\n")),
+                    }
+                    // Link docker-compose as CLI plugin
+                    if !compose_ok {
+                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                        let plugins_dir = format!("{home}/.docker/cli-plugins");
+                        let _ = std::fs::create_dir_all(&plugins_dir);
+                        if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-compose"]).await {
+                            let bin = format!("{}/bin/docker-compose", prefix.trim());
+                            let link = format!("{plugins_dir}/docker-compose");
+                            let _ = std::fs::remove_file(&link); // Remove existing symlink if any
+                            let _ = std::os::unix::fs::symlink(&bin, &link);
+                        }
+                    }
                 }
-            } else {
-                output.push_str("Lima and Docker CLI: installed\n");
             }
 
             // Create/start Lima VM
