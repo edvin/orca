@@ -149,6 +149,8 @@ pub fn run() {
             commands::reconnect_runtime,
             commands::get_wsl_config,
             commands::save_wsl_config,
+            commands::get_lima_settings,
+            commands::save_lima_settings,
             commands::read_file,
             commands::save_compose_file,
             commands::check_ports,

@@ -238,6 +238,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/settings/ai/models", get(list_ai_models))
         .route("/settings/cleanup", post(cleanup))
         .route("/settings/reconnect", post(reconnect_runtime))
+        .route("/settings/lima", get(get_lima_settings).post(save_lima_settings))
         // Agent APIs (MCP + OpenAI-compatible)
         .route("/agent/tools", get(agent_list_tools))
         .route("/agent/execute", post(agent_execute_tool))
@@ -3509,6 +3510,94 @@ async fn save_general_settings(
     config.telemetry = body.telemetry;
     config.save().map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// --- Lima VM Settings ---
+
+#[derive(Deserialize)]
+struct LimaSettingsRequest {
+    name: String,
+    cpus: u32,
+    memory_gib: u32,
+    disk_gib: u32,
+}
+
+async fn get_lima_settings() -> Result<impl IntoResponse, ApiError> {
+    let output = tokio::process::Command::new("limactl")
+        .args(["list", "--json"])
+        .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default()))
+        .output()
+        .await
+        .map_err(|e| anyhow::anyhow!("limactl failed: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // limactl list --json outputs one JSON object per line (NDJSON)
+    let vms: Vec<serde_json::Value> = stdout
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    let vm = vms.iter().find(|v| {
+        v["name"].as_str() == Some("orca") || v["name"].as_str() == Some("docker")
+    });
+
+    if let Some(vm) = vm {
+        Ok(Json(serde_json::json!({
+            "available": true,
+            "name": vm["name"],
+            "status": vm["status"],
+            "cpus": vm["cpus"],
+            "memory": vm["memory"],
+            "disk": vm["disk"],
+        })))
+    } else {
+        Ok(Json(serde_json::json!({ "available": false })))
+    }
+}
+
+async fn save_lima_settings(
+    Json(body): Json<LimaSettingsRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let path_env = format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default());
+
+    // Stop the VM
+    let _ = tokio::process::Command::new("limactl")
+        .args(["stop", &body.name])
+        .env("PATH", &path_env)
+        .output()
+        .await;
+
+    // Use limactl edit with --set to change resources
+    let set_expr = format!(
+        ".cpus = {} | .memory = \"{}GiB\" | .disk = \"{}GiB\"",
+        body.cpus, body.memory_gib, body.disk_gib
+    );
+    let edit_output = tokio::process::Command::new("limactl")
+        .args(["edit", &body.name, "--set", &set_expr])
+        .env("PATH", &path_env)
+        .output()
+        .await
+        .map_err(|e| anyhow::anyhow!("limactl edit failed: {e}"))?;
+
+    if !edit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&edit_output.stderr);
+        return Err(anyhow::anyhow!("limactl edit failed: {stderr}").into());
+    }
+
+    // Start the VM
+    let start_output = tokio::process::Command::new("limactl")
+        .args(["start", &body.name])
+        .env("PATH", &path_env)
+        .output()
+        .await
+        .map_err(|e| anyhow::anyhow!("limactl start failed: {e}"))?;
+
+    if !start_output.status.success() {
+        let stderr = String::from_utf8_lossy(&start_output.stderr);
+        return Err(anyhow::anyhow!("VM started with errors: {stderr}").into());
+    }
+
+    Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
 // --- AI Settings ---

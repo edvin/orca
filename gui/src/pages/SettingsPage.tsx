@@ -60,6 +60,20 @@ export default function SettingsPage() {
   const [wslSwap, setWslSwap] = createSignal("");
   const [wslSaving, setWslSaving] = createSignal(false);
   const isWindows = navigator.platform.includes("Win");
+  const isMac = navigator.platform.includes("Mac");
+
+  // Lima VM config (macOS only)
+  const [limaAvailable, setLimaAvailable] = createSignal(false);
+  const [limaName, setLimaName] = createSignal("");
+  const [limaStatus, setLimaStatus] = createSignal("");
+  const [limaCpus, setLimaCpus] = createSignal(4);
+  const [limaMemoryGib, setLimaMemoryGib] = createSignal(4);
+  const [limaDiskGib, setLimaDiskGib] = createSignal(60);
+  const [limaOrigCpus, setLimaOrigCpus] = createSignal(4);
+  const [limaOrigMemoryGib, setLimaOrigMemoryGib] = createSignal(4);
+  const [limaOrigDiskGib, setLimaOrigDiskGib] = createSignal(60);
+  const [limaSaving, setLimaSaving] = createSignal(false);
+
   const [mcpCopied, setMcpCopied] = createSignal(false);
   const [endpointCopied, setEndpointCopied] = createSignal(false);
   const [tokenCopied, setTokenCopied] = createSignal(false);
@@ -367,6 +381,64 @@ export default function SettingsPage() {
 
   const openaiEndpoint = "http://127.0.0.1:9477/api/v1/agent/openai/chat/completions";
 
+  const refreshLimaSettings = async () => {
+    if (!isMac) return;
+    try {
+      const settings = (await invoke("get_lima_settings")) as {
+        available: boolean;
+        name?: string;
+        status?: string;
+        cpus?: number;
+        memory?: number;
+        disk?: number;
+      };
+      setLimaAvailable(settings.available);
+      if (settings.available) {
+        setLimaName(settings.name || "");
+        setLimaStatus(settings.status || "");
+        const memGib = settings.memory ? Math.round(settings.memory / (1024 * 1024 * 1024)) : 4;
+        const diskGib = settings.disk ? Math.round(settings.disk / (1024 * 1024 * 1024)) : 60;
+        const cpus = settings.cpus || 4;
+        setLimaCpus(cpus);
+        setLimaMemoryGib(memGib);
+        setLimaDiskGib(diskGib);
+        setLimaOrigCpus(cpus);
+        setLimaOrigMemoryGib(memGib);
+        setLimaOrigDiskGib(diskGib);
+      }
+    } catch (_e) {
+      // Not on macOS or limactl not available
+    }
+  };
+
+  const limaHasChanges = () =>
+    limaCpus() !== limaOrigCpus() ||
+    limaMemoryGib() !== limaOrigMemoryGib() ||
+    limaDiskGib() !== limaOrigDiskGib();
+
+  const saveLimaSettings = async () => {
+    if (!await confirmDanger(
+      "Restart Docker VM",
+      "This will restart the Docker VM. Running containers will be stopped. This may take a few minutes."
+    )) return;
+
+    setLimaSaving(true);
+    try {
+      await invoke("save_lima_settings", {
+        name: limaName(),
+        cpus: limaCpus(),
+        memoryGib: limaMemoryGib(),
+        diskGib: limaDiskGib(),
+      });
+      showToast("VM resources updated", "success");
+      await refreshLimaSettings();
+    } catch (e) {
+      showToast(`Failed to update VM: ${e}`, "error");
+    } finally {
+      setLimaSaving(false);
+    }
+  };
+
   const refreshWslConfig = async () => {
     if (!isWindows) return;
     try {
@@ -401,6 +473,7 @@ export default function SettingsPage() {
     refreshGeneralSettings();
     refreshAiSettings();
     refreshWslConfig();
+    refreshLimaSettings();
   });
 
   return (
@@ -515,6 +588,113 @@ export default function SettingsPage() {
                     </span>
                     <button class="btn btn-primary" onClick={saveWslConfig} disabled={wslSaving()}>
                       {wslSaving() ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Show>
+
+            {/* Lima VM Resources — macOS only */}
+            <Show when={isMac && limaAvailable()}>
+              <div class="settings-section">
+                <h2 class="settings-section-title">Virtual Machine</h2>
+                <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 10px" }}>Lima VM resources for Docker</p>
+                <div class="card" style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "13px" }}>
+                    <span style={{ color: "#c9d1d9" }}>VM:</span>
+                    <span style={{ color: "#e6edf3", "font-weight": "500" }}>{limaName()}</span>
+                    <span style={{
+                      "font-size": "11px",
+                      padding: "2px 8px",
+                      "border-radius": "10px",
+                      background: limaStatus() === "Running" ? "rgba(63, 185, 80, 0.15)" : "rgba(139, 148, 158, 0.15)",
+                      color: limaStatus() === "Running" ? "#3fb950" : "#8b949e",
+                    }}>
+                      {limaStatus()}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>CPUs</label>
+                    <input
+                      type="number"
+                      class="form-input"
+                      min="1"
+                      max="16"
+                      step="1"
+                      value={limaCpus()}
+                      onInput={(e) => setLimaCpus(parseInt(e.currentTarget.value) || 1)}
+                      style={{ flex: "1", "max-width": "120px" }}
+                      disabled={limaSaving()}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Memory</label>
+                    <div style={{ display: "flex", "align-items": "center", gap: "6px", flex: "1", "max-width": "160px" }}>
+                      <input
+                        type="number"
+                        class="form-input"
+                        min="2"
+                        max="64"
+                        step="1"
+                        value={limaMemoryGib()}
+                        onInput={(e) => setLimaMemoryGib(parseInt(e.currentTarget.value) || 2)}
+                        style={{ flex: "1" }}
+                        disabled={limaSaving()}
+                      />
+                      <span style={{ "font-size": "13px", color: "#8b949e" }}>GB</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Disk</label>
+                    <div style={{ display: "flex", "align-items": "center", gap: "6px", flex: "1", "max-width": "160px" }}>
+                      <input
+                        type="number"
+                        class="form-input"
+                        min="20"
+                        max="500"
+                        step="10"
+                        value={limaDiskGib()}
+                        onInput={(e) => setLimaDiskGib(parseInt(e.currentTarget.value) || 20)}
+                        style={{ flex: "1" }}
+                        disabled={limaSaving()}
+                      />
+                      <span style={{ "font-size": "13px", color: "#8b949e" }}>GB</span>
+                    </div>
+                  </div>
+
+                  <Show when={limaHasChanges()}>
+                    <div style={{ "font-size": "11px", color: "#d29922", display: "flex", "align-items": "center", gap: "6px" }}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="#d29922"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm9 3a1 1 0 11-2 0 1 1 0 012 0zm-.25-6.25a.75.75 0 00-1.5 0v3.5a.75.75 0 001.5 0v-3.5z"/></svg>
+                      Applying changes will restart the Docker VM. Running containers will be stopped.
+                    </div>
+                  </Show>
+
+                  <div style={{ display: "flex", "align-items": "center", "justify-content": "flex-end", gap: "8px" }}>
+                    <button
+                      class="btn"
+                      disabled={limaSaving()}
+                      onClick={async () => {
+                        if (!await confirmDanger("Restart Docker VM", "This will restart the Docker VM. Running containers will be stopped.")) return;
+                        setLimaSaving(true);
+                        try {
+                          await invoke("save_lima_settings", { name: limaName(), cpus: limaCpus(), memoryGib: limaMemoryGib(), diskGib: limaDiskGib() });
+                          showToast("VM restarted", "success");
+                          await refreshLimaSettings();
+                        } catch (e) { showToast(`Restart failed: ${e}`, "error"); }
+                        finally { setLimaSaving(false); }
+                      }}
+                    >
+                      {limaSaving() ? "Restarting..." : "Restart VM"}
+                    </button>
+                    <button
+                      class="btn btn-primary"
+                      onClick={saveLimaSettings}
+                      disabled={!limaHasChanges() || limaSaving()}
+                    >
+                      {limaSaving() ? "Restarting VM..." : "Apply Changes"}
                     </button>
                   </div>
                 </div>

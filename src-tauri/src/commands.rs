@@ -1963,6 +1963,40 @@ pub async fn save_general_settings(
     }
 }
 
+// --- Lima VM Settings ---
+
+#[tauri::command]
+pub async fn get_lima_settings() -> Result<serde_json::Value, String> {
+    get_json("/settings/lima").await
+}
+
+#[tauri::command]
+pub async fn save_lima_settings(name: String, cpus: u32, memory_gib: u32, disk_gib: u32) -> Result<serde_json::Value, String> {
+    let long_client = {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(token) = load_api_token() {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+                headers.insert(reqwest::header::AUTHORIZATION, val);
+            }
+        }
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(600))
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    };
+    long_client
+        .post(format!("{DAEMON_URL}/settings/lima"))
+        .json(&serde_json::json!({ "name": name, "cpus": cpus, "memory_gib": memory_gib, "disk_gib": disk_gib }))
+        .send()
+        .await
+        .map_err(|e| format!("Lima settings failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
 #[tauri::command]
 pub async fn save_ai_settings(
     provider: String,
