@@ -2352,6 +2352,92 @@ select option {
   color: #f85149;
 }
 
+/* ==================== Host Selector ==================== */
+.host-selector {
+  position: relative;
+  margin-left: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.host-selector-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  color: #8b949e;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.host-selector-btn:hover {
+  border-color: #30363d;
+  color: #e6edf3;
+}
+
+.host-selector-btn.host-remote {
+  border-color: #1f6feb44;
+  color: #58a6ff;
+  background: #1f6feb12;
+}
+
+.host-selector-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  background: rgba(22, 27, 34, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 9999;
+  animation: modal-scale-in 0.1s ease-out;
+  padding: 4px;
+}
+
+.host-selector-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: #c9d1d9;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background 0.1s;
+}
+
+.host-selector-item:hover {
+  background: #21262d;
+}
+
+.host-selector-item.active {
+  color: #58a6ff;
+  font-weight: 500;
+}
+
+.host-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.host-selector-divider {
+  height: 1px;
+  background: #21262d;
+  margin: 4px 0;
+}
+
 /* ==================== Sparkline ==================== */
 .sparkline-container {
   display: inline-block;

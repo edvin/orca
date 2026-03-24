@@ -1,0 +1,30 @@
+[Unit]
+Description=Orca Container Management Daemon
+Documentation=https://orca-desktop.com
+After=network.target docker.service containerd.service
+Wants=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/orca-daemon --host 0.0.0.0
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=strict
+ReadWritePaths=/var/run/docker.sock /etc/orca /tmp
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orca-daemon
+
+# Environment
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

@@ -154,6 +154,13 @@ pub fn run() {
             commands::read_file,
             commands::save_compose_file,
             commands::check_ports,
+            commands::list_remote_hosts,
+            commands::add_remote_host,
+            commands::update_remote_host,
+            commands::remove_remote_host,
+            commands::switch_host,
+            commands::get_active_host,
+            commands::test_remote_host,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

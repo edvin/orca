@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import { getAlertEvents, getUnreadCount, markAllRead, clearEvents } from "../lib/activityStore";
 import { openAiWindow } from "./AiAssistant";
-import type { SystemHealth } from "../lib/types";
+import type { SystemHealth, RemoteHost, ActiveHost } from "../lib/types";
 
 interface TitlebarProps {
   daemonStatus: string;
@@ -30,6 +30,32 @@ export default function Titlebar(props: TitlebarProps) {
   const [warningCount, setWarningCount] = createSignal(0);
   const [runtimeInfo, setRuntimeInfo] = createSignal<string | null>(null);
   const [bellOpen, setBellOpen] = createSignal(false);
+  const [hostMenuOpen, setHostMenuOpen] = createSignal(false);
+  const [remoteHosts, setRemoteHosts] = createSignal<RemoteHost[]>([]);
+  const [activeHost, setActiveHost] = createSignal<ActiveHost>({ id: null, name: "Local", url: "", is_remote: false });
+
+  const loadHosts = async () => {
+    try {
+      const hosts = (await invoke("list_remote_hosts")) as RemoteHost[];
+      setRemoteHosts(hosts);
+      const active = (await invoke("get_active_host")) as ActiveHost;
+      setActiveHost(active);
+    } catch {}
+  };
+
+  const switchToHost = async (id: string | null) => {
+    try {
+      await invoke("switch_host", { id });
+      const active = (await invoke("get_active_host")) as ActiveHost;
+      setActiveHost(active);
+      setHostMenuOpen(false);
+      showToast(`Switched to ${active.name}`, "success");
+      // Trigger a refresh across the app
+      document.dispatchEvent(new CustomEvent("orca-refresh"));
+    } catch (e) {
+      showToast(`Failed to switch host: ${e}`, "error");
+    }
+  };
 
   const pollHealth = async () => {
     try {
@@ -56,14 +82,21 @@ export default function Titlebar(props: TitlebarProps) {
 
   onMount(() => {
     pollHealth();
+    loadHosts();
     const interval = setInterval(pollHealth, 10_000);
 
-    // Close bell dropdown when clicking outside
+    // Close dropdowns when clicking outside
     const handleClickOutside = (e: MouseEvent) => {
       if (bellOpen()) {
         const bell = document.querySelector(".notification-bell");
         if (bell && !bell.contains(e.target as Node)) {
           setBellOpen(false);
+        }
+      }
+      if (hostMenuOpen()) {
+        const hostSel = document.querySelector(".host-selector");
+        if (hostSel && !hostSel.contains(e.target as Node)) {
+          setHostMenuOpen(false);
         }
       }
     };
@@ -149,6 +182,51 @@ export default function Titlebar(props: TitlebarProps) {
             </span>
           </Show>
         </div>
+        <Show when={remoteHosts().length > 0}>
+          <div class="host-selector" data-tauri-drag-region-exclude>
+            <button
+              class={`host-selector-btn ${activeHost().is_remote ? "host-remote" : ""}`}
+              onClick={() => { setHostMenuOpen(!hostMenuOpen()); loadHosts(); }}
+              title={activeHost().is_remote ? `Connected to ${activeHost().url}` : "Local daemon"}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+              </svg>
+              <span>{activeHost().name}</span>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <Show when={hostMenuOpen()}>
+              <div class="host-selector-dropdown">
+                <div
+                  class={`host-selector-item ${!activeHost().is_remote ? "active" : ""}`}
+                  onClick={() => switchToHost(null)}
+                >
+                  <span class="host-dot" style={{ background: "#3fb950" }} />
+                  <span>Local</span>
+                </div>
+                <For each={remoteHosts()}>
+                  {(host) => (
+                    <div
+                      class={`host-selector-item ${activeHost().id === host.id ? "active" : ""}`}
+                      onClick={() => switchToHost(host.id)}
+                    >
+                      <span class="host-dot" style={{ background: activeHost().id === host.id ? "#58a6ff" : "#8b949e" }} />
+                      <span>{host.name}</span>
+                    </div>
+                  )}
+                </For>
+                <div class="host-selector-divider" />
+                <div
+                  class="host-selector-item"
+                  onClick={() => { setHostMenuOpen(false); props.onNavigate?.("settings"); }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  <span>Manage Hosts...</span>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </Show>
       </div>
       <button
         class="titlebar-search"

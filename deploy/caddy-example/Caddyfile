@@ -1,0 +1,3 @@
+orca.example.com {
+    reverse_proxy localhost:9477
+}

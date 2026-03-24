@@ -1,6 +1,6 @@
 import { createSignal, onMount, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { MachineInfo, RegistryCredential } from "../lib/types";
+import type { MachineInfo, RegistryCredential, RemoteHost } from "../lib/types";
 import { showToast } from "../components/Toast";
 import { confirmDanger, confirm as confirmDialog } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
@@ -8,7 +8,7 @@ import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, update
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 
-type SettingsTab = "general" | "ai" | "registries" | "maintenance" | "about";
+type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "maintenance" | "about";
 
 export default function SettingsPage() {
   const [tab, setTab] = createSignal<SettingsTab>("general");
@@ -21,6 +21,17 @@ export default function SettingsPage() {
   const [regName, setRegName] = createSignal("");
   const [regUsername, setRegUsername] = createSignal("");
   const [regPassword, setRegPassword] = createSignal("");
+
+  // Remote hosts
+  const [remoteHosts, setRemoteHosts] = createSignal<RemoteHost[]>([]);
+  const [showAddHost, setShowAddHost] = createSignal(false);
+  const [editingHost, setEditingHost] = createSignal<RemoteHost | null>(null);
+  const [hostName, setHostName] = createSignal("");
+  const [hostUrl, setHostUrl] = createSignal("");
+  const [hostToken, setHostToken] = createSignal("");
+  const [hostTlsVerify, setHostTlsVerify] = createSignal(true);
+  const [hostTesting, setHostTesting] = createSignal(false);
+  const [hostTestResult, setHostTestResult] = createSignal<string | null>(null);
 
   // Maintenance / System Prune
   const [pruneContainers, setPruneContainers] = createSignal(false);
@@ -141,6 +152,104 @@ export default function SettingsPage() {
   const applyPreset = (preset: typeof REGISTRY_PRESETS[number]) => {
     setRegServer(preset.server);
     setRegName(preset.name);
+  };
+
+  // --- Remote hosts ---
+
+  const refreshRemoteHosts = async () => {
+    try {
+      const hosts = (await invoke("list_remote_hosts")) as RemoteHost[];
+      setRemoteHosts(hosts);
+    } catch {}
+  };
+
+  const resetHostForm = () => {
+    setHostName("");
+    setHostUrl("");
+    setHostToken("");
+    setHostTlsVerify(true);
+    setHostTestResult(null);
+    setEditingHost(null);
+  };
+
+  const startEditHost = (host: RemoteHost) => {
+    setEditingHost(host);
+    setHostName(host.name);
+    setHostUrl(host.url);
+    setHostToken("");  // Don't pre-fill token for security
+    setHostTlsVerify(host.tls_verify);
+    setHostTestResult(null);
+    setShowAddHost(true);
+  };
+
+  const saveHost = async () => {
+    const name = hostName().trim();
+    const url = hostUrl().trim().replace(/\/+$/, "");
+    const token = hostToken().trim();
+    const tls_verify = hostTlsVerify();
+    if (!name || !url) return;
+
+    const editing = editingHost();
+    try {
+      if (editing) {
+        // Update existing — if token is empty, keep the old one
+        // We need to pass something, so re-read from backend is not practical
+        // User must provide token on edit if they want to change it
+        await invoke("update_remote_host", {
+          id: editing.id,
+          name,
+          url,
+          token: token || "__KEEP__",
+          tlsVerify: tls_verify,
+        });
+        showToast("Host updated", "success");
+      } else {
+        if (!token) {
+          showToast("API token is required", "error");
+          return;
+        }
+        await invoke("add_remote_host", { name, url, token, tlsVerify: tls_verify });
+        showToast("Host added", "success");
+      }
+      setShowAddHost(false);
+      resetHostForm();
+      await refreshRemoteHosts();
+    } catch (e) {
+      logError(`Failed to save host: ${e}`, `Host "${name}"`);
+      showToast(`Failed to save host: ${e}`, "error");
+    }
+  };
+
+  const removeHost = async (host: RemoteHost) => {
+    if (!await confirmDanger("Remove Host", `Remove remote host '${host.name}'?`)) return;
+    try {
+      await invoke("remove_remote_host", { id: host.id });
+      showToast("Host removed", "success");
+      await refreshRemoteHosts();
+    } catch (e) {
+      logError(`Failed to remove host: ${e}`, `Host "${host.name}"`);
+      showToast(`Failed to remove host: ${e}`, "error");
+    }
+  };
+
+  const testHost = async () => {
+    const url = hostUrl().trim().replace(/\/+$/, "");
+    const token = hostToken().trim();
+    if (!url) return;
+    setHostTesting(true);
+    setHostTestResult(null);
+    try {
+      const result = (await invoke("test_remote_host", {
+        url,
+        token,
+        tlsVerify: hostTlsVerify(),
+      })) as any;
+      setHostTestResult(`Connected — version ${result.version || "unknown"}, status: ${result.status || "ok"}`);
+    } catch (e) {
+      setHostTestResult(`Failed: ${e}`);
+    } finally {
+      setHostTesting(false);
+    }
   };
 
   const refreshGeneralSettings = async () => {
@@ -472,6 +581,7 @@ export default function SettingsPage() {
   onMount(() => {
     refresh();
     refreshRegistries();
+    refreshRemoteHosts();
     refreshGeneralSettings();
     refreshAiSettings();
     refreshWslConfig();
@@ -495,6 +605,7 @@ export default function SettingsPage() {
         <button class={`tab-item ${tab() === "general" ? "active" : ""}`} onClick={() => setTab("general")}>General</button>
         <button class={`tab-item ${tab() === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>AI & Agents</button>
         <button class={`tab-item ${tab() === "registries" ? "active" : ""}`} onClick={() => setTab("registries")}>Registries</button>
+        <button class={`tab-item ${tab() === "remote-hosts" ? "active" : ""}`} onClick={() => setTab("remote-hosts")}>Remote Hosts</button>
         <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
         <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
       </div>
@@ -1074,6 +1185,119 @@ export default function SettingsPage() {
                       <button class="btn btn-primary" onClick={addRegistry} disabled={!regServer().trim() || !regUsername().trim() || !regPassword()}>Save</button>
                       <button class="btn" onClick={() => setShowAddRegistry(false)}>Cancel</button>
                     </div>
+                  </div>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
+
+        {/* === Remote Hosts Tab === */}
+        <Show when={tab() === "remote-hosts"}>
+          <div class="settings-section">
+            <h2 class="settings-section-title">Remote Hosts</h2>
+            <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
+              Connect to remote servers running the orca-daemon. Switch between hosts from the titlebar dropdown.
+            </p>
+            <div class="card">
+              <Show when={remoteHosts().length > 0} fallback={
+                <div style={{ padding: "8px 0", color: "#8b949e" }}>No remote hosts configured.</div>
+              }>
+                <table class="table" style={{ margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>URL</th>
+                      <th>TLS</th>
+                      <th style={{ "text-align": "right" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <For each={remoteHosts()}>
+                      {(host) => (
+                        <tr>
+                          <td style={{ "font-weight": 500 }}>{host.name}</td>
+                          <td class="mono" style={{ "font-size": "12px" }}>{host.url}</td>
+                          <td>{host.tls_verify ? "Verify" : "Skip"}</td>
+                          <td style={{ "text-align": "right", display: "flex", gap: "4px", "justify-content": "flex-end" }}>
+                            <button
+                              class="btn btn-sm"
+                              onClick={() => startEditHost(host)}
+                              title="Edit host"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                            </button>
+                            <button
+                              class="btn btn-sm btn-danger"
+                              onClick={() => removeHost(host)}
+                              title="Remove host"
+                              style={{ color: "#f85149" }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                    </For>
+                  </tbody>
+                </table>
+              </Show>
+
+              <div style={{ "margin-top": "12px" }}>
+                <Show when={!showAddHost()}>
+                  <button class="btn btn-primary" onClick={() => { resetHostForm(); setShowAddHost(true); }}>Add Host</button>
+                </Show>
+              </div>
+
+              <Show when={showAddHost()}>
+                <div style={{ "margin-top": "12px", "border-top": "1px solid #21262d", "padding-top": "12px" }}>
+                  <h3 style={{ "font-size": "14px", "font-weight": 600, "margin-bottom": "12px", color: "#e6edf3" }}>
+                    {editingHost() ? `Edit "${editingHost()!.name}"` : "Add Remote Host"}
+                  </h3>
+                  <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                    <div class="form-group">
+                      <label class="form-label">Display Name</label>
+                      <input class="form-input" type="text" placeholder="Production Server" value={hostName()} onInput={(e) => setHostName(e.currentTarget.value)} />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Daemon URL</label>
+                      <input class="form-input" type="text" placeholder="https://prod.example.com:9477/api/v1" value={hostUrl()} onInput={(e) => setHostUrl(e.currentTarget.value)} />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">API Token {editingHost() ? "(leave blank to keep current)" : ""}</label>
+                      <input class="form-input" type="password" placeholder="Bearer token" value={hostToken()} onInput={(e) => setHostToken(e.currentTarget.value)} />
+                    </div>
+                    <div class="settings-row" style={{ padding: "4px 0" }}>
+                      <div class="settings-row-left">
+                        <span class="settings-label" style={{ "font-size": "13px" }}>Verify TLS Certificate</span>
+                        <span class="settings-description">Disable for self-signed certificates</span>
+                      </div>
+                      <label class="toggle">
+                        <input type="checkbox" checked={hostTlsVerify()} onChange={(e) => setHostTlsVerify(e.currentTarget.checked)} />
+                        <span class="toggle-slider" />
+                      </label>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                      <button class="btn btn-primary" onClick={saveHost} disabled={!hostName().trim() || !hostUrl().trim()}>
+                        {editingHost() ? "Update" : "Save"}
+                      </button>
+                      <button class="btn" onClick={() => { testHost(); }} disabled={hostTesting() || !hostUrl().trim()}>
+                        {hostTesting() ? "Testing..." : "Test Connection"}
+                      </button>
+                      <button class="btn" onClick={() => { setShowAddHost(false); resetHostForm(); }}>Cancel</button>
+                    </div>
+                    <Show when={hostTestResult()}>
+                      <div style={{
+                        padding: "8px 12px",
+                        "border-radius": "6px",
+                        "font-size": "12px",
+                        background: hostTestResult()!.startsWith("Failed") ? "#f8514922" : "#3fb95022",
+                        color: hostTestResult()!.startsWith("Failed") ? "#f85149" : "#3fb950",
+                        border: `1px solid ${hostTestResult()!.startsWith("Failed") ? "#f8514944" : "#3fb95044"}`,
+                      }}>
+                        {hostTestResult()}
+                      </div>
+                    </Show>
                   </div>
                 </div>
               </Show>

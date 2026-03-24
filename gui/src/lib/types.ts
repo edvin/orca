@@ -453,6 +453,22 @@ export interface AiSuggestion {
   detail: string;
 }
 
+// --- Remote Hosts ---
+
+export interface RemoteHost {
+  id: string;
+  name: string;
+  url: string;
+  tls_verify: boolean;
+}
+
+export interface ActiveHost {
+  id: string | null;
+  name: string;
+  url: string;
+  is_remote: boolean;
+}
+
 // --- Environment ---
 
 export interface EnvironmentStatus {

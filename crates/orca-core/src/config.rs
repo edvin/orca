@@ -6,6 +6,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::machine::MachineConfig;
 
+/// A remote orca-daemon host.
+/// Tokens are stored as base64-encoded strings in the config file (same security as registry passwords).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteHost {
+    /// Unique identifier (hex timestamp-based).
+    pub id: String,
+    /// Display name (e.g., "Production", "Staging").
+    pub name: String,
+    /// Full API URL (e.g., "https://prod.example.com:9477/api/v1").
+    pub url: String,
+    /// API bearer token (base64-encoded for storage).
+    pub token: String,
+    /// Whether to verify TLS certificates (default true).
+    #[serde(default = "default_true")]
+    pub tls_verify: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// Saved registry credentials.
 /// Passwords are stored as base64-encoded strings in the config file.
 /// This is NOT encryption — it simply avoids plaintext passwords in the JSON.
@@ -79,6 +100,9 @@ pub struct OrcaConfig {
     /// Anthropic model to use (default: claude-sonnet-4-20250514)
     #[serde(default = "default_anthropic_model")]
     pub anthropic_model: String,
+    /// Remote orca-daemon hosts.
+    #[serde(default)]
+    pub remote_hosts: Vec<RemoteHost>,
 }
 
 fn default_ai_provider() -> String {
@@ -145,6 +169,7 @@ impl Default for OrcaConfig {
             openai_url: default_openai_url(),
             openai_model: default_openai_model(),
             anthropic_model: default_anthropic_model(),
+            remote_hosts: Vec::new(),
         }
     }
 }

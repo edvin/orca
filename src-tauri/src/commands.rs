@@ -2,7 +2,7 @@
 //! These proxy to the Orca daemon's HTTP API.
 
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock, Mutex};
+use std::sync::{Arc, OnceLock, Mutex, RwLock};
 
 use serde::Deserialize;
 use tauri::Manager;
@@ -16,23 +16,59 @@ fn port_forward_map() -> &'static Mutex<HashMap<String, std::process::Child>> {
     PORT_FORWARDS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-const DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
+const LOCAL_DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
 
-/// Cached API token — loaded once from config, reused for all requests.
+/// Override for the daemon URL when a remote host is selected.
+/// Contains (url, token, tls_verify) when a remote host is active, None for local.
+static DAEMON_URL_OVERRIDE: RwLock<Option<(String, String, bool)>> = RwLock::new(None);
+
+/// Returns the currently active daemon URL — remote override or local default.
+fn daemon_url() -> String {
+    if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
+        if let Some((url, _, _)) = guard.as_ref() {
+            return url.clone();
+        }
+    }
+    LOCAL_DAEMON_URL.to_string()
+}
+
+/// Returns the API token for the active host.
+/// For remote hosts, returns the remote token; for local, reads from config.
+fn active_api_token() -> Option<String> {
+    if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
+        if let Some((_, token, _)) = guard.as_ref() {
+            return Some(token.clone());
+        }
+    }
+    load_api_token()
+}
+
+/// Cached API token — loaded once from config, reused for local requests.
 static API_TOKEN: OnceLock<Option<String>> = OnceLock::new();
 
 /// Build a reqwest client with the API auth token pre-configured.
 fn authed_client() -> reqwest::Client {
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(5));
+
+    // Check if we should skip TLS verification for the active remote host
+    if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
+        if let Some((_, _, tls_verify)) = guard.as_ref() {
+            if !tls_verify {
+                builder = builder.danger_accept_invalid_certs(true);
+            }
+        }
+    }
+
     let mut headers = reqwest::header::HeaderMap::new();
-    if let Some(token) = load_api_token() {
+    if let Some(token) = active_api_token() {
         if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
             headers.insert(reqwest::header::AUTHORIZATION, val);
         }
     }
-    reqwest::Client::builder()
+    builder
         .default_headers(headers)
-        .timeout(std::time::Duration::from_secs(30))
-        .connect_timeout(std::time::Duration::from_secs(5))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new())
 }
@@ -49,8 +85,9 @@ fn client() -> reqwest::Client {
 }
 
 async fn get_json<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, String> {
+    let base = daemon_url();
     let resp = client()
-        .get(format!("{DAEMON_URL}{path}"))
+        .get(format!("{base}{path}"))
         .send()
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
@@ -66,8 +103,9 @@ async fn get_json<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, String>
 }
 
 async fn post_empty(path: &str) -> Result<(), String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}{path}"))
+        .post(format!("{base}{path}"))
         .send()
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
@@ -81,8 +119,9 @@ async fn post_empty(path: &str) -> Result<(), String> {
 }
 
 async fn post_json(path: &str) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}{path}"))
+        .post(format!("{base}{path}"))
         .send()
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
@@ -98,8 +137,9 @@ async fn post_json(path: &str) -> Result<serde_json::Value, String> {
 }
 
 async fn delete(path: &str) -> Result<(), String> {
+    let base = daemon_url();
     let resp = client()
-        .delete(format!("{DAEMON_URL}{path}"))
+        .delete(format!("{base}{path}"))
         .send()
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
@@ -161,8 +201,9 @@ pub async fn exec_container(
     command: Vec<String>,
     workdir: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/containers/{id}/exec"))
+        .post(format!("{base}/containers/{id}/exec"))
         .json(&serde_json::json!({
             "command": command,
             "workdir": workdir,
@@ -187,6 +228,7 @@ pub async fn update_container(
     cpu_limit: Option<f64>,
     restart_policy: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     let mut body = serde_json::json!({});
     if let Some(mem) = memory_limit {
         body["memory_limit"] = serde_json::json!(mem);
@@ -199,7 +241,7 @@ pub async fn update_container(
     }
 
     let resp = client()
-        .post(format!("{DAEMON_URL}/containers/{id}/update"))
+        .post(format!("{base}/containers/{id}/update"))
         .json(&body)
         .send()
         .await
@@ -240,11 +282,12 @@ pub async fn container_logs(
     id: String,
     tail: Option<u32>,
 ) -> Result<Vec<String>, String> {
+    let base = daemon_url();
     // Fetch logs as SSE, collect lines (non-streaming for Tauri command).
     // For follow mode we'd use Tauri events, but batch fetch is fine for initial view.
     let resp = client()
         .get(format!(
-            "{DAEMON_URL}/containers/{id}/logs?follow=false&tail={}",
+            "{base}/containers/{id}/logs?follow=false&tail={}",
             tail.unwrap_or(500)
         ))
         .send()
@@ -280,6 +323,7 @@ pub async fn create_and_run_container(
     gpu: Option<bool>,
     network: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     // Build the create request body
     let mut body = serde_json::json!({
         "image": image,
@@ -368,7 +412,7 @@ pub async fn create_and_run_container(
 
     // Create the container
     let create_resp = client()
-        .post(format!("{DAEMON_URL}/containers"))
+        .post(format!("{base}/containers"))
         .json(&body)
         .send()
         .await
@@ -409,8 +453,9 @@ pub async fn add_registry(
     username: String,
     password: String,
 ) -> Result<(), String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}/registries"))
+        .post(format!("{base}/registries"))
         .json(&serde_json::json!({
             "server": server,
             "name": name,
@@ -457,6 +502,7 @@ pub async fn pull_image(
     username: Option<String>,
     password: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     let mut body = serde_json::json!({ "reference": reference });
     if let (Some(user), Some(pass)) = (username, password) {
         body["auth"] = serde_json::json!({
@@ -482,7 +528,7 @@ pub async fn pull_image(
     };
 
     let resp = pull_client
-        .post(format!("{DAEMON_URL}/images/pull"))
+        .post(format!("{base}/images/pull"))
         .json(&body)
         .send()
         .await
@@ -511,8 +557,9 @@ pub async fn remove_image(id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn batch_delete_images(ids: Vec<String>, force: bool) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/images/batch-delete"))
+        .post(format!("{base}/images/batch-delete"))
         .json(&serde_json::json!({ "ids": ids, "force": force }))
         .send()
         .await
@@ -529,9 +576,10 @@ pub async fn prune_images() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn tag_image(source: String, repo: String, tag: String) -> Result<(), String> {
+    let base = daemon_url();
     let resp = client()
         .post(format!(
-            "{DAEMON_URL}/images/{}/tag",
+            "{base}/images/{}/tag",
             urlencoding::encode(&source)
         ))
         .json(&serde_json::json!({ "repo": repo, "tag": tag }))
@@ -552,8 +600,9 @@ pub async fn build_image(
     tag: Option<String>,
     build_args: Option<HashMap<String, String>>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}/images/build"))
+        .post(format!("{base}/images/build"))
         .json(&serde_json::json!({
             "context_path": context_path,
             "dockerfile": dockerfile,
@@ -602,8 +651,9 @@ pub async fn remove_volume(name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn create_volume(name: String, driver: Option<String>, labels: Option<Vec<String>>) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/volumes"))
+        .post(format!("{base}/volumes"))
         .json(&serde_json::json!({
             "name": name,
             "driver": driver.unwrap_or_else(|| "local".to_string()),
@@ -658,8 +708,9 @@ pub async fn container_read_file(id: String, path: String) -> Result<serde_json:
 
 #[tauri::command]
 pub async fn commit_container(id: String, repo: String, tag: Option<String>) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/containers/{}/commit", urlencoding::encode(&id)))
+        .post(format!("{base}/containers/{}/commit", urlencoding::encode(&id)))
         .json(&serde_json::json!({ "repo": repo, "tag": tag.unwrap_or_else(|| "latest".into()) }))
         .send().await.map_err(|e| format!("{e}"))?
         .json().await.map_err(|e| format!("{e}"))
@@ -695,8 +746,9 @@ pub async fn image_read_file(id: String, path: String) -> Result<serde_json::Val
 
 #[tauri::command]
 pub async fn import_image(path: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/images/import"))
+        .post(format!("{base}/images/import"))
         .json(&serde_json::json!({ "path": path }))
         .timeout(std::time::Duration::from_secs(300))
         .send().await.map_err(|e| format!("{e}"))?
@@ -707,6 +759,7 @@ pub async fn import_image(path: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn scan_image(id: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     // Trivy scans can take a while — use a longer timeout
     let client = {
         let mut headers = reqwest::header::HeaderMap::new();
@@ -725,7 +778,7 @@ pub async fn scan_image(id: String) -> Result<serde_json::Value, String> {
 
     let encoded = urlencoding::encode(&id);
     let resp = client
-        .get(format!("{DAEMON_URL}/images/{encoded}/scan"))
+        .get(format!("{base}/images/{encoded}/scan"))
         .send()
         .await
         .map_err(|e| format!("Scan failed: {e}"))?;
@@ -749,8 +802,9 @@ pub async fn list_networks() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn create_network(name: String, driver: Option<String>) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/networks"))
+        .post(format!("{base}/networks"))
         .json(&serde_json::json!({
             "name": name,
             "driver": driver.unwrap_or_else(|| "bridge".to_string()),
@@ -821,10 +875,11 @@ pub async fn compose_pull(name: String) -> Result<serde_json::Value, String> {
 /// Tauri event emissions for real-time updates.
 #[tauri::command]
 pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
+    let base = daemon_url();
     use tauri::Emitter;
 
     let resp = client()
-        .get(format!("{DAEMON_URL}/events"))
+        .get(format!("{base}/events"))
         .send()
         .await
         .map_err(|e| format!("Failed to connect to event stream: {e}"))?;
@@ -872,6 +927,7 @@ pub async fn k8s_status() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn k8s_enable() -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     // K8s setup can take several minutes — use a long timeout
     let long_client = {
         let mut headers = reqwest::header::HeaderMap::new();
@@ -889,7 +945,7 @@ pub async fn k8s_enable() -> Result<serde_json::Value, String> {
     };
 
     long_client
-        .post(format!("{DAEMON_URL}/k8s/enable"))
+        .post(format!("{base}/k8s/enable"))
         .send()
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?
@@ -954,8 +1010,9 @@ pub async fn k8s_scale_deployment(
     name: String,
     replicas: u32,
 ) -> Result<(), String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}/k8s/deployments/{namespace}/{name}/scale"))
+        .post(format!("{base}/k8s/deployments/{namespace}/{name}/scale"))
         .json(&serde_json::json!({ "replicas": replicas }))
         .send()
         .await
@@ -989,6 +1046,7 @@ pub async fn k8s_pod_logs(
         query_parts.push(format!("tail={t}"));
     }
     let query = if query_parts.is_empty() {
+    let base = daemon_url();
         String::new()
     } else {
         format!("?{}", query_parts.join("&"))
@@ -999,8 +1057,9 @@ pub async fn k8s_pod_logs(
 
 #[tauri::command]
 pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/k8s/apply"))
+        .post(format!("{base}/k8s/apply"))
         .json(&serde_json::json!({ "yaml": yaml }))
         .send()
         .await
@@ -1087,6 +1146,7 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
 
     if !output.status.success() {
         return Err(if stderr.trim().is_empty() {
+    let base = daemon_url();
             format!("kubectl exited with code {}: {}", output.status, stdout)
         } else {
             stderr
@@ -1108,9 +1168,10 @@ pub async fn k8s_events(namespace: String) -> Result<serde_json::Value, String> 
 
 #[tauri::command]
 pub async fn k8s_create_namespace(name: String) -> Result<(), String> {
+    let base = daemon_url();
     validate_k8s_name(&name)?;
     let resp = client()
-        .post(format!("{DAEMON_URL}/k8s/namespaces"))
+        .post(format!("{base}/k8s/namespaces"))
         .json(&serde_json::json!({ "name": name }))
         .send()
         .await
@@ -1142,10 +1203,11 @@ pub async fn k8s_secrets(namespace: String) -> Result<serde_json::Value, String>
 
 #[tauri::command]
 pub async fn k8s_create_secret(namespace: String, name: String, data: serde_json::Value, secret_type: Option<String>) -> Result<(), String> {
+    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
     let resp = client()
-        .post(format!("{DAEMON_URL}/k8s/secrets/{namespace}"))
+        .post(format!("{base}/k8s/secrets/{namespace}"))
         .json(&serde_json::json!({ "name": name, "data": data, "secret_type": secret_type }))
         .send()
         .await
@@ -1167,10 +1229,11 @@ pub async fn k8s_delete_secret(namespace: String, name: String) -> Result<(), St
 
 #[tauri::command]
 pub async fn k8s_update_secret(namespace: String, name: String, data: serde_json::Value) -> Result<(), String> {
+    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
     let resp = client()
-        .put(format!("{DAEMON_URL}/k8s/secrets/{namespace}/{name}"))
+        .put(format!("{base}/k8s/secrets/{namespace}/{name}"))
         .json(&serde_json::json!({ "data": data }))
         .send()
         .await
@@ -1185,10 +1248,11 @@ pub async fn k8s_update_secret(namespace: String, name: String, data: serde_json
 
 #[tauri::command]
 pub async fn k8s_create_pvc(namespace: String, name: String, storage_class: String, size: String, access_modes: Vec<String>) -> Result<(), String> {
+    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
     let resp = client()
-        .post(format!("{DAEMON_URL}/k8s/pvcs/{namespace}"))
+        .post(format!("{base}/k8s/pvcs/{namespace}"))
         .json(&serde_json::json!({
             "name": name,
             "storage_class": storage_class,
@@ -1227,8 +1291,9 @@ pub async fn k8s_rollout_undo(
     name: String,
     revision: Option<u32>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/k8s/deployments/{namespace}/{name}/rollback"))
+        .post(format!("{base}/k8s/deployments/{namespace}/{name}/rollback"))
         .json(&serde_json::json!({ "revision": revision }))
         .send()
         .await
@@ -1264,8 +1329,9 @@ pub async fn k8s_scale_statefulset(
     name: String,
     replicas: u32,
 ) -> Result<(), String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}/k8s/statefulsets/{namespace}/{name}/scale"))
+        .post(format!("{base}/k8s/statefulsets/{namespace}/{name}/scale"))
         .json(&serde_json::json!({ "replicas": replicas }))
         .send()
         .await
@@ -1321,11 +1387,12 @@ pub async fn k8s_create_hpa(
     max: i32,
     cpu_target: i32,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
     validate_k8s_name(&deployment)?;
     client()
-        .post(format!("{DAEMON_URL}/k8s/hpas/{namespace}"))
+        .post(format!("{base}/k8s/hpas/{namespace}"))
         .json(&serde_json::json!({
             "name": name,
             "deployment": deployment,
@@ -1387,10 +1454,11 @@ pub async fn k8s_cronjobs(namespace: String) -> Result<serde_json::Value, String
 
 #[tauri::command]
 pub async fn k8s_trigger_cronjob(namespace: String, name: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
     client()
-        .post(format!("{DAEMON_URL}/k8s/cronjobs/{namespace}/{name}/trigger"))
+        .post(format!("{base}/k8s/cronjobs/{namespace}/{name}/trigger"))
         .send()
         .await
         .map_err(|e| format!("Trigger failed: {e}"))?
@@ -1415,10 +1483,11 @@ pub async fn k8s_delete_cronjob(namespace: String, name: String) -> Result<(), S
 
 #[tauri::command]
 pub async fn k8s_suspend_cronjob(namespace: String, name: String, suspend: bool) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
     client()
-        .put(format!("{DAEMON_URL}/k8s/cronjobs/{namespace}/{name}/suspend"))
+        .put(format!("{base}/k8s/cronjobs/{namespace}/{name}/suspend"))
         .json(&serde_json::json!({ "suspend": suspend }))
         .send()
         .await
@@ -1435,8 +1504,9 @@ pub async fn k8s_helm_list() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn k8s_helm_uninstall(name: String, namespace: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/k8s/helm/uninstall"))
+        .post(format!("{base}/k8s/helm/uninstall"))
         .json(&serde_json::json!({ "name": name, "namespace": namespace }))
         .send()
         .await
@@ -1458,8 +1528,9 @@ pub async fn k8s_helm_install(
     namespace: String,
     set_values: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/k8s/helm/install"))
+        .post(format!("{base}/k8s/helm/install"))
         .json(&serde_json::json!({
             "release_name": release_name,
             "chart": chart,
@@ -1574,6 +1645,7 @@ pub async fn env_status() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn env_fix(action: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     // Fix actions can take minutes (install Homebrew, Lima, Docker, etc.)
     let long_client = {
         let mut headers = reqwest::header::HeaderMap::new();
@@ -1590,7 +1662,7 @@ pub async fn env_fix(action: String) -> Result<serde_json::Value, String> {
             .unwrap_or_else(|_| reqwest::Client::new())
     };
     long_client
-        .post(format!("{DAEMON_URL}/environment/fix"))
+        .post(format!("{base}/environment/fix"))
         .json(&serde_json::json!({ "action": action }))
         .send()
         .await
@@ -1604,6 +1676,7 @@ pub async fn env_fix(action: String) -> Result<serde_json::Value, String> {
 /// Returns immediately; frontend listens for events.
 #[tauri::command]
 pub async fn env_fix_stream(app: tauri::AppHandle, action: String) -> Result<(), String> {
+    let base = daemon_url();
     use tauri::Emitter;
 
     let mut headers = reqwest::header::HeaderMap::new();
@@ -1622,7 +1695,7 @@ pub async fn env_fix_stream(app: tauri::AppHandle, action: String) -> Result<(),
     // Spawn the SSE reader in a background task
     tokio::spawn(async move {
         let resp = match client
-            .post(format!("{DAEMON_URL}/environment/fix-stream"))
+            .post(format!("{base}/environment/fix-stream"))
             .json(&serde_json::json!({ "action": action }))
             .send()
             .await
@@ -1690,8 +1763,9 @@ pub async fn deploy_template(
     env: Option<Vec<String>>,
     volumes: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}/templates/{id}/deploy"))
+        .post(format!("{base}/templates/{id}/deploy"))
         .json(&serde_json::json!({
             "name": name,
             "ports": ports,
@@ -1719,8 +1793,9 @@ pub async fn deploy_template(
 
 #[tauri::command]
 pub async fn save_user_template(template: serde_json::Value) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/templates/user"))
+        .post(format!("{base}/templates/user"))
         .json(&template)
         .send()
         .await
@@ -1732,8 +1807,9 @@ pub async fn save_user_template(template: serde_json::Value) -> Result<serde_jso
 
 #[tauri::command]
 pub async fn delete_user_template(id: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .delete(format!("{DAEMON_URL}/templates/user?id={id}"))
+        .delete(format!("{base}/templates/user?id={id}"))
         .send()
         .await
         .map_err(|e| format!("Delete failed: {e}"))?
@@ -1750,6 +1826,7 @@ pub async fn ai_ask(
     context: Option<serde_json::Value>,
     history: Option<Vec<serde_json::Value>>,
 ) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     // Validate request size
     if let Some(ref ctx) = context {
         let ctx_str = serde_json::to_string(ctx).unwrap_or_default();
@@ -1784,7 +1861,7 @@ pub async fn ai_ask(
     };
 
     let resp = ai_client
-        .post(format!("{DAEMON_URL}/ai/ask"))
+        .post(format!("{base}/ai/ask"))
         .json(&serde_json::json!({
             "query": query,
             "context": context,
@@ -1944,8 +2021,9 @@ pub async fn save_general_settings(
     show_tray_icon: bool,
     telemetry: bool,
 ) -> Result<(), String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}/settings/general"))
+        .post(format!("{base}/settings/general"))
         .json(&serde_json::json!({
             "start_on_login": start_on_login,
             "show_tray_icon": show_tray_icon,
@@ -1972,6 +2050,7 @@ pub async fn get_lima_settings() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn save_lima_settings(name: String, cpus: u32, memory_gib: u32, disk_gib: u32) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     let long_client = {
         let mut headers = reqwest::header::HeaderMap::new();
         if let Some(token) = load_api_token() {
@@ -1987,7 +2066,7 @@ pub async fn save_lima_settings(name: String, cpus: u32, memory_gib: u32, disk_g
             .unwrap_or_else(|_| reqwest::Client::new())
     };
     long_client
-        .post(format!("{DAEMON_URL}/settings/lima"))
+        .post(format!("{base}/settings/lima"))
         .json(&serde_json::json!({ "name": name, "cpus": cpus, "memory_gib": memory_gib, "disk_gib": disk_gib }))
         .send()
         .await
@@ -2004,8 +2083,9 @@ pub async fn save_ai_settings(
     model: String,
     url: Option<String>,
 ) -> Result<(), String> {
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{DAEMON_URL}/settings/ai"))
+        .post(format!("{base}/settings/ai"))
         .json(&serde_json::json!({
             "provider": provider,
             "api_key": api_key,
@@ -2132,8 +2212,9 @@ pub async fn open_file_in_browser(path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn reconnect_runtime() -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     client()
-        .post(format!("{DAEMON_URL}/settings/reconnect"))
+        .post(format!("{base}/settings/reconnect"))
         .send()
         .await
         .map_err(|e| format!("Reconnect failed: {e}"))?
@@ -2144,12 +2225,13 @@ pub async fn reconnect_runtime() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
     const ALLOWED_SCOPES: &[&str] = &["containers", "images", "volumes", "networks", "build_cache", "all"];
     if !ALLOWED_SCOPES.contains(&scope.as_str()) {
         return Err(format!("Invalid cleanup scope: {scope}"));
     }
     client()
-        .post(format!("{DAEMON_URL}/settings/cleanup"))
+        .post(format!("{base}/settings/cleanup"))
         .json(&serde_json::json!({ "scope": scope }))
         .send()
         .await
@@ -2204,4 +2286,168 @@ pub async fn check_ports(ports: Vec<u16>) -> Result<serde_json::Value, String> {
         }
     }
     Ok(serde_json::json!({ "conflicts": conflicts }))
+}
+
+// --- Remote Host Management ---
+
+#[tauri::command]
+pub async fn list_remote_hosts() -> Result<Vec<serde_json::Value>, String> {
+    let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    Ok(config
+        .remote_hosts
+        .iter()
+        .map(|h| {
+            serde_json::json!({
+                "id": h.id,
+                "name": h.name,
+                "url": h.url,
+                "tls_verify": h.tls_verify,
+            })
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn add_remote_host(
+    name: String,
+    url: String,
+    token: String,
+    tls_verify: bool,
+) -> Result<serde_json::Value, String> {
+    let mut config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    // Generate a unique ID from timestamp + simple hash
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let id = format!("{:x}{:04x}", now.as_millis(), now.subsec_nanos() & 0xFFFF);
+    config.remote_hosts.push(orca_core::config::RemoteHost {
+        id: id.clone(),
+        name,
+        url,
+        token,
+        tls_verify,
+    });
+    config.save().map_err(|e| format!("{e}"))?;
+    Ok(serde_json::json!({ "id": id }))
+}
+
+#[tauri::command]
+pub async fn update_remote_host(
+    id: String,
+    name: String,
+    url: String,
+    token: String,
+    tls_verify: bool,
+) -> Result<(), String> {
+    let mut config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    let host = config
+        .remote_hosts
+        .iter_mut()
+        .find(|h| h.id == id)
+        .ok_or("Host not found")?;
+    host.name = name;
+    host.url = url;
+    // If token is "__KEEP__", preserve the existing token
+    if token != "__KEEP__" {
+        host.token = token;
+    }
+    host.tls_verify = tls_verify;
+    config.save().map_err(|e| format!("{e}"))?;
+
+    // If this host is currently active, update the override
+    if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
+        if guard.is_some() {
+            drop(guard);
+            // Re-apply the override with updated values
+            let host = config.remote_hosts.iter().find(|h| h.id == id).unwrap();
+            if let Ok(mut w) = DAEMON_URL_OVERRIDE.write() {
+                *w = Some((host.url.clone(), host.token.clone(), host.tls_verify));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_remote_host(id: String) -> Result<(), String> {
+    let mut config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    config.remote_hosts.retain(|h| h.id != id);
+    config.save().map_err(|e| format!("{e}"))?;
+    // If the removed host was active, switch back to local
+    if let Ok(mut guard) = DAEMON_URL_OVERRIDE.write() {
+        *guard = None;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn switch_host(id: Option<String>) -> Result<serde_json::Value, String> {
+    if let Some(id) = id {
+        let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+        let host = config
+            .remote_hosts
+            .iter()
+            .find(|h| h.id == id)
+            .ok_or("Host not found")?;
+        let mut guard = DAEMON_URL_OVERRIDE.write().map_err(|e| format!("{e}"))?;
+        *guard = Some((host.url.clone(), host.token.clone(), host.tls_verify));
+        Ok(serde_json::json!({ "host": host.name, "url": host.url }))
+    } else {
+        let mut guard = DAEMON_URL_OVERRIDE.write().map_err(|e| format!("{e}"))?;
+        *guard = None;
+        Ok(serde_json::json!({ "host": "Local", "url": LOCAL_DAEMON_URL }))
+    }
+}
+
+#[tauri::command]
+pub async fn get_active_host() -> Result<serde_json::Value, String> {
+    if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
+        if let Some((url, _, _)) = guard.as_ref() {
+            // Find the matching host name from config
+            if let Ok(config) = orca_core::config::OrcaConfig::load() {
+                if let Some(host) = config.remote_hosts.iter().find(|h| &h.url == url) {
+                    return Ok(serde_json::json!({
+                        "id": host.id,
+                        "name": host.name,
+                        "url": host.url,
+                        "is_remote": true,
+                    }));
+                }
+            }
+            return Ok(serde_json::json!({
+                "id": null,
+                "name": "Remote",
+                "url": url,
+                "is_remote": true,
+            }));
+        }
+    }
+    Ok(serde_json::json!({
+        "id": null,
+        "name": "Local",
+        "url": LOCAL_DAEMON_URL,
+        "is_remote": false,
+    }))
+}
+
+#[tauri::command]
+pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> Result<serde_json::Value, String> {
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(5));
+    if !tls_verify {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+    let client = builder.build().unwrap_or_else(|_| reqwest::Client::new());
+    let resp = client
+        .get(format!("{url}/health"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {e}"))?;
+    let health: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))?;
+    Ok(health)
 }
