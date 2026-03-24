@@ -50,12 +50,14 @@ export default function XTerminal(props: XTerminalProps) {
 
     const term = new Terminal({
       cursorBlink: true,
+      cursorStyle: "block",
       fontFamily: TERM_FONT,
       fontSize: fontSize(),
       theme: {
         background: "#1a1b26",
         foreground: "#a9b1d6",
         cursor: "#c0caf5",
+        cursorAccent: "#1a1b26",
         selectionBackground: "#33467c",
         black: "#15161e",
         red: "#f7768e",
@@ -99,8 +101,12 @@ export default function XTerminal(props: XTerminalProps) {
 
     ws.onopen = () => {
       term.writeln(`\x1b[36mConnected to ${props.containerName}\x1b[0m`);
-      const dims = { cols: term.cols, rows: term.rows };
-      ws.send(JSON.stringify(dims));
+      // Send initial resize after a brief delay (exec needs to be ready)
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ cols: term.cols, rows: term.rows }));
+        }
+      }, 200);
     };
 
     ws.onmessage = (event: MessageEvent) => {
