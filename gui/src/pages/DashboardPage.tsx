@@ -8,6 +8,12 @@ import { recordMetrics } from "../lib/metricsStore";
 import TimeChart from "../components/TimeChart";
 import LastUpdated from "../components/LastUpdated";
 
+// Persist metrics history across navigations (module-level, not component-level)
+const [cpuHistory, setCpuHistory] = createSignal<Array<{time: number, value: number}>>([]);
+const [memHistory, setMemHistory] = createSignal<Array<{time: number, value: number}>>([]);
+const [perContainerCpuHistory, setPerContainerCpuHistory] = createSignal<Record<string, Array<{time: number, value: number}>>>({});
+const [perContainerMemHistory, setPerContainerMemHistory] = createSignal<Record<string, Array<{time: number, value: number}>>>({});
+
 /** Wrap an invoke call with a timeout (ms). Rejects on timeout. */
 function invokeWithTimeout<T>(cmd: string, args?: Record<string, unknown>, timeoutMs = 10_000): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -31,11 +37,6 @@ export default function DashboardPage(props: DashboardPageProps) {
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
   const [containerStats, setContainerStats] = createSignal<Record<string, ContainerStats>>({});
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
-
-  const [cpuHistory, setCpuHistory] = createSignal<Array<{time: number, value: number}>>([]);
-  const [memHistory, setMemHistory] = createSignal<Array<{time: number, value: number}>>([]);
-  const [perContainerCpuHistory, setPerContainerCpuHistory] = createSignal<Record<string, Array<{time: number, value: number}>>>({});
-  const [perContainerMemHistory, setPerContainerMemHistory] = createSignal<Record<string, Array<{time: number, value: number}>>>({});
 
   const [containersState, setContainersState] = createSignal<CardState>("loading");
   const [imagesState, setImagesState] = createSignal<CardState>("loading");
