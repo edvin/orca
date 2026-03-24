@@ -473,6 +473,8 @@ pub async fn run_fix_streaming(
                     "limactl", &["create", "--name=orca", "--vm-type=vz",
                         "--rosetta", "--mount-writable",
                         "--mount-type=virtiofs",
+                        "--memory=8",
+                        "--cpus=4",
                         "--set", r#".portForwards += [{"guestIPMustBeZero": false, "guestIP": "127.0.0.1", "hostIP": "127.0.0.1"}]"#,
                         "template:docker"],
                     &tx
@@ -1510,6 +1512,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 // Write port forwarding override (matches Docker Desktop behavior)
                 let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
                 match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs",
+                    "--memory=8", "--cpus=4",
                     "--set", r#".portForwards += [{"guestIPMustBeZero": false, "guestIP": "127.0.0.1", "hostIP": "127.0.0.1"}]"#,
                     "template:docker"]).await {
                     Ok(_) => output.push_str("VM created.\n"),
