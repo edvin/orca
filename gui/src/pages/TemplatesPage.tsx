@@ -305,8 +305,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           const result = await invoke("check_ports", { ports: hostPorts }) as { conflicts: number[] };
           if (result.conflicts && result.conflicts.length > 0) {
             showToast(`Port${result.conflicts.length > 1 ? "s" : ""} ${result.conflicts.join(", ")} already in use. Change the port mappings and try again.`, "error");
-            setDeploying(false);
-            return;
+            return; // finally block will handle host switch-back and setDeploying(false)
           }
         } catch { /* port check failed, proceed anyway */ }
       }

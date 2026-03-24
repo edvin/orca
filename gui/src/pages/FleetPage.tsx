@@ -4,6 +4,21 @@ import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import type { RemoteHost, HostStatus } from "../lib/types";
 
+// Module-level signal — persists across navigation
+const [lastSeen, setLastSeen] = createSignal<Record<string, number>>({});
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days !== 1 ? "s" : ""} ago`;
+}
+
 interface FleetPageProps {
   onNavigate: (page: string) => void;
 }
@@ -73,6 +88,16 @@ export default function FleetPage(props: FleetPageProps) {
     const updated = results.map((r) =>
       r.status === "fulfilled" ? r.value : { ...hostList[0], checking: false, online: false, error: "Probe failed" }
     );
+    // Track last-seen timestamps for online hosts
+    const now = Date.now();
+    const seen = { ...lastSeen() };
+    for (const host of updated) {
+      const key = host.id || "__local__";
+      if (host.online) {
+        seen[key] = now;
+      }
+    }
+    setLastSeen(seen);
     setHosts(updated);
     setLastUpdated(new Date());
   };
@@ -99,6 +124,13 @@ export default function FleetPage(props: FleetPageProps) {
   const totalContainers = () =>
     hosts().reduce((sum, h) => sum + (h.containers_total || 0), 0);
   const onlineCount = () => hosts().filter((h) => h.online).length;
+
+  const versionMismatch = () => {
+    const onlineHosts = hosts().filter((h) => h.online && h.version);
+    if (onlineHosts.length < 2) return false;
+    const versions = new Set(onlineHosts.map((h) => h.version));
+    return versions.size > 1;
+  };
 
   return (
     <div class="fleet-page" style={{ padding: "28px 32px", "overflow-y": "auto", height: "100%" }}>
@@ -130,6 +162,13 @@ export default function FleetPage(props: FleetPageProps) {
           </button>
         </div>
       </div>
+
+      {/* Version mismatch warning */}
+      <Show when={versionMismatch()}>
+        <div style={{ padding: "8px 16px", background: "rgba(210, 169, 34, 0.1)", border: "1px solid rgba(210, 169, 34, 0.2)", "border-radius": "6px", "font-size": "12px", color: "#d29922", "margin-bottom": "12px" }}>
+          Version mismatch detected — hosts are running different daemon versions. Update all hosts to the same version for best compatibility.
+        </div>
+      </Show>
 
       {/* Grid */}
       <div
@@ -236,6 +275,15 @@ export default function FleetPage(props: FleetPageProps) {
                       {host.error}
                     </span>
                   </Show>
+                  {(() => {
+                    const key = host.id || "__local__";
+                    const ts = lastSeen()[key];
+                    return ts ? (
+                      <span style={{ color: "#8b949e", "font-size": "12px", display: "block", "margin-top": "4px" }}>
+                        Last seen {relativeTime(ts)}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               </Show>
 

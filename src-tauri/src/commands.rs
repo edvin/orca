@@ -2371,11 +2371,19 @@ pub async fn update_remote_host(
 #[tauri::command]
 pub async fn remove_remote_host(id: String) -> Result<(), String> {
     let mut config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    // Find the URL of the host being removed before we drop it
+    let removed_url = config.remote_hosts.iter().find(|h| h.id == id).map(|h| h.url.clone());
     config.remote_hosts.retain(|h| h.id != id);
     config.save().map_err(|e| format!("{e}"))?;
-    // If the removed host was active, switch back to local
-    if let Ok(mut guard) = DAEMON_URL_OVERRIDE.write() {
-        *guard = None;
+    // Only switch back to local if the removed host was the active one
+    if let Some(removed_url) = removed_url {
+        if let Ok(mut guard) = DAEMON_URL_OVERRIDE.write() {
+            if let Some((active_url, _, _)) = guard.as_ref() {
+                if *active_url == removed_url {
+                    *guard = None;
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -2552,7 +2560,14 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
 #[tauri::command]
 pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
     let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
-    let client = reqwest::Client::builder()
+
+    // Two clients: one that verifies TLS, one that doesn't
+    let verify_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .connect_timeout(std::time::Duration::from_secs(3))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+    let noverify_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .connect_timeout(std::time::Duration::from_secs(3))
         .danger_accept_invalid_certs(true)
@@ -2561,9 +2576,9 @@ pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
 
     let mut results = Vec::new();
 
-    // Check local daemon
+    // Check local daemon (always verify — it's localhost)
     let local_token = load_api_token().unwrap_or_default();
-    let local_result = client
+    let local_result = verify_client
         .get(format!("{LOCAL_DAEMON_URL}/health"))
         .header("Authorization", format!("Bearer {local_token}"))
         .send()
@@ -2585,8 +2600,9 @@ pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
         "version": local_version,
     }));
 
-    // Check each remote host
+    // Check each remote host, respecting tls_verify per host
     for host in &config.remote_hosts {
+        let client = if host.tls_verify { &verify_client } else { &noverify_client };
         let resp = client
             .get(format!("{}/health", host.url))
             .header("Authorization", format!("Bearer {}", host.token))

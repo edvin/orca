@@ -32,6 +32,7 @@ export default function SettingsPage() {
   const [hostTlsVerify, setHostTlsVerify] = createSignal(true);
   const [hostTesting, setHostTesting] = createSignal(false);
   const [hostTestResult, setHostTestResult] = createSignal<string | null>(null);
+  const [showHostToken, setShowHostToken] = createSignal(false);
 
   // Maintenance / System Prune
   const [pruneContainers, setPruneContainers] = createSignal(false);
@@ -170,6 +171,7 @@ export default function SettingsPage() {
     setHostTlsVerify(true);
     setHostTestResult(null);
     setEditingHost(null);
+    setShowHostToken(false);
   };
 
   const startEditHost = (host: RemoteHost) => {
@@ -179,6 +181,7 @@ export default function SettingsPage() {
     setHostToken("");  // Don't pre-fill token for security
     setHostTlsVerify(host.tls_verify);
     setHostTestResult(null);
+    setShowHostToken(false);
     setShowAddHost(true);
   };
 
@@ -1265,7 +1268,12 @@ export default function SettingsPage() {
                     </div>
                     <div class="form-group">
                       <label class="form-label">API Token {editingHost() ? "(leave blank to keep current)" : ""}</label>
-                      <input class="form-input" type="password" placeholder="Bearer token" value={hostToken()} onInput={(e) => setHostToken(e.currentTarget.value)} />
+                      <div style={{ display: "flex", gap: "4px" }}>
+                        <input class="form-input" type={showHostToken() ? "text" : "password"} placeholder="Bearer token" value={hostToken()} onInput={(e) => setHostToken(e.currentTarget.value)} style={{ flex: "1" }} />
+                        <button class="btn btn-sm" onClick={() => setShowHostToken(!showHostToken())} style={{ "flex-shrink": "0", "white-space": "nowrap" }}>
+                          {showHostToken() ? "Hide" : "Show"}
+                        </button>
+                      </div>
                     </div>
                     <div class="settings-row" style={{ padding: "4px 0" }}>
                       <div class="settings-row-left">

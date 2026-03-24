@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import type { SystemHealth } from "../lib/types";
+import type { SystemHealth, ActiveHost } from "../lib/types";
 import { formatBytes } from "../lib/format";
 import { showToast } from "./Toast";
 import { confirm } from "./ConfirmDialog";
@@ -16,12 +16,17 @@ export default function StatusBar(props: StatusBarProps) {
   const [updateAvailable, setUpdateAvailable] = createSignal<{version: string; body?: string} | null>(null);
   const [installing, setInstalling] = createSignal(false);
   const [appVersion, setAppVersion] = createSignal<string | null>(null);
+  const [activeHost, setActiveHost] = createSignal<ActiveHost | null>(null);
 
   const pollHealth = async () => {
     try {
       const h = (await invoke("system_health")) as SystemHealth;
       setHealth(h);
     } catch { /* daemon not ready */ }
+    try {
+      const host = (await invoke("get_active_host")) as ActiveHost;
+      setActiveHost(host);
+    } catch { /* ignore */ }
   };
 
   const checkUpdate = async () => {
@@ -93,6 +98,13 @@ export default function StatusBar(props: StatusBarProps) {
   return (
     <div class="status-bar">
       <div class="status-bar-left">
+        <Show when={activeHost()}>
+          <span class="status-bar-item" title={activeHost()!.is_remote ? `Connected to ${activeHost()!.url}` : "Local daemon"}>
+            <span class="status-bar-dot" style={{ background: activeHost()!.is_remote ? "#58a6ff" : "#3fb950" }} />
+            {activeHost()!.name}
+          </span>
+          <span class="status-bar-separator" />
+        </Show>
         <Show when={health()?.docker_connected}>
           <span class="status-bar-item">
             <span class="status-bar-dot" style={{ background: "#3fb950" }} />

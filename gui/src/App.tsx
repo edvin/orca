@@ -45,6 +45,7 @@ export default function App() {
 
   // Fleet health polling state
   let lastFleetStatus: Record<string, boolean> = {};
+  let fleetStatusCount: Record<string, number> = {};
   let fleetPollInterval: ReturnType<typeof setInterval> | null = null;
 
   const pollFleetHealth = async () => {
@@ -62,13 +63,21 @@ export default function App() {
       for (const host of hosts) {
         const key = host.id || "__local__";
         if (key in lastFleetStatus && lastFleetStatus[key] !== host.online) {
-          if (host.online) {
-            showToast(`${host.name} is back online`, "success");
-          } else {
-            showToast(`${host.name} is offline`, "error");
+          // State changed — require 2 consecutive polls in the new state before alerting
+          fleetStatusCount[key] = (fleetStatusCount[key] || 0) + 1;
+          if (fleetStatusCount[key] >= 2) {
+            if (host.online) {
+              showToast(`${host.name} is back online`, "success");
+            } else {
+              showToast(`${host.name} is offline`, "error");
+            }
+            fleetStatusCount[key] = 0;
+            lastFleetStatus[key] = host.online;
           }
+        } else {
+          fleetStatusCount[key] = 0;
+          lastFleetStatus[key] = host.online;
         }
-        lastFleetStatus[key] = host.online;
       }
     } catch {
       // Fleet polling failed silently — daemon may not support probe_all_hosts yet
