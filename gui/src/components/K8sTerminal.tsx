@@ -24,8 +24,6 @@ export default function K8sTerminal(props: K8sTerminalProps) {
     localStorage.setItem("terminal-font-size", String(next));
     if (termInstance && fitAddonInstance) {
       termInstance.options.fontSize = next;
-      termInstance.options.fontFamily = "monospace";
-      termInstance.options.fontFamily = "JetBrains Mono NF, monospace";
       fitAddonInstance.fit();
     }
   };
@@ -57,9 +55,9 @@ export default function K8sTerminal(props: K8sTerminalProps) {
         brightCyan: "#56d4dd",
         brightWhite: "#c9d1d9",
       },
-      fontFamily: "JetBrains Mono NF, monospace",
+      fontFamily: "'JetBrains Mono NF', 'JetBrains Mono', 'Menlo', 'Consolas', monospace",
       fontSize: fontSize(),
-      lineHeight: 1.3,
+      lineHeight: 1.1,
       cursorBlink: true,
       cursorStyle: "bar",
       scrollback: 10000,
@@ -75,7 +73,6 @@ export default function K8sTerminal(props: K8sTerminalProps) {
     term.open(termDiv!);
 
     requestAnimationFrame(() => {
-      term.options.fontFamily = "JetBrains Mono NF, monospace";
       fitAddon.fit();
     });
 

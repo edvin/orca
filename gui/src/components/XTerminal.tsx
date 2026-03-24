@@ -24,12 +24,7 @@ export default function XTerminal(props: XTerminalProps) {
     setFontSize(next);
     localStorage.setItem("terminal-font-size", String(next));
     if (termInstance && fitAddonInstance) {
-      // Dispose and recreate with new font size by clearing and resetting all options
       termInstance.options.fontSize = next;
-      // Clear the renderer cache by temporarily changing font
-      termInstance.options.fontFamily = "monospace";
-      termInstance.options.fontFamily = "JetBrains Mono NF, monospace";
-      // Force full re-layout
       fitAddonInstance.fit();
     }
   };
@@ -64,14 +59,13 @@ export default function XTerminal(props: XTerminalProps) {
         brightCyan: "#56d4dd",
         brightWhite: "#c9d1d9",
       },
-      fontFamily: "JetBrains Mono NF, monospace",
+      fontFamily: "'JetBrains Mono NF', 'JetBrains Mono', 'Menlo', 'Consolas', monospace",
       fontSize: fontSize(),
-      lineHeight: 1.3,
+      lineHeight: 1.1,
       cursorBlink: true,
       cursorStyle: "bar",
       scrollback: 10000,
       convertEol: false,
-      // Skip xterm's internal font validation — we know the font is loaded via CSS
       allowProposedApi: true,
     });
 
@@ -82,9 +76,8 @@ export default function XTerminal(props: XTerminalProps) {
     term.loadAddon(new WebLinksAddon());
     term.open(termDiv!);
 
-    // Force xterm to re-measure with the CSS font by setting fontFamily after open
+    // Let xterm measure the font, then fit to container
     requestAnimationFrame(() => {
-      term.options.fontFamily = "JetBrains Mono NF, monospace";
       fitAddon.fit();
     });
 
