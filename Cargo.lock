@@ -3115,6 +3115,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
+name = "openssl-src"
+version = "300.5.5+3.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f1787d533e03597a7934fd0a765f0d28e94ecc5fb7789f8053b1e699a56f709"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.112"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3122,6 +3131,7 @@ checksum = "57d55af3b3e226502be1526dfdba67ab0e9c96fc293004e79576b2b9edb0dbdb"
 dependencies = [
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -3134,7 +3144,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "orca-backend-common"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3156,7 +3166,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-macos"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3171,7 +3181,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-native"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3183,7 +3193,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-windows"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3198,7 +3208,7 @@ dependencies = [
 
 [[package]]
 name = "orca-cli"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3212,7 +3222,7 @@ dependencies = [
 
 [[package]]
 name = "orca-core"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3227,7 +3237,7 @@ dependencies = [
 
 [[package]]
 name = "orca-daemon"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -3236,6 +3246,7 @@ dependencies = [
  "clap",
  "futures",
  "hyper-util",
+ "openssl",
  "orca-backend-common",
  "orca-backend-native",
  "orca-core",
@@ -3254,7 +3265,7 @@ dependencies = [
 
 [[package]]
 name = "orca-gui"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "cocoa",

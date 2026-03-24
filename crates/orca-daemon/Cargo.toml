@@ -10,6 +10,7 @@ name = "orca-daemon"
 path = "src/main.rs"
 
 [dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
 orca-core.workspace = true
 orca-backend-common.workspace = true
 orca-backend-native.workspace = true
