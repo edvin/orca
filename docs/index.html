@@ -1123,6 +1123,33 @@
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/20-settings-ai.png" alt="AI & Agents settings with MCP configuration" loading="lazy">
     </div>
   </div>
+
+  <div class="highlight-row">
+    <div class="highlight-text">
+      <h3>Manage remote servers</h3>
+      <p>Install the Orca daemon on any Linux server and manage it from your desktop. One command to install, automatic updates via apt, systemd keeps it running.</p>
+      <ul>
+        <li>One-liner install — <code>apt install orca-daemon</code></li>
+        <li>Systemd service — auto-start, restart on crash, journal logging</li>
+        <li>Host selector — switch between local and remote in one click</li>
+        <li>TLS ready — Caddy/nginx reverse proxy examples included</li>
+        <li>Fleet management — manage all your servers from one UI</li>
+      </ul>
+    </div>
+    <div class="highlight-visual">
+<span style="color: #6e7681"># Install on any Linux server</span>
+<span style="color: #79c0ff">$</span> curl -1sLf <span style="color: #a5d6ff">'https://dl.cloudsmith.io/public/edvin/orca/setup.deb.sh'</span> | sudo bash
+<span style="color: #79c0ff">$</span> sudo apt install <span style="color: #a5d6ff">orca-daemon</span>
+
+<span style="color: #3fb950">=== Orca Daemon Ready ===</span>
+
+<span style="color: #8b949e">URL:</span>   <span style="color: #a5d6ff">https://prod.example.com:9477/api/v1</span>
+<span style="color: #8b949e">Token:</span> <span style="color: #d2a8ff">a7b3c9d1e5f2...</span>
+
+<span style="color: #6e7681"># Add in Orca Desktop → Settings → Remote Hosts</span>
+<span style="color: #6e7681"># Then switch servers from the titlebar dropdown</span>
+    </div>
+  </div>
 </section>
 
 <!-- Screenshot Gallery -->

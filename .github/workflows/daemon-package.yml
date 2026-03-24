@@ -32,14 +32,23 @@ jobs:
         if: matrix.arch == 'aarch64'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu libssl-dev:arm64 pkg-config
+          # Add arm64 architecture for cross-compilation
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update || true
+          sudo apt-get install -y libssl-dev:arm64 || true
+
+      - name: Install cargo-cross
+        if: matrix.arch == 'aarch64'
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build orca-daemon
         run: |
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+            cross build --release --target ${{ matrix.target }} --bin orca-daemon
+          else
+            cargo build --release --target ${{ matrix.target }} --bin orca-daemon
           fi
-          cargo build --release --target ${{ matrix.target }} --bin orca-daemon
         env:
           CARGO_TERM_COLOR: always
 
