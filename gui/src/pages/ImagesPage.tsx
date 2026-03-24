@@ -43,6 +43,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [inspecting, setInspecting] = createSignal<string | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
   const [imageHistoryData, setImageHistoryData] = createSignal<any[]>([]);
+  const [layersDialogImage, setLayersDialogImage] = createSignal<any>(null);
   const [searchResults, setSearchResults] = createSignal<ImageSearchResult[]>([]);
   const [selectedResultIndex, setSelectedResultIndex] = createSignal(-1);
   const [searching, setSearching] = createSignal(false);
@@ -964,7 +965,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                   <Show when={inspecting() === img.id}>
                     <tr>
                       <td colspan="6" style={{ padding: 0 }}>
-                        <div class="detail-body">
+                        <div class="detail-body" style={{ overflow: "hidden", "max-width": "100%", "word-break": "break-all" }}>
                           <Show
                             when={inspectData()}
                             fallback={
@@ -1012,124 +1013,15 @@ export default function ImagesPage(props: ImagesPageProps) {
                                   </div>
                                 </div>
 
-                                {/* Layer visualization */}
+                                {/* Layer count + view button */}
                                 <Show when={imageHistoryData().length > 0}>
-                                  {(() => {
-                                    const history = imageHistoryData();
-                                    // History is returned newest-first; reverse for display
-                                    const historyItems = [...history].reverse();
-                                    const maxSize = Math.max(...historyItems.map((h: any) => h.Size || h.size || 0), 1);
-                                    const totalSize = historyItems.reduce((sum: number, h: any) => sum + (h.Size || h.size || 0), 0);
-
-                                    return (
-                                      <div style={{ "margin-top": "16px" }}>
-                                        <div style={{
-                                          display: "flex", "align-items": "center", "justify-content": "space-between",
-                                          "margin-bottom": "10px",
-                                        }}>
-                                          <span style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>
-                                            Image Layers
-                                          </span>
-                                          <span style={{ "font-size": "12px", color: "#8b949e" }}>
-                                            Total: {formatBytes(totalSize)}
-                                          </span>
-                                        </div>
-                                        <div style={{
-                                          background: "#0d1117",
-                                          border: "1px solid #21262d",
-                                          "border-radius": "8px",
-                                          padding: "8px",
-                                          "max-height": "320px",
-                                          overflow: "auto",
-                                        }}>
-                                          <For each={historyItems}>
-                                            {(item: any, idx) => {
-                                              const layerSize = item.Size || item.size || 0;
-                                              const createdBy = item.CreatedBy || item.created_by || "";
-                                              // Parse instruction from the created_by field
-                                              const instruction = (() => {
-                                                if (!createdBy) return "unknown";
-                                                // Docker buildkit format: /bin/sh -c #(nop)  CMD ["node"]
-                                                const nopMatch = createdBy.match(/#\(nop\)\s+(.+)/);
-                                                if (nopMatch) return nopMatch[1].trim();
-                                                // Regular RUN command
-                                                const shMatch = createdBy.match(/\/bin\/sh\s+-c\s+(.+)/);
-                                                if (shMatch) return `RUN ${shMatch[1].trim()}`;
-                                                // Buildkit format
-                                                if (createdBy.startsWith("RUN ") || createdBy.startsWith("COPY ") || createdBy.startsWith("ADD ") || createdBy.startsWith("CMD ") || createdBy.startsWith("ENTRYPOINT ") || createdBy.startsWith("ENV ") || createdBy.startsWith("EXPOSE ") || createdBy.startsWith("WORKDIR ") || createdBy.startsWith("LABEL ") || createdBy.startsWith("ARG ")) {
-                                                  return createdBy;
-                                                }
-                                                return createdBy.length > 80 ? createdBy.slice(0, 80) + "..." : createdBy;
-                                              })();
-                                              // Determine if this is a "base" layer (empty_layer tag or early layers)
-                                              const isEmptyLayer = item.empty_layer === true || (item.Tags && item.Tags !== null);
-                                              const isBaseLayer = idx() < Math.max(1, historyItems.length - 4) && layerSize > 0;
-                                              const barWidth = maxSize > 0 ? Math.max(2, (layerSize / maxSize) * 100) : 2;
-                                              const barColor = isBaseLayer ? "#30363d" : "#1f6feb";
-                                              const borderColor = isBaseLayer ? "#484f58" : "#58a6ff";
-
-                                              return (
-                                                <div
-                                                  title={createdBy}
-                                                  style={{
-                                                    position: "relative",
-                                                    "margin-bottom": "4px",
-                                                    "border-left": `4px solid ${borderColor}`,
-                                                    "border-radius": "0 4px 4px 0",
-                                                    overflow: "hidden",
-                                                    "min-height": "28px",
-                                                  }}
-                                                >
-                                                  {/* Size bar background */}
-                                                  <div style={{
-                                                    position: "absolute",
-                                                    top: 0,
-                                                    left: 0,
-                                                    height: "100%",
-                                                    width: `${barWidth}%`,
-                                                    background: barColor,
-                                                    opacity: "0.15",
-                                                    "border-radius": "0 4px 4px 0",
-                                                  }} />
-                                                  {/* Content */}
-                                                  <div style={{
-                                                    position: "relative",
-                                                    display: "flex",
-                                                    "align-items": "center",
-                                                    "justify-content": "space-between",
-                                                    padding: "4px 10px",
-                                                    gap: "12px",
-                                                  }}>
-                                                    <span style={{
-                                                      "font-family": "'JetBrains Mono NF', monospace",
-                                                      "font-size": "11px",
-                                                      color: isBaseLayer ? "#8b949e" : "#c9d1d9",
-                                                      overflow: "hidden",
-                                                      "text-overflow": "ellipsis",
-                                                      "white-space": "nowrap",
-                                                      flex: "1",
-                                                      "min-width": "0",
-                                                    }}>
-                                                      {instruction}
-                                                    </span>
-                                                    <span style={{
-                                                      "font-family": "'JetBrains Mono NF', monospace",
-                                                      "font-size": "11px",
-                                                      color: layerSize > 0 ? (isBaseLayer ? "#8b949e" : "#58a6ff") : "#484f58",
-                                                      "flex-shrink": "0",
-                                                      "white-space": "nowrap",
-                                                    }}>
-                                                      {layerSize > 0 ? formatBytes(layerSize) : "0 B"}
-                                                    </span>
-                                                  </div>
-                                                </div>
-                                              );
-                                            }}
-                                          </For>
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
+                                  <div style={{ "margin-top": "4px", "font-size": "12px", color: "#8b949e" }}>
+                                    {imageHistoryData().length} layers
+                                    <button class="btn btn-sm" style={{ "margin-left": "8px", "font-size": "11px", padding: "1px 8px" }}
+                                      onClick={(e) => { e.stopPropagation(); setLayersDialogImage(img); }}>
+                                      View Layers
+                                    </button>
+                                  </div>
                                 </Show>
 
                                 <div style={{ "margin-top": "12px", display: "flex", gap: "8px", "align-items": "center", "flex-wrap": "wrap" }}>
@@ -1757,6 +1649,91 @@ export default function ImagesPage(props: ImagesPageProps) {
                 </button>
                 <button class="btn" onClick={() => setReportPath(null)}>Close</button>
               </div>
+            </div>
+          </div>
+        </div>
+      </Show>
+      {/* Layers Dialog */}
+      <Show when={layersDialogImage()}>
+        <div class="modal-overlay" onClick={() => setLayersDialogImage(null)}>
+          <div class="modal-dialog" style={{ "max-width": "800px", "max-height": "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Image Layers — {layersDialogImage()?.repo_tags?.[0] || shortId(layersDialogImage()?.id)}</span>
+              <button class="modal-close" onClick={() => setLayersDialogImage(null)}>&times;</button>
+            </div>
+            <div style={{ padding: "16px", overflow: "auto", flex: "1" }}>
+              {(() => {
+                const history = imageHistoryData();
+                const historyItems = [...history].reverse();
+                const maxSize = Math.max(...historyItems.map((h: any) => h.Size || h.size || 0), 1);
+                const totalSize = historyItems.reduce((sum: number, h: any) => sum + (h.Size || h.size || 0), 0);
+
+                const parseInstruction = (createdBy: string) => {
+                  if (!createdBy) return "unknown";
+                  const nopMatch = createdBy.match(/#\(nop\)\s+(.+)/);
+                  if (nopMatch) return nopMatch[1].trim();
+                  const shMatch = createdBy.match(/\/bin\/sh\s+-c\s+(.+)/);
+                  if (shMatch) return `RUN ${shMatch[1].trim()}`;
+                  if (/^(RUN|COPY|ADD|CMD|ENTRYPOINT|ENV|EXPOSE|WORKDIR|LABEL|ARG|FROM)\s/.test(createdBy)) return createdBy;
+                  return createdBy;
+                };
+
+                return (
+                  <>
+                    <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "12px" }}>
+                      {historyItems.length} layers — Total: {formatBytes(totalSize)}
+                    </div>
+                    <For each={historyItems}>
+                      {(item: any, idx) => {
+                        const layerSize = item.Size || item.size || 0;
+                        const createdBy = item.CreatedBy || item.created_by || "";
+                        const instruction = parseInstruction(createdBy);
+                        const isBaseLayer = idx() < Math.max(1, historyItems.length - 4) && layerSize > 0;
+                        const barWidth = maxSize > 0 ? Math.max(2, (layerSize / maxSize) * 100) : 2;
+                        const barColor = isBaseLayer ? "#30363d" : "#1f6feb";
+                        const borderColor = isBaseLayer ? "#484f58" : "#58a6ff";
+
+                        return (
+                          <div style={{
+                            position: "relative",
+                            "margin-bottom": "4px",
+                            "border-left": `4px solid ${borderColor}`,
+                            "border-radius": "0 4px 4px 0",
+                            overflow: "hidden",
+                            "min-height": "28px",
+                          }}>
+                            <div style={{
+                              position: "absolute", top: 0, left: 0, height: "100%",
+                              width: `${barWidth}%`, background: barColor, opacity: "0.15",
+                              "border-radius": "0 4px 4px 0",
+                            }} />
+                            <div style={{
+                              position: "relative", display: "flex", "align-items": "center",
+                              "justify-content": "space-between", padding: "4px 10px", gap: "12px",
+                            }}>
+                              <span style={{
+                                "font-family": "'JetBrains Mono NF', monospace", "font-size": "11px",
+                                color: isBaseLayer ? "#8b949e" : "#c9d1d9",
+                                overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap",
+                                flex: "1", "min-width": "0",
+                              }} title={createdBy}>
+                                {instruction}
+                              </span>
+                              <span style={{
+                                "font-family": "'JetBrains Mono NF', monospace", "font-size": "11px",
+                                color: layerSize > 0 ? (isBaseLayer ? "#8b949e" : "#58a6ff") : "#484f58",
+                                "white-space": "nowrap",
+                              }}>
+                                {layerSize > 0 ? formatBytes(layerSize) : "0 B"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }}
+                    </For>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
