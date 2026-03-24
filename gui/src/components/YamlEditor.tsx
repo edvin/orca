@@ -77,43 +77,54 @@ export default function YamlEditor(props: YamlEditorProps) {
 
   onMount(() => {
     try {
-    // Configure YAML-friendly dark theme matching the app
+    // Tokyo Night theme — matches the controlpanel project
     monaco.editor.defineTheme("orca-dark", {
       base: "vs-dark",
       inherit: true,
       rules: [
-        { token: "comment", foreground: "6e7681", fontStyle: "italic" },
-        { token: "type", foreground: "79c0ff" },         // keys
-        { token: "keyword", foreground: "ff7b72" },       // booleans, doc markers
-        { token: "number", foreground: "d2a8ff" },        // numbers
-        { token: "number.date", foreground: "d2a8ff" },   // timestamps
-        { token: "string", foreground: "a5d6ff" },        // strings
-        { token: "string.escape", foreground: "79c0ff" }, // escape sequences
-        { token: "tag", foreground: "7ee787" },           // anchors, tags
-        { token: "operator", foreground: "8b949e" },      // block scalars, list dashes
+        { token: "", foreground: "a9b1d6" },
+        { token: "comment", foreground: "565f89", fontStyle: "italic" },
+        { token: "keyword", foreground: "bb9af7" },
+        { token: "string", foreground: "9ece6a" },
+        { token: "number", foreground: "ff9e64" },
+        { token: "number.date", foreground: "ff9e64" },
+        { token: "constant", foreground: "ff9e64" },
+        { token: "type", foreground: "2ac3de" },         // YAML keys
+        { token: "tag", foreground: "f7768e" },           // anchors, tags
+        { token: "operator", foreground: "89ddff" },      // block scalars, list dashes
+        { token: "string.escape", foreground: "89ddff" },
+        { token: "variable", foreground: "c0caf5" },
+        { token: "identifier", foreground: "a9b1d6" },
+        { token: "function", foreground: "7aa2f7" },
+        { token: "delimiter.bracket", foreground: "89ddff" },
+        { token: "attribute.name", foreground: "bb9af7" },
+        { token: "attribute.value", foreground: "9ece6a" },
       ],
       colors: {
-        "editor.background": "#0d1117",
-        "editor.foreground": "#e6edf3",
-        "editor.lineHighlightBackground": "#161b2266",
+        "editor.background": "#1a1b26",
+        "editor.foreground": "#a9b1d6",
+        "editor.lineHighlightBackground": "#1e2030",
         "editor.lineHighlightBorder": "#00000000",
-        "editorLineNumber.foreground": "#3b4048",
-        "editorLineNumber.activeForeground": "#e6edf3",
-        "editor.selectionBackground": "#1f6feb44",
-        "editor.selectionHighlightBackground": "#1f6feb22",
-        "editorCursor.foreground": "#58a6ff",
-        "editorWidget.background": "#161b22",
-        "editorWidget.border": "#30363d",
-        "editorIndentGuide.background": "#21262d",
-        "editorIndentGuide.activeBackground": "#30363d",
-        "editorBracketMatch.background": "#1f6feb22",
-        "editorBracketMatch.border": "#1f6feb66",
-        "input.background": "#0d1117",
-        "input.border": "#30363d",
-        "dropdown.background": "#161b22",
-        "scrollbarSlider.background": "#484f5833",
-        "scrollbarSlider.hoverBackground": "#484f5866",
-        "scrollbarSlider.activeBackground": "#484f5899",
+        "editor.selectionBackground": "#33467c",
+        "editor.selectionHighlightBackground": "#2f3549",
+        "editor.inactiveSelectionBackground": "#292e42",
+        "editorLineNumber.foreground": "#3b4261",
+        "editorLineNumber.activeForeground": "#737aa2",
+        "editorCursor.foreground": "#c0caf5",
+        "editorWidget.background": "#1a1b26",
+        "editorWidget.border": "#292e42",
+        "editorIndentGuide.background": "#292e42",
+        "editorIndentGuide.activeBackground": "#3b4261",
+        "editorBracketMatch.background": "#1a1b2600",
+        "editorBracketMatch.border": "#545c7e",
+        "editorStickyScroll.background": "#1a1b26",
+        "editorStickyScrollHover.background": "#1e2030",
+        "input.background": "#1a1b26",
+        "input.border": "#3b4261",
+        "dropdown.background": "#1a1b26",
+        "scrollbarSlider.background": "#3b426180",
+        "scrollbarSlider.hoverBackground": "#3b4261b3",
+        "scrollbarSlider.activeBackground": "#3b4261",
       },
     });
 
@@ -146,7 +157,9 @@ export default function YamlEditor(props: YamlEditorProps) {
       selectionHighlight: false,
       matchBrackets: "never" as any,
       renderWhitespace: "none",
-      guides: { indentation: true, bracketPairs: false },
+      guides: { indentation: true, bracketPairs: true },
+      bracketPairColorization: { enabled: true },
+      stickyScroll: { enabled: true },
       contextmenu: false,
       scrollbar: {
         verticalScrollbarSize: 6,
@@ -220,7 +233,7 @@ export default function YamlEditor(props: YamlEditorProps) {
       <Show when={props.title || props.onSave || props.onClose}>
         <div style={{
           display: "flex", "align-items": "center", "justify-content": "space-between",
-          padding: "8px 12px", background: "#161b22", "border-bottom": "1px solid #21262d",
+          padding: "8px 12px", background: "#1a1b26", "border-bottom": "1px solid #292e42",
         }}>
           <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
             <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>

@@ -3536,7 +3536,7 @@ spec:
       {/* YAML Editor Modal */}
       <Show when={yamlResource()}>
         <div class="modal-overlay" onClick={() => setYamlResource(null)}>
-          <div class="modal-dialog" style={{ width: "800px", "max-width": "90vw", height: "80vh", display: "flex", "flex-direction": "column", background: "#0d1117" }} onClick={(e) => e.stopPropagation()}>
+          <div class="modal-dialog" style={{ width: "1000px", "max-width": "92vw", height: "85vh", display: "flex", "flex-direction": "column", background: "#1a1b26" }} onClick={(e) => e.stopPropagation()}>
             <YamlEditor
               value={yamlResource()!.yaml}
               title={`${yamlResource()!.kind}/${yamlResource()!.name}`}
@@ -3603,7 +3603,7 @@ spec:
       {/* Deploy from YAML Modal */}
       <Show when={deployYamlOpen()}>
         <div class="modal-overlay" onClick={() => setDeployYamlOpen(false)}>
-          <div class="modal-dialog" style={{ width: "800px", "max-width": "90vw", height: "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+          <div class="modal-dialog" style={{ width: "1000px", "max-width": "92vw", height: "85vh", display: "flex", "flex-direction": "column", background: "#1a1b26" }} onClick={(e) => e.stopPropagation()}>
             <YamlEditor
               value={"# Enter your Kubernetes YAML here\n# Example:\n# apiVersion: v1\n# kind: Pod\n# metadata:\n#   name: my-pod\n# spec:\n#   containers:\n#   - name: my-container\n#     image: nginx\n"}
               title="Deploy from YAML"
