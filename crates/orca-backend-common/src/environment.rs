@@ -432,6 +432,7 @@ pub async fn run_fix_streaming(
                         if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-compose"]).await {
                             let bin = format!("{}/bin/docker-compose", prefix.trim());
                             let link = format!("{plugins_dir}/docker-compose");
+                            #[cfg(unix)]
                             let _ = std::os::unix::fs::symlink(&bin, &link);
                             send("    Docker Compose plugin linked.\n".into()).await;
                         }
@@ -1492,6 +1493,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                             let bin = format!("{}/bin/docker-compose", prefix.trim());
                             let link = format!("{plugins_dir}/docker-compose");
                             let _ = std::fs::remove_file(&link); // Remove existing symlink if any
+                            #[cfg(unix)]
                             let _ = std::os::unix::fs::symlink(&bin, &link);
                         }
                     }
