@@ -1796,7 +1796,7 @@ async fn scan_image(
 
     // Run Trivy as a container with access to the Docker socket
     let config = Config {
-        image: Some("aquasecurity/trivy:latest".to_string()),
+        image: Some("ghcr.io/aquasecurity/trivy:latest".to_string()),
         cmd: Some(vec![
             "image".to_string(),
             "--format".to_string(),
@@ -1827,9 +1827,9 @@ async fn scan_image(
             if err_str.contains("404") || err_str.contains("No such image") {
                 // Auto-pull the Trivy image
                 use bollard::image::CreateImageOptions;
-                tracing::info!("scan_image: pulling aquasecurity/trivy:latest...");
+                tracing::info!("scan_image: pulling ghcr.io/aquasecurity/trivy:latest...");
                 let pull_opts = CreateImageOptions {
-                    from_image: "aquasecurity/trivy",
+                    from_image: "ghcr.io/aquasecurity/trivy",
                     tag: "latest",
                     platform: "linux/amd64", // Trivy works best on amd64, even on Apple Silicon via emulation
                     ..Default::default()
