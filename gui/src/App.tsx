@@ -22,6 +22,7 @@ import SettingsPage from "./pages/SettingsPage";
 import EnvironmentPage from "./pages/EnvironmentPage";
 import ActivityPage from "./pages/ActivityPage";
 import DashboardPage from "./pages/DashboardPage";
+import FleetPage from "./pages/FleetPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import ConnectionScreen from "./components/ConnectionScreen";
 import CommandPalette from "./components/CommandPalette";
@@ -30,7 +31,7 @@ import type { AiAssistantApi } from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
 
-export type Page = "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "kubernetes" | "environment" | "activity" | "settings";
+export type Page = "fleet" | "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "kubernetes" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
@@ -41,6 +42,38 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = createSignal(false);
   const [environmentChecked, setEnvironmentChecked] = createSignal(false);
   let aiApi: AiAssistantApi | undefined;
+
+  // Fleet health polling state
+  let lastFleetStatus: Record<string, boolean> = {};
+  let fleetPollInterval: ReturnType<typeof setInterval> | null = null;
+
+  const pollFleetHealth = async () => {
+    try {
+      const hosts = (await invoke("probe_all_hosts")) as Array<{
+        id: string | null;
+        name: string;
+        online: boolean;
+        version: string | null;
+      }>;
+      // Only alert if there are remote hosts configured
+      const hasRemotes = hosts.some((h) => h.id !== null);
+      if (!hasRemotes) return;
+
+      for (const host of hosts) {
+        const key = host.id || "__local__";
+        if (key in lastFleetStatus && lastFleetStatus[key] !== host.online) {
+          if (host.online) {
+            showToast(`${host.name} is back online`, "success");
+          } else {
+            showToast(`${host.name} is offline`, "error");
+          }
+        }
+        lastFleetStatus[key] = host.online;
+      }
+    } catch {
+      // Fleet polling failed silently — daemon may not support probe_all_hosts yet
+    }
+  };
 
   const checkDaemon = async () => {
     try {
@@ -128,11 +161,17 @@ export default function App() {
   };
 
   // React to daemon status changes — when it becomes "running",
-  // immediately check the environment
+  // immediately check the environment and start fleet polling
   createEffect(() => {
     if (daemonStatus() === "running" && !environmentChecked()) {
       checkEnvironment();
       startEventSubscription();
+
+      // Start fleet health polling (initial after 10s, then every 60s)
+      if (!fleetPollInterval) {
+        setTimeout(pollFleetHealth, 10000);
+        fleetPollInterval = setInterval(pollFleetHealth, 60000);
+      }
     }
   });
 
@@ -188,6 +227,7 @@ export default function App() {
     document.addEventListener("keydown", handleGlobalKeyDown);
     onCleanup(() => {
       clearInterval(interval);
+      if (fleetPollInterval) clearInterval(fleetPollInterval);
       document.removeEventListener("keydown", handleGlobalKeyDown);
       unsubEvents();
     });
@@ -230,6 +270,7 @@ export default function App() {
               daemonStatus={daemonStatus()}
             />
             <main class="app-main">
+              {page() === "fleet" && <FleetPage onNavigate={(p) => navigate(p)} />}
               {page() === "dashboard" && <DashboardPage onNavigate={(p) => navigate(p)} />}
               {page() === "templates" && <TemplatesPage onNavigate={(p) => navigate(p)} />}
               {page() === "containers" && <ContainersPage onNavigate={(p) => navigate(p)} onAskAi={(id, name, image) => aiApi?.askAboutContainer(id, name, image)} />}

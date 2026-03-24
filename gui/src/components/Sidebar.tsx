@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show, JSX } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Page } from "../App";
+import type { RemoteHost } from "../lib/types";
 
 interface SidebarProps {
   currentPage: string;
@@ -19,6 +20,14 @@ const Icon = (props: { d: string | string[]; children?: JSX.Element }) => (
 );
 
 const icons: Record<string, () => JSX.Element> = {
+  // Globe (fleet/multi-host)
+  fleet: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+      <path d="M2 12h20" />
+    </svg>
+  ),
   // LayoutDashboard
   dashboard: () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -125,6 +134,7 @@ const [collapsed, setCollapsed] = createSignal(
 export default function Sidebar(props: SidebarProps) {
   const [containerCount, setContainerCount] = createSignal(0);
   const [imageCount, setImageCount] = createSignal(0);
+  const [hasRemoteHosts, setHasRemoteHosts] = createSignal(false);
 
   const fetchCounts = async () => {
     try {
@@ -134,6 +144,10 @@ export default function Sidebar(props: SidebarProps) {
     try {
       const images = (await invoke("list_images")) as any[];
       setImageCount(images.length);
+    } catch { /* ignore */ }
+    try {
+      const remotes = (await invoke("list_remote_hosts")) as RemoteHost[];
+      setHasRemoteHosts(remotes.length > 0);
     } catch { /* ignore */ }
   };
 
@@ -158,6 +172,17 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <aside class={`sidebar ${collapsed() ? "sidebar-collapsed" : ""}`}>
       <nav class="sidebar-nav">
+        <Show when={hasRemoteHosts()}>
+          <button
+            class={`nav-item ${props.currentPage === "fleet" ? "active" : ""}`}
+            onClick={() => props.onNavigate("fleet" as Page)}
+            title={collapsed() ? "Fleet" : undefined}
+          >
+            <span class="nav-icon">{icons.fleet()}</span>
+            <span class="nav-label">Fleet</span>
+          </button>
+          <div class="nav-separator" />
+        </Show>
         <For each={mainNavItems}>
           {(item) => (
             <button

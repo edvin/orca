@@ -469,6 +469,26 @@ export interface ActiveHost {
   is_remote: boolean;
 }
 
+// --- Fleet ---
+
+export interface HostStatus {
+  id: string | null;  // null = local
+  name: string;
+  url: string;
+  online: boolean;
+  checking: boolean;
+  version?: string;
+  docker_connected?: boolean;
+  cpu_count?: number;
+  memory_total?: number;
+  memory_available?: number;
+  disk_usage_percent?: number;
+  containers_running?: number;
+  containers_total?: number;
+  images_total?: number;
+  error?: string;
+}
+
 // --- Environment ---
 
 export interface EnvironmentStatus {

@@ -161,6 +161,8 @@ pub fn run() {
             commands::switch_host,
             commands::get_active_host,
             commands::test_remote_host,
+            commands::probe_host,
+            commands::probe_all_hosts,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

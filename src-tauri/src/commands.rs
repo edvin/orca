@@ -2451,3 +2451,168 @@ pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> R
         .map_err(|e| format!("Invalid response: {e}"))?;
     Ok(health)
 }
+
+/// Probe a host (local or remote) to gather health, container, and image data.
+/// For remote hosts, pass the host ID. For local, pass None.
+#[tauri::command]
+pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, String> {
+    let (url, token, tls_verify) = if let Some(ref id) = host_id {
+        let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+        let host = config
+            .remote_hosts
+            .iter()
+            .find(|h| h.id == *id)
+            .ok_or("Host not found")?;
+        (host.url.clone(), host.token.clone(), host.tls_verify)
+    } else {
+        // Local host
+        let token = load_api_token().unwrap_or_default();
+        (LOCAL_DAEMON_URL.to_string(), token, true)
+    };
+
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(5));
+    if !tls_verify {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+    let client = builder.build().unwrap_or_else(|_| reqwest::Client::new());
+
+    // Health check
+    let health = client
+        .get(format!("{url}/health"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("{e}"))?;
+
+    // System health (resources)
+    let system = match client
+        .get(format!("{url}/system/health"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+    {
+        Ok(resp) => resp.json::<serde_json::Value>().await.ok(),
+        Err(_) => None,
+    };
+
+    // Container list
+    let containers = match client
+        .get(format!("{url}/containers"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+    {
+        Ok(resp) => resp.json::<Vec<serde_json::Value>>().await.ok(),
+        Err(_) => None,
+    };
+
+    let running = containers.as_ref().map(|c| {
+        c.iter()
+            .filter(|c| c.get("state").and_then(|s| s.as_str()) == Some("Running"))
+            .count()
+    });
+    let total = containers.as_ref().map(|c| c.len());
+
+    // Images count
+    let images_total = match client
+        .get(format!("{url}/images"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+    {
+        Ok(resp) => resp
+            .json::<Vec<serde_json::Value>>()
+            .await
+            .ok()
+            .map(|v| v.len()),
+        Err(_) => None,
+    };
+
+    Ok(serde_json::json!({
+        "online": true,
+        "version": health.get("version").and_then(|v| v.as_str()),
+        "docker_connected": system.as_ref().and_then(|s| s.get("docker_connected").and_then(|v| v.as_bool())),
+        "cpu_count": system.as_ref().and_then(|s| s["system_resources"]["cpu_count"].as_u64()),
+        "memory_total": system.as_ref().and_then(|s| s["system_resources"]["memory_total_bytes"].as_u64()),
+        "memory_available": system.as_ref().and_then(|s| s["system_resources"]["memory_available_bytes"].as_u64()),
+        "disk_usage_percent": system.as_ref().and_then(|s| s["system_resources"]["disk_usage_percent"].as_f64()),
+        "containers_running": running,
+        "containers_total": total,
+        "images_total": images_total,
+    }))
+}
+
+/// Probe all configured hosts (local + remote) for health status.
+/// Returns a lightweight list of { id, name, online, version } for fleet monitoring.
+#[tauri::command]
+pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
+    let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .connect_timeout(std::time::Duration::from_secs(3))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let mut results = Vec::new();
+
+    // Check local daemon
+    let local_token = load_api_token().unwrap_or_default();
+    let local_result = client
+        .get(format!("{LOCAL_DAEMON_URL}/health"))
+        .header("Authorization", format!("Bearer {local_token}"))
+        .send()
+        .await;
+    let (local_online, local_version) = match local_result {
+        Ok(resp) => {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                (true, json.get("version").and_then(|v| v.as_str()).map(String::from))
+            } else {
+                (true, None)
+            }
+        }
+        Err(_) => (false, None),
+    };
+    results.push(serde_json::json!({
+        "id": serde_json::Value::Null,
+        "name": "Local",
+        "online": local_online,
+        "version": local_version,
+    }));
+
+    // Check each remote host
+    for host in &config.remote_hosts {
+        let resp = client
+            .get(format!("{}/health", host.url))
+            .header("Authorization", format!("Bearer {}", host.token))
+            .send()
+            .await;
+        let (online, version) = match resp {
+            Ok(r) => {
+                if r.status().is_success() {
+                    if let Ok(json) = r.json::<serde_json::Value>().await {
+                        (true, json.get("version").and_then(|v| v.as_str()).map(String::from))
+                    } else {
+                        (true, None)
+                    }
+                } else {
+                    (false, None)
+                }
+            }
+            Err(_) => (false, None),
+        };
+        results.push(serde_json::json!({
+            "id": host.id,
+            "name": host.name,
+            "online": online,
+            "version": version,
+        }));
+    }
+
+    Ok(results)
+}

@@ -476,6 +476,7 @@ pub async fn run_fix_streaming(
                         "--memory=8",
                         "--cpus=4",
                         "--set", r#".portForwards += [{"guestIPMustBeZero": false, "guestIP": "127.0.0.1", "hostIP": "127.0.0.1"}]"#,
+                        "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
                         "template:docker"],
                     &tx
                 ).await;
@@ -1548,6 +1549,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs",
                     "--memory=8", "--cpus=4",
                     "--set", r#".portForwards += [{"guestIPMustBeZero": false, "guestIP": "127.0.0.1", "hostIP": "127.0.0.1"}]"#,
+                    "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
                     "template:docker"]).await {
                     Ok(_) => output.push_str("VM created.\n"),
                     Err(e) => output.push_str(&format!("VM creation failed: {e}\n")),

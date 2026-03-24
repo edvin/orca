@@ -3,7 +3,7 @@ import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 import { invoke } from "@tauri-apps/api/core";
 import { useRefresh } from "../lib/useRefresh";
-import type { AppTemplate, ImageSearchResult } from "../lib/types";
+import type { AppTemplate, ImageSearchResult, RemoteHost, ActiveHost } from "../lib/types";
 import { showToast } from "../components/Toast";
 import { logError, logInfo } from "../lib/activityStore";
 
@@ -32,6 +32,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [deployEnv, setDeployEnv] = createSignal<EnvEntry[]>([]);
   const [deployVolumes, setDeployVolumes] = createSignal<VolumeEntry[]>([]);
   const [existingNames, setExistingNames] = createSignal<Set<string>>(new Set());
+
+  // Target host for deploy (fleet management)
+  const [deployHostId, setDeployHostId] = createSignal<string | null>(null); // null = current active host
+  const [hostOptions, setHostOptions] = createSignal<Array<{ value: string; label: string }>>([]);
 
   // Editor dialog state (create/edit user template)
   const [editorOpen, setEditorOpen] = createSignal(false);
@@ -168,6 +172,22 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       setExistingNames(names);
       setNameConflict(names.has(template.id));
     } catch { setExistingNames(new Set<string>()); }
+
+    // Load host options for target host selector
+    try {
+      const activeHost = (await invoke("get_active_host")) as ActiveHost;
+      const remoteHosts = (await invoke("list_remote_hosts")) as RemoteHost[];
+      const options: Array<{ value: string; label: string }> = [
+        { value: "__local__", label: "Local" },
+        ...remoteHosts.map((h) => ({ value: h.id, label: h.name })),
+      ];
+      setHostOptions(options);
+      // Default to current active host
+      setDeployHostId(activeHost.is_remote && activeHost.id ? activeHost.id : "__local__");
+    } catch {
+      setHostOptions([{ value: "__local__", label: "Local" }]);
+      setDeployHostId("__local__");
+    }
   };
 
   const closeDeploy = () => setDeployTarget(null);
@@ -257,7 +277,23 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     if (!template) return;
 
     setDeploying(true);
+
+    // Determine if we need to switch hosts for deployment
+    const targetHostId = deployHostId();
+    const targetHostLabel = hostOptions().find((o) => o.value === targetHostId)?.label || "Local";
+    let originalHost: ActiveHost | null = null;
+    let switchedHost = false;
+
     try {
+      // If deploying to a different host, switch first
+      originalHost = (await invoke("get_active_host")) as ActiveHost;
+      const currentHostKey = originalHost.is_remote && originalHost.id ? originalHost.id : "__local__";
+      if (targetHostId && targetHostId !== currentHostKey) {
+        setDeployStatus(`Switching to ${targetHostLabel}...`);
+        await invoke("switch_host", { id: targetHostId === "__local__" ? null : targetHostId });
+        switchedHost = true;
+      }
+
       const ports = deployPorts().filter((p) => p.host || p.container).map((p) => `${p.host}:${p.container}`);
       const env = deployEnv().filter((e) => e.key).map((e) => `${e.key}=${e.value}`);
       const volumes = deployVolumes().filter((v) => v.source || v.target).map((v) => `${v.source}:${v.target}`);
@@ -298,13 +334,16 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       const containerId = result?.id;
       const containerName = result?.name;
       const notes = result?.notes || template.notes;
-      showToast(`${template.name} deployed!${notes ? " " + notes : ""}`, "success");
-      logInfo("Template deployed", `${template.name} → container ${containerName || containerId || "unknown"}`);
-      // Navigate to the container detail page
-      if (containerId && props.onNavigate) {
-        props.onNavigate(`container:${containerId}`);
-      } else {
-        props.onNavigate?.("containers");
+      const hostSuffix = switchedHost ? ` on ${targetHostLabel}` : "";
+      showToast(`${template.name} deployed${hostSuffix}!${notes ? " " + notes : ""}`, "success");
+      logInfo("Template deployed", `${template.name} → container ${containerName || containerId || "unknown"}${hostSuffix}`);
+      // Navigate to the container detail page (only if deployed on current host)
+      if (!switchedHost) {
+        if (containerId && props.onNavigate) {
+          props.onNavigate(`container:${containerId}`);
+        } else {
+          props.onNavigate?.("containers");
+        }
       }
     } catch (e: any) {
       const err = String(e);
@@ -318,6 +357,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       logError(`Deploy failed: ${displayMsg}`, `Template "${template.name}" (${template.image})`);
       showToast(displayMsg, "error");
     } finally {
+      // Always switch back to original host
+      if (switchedHost && originalHost) {
+        try {
+          await invoke("switch_host", { id: originalHost.is_remote && originalHost.id ? originalHost.id : null });
+        } catch { /* best effort switch-back */ }
+      }
       setDeploying(false);
     }
   };
@@ -703,6 +748,16 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 <button class="modal-close" onClick={() => closeDeploy()}>{"\u00d7"}</button>
               </div>
               <div class="modal-body">
+                <Show when={hostOptions().length > 1}>
+                  <div class="form-group">
+                    <label class="form-label">Target Host</label>
+                    <Dropdown
+                      value={deployHostId() || "__local__"}
+                      options={hostOptions()}
+                      onChange={(v) => setDeployHostId(v)}
+                    />
+                  </div>
+                </Show>
                 <div class="form-group">
                   <label class="form-label">Container Name</label>
                   <input
