@@ -38,6 +38,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [showRunDialog, setShowRunDialog] = createSignal(false);
   const [inlineStats, setInlineStats] = createSignal<Record<string, ContainerStats>>({});
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set(["__standalone__"]));
+  let hasAutoExpanded = false;
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const [containerMenuOpen, setContainerMenuOpen] = createSignal<string | null>(null);
   const [showMultiLog, setShowMultiLog] = createSignal(false);
@@ -52,8 +53,9 @@ export default function ContainersPage(props: ContainersPageProps) {
       setStacks(stackResult || []);
       setLastUpdated(new Date());
 
-      // Auto-expand stacks with running containers (on first load)
-      if (expanded().size <= 1) {
+      // Auto-expand stacks with running containers (only on first load)
+      if (!hasAutoExpanded) {
+        hasAutoExpanded = true;
         const autoExpand = new Set(expanded());
         for (const stack of stackResult) {
           if (stack.services.some((s) => s.state === "Running")) {
