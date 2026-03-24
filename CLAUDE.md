@@ -144,3 +144,33 @@ kubectl config set-context orca --cluster=orca --user=orca
 - K8s operations: WSL kubectl on Windows, kube client on Linux/macOS
 - All inline styles matching dark theme (#0a0e14 bg, #e6edf3 text, #58a6ff accent)
 - Template icons are inline SVG strings rendered via innerHTML, not text or emoji
+
+## Pending macOS Debugging
+
+These issues only reproduce on macOS and need debugging with dev tools:
+
+### 1. Terminal cursor not visible
+- Block cursor is set (`cursorStyle: "block"`, `cursorAccent`) but doesn't render
+- Font loaded via FontFace API from `/fonts/JetBrainsMonoNerdFont-Regular.ttf`
+- Suspect: font fails to load in Tauri webview → xterm falls back to system font with wrong metrics → cursor renders off-screen
+- **Debug**: Open dev tools → Console → check for font loading errors. Inspect `.xterm-cursor-layer` canvas.
+
+### 2. Terminal font size +/- only changes line height
+- `term.options.fontSize = next` followed by `fitAddon.fit()` doesn't re-render text
+- Tried `_renderService.clear()` — untested on macOS
+- **Debug**: In console, try `term.options.fontSize = 20` manually. Check if canvas redraws.
+
+### 3. Monaco YAML editor jumbles on scroll
+- Sticky scroll disabled, conflicting CSS removed, vite-plugin-monaco-editor added
+- Text overlaps/jumbles when scrolling in modal dialogs
+- **Debug**: Inspect `.monaco-editor` DOM. Check if `.overflow-guard` and `.view-overlays` are positioned correctly. Try `editor.layout()` manually.
+
+### Root cause hypothesis
+All three may be caused by font loading failure in Tauri's WebKit webview on macOS. The FontFace API loads .ttf files but canvas rendering may not pick them up. Compare with the working terminal in `~/projects/hosting/web/controlpanel/src/components/web-terminal.tsx`.
+
+### How to debug
+```bash
+cd ~/projects/orca
+cargo tauri dev  # Opens app with dev tools
+# Right-click → Inspect Element → Console/Elements
+```
