@@ -143,4 +143,4 @@ kubectl config set-context orca --cluster=orca --user=orca
 - Use `validate_k8s_name()` on all K8s name/namespace inputs in Tauri commands
 - K8s operations: WSL kubectl on Windows, kube client on Linux/macOS
 - All inline styles matching dark theme (#0a0e14 bg, #e6edf3 text, #58a6ff accent)
-- Template icons are 2-letter text badges, not emoji
+- Template icons are inline SVG strings rendered via innerHTML, not text or emoji

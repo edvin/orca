@@ -516,7 +516,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     const colors = () => categoryColors[props.template.category] || categoryColors["Tools"];
     return (
     <div class="template-card" onClick={() => openDeploy(props.template)} style={{ position: "relative" }}>
-      <div class="template-icon" style={{ background: colors().bg, color: colors().color, "border-color": colors().border }}>{props.template.icon}</div>
+      <div class="template-icon" style={{ background: colors().bg, color: colors().color, "border-color": colors().border }} innerHTML={props.template.icon} />
       <div class="template-name">{props.template.name}</div>
       <div class="template-desc">{props.template.description}</div>
       <Show when={!props.template.is_builtin}>
@@ -699,7 +699,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
             <div class="modal-dialog" style={{ "max-width": "620px" }}>
               <div class="modal-header">
-                <span class="modal-title">{template().icon} Deploy {template().name}</span>
+                <span class="modal-title">Deploy {template().name}</span>
                 <button class="modal-close" onClick={() => closeDeploy()}>{"\u00d7"}</button>
               </div>
               <div class="modal-body">

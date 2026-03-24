@@ -2601,14 +2601,15 @@ select option {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  font-size: 15px;
-  font-weight: 700;
-  font-family: 'JetBrains Mono NF', 'JetBrains Mono', monospace;
-  letter-spacing: 0.5px;
   margin-bottom: 12px;
   background: rgba(88, 166, 255, 0.1);
   color: #58a6ff;
   border: 1px solid rgba(88, 166, 255, 0.15);
+}
+
+.template-icon svg {
+  width: 22px;
+  height: 22px;
 }
 
 .template-name {
