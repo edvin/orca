@@ -166,7 +166,54 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
         }
     }
 
-    // 2. On Windows, try connecting via TCP to Docker in WSL2
+    // 2. On macOS, try starting the Lima VM if it exists
+    #[cfg(target_os = "macos")]
+    {
+        use tokio::process::Command;
+        // Check if a Lima VM exists (orca or docker)
+        if let Ok(output) = Command::new("limactl")
+            .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default()))
+            .args(["list", "--format", "{{.Name}} {{.Status}}"])
+            .output().await
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            let vm_name = if text.lines().any(|l| l.starts_with("orca ")) { Some("orca") }
+                else if text.lines().any(|l| l.starts_with("docker ")) { Some("docker") }
+                else { None };
+
+            if let Some(name) = vm_name {
+                let is_running = text.lines().any(|l| l.starts_with(name) && l.contains("Running"));
+                if !is_running {
+                    tracing::info!("Starting Lima VM '{name}'...");
+                    let _ = Command::new("limactl")
+                        .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default()))
+                        .args(["start", name])
+                        .output().await;
+                }
+
+                // Wait for Docker socket to appear
+                let home = std::env::var("HOME").unwrap_or_default();
+                let socket = format!("{home}/.lima/{name}/sock/docker.sock");
+                for attempt in 1..=15 {
+                    if std::path::Path::new(&socket).exists() {
+                        tracing::info!("Lima socket ready: {socket}");
+                        if let Ok(docker) = bollard::Docker::connect_with_socket(&socket, 120, bollard::API_DEFAULT_VERSION) {
+                            if docker.ping().await.is_ok() {
+                                tracing::info!("Connected to Docker via Lima VM '{name}' (attempt {attempt})");
+                                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
+                            }
+                        }
+                    }
+                    if attempt <= 14 {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    }
+                }
+                tracing::warn!("Lima VM '{name}' exists but Docker socket not available after 30s");
+            }
+        }
+    }
+
+    // 3. On Windows, try connecting via TCP to Docker in WSL2
     #[cfg(target_os = "windows")]
     {
         // Try named pipe (Docker Desktop)
