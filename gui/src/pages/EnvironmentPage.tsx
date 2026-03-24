@@ -260,11 +260,8 @@ export default function EnvironmentPage() {
               Set up Docker
             </button>
           </Show>
-          <button class="btn" onClick={restartDocker} disabled={restartingDocker()}>
-            {restartingDocker() ? "Restarting..." : "Restart Docker"}
-          </button>
-          <button class="btn" onClick={restartOrcaDaemon} disabled={restartingOrca()}>
-            {restartingOrca() ? "Restarting..." : "Restart Orca"}
+          <button class="btn" onClick={restartDocker} disabled={restartingDocker() || restartingOrca()}>
+            {restartingDocker() ? "Restarting..." : "Restart Docker & Orca"}
           </button>
           <button class="btn" onClick={runDiagnose}>
             Diagnose
