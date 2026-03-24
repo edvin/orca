@@ -26,14 +26,14 @@ pub async fn execute_tool(
         // === Container Operations ===
 
         "list_containers" => {
-            let containers = state.runtime.list_containers(true).await
+            let containers = state.rt().await.list_containers(true).await
                 .map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(containers).unwrap_or_default())
         }
 
         "inspect_container" => {
             let id = get_str(&arguments, "id")?;
-            let container = state.runtime.inspect_container(id).await
+            let container = state.rt().await.inspect_container(id).await
                 .map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(container).unwrap_or_default())
         }
@@ -41,7 +41,7 @@ pub async fn execute_tool(
         "container_logs" => {
             let id = get_str(&arguments, "id")?;
             let tail = arguments.get("tail").and_then(|v| v.as_u64()).map(|v| v as u32);
-            let mut rx = state.runtime.container_logs(id, false, tail).await
+            let mut rx = state.rt().await.container_logs(id, false, tail).await
                 .map_err(|e| e.to_string())?;
             let mut lines = Vec::new();
             while let Some(line) = rx.recv().await {
@@ -52,27 +52,27 @@ pub async fn execute_tool(
 
         "container_stats" => {
             let id = get_str(&arguments, "id")?;
-            let stats = state.runtime.container_stats(id).await
+            let stats = state.rt().await.container_stats(id).await
                 .map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(stats).unwrap_or_default())
         }
 
         "start_container" => {
             let id = get_str(&arguments, "id")?;
-            state.runtime.start_container(id).await.map_err(|e| e.to_string())?;
+            state.rt().await.start_container(id).await.map_err(|e| e.to_string())?;
             Ok(json!({ "status": "started" }))
         }
 
         "stop_container" => {
             let id = get_str(&arguments, "id")?;
-            state.runtime.stop_container(id, 10).await.map_err(|e| e.to_string())?;
+            state.rt().await.stop_container(id, 10).await.map_err(|e| e.to_string())?;
             Ok(json!({ "status": "stopped" }))
         }
 
         "restart_container" => {
             let id = get_str(&arguments, "id")?;
-            state.runtime.stop_container(id, 10).await.ok();
-            state.runtime.start_container(id).await.map_err(|e| e.to_string())?;
+            state.rt().await.stop_container(id, 10).await.ok();
+            state.rt().await.start_container(id).await.map_err(|e| e.to_string())?;
             Ok(json!({ "status": "restarted" }))
         }
 
@@ -81,7 +81,7 @@ pub async fn execute_tool(
             let command: Vec<String> = arguments.get("command")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .ok_or("Missing 'command' parameter")?;
-            let result = state.runtime.exec(ExecOpts {
+            let result = state.rt().await.exec(ExecOpts {
                 container: id.to_string(),
                 command,
                 interactive: false,
@@ -164,9 +164,9 @@ pub async fn execute_tool(
                 gpu: false,
             };
 
-            let container_id = state.runtime.create_container(opts).await
+            let container_id = state.rt().await.create_container(opts).await
                 .map_err(|e| e.to_string())?;
-            state.runtime.start_container(&container_id).await
+            state.rt().await.start_container(&container_id).await
                 .map_err(|e| e.to_string())?;
 
             Ok(json!({
@@ -179,7 +179,7 @@ pub async fn execute_tool(
         "remove_container" => {
             let id = get_str(&arguments, "id")?;
             let force = arguments.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
-            state.runtime.remove_container(id, force).await
+            state.rt().await.remove_container(id, force).await
                 .map_err(|e| e.to_string())?;
             Ok(json!({ "status": "removed" }))
         }
@@ -188,9 +188,9 @@ pub async fn execute_tool(
 
         "diagnose_container" => {
             let id = get_str(&arguments, "id")?;
-            let inspect = state.runtime.inspect_container(id).await.ok();
-            let stats = state.runtime.container_stats(id).await.ok();
-            let mut logs_rx = state.runtime.container_logs(id, false, Some(50)).await.ok();
+            let inspect = state.rt().await.inspect_container(id).await.ok();
+            let stats = state.rt().await.container_stats(id).await.ok();
+            let mut logs_rx = state.rt().await.container_logs(id, false, Some(50)).await.ok();
             let mut log_lines = Vec::new();
             if let Some(ref mut rx) = logs_rx {
                 while let Some(line) = rx.recv().await {
@@ -207,7 +207,7 @@ pub async fn execute_tool(
         "check_port_availability" => {
             let port = arguments.get("port").and_then(|v| v.as_u64())
                 .ok_or("Missing 'port' parameter")? as u16;
-            let containers = state.runtime.list_containers(true).await
+            let containers = state.rt().await.list_containers(true).await
                 .map_err(|e| e.to_string())?;
             let using: Vec<_> = containers.iter().filter(|c| {
                 c.ports.iter().any(|p| p.host_port == port)
@@ -235,14 +235,14 @@ pub async fn execute_tool(
         // === Images ===
 
         "list_images" => {
-            let images = ImageManager::list(state.runtime.as_ref()).await
+            let images = ImageManager::list(state.rt().await.as_ref()).await
                 .map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(images).unwrap_or_default())
         }
 
         "pull_image" => {
             let reference = get_str(&arguments, "reference")?;
-            let mut rx = ImageManager::pull(state.runtime.as_ref(), reference).await
+            let mut rx = ImageManager::pull(state.rt().await.as_ref(), reference).await
                 .map_err(|e| e.to_string())?;
             // Consume all progress events to completion
             let mut progress = Vec::new();
@@ -262,13 +262,13 @@ pub async fn execute_tool(
         "remove_image" => {
             let id = get_str(&arguments, "id")?;
             let force = arguments.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
-            ImageManager::remove(state.runtime.as_ref(), id, force).await
+            ImageManager::remove(state.rt().await.as_ref(), id, force).await
                 .map_err(|e| e.to_string())?;
             Ok(json!({ "status": "removed" }))
         }
 
         "prune_images" => {
-            let result = ImageManager::prune(state.runtime.as_ref()).await
+            let result = ImageManager::prune(state.rt().await.as_ref()).await
                 .map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(result).unwrap_or_default())
         }
@@ -276,7 +276,7 @@ pub async fn execute_tool(
         // === Compose Stacks ===
 
         "list_stacks" => {
-            let containers = state.runtime.list_containers(true).await
+            let containers = state.rt().await.list_containers(true).await
                 .map_err(|e| e.to_string())?;
             let stacks = compose::extract_projects(&containers);
             Ok(serde_json::to_value(stacks).unwrap_or_default())
@@ -286,7 +286,7 @@ pub async fn execute_tool(
             let name = get_str(&arguments, "name")?;
             let (dir, config) = resolve_stack_dir(state, name).await?;
             let output = orca_core::compose::ComposeRunner::compose_up(
-                state.runtime.as_ref(), &dir, config.as_deref(),
+                state.rt().await.as_ref(), &dir, config.as_deref(),
             ).await.map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(output).unwrap_or_default())
         }
@@ -295,7 +295,7 @@ pub async fn execute_tool(
             let name = get_str(&arguments, "name")?;
             let (dir, config) = resolve_stack_dir(state, name).await?;
             let output = orca_core::compose::ComposeRunner::compose_down(
-                state.runtime.as_ref(), &dir, config.as_deref(),
+                state.rt().await.as_ref(), &dir, config.as_deref(),
             ).await.map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(output).unwrap_or_default())
         }
@@ -303,13 +303,13 @@ pub async fn execute_tool(
         // === Volumes & Networks ===
 
         "list_volumes" => {
-            let volumes = VolumeManager::list(state.runtime.as_ref()).await
+            let volumes = VolumeManager::list(state.rt().await.as_ref()).await
                 .map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(volumes).unwrap_or_default())
         }
 
         "list_networks" => {
-            let networks = NetworkManager::list(state.runtime.as_ref()).await
+            let networks = NetworkManager::list(state.rt().await.as_ref()).await
                 .map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(networks).unwrap_or_default())
         }
@@ -317,7 +317,7 @@ pub async fn execute_tool(
         "create_network" => {
             let name = get_str(&arguments, "name")?;
             let driver = arguments.get("driver").and_then(|v| v.as_str()).unwrap_or("bridge");
-            let network = NetworkManager::create(state.runtime.as_ref(), name, driver).await
+            let network = NetworkManager::create(state.rt().await.as_ref(), name, driver).await
                 .map_err(|e| e.to_string())?;
             Ok(serde_json::to_value(network).unwrap_or_default())
         }
@@ -400,9 +400,9 @@ pub async fn execute_tool(
                 gpu: false,
             };
 
-            let container_id = state.runtime.create_container(opts).await
+            let container_id = state.rt().await.create_container(opts).await
                 .map_err(|e| e.to_string())?;
-            state.runtime.start_container(&container_id).await
+            state.rt().await.start_container(&container_id).await
                 .map_err(|e| e.to_string())?;
 
             Ok(json!({
@@ -485,7 +485,7 @@ async fn resolve_stack_dir(
     state: &AppState,
     name: &str,
 ) -> Result<(String, Option<String>), String> {
-    let containers = state.runtime.list_containers(true).await
+    let containers = state.rt().await.list_containers(true).await
         .map_err(|e| e.to_string())?;
     let stacks = compose::extract_projects(&containers);
     let stack = stacks.into_iter().find(|s| s.name == name)

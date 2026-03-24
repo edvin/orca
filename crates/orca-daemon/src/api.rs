@@ -352,7 +352,7 @@ fn native_machine_info() -> MachineInfo {
 async fn list_containers(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let containers = state.runtime.list_containers(true).await?;
+    let containers = state.rt().await.list_containers(true).await?;
     Ok(Json(containers))
 }
 
@@ -360,7 +360,7 @@ async fn inspect_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let container = state.runtime.inspect_container(&id).await?;
+    let container = state.rt().await.inspect_container(&id).await?;
     Ok(Json(container))
 }
 
@@ -368,7 +368,7 @@ async fn start_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.runtime.start_container(&id).await?;
+    state.rt().await.start_container(&id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -376,7 +376,7 @@ async fn stop_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.runtime.stop_container(&id, 10).await?;
+    state.rt().await.stop_container(&id, 10).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -384,7 +384,7 @@ async fn kill_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.runtime.kill_container(&id, "SIGKILL").await?;
+    state.rt().await.kill_container(&id, "SIGKILL").await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -392,7 +392,7 @@ async fn remove_container(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.runtime.remove_container(&id, false).await?;
+    state.rt().await.remove_container(&id, false).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -435,7 +435,7 @@ async fn update_container(
         restart_policy: body.restart_policy,
     };
 
-    state.runtime.update_container(&id, opts).await?;
+    state.rt().await.update_container(&id, opts).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -535,7 +535,7 @@ async fn create_container(
         gpu: false,
     };
 
-    let id = state.runtime.create_container(opts).await?;
+    let id = state.rt().await.create_container(opts).await?;
 
     Ok((
         StatusCode::CREATED,
@@ -547,7 +547,7 @@ async fn container_stats(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<ContainerStats>, ApiError> {
-    let stats = state.runtime.container_stats(&id).await?;
+    let stats = state.rt().await.container_stats(&id).await?;
     Ok(Json(stats))
 }
 
@@ -578,7 +578,7 @@ async fn exec_container(
         workdir: body.workdir,
     };
 
-    let result = state.runtime.exec(opts).await?;
+    let result = state.rt().await.exec(opts).await?;
     Ok(Json(result))
 }
 
@@ -607,7 +607,7 @@ async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: 
     use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions, StartExecResults};
 
     // Create exec with TTY
-    let exec = match state.runtime.docker.create_exec(
+    let exec = match state.rt().await.docker.create_exec(
         &container_id,
         CreateExecOptions {
             cmd: Some(vec![
@@ -645,7 +645,7 @@ async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: 
         ..Default::default()
     });
 
-    match state.runtime.docker.start_exec(&exec_id, start_opts).await {
+    match state.rt().await.docker.start_exec(&exec_id, start_opts).await {
         Ok(StartExecResults::Attached {
             mut output,
             mut input,
@@ -665,7 +665,7 @@ async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: 
 
             // WebSocket input -> Container stdin (+ resize handling)
             let exec_id_for_input = exec.id.clone();
-            let docker = state.runtime.docker.clone();
+            let docker = state.rt().await.docker.clone();
             let input_task = tokio::spawn(async move {
                 while let Some(Ok(msg)) = ws_receiver.next().await {
                     match msg {
@@ -732,7 +732,7 @@ async fn export_docker_run(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let container = state.runtime.inspect_container(&id).await?;
+    let container = state.rt().await.inspect_container(&id).await?;
     let cmd = orca_backend_common::export::container_to_docker_run(&container);
     Ok(Json(serde_json::json!({ "command": cmd })))
 }
@@ -741,7 +741,7 @@ async fn export_compose(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let container = state.runtime.inspect_container(&id).await?;
+    let container = state.rt().await.inspect_container(&id).await?;
     let project_name = container.name.replace('/', "").replace('-', "_");
     let yaml = orca_backend_common::export::containers_to_compose(&[container], &project_name);
     Ok(Json(serde_json::json!({ "yaml": yaml })))
@@ -763,7 +763,7 @@ async fn container_logs_sse(
     let follow = query.follow.unwrap_or(true);
     let tail = query.tail.or(Some(200));
 
-    let mut rx = state.runtime.container_logs(&id, follow, tail).await?;
+    let mut rx = state.rt().await.container_logs(&id, follow, tail).await?;
 
     let stream = async_stream::stream! {
         while let Some(line) = rx.recv().await {
@@ -783,7 +783,7 @@ async fn container_logs_sse(
 async fn list_images(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let images = ImageManager::list(state.runtime.as_ref()).await?;
+    let images = ImageManager::list(state.rt().await.as_ref()).await?;
     Ok(Json(images))
 }
 
@@ -792,7 +792,7 @@ async fn inspect_image(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Return raw Docker inspect data (includes RootFS, Config, etc.)
-    let raw = state.runtime.docker.inspect_image(&id).await
+    let raw = state.rt().await.docker.inspect_image(&id).await
         .map_err(|e| anyhow::anyhow!("Failed to inspect image: {e}"))?;
     Ok(Json(raw))
 }
@@ -802,7 +802,7 @@ async fn image_history(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     tracing::debug!("image_history: id={id}");
-    let history = state.runtime.docker.image_history(&id).await
+    let history = state.rt().await.docker.image_history(&id).await
         .map_err(|e| {
             tracing::error!("image_history failed for {id}: {e}");
             anyhow::anyhow!("Failed to get image history: {e}")
@@ -815,7 +815,7 @@ async fn remove_image(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    ImageManager::remove(state.runtime.as_ref(), &id, false).await?;
+    ImageManager::remove(state.rt().await.as_ref(), &id, false).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -843,8 +843,7 @@ async fn pull_image(
             password: auth.password.clone(),
             server: None,
         };
-        state
-            .runtime
+        state.rt().await
             .pull_with_auth(&body.reference, &registry_auth)
             .await?
     } else {
@@ -857,13 +856,12 @@ async fn pull_image(
                 server: Some(cred.server.clone()),
             };
             drop(config);
-            state
-                .runtime
+            state.rt().await
                 .pull_with_auth(&body.reference, &registry_auth)
                 .await?
         } else {
             drop(config);
-            ImageManager::pull(state.runtime.as_ref(), &body.reference).await?
+            ImageManager::pull(state.rt().await.as_ref(), &body.reference).await?
         }
     };
 
@@ -898,7 +896,7 @@ async fn build_image(
     Json(body): Json<BuildRequest>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
     let mut rx = ImageManager::build(
-        state.runtime.as_ref(),
+        state.rt().await.as_ref(),
         &body.context_path,
         body.dockerfile.as_deref(),
         body.tag.as_deref(),
@@ -925,7 +923,7 @@ async fn build_image(
 async fn prune_images(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let result = ImageManager::prune(state.runtime.as_ref()).await?;
+    let result = ImageManager::prune(state.rt().await.as_ref()).await?;
     Ok(Json(result))
 }
 
@@ -944,7 +942,7 @@ async fn batch_delete_images(
     let mut errors = Vec::new();
 
     for id in &body.ids {
-        match ImageManager::remove(state.runtime.as_ref(), id, body.force).await {
+        match ImageManager::remove(state.rt().await.as_ref(), id, body.force).await {
             Ok(()) => deleted.push(id.clone()),
             Err(e) => errors.push(format!("{}: {e}", &id[..12.min(id.len())])),
         }
@@ -967,7 +965,7 @@ async fn tag_image(
     Path(source): Path<String>,
     Json(body): Json<TagRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    ImageManager::tag(state.runtime.as_ref(), &source, &body.repo, &body.tag).await?;
+    ImageManager::tag(state.rt().await.as_ref(), &source, &body.repo, &body.tag).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1048,7 +1046,7 @@ async fn search_images(
 async fn list_volumes(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let volumes = VolumeManager::list(state.runtime.as_ref()).await?;
+    let volumes = VolumeManager::list(state.rt().await.as_ref()).await?;
     Ok(Json(volumes))
 }
 
@@ -1056,7 +1054,7 @@ async fn inspect_volume(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let volume = VolumeManager::inspect(state.runtime.as_ref(), &name).await?;
+    let volume = VolumeManager::inspect(state.rt().await.as_ref(), &name).await?;
     Ok(Json(volume))
 }
 
@@ -1064,7 +1062,7 @@ async fn remove_volume(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    VolumeManager::remove(state.runtime.as_ref(), &name, false).await?;
+    VolumeManager::remove(state.rt().await.as_ref(), &name, false).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1104,7 +1102,7 @@ async fn create_volume_handler(
         _ => std::collections::HashMap::new(),
     };
 
-    let volume = VolumeManager::create(state.runtime.as_ref(), &body.name, labels).await?;
+    let volume = VolumeManager::create(state.rt().await.as_ref(), &body.name, labels).await?;
     Ok((StatusCode::CREATED, Json(volume)))
 }
 
@@ -1112,7 +1110,7 @@ async fn create_volume_handler(
 
 /// Ensure a helper image (e.g. alpine:latest) is available locally, pulling if needed.
 async fn ensure_image(state: &Arc<AppState>, image: &str) -> Result<(), ApiError> {
-    if state.runtime.docker.inspect_image(image).await.is_ok() {
+    if state.rt().await.docker.inspect_image(image).await.is_ok() {
         return Ok(());
     }
     use bollard::image::CreateImageOptions;
@@ -1124,7 +1122,7 @@ async fn ensure_image(state: &Arc<AppState>, image: &str) -> Result<(), ApiError
         tag,
         ..Default::default()
     };
-    let mut stream = state.runtime.docker.create_image(Some(opts), None, None);
+    let mut stream = state.rt().await.docker.create_image(Some(opts), None, None);
     while let Some(result) = stream.next().await {
         result.map_err(|e| anyhow::anyhow!("Failed to pull {image}: {e}"))?;
     }
@@ -1187,8 +1185,8 @@ async fn volume_list_files(
         gpu: false,
     };
 
-    let id = state.runtime.create_container(opts).await?;
-    state.runtime.start_container(&id).await?;
+    let id = state.rt().await.create_container(opts).await?;
+    state.rt().await.start_container(&id).await?;
 
     // Wait for container to finish
     {
@@ -1197,12 +1195,12 @@ async fn volume_list_files(
         let wait_opts = WaitContainerOptions { condition: "not-running" };
         let _ = tokio::time::timeout(
             Duration::from_secs(10),
-            state.runtime.docker.wait_container(&id, Some(wait_opts)).next(),
+            state.rt().await.docker.wait_container(&id, Some(wait_opts)).next(),
         ).await;
     }
 
     // Collect logs
-    let log_rx = state.runtime.container_logs(&id, false, Some(1000)).await?;
+    let log_rx = state.rt().await.container_logs(&id, false, Some(1000)).await?;
     let mut lines = Vec::new();
     let mut rx = log_rx;
     while let Some(line) = rx.recv().await {
@@ -1210,13 +1208,13 @@ async fn volume_list_files(
     }
 
     // Check exit code
-    let exit_code = match state.runtime.inspect_container(&id).await {
+    let exit_code = match state.rt().await.inspect_container(&id).await {
         Ok(info) => info.exit_code,
         Err(_) => None,
     };
 
     // Clean up
-    let _ = state.runtime.remove_container(&id, true).await;
+    let _ = state.rt().await.remove_container(&id, true).await;
 
     // If the container exited with non-zero, return an error
     if let Some(code) = exit_code {
@@ -1304,8 +1302,8 @@ async fn volume_read_file(
         gpu: false,
     };
 
-    let id = state.runtime.create_container(opts).await?;
-    state.runtime.start_container(&id).await?;
+    let id = state.rt().await.create_container(opts).await?;
+    state.rt().await.start_container(&id).await?;
 
     // Wait for container to finish
     {
@@ -1314,18 +1312,18 @@ async fn volume_read_file(
         let wait_opts = WaitContainerOptions { condition: "not-running" };
         let _ = tokio::time::timeout(
             Duration::from_secs(10),
-            state.runtime.docker.wait_container(&id, Some(wait_opts)).next(),
+            state.rt().await.docker.wait_container(&id, Some(wait_opts)).next(),
         ).await;
     }
 
-    let log_rx = state.runtime.container_logs(&id, false, Some(10000)).await?;
+    let log_rx = state.rt().await.container_logs(&id, false, Some(10000)).await?;
     let mut lines = Vec::new();
     let mut rx = log_rx;
     while let Some(line) = rx.recv().await {
         lines.push(line);
     }
 
-    let _ = state.runtime.remove_container(&id, true).await;
+    let _ = state.rt().await.remove_container(&id, true).await;
 
     Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
 }
@@ -1351,7 +1349,7 @@ async fn image_list_files(
         format!("/{}", sanitized)
     };
 
-    let lines = run_in_image(&state.runtime.docker, &image_ref,
+    let lines = run_in_image(&state.rt().await.docker, &image_ref,
         vec!["ls", "-la", &browse_path]).await?;
 
     let mut entries = Vec::new();
@@ -1407,7 +1405,7 @@ async fn image_read_file(
         .join("/");
     let full_path = format!("/{}", sanitized);
 
-    let lines = run_in_image(&state.runtime.docker, &image_ref,
+    let lines = run_in_image(&state.rt().await.docker, &image_ref,
         vec!["cat", &full_path]).await?;
 
     Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
@@ -1606,7 +1604,7 @@ async fn container_list_files(
         format!("/{}", sanitized)
     };
 
-    let lines = run_in_container(&state.runtime.docker, &id,
+    let lines = run_in_container(&state.rt().await.docker, &id,
         vec!["ls", "-la", &browse_path]).await?;
 
     let mut entries = Vec::new();
@@ -1658,7 +1656,7 @@ async fn container_read_file(
         .join("/");
     let full_path = format!("/{}", sanitized);
 
-    let lines = run_in_container(&state.runtime.docker, &id,
+    let lines = run_in_container(&state.rt().await.docker, &id,
         vec!["cat", &full_path]).await?;
 
     Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
@@ -1752,7 +1750,7 @@ async fn commit_container(
     let config = Config::<String> {
         ..Default::default()
     };
-    let result = state.runtime.docker.commit_container(options, config).await
+    let result = state.rt().await.docker.commit_container(options, config).await
         .map_err(|e| anyhow::anyhow!("Commit failed: {e}"))?;
 
     Ok(Json(serde_json::json!({ "id": result.id.unwrap_or_default() })))
@@ -1771,7 +1769,7 @@ async fn import_image(
 ) -> Result<impl IntoResponse, ApiError> {
     let file = tokio::fs::read(&body.path).await
         .map_err(|e| anyhow::anyhow!("Failed to read file: {e}"))?;
-    let mut stream = state.runtime.docker.import_image(
+    let mut stream = state.rt().await.docker.import_image(
         bollard::image::ImportImageOptions { quiet: false },
         file.into(),
         None,
@@ -1789,7 +1787,7 @@ async fn import_image(
 
 /// Resolve an image ID to a usable reference (repo:tag or full sha).
 async fn resolve_image_ref(state: &AppState, id: &str) -> anyhow::Result<String> {
-    let images: Vec<orca_core::image::Image> = ImageManager::list(state.runtime.as_ref()).await?;
+    let images: Vec<orca_core::image::Image> = ImageManager::list(state.rt().await.as_ref()).await?;
     if let Some(img) = images.iter().find(|i| i.id == id || i.id.contains(id)) {
         // Prefer a repo:tag if available
         if let Some(tag) = img.repo_tags.first() {
@@ -1814,7 +1812,7 @@ async fn scan_image(
 
     tracing::info!("scan_image: starting scan for {image_id}");
     let image_ref = resolve_image_ref(&state, &image_id).await?;
-    let docker = &state.runtime.docker;
+    let docker = &state.rt().await.docker;
 
     // Find the Docker socket path — varies by platform and runtime
     let socket_path = find_docker_socket();
@@ -2001,7 +1999,7 @@ async fn volume_containers(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let containers = state.runtime.list_containers(true).await?;
+    let containers = state.rt().await.list_containers(true).await?;
     let using_volume: Vec<_> = containers
         .into_iter()
         .filter(|c| {
@@ -2019,7 +2017,7 @@ async fn volume_containers(
 async fn list_networks(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let networks = NetworkManager::list(state.runtime.as_ref()).await?;
+    let networks = NetworkManager::list(state.rt().await.as_ref()).await?;
     Ok(Json(networks))
 }
 
@@ -2027,7 +2025,7 @@ async fn inspect_network(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let network = NetworkManager::inspect(state.runtime.as_ref(), &name).await?;
+    let network = NetworkManager::inspect(state.rt().await.as_ref(), &name).await?;
     Ok(Json(network))
 }
 
@@ -2046,7 +2044,7 @@ async fn create_network_handler(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateNetworkRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let network = NetworkManager::create(state.runtime.as_ref(), &body.name, &body.driver).await?;
+    let network = NetworkManager::create(state.rt().await.as_ref(), &body.name, &body.driver).await?;
     Ok((StatusCode::CREATED, Json(network)))
 }
 
@@ -2054,14 +2052,14 @@ async fn remove_network_handler(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    NetworkManager::remove(state.runtime.as_ref(), &name).await?;
+    NetworkManager::remove(state.rt().await.as_ref(), &name).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn network_topology(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let networks = state.runtime.docker.list_networks::<String>(None).await
+    let networks = state.rt().await.docker.list_networks::<String>(None).await
         .map_err(|e| ApiError(anyhow::anyhow!("Failed to list networks: {e}")))?;
 
     let mut topology = Vec::new();
@@ -2080,7 +2078,7 @@ async fn network_topology(
 
         // Inspect the network to get connected containers (list doesn't include them)
         let mut containers = Vec::new();
-        if let Ok(detail) = state.runtime.docker.inspect_network::<String>(&net_id, None).await {
+        if let Ok(detail) = state.rt().await.docker.inspect_network::<String>(&net_id, None).await {
             if let Some(ref cmap) = detail.containers {
                 for (cid, endpoint) in cmap {
                     let cname = endpoint.name.clone()
@@ -2114,7 +2112,7 @@ async fn network_topology(
 async fn get_stacks(
     state: &AppState,
 ) -> Result<Vec<compose::ComposeProject>, ApiError> {
-    let containers = state.runtime.list_containers(true).await?;
+    let containers = state.rt().await.list_containers(true).await?;
     Ok(compose::extract_projects(&containers))
 }
 
@@ -2150,7 +2148,7 @@ async fn start_stack(
     let mut errors = Vec::new();
     for service in &stack.services {
         if service.state != orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.runtime.start_container(&service.container_id).await {
+            if let Err(e) = state.rt().await.start_container(&service.container_id).await {
                 errors.push(format!("{}: {e}", service.name));
             }
         }
@@ -2182,7 +2180,7 @@ async fn stop_stack(
     let mut errors = Vec::new();
     for service in &stack.services {
         if service.state == orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.runtime.stop_container(&service.container_id, 10).await {
+            if let Err(e) = state.rt().await.stop_container(&service.container_id, 10).await {
                 errors.push(format!("{}: {e}", service.name));
             }
         }
@@ -2215,14 +2213,14 @@ async fn restart_stack(
     // Stop all running
     for service in &stack.services {
         if service.state == orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.runtime.stop_container(&service.container_id, 10).await {
+            if let Err(e) = state.rt().await.stop_container(&service.container_id, 10).await {
                 errors.push(format!("stop {}: {e}", service.name));
             }
         }
     }
     // Start all
     for service in &stack.services {
-        if let Err(e) = state.runtime.start_container(&service.container_id).await {
+        if let Err(e) = state.rt().await.start_container(&service.container_id).await {
             errors.push(format!("start {}: {e}", service.name));
         }
     }
@@ -2265,8 +2263,7 @@ async fn compose_up(
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
-    let output = state
-        .runtime
+    let output = state.rt().await
         .compose_up(&dir, config.as_deref())
         .await?;
     Ok(Json(output))
@@ -2277,8 +2274,7 @@ async fn compose_down(
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
-    let output = state
-        .runtime
+    let output = state.rt().await
         .compose_down(&dir, config.as_deref())
         .await?;
     Ok(Json(output))
@@ -2289,8 +2285,7 @@ async fn compose_pull(
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
-    let output = state
-        .runtime
+    let output = state.rt().await
         .compose_pull(&dir, config.as_deref())
         .await?;
     Ok(Json(output))
@@ -3134,7 +3129,7 @@ async fn system_health(
     let mut health = orca_backend_common::environment::check_system_health().await;
 
     // Check the daemon's ACTUAL Docker connection (what the app uses)
-    if let Ok(version) = state.runtime.docker.version().await {
+    if let Ok(version) = state.rt().await.docker.version().await {
         health.docker_connected = true;
         health.docker_version = version.version;
         health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable") && !w.contains("Restart"));
@@ -3323,10 +3318,10 @@ async fn deploy_template(
     // Pull the image if not already available
     ensure_image(&state, &template.image).await?;
 
-    let container_id = state.runtime.create_container(opts).await?;
+    let container_id = state.rt().await.create_container(opts).await?;
 
     // Start the container
-    state.runtime.start_container(&container_id).await?;
+    state.rt().await.start_container(&container_id).await?;
 
     Ok((
         StatusCode::CREATED,
@@ -4025,11 +4020,11 @@ async fn cleanup(
 
     // Docker resource pruning: stopped containers
     if scope == "containers" {
-        let containers = state.runtime.list_containers(true).await?;
+        let containers = state.rt().await.list_containers(true).await?;
         let mut removed = 0u64;
         for c in &containers {
             if matches!(c.state, orca_core::runtime::ContainerState::Exited | orca_core::runtime::ContainerState::Dead | orca_core::runtime::ContainerState::Created) {
-                if let Err(e) = state.runtime.remove_container(&c.id, true).await {
+                if let Err(e) = state.rt().await.remove_container(&c.id, true).await {
                     log.push(format!("Failed to remove container {}: {e}", &c.id[..12.min(c.id.len())]));
                 } else {
                     removed += 1;
@@ -4041,7 +4036,7 @@ async fn cleanup(
 
     // Docker resource pruning: images
     if scope == "images" {
-        match ImageManager::prune(state.runtime.as_ref()).await {
+        match ImageManager::prune(state.rt().await.as_ref()).await {
             Ok(result) => {
                 let count = result.images_deleted.len();
                 let bytes = result.space_reclaimed;
@@ -4053,7 +4048,7 @@ async fn cleanup(
 
     // Docker resource pruning: volumes
     if scope == "volumes" {
-        match VolumeManager::prune(state.runtime.as_ref()).await {
+        match VolumeManager::prune(state.rt().await.as_ref()).await {
             Ok(bytes) => log.push(format!("Pruned volumes, reclaimed {bytes} bytes")),
             Err(e) => log.push(format!("Failed to prune volumes: {e}")),
         }
@@ -4061,7 +4056,7 @@ async fn cleanup(
 
     // Docker resource pruning: networks
     if scope == "networks" {
-        match state.runtime.docker.prune_networks::<String>(None).await {
+        match state.rt().await.docker.prune_networks::<String>(None).await {
             Ok(result) => {
                 let count = result.networks_deleted.map(|n| n.len()).unwrap_or(0);
                 log.push(format!("Removed {count} unused network(s)"));
@@ -4073,7 +4068,7 @@ async fn cleanup(
     // Docker resource pruning: build cache (via CLI since bollard doesn't expose this)
     if scope == "build_cache" {
         use std::process::Stdio;
-        let runtime_cmd = if state.runtime.kind() == orca_core::runtime::RuntimeKind::Podman {
+        let runtime_cmd = if state.rt().await.kind() == orca_core::runtime::RuntimeKind::Podman {
             "podman"
         } else {
             "docker"
@@ -4118,19 +4113,22 @@ fn extended_path() -> String {
     )
 }
 
-/// Try to ping a Docker socket and return the server version on success.
-async fn try_socket_ping(socket_path: &str) -> Option<String> {
+/// Try to ping a Docker socket and return the server version + client on success.
+async fn try_socket_ping(socket_path: &str) -> Option<(String, bollard::Docker)> {
     let docker = bollard::Docker::connect_with_socket(
         socket_path, 120, bollard::API_DEFAULT_VERSION,
     ).ok()?;
     let ver = docker.version().await.ok()?;
-    ver.version
+    ver.version.map(|v| (v, docker))
 }
 
-async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
+async fn reconnect_runtime(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
     let mut log = Vec::new();
     let mut connected_version: Option<String> = None;
     let mut connected_method: Option<String> = None;
+    let mut connected_docker: Option<bollard::Docker> = None;
 
     log.push("Checking Docker connectivity...".to_string());
     log.push("".to_string());
@@ -4143,10 +4141,11 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                 let exists = std::path::Path::new(path).exists();
                 if exists {
                     match try_socket_ping(path).await {
-                        Some(v) => {
+                        Some((v, docker_client)) => {
                             log.push(format!("  Socket exists \u{2713} \u{2192} Docker {v} \u{2713}"));
-                            connected_version = Some(v);
+                            connected_version = Some(v.clone());
                             connected_method = Some(format!("DOCKER_HOST ({path})"));
+                            connected_docker = Some(docker_client);
                         }
                         None => log.push("  Socket exists but ping failed".to_string()),
                     }
@@ -4177,7 +4176,7 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                 if let Some(path) = uri.strip_prefix("unix://") {
                     let exists = std::path::Path::new(path).exists();
                     if exists && connected_version.is_none() {
-                        if let Some(v) = try_socket_ping(path).await {
+                        if let Some((v, docker_client)) = try_socket_ping(path).await {
                             log.push(format!("  Context socket: found \u{2713} \u{2192} Docker {v} \u{2713}"));
                             connected_version = Some(v);
                             connected_method = Some(format!("Docker context ({path})"));
@@ -4225,11 +4224,12 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
         let exists = std::path::Path::new(path).exists();
         if exists {
             match try_socket_ping(path).await {
-                Some(v) => {
+                Some((v, docker_client)) => {
                     log.push(format!("Socket {path}: found \u{2713} \u{2192} Docker {v} \u{2713}"));
                     if connected_version.is_none() {
-                        connected_version = Some(v);
+                        connected_version = Some(v.clone());
                         connected_method = Some(format!("{label} ({path})"));
+                        connected_docker = Some(docker_client);
                     }
                 }
                 None => log.push(format!("Socket {path}: found but ping failed")),
@@ -4282,10 +4282,11 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
                                     let socket = format!("{home}/.lima/{name}/sock/docker.sock");
                                     for attempt in 1..=15 {
                                         if std::path::Path::new(&socket).exists() {
-                                            if let Some(v) = try_socket_ping(&socket).await {
+                                            if let Some((v, docker_client)) = try_socket_ping(&socket).await {
                                                 log.push(format!("  Socket ready \u{2713} \u{2192} Docker {v} \u{2713} (attempt {attempt})"));
-                                                connected_version = Some(v);
+                                                connected_version = Some(v.clone());
                                                 connected_method = Some(format!("Lima VM '{name}' ({socket})"));
+                                                connected_docker = Some(docker_client);
                                                 break;
                                             }
                                         }
@@ -4414,11 +4415,19 @@ async fn reconnect_runtime() -> Result<impl IntoResponse, ApiError> {
         }
     }
 
+    // Hot-swap the runtime if we found a working connection
+    if let Some(docker) = connected_docker {
+        let new_runtime = Arc::new(orca_backend_common::BollardRuntime::new(docker));
+        state.swap_runtime(new_runtime).await;
+        log.push("".to_string());
+        log.push("\u{2713} Runtime connection updated — Docker is now connected.".to_string());
+    }
+
     // Summary
     log.push("".to_string());
     if let (Some(version), Some(method)) = (&connected_version, &connected_method) {
         log.push(format!("Result: Docker {version} is reachable via {method}."));
-        log.push("Action: Restart Orca daemon to reconnect.".to_string());
+        log.push("Connected successfully — no restart needed.".to_string());
         Ok(Json(serde_json::json!({
             "connected": true,
             "method": method,

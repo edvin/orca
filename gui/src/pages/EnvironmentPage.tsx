@@ -231,6 +231,11 @@ export default function EnvironmentPage() {
       };
       setDiagnoseLog(result.log.join("\n"));
       setDiagnoseResult(result.connected);
+
+      // If Docker was found, the daemon hot-swapped the connection — just refresh
+      if (result.connected) {
+        await refresh();
+      }
     } catch (e) {
       logError(`Connection diagnostics failed: ${e}`);
       setDiagnoseLog(`Failed to run diagnostics: ${e}`);

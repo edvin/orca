@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::{Mutex, RwLock, broadcast};
 
 use orca_backend_common::BollardRuntime;
 use orca_backend_common::k8s::K3sManager;
@@ -8,12 +8,12 @@ use orca_core::config::OrcaConfig;
 use orca_core::event::Event;
 
 /// Shared application state for the daemon.
-/// Uses BollardRuntime directly for container operations — this works
-/// for all platforms since the bollard API is the same regardless of
-/// whether the runtime is native, in a Lima VM, or in WSL2.
+///
+/// The runtime is wrapped in RwLock so it can be hot-swapped when
+/// reconnecting to Docker without restarting the daemon.
 pub struct AppState {
     pub config: Mutex<OrcaConfig>,
-    pub runtime: Arc<BollardRuntime>,
+    pub runtime: RwLock<Arc<BollardRuntime>>,
     pub k8s: Arc<K3sManager>,
     pub events_tx: broadcast::Sender<Event>,
     /// API authentication token. Empty string means auth is disabled (--no-auth).
@@ -30,10 +30,22 @@ impl AppState {
     ) -> Self {
         Self {
             config: Mutex::new(config),
-            runtime,
+            runtime: RwLock::new(runtime),
             k8s,
             events_tx,
             api_token,
         }
+    }
+
+    /// Get the current runtime (read lock — fast, concurrent).
+    pub async fn rt(&self) -> Arc<BollardRuntime> {
+        self.runtime.read().await.clone()
+    }
+
+    /// Swap the runtime with a new connection (write lock — exclusive).
+    pub async fn swap_runtime(&self, new_runtime: Arc<BollardRuntime>) {
+        let mut guard = self.runtime.write().await;
+        *guard = new_runtime;
+        tracing::info!("Runtime connection hot-swapped successfully");
     }
 }
