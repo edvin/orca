@@ -2,7 +2,7 @@ import { createSignal, onMount, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { MachineInfo, RegistryCredential } from "../lib/types";
 import { showToast } from "../components/Toast";
-import { confirmDanger } from "../components/ConfirmDialog";
+import { confirmDanger, confirm as confirmDialog } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, updateOllamaSetup } from "../lib/ollamaSetup";
 import Spinner from "../components/Spinner";
@@ -417,10 +417,12 @@ export default function SettingsPage() {
     limaDiskGib() !== limaOrigDiskGib();
 
   const saveLimaSettings = async () => {
-    if (!await confirmDanger(
-      "Restart Docker VM",
-      "This will restart the Docker VM. Running containers will be stopped. This may take a few minutes."
-    )) return;
+    if (!await confirmDialog({
+      title: "Restart Docker VM",
+      message: "This will restart the Docker VM. Running containers will be stopped. This may take a few minutes.",
+      confirmLabel: "Restart",
+      danger: true,
+    })) return;
 
     setLimaSaving(true);
     try {
@@ -677,7 +679,7 @@ export default function SettingsPage() {
                       class="btn"
                       disabled={limaSaving()}
                       onClick={async () => {
-                        if (!await confirmDanger("Restart Docker VM", "This will restart the Docker VM. Running containers will be stopped.")) return;
+                        if (!await confirmDialog({ title: "Restart Docker VM", message: "This will restart the Docker VM. Running containers will be stopped.", confirmLabel: "Restart", danger: true })) return;
                         setLimaSaving(true);
                         try {
                           await invoke("save_lima_settings", { name: limaName(), cpus: limaCpus(), memoryGib: limaMemoryGib(), diskGib: limaDiskGib() });
