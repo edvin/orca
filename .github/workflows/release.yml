@@ -132,20 +132,26 @@ jobs:
           # Add to search list
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
-      - name: Build Tauri app
+      - name: Build Tauri app (macOS signed)
+        if: runner.os == 'macOS'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          # macOS code signing
-          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && 'Developer ID Application: Edvin Syse (T4R2B5AWVQ)' || '-' }}
-          # macOS notarization
+          APPLE_SIGNING_IDENTITY: "Developer ID Application: Edvin Syse (T4R2B5AWVQ)"
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: "T4R2B5AWVQ"
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: cargo tauri build --target ${{ matrix.platform.target }}
 
+      - name: Build Tauri app (Linux/Windows)
+        if: runner.os != 'macOS'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: cargo tauri build --target ${{ matrix.platform.target }}
+
       - name: Cleanup keychain
-        if: runner.os == 'macOS' && always()
+        if: always() && runner.os == 'macOS'
         run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
       - name: Upload release artifacts
