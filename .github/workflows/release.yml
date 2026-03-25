@@ -154,6 +154,18 @@ jobs:
         if: always() && runner.os == 'macOS'
         run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
+      - name: Sign Windows installers
+        if: runner.os == 'Windows'
+        uses: sslcom/esigner-codesign@master
+        with:
+          command: batch_sign
+          username: ${{ secrets.SSLCOM_USERNAME }}
+          password: ${{ secrets.SSLCOM_PASSWORD }}
+          credential_id: ${{ secrets.SSLCOM_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.SSLCOM_TOTP_SECRET }}
+          dir_path: target/${{ matrix.platform.target }}/release/bundle
+          environment_name: PRODUCT
+
       - name: Upload release artifacts
         shell: bash
         run: |
