@@ -402,15 +402,17 @@ pub async fn run_fix_streaming(
             let lima_installed = run_cmd("limactl", &["--version"]).await.is_ok();
             let docker_cli_installed = run_cmd("docker", &["--version"]).await.is_ok();
             let compose_installed = run_cmd("docker", &["compose", "version"]).await.is_ok();
+            let buildx_installed = run_cmd("docker", &["buildx", "version"]).await.is_ok();
 
             {
                 let mut packages = Vec::new();
                 if !lima_installed { packages.push("lima"); }
                 if !docker_cli_installed { packages.push("docker"); }
                 if !compose_installed { packages.push("docker-compose"); }
+                if !buildx_installed { packages.push("docker-buildx"); }
 
                 if packages.is_empty() {
-                    send("    Lima, Docker CLI, and Compose already installed.\n".into()).await;
+                    send("    Lima, Docker CLI, Compose, and Buildx already installed.\n".into()).await;
                 } else {
                     send(format!("    Installing: {}\n", packages.join(", "))).await;
                     let install_result = run_cmd_streaming(
@@ -435,6 +437,20 @@ pub async fn run_fix_streaming(
                             #[cfg(unix)]
                             let _ = std::os::unix::fs::symlink(&bin, &link);
                             send("    Docker Compose plugin linked.\n".into()).await;
+                        }
+                    }
+
+                    // Set up docker-buildx as a CLI plugin
+                    if !buildx_installed {
+                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                        let plugins_dir = format!("{home}/.docker/cli-plugins");
+                        let _ = std::fs::create_dir_all(&plugins_dir);
+                        if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-buildx"]).await {
+                            let bin = format!("{}/bin/docker-buildx", prefix.trim());
+                            let link = format!("{plugins_dir}/docker-buildx");
+                            #[cfg(unix)]
+                            let _ = std::os::unix::fs::symlink(&bin, &link);
+                            send("    Docker Buildx plugin linked.\n".into()).await;
                         }
                     }
 
@@ -475,7 +491,7 @@ pub async fn run_fix_streaming(
                         "--mount-type=virtiofs",
                         "--memory=8",
                         "--cpus=4",
-                        "--set", r#".portForwards += [{"guestIPMustBeZero": false, "guestIP": "127.0.0.1", "hostIP": "127.0.0.1"}]"#,
+                        "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
                         "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
                         "template:docker"],
                     &tx
@@ -1504,17 +1520,19 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 output.push_str("Homebrew: installed\n");
             }
 
-            // Install Lima + Docker CLI + Docker Compose
+            // Install Lima + Docker CLI + Docker Compose + Buildx
             let lima_ok = run_cmd("limactl", &["--version"]).await.is_ok();
             let docker_ok = run_cmd("docker", &["--version"]).await.is_ok();
             let compose_ok = run_cmd("docker", &["compose", "version"]).await.is_ok();
+            let buildx_ok = run_cmd("docker", &["buildx", "version"]).await.is_ok();
             {
                 let mut pkgs: Vec<&str> = Vec::new();
                 if !lima_ok { pkgs.push("lima"); }
                 if !docker_ok { pkgs.push("docker"); }
                 if !compose_ok { pkgs.push("docker-compose"); }
+                if !buildx_ok { pkgs.push("docker-buildx"); }
                 if pkgs.is_empty() {
-                    output.push_str("Lima, Docker CLI, and Compose: installed\n");
+                    output.push_str("Lima, Docker CLI, Compose, and Buildx: installed\n");
                 } else {
                     output.push_str(&format!("Installing {}...\n", pkgs.join(", ")));
                     match run_cmd("brew", &[&["install"][..], &pkgs].concat()).await {
@@ -1529,7 +1547,20 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                         if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-compose"]).await {
                             let bin = format!("{}/bin/docker-compose", prefix.trim());
                             let link = format!("{plugins_dir}/docker-compose");
-                            let _ = std::fs::remove_file(&link); // Remove existing symlink if any
+                            let _ = std::fs::remove_file(&link);
+                            #[cfg(unix)]
+                            let _ = std::os::unix::fs::symlink(&bin, &link);
+                        }
+                    }
+                    // Link docker-buildx as CLI plugin
+                    if !buildx_ok {
+                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+                        let plugins_dir = format!("{home}/.docker/cli-plugins");
+                        let _ = std::fs::create_dir_all(&plugins_dir);
+                        if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-buildx"]).await {
+                            let bin = format!("{}/bin/docker-buildx", prefix.trim());
+                            let link = format!("{plugins_dir}/docker-buildx");
+                            let _ = std::fs::remove_file(&link);
                             #[cfg(unix)]
                             let _ = std::os::unix::fs::symlink(&bin, &link);
                         }
@@ -1548,7 +1579,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
                 match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs",
                     "--memory=8", "--cpus=4",
-                    "--set", r#".portForwards += [{"guestIPMustBeZero": false, "guestIP": "127.0.0.1", "hostIP": "127.0.0.1"}]"#,
+                    "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
                     "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
                     "template:docker"]).await {
                     Ok(_) => output.push_str("VM created.\n"),

@@ -65,12 +65,12 @@ portForwards:
   # Forward the Docker/Podman socket
   - guestSocket: "/var/run/docker.sock"
     hostSocket: "{{{{.Dir}}}}/sock/docker.sock"
-  # Forward all container ports (1-65535) from guest to host
-  # Lima uses SSH port forwarding — this range covers typical container ports
-  - guestIPMustBeZero: true
+  # Forward all Docker container ports (bound to 0.0.0.0) to localhost on host
+  - guestIP: "0.0.0.0"
+    guestIPMustBeZero: true
     guestPortRange: [1, 65535]
     hostIP: "127.0.0.1"
-    ignore: true
+    proto: tcp
 hostResolver:
   enabled: true
   hosts:
