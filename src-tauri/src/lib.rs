@@ -125,6 +125,7 @@ pub fn run() {
             commands::k8s_stop_port_forward,
             commands::k8s_list_port_forwards,
             commands::system_health,
+            commands::host_uid,
             commands::env_status,
             commands::env_fix,
             commands::env_fix_stream,

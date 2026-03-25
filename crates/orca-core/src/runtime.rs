@@ -120,6 +120,9 @@ pub struct ContainerCreateOpts {
     /// Request GPU access (--gpus all). Requires NVIDIA Container Toolkit.
     #[serde(default)]
     pub gpu: bool,
+    /// Run as specific user (e.g., "1000:1000"). Maps to Docker's --user flag.
+    #[serde(default)]
+    pub user: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

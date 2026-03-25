@@ -226,6 +226,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/environment/fix-stream", post(env_fix_stream))
         // System health
         .route("/system/health", get(system_health))
+        .route("/system/host-uid", get(host_uid))
         // Templates
         .route("/templates", get(list_templates))
         .route("/templates/user", post(save_user_template).delete(delete_user_template))
@@ -466,6 +467,9 @@ struct CreateContainerRequest {
     /// Memory limit as a human-readable string (e.g. "512m", "1g") or raw bytes.
     #[serde(default)]
     memory_limit: Option<String>,
+    /// Run as specific user (e.g., "1000:1000"). Maps to Docker's --user flag.
+    #[serde(default)]
+    user: Option<String>,
 }
 
 /// Parse a human-readable memory string (e.g. "512m", "1g", "256k") into bytes.
@@ -533,6 +537,7 @@ async fn create_container(
         memory_limit,
         memory_swap: None,
         gpu: false,
+        user: body.user,
     };
 
     let id = state.rt().await.create_container(opts).await?;
@@ -1183,6 +1188,7 @@ async fn volume_list_files(
         memory_limit: None,
         memory_swap: None,
         gpu: false,
+        user: None,
     };
 
     let id = state.rt().await.create_container(opts).await?;
@@ -1300,6 +1306,7 @@ async fn volume_read_file(
         memory_limit: None,
         memory_swap: None,
         gpu: false,
+        user: None,
     };
 
     let id = state.rt().await.create_container(opts).await?;
@@ -3154,6 +3161,55 @@ async fn system_health(
     Ok(Json(health))
 }
 
+/// Returns the host UID:GID so the frontend can offer "Run as host user" for bind mounts.
+async fn host_uid() -> Json<serde_json::Value> {
+    let platform = std::env::consts::OS;
+
+    #[cfg(unix)]
+    {
+        // Safe: getuid/getgid are always-safe POSIX calls
+        let uid = nix_uid();
+        let gid = nix_gid();
+        Json(serde_json::json!({
+            "uid": uid,
+            "gid": gid,
+            "user": format!("{uid}:{gid}"),
+            "platform": platform,
+        }))
+    }
+    #[cfg(not(unix))]
+    {
+        Json(serde_json::json!({
+            "uid": null,
+            "gid": null,
+            "user": null,
+            "platform": platform,
+        }))
+    }
+}
+
+#[cfg(unix)]
+fn nix_uid() -> u32 {
+    std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+#[cfg(unix)]
+fn nix_gid() -> u32 {
+    std::process::Command::new("id")
+        .arg("-g")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
 /// Try to connect to Docker via various methods. Returns (version, method) on success.
 async fn try_docker_connection() -> Option<(String, &'static str)> {
     // Try local defaults (Unix socket on Linux/macOS, named pipe on Windows)
@@ -3315,6 +3371,7 @@ async fn deploy_template(
         memory_limit: None,
         memory_swap: None,
         gpu: false,
+        user: None,
     };
 
     // Pull the image if not already available

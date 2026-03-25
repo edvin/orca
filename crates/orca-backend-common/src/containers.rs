@@ -46,6 +46,7 @@ impl ContainerRuntime for BollardRuntime {
 
         let config = bollard::container::Config {
             image: Some(opts.image.clone()),
+            user: opts.user.clone(),
             cmd: if opts.command.is_empty() {
                 None
             } else {

@@ -1,4 +1,4 @@
-import { createSignal, Show, onMount, onCleanup } from "solid-js";
+import { createSignal, createMemo, Show, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import Spinner from "./Spinner";
@@ -11,6 +11,13 @@ interface RunContainerDialogProps {
 }
 
 type RunStage = "form" | "pulling" | "creating" | "starting" | "done" | "error";
+
+interface HostUidInfo {
+  uid: number | null;
+  gid: number | null;
+  user: string | null;
+  platform: string;
+}
 
 export default function RunContainerDialog(props: RunContainerDialogProps) {
   const handleEscape = (e: KeyboardEvent) => {
@@ -34,6 +41,15 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
         // Keep defaults if fetch fails
       }
     })();
+    // Fetch host UID for "Run as host user" feature
+    (async () => {
+      try {
+        const info = (await invoke("host_uid")) as HostUidInfo;
+        setHostUidInfo(info);
+      } catch {
+        // Not critical
+      }
+    })();
   });
   onCleanup(() => document.removeEventListener("keydown", handleEscape));
 
@@ -53,9 +69,20 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
     { value: "none", label: "none" },
   ]);
   const [showAdvanced, setShowAdvanced] = createSignal(false);
+  const [runAsHostUser, setRunAsHostUser] = createSignal(false);
+  const [hostUidInfo, setHostUidInfo] = createSignal<HostUidInfo | null>(null);
   const [stage, setStage] = createSignal<RunStage>("form");
   const [stageMessage, setStageMessage] = createSignal("");
   const [errorMessage, setErrorMessage] = createSignal("");
+
+  // Show "Run as host user" when bind mounts are present and we're on macOS (Lima)
+  const hasBindMounts = createMemo(() => {
+    return volumes().split("\n").some((l) => l.trim().includes(":"));
+  });
+  const showHostUserOption = createMemo(() => {
+    const info = hostUidInfo();
+    return hasBindMounts() && info?.platform === "macos" && info?.uid != null;
+  });
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
@@ -107,6 +134,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
         cpuLimit: cpuLimit().trim() ? parseFloat(cpuLimit().trim()) : null,
         memoryLimit: memoryLimit().trim() || null,
         network: network() !== "bridge" ? network() : null,
+        user: runAsHostUser() && hostUidInfo()?.user ? hostUidInfo()!.user : null,
       });
 
       // Stage 4: Done
@@ -284,6 +312,53 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                   />
                   <span class="form-hint">host:container, one per line</span>
                 </div>
+
+                <Show when={showHostUserOption()}>
+                  <div style={{
+                    display: "flex",
+                    "align-items": "center",
+                    gap: "10px",
+                    padding: "10px 14px",
+                    background: runAsHostUser() ? "#58a6ff12" : "#ffffff06",
+                    border: `1px solid ${runAsHostUser() ? "#58a6ff44" : "#ffffff12"}`,
+                    "border-radius": "8px",
+                    "margin-bottom": "12px",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                    onClick={() => setRunAsHostUser(!runAsHostUser())}
+                  >
+                    <div style={{
+                      width: "36px",
+                      height: "20px",
+                      "border-radius": "10px",
+                      background: runAsHostUser() ? "#58a6ff" : "#30363d",
+                      position: "relative",
+                      transition: "background 0.15s ease",
+                      "flex-shrink": "0",
+                    }}>
+                      <div style={{
+                        width: "16px",
+                        height: "16px",
+                        "border-radius": "50%",
+                        background: "#e6edf3",
+                        position: "absolute",
+                        top: "2px",
+                        left: runAsHostUser() ? "18px" : "2px",
+                        transition: "left 0.15s ease",
+                        "box-shadow": "0 1px 3px rgba(0,0,0,0.3)",
+                      }} />
+                    </div>
+                    <div style={{ flex: "1" }}>
+                      <div style={{ "font-size": "13px", color: "#e6edf3", "font-weight": "500" }}>
+                        Run as host user
+                      </div>
+                      <div style={{ "font-size": "11px", color: "#8b949e", "margin-top": "2px" }}>
+                        Maps container user to {hostUidInfo()?.user} — fixes bind mount permissions on macOS
+                      </div>
+                    </div>
+                  </div>
+                </Show>
 
                 <div class="form-group">
                   <label class="form-label">Network</label>

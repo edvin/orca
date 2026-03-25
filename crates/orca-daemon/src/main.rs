@@ -230,7 +230,12 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
 
             if let Some(name) = vm_name {
                 let is_running = text.lines().any(|l| l.starts_with(name) && l.contains("Running"));
-                if !is_running {
+
+                // Reconcile Lima VM config — apply any missing settings.
+                // This may stop the VM if changes are needed, so we always ensure it's started after.
+                let was_reconfigured = reconcile_lima_config(name, is_running).await;
+
+                if !is_running || was_reconfigured {
                     tracing::info!("Starting Lima VM '{name}'...");
                     let _ = Command::new("limactl")
                         .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default()))
@@ -327,6 +332,7 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     tracing::warn!("No container runtime available");
     tracing::warn!("Daemon will start without runtime — Environment page will guide setup");
 
+
     // Create a fallback connection that will error on use
     Arc::new(orca_backend_common::BollardRuntime::new(
         bollard::Docker::connect_with_local_defaults()
@@ -335,4 +341,115 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
                     .expect("failed to create fallback Docker client")
             }))
     ))
+}
+
+/// Reconcile Lima VM config: ensure port forwarding, mounts, etc. match desired state.
+/// Reads ~/.lima/<name>/lima.yaml, checks for required settings, applies fixes via `limactl edit --set`.
+/// If the VM is running and changes are needed, it will be stopped and edited.
+/// Returns true if changes were applied (caller should restart the VM).
+#[cfg(target_os = "macos")]
+async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
+    use tokio::process::Command;
+
+    let home = std::env::var("HOME").unwrap_or_default();
+    let lima_yaml_path = format!("{home}/.lima/{vm_name}/lima.yaml");
+    let path_env = format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default());
+
+    let yaml_content = match tokio::fs::read_to_string(&lima_yaml_path).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::debug!("Cannot read Lima config at {lima_yaml_path}: {e}");
+            return false;
+        }
+    };
+
+    // Define desired config patches and how to detect them.
+    // Each entry: (description, check_fn, set_expression)
+    let patches: Vec<(&str, bool, &str)> = vec![
+        (
+            "port forwarding (0.0.0.0 → host)",
+            // Check: must have guestIP 0.0.0.0 with guestIPMustBeZero: true and NO ignore: true
+            yaml_content.contains("guestIP: \"0.0.0.0\"")
+                && yaml_content.contains("guestIPMustBeZero: true")
+                && !yaml_content.contains("ignore: true"),
+            r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
+        ),
+        (
+            "/Volumes mount",
+            yaml_content.contains("/Volumes"),
+            r#".mounts += [{"location": "/Volumes", "writable": true}]"#,
+        ),
+        (
+            "/private mount",
+            yaml_content.contains("/private"),
+            r#".mounts += [{"location": "/private", "writable": true}]"#,
+        ),
+    ];
+
+    // Also check if we need to remove the broken `ignore: true` rule
+    let has_ignore_rule = yaml_content.contains("ignore: true");
+
+    let mut needed: Vec<(&str, &str)> = Vec::new();
+    for (desc, present, set_expr) in &patches {
+        if !present {
+            needed.push((desc, set_expr));
+        }
+    }
+
+    if needed.is_empty() && !has_ignore_rule {
+        tracing::debug!("Lima VM '{vm_name}' config is up to date");
+        return false;
+    }
+
+    tracing::info!("Lima VM '{vm_name}' config needs updates:");
+    for (desc, _) in &needed {
+        tracing::info!("  - Missing: {desc}");
+    }
+    if has_ignore_rule {
+        tracing::info!("  - Removing broken 'ignore: true' port forwarding rule");
+    }
+
+    // If running, stop first — limactl edit requires a stopped VM
+    if is_running {
+        tracing::info!("Stopping Lima VM '{vm_name}' to apply config updates...");
+        let _ = Command::new("limactl")
+            .env("PATH", &path_env)
+            .args(["stop", vm_name])
+            .output().await;
+    }
+
+    // Remove the broken ignore rule if present
+    if has_ignore_rule {
+        // Filter out the portForward entry that has ignore: true
+        let _ = Command::new("limactl")
+            .env("PATH", &path_env)
+            .args(["edit", vm_name, "--set",
+                r#".portForwards = [.portForwards[] | select(.ignore != true)]"#])
+            .output().await;
+        tracing::info!("Removed 'ignore: true' port forwarding rule");
+    }
+
+    // Apply each missing patch
+    for (desc, set_expr) in &needed {
+        let output = Command::new("limactl")
+            .env("PATH", &path_env)
+            .args(["edit", vm_name, "--set", set_expr])
+            .output().await;
+        match output {
+            Ok(o) if o.status.success() => {
+                tracing::info!("Applied: {desc}");
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                tracing::warn!("Failed to apply {desc}: {stderr}");
+            }
+            Err(e) => {
+                tracing::warn!("Failed to run limactl edit for {desc}: {e}");
+            }
+        }
+    }
+
+    // The VM will be started by the caller (the existing start logic)
+    tracing::info!("Lima VM '{vm_name}' config updated — VM will be started next");
+    true
 }

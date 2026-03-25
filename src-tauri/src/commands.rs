@@ -322,6 +322,7 @@ pub async fn create_and_run_container(
     memory_limit: Option<String>,
     gpu: Option<bool>,
     network: Option<String>,
+    user: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     // Build the create request body
@@ -407,6 +408,11 @@ pub async fn create_and_run_container(
     if let Some(net) = network {
         if !net.is_empty() {
             body["network"] = serde_json::json!(net);
+        }
+    }
+    if let Some(u) = user {
+        if !u.is_empty() {
+            body["user"] = serde_json::json!(u);
         }
     }
 
@@ -1634,6 +1640,11 @@ pub async fn k8s_list_port_forwards() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn system_health() -> Result<serde_json::Value, String> {
     get_json("/system/health").await
+}
+
+#[tauri::command]
+pub async fn host_uid() -> Result<serde_json::Value, String> {
+    get_json("/system/host-uid").await
 }
 
 // --- Environment ---
