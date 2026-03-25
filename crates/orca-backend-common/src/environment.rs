@@ -761,43 +761,6 @@ async fn check_docker_group() -> HealthCheck {
     }
 }
 
-async fn check_lima_installed() -> HealthCheck {
-    match run_cmd("limactl", &["--version"]).await {
-        Ok(version) => HealthCheck {
-            name: "Lima".to_string(),
-            description: "Lima VM manager is installed (used for running Linux containers on macOS)".to_string(),
-            status: CheckStatus::Pass,
-            fix_action: None,
-            details: Some(version),
-        },
-        Err(_) => HealthCheck {
-            name: "Lima".to_string(),
-            description: "Optional: Lima VM manager for running containers in a lightweight VM".to_string(),
-            status: CheckStatus::Warning,
-            fix_action: Some("install_lima".to_string()),
-            details: Some("Not installed — install with: brew install lima".to_string()),
-        },
-    }
-}
-
-async fn check_brew_installed() -> HealthCheck {
-    match run_cmd("brew", &["--version"]).await {
-        Ok(version) => HealthCheck {
-            name: "Homebrew".to_string(),
-            description: "Homebrew package manager is installed".to_string(),
-            status: CheckStatus::Pass,
-            fix_action: None,
-            details: Some(version.lines().next().unwrap_or(&version).to_string()),
-        },
-        Err(e) => HealthCheck {
-            name: "Homebrew".to_string(),
-            description: "Homebrew package manager (needed to install dependencies)".to_string(),
-            status: CheckStatus::Warning,
-            fix_action: Some("install_brew".to_string()),
-            details: Some(format!("Not found — install from https://brew.sh")),
-        },
-    }
-}
 
 async fn check_wsl2_enabled() -> HealthCheck {
     match run_cmd("wsl", &["--status"]).await {
@@ -1575,8 +1538,6 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 else { "orca" };
             if !vms.lines().any(|l| l.trim() == "orca" || l.trim() == "docker" || l.trim() == "default") {
                 output.push_str("Creating Lima VM 'orca'...\n");
-                // Write port forwarding override (matches Docker Desktop behavior)
-                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
                 match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs",
                     "--memory=8", "--cpus=4",
                     "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,

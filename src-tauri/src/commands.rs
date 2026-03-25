@@ -1052,7 +1052,7 @@ pub async fn k8s_pod_logs(
         query_parts.push(format!("tail={t}"));
     }
     let query = if query_parts.is_empty() {
-    let base = daemon_url();
+    let _base = daemon_url();
         String::new()
     } else {
         format!("?{}", query_parts.join("&"))
@@ -1152,7 +1152,7 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
 
     if !output.status.success() {
         return Err(if stderr.trim().is_empty() {
-    let base = daemon_url();
+    let _base = daemon_url();
             format!("kubectl exited with code {}: {}", output.status, stdout)
         } else {
             stderr

@@ -1072,6 +1072,7 @@ async fn remove_volume(
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct CreateVolumeRequest {
     name: String,
     #[serde(default = "default_local_driver")]
@@ -4235,7 +4236,7 @@ async fn reconnect_runtime(
                 if let Some(path) = uri.strip_prefix("unix://") {
                     let exists = std::path::Path::new(path).exists();
                     if exists && connected_version.is_none() {
-                        if let Some((v, docker_client)) = try_socket_ping(path).await {
+                        if let Some((v, _docker_client)) = try_socket_ping(path).await {
                             log.push(format!("  Context socket: found \u{2713} \u{2192} Docker {v} \u{2713}"));
                             connected_version = Some(v);
                             connected_method = Some(format!("Docker context ({path})"));

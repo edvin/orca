@@ -103,7 +103,7 @@ impl K3sManager {
     /// Always uses --context orca to avoid connecting to the user's remote clusters.
     fn kubectl_command(&self) -> Command {
         let bin = self.kubectl_bin();
-        let mut cmd = if bin.starts_with("k3s ") {
+        let cmd = if bin.starts_with("k3s ") {
             let mut c = Command::new("k3s");
             c.arg("kubectl");
             c
@@ -167,11 +167,6 @@ impl K3sManager {
         // Extract server URL from k3s config (usually https://127.0.0.1:6443)
         let server = k3s_content.lines()
             .find(|l| l.trim().starts_with("server:"))
-            .and_then(|l| l.split_once(':').map(|(_, v)| v.trim().trim_matches('"').to_string()))
-            .unwrap_or_else(|| "https://127.0.0.1:6443".to_string());
-        // The split_once on ':' only splits at the first colon, we need the full URL
-        let server = k3s_content.lines()
-            .find(|l| l.trim().starts_with("server:"))
             .map(|l| l.trim().trim_start_matches("server:").trim().trim_matches('"').to_string())
             .unwrap_or_else(|| "https://127.0.0.1:6443".to_string());
 
@@ -196,12 +191,6 @@ impl K3sManager {
         let mut cmd = std::process::Command::new("kubectl");
         cmd.env("PATH", Self::extended_path());
         cmd.args(["config", "set-cluster", "orca", &format!("--server={server}")]);
-        if let Some(ca) = &ca_data {
-            // Write CA to a temp approach: embed directly
-            cmd.arg("--embed-certs=true");
-            // Actually, set-cluster with --certificate-authority needs a file, but we have base64 data.
-            // Use the simpler approach: set via config set
-        }
         let _ = cmd.output();
 
         // Set certificate-authority-data directly via config set
@@ -637,8 +626,6 @@ impl K3sManager {
                                         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
                                         let kube_dir = format!("{home}/.kube");
                                         let _ = std::fs::create_dir_all(&kube_dir);
-                                        let config_path = format!("{kube_dir}/config");
-
                                         // k3s config has server: https://127.0.0.1:6443
                                         // Lima VZ forwards ports, so localhost:6443 works on the host
                                         let fixed = kubeconfig.replace("127.0.0.1", "localhost");
