@@ -143,6 +143,95 @@
 - Signed auto-updates on all platforms
 - Guided setup wizard with real-time streaming progress
 
+## macOS & Lima: How it works
+
+On macOS, Docker runs inside a lightweight Linux VM managed by [Lima](https://lima-vm.io). Orca sets this up automatically — you don't need Docker Desktop, OrbStack, or any other commercial tool.
+
+### What Orca installs
+
+When you first launch Orca on macOS, the setup wizard installs (via Homebrew):
+- **Lima** — lightweight VM manager using Apple's Virtualization.framework
+- **Docker CLI** + **Docker Compose** + **Docker Buildx** — the standard Docker tools
+- A Linux VM named "orca" with 8GB RAM, 4 CPUs, VirtioFS mounts, and port forwarding
+
+### Port forwarding
+
+Container ports are automatically forwarded to your Mac. If you run `docker run -p 8080:80 nginx`, you can access it at `http://localhost:8080` — same as Docker Desktop.
+
+Orca configures this automatically. If you're upgrading from an older version, the daemon reconciles your VM config on startup and applies any missing settings.
+
+### File permissions (bind mounts)
+
+> **This is the most important difference from Docker Desktop.**
+
+When you bind-mount a host directory into a container (e.g., `-v /Users/me/code:/app`), file permissions behave differently than Docker Desktop:
+
+| | Docker Desktop / OrbStack | Orca (Lima) / WSL / Native Linux |
+|---|---|---|
+| **UID mapping** | Transparent — files appear owned by the container user regardless of host UID | Raw Linux permissions — host UID (501 on macOS) is visible inside the container |
+| **chmod/chown** | Works transparently via proprietary FUSE layer | May fail on VirtioFS mounts (`Read-only file system` for permission changes) |
+| **Impact** | "Just works" for all projects | Some projects need adjustments (same ones that need fixes on WSL/native Linux) |
+
+**Docker Desktop and OrbStack use a proprietary filesystem abstraction layer** that remaps UIDs and intercepts permission calls. This is why bind mounts "just work" on those tools. Lima uses raw VirtioFS without this layer — you get native Linux filesystem semantics.
+
+### What this means in practice
+
+**Most containers work fine** — anything using named volumes (`-v mydata:/data`), network-based storage, or running as root is unaffected.
+
+**Projects that may need adjustments:**
+- Containers with entrypoint scripts that `chmod` or `chown` mounted directories
+- Non-root containers writing to bind-mounted host directories
+- Development containers that expect the mounted source code to be owned by a specific UID
+
+### How to fix permission issues
+
+These are the same fixes used for WSL and native Linux Docker — any project already working on those platforms works on Orca too.
+
+**Option 1: Run as your host UID**
+```bash
+# Find your macOS UID (usually 501)
+id -u
+
+# Run the container with matching UID
+docker run --user 501:20 -v /Users/me/code:/app myimage
+```
+> **Caveat:** This breaks containers that need root for PID 1 (e.g., nginx binding port 80, apt-get in entrypoints). Only use for dev containers where you control the image.
+
+**Option 2: Fix permissions in the entrypoint**
+```dockerfile
+# In your Dockerfile or entrypoint script
+RUN chmod -R 777 /app  # or use a more targeted approach
+```
+
+**Option 3: Use named volumes instead of bind mounts**
+```bash
+# Instead of:  -v /Users/me/data:/app/data
+# Use:         -v mydata:/app/data
+docker run -v mydata:/app/data myimage
+```
+Named volumes are managed entirely inside the VM — no permission issues.
+
+**Option 4: Set the container user to match the host**
+```yaml
+# docker-compose.yml
+services:
+  app:
+    image: myimage
+    user: "501:20"  # macOS default UID:GID
+    volumes:
+      - ./src:/app/src
+```
+
+### For project maintainers
+
+If you maintain a project that uses Docker for development, consider these practices to support all Docker runtimes (not just Docker Desktop):
+
+1. **Don't assume UID 0 (root) owns mounted files** — use `gosu` or `fixuid` in entrypoints
+2. **Don't `chmod`/`chown` on mounted volumes in entrypoints** — it fails on VirtioFS and some NFS setups
+3. **Prefer named volumes for data** and bind mounts only for source code
+4. **Document the required `--user` flag** if your container runs as non-root and writes to mounts
+5. **Test on WSL** — if it works there, it works on Lima/Orca too
+
 ## Screenshots
 
 <details>
