@@ -2333,6 +2333,11 @@ pub async fn add_remote_host(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
     let id = format!("{:x}{:04x}", now.as_millis(), now.subsec_nanos() & 0xFFFF);
+    // Normalize URL: ensure it ends with /api/v1
+    let url = {
+        let base = url.trim_end_matches('/');
+        if base.ends_with("/api/v1") { base.to_string() } else { format!("{base}/api/v1") }
+    };
     config.remote_hosts.push(orca_core::config::RemoteHost {
         id: id.clone(),
         name,
@@ -2360,6 +2365,11 @@ pub async fn update_remote_host(
         .iter_mut()
         .find(|h| h.id == id)
         .ok_or("Host not found")?;
+    // Normalize URL: ensure it ends with /api/v1
+    let url = {
+        let base = url.trim_end_matches('/');
+        if base.ends_with("/api/v1") { base.to_string() } else { format!("{base}/api/v1") }
+    };
     host.name = name;
     host.url = url;
     // If token is "__KEEP__", preserve the existing token
@@ -2458,6 +2468,14 @@ pub async fn get_active_host() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> Result<serde_json::Value, String> {
+    // Normalize URL: ensure it ends with /api/v1
+    let base = url.trim_end_matches('/');
+    let base = if base.ends_with("/api/v1") {
+        base.to_string()
+    } else {
+        format!("{base}/api/v1")
+    };
+
     let mut builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .connect_timeout(std::time::Duration::from_secs(5));
@@ -2466,7 +2484,7 @@ pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> R
     }
     let client = builder.build().unwrap_or_else(|_| reqwest::Client::new());
     let resp = client
-        .get(format!("{url}/health"))
+        .get(format!("{base}/health"))
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await

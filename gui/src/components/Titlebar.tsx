@@ -85,6 +85,11 @@ export default function Titlebar(props: TitlebarProps) {
     loadHosts();
     const interval = setInterval(pollHealth, 10_000);
 
+    // Reload hosts when settings change
+    const onRefresh = () => loadHosts();
+    document.addEventListener("orca-refresh", onRefresh);
+    onCleanup(() => document.removeEventListener("orca-refresh", onRefresh));
+
     // Close dropdowns when clicking outside
     const handleClickOutside = (e: MouseEvent) => {
       if (bellOpen()) {
