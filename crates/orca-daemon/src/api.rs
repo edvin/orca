@@ -625,7 +625,7 @@ async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: 
             attach_stdout: Some(true),
             attach_stderr: Some(true),
             tty: Some(true),
-            env: Some(vec!["TERM=xterm-256color".to_string()]),
+            env: Some(vec!["TERM=xterm-256color".to_string(), "COLORTERM=truecolor".to_string()]),
             ..Default::default()
         },
     )
@@ -2868,6 +2868,8 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
     #[cfg(target_os = "windows")]
     let child_result = {
         TokioCommand::new("wsl")
+            .env("TERM", "xterm-256color")
+            .env("COLORTERM", "truecolor")
             .args(["-u", "root", "--", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--", "sh"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -2881,6 +2883,7 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
         TokioCommand::new("kubectl")
             .env("PATH", format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{path}"))
             .env("TERM", "xterm-256color")
+            .env("COLORTERM", "truecolor")
             .args(["--context", "orca", "exec", "-it", &name, "-n", &namespace, "--", "sh"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())

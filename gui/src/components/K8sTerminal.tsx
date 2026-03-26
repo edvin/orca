@@ -33,8 +33,10 @@ export default function K8sTerminal(props: K8sTerminalProps) {
     localStorage.setItem("terminal-font-size", String(next));
     if (term && fitAddon) {
       term.options.fontSize = next;
-      (term as any)._core?._renderService?.clear();
-      fitAddon.fit();
+      requestAnimationFrame(() => {
+        fitAddon!.fit();
+        term!.refresh(0, term!.rows - 1);
+      });
     }
   };
 
@@ -43,6 +45,7 @@ export default function K8sTerminal(props: K8sTerminalProps) {
 
     term = new Terminal({
       cursorBlink: true,
+      cursorStyle: "block",
       fontFamily: TERM_FONT,
       fontSize: fontSize(),
       theme: {

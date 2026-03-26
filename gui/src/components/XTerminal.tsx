@@ -33,12 +33,11 @@ export default function XTerminal(props: XTerminalProps) {
     setFontSize(next);
     localStorage.setItem("terminal-font-size", String(next));
     if (term && fitAddon) {
-      // Recreate the terminal with new font size — most reliable approach
-      const currentContent = ""; // Can't easily preserve scrollback
       term.options.fontSize = next;
-      // Force xterm to remeasure character dimensions
-      (term as any)._core?._renderService?.clear();
-      fitAddon.fit();
+      requestAnimationFrame(() => {
+        fitAddon!.fit();
+        term!.refresh(0, term!.rows - 1);
+      });
     }
   };
 
@@ -47,6 +46,7 @@ export default function XTerminal(props: XTerminalProps) {
 
     term = new Terminal({
       cursorBlink: true,
+      cursorStyle: "block",
       fontFamily: TERM_FONT,
       fontSize: fontSize(),
       theme: {
