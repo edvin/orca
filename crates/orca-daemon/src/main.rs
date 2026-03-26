@@ -384,6 +384,11 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
             yaml_content.contains("/private"),
             r#".mounts += [{"location": "/private", "writable": true}]"#,
         ),
+        (
+            "HWE kernel provision script",
+            yaml_content.contains("linux-generic-hwe"),
+            r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n"}]"##,
+        ),
     ];
 
     // Also check if we need to remove the broken `ignore: true` rule

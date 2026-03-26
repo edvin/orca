@@ -523,6 +523,16 @@ pub async fn run_fix_streaming(
             }
             send("    VM is running.\n".into()).await;
 
+            // Reboot to activate HWE kernel (6.17) if it was just provisioned
+            let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
+            if kernel_ver.trim().starts_with("6.8.") || kernel_ver.trim().starts_with("6.5.") {
+                send(">>> Activating HWE kernel (reboot)...\n".into()).await;
+                let _ = run_cmd("limactl", &["stop", vm_name]).await;
+                let _ = run_cmd_streaming("limactl", &["start", vm_name], &tx).await;
+                let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
+                send(format!("    Kernel upgraded: {} → {}\n", kernel_ver.trim(), new_ver.trim())).await;
+            }
+
             // Step 5: Configure Docker context to use Lima
             send(">>> Step 5/5: Configuring Docker...\n".into()).await;
 
@@ -1552,6 +1562,16 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
 
             output.push_str(&format!("Starting Lima VM '{vm_name}'...\n"));
             let _ = run_cmd("limactl", &["start", vm_name]).await;
+
+            // Reboot to activate HWE kernel if needed
+            let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
+            if kernel_ver.trim().starts_with("6.8.") || kernel_ver.trim().starts_with("6.5.") {
+                output.push_str("Activating HWE kernel (reboot)...\n");
+                let _ = run_cmd("limactl", &["stop", vm_name]).await;
+                let _ = run_cmd("limactl", &["start", vm_name]).await;
+                let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
+                output.push_str(&format!("Kernel upgraded: {} → {}\n", kernel_ver.trim(), new_ver.trim()));
+            }
 
             // Verify
             match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
