@@ -235,8 +235,8 @@ export default function ImagesPage(props: ImagesPageProps) {
     }
   };
 
-  const doPull = async () => {
-    const ref_ = pullRef().trim();
+  const doPull = async (overrideRef?: string) => {
+    const ref_ = (overrideRef || pullRef()).trim();
     if (!ref_) return;
     setPulling(true);
     setPullStatus(`Pulling ${ref_}...`);
@@ -379,7 +379,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       if (idx >= 0 && idx < results.length) {
         // A result is selected — use it as the pull target and pull
         selectSearchResult(results[idx].name);
-        doPull();
+        doPull(results[idx].name);
       } else if (results.length > 0 && showSearchDropdown()) {
         // No selection yet — highlight the first result
         setSelectedResultIndex(0);
@@ -1400,7 +1400,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                             background: i() === selectedResultIndex() ? "rgba(31, 111, 235, 0.12)" : "transparent",
                             "border-left": i() === selectedResultIndex() ? "2px solid #58a6ff" : "2px solid transparent",
                           }}
-                          onMouseDown={() => { selectSearchResult(result.name); doPull(); }}
+                          onMouseDown={() => { selectSearchResult(result.name); doPull(result.name); }}
                           onMouseEnter={() => setSelectedResultIndex(i())}
                         >
                           <div style={{ flex: 1, "min-width": 0 }}>
@@ -1471,7 +1471,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               <button class="btn" onClick={() => { if (!pulling()) setShowPull(false); }} disabled={pulling()}>Cancel</button>
               <button
                 class="btn btn-primary"
-                onClick={doPull}
+                onClick={() => doPull()}
                 disabled={pulling() || !pullRef().trim()}
               >
                 {pulling() ? (<><Spinner size={12} />{" Pulling..."}</>) : "Pull"}
