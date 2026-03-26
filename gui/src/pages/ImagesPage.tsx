@@ -107,7 +107,11 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   onMount(() => {
     refresh();
-    // Auto-open pull dialog if requested (e.g. from Cmd+K → Pull Image)
+  });
+
+  // Auto-open pull dialog if requested (e.g. from Cmd+K → Pull Image)
+  // Uses createEffect so it works even when already on the images page
+  createEffect(() => {
     if (props.autoOpenPull) {
       setShowPull(true);
       props.onPullOpened?.();
@@ -373,26 +377,33 @@ export default function ImagesPage(props: ImagesPageProps) {
         setSelectedResultIndex(idx - 1);
       } else {
         setSelectedResultIndex(-1);
+        pullInputRef?.focus();
       }
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (idx >= 0 && idx < results.length) {
-        // A result is selected — use it as the pull target and pull
+        // A result is highlighted — pull it
         selectSearchResult(results[idx].name);
         doPull(results[idx].name);
       } else if (results.length > 0 && showSearchDropdown()) {
-        // No selection yet — select and pull the first result
+        // Results visible but none selected — pull the first result
         selectSearchResult(results[0].name);
         doPull(results[0].name);
-      } else if (pullRef().trim() && !pulling()) {
-        // No dropdown — pull whatever is typed (e.g. "nginx:latest")
-        doPull();
       }
+      // If no results yet (search pending or empty), do nothing — don't pull raw text
     } else if (e.key === "Escape") {
-      if (showSearchDropdown()) {
+      e.preventDefault();
+      if (idx >= 0) {
+        // A result is selected — deselect and re-focus input
+        setSelectedResultIndex(-1);
+        pullInputRef?.focus();
+      } else if (showSearchDropdown()) {
+        // Dropdown open — close it
         setShowSearchDropdown(false);
         setSelectedResultIndex(-1);
+        pullInputRef?.focus();
       } else if (!pulling()) {
+        // Nothing open — close the dialog
         setShowPull(false);
       }
     }
