@@ -1209,45 +1209,53 @@ export default function SettingsPage() {
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
               Connect to remote servers running the orca-daemon. Switch between hosts from the titlebar dropdown.
             </p>
-            <div class="card">
-              <Show when={remoteHosts().length > 0} fallback={
-                <div style={{ padding: "8px 0", color: "#8b949e" }}>No remote hosts configured.</div>
-              }>
-                <table class="table" style={{ margin: 0 }}>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>URL</th>
-                      <th>Tags</th>
-                      <th>TLS</th>
-                      <th style={{ "text-align": "right" }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={remoteHosts()}>
-                      {(host) => (
-                        <tr>
-                          <td style={{ "font-weight": 500 }}>{host.name}</td>
-                          <td class="mono" style={{ "font-size": "12px" }}>{host.url}</td>
-                          <td>
-                            <div style={{ display: "flex", "flex-wrap": "wrap", gap: "3px" }}>
-                              <For each={host.tags || []}>
-                                {(tag) => (
-                                  <span style={{
-                                    padding: "1px 6px",
-                                    "border-radius": "10px",
-                                    "font-size": "10px",
-                                    "font-weight": "500",
-                                    background: "rgba(88, 166, 255, 0.1)",
-                                    color: "#58a6ff",
-                                    border: "1px solid rgba(88, 166, 255, 0.15)",
-                                  }}>{tag}</span>
-                                )}
-                              </For>
-                            </div>
-                          </td>
-                          <td>{host.tls_verify ? "Verify" : "Skip"}</td>
-                          <td style={{ "text-align": "right", display: "flex", gap: "4px", "justify-content": "flex-end" }}>
+            <Show when={remoteHosts().length > 0} fallback={
+              <div style={{ padding: "16px 0", color: "#8b949e" }}>No remote hosts configured.</div>
+            }>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th style={{ "min-width": "200px" }}>URL</th>
+                    <th>Tags</th>
+                    <th style={{ width: "60px" }}>TLS</th>
+                    <th style={{ "text-align": "right", width: "80px" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={remoteHosts()}>
+                    {(host) => (
+                      <tr>
+                        <td style={{ "font-weight": 500 }}>{host.name}</td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{host.url}</td>
+                        <td>
+                          <div style={{ display: "flex", "flex-wrap": "wrap", gap: "3px" }}>
+                            <For each={host.tags || []}>
+                              {(tag) => (
+                                <span style={{
+                                  padding: "1px 6px",
+                                  "border-radius": "10px",
+                                  "font-size": "10px",
+                                  "font-weight": "500",
+                                  background: "rgba(88, 166, 255, 0.1)",
+                                  color: "#58a6ff",
+                                  border: "1px solid rgba(88, 166, 255, 0.15)",
+                                }}>{tag}</span>
+                              )}
+                            </For>
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{
+                            "font-size": "11px",
+                            padding: "2px 6px",
+                            "border-radius": "4px",
+                            background: host.tls_verify ? "rgba(63, 185, 80, 0.1)" : "rgba(248, 81, 73, 0.1)",
+                            color: host.tls_verify ? "#3fb950" : "#f85149",
+                          }}>{host.tls_verify ? "On" : "Off"}</span>
+                        </td>
+                        <td style={{ "text-align": "right" }}>
+                          <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end" }}>
                             <button
                               class="btn btn-sm"
                               onClick={() => startEditHost(host)}
@@ -1262,19 +1270,21 @@ export default function SettingsPage() {
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                             </button>
-                          </td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
-              </Show>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
 
-              <div style={{ "margin-top": "12px" }}>
-                <Show when={!showAddHost()}>
-                  <button class="btn btn-primary" onClick={() => { resetHostForm(); setShowAddHost(true); }}>Add Host</button>
-                </Show>
-              </div>
+            <div style={{ "margin-top": "12px" }}>
+              <Show when={!showAddHost()}>
+                <button class="btn btn-primary" onClick={() => { resetHostForm(); setShowAddHost(true); }}>Add Host</button>
+              </Show>
+            </div>
+            <div class="card">
 
               <Show when={showAddHost()}>
                 <div style={{ "margin-top": "12px", "border-top": "1px solid #21262d", "padding-top": "12px" }}>
@@ -1288,7 +1298,7 @@ export default function SettingsPage() {
                     </div>
                     <div class="form-group">
                       <label class="form-label">Daemon URL</label>
-                      <input class="form-input" type="text" placeholder="https://prod.example.com:9477/api/v1" value={hostUrl()} onInput={(e) => setHostUrl(e.currentTarget.value)} />
+                      <input class="form-input" type="text" placeholder="https://prod.example.com:9477" value={hostUrl()} onInput={(e) => setHostUrl(e.currentTarget.value)} />
                     </div>
                     <div class="form-group">
                       <label class="form-label">API Token {editingHost() ? "(leave blank to keep current)" : ""}</label>
