@@ -155,8 +155,8 @@ jobs:
         run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
       - name: Sign Windows installers
-        if: runner.os == 'Windows'
-        uses: sslcom/esigner-codesign@master
+        if: runner.os == 'Windows' && secrets.SSLCOM_USERNAME != ''
+        uses: sslcom/esigner-codesign@main
         with:
           command: batch_sign
           username: ${{ secrets.SSLCOM_USERNAME }}
