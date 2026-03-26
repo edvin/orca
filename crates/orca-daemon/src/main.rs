@@ -453,3 +453,4 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
     tracing::info!("Lima VM '{vm_name}' config updated — VM will be started next");
     true
 }
+

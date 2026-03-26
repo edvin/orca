@@ -61,6 +61,12 @@ provision:
       if ! grep -q host.docker.internal /etc/hosts; then
         echo "$HOST_IP host.docker.internal host.lima.internal" >> /etc/hosts
       fi
+
+      # Install HWE kernel for idmapped mount support (requires 6.12+)
+      # This gives us transparent UID remapping on VirtioFS mounts
+      if ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then
+        apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04
+      fi
 portForwards:
   # Forward the Docker/Podman socket
   - guestSocket: "/var/run/docker.sock"

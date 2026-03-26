@@ -493,6 +493,7 @@ pub async fn run_fix_streaming(
                         "--cpus=4",
                         "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
                         "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
+                        "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Install HWE kernel for idmapped mount support (6.12+)\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n"}]"##,
                         "template:docker"],
                     &tx
                 ).await;
@@ -1542,6 +1543,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                     "--memory=8", "--cpus=4",
                     "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
                     "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
+                    "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Install HWE kernel for idmapped mount support (6.12+)\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n"}]"##,
                     "template:docker"]).await {
                     Ok(_) => output.push_str("VM created.\n"),
                     Err(e) => output.push_str(&format!("VM creation failed: {e}\n")),
