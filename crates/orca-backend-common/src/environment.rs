@@ -132,29 +132,68 @@ pub async fn run_cmd_streaming(
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
+    // Track when the last output line was sent, for heartbeat
+    let last_output = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let update_last = |ts: &std::sync::Arc<std::sync::atomic::AtomicU64>| {
+        ts.store(
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    };
+    update_last(&last_output);
+
     // Read stdout and stderr concurrently, sending lines as they come
     let tx2 = tx.clone();
+    let last2 = last_output.clone();
     let stdout_task = tokio::spawn(async move {
         if let Some(out) = stdout {
             let mut reader = BufReader::new(out).lines();
             while let Ok(Some(line)) = reader.next_line().await {
+                update_last(&last2);
                 let _ = tx2.send(line).await;
             }
         }
     });
 
     let tx3 = tx.clone();
+    let last3 = last_output.clone();
     let stderr_task = tokio::spawn(async move {
         if let Some(err) = stderr {
             let mut reader = BufReader::new(err).lines();
             while let Ok(Some(line)) = reader.next_line().await {
+                update_last(&last3);
                 let _ = tx3.send(line).await;
+            }
+        }
+    });
+
+    // Heartbeat: send a dot every 5 seconds if no output has been produced
+    let tx_heartbeat = tx.clone();
+    let last_hb = last_output.clone();
+    let heartbeat = tokio::spawn(async move {
+        let mut elapsed = 0u64;
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            elapsed += 5;
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+            let last = last_hb.load(std::sync::atomic::Ordering::Relaxed);
+            if now - last >= 4 {
+                let msg = match elapsed {
+                    0..=30 => "    ...".to_string(),
+                    31..=60 => format!("    Still working... ({elapsed}s)"),
+                    61..=120 => format!("    Still working... ({elapsed}s) — installing packages"),
+                    _ => format!("    Still working... ({elapsed}s) — this can take a few minutes on first run"),
+                };
+                if tx_heartbeat.send(msg).await.is_err() {
+                    break;
+                }
             }
         }
     });
 
     let _ = stdout_task.await;
     let _ = stderr_task.await;
+    heartbeat.abort();
 
     let status = child.wait().await.map_err(|e| e.to_string())?;
     if status.success() {
@@ -481,7 +520,8 @@ pub async fn run_fix_streaming(
                 send(format!("    Lima VM '{}' already exists.\n", vm_name).into()).await;
             } else {
                 send("    Creating 'orca' VM with Apple Virtualization...\n".into()).await;
-                send("    This downloads a lightweight Linux image (~150MB)\n\n".into()).await;
+                send("    This downloads a Linux image, installs Docker, and upgrades the kernel.\n".into()).await;
+                send("    First-time setup takes 3-5 minutes.\n\n".into()).await;
 
                 // Create VM with --set to add port forwarding for 127.0.0.1-bound ports
                 // This matches Docker Desktop behavior where localhost:80 works from the host
@@ -526,7 +566,9 @@ pub async fn run_fix_streaming(
             // Reboot to activate HWE kernel (6.17) if it was just provisioned
             let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
             if kernel_ver.trim().starts_with("6.8.") || kernel_ver.trim().starts_with("6.5.") {
-                send(">>> Activating HWE kernel (reboot)...\n".into()).await;
+                send(">>> Activating upgraded kernel...\n".into()).await;
+                send("    Rebooting VM to switch from kernel ".into()).await;
+                send(format!("{} to HWE kernel. This takes ~30 seconds.\n", kernel_ver.trim())).await;
                 let _ = run_cmd("limactl", &["stop", vm_name]).await;
                 let _ = run_cmd_streaming("limactl", &["start", vm_name], &tx).await;
                 let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
