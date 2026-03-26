@@ -1063,40 +1063,24 @@ impl K8sManager for K3sManager {
     }
 
     async fn status(&self) -> anyhow::Result<ClusterStatus> {
-        let kubeconfig_path = self.kubeconfig_path();
-        let has_context = self.has_orca_context();
-        tracing::info!("K8s status: kubeconfig={}, has_orca_context={}", kubeconfig_path.display(), has_context);
-
-        // If the kubeconfig doesn't exist or doesn't have our context, K8s isn't enabled
-        if !kubeconfig_path.exists() || !has_context {
-            // Check if k3s is installed (for direct installs)
-            let installed = self.is_k3s_installed().await;
-            tracing::info!("K8s status: no kubeconfig found, is_k3s_installed={}", installed);
-            return Ok(ClusterStatus {
-                enabled: installed,
-                running: false,
-                version: None,
-                node_name: None,
-                node_status: None,
-                pods_running: 0,
-                pods_total: 0,
-                traefik_dashboard: None,
-                error: Some(format!("Kubeconfig not found at {}", kubeconfig_path.display())),
-            });
-        }
-
-        let client = match self.get_client().await {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::warn!("K8s status: kube client failed ({e}), trying kubectl CLI fallback");
-                // Fall back to kubectl CLI — handles exec-based auth (Docker Desktop, GKE, etc.)
-                return self.status_via_kubectl().await;
-            }
-        };
-
-        // On Windows, always use WSL commands — port forwarding to k3s is unreliable
+        // On Windows, k3s runs inside WSL — always check via WSL directly
+        // The Windows-side kubeconfig may not exist or may not be usable
         #[cfg(target_os = "windows")]
         {
+            let installed = self.is_k3s_installed().await;
+            if !installed {
+                return Ok(ClusterStatus {
+                    enabled: false,
+                    running: false,
+                    version: None,
+                    node_name: None,
+                    node_status: None,
+                    pods_running: 0,
+                    pods_total: 0,
+                    traefik_dashboard: None,
+                    error: None,
+                });
+            }
             tracing::info!("K8s status: checking via WSL kubectl...");
             // Ensure k3s is running
             let _ = Command::new("wsl")
@@ -1152,9 +1136,37 @@ impl K8sManager for K3sManager {
             });
         }
 
-        // Non-Windows: use the kube client directly
+        // Non-Windows: check kubeconfig, then use the kube client directly
         #[cfg(not(target_os = "windows"))]
         {
+            let kubeconfig_path = self.kubeconfig_path();
+            let has_context = self.has_orca_context();
+            tracing::info!("K8s status: kubeconfig={}, has_orca_context={}", kubeconfig_path.display(), has_context);
+
+            if !kubeconfig_path.exists() || !has_context {
+                let installed = self.is_k3s_installed().await;
+                tracing::info!("K8s status: no kubeconfig found, is_k3s_installed={}", installed);
+                return Ok(ClusterStatus {
+                    enabled: installed,
+                    running: false,
+                    version: None,
+                    node_name: None,
+                    node_status: None,
+                    pods_running: 0,
+                    pods_total: 0,
+                    traefik_dashboard: None,
+                    error: Some(format!("Kubeconfig not found at {}", kubeconfig_path.display())),
+                });
+            }
+
+            let client = match self.get_client().await {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("K8s status: kube client failed ({e}), trying kubectl CLI fallback");
+                    return self.status_via_kubectl().await;
+                }
+            };
+
             let api_result = client.apiserver_version().await;
             let running = api_result.is_ok();
             match &api_result {
