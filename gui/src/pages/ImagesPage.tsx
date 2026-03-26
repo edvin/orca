@@ -381,10 +381,11 @@ export default function ImagesPage(props: ImagesPageProps) {
         selectSearchResult(results[idx].name);
         doPull(results[idx].name);
       } else if (results.length > 0 && showSearchDropdown()) {
-        // No selection yet — highlight the first result
-        setSelectedResultIndex(0);
+        // No selection yet — select and pull the first result
+        selectSearchResult(results[0].name);
+        doPull(results[0].name);
       } else if (pullRef().trim() && !pulling()) {
-        // No dropdown — pull whatever is typed
+        // No dropdown — pull whatever is typed (e.g. "nginx:latest")
         doPull();
       }
     } else if (e.key === "Escape") {
