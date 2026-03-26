@@ -1524,66 +1524,6 @@ async fn run_in_image(
     Ok(stdout_lines)
 }
 
-/// Find the Docker socket path — checks DOCKER_HOST, common paths.
-fn find_docker_socket() -> String {
-    // 1. Check DOCKER_HOST env var (e.g., "unix:///Users/edvin/.docker/run/docker.sock")
-    if let Ok(host) = std::env::var("DOCKER_HOST") {
-        if let Some(path) = host.strip_prefix("unix://") {
-            if std::path::Path::new(path).exists() {
-                tracing::debug!("Docker socket from DOCKER_HOST: {path}");
-                return path.to_string();
-            }
-        }
-    }
-
-    // 2. Also check Docker context
-    let extended_path = format!(
-        "/opt/homebrew/bin:/usr/local/bin:{}",
-        std::env::var("PATH").unwrap_or_default()
-    );
-    if let Ok(output) = std::process::Command::new("docker")
-        .env("PATH", &extended_path)
-        .args(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"])
-        .output()
-    {
-        if output.status.success() {
-            let host = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if let Some(path) = host.strip_prefix("unix://") {
-                if std::path::Path::new(path).exists() {
-                    tracing::debug!("Docker socket from context: {path}");
-                    return path.to_string();
-                }
-            }
-        }
-    }
-
-    // 3. Check all common socket paths
-    let home = std::env::var("HOME").unwrap_or_default();
-    let candidates = [
-        "/var/run/docker.sock".to_string(),
-        format!("{home}/.docker/run/docker.sock"),
-        format!("{home}/.docker/desktop/docker.sock"),
-        format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock"),
-        format!("{home}/.lima/orca/sock/docker.sock"),
-        format!("{home}/.lima/docker/sock/docker.sock"),
-        format!("{home}/.lima/default/sock/docker.sock"),
-        format!("{home}/.colima/default/docker.sock"),
-        format!("{home}/.colima/docker/docker.sock"),
-        format!("{}/podman/podman.sock", std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/1000".to_string())),
-    ];
-
-    for path in &candidates {
-        if std::path::Path::new(path.as_str()).exists() {
-            tracing::debug!("Docker socket found at: {path}");
-            return path.clone();
-        }
-    }
-
-    // Fallback
-    tracing::warn!("No Docker socket found, defaulting to /var/run/docker.sock");
-    "/var/run/docker.sock".to_string()
-}
-
 /// Simple shell escaping for arguments.
 fn shell_escape(s: &str) -> String {
     if s.chars().all(|c| c.is_alphanumeric() || c == '/' || c == '.' || c == '-' || c == '_') {
@@ -1822,9 +1762,12 @@ async fn scan_image(
     let image_ref = resolve_image_ref(&state, &image_id).await?;
     let docker = &state.rt().await.docker;
 
-    // Find the Docker socket path — varies by platform and runtime
-    let socket_path = find_docker_socket();
-    tracing::debug!("scan_image: using docker socket at {socket_path}");
+    // The Docker socket to mount into the Trivy container.
+    // Inside a Lima/Colima VM, Docker's socket is always at /var/run/docker.sock
+    // even though the *host* accesses it via ~/.lima/orca/sock/docker.sock.
+    // We must use the in-VM path since the container runs inside the VM.
+    let socket_path = "/var/run/docker.sock".to_string();
+    tracing::debug!("scan_image: mounting docker socket at {socket_path}");
 
     // Run Trivy as a container with access to the Docker socket
     let config = Config {
