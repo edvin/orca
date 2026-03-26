@@ -306,6 +306,24 @@
       font-weight: 500;
     }
 
+    .download-links a.dl-recommended {
+      background: rgba(88, 166, 255, 0.12);
+      border-color: rgba(88, 166, 255, 0.4);
+      order: -1;
+    }
+
+    .download-links a.dl-recommended::after {
+      content: 'Recommended';
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #58a6ff;
+      background: rgba(88, 166, 255, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 4px;
+    }
+
     .hero-badges {
       display: flex;
       gap: 8px;
@@ -1441,6 +1459,25 @@ document.addEventListener('DOMContentLoaded', initGallery);
     document.getElementById('dl-version').textContent = version;
     document.getElementById('dl-date').textContent = 'Released ' + date;
     document.getElementById('dl-meta').style.display = 'flex';
+
+    // Detect OS and highlight the recommended download
+    const ua = navigator.userAgent || navigator.platform || '';
+    let osId = null;
+    if (/Mac/i.test(ua)) osId = 'dl-macos';
+    else if (/Win/i.test(ua)) osId = 'dl-windows';
+    else if (/Linux/i.test(ua)) osId = 'dl-linux';
+    if (osId) {
+      document.getElementById(osId).classList.add('dl-recommended');
+    }
+
+    // Also update the CTA download button at the bottom
+    const ctaBtn = document.querySelector('.cta .btn-primary');
+    if (ctaBtn && osId) {
+      const dlEl = document.getElementById(osId);
+      ctaBtn.href = dlEl.href;
+      const osName = osId === 'dl-macos' ? 'macOS' : osId === 'dl-windows' ? 'Windows' : 'Linux';
+      ctaBtn.textContent = 'Download for ' + osName;
+    }
   } catch (e) {
     // Silently fail — links still point to releases page
   }
