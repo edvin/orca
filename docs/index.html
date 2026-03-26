@@ -1227,8 +1227,29 @@
         </tbody>
       </table>
 
+      <div style="font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 4px;">Default UIDs by platform</div>
+      <p style="font-size: 13px; color: #8b949e; margin-bottom: 12px;">Use these when setting <code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">--user</code> or <code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">PUID/PGID</code>:</p>
+      <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+        <div style="background: #0d1117; border-radius: 8px; padding: 10px 16px; flex: 1; min-width: 120px; text-align: center;">
+          <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">macOS</div>
+          <div style="font-size: 16px; font-weight: 600; color: #58a6ff; font-family: monospace;">501:20</div>
+        </div>
+        <div style="background: #0d1117; border-radius: 8px; padding: 10px 16px; flex: 1; min-width: 120px; text-align: center;">
+          <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">Linux / WSL</div>
+          <div style="font-size: 16px; font-weight: 600; color: #3fb950; font-family: monospace;">1000:1000</div>
+        </div>
+        <div style="background: #0d1117; border-radius: 8px; padding: 10px 16px; flex: 1; min-width: 120px; text-align: center;">
+          <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">Docker root</div>
+          <div style="font-size: 16px; font-weight: 600; color: #d29922; font-family: monospace;">0:0</div>
+        </div>
+        <div style="background: #0d1117; border-radius: 8px; padding: 10px 16px; flex: 1; min-width: 120px; text-align: center;">
+          <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">node image</div>
+          <div style="font-size: 16px; font-weight: 600; color: #8b949e; font-family: monospace;">1000:1000</div>
+        </div>
+      </div>
+
       <div style="font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 12px;">Quick fixes</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
         <div style="background: #0d1117; border-radius: 8px; padding: 14px 16px;">
           <div style="font-size: 12px; font-weight: 600; color: #58a6ff; margin-bottom: 6px;">Use named volumes</div>
           <code style="font-size: 12px; color: #8b949e; display: block; white-space: pre; line-height: 1.5;">docker run -v mydata:/app/data myimage
@@ -1247,9 +1268,36 @@
     volumes: [./src:/app/src]</code>
         </div>
         <div style="background: #0d1117; border-radius: 8px; padding: 14px 16px;">
-          <div style="font-size: 12px; font-weight: 600; color: #58a6ff; margin-bottom: 6px;">Already works on WSL?</div>
-          <code style="font-size: 12px; color: #8b949e; display: block; white-space: pre; line-height: 1.5;">It works on Orca too.
-Same Linux filesystem semantics.</code>
+          <div style="font-size: 12px; font-weight: 600; color: #58a6ff; margin-bottom: 6px;">PUID/PGID (linuxserver.io)</div>
+          <code style="font-size: 12px; color: #8b949e; display: block; white-space: pre; line-height: 1.5;">docker run -e PUID=501 -e PGID=20 \
+  -v /path:/config myimage</code>
+        </div>
+      </div>
+
+      <div style="font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 12px;">Troubleshooting</div>
+      <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+        <div style="background: #0d1117; border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 12px; font-weight: 600; color: #f85149; margin-bottom: 6px;">chmod: Read-only file system</div>
+          <div style="font-size: 12px; color: #8b949e; margin-bottom: 8px;">Entrypoint runs <code style="color: #e6edf3; background: #161b22; padding: 1px 5px; border-radius: 3px;">chmod 0755 /path</code> on a VirtioFS mount. VirtioFS doesn't support permission changes on host files.</div>
+          <code style="font-size: 12px; color: #3fb950; display: block; white-space: pre; line-height: 1.5;"># Fix: make chmod non-fatal in your entrypoint
+chmod 0755 /root/ansible 2>/dev/null || true</code>
+        </div>
+        <div style="background: #0d1117; border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 12px; font-weight: 600; color: #f85149; margin-bottom: 6px;">Permission denied writing to mounted directory</div>
+          <div style="font-size: 12px; color: #8b949e; margin-bottom: 8px;">Container runs as UID 1000 but mounted files are owned by UID 501 (macOS).</div>
+          <code style="font-size: 12px; color: #3fb950; display: block; white-space: pre; line-height: 1.5;"># Fix: run as your host UID
+docker run --user 501:20 -v ./src:/app myimage</code>
+        </div>
+        <div style="background: #0d1117; border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 12px; font-weight: 600; color: #f85149; margin-bottom: 6px;">EACCES in Node.js / npm install</div>
+          <div style="font-size: 12px; color: #8b949e; margin-bottom: 8px;">The <code style="color: #e6edf3; background: #161b22; padding: 1px 5px; border-radius: 3px;">node</code> image user is UID 1000, doesn't match macOS UID 501.</div>
+          <code style="font-size: 12px; color: #3fb950; display: block; white-space: pre; line-height: 1.5;"># Fix: run as host user or root
+docker run --user 501:20 -v ./project:/app node:20 npm install
+docker run --user root -v ./project:/app node:20 npm install</code>
+        </div>
+        <div style="background: #0d1117; border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 12px; font-weight: 600; color: #d29922; margin-bottom: 6px;">Works on Docker Desktop but not on Orca?</div>
+          <div style="font-size: 12px; color: #8b949e;">Docker Desktop hides the issue with its proprietary FUSE layer. Apply one of the fixes above. <strong style="color: #e6edf3;">If it works on WSL, it works on Orca.</strong></div>
         </div>
       </div>
     </div>
