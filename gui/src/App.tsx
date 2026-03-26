@@ -265,7 +265,7 @@ export default function App() {
       <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => navigate(p)} />
       {daemonStatus() === "connecting" ? (
         <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "calc(100vh - 40px)", gap: "16px" }}>
-          <img src="/icon.png" alt="Orca" style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
+          <img src="/orca-logo-full.png" alt="Orca" style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
           <div style={{ color: "#8b949e", "font-size": "14px" }}>Starting Orca...</div>
         </div>
       ) : daemonStatus() !== "running" ? (
