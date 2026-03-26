@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { Terminal } from "@xterm/xterm";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke } from "@tauri-apps/api/core";
@@ -75,6 +76,7 @@ export default function K8sTerminal(props: K8sTerminalProps) {
 
     fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+    term.loadAddon(new CanvasAddon());
     term.loadAddon(new WebLinksAddon());
     term.open(termDiv!);
     fitAddon.fit();
@@ -106,6 +108,24 @@ export default function K8sTerminal(props: K8sTerminalProps) {
 
     ws.onclose = () => term!.writeln("\r\n\x1b[90mConnection closed\x1b[0m");
     ws.onerror = () => term!.writeln("\r\n\x1b[31mWebSocket error\x1b[0m");
+
+    // Ctrl+C: copy selection if any, otherwise send SIGINT
+    // Ctrl+V: paste from clipboard into terminal
+    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.type !== "keydown") return true;
+      if (e.ctrlKey && e.key === "c" && term!.hasSelection()) {
+        navigator.clipboard.writeText(term!.getSelection());
+        term!.clearSelection();
+        return false;
+      }
+      if (e.ctrlKey && e.key === "v") {
+        navigator.clipboard.readText().then((text) => {
+          if (ws?.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(text));
+        });
+        return false;
+      }
+      return true;
+    });
 
     term.onData((data: string) => {
       if (ws?.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(data));
