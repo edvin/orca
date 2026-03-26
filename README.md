@@ -153,177 +153,26 @@ When you first launch Orca on macOS, the setup wizard installs (via Homebrew):
 - **Lima** — lightweight VM manager using Apple's Virtualization.framework
 - **Docker CLI** + **Docker Compose** + **Docker Buildx** — the standard Docker tools
 - A Linux VM named "orca" with 8GB RAM, 4 CPUs, VirtioFS mounts, and port forwarding
+- **HWE kernel (6.17)** — upgraded from Ubuntu's default 6.8 for full VirtioFS permission support
 
 ### Port forwarding
 
 Container ports are automatically forwarded to your Mac. If you run `docker run -p 8080:80 nginx`, you can access it at `http://localhost:8080` — same as Docker Desktop.
 
-Orca configures this automatically. If you're upgrading from an older version, the daemon reconciles your VM config on startup and applies any missing settings.
+### Bind mount permissions
 
-### File permissions (bind mounts)
+**Bind mount permissions just work.** Orca provisions a modern Linux kernel (6.17) in the Lima VM, which resolves VirtioFS permission issues that affect older kernels. With the HWE kernel:
 
-> **This is the most important difference from Docker Desktop.**
+- **chmod/chown** work on bind-mounted host directories
+- **Root and non-root containers** can read/write bind mounts
+- **Entrypoint scripts** that fix permissions run without errors
+- No `--user` flags, no `PUID`/`PGID` env vars, no workarounds needed
 
-When you bind-mount a host directory into a container (e.g., `-v /Users/me/code:/app`), file permissions behave differently than Docker Desktop:
+This gives Orca the same bind mount behavior as Docker Desktop — without Docker Desktop's proprietary filesystem layer.
 
-| | Docker Desktop / OrbStack | Orca (Lima) / WSL / Native Linux |
-|---|---|---|
-| **UID mapping** | Transparent — files appear owned by the container user regardless of host UID | Raw Linux permissions — host UID (501 on macOS) is visible inside the container |
-| **chmod/chown** | Works transparently via proprietary FUSE layer | May fail on VirtioFS mounts (`Read-only file system` for permission changes) |
-| **Impact** | "Just works" for all projects | Some projects need adjustments (same ones that need fixes on WSL/native Linux) |
+### Auto-reconciliation
 
-**Docker Desktop and OrbStack use a proprietary filesystem abstraction layer** that remaps UIDs and intercepts permission calls. This is why bind mounts "just work" on those tools. Lima uses raw VirtioFS without this layer — you get native Linux filesystem semantics.
-
-### What this means in practice
-
-**Most containers work fine** — anything using named volumes (`-v mydata:/data`), network-based storage, or running as root is unaffected.
-
-**Projects that may need adjustments:**
-- Containers with entrypoint scripts that `chmod` or `chown` mounted directories
-- Non-root containers writing to bind-mounted host directories
-- Development containers that expect the mounted source code to be owned by a specific UID
-
-### How to fix permission issues
-
-These are the same fixes used for WSL and native Linux Docker — any project already working on those platforms works on Orca too.
-
-**Option 1: Run as your host UID**
-```bash
-# Find your macOS UID (usually 501)
-id -u
-
-# Run the container with matching UID
-docker run --user 501:20 -v /Users/me/code:/app myimage
-```
-> **Caveat:** This breaks containers that need root for PID 1 (e.g., nginx binding port 80, apt-get in entrypoints). Only use for dev containers where you control the image.
-
-**Option 2: Fix permissions in the entrypoint**
-```dockerfile
-# In your Dockerfile or entrypoint script
-RUN chmod -R 777 /app  # or use a more targeted approach
-```
-
-**Option 3: Use named volumes instead of bind mounts**
-```bash
-# Instead of:  -v /Users/me/data:/app/data
-# Use:         -v mydata:/app/data
-docker run -v mydata:/app/data myimage
-```
-Named volumes are managed entirely inside the VM — no permission issues.
-
-**Option 4: Set the container user to match the host**
-```yaml
-# docker-compose.yml
-services:
-  app:
-    image: myimage
-    user: "501:20"  # macOS default UID:GID
-    volumes:
-      - ./src:/app/src
-```
-
-### UID/GID defaults by platform
-
-Understanding these defaults helps you set the right `--user` flag or `PUID`/`PGID` values:
-
-| Platform | Default UID | Default GID | Notes |
-|----------|------------|------------|-------|
-| **macOS** | 501 | 20 (staff) | First user is always 501 |
-| **Linux** | 1000 | 1000 | User Private Group |
-| **WSL2** | 1000 | 1000 | Same as native Linux |
-| **Docker root** | 0 | 0 | No remapping by default |
-| **node image** | 1000 | 1000 | Built-in `node` user |
-| **linuxserver.io** | 911 | 911 | Overridden by PUID/PGID env vars |
-
-### The PUID/PGID pattern (linuxserver.io)
-
-Many popular Docker images (especially from [linuxserver.io](https://www.linuxserver.io/)) support `PUID` and `PGID` environment variables. The entrypoint runs as root, creates an internal user with your UID/GID, chowns the data directories, then drops to that user:
-
-```bash
-# macOS
-docker run -e PUID=501 -e PGID=20 -v /path:/config lscr.io/linuxserver/someimage
-
-# Linux / WSL
-docker run -e PUID=1000 -e PGID=1000 -v /path:/config lscr.io/linuxserver/someimage
-```
-
-This is the cleanest approach — the container runs as root initially (so port binding and package installs work), then drops to your UID for file operations.
-
-### Troubleshooting
-
-#### `chmod: changing permissions of '/path': Read-only file system`
-
-**Cause:** An entrypoint script runs `chmod` or `chown` on a VirtioFS bind mount. VirtioFS doesn't support permission changes on mounted host files.
-
-**Example:** `docker run -v .:/root/ansible ansible-image` where the entrypoint does `chmod 0755 /root/ansible`.
-
-**Fix (in your entrypoint):**
-```bash
-# Make the chmod non-fatal
-chmod 0755 /root/ansible 2>/dev/null || true
-```
-
-Or better — check if it's needed:
-```bash
-# Only chmod if permissions don't already match
-[ "$(stat -c %a /root/ansible)" != "755" ] && chmod 0755 /root/ansible 2>/dev/null || true
-```
-
-#### `Permission denied` when container writes to mounted directory
-
-**Cause:** Container runs as a different UID than the host user who owns the mounted files. For example, a container running as UID 1000 (the `node` user) can't write to files owned by UID 501 (macOS default).
-
-**Fix:**
-```bash
-# Run as your macOS user
-docker run --user 501:20 -v ./src:/app myimage
-
-# Or in docker-compose.yml
-services:
-  app:
-    user: "501:20"
-    volumes: [./src:/app]
-```
-
-#### `No such file or directory` for `/home/user` inside container
-
-**Cause:** Using `--user 501:20` but UID 501 doesn't exist in the container's `/etc/passwd`, so `$HOME` is unset.
-
-**Fix:**
-```bash
-# Set HOME explicitly
-docker run --user 501:20 -e HOME=/tmp -v ./src:/app myimage
-```
-
-#### Container works on Docker Desktop but not on Orca/WSL
-
-**Cause:** Docker Desktop's proprietary filesystem layer hides permission issues. The container has a bug — it just doesn't surface on Docker Desktop.
-
-**Fix:** Apply one of the options above. If the project uses `PUID`/`PGID`, set them to your host UID. If not, use `--user`. **The rule of thumb: if it works on WSL, it works on Orca.**
-
-#### `EACCES: permission denied` in Node.js/npm containers
-
-**Cause:** The `node` image's built-in user is UID 1000. On macOS, your files are owned by UID 501.
-
-**Fix:**
-```bash
-# Run as your macOS UID
-docker run --user 501:20 -v ./project:/app -w /app node:20 npm install
-
-# Or use root (fine for development)
-docker run --user root -v ./project:/app -w /app node:20 npm install
-```
-
-### For project maintainers
-
-If you maintain a project that uses Docker for development, consider these practices to support all Docker runtimes (not just Docker Desktop):
-
-1. **Don't assume UID 0 (root) owns mounted files** — use `gosu` or `fixuid` in entrypoints
-2. **Make `chmod`/`chown` calls non-fatal** — add `2>/dev/null || true` so they don't break on VirtioFS or NFS
-3. **Support PUID/PGID** — the linuxserver.io pattern is widely understood and easy to add
-4. **Prefer named volumes for data** and bind mounts only for source code
-5. **Document the required `--user` flag** if your container runs as non-root and writes to mounts
-6. **Test on WSL** — if it works there, it works on Lima/Orca too
+On every startup, the Orca daemon checks the Lima VM config and automatically applies any missing settings (port forwarding, mounts, kernel provisioning). When you upgrade Orca, your VM is patched automatically — no manual recreation needed.
 
 ## Screenshots
 
