@@ -6,7 +6,7 @@ Wants=docker.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/orca-daemon --host 0.0.0.0
+ExecStart=/usr/local/bin/orca-daemon --bind 0.0.0.0
 Restart=always
 RestartSec=5
 User=root
