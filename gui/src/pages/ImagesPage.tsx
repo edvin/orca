@@ -876,7 +876,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         fallback={
           <div class="empty">
             <p class="empty-title">No images found</p>
-            <p>Pull an image to get started.</p>
+            <p>Search Docker Hub using the Pull button above, or deploy from the App Catalog.</p>
           </div>
         }
       >

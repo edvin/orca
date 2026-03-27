@@ -1449,16 +1449,49 @@ export default function SettingsPage() {
         <Show when={tab() === "auto-deploy"}>
           <div class="settings-section">
             <h2 class="settings-section-title">Auto-Deploy</h2>
-            <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "8px", "line-height": "1.5" }}>
-              Automatically redeploy containers when a new image is pushed. Add a GitHub webhook pointing to your daemon's webhook URL.
+            <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
+              Push code to GitHub and your containers update automatically. Orca receives a webhook when a new image is pushed, pulls it, and redeploys matching containers with the same configuration.
             </p>
+
+            {/* Setup guide */}
+            <Show when={deployRules().length === 0}>
+              <div style={{ background: "#161b22", border: "1px solid #30363d", "border-radius": "10px", padding: "20px 24px", "margin-bottom": "20px" }}>
+                <div style={{ "font-size": "14px", "font-weight": 600, color: "#e6edf3", "margin-bottom": "16px" }}>Quick setup</div>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "14px" }}>
+                  <div style={{ display: "flex", gap: "12px", "align-items": "flex-start" }}>
+                    <span style={{ background: "#58a6ff", color: "#fff", width: "22px", height: "22px", "border-radius": "50%", display: "flex", "align-items": "center", "justify-content": "center", "font-size": "12px", "font-weight": 600, "flex-shrink": 0 }}>1</span>
+                    <div>
+                      <div style={{ "font-size": "13px", color: "#e6edf3", "font-weight": 500 }}>Create a deploy rule below</div>
+                      <div style={{ "font-size": "12px", color: "#8b949e" }}>Set the image pattern (e.g., <code style={{ color: "#58a6ff" }}>ghcr.io/myorg/myapp</code>) and tag filter (e.g., <code style={{ color: "#58a6ff" }}>v*</code> for version tags)</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", "align-items": "flex-start" }}>
+                    <span style={{ background: "#58a6ff", color: "#fff", width: "22px", height: "22px", "border-radius": "50%", display: "flex", "align-items": "center", "justify-content": "center", "font-size": "12px", "font-weight": 600, "flex-shrink": 0 }}>2</span>
+                    <div>
+                      <div style={{ "font-size": "13px", color: "#e6edf3", "font-weight": 500 }}>Add a webhook in your GitHub repo</div>
+                      <div style={{ "font-size": "12px", color: "#8b949e" }}>
+                        Go to your repo's Settings &rarr; Webhooks &rarr; Add webhook. Set the payload URL to your daemon's webhook endpoint, content type to <code style={{ color: "#58a6ff" }}>application/json</code>, and select the <strong>Packages</strong> event.
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", "align-items": "flex-start" }}>
+                    <span style={{ background: "#3fb950", color: "#fff", width: "22px", height: "22px", "border-radius": "50%", display: "flex", "align-items": "center", "justify-content": "center", "font-size": "12px", "font-weight": 600, "flex-shrink": 0 }}>3</span>
+                    <div>
+                      <div style={{ "font-size": "13px", color: "#e6edf3", "font-weight": 500 }}>Push and watch</div>
+                      <div style={{ "font-size": "12px", color: "#8b949e" }}>When GitHub Actions builds and pushes your image, Orca automatically pulls it and redeploys the matching container. Check the deploy history below for results.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Show>
+
             <div style={{ background: "#0d1117", "border-radius": "8px", padding: "12px 16px", "margin-bottom": "16px", "font-size": "12px" }}>
-              <div style={{ color: "#8b949e", "margin-bottom": "4px" }}>Webhook URL (add this in your GitHub repo settings):</div>
+              <div style={{ color: "#8b949e", "margin-bottom": "4px" }}>Webhook URL for your GitHub repo:</div>
               <code class="mono" style={{ color: "#58a6ff", "word-break": "break-all" }}>
                 {"<your-daemon-url>/api/v1/webhooks/github"}
               </code>
               <div style={{ color: "#6e7681", "margin-top": "6px", "font-size": "11px" }}>
-                Event type: <strong style={{ color: "#8b949e" }}>Packages</strong> &middot; Content type: <strong style={{ color: "#8b949e" }}>application/json</strong>
+                Event: <strong style={{ color: "#8b949e" }}>Packages</strong> &middot; Content type: <strong style={{ color: "#8b949e" }}>application/json</strong> &middot; For Docker Hub use <code style={{ color: "#6e7681" }}>/webhooks/dockerhub</code>
               </div>
             </div>
 
@@ -1531,18 +1564,18 @@ export default function SettingsPage() {
                   <div class="form-group">
                     <label class="form-label">Image Pattern</label>
                     <input class="form-input mono" type="text" placeholder="ghcr.io/myorg/myapp" value={ruleImage()} onInput={(e) => setRuleImage(e.currentTarget.value)} />
-                    <span class="form-hint">The image name without tag. Matches if the pushed image contains this pattern.</span>
+                    <span class="form-hint">The full image name without tag, e.g. ghcr.io/myorg/api. Matches any pushed image containing this text.</span>
                   </div>
                   <div class="form-row">
                     <div class="form-group" style={{ flex: 1 }}>
                       <label class="form-label">Tag Filter</label>
                       <input class="form-input mono" type="text" placeholder="latest, v*, main" value={ruleTagFilter()} onInput={(e) => setRuleTagFilter(e.currentTarget.value)} />
-                      <span class="form-hint">Empty or * for any tag. Use v* for version tags only.</span>
+                      <span class="form-hint">* = any tag, v* = version tags (v1.0, v2.3.1), latest = only latest, main = branch</span>
                     </div>
                     <div class="form-group" style={{ flex: 1 }}>
                       <label class="form-label">Container Names</label>
                       <input class="form-input" type="text" placeholder="Leave empty to match by image" value={ruleContainers()} onInput={(e) => setRuleContainers(e.currentTarget.value)} />
-                      <span class="form-hint">Comma-separated. Empty = any container running this image.</span>
+                      <span class="form-hint">e.g. api, worker. Leave empty to redeploy any container using this image.</span>
                     </div>
                   </div>
                   <div class="settings-row" style={{ padding: "4px 0" }}>

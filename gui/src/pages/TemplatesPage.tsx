@@ -456,7 +456,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         <button class="btn btn-sm" onClick={props.add} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.ports().length > 0} fallback={
-        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No port mappings configured</div>
+        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No port mappings. Add one to expose a container port to the host (e.g., 8080:80).</div>
       }>
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>
@@ -486,7 +486,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         <button class="btn btn-sm" onClick={props.add} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.env().length > 0} fallback={
-        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No environment variables configured</div>
+        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No environment variables. Add KEY=VALUE pairs to configure the application.</div>
       }>
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>
@@ -521,7 +521,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         <button class="btn btn-sm" onClick={props.add} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.volumes().length > 0} fallback={
-        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No volumes configured</div>
+        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No volumes. Add one to persist data (e.g., data:/var/lib/myapp).</div>
       }>
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>

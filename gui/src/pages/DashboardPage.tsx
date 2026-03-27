@@ -379,7 +379,7 @@ export default function DashboardPage(props: DashboardPageProps) {
         <div class="consumer-card">
           <div class="consumer-title">Top CPU Consumers</div>
           <Show when={topCpu().length > 0} fallback={
-            <div style={{ color: "#484f58", "font-size": "12px" }}>No running containers</div>
+            <div style={{ color: "#484f58", "font-size": "12px" }}>No running containers. Start a container to see resource usage here.</div>
           }>
             <table class="table" style={{ "font-size": "12px" }}>
               <thead>
@@ -423,7 +423,7 @@ export default function DashboardPage(props: DashboardPageProps) {
         <div class="consumer-card">
           <div class="consumer-title">Top Memory Consumers</div>
           <Show when={topMemory().length > 0} fallback={
-            <div style={{ color: "#484f58", "font-size": "12px" }}>No running containers</div>
+            <div style={{ color: "#484f58", "font-size": "12px" }}>No running containers. Start a container to see resource usage here.</div>
           }>
             <table class="table" style={{ "font-size": "12px" }}>
               <thead>

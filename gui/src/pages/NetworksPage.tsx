@@ -199,7 +199,7 @@ export default function NetworksPage() {
             <div class="empty">
               <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="12" y2="12"/><path d="M12 12L5 17"/><path d="M12 12l7 5"/></svg></div>
               <p class="empty-title">No custom networks</p>
-              <p>The default bridge, host, and none networks are managed by Docker</p>
+              <p>Create a network to connect containers that need to communicate. The default bridge, host, and none networks are managed by Docker.</p>
             </div>
           }
         >
