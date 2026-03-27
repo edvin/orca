@@ -128,6 +128,21 @@
 Your browser → localhost:8080 → [WebSocket tunnel] → Remote daemon → K8s service:80
 ```
 
+### Auto-Deploy (GitHub Webhooks)
+
+- **Push-to-deploy** — push code to GitHub, containers update automatically
+- GitHub Actions builds image → pushes to ghcr.io → webhook → daemon pulls + redeploys
+- **Tag filters** — deploy on `v*` (version tags), `latest`, `main`, or `*` (any push)
+- **Container targeting** — redeploy specific containers by name, or auto-match by image
+- **Config preservation** — ports, volumes, env vars, labels, restart policy all carried over
+- **Deploy history** — success/failure log with timestamps
+- **HMAC-SHA256 signature validation** — rejects unsigned/tampered webhooks
+- **Docker Hub support** — works with Docker Hub webhooks too
+
+```
+git push → GitHub Actions → ghcr.io → Webhook → Orca daemon → Pull + Redeploy
+```
+
 ### Security
 
 - **Mandatory API token authentication** — auto-generated on first run, required on every request

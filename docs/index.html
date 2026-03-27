@@ -1114,7 +1114,7 @@
 
       <!-- Category: Fleet -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">13</span></span>
+        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">15</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -1130,7 +1130,9 @@
       <div class="ft-row"><span><strong>One-liner server install</strong> — <code>apt install orca-daemon</code> via Cloudsmith</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Hot-swap reconnect</strong> — Diagnose button finds Docker and reconnects instantly</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>TLS ready</strong> — Caddy/nginx reverse proxy examples, bearer token auth</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row" style="border: none;"><span><strong>Remote port forwarding</strong> — WebSocket TCP tunnel to any service on any host, no VPN needed</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Remote port forwarding</strong> — WebSocket TCP tunnel to any service on any host, no VPN needed</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Auto-deploy</strong> — GitHub/Docker Hub webhook triggers pull + redeploy with config preservation</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row" style="border: none;"><span><strong>Tag filters</strong> — deploy on v* (versions), latest, branch names, or any push</span><span class="ft-check ft-unique">&#10003;</span></div>
       </div>
 
   </div>
@@ -1219,6 +1221,66 @@
     </div>
     <div class="highlight-screenshot" style="direction: ltr;">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/00-fleet.png" alt="Fleet dashboard with host cards, tags, and status" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<!-- Auto-Deploy -->
+<section class="showcase" style="padding-bottom: 0;">
+  <div class="section-header">
+    <h2>Push to deploy</h2>
+    <p>Push code to GitHub. Containers update automatically on your servers.</p>
+  </div>
+
+  <div style="max-width: 900px; margin: 0 auto; padding: 0 24px;">
+    <!-- Flow diagram -->
+    <div style="display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 40px; flex-wrap: wrap;">
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 14px 20px; text-align: center;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">You push code</div>
+        <div style="font-size: 14px; font-weight: 600; color: #e6edf3; font-family: monospace;">git push</div>
+      </div>
+      <div style="padding: 0 6px; color: #30363d; font-size: 20px;">&#x2192;</div>
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 14px 20px; text-align: center;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">GitHub Actions</div>
+        <div style="font-size: 14px; font-weight: 600; color: #e6edf3;">Build &amp; Push</div>
+      </div>
+      <div style="padding: 0 6px; color: #30363d; font-size: 20px;">&#x2192;</div>
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 14px 20px; text-align: center;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">ghcr.io</div>
+        <div style="font-size: 14px; font-weight: 600; color: #e6edf3;">New Image</div>
+      </div>
+      <div style="padding: 0 6px; color: #30363d; font-size: 20px;">&#x2192;</div>
+      <div style="background: linear-gradient(135deg, rgba(63, 185, 80, 0.12), rgba(88, 166, 255, 0.12)); border: 1px solid rgba(63, 185, 80, 0.3); border-radius: 12px; padding: 14px 20px; text-align: center;">
+        <div style="font-size: 11px; color: #3fb950; margin-bottom: 4px;">Webhook</div>
+        <div style="font-size: 14px; font-weight: 600; color: #e6edf3;">Orca Daemon</div>
+      </div>
+      <div style="padding: 0 6px; color: #30363d; font-size: 20px;">&#x2192;</div>
+      <div style="background: #161b22; border: 1px solid #3fb95066; border-radius: 12px; padding: 14px 20px; text-align: center;">
+        <div style="font-size: 11px; color: #3fb950; margin-bottom: 4px;">Auto</div>
+        <div style="font-size: 14px; font-weight: 600; color: #3fb950;">Redeploy</div>
+      </div>
+    </div>
+
+    <!-- Feature cards -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 40px;">
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
+        <div style="font-size: 14px; font-weight: 600; color: #3fb950; margin-bottom: 8px;">Zero-config CD</div>
+        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
+          Add a webhook URL to your GitHub repo. Set a deploy rule in Orca. That's it. No ArgoCD, no Watchtower, no YAML pipelines.
+        </div>
+      </div>
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
+        <div style="font-size: 14px; font-weight: 600; color: #58a6ff; margin-bottom: 8px;">Smart tag filters</div>
+        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
+          Deploy on version tags (<code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">v*</code>), specific branches (<code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">main</code>), or every push. One rule per environment.
+        </div>
+      </div>
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
+        <div style="font-size: 14px; font-weight: 600; color: #d29922; margin-bottom: 8px;">Config preserved</div>
+        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
+          Ports, volumes, env vars, labels, restart policy — all carried over. Only the image changes. Signed webhook validation prevents unauthorized deploys.
+        </div>
+      </div>
     </div>
   </div>
 </section>
