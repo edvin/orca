@@ -9,10 +9,19 @@ use tauri::Manager;
 
 use crate::daemon;
 
-/// Active port-forward processes, keyed by "namespace/service/port"
-static PORT_FORWARDS: OnceLock<Mutex<HashMap<String, std::process::Child>>> = OnceLock::new();
+/// Active port-forward tunnels, keyed by "namespace/service/port".
+/// Each entry holds a tokio task handle that is aborted on drop.
+struct TunnelHandle(tokio::task::JoinHandle<()>);
 
-fn port_forward_map() -> &'static Mutex<HashMap<String, std::process::Child>> {
+impl Drop for TunnelHandle {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+static PORT_FORWARDS: OnceLock<Mutex<HashMap<String, TunnelHandle>>> = OnceLock::new();
+
+fn port_forward_map() -> &'static Mutex<HashMap<String, TunnelHandle>> {
     PORT_FORWARDS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -1527,7 +1536,7 @@ pub async fn k8s_helm_install(
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
-// --- K8s Port Forwarding ---
+// --- K8s Port Forwarding (WebSocket tunnel) ---
 
 #[tauri::command]
 pub async fn k8s_port_forward(
@@ -1537,16 +1546,11 @@ pub async fn k8s_port_forward(
     local_port: Option<u16>,
     expose: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    // Port forwarding only works on local host — it spawns a local kubectl process
-    if DAEMON_URL_OVERRIDE.read().map(|g| g.is_some()).unwrap_or(false) {
-        return Err("Port forwarding is not supported for remote hosts. Connect to the server directly.".to_string());
-    }
-
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&service)?;
     let local = local_port.unwrap_or(port);
     let key = format!("{namespace}/{service}/{local}");
-    let address = if expose.unwrap_or(false) { "0.0.0.0" } else { "127.0.0.1" };
+    let address: &str = if expose.unwrap_or(false) { "0.0.0.0" } else { "127.0.0.1" };
 
     {
         let map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
@@ -1555,34 +1559,98 @@ pub async fn k8s_port_forward(
         }
     }
 
-    let child = if cfg!(target_os = "windows") {
-        let mut cmd = std::process::Command::new("wsl");
-        cmd.args(["-u", "root", "--", "k3s", "kubectl", "port-forward",
-                &format!("svc/{service}"), &format!("{local}:{port}"),
-                "-n", &namespace, &format!("--address={address}")])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    // Build the WebSocket tunnel URL from the daemon URL
+    let base_url = daemon_url();
+    let token = active_api_token().unwrap_or_default();
+    let ws_base = base_url.replace("https://", "wss://").replace("http://", "ws://");
+    let target_host = format!("{service}.{namespace}.svc.cluster.local");
+
+    let tls_verify = DAEMON_URL_OVERRIDE.read()
+        .map(|g| g.as_ref().map(|(_, _, v)| *v).unwrap_or(true))
+        .unwrap_or(true);
+
+    // Bind local TCP listener
+    let listener = tokio::net::TcpListener::bind((address, local)).await
+        .map_err(|e| format!("Failed to bind port {local}: {e}"))?;
+
+    let task = tokio::spawn(async move {
+        loop {
+            let (tcp_stream, _) = match listener.accept().await {
+                Ok(conn) => conn,
+                Err(_) => break,
+            };
+            let url = format!("{ws_base}/tunnel?host={}&port={}&token={}",
+                urlencoding::encode(&target_host),
+                port,
+                urlencoding::encode(&token),
+            );
+            let tls_v = tls_verify;
+            tokio::spawn(async move {
+                if let Err(e) = proxy_tcp_to_ws(tcp_stream, &url, tls_v).await {
+                    tracing::warn!("Tunnel proxy error: {e}");
+                }
+            });
         }
-        cmd.spawn()
-            .map_err(|e| format!("Failed to start port-forward: {e}"))?
-    } else {
-        std::process::Command::new("kubectl")
-            .args(["port-forward", &format!("svc/{service}"),
-                &format!("{local}:{port}"), "-n", &namespace, &format!("--address={address}")])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|e| format!("Failed to start port-forward: {e}"))?
-    };
+    });
 
-    let pid = child.id();
-    port_forward_map().lock().map_err(|e| format!("{e}"))?.insert(key, child);
+    port_forward_map().lock().map_err(|e| format!("{e}"))?.insert(key, TunnelHandle(task));
 
-    Ok(serde_json::json!({ "status": "started", "port": local, "pid": pid }))
+    Ok(serde_json::json!({ "status": "started", "port": local, "mode": "tunnel" }))
+}
+
+/// Proxy a single TCP connection bidirectionally through a WebSocket tunnel.
+async fn proxy_tcp_to_ws(
+    tcp_stream: tokio::net::TcpStream,
+    ws_url: &str,
+    _tls_verify: bool,
+) -> Result<(), String> {
+    use tokio_tungstenite::tungstenite::Message as WsMessage;
+    use futures_util::{SinkExt as _, StreamExt as _};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url).await
+        .map_err(|e| format!("WebSocket connect failed: {e}"))?;
+
+    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+    let (mut tcp_read, mut tcp_write) = tcp_stream.into_split();
+
+    // TCP → WebSocket
+    let tcp_to_ws = tokio::spawn(async move {
+        let mut buf = vec![0u8; 32768];
+        loop {
+            match tcp_read.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    if ws_sender.send(WsMessage::Binary(buf[..n].to_vec().into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        let _ = ws_sender.close().await;
+    });
+
+    // WebSocket → TCP
+    let ws_to_tcp = tokio::spawn(async move {
+        while let Some(Ok(msg)) = ws_receiver.next().await {
+            match msg {
+                WsMessage::Binary(data) => {
+                    if tcp_write.write_all(&data).await.is_err() {
+                        break;
+                    }
+                }
+                WsMessage::Close(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = tcp_to_ws => {},
+        _ = ws_to_tcp => {},
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1595,10 +1663,7 @@ pub async fn k8s_stop_port_forward(
     validate_k8s_name(&service)?;
     let key = format!("{namespace}/{service}/{port}");
     let mut map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
-    if let Some(mut child) = map.remove(&key) {
-        let _ = child.kill();
-        let _ = child.wait();
-    }
+    map.remove(&key); // Drop triggers task.abort()
     Ok(())
 }
 

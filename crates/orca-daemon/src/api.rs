@@ -72,7 +72,7 @@ pub async fn auth_middleware(
     }
 
     // Allow WebSocket endpoints — they do their own auth via query param
-    if req.uri().path().ends_with("/terminal") || req.uri().path().ends_with("/enable-stream") {
+    if req.uri().path().ends_with("/terminal") || req.uri().path().ends_with("/enable-stream") || req.uri().path().ends_with("/tunnel") {
         return Ok(next.run(req).await);
     }
 
@@ -188,6 +188,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/apply", post(k8s_apply))
         .route("/k8s/yaml/{kind}/{namespace}/{name}", get(k8s_get_yaml))
         .route("/k8s/events/{namespace}", get(k8s_events))
+        // TCP tunnel (WebSocket-based port forwarding for remote hosts)
+        .route("/tunnel", get(tunnel_ws))
         .route("/k8s/namespaces", post(k8s_create_namespace))
         .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
         .route("/k8s/configmaps/{namespace}", get(k8s_configmaps))
@@ -3633,6 +3635,99 @@ async fn save_lima_settings(
     }
 
     Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
+// --- TCP Tunnel (WebSocket-based port forwarding) ---
+
+#[derive(Deserialize)]
+struct TunnelParams {
+    host: String,
+    port: u16,
+    token: String,
+}
+
+async fn tunnel_ws(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<TunnelParams>,
+    ws: WebSocketUpgrade,
+) -> Result<impl IntoResponse, StatusCode> {
+    // Auth via query param (WebSocket can't send headers in browser)
+    use subtle::ConstantTimeEq;
+    let token = &params.token;
+    if state.api_token.is_empty()
+        || state.api_token.len() != token.len()
+        || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1
+    {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // Basic validation
+    if params.port == 0 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    tracing::info!("Tunnel: opening connection to {}:{}", params.host, params.port);
+    Ok(ws.on_upgrade(move |socket| handle_tunnel(socket, params.host, params.port)))
+}
+
+async fn handle_tunnel(socket: WebSocket, host: String, port: u16) {
+    // Connect to the target TCP service
+    let tcp_stream = match tokio::net::TcpStream::connect((&*host, port)).await {
+        Ok(s) => {
+            tracing::info!("Tunnel: connected to {host}:{port}");
+            s
+        }
+        Err(e) => {
+            tracing::warn!("Tunnel: failed to connect to {host}:{port}: {e}");
+            let (mut sender, _) = socket.split();
+            let _ = sender.send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                code: 1011,
+                reason: format!("Cannot connect to {host}:{port}: {e}").into(),
+            }))).await;
+            return;
+        }
+    };
+
+    let (mut tcp_read, mut tcp_write) = tcp_stream.into_split();
+    let (mut ws_sender, mut ws_receiver) = socket.split();
+
+    // TCP → WebSocket
+    let tcp_to_ws = tokio::spawn(async move {
+        let mut buf = vec![0u8; 32768];
+        loop {
+            match tcp_read.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    if ws_sender.send(Message::Binary(buf[..n].to_vec().into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        let _ = ws_sender.close().await;
+    });
+
+    // WebSocket → TCP
+    let ws_to_tcp = tokio::spawn(async move {
+        while let Some(Ok(msg)) = ws_receiver.next().await {
+            match msg {
+                Message::Binary(data) => {
+                    if tcp_write.write_all(&data).await.is_err() {
+                        break;
+                    }
+                }
+                Message::Close(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = tcp_to_ws => {},
+        _ = ws_to_tcp => {},
+    }
+    tracing::info!("Tunnel: closed connection to {host}:{port}");
 }
 
 // --- AI Settings ---
