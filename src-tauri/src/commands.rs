@@ -2765,3 +2765,39 @@ pub async fn delete_deploy_rule(id: String) -> Result<(), String> {
 pub async fn list_deploy_history() -> Result<serde_json::Value, String> {
     get_json("/deploy/history").await
 }
+
+#[tauri::command]
+pub async fn test_deploy_webhook(image: String, tag: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .post(format!("{base}/deploy/test"))
+        .json(&serde_json::json!({ "image": image, "tag": tag }))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
+#[tauri::command]
+pub async fn save_webhook_secret(secret: Option<String>) -> Result<(), String> {
+    let base = daemon_url();
+    let resp = client()
+        .post(format!("{base}/deploy/webhook-secret"))
+        .json(&serde_json::json!({ "secret": secret }))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_webhook_url() -> Result<String, String> {
+    let base = daemon_url();
+    Ok(format!("{base}/webhooks/github"))
+}

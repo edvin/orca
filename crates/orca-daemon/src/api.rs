@@ -202,6 +202,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/deploy/rules", get(list_deploy_rules).post(save_deploy_rule))
         .route("/deploy/rules/{id}", delete(delete_deploy_rule))
         .route("/deploy/history", get(list_deploy_history))
+        .route("/deploy/test", post(test_deploy_rule))
+        .route("/deploy/webhook-secret", post(save_webhook_secret))
         .route("/k8s/namespaces", post(k8s_create_namespace))
         .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
         .route("/k8s/configmaps/{namespace}", get(k8s_configmaps))
@@ -4086,6 +4088,48 @@ async fn delete_deploy_rule(
 async fn list_deploy_history() -> Result<impl IntoResponse, ApiError> {
     let config = orca_core::config::OrcaConfig::load()?;
     Ok(Json(config.deploy_history))
+}
+
+#[derive(Deserialize)]
+struct TestDeployRequest {
+    image: String,
+    tag: String,
+}
+
+/// Simulate a webhook — find matching rules and return what would be deployed (dry run).
+async fn test_deploy_rule(
+    Json(body): Json<TestDeployRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let config = orca_core::config::OrcaConfig::load()?;
+    let rules = config.find_matching_rules(&body.image, &body.tag);
+    let matches: Vec<serde_json::Value> = rules.iter().map(|r| {
+        serde_json::json!({
+            "rule_name": r.name,
+            "image_pattern": r.image_pattern,
+            "tag_filter": r.tag_filter,
+            "container_names": r.container_names,
+        })
+    }).collect();
+    Ok(Json(serde_json::json!({
+        "image": body.image,
+        "tag": body.tag,
+        "matched_rules": matches,
+        "would_deploy": !matches.is_empty(),
+    })))
+}
+
+#[derive(Deserialize)]
+struct WebhookSecretRequest {
+    secret: Option<String>,
+}
+
+async fn save_webhook_secret(
+    Json(body): Json<WebhookSecretRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = orca_core::config::OrcaConfig::load()?;
+    config.webhook_secret = body.secret;
+    config.save()?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 // --- AI Settings ---

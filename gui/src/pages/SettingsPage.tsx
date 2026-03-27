@@ -45,6 +45,11 @@ export default function SettingsPage() {
   const [ruleTagFilter, setRuleTagFilter] = createSignal("");
   const [ruleContainers, setRuleContainers] = createSignal("");
   const [ruleEnabled, setRuleEnabled] = createSignal(true);
+  const [ruleSecret, setRuleSecret] = createSignal("");
+  const [webhookSecret, setWebhookSecret] = createSignal("");
+  const [webhookUrl, setWebhookUrl] = createSignal("");
+  const [webhookUrlCopied, setWebhookUrlCopied] = createSignal(false);
+  const [testingWebhook, setTestingWebhook] = createSignal(false);
 
   // Maintenance / System Prune
   const [pruneContainers, setPruneContainers] = createSignal(false);
@@ -668,6 +673,7 @@ export default function SettingsPage() {
     refreshRemoteHosts();
     refreshDeployRules();
     refreshDeployHistory();
+    invoke("get_webhook_url").then((u) => setWebhookUrl(u as string)).catch(() => {});
     refreshGeneralSettings();
     refreshAiSettings();
     refreshWslConfig();
@@ -1485,13 +1491,77 @@ export default function SettingsPage() {
               </div>
             </Show>
 
-            <div style={{ background: "#0d1117", "border-radius": "8px", padding: "12px 16px", "margin-bottom": "16px", "font-size": "12px" }}>
-              <div style={{ color: "#8b949e", "margin-bottom": "4px" }}>Webhook URL for your GitHub repo:</div>
-              <code class="mono" style={{ color: "#58a6ff", "word-break": "break-all" }}>
-                {"<your-daemon-url>/api/v1/webhooks/github"}
+            <div style={{ background: "#0d1117", "border-radius": "8px", padding: "14px 16px", "margin-bottom": "16px" }}>
+              <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
+                <span style={{ "font-size": "12px", color: "#8b949e" }}>Webhook URL (paste into GitHub repo settings):</span>
+                <button class="btn btn-sm" style={{ "font-size": "11px", padding: "2px 8px" }}
+                  onClick={async () => {
+                    try {
+                      const url = await invoke("get_webhook_url") as string;
+                      await navigator.clipboard.writeText(url);
+                      setWebhookUrlCopied(true);
+                      setTimeout(() => setWebhookUrlCopied(false), 2000);
+                    } catch { showToast("Failed to copy URL", "error"); }
+                  }}
+                >{webhookUrlCopied() ? "Copied!" : "Copy"}</button>
+              </div>
+              <code class="mono" style={{ "font-size": "13px", color: "#58a6ff", "word-break": "break-all", display: "block" }}>
+                {webhookUrl() || "Loading..."}
               </code>
-              <div style={{ color: "#6e7681", "margin-top": "6px", "font-size": "11px" }}>
+              <div style={{ color: "#6e7681", "margin-top": "8px", "font-size": "11px" }}>
                 Event: <strong style={{ color: "#8b949e" }}>Packages</strong> &middot; Content type: <strong style={{ color: "#8b949e" }}>application/json</strong> &middot; For Docker Hub use <code style={{ color: "#6e7681" }}>/webhooks/dockerhub</code>
+              </div>
+            </div>
+
+            {/* Webhook secret */}
+            <div style={{ background: "#0d1117", "border-radius": "8px", padding: "14px 16px", "margin-bottom": "16px" }}>
+              <div class="form-group" style={{ margin: 0 }}>
+                <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
+                  <label class="form-label" style={{ margin: 0 }}>Webhook Secret</label>
+                  <button class="btn btn-sm" style={{ "font-size": "11px", padding: "2px 8px" }}
+                    onClick={async () => {
+                      try {
+                        await invoke("save_webhook_secret", { secret: webhookSecret().trim() || null });
+                        showToast(webhookSecret().trim() ? "Webhook secret saved" : "Webhook secret cleared", "success");
+                      } catch (e) { showToast(`Failed: ${e}`, "error"); }
+                    }}
+                  >Save</button>
+                </div>
+                <input class="form-input mono" type="password" placeholder="Same secret you set in GitHub webhook settings"
+                  value={webhookSecret()} onInput={(e) => setWebhookSecret(e.currentTarget.value)}
+                  style={{ "font-size": "12px" }}
+                />
+                <span class="form-hint">GitHub signs webhook payloads with this secret (HMAC-SHA256). Leave empty to accept all webhooks without signature validation.</span>
+              </div>
+            </div>
+
+            {/* Test webhook */}
+            <div style={{ background: "#0d1117", "border-radius": "8px", padding: "14px 16px", "margin-bottom": "20px" }}>
+              <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px" }}>Test your rules — enter an image and tag to see which rules would match:</div>
+              <div style={{ display: "flex", gap: "8px", "align-items": "flex-end" }}>
+                <div style={{ flex: 2 }}>
+                  <input class="form-input mono" type="text" placeholder="ghcr.io/myorg/myapp" id="test-image" style={{ "font-size": "12px" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <input class="form-input mono" type="text" placeholder="v1.0.0" id="test-tag" style={{ "font-size": "12px" }} />
+                </div>
+                <button class="btn btn-sm" disabled={testingWebhook()}
+                  onClick={async () => {
+                    const img = (document.getElementById("test-image") as HTMLInputElement)?.value.trim();
+                    const tag = (document.getElementById("test-tag") as HTMLInputElement)?.value.trim() || "latest";
+                    if (!img) return;
+                    setTestingWebhook(true);
+                    try {
+                      const result = await invoke("test_deploy_webhook", { image: img, tag }) as any;
+                      if (result.would_deploy) {
+                        showToast(`Would deploy: ${result.matched_rules.map((r: any) => r.rule_name).join(", ")}`, "success");
+                      } else {
+                        showToast(`No rules match ${img}:${tag}`, "info");
+                      }
+                    } catch (e) { showToast(`Test failed: ${e}`, "error"); }
+                    setTestingWebhook(false);
+                  }}
+                >{testingWebhook() ? "Testing..." : "Test"}</button>
               </div>
             </div>
 

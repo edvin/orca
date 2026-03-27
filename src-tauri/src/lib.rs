@@ -168,6 +168,9 @@ pub fn run() {
             commands::save_deploy_rule,
             commands::delete_deploy_rule,
             commands::list_deploy_history,
+            commands::test_deploy_webhook,
+            commands::save_webhook_secret,
+            commands::get_webhook_url,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;
