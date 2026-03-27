@@ -368,6 +368,21 @@ pub fn builtin_templates() -> Vec<AppTemplate> {
             is_builtin: false,
             notes: "Web UI at http://localhost:3000. Requires Ollama running (deploy it first from App Catalog). Create an account on first visit.".to_string(),
         },
+        // Dev Tools
+        AppTemplate {
+            id: "claude-workspace".to_string(),
+            name: "Claude Code Workspace".to_string(),
+            description: "Full dev environment with Claude CLI, Node, Python, Go, Rust, PHP, and common tools. Mount your project and start coding with AI.".to_string(),
+            icon: r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>"#.to_string(),
+            category: "Dev Tools".to_string(),
+            image: "ghcr.io/edvin/orca-claude-workspace:latest".to_string(),
+            default_ports: vec![],
+            default_env: vec!["ANTHROPIC_API_KEY=your-key-here".to_string()],
+            default_volumes: vec![],
+            restart_policy: "no".to_string(),
+            is_builtin: false,
+            notes: "Mount your project directory as a volume (e.g., /home/user/myproject:/workspace).\n\nSet your ANTHROPIC_API_KEY in the environment variables above.\n\nIncludes: Node 20, Python 3, Go, Rust, PHP 8, Claude CLI, TypeScript, pnpm, Docker CLI, GitHub CLI.\n\nOpen a terminal into the container to start using Claude Code.".to_string(),
+        },
     ];
     for t in &mut templates {
         t.is_builtin = true;

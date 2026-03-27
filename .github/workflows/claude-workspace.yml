@@ -1,0 +1,57 @@
+name: Claude Workspace Image
+
+on:
+  push:
+    paths:
+      - 'deploy/claude-workspace/**'
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/orca-claude-workspace
+
+jobs:
+  build-and-push:
+    name: Build (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: amd64
+            runner: ubuntu-latest
+            docker_platform: linux/amd64
+          - name: arm64
+            runner: ubuntu-latest
+            docker_platform: linux/arm64
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/claude-workspace
+          platforms: ${{ matrix.platform.docker_platform }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
