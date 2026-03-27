@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Index, Show } from "solid-js";
+import { createSignal, createMemo, onMount, For, Index, Show } from "solid-js";
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 import { invoke } from "@tauri-apps/api/core";
@@ -7,7 +7,7 @@ import type { AppTemplate, ImageSearchResult, RemoteHost, ActiveHost } from "../
 import { showToast } from "../components/Toast";
 import { logError, logInfo } from "../lib/activityStore";
 
-const CATEGORIES = ["All", "Database", "Web Server", "AI", "Monitoring", "Storage", "Tools", "Development", "Message Queue", "Search"];
+// Categories are derived dynamically from loaded templates
 
 interface EnvEntry { key: string; value: string }
 interface VolumeEntry { source: string; target: string }
@@ -21,6 +21,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [templates, setTemplates] = createSignal<AppTemplate[]>([]);
   const [category, setCategory] = createSignal("All");
   const [search, setSearch] = createSignal("");
+  // Dynamic categories derived from loaded templates
+  const categories = createMemo(() => {
+    const cats = new Set(templates().map(t => t.category));
+    return ["All", ...Array.from(cats).sort()];
+  });
+
   const [deploying, setDeploying] = createSignal(false);
   const [deployStatus, setDeployStatus] = createSignal("");
   const [deployTarget, setDeployTarget] = createSignal<AppTemplate | null>(null);
@@ -554,6 +560,9 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     "Message Queue": { bg: "rgba(210, 169, 34, 0.1)", color: "#d29922", border: "rgba(210, 169, 34, 0.15)" },
     "Search": { bg: "rgba(121, 192, 255, 0.1)", color: "#79c0ff", border: "rgba(121, 192, 255, 0.15)" },
     "AI": { bg: "rgba(163, 113, 247, 0.1)", color: "#a371f7", border: "rgba(163, 113, 247, 0.15)" },
+    "Dev Tools": { bg: "rgba(88, 166, 255, 0.1)", color: "#58a6ff", border: "rgba(88, 166, 255, 0.15)" },
+    "Analytics": { bg: "rgba(210, 169, 34, 0.1)", color: "#d29922", border: "rgba(210, 169, 34, 0.15)" },
+    "Automation": { bg: "rgba(63, 185, 80, 0.1)", color: "#3fb950", border: "rgba(63, 185, 80, 0.15)" },
   };
 
   const TemplateCard = (props: { template: AppTemplate }) => {
@@ -618,7 +627,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       <Show when={activeTab() === "curated"}>
         {/* Category filter tabs */}
         <div class="tab-bar" style="margin-bottom: 24px">
-          <For each={CATEGORIES}>
+          <For each={categories()}>
             {(cat) => (
               <button
                 class={`tab-item ${category() === cat ? "active" : ""}`}
@@ -843,7 +852,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                   <label class="form-label">Category</label>
                   <Dropdown
                     value={editorCategory()}
-                    options={CATEGORIES.filter((c) => c !== "All").map((cat) => ({ value: cat, label: cat }))}
+                    options={categories().filter((c: string) => c !== "All").map((cat: string) => ({ value: cat, label: cat }))}
                     onChange={(v) => setEditorCategory(v)}
                   />
                 </div>
