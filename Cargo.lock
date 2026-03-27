@@ -3154,7 +3154,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "orca-backend-common"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3176,7 +3176,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-macos"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3191,7 +3191,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-native"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3203,7 +3203,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-windows"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3218,7 +3218,7 @@ dependencies = [
 
 [[package]]
 name = "orca-cli"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3232,7 +3232,7 @@ dependencies = [
 
 [[package]]
 name = "orca-core"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3251,7 +3251,7 @@ dependencies = [
 
 [[package]]
 name = "orca-daemon"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -3279,7 +3279,7 @@ dependencies = [
 
 [[package]]
 name = "orca-gui"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "cocoa",
