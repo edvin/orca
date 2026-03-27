@@ -1378,6 +1378,81 @@
   </div>
 </section>
 
+<!-- Community App Catalog -->
+<section class="showcase">
+  <div class="section-header">
+    <h2>Community App Catalog</h2>
+    <p>One-click deploy for popular apps. The catalog updates automatically — no app update needed.</p>
+  </div>
+
+  <div style="max-width: 1000px; margin: 0 auto; padding: 0 24px;">
+    <!-- Tab switcher -->
+    <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
+      <button id="catalog-cards-btn" onclick="showCatalogView('cards')" style="padding: 6px 16px; border-radius: 8px; border: 1px solid rgba(88, 166, 255, 0.4); background: rgba(88, 166, 255, 0.12); color: #58a6ff; font-size: 13px; cursor: pointer; font-weight: 500;">Cards</button>
+      <button id="catalog-json-btn" onclick="showCatalogView('json')" style="padding: 6px 16px; border-radius: 8px; border: 1px solid #30363d; background: transparent; color: #8b949e; font-size: 13px; cursor: pointer;">JSON</button>
+    </div>
+
+    <!-- Cards view -->
+    <div id="catalog-cards" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 30px;">
+      <div style="padding: 40px; text-align: center; color: #484f58; grid-column: 1 / -1;">Loading catalog...</div>
+    </div>
+
+    <!-- JSON view -->
+    <div id="catalog-json" style="display: none; margin-bottom: 30px;">
+      <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 20px; overflow-x: auto; font-size: 12px; color: #8b949e; max-height: 500px; overflow-y: auto; line-height: 1.5;"><code id="catalog-json-code">Loading...</code></pre>
+    </div>
+
+    <div style="text-align: center;">
+      <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" class="btn btn-primary" style="text-decoration: none;">Contribute a Template</a>
+      <span style="font-size: 13px; color: #484f58; margin-left: 12px;">Add your favorite app to the catalog via a simple form</span>
+    </div>
+  </div>
+</section>
+
+<script>
+function showCatalogView(view) {
+  document.getElementById('catalog-cards').style.display = view === 'cards' ? 'grid' : 'none';
+  document.getElementById('catalog-json').style.display = view === 'json' ? 'block' : 'none';
+  document.getElementById('catalog-cards-btn').style.background = view === 'cards' ? 'rgba(88, 166, 255, 0.12)' : 'transparent';
+  document.getElementById('catalog-cards-btn').style.borderColor = view === 'cards' ? 'rgba(88, 166, 255, 0.4)' : '#30363d';
+  document.getElementById('catalog-cards-btn').style.color = view === 'cards' ? '#58a6ff' : '#8b949e';
+  document.getElementById('catalog-json-btn').style.background = view === 'json' ? 'rgba(88, 166, 255, 0.12)' : 'transparent';
+  document.getElementById('catalog-json-btn').style.borderColor = view === 'json' ? 'rgba(88, 166, 255, 0.4)' : '#30363d';
+  document.getElementById('catalog-json-btn').style.color = view === 'json' ? '#58a6ff' : '#8b949e';
+}
+
+(async function loadCatalog() {
+  try {
+    const resp = await fetch('templates.json');
+    if (!resp.ok) return;
+    const templates = await resp.json();
+
+    // Render cards
+    const container = document.getElementById('catalog-cards');
+    container.innerHTML = templates.map(t => `
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; transition: border-color 0.2s;"
+           onmouseover="this.style.borderColor='rgba(88,166,255,0.3)'"
+           onmouseout="this.style.borderColor='#30363d'">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+          <div style="width: 28px; height: 28px; color: #58a6ff; flex-shrink: 0;">${t.icon}</div>
+          <div>
+            <div style="font-size: 14px; font-weight: 600; color: #e6edf3;">${t.name}</div>
+            <div style="font-size: 10px; color: #58a6ff; background: rgba(88,166,255,0.1); padding: 1px 6px; border-radius: 8px; display: inline-block;">${t.category}</div>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: #8b949e; line-height: 1.5; margin-bottom: 8px;">${t.description}</div>
+        <code style="font-size: 11px; color: #6e7681; word-break: break-all;">${t.image}</code>
+      </div>
+    `).join('');
+
+    // Render JSON
+    document.getElementById('catalog-json-code').textContent = JSON.stringify(templates, null, 2);
+  } catch (e) {
+    document.getElementById('catalog-cards').innerHTML = '<div style="padding: 20px; text-align: center; color: #484f58; grid-column: 1/-1;">Could not load catalog</div>';
+  }
+})();
+</script>
+
 <!-- Screenshot Gallery -->
 <section class="showcase">
   <div class="section-header">
