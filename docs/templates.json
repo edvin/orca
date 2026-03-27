@@ -6,9 +6,16 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 12c0 1.66 4 3 9 3s9-1.34 9-3\"/></svg>",
     "category": "Database",
     "image": "postgres:16-alpine",
-    "default_ports": ["5432:5432"],
-    "default_env": ["POSTGRES_PASSWORD=changeme", "POSTGRES_DB=mydb"],
-    "default_volumes": ["pgdata:/var/lib/postgresql/data"],
+    "default_ports": [
+      "5432:5432"
+    ],
+    "default_env": [
+      "POSTGRES_PASSWORD=changeme",
+      "POSTGRES_DB=mydb"
+    ],
+    "default_volumes": [
+      "pgdata:/var/lib/postgresql/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Connect with: psql -h localhost -U postgres -d mydb",
     "is_builtin": true
@@ -20,9 +27,16 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 12c0 1.66 4 3 9 3s9-1.34 9-3\"/><path d=\"M3 8.5c0 1.66 4 3 9 3s9-1.34 9-3\"/></svg>",
     "category": "Database",
     "image": "mysql:8",
-    "default_ports": ["3306:3306"],
-    "default_env": ["MYSQL_ROOT_PASSWORD=changeme", "MYSQL_DATABASE=mydb"],
-    "default_volumes": ["mysqldata:/var/lib/mysql"],
+    "default_ports": [
+      "3306:3306"
+    ],
+    "default_env": [
+      "MYSQL_ROOT_PASSWORD=changeme",
+      "MYSQL_DATABASE=mydb"
+    ],
+    "default_volumes": [
+      "mysqldata:/var/lib/mysql"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Connect with: mysql -h 127.0.0.1 -u root -p",
     "is_builtin": true
@@ -34,9 +48,13 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\" transform=\"rotate(45 12 12)\"/><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"16\"/><line x1=\"8\" y1=\"12\" x2=\"16\" y2=\"12\"/></svg>",
     "category": "Database",
     "image": "redis:alpine",
-    "default_ports": ["6379:6379"],
+    "default_ports": [
+      "6379:6379"
+    ],
     "default_env": [],
-    "default_volumes": ["redisdata:/data"],
+    "default_volumes": [
+      "redisdata:/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Connect with: redis-cli",
     "is_builtin": true
@@ -48,9 +66,16 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M17 8c0 4-5 8-5 14 0-6-5-10-5-14a5 5 0 0 1 10 0z\"/><path d=\"M12 22v-8\"/></svg>",
     "category": "Database",
     "image": "mongo:7",
-    "default_ports": ["27017:27017"],
-    "default_env": ["MONGO_INITDB_ROOT_USERNAME=admin", "MONGO_INITDB_ROOT_PASSWORD=changeme"],
-    "default_volumes": ["mongodata:/data/db"],
+    "default_ports": [
+      "27017:27017"
+    ],
+    "default_env": [
+      "MONGO_INITDB_ROOT_USERNAME=admin",
+      "MONGO_INITDB_ROOT_PASSWORD=changeme"
+    ],
+    "default_volumes": [
+      "mongodata:/data/db"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Connect with: mongosh -u admin -p changeme",
     "is_builtin": true
@@ -62,7 +87,9 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z\"/></svg>",
     "category": "Web Server",
     "image": "nginx:alpine",
-    "default_ports": ["8080:80"],
+    "default_ports": [
+      "8080:80"
+    ],
     "default_env": [],
     "default_volumes": [],
     "restart_policy": "unless-stopped",
@@ -76,9 +103,15 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/><circle cx=\"12\" cy=\"16\" r=\"1\"/></svg>",
     "category": "Web Server",
     "image": "caddy:alpine",
-    "default_ports": ["80:80", "443:443"],
+    "default_ports": [
+      "80:80",
+      "443:443"
+    ],
     "default_env": [],
-    "default_volumes": ["caddydata:/data", "caddyconfig:/config"],
+    "default_volumes": [
+      "caddydata:/data",
+      "caddyconfig:/config"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Configure via Caddyfile at /etc/caddy/Caddyfile",
     "is_builtin": true
@@ -90,9 +123,15 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 20V10\"/><path d=\"M12 20V4\"/><path d=\"M6 20v-6\"/><rect x=\"2\" y=\"2\" width=\"20\" height=\"20\" rx=\"2\"/></svg>",
     "category": "Monitoring",
     "image": "grafana/grafana:latest",
-    "default_ports": ["3000:3000"],
-    "default_env": ["GF_SECURITY_ADMIN_PASSWORD=admin"],
-    "default_volumes": ["grafanadata:/var/lib/grafana"],
+    "default_ports": [
+      "3000:3000"
+    ],
+    "default_env": [
+      "GF_SECURITY_ADMIN_PASSWORD=admin"
+    ],
+    "default_volumes": [
+      "grafanadata:/var/lib/grafana"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Login at http://localhost:3000 with admin/admin",
     "is_builtin": true
@@ -104,9 +143,13 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2c1 3 3 5 5 6-1 3-2 6-5 8-3-2-4-5-5-8 2-1 4-3 5-6z\"/><path d=\"M12 16v6\"/><path d=\"M8 22h8\"/></svg>",
     "category": "Monitoring",
     "image": "prom/prometheus:latest",
-    "default_ports": ["9090:9090"],
+    "default_ports": [
+      "9090:9090"
+    ],
     "default_env": [],
-    "default_volumes": ["promdata:/prometheus"],
+    "default_volumes": [
+      "promdata:/prometheus"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Dashboard at http://localhost:9090",
     "is_builtin": true
@@ -118,9 +161,17 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z\"/></svg>",
     "category": "Storage",
     "image": "minio/minio:latest",
-    "default_ports": ["9000:9000", "9001:9001"],
-    "default_env": ["MINIO_ROOT_USER=minioadmin", "MINIO_ROOT_PASSWORD=minioadmin"],
-    "default_volumes": ["miniodata:/data"],
+    "default_ports": [
+      "9000:9000",
+      "9001:9001"
+    ],
+    "default_env": [
+      "MINIO_ROOT_USER=minioadmin",
+      "MINIO_ROOT_PASSWORD=minioadmin"
+    ],
+    "default_volumes": [
+      "miniodata:/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Console at http://localhost:9001",
     "is_builtin": true
@@ -132,8 +183,14 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 12c0 1.66 4 3 9 3s9-1.34 9-3\"/><path d=\"M15 13l2 2-2 2\"/><path d=\"M9 13l-2 2 2 2\"/></svg>",
     "category": "Tools",
     "image": "phpmyadmin:latest",
-    "default_ports": ["8082:80"],
-    "default_env": ["PMA_HOST=orca-mysql", "PMA_PORT=3306", "PMA_ARBITRARY=1"],
+    "default_ports": [
+      "8082:80"
+    ],
+    "default_env": [
+      "PMA_HOST=orca-mysql",
+      "PMA_PORT=3306",
+      "PMA_ARBITRARY=1"
+    ],
     "default_volumes": [],
     "restart_policy": "no",
     "notes": "Open http://localhost:8082. Set PMA_HOST to your MySQL/MariaDB container name. PMA_ARBITRARY=1 allows connecting to any server.",
@@ -146,7 +203,9 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 12c0 1.66 4 3 9 3s9-1.34 9-3\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/></svg>",
     "category": "Tools",
     "image": "adminer:latest",
-    "default_ports": ["8081:8080"],
+    "default_ports": [
+      "8081:8080"
+    ],
     "default_env": [],
     "default_volumes": [],
     "restart_policy": "no",
@@ -160,25 +219,14 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z\"/><polyline points=\"22,6 12,13 2,6\"/></svg>",
     "category": "Tools",
     "image": "mailhog/mailhog:latest",
-    "default_ports": ["1025:1025", "8025:8025"],
+    "default_ports": [
+      "1025:1025",
+      "8025:8025"
+    ],
     "default_env": [],
     "default_volumes": [],
     "restart_policy": "no",
     "notes": "SMTP on port 1025, Web UI at http://localhost:8025",
-    "is_builtin": true
-  },
-  {
-    "id": "portainer",
-    "name": "Portainer",
-    "description": "Container management UI",
-    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"7\" width=\"20\" height=\"14\" rx=\"2\" ry=\"2\"/><path d=\"M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2\"/><line x1=\"12\" y1=\"12\" x2=\"12\" y2=\"16\"/><line x1=\"10\" y1=\"14\" x2=\"14\" y2=\"14\"/></svg>",
-    "category": "Tools",
-    "image": "portainer/portainer-ce:latest",
-    "default_ports": ["9443:9443"],
-    "default_env": [],
-    "default_volumes": ["/var/run/docker.sock:/var/run/docker.sock", "portainerdata:/data"],
-    "restart_policy": "unless-stopped",
-    "notes": "Access at https://localhost:9443",
     "is_builtin": true
   },
   {
@@ -188,9 +236,19 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"18\" cy=\"18\" r=\"3\"/><circle cx=\"6\" cy=\"6\" r=\"3\"/><path d=\"M13 6h3a2 2 0 0 1 2 2v7\"/><path d=\"M11 18H8a2 2 0 0 1-2-2V9\"/></svg>",
     "category": "Development",
     "image": "gitlab/gitlab-ce:latest",
-    "default_ports": ["8080:80", "8443:443", "2222:22"],
-    "default_env": ["GITLAB_ROOT_PASSWORD=changeme"],
-    "default_volumes": ["gitlab-config:/etc/gitlab", "gitlab-logs:/var/log/gitlab", "gitlab-data:/var/opt/gitlab"],
+    "default_ports": [
+      "8080:80",
+      "8443:443",
+      "2222:22"
+    ],
+    "default_env": [
+      "GITLAB_ROOT_PASSWORD=changeme"
+    ],
+    "default_volumes": [
+      "gitlab-config:/etc/gitlab",
+      "gitlab-logs:/var/log/gitlab",
+      "gitlab-data:/var/opt/gitlab"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Access at http://localhost:8080. Login with root/changeme. First start takes several minutes.",
     "is_builtin": true
@@ -202,9 +260,14 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M17 8h1a4 4 0 1 1 0 8h-1\"/><path d=\"M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z\"/><line x1=\"6\" y1=\"2\" x2=\"6\" y2=\"4\"/><line x1=\"10\" y1=\"2\" x2=\"10\" y2=\"4\"/><line x1=\"14\" y1=\"2\" x2=\"14\" y2=\"4\"/></svg>",
     "category": "Development",
     "image": "gitea/gitea:latest",
-    "default_ports": ["3000:3000", "2222:22"],
+    "default_ports": [
+      "3000:3000",
+      "2222:22"
+    ],
     "default_env": [],
-    "default_volumes": ["gitea-data:/data"],
+    "default_volumes": [
+      "gitea-data:/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Setup wizard at http://localhost:3000",
     "is_builtin": true
@@ -216,9 +279,17 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/><path d=\"M8 10h8\"/><path d=\"M8 14h4\"/></svg>",
     "category": "Message Queue",
     "image": "rabbitmq:3-management",
-    "default_ports": ["5672:5672", "15672:15672"],
-    "default_env": ["RABBITMQ_DEFAULT_USER=admin", "RABBITMQ_DEFAULT_PASS=changeme"],
-    "default_volumes": ["rabbitmq-data:/var/lib/rabbitmq"],
+    "default_ports": [
+      "5672:5672",
+      "15672:15672"
+    ],
+    "default_env": [
+      "RABBITMQ_DEFAULT_USER=admin",
+      "RABBITMQ_DEFAULT_PASS=changeme"
+    ],
+    "default_volumes": [
+      "rabbitmq-data:/var/lib/rabbitmq"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Management UI at http://localhost:15672 (admin/changeme)",
     "is_builtin": true
@@ -230,9 +301,17 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><line x1=\"21\" y1=\"21\" x2=\"16.65\" y2=\"16.65\"/></svg>",
     "category": "Search",
     "image": "elasticsearch:8.15.0",
-    "default_ports": ["9200:9200"],
-    "default_env": ["discovery.type=single-node", "xpack.security.enabled=false", "ES_JAVA_OPTS=-Xms512m -Xmx512m"],
-    "default_volumes": ["es-data:/usr/share/elasticsearch/data"],
+    "default_ports": [
+      "9200:9200"
+    ],
+    "default_env": [
+      "discovery.type=single-node",
+      "xpack.security.enabled=false",
+      "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ],
+    "default_volumes": [
+      "es-data:/usr/share/elasticsearch/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "API at http://localhost:9200",
     "is_builtin": true
@@ -244,9 +323,14 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polygon points=\"13 2 3 14 12 14 11 22 21 10 12 10 13 2\"/></svg>",
     "category": "Message Queue",
     "image": "nats:latest",
-    "default_ports": ["4222:4222", "8222:8222"],
+    "default_ports": [
+      "4222:4222",
+      "8222:8222"
+    ],
     "default_env": [],
-    "default_volumes": ["nats-data:/data"],
+    "default_volumes": [
+      "nats-data:/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Client port 4222, monitoring at http://localhost:8222. JetStream is enabled by default in recent versions.",
     "is_builtin": true
@@ -258,9 +342,15 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><line x1=\"21\" y1=\"21\" x2=\"16.65\" y2=\"16.65\"/><line x1=\"8\" y1=\"11\" x2=\"14\" y2=\"11\"/></svg>",
     "category": "Search",
     "image": "getmeili/meilisearch:latest",
-    "default_ports": ["7700:7700"],
-    "default_env": ["MEILI_ENV=development"],
-    "default_volumes": ["meili-data:/meili_data"],
+    "default_ports": [
+      "7700:7700"
+    ],
+    "default_env": [
+      "MEILI_ENV=development"
+    ],
+    "default_volumes": [
+      "meili-data:/meili_data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Dashboard at http://localhost:7700. Set MEILI_MASTER_KEY for production use.",
     "is_builtin": true
@@ -268,13 +358,23 @@
   {
     "id": "openclaw",
     "name": "OpenClaw",
-    "description": "Personal AI assistant — connects to WhatsApp, Telegram, Slack, and more",
+    "description": "Personal AI assistant \u2014 connects to WhatsApp, Telegram, Slack, and more",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"10\" rx=\"2\"/><path d=\"M12 2a4 4 0 0 0-4 4v5h8V6a4 4 0 0 0-4-4z\"/><circle cx=\"9\" cy=\"16\" r=\"1\"/><circle cx=\"15\" cy=\"16\" r=\"1\"/></svg>",
     "category": "AI",
     "image": "ghcr.io/openclaw/openclaw:latest",
-    "default_ports": ["18789:18789", "18790:18790"],
-    "default_env": ["NODE_ENV=production", "OPENCLAW_GATEWAY_TOKEN=changeme", "OPENCLAW_GATEWAY_BIND=lan"],
-    "default_volumes": ["openclaw-config:/home/node/.openclaw", "openclaw-workspace:/home/node/.openclaw/workspace"],
+    "default_ports": [
+      "18789:18789",
+      "18790:18790"
+    ],
+    "default_env": [
+      "NODE_ENV=production",
+      "OPENCLAW_GATEWAY_TOKEN=changeme",
+      "OPENCLAW_GATEWAY_BIND=lan"
+    ],
+    "default_volumes": [
+      "openclaw-config:/home/node/.openclaw",
+      "openclaw-workspace:/home/node/.openclaw/workspace"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Gateway UI at http://localhost:18789. Enter the OPENCLAW_GATEWAY_TOKEN value in Settings to authenticate. Configure your AI provider API keys and messaging channels from the web interface.",
     "is_builtin": true
@@ -286,9 +386,16 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 9c0 1.66 4 3 9 3s9-1.34 9-3\"/><path d=\"M3 14c0 1.66 4 3 9 3s9-1.34 9-3\"/></svg>",
     "category": "Database",
     "image": "mariadb:11",
-    "default_ports": ["3306:3306"],
-    "default_env": ["MARIADB_ROOT_PASSWORD=changeme", "MARIADB_DATABASE=mydb"],
-    "default_volumes": ["mariadb-data:/var/lib/mysql"],
+    "default_ports": [
+      "3306:3306"
+    ],
+    "default_env": [
+      "MARIADB_ROOT_PASSWORD=changeme",
+      "MARIADB_DATABASE=mydb"
+    ],
+    "default_volumes": [
+      "mariadb-data:/var/lib/mysql"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Connect with: mariadb -h 127.0.0.1 -u root -p",
     "is_builtin": true
@@ -300,11 +407,15 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2a7 7 0 0 0-7 7c0 3 2 5 4 7h6c2-2 4-4 4-7a7 7 0 0 0-7-7z\"/><path d=\"M9 16v2a3 3 0 0 0 6 0v-2\"/><path d=\"M9 10h0\"/><path d=\"M15 10h0\"/></svg>",
     "category": "AI",
     "image": "ollama/ollama:latest",
-    "default_ports": ["11434:11434"],
+    "default_ports": [
+      "11434:11434"
+    ],
     "default_env": [],
-    "default_volumes": ["ollama-models:/root/.ollama"],
+    "default_volumes": [
+      "ollama-models:/root/.ollama"
+    ],
     "restart_policy": "unless-stopped",
-    "notes": "After starting, pull a model with tool support:\n  docker exec ollama ollama pull qwen2.5:7b\n\nThen in Settings → AI, select 'Ollama (Local)' — or click 'Set up Ollama' for automatic setup.\n\nNo API key needed.",
+    "notes": "After starting, pull a model with tool support:\n  docker exec ollama ollama pull qwen2.5:7b\n\nThen in Settings \u2192 AI, select 'Ollama (Local)' \u2014 or click 'Set up Ollama' for automatic setup.\n\nNo API key needed.",
     "is_builtin": true
   },
   {
@@ -314,9 +425,15 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/></svg>",
     "category": "AI",
     "image": "ghcr.io/open-webui/open-webui:main",
-    "default_ports": ["3000:8080"],
-    "default_env": ["OLLAMA_BASE_URL=http://host.docker.internal:11434"],
-    "default_volumes": ["open-webui-data:/app/backend/data"],
+    "default_ports": [
+      "3000:8080"
+    ],
+    "default_env": [
+      "OLLAMA_BASE_URL=http://host.docker.internal:11434"
+    ],
+    "default_volumes": [
+      "open-webui-data:/app/backend/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Web UI at http://localhost:3000. Requires Ollama running (deploy it first from App Catalog). Create an account on first visit.",
     "is_builtin": true
@@ -329,7 +446,9 @@
     "category": "Development",
     "image": "ghcr.io/edvin/orca-claude-workspace:latest",
     "default_ports": [],
-    "default_env": ["ANTHROPIC_API_KEY=your-key-here"],
+    "default_env": [
+      "ANTHROPIC_API_KEY=your-key-here"
+    ],
     "default_volumes": [],
     "restart_policy": "no",
     "notes": "Mount your project directory as a volume (e.g., /home/user/myproject:/workspace).\n\nSet your ANTHROPIC_API_KEY in the environment variables above.\n\nIncludes: Node 20, Python 3, Go, Rust, PHP 8, Claude CLI, TypeScript, pnpm, Docker CLI, GitHub CLI.\n\nOpen a terminal into the container to start using Claude Code.",
@@ -342,9 +461,13 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\" transform=\"rotate(45 12 12)\"/><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"16\"/><line x1=\"8\" y1=\"12\" x2=\"16\" y2=\"12\"/></svg>",
     "category": "Database",
     "image": "valkey/valkey:latest",
-    "default_ports": ["6379:6379"],
+    "default_ports": [
+      "6379:6379"
+    ],
     "default_env": [],
-    "default_volumes": ["valkeydata:/data"],
+    "default_volumes": [
+      "valkeydata:/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Drop-in replacement for Redis. Connect with: valkey-cli or redis-cli",
     "is_builtin": true
@@ -356,9 +479,13 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/></svg>",
     "category": "Monitoring",
     "image": "amir20/dozzle:latest",
-    "default_ports": ["9999:8080"],
+    "default_ports": [
+      "9999:8080"
+    ],
     "default_env": [],
-    "default_volumes": ["/var/run/docker.sock:/var/run/docker.sock:ro"],
+    "default_volumes": [
+      "/var/run/docker.sock:/var/run/docker.sock:ro"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Log viewer at http://localhost:9999. Read-only access to Docker socket.",
     "is_builtin": true
@@ -370,9 +497,13 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 12h-4l-3 9L9 3l-3 9H2\"/></svg>",
     "category": "Monitoring",
     "image": "louislam/uptime-kuma:latest",
-    "default_ports": ["3001:3001"],
+    "default_ports": [
+      "3001:3001"
+    ],
     "default_env": [],
-    "default_volumes": ["uptime-kuma-data:/app/data"],
+    "default_volumes": [
+      "uptime-kuma-data:/app/data"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Dashboard at http://localhost:3001. Create an admin account on first visit.",
     "is_builtin": true
@@ -384,11 +515,18 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 20V10\"/><path d=\"M12 20V4\"/><path d=\"M6 20v-6\"/></svg>",
     "category": "Analytics",
     "image": "ghcr.io/plausible/community-edition:latest",
-    "default_ports": ["8000:8000"],
-    "default_env": ["BASE_URL=http://localhost:8000", "SECRET_KEY_BASE=changeme"],
-    "default_volumes": ["plausible-data:/var/lib/plausible"],
+    "default_ports": [
+      "8000:8000"
+    ],
+    "default_env": [
+      "BASE_URL=http://localhost:8000",
+      "SECRET_KEY_BASE=changeme"
+    ],
+    "default_volumes": [
+      "plausible-data:/var/lib/plausible"
+    ],
     "restart_policy": "unless-stopped",
-    "notes": "Dashboard at http://localhost:8000. Requires a PostgreSQL and ClickHouse database — see docs for full setup.",
+    "notes": "Dashboard at http://localhost:8000. Requires a PostgreSQL and ClickHouse database \u2014 see docs for full setup.",
     "is_builtin": true
   },
   {
@@ -398,9 +536,13 @@
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"/></svg>",
     "category": "Automation",
     "image": "n8nio/n8n:latest",
-    "default_ports": ["5678:5678"],
+    "default_ports": [
+      "5678:5678"
+    ],
     "default_env": [],
-    "default_volumes": ["n8n-data:/home/node/.n8n"],
+    "default_volumes": [
+      "n8n-data:/home/node/.n8n"
+    ],
     "restart_policy": "unless-stopped",
     "notes": "Editor at http://localhost:5678. Create an account on first visit.",
     "is_builtin": true
