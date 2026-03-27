@@ -444,6 +444,82 @@ pub async fn execute_tool(
             Ok(json!({ "logs": logs }))
         }
 
+        "k8s_list_namespaces" => {
+            let namespaces = state.k8s.list_namespaces().await.map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(namespaces).unwrap_or_default())
+        }
+
+        "k8s_list_deployments" => {
+            let ns = arguments.get("namespace").and_then(|v| v.as_str()).unwrap_or("default");
+            let deployments = state.k8s.list_deployments(ns).await.map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(deployments).unwrap_or_default())
+        }
+
+        "k8s_list_services" => {
+            let ns = arguments.get("namespace").and_then(|v| v.as_str()).unwrap_or("default");
+            let services = state.k8s.list_services(ns).await.map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(services).unwrap_or_default())
+        }
+
+        "k8s_list_events" => {
+            let ns = arguments.get("namespace").and_then(|v| v.as_str()).unwrap_or("default");
+            let events = state.k8s.list_events(ns).await.map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(events).unwrap_or_default())
+        }
+
+        "k8s_scale_deployment" => {
+            let ns = get_str(&arguments, "namespace")?;
+            let name = get_str(&arguments, "name")?;
+            let replicas = arguments.get("replicas").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+            state.k8s.scale_deployment(ns, name, replicas).await.map_err(|e| e.to_string())?;
+            Ok(json!({ "scaled": name, "replicas": replicas }))
+        }
+
+        "k8s_restart_deployment" => {
+            let ns = get_str(&arguments, "namespace")?;
+            let name = get_str(&arguments, "name")?;
+            state.k8s.restart_deployment(ns, name).await.map_err(|e| e.to_string())?;
+            Ok(json!({ "restarted": name }))
+        }
+
+        "k8s_delete_pod" => {
+            let ns = get_str(&arguments, "namespace")?;
+            let name = get_str(&arguments, "name")?;
+            state.k8s.delete_pod(ns, name).await.map_err(|e| e.to_string())?;
+            Ok(json!({ "deleted": name }))
+        }
+
+        "k8s_get_yaml" => {
+            let kind = get_str(&arguments, "kind")?;
+            let ns = get_str(&arguments, "namespace")?;
+            let name = get_str(&arguments, "name")?;
+            let yaml = state.k8s.get_resource_yaml(kind, name, ns).await.map_err(|e| e.to_string())?;
+            Ok(json!({ "yaml": yaml }))
+        }
+
+        "k8s_list_configmaps" => {
+            let ns = arguments.get("namespace").and_then(|v| v.as_str()).unwrap_or("default");
+            let configmaps = state.k8s.list_configmaps(ns).await.map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(configmaps).unwrap_or_default())
+        }
+
+        "k8s_list_secrets" => {
+            let ns = arguments.get("namespace").and_then(|v| v.as_str()).unwrap_or("default");
+            let secrets = state.k8s.list_secrets(ns).await.map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(secrets).unwrap_or_default())
+        }
+
+        "k8s_list_ingresses" => {
+            let ns = arguments.get("namespace").and_then(|v| v.as_str()).unwrap_or("default");
+            let ingresses = state.k8s.list_ingresses(ns).await.map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(ingresses).unwrap_or_default())
+        }
+
+        "k8s_helm_list" => {
+            let releases = state.k8s.helm_list().await.map_err(|e| e.to_string())?;
+            Ok(serde_json::to_value(releases).unwrap_or_default())
+        }
+
         _ => Err(format!("Unknown tool: {tool_name}")),
     }
 }

@@ -243,6 +243,92 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             })),
             category: "Kubernetes".into(),
         },
+        ToolDefinition {
+            name: "k8s_list_namespaces".into(),
+            description: "List all Kubernetes namespaces.".into(),
+            parameters: json_schema(json!({})),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_list_deployments".into(),
+            description: "List Kubernetes deployments in a namespace.".into(),
+            parameters: json_schema(json!({ "namespace": { "type": "string", "default": "default" } })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_list_services".into(),
+            description: "List Kubernetes services in a namespace.".into(),
+            parameters: json_schema(json!({ "namespace": { "type": "string", "default": "default" } })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_list_events".into(),
+            description: "List recent Kubernetes events in a namespace (useful for debugging).".into(),
+            parameters: json_schema(json!({ "namespace": { "type": "string", "default": "default" } })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_scale_deployment".into(),
+            description: "Scale a Kubernetes deployment to a specific number of replicas.".into(),
+            parameters: json_schema(json!({
+                "namespace": { "type": "string" },
+                "name": { "type": "string" },
+                "replicas": { "type": "integer" }
+            })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_restart_deployment".into(),
+            description: "Restart a Kubernetes deployment (rolling restart).".into(),
+            parameters: json_schema(json!({
+                "namespace": { "type": "string" },
+                "name": { "type": "string" }
+            })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_delete_pod".into(),
+            description: "Delete a Kubernetes pod (it will be recreated by its controller).".into(),
+            parameters: json_schema(json!({
+                "namespace": { "type": "string" },
+                "name": { "type": "string" }
+            })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_get_yaml".into(),
+            description: "Get the YAML manifest of a Kubernetes resource.".into(),
+            parameters: json_schema(json!({
+                "kind": { "type": "string", "description": "Resource kind (e.g., pod, deployment, service)" },
+                "namespace": { "type": "string" },
+                "name": { "type": "string" }
+            })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_list_configmaps".into(),
+            description: "List ConfigMaps in a namespace.".into(),
+            parameters: json_schema(json!({ "namespace": { "type": "string", "default": "default" } })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_list_secrets".into(),
+            description: "List Secrets in a namespace (names only, not values).".into(),
+            parameters: json_schema(json!({ "namespace": { "type": "string", "default": "default" } })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_list_ingresses".into(),
+            description: "List Ingresses in a namespace.".into(),
+            parameters: json_schema(json!({ "namespace": { "type": "string", "default": "default" } })),
+            category: "Kubernetes".into(),
+        },
+        ToolDefinition {
+            name: "k8s_helm_list".into(),
+            description: "List installed Helm releases.".into(),
+            parameters: json_schema(json!({})),
+            category: "Kubernetes".into(),
+        },
     ]
 }
 

@@ -98,7 +98,7 @@
 
 - **MCP server** for Claude Code and Claude Desktop integration
 - **OpenAI-compatible function calling** endpoint
-- **27 tools** across 8 categories (containers, images, compose, k8s, volumes, networks, system, diagnostics)
+- **43 tools** across 8 categories (containers, images, compose, k8s, volumes, networks, system, diagnostics)
 - Direct tool execution endpoint for custom agents
 - Compound diagnostic tools (inspect + logs + stats in one call)
 
@@ -432,14 +432,14 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   -d '{"tool": "list_containers", "args": {}}'
 ```
 
-### Available Tools (27 tools, 8 categories)
+### Available Tools (43 tools, 8 categories)
 
 | Category | Tools |
 |----------|-------|
 | Containers | list, inspect, start, stop, restart, remove, logs, exec, stats |
 | Images | list, pull, remove, prune |
 | Compose | list stacks, up, down, pull |
-| Kubernetes | status, pods, deployments, services, scale |
+| Kubernetes | status, pods, deployments, services, ingresses, events, configmaps, secrets, scale, restart, delete pod, get yaml, helm list, namespaces |
 | Volumes | list, create, remove |
 | Networks | list, create, remove |
 | System | health, environment status |
