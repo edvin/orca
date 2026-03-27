@@ -56,9 +56,16 @@ fn active_api_token() -> Option<String> {
 static API_TOKEN: OnceLock<Option<String>> = OnceLock::new();
 
 /// Build a reqwest client with the API auth token pre-configured.
+/// Uses active_api_token() which returns the remote token when a remote host is selected.
 fn authed_client() -> reqwest::Client {
+    authed_client_with_timeout(30)
+}
+
+/// Build an authed client with a custom timeout (in seconds).
+/// Use this for long-running operations (image pull, K8s enable, AI queries, etc.)
+fn authed_client_with_timeout(timeout_secs: u64) -> reqwest::Client {
     let mut builder = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .connect_timeout(std::time::Duration::from_secs(5));
 
     // Check if we should skip TLS verification for the active remote host
@@ -527,20 +534,8 @@ pub async fn pull_image(
     }
 
     // Image pulls can take a long time — use extended timeout
-    let pull_client = {
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(token) = load_api_token() {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
-                headers.insert(reqwest::header::AUTHORIZATION, val);
-            }
-        }
-        reqwest::Client::builder()
-            .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(600))
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    };
+    // Must use active_api_token() (not load_api_token()) to support remote hosts
+    let pull_client = authed_client_with_timeout(600);
 
     let resp = pull_client
         .post(format!("{base}/images/pull"))
@@ -776,20 +771,7 @@ pub async fn import_image(path: String) -> Result<serde_json::Value, String> {
 pub async fn scan_image(id: String) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     // Trivy scans can take a while — use a longer timeout
-    let client = {
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(token) = load_api_token() {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
-                headers.insert(reqwest::header::AUTHORIZATION, val);
-            }
-        }
-        reqwest::Client::builder()
-            .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(600))
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    };
+    let client = authed_client_with_timeout(600);
 
     let encoded = urlencoding::encode(&id);
     let resp = client
@@ -944,20 +926,7 @@ pub async fn k8s_status() -> Result<serde_json::Value, String> {
 pub async fn k8s_enable() -> Result<serde_json::Value, String> {
     let base = daemon_url();
     // K8s setup can take several minutes — use a long timeout
-    let long_client = {
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(token) = load_api_token() {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
-                headers.insert(reqwest::header::AUTHORIZATION, val);
-            }
-        }
-        reqwest::Client::builder()
-            .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(600))
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    };
+    let long_client = authed_client_with_timeout(600);
 
     long_client
         .post(format!("{base}/k8s/enable"))
@@ -1704,20 +1673,7 @@ pub async fn env_status() -> Result<serde_json::Value, String> {
 pub async fn env_fix(action: String) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     // Fix actions can take minutes (install Homebrew, Lima, Docker, etc.)
-    let long_client = {
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(token) = load_api_token() {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
-                headers.insert(reqwest::header::AUTHORIZATION, val);
-            }
-        }
-        reqwest::Client::builder()
-            .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(600)) // 10 minutes
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    };
+    let long_client = authed_client_with_timeout(600);
     long_client
         .post(format!("{base}/environment/fix"))
         .json(&serde_json::json!({ "action": action }))
@@ -1736,18 +1692,7 @@ pub async fn env_fix_stream(app: tauri::AppHandle, action: String) -> Result<(),
     let base = daemon_url();
     use tauri::Emitter;
 
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Some(token) = load_api_token() {
-        if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
-            headers.insert(reqwest::header::AUTHORIZATION, val);
-        }
-    }
-    let client = reqwest::Client::builder()
-        .default_headers(headers)
-        .timeout(std::time::Duration::from_secs(600))
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let client = authed_client_with_timeout(600);
 
     // Spawn the SSE reader in a background task
     tokio::spawn(async move {
@@ -1902,20 +1847,7 @@ pub async fn ai_ask(
     }
 
     // AI requests can be slow — local models need time to load into memory
-    let ai_client = {
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(token) = load_api_token() {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
-                headers.insert(reqwest::header::AUTHORIZATION, val);
-            }
-        }
-        reqwest::Client::builder()
-            .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(300))
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    };
+    let ai_client = authed_client_with_timeout(300);
 
     let resp = ai_client
         .post(format!("{base}/ai/ask"))
@@ -2108,20 +2040,7 @@ pub async fn get_lima_settings() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn save_lima_settings(name: String, cpus: u32, memory_gib: u32, disk_gib: u32) -> Result<serde_json::Value, String> {
     let base = daemon_url();
-    let long_client = {
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(token) = load_api_token() {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
-                headers.insert(reqwest::header::AUTHORIZATION, val);
-            }
-        }
-        reqwest::Client::builder()
-            .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(600))
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    };
+    let long_client = authed_client_with_timeout(600);
     long_client
         .post(format!("{base}/settings/lima"))
         .json(&serde_json::json!({ "name": name, "cpus": cpus, "memory_gib": memory_gib, "disk_gib": disk_gib }))
@@ -2334,6 +2253,10 @@ pub async fn save_compose_file(path: String, content: String) -> Result<(), Stri
 
 #[tauri::command]
 pub async fn check_ports(ports: Vec<u16>) -> Result<serde_json::Value, String> {
+    // Skip port check for remote hosts — we can't check remote ports from here
+    if DAEMON_URL_OVERRIDE.read().map(|g| g.is_some()).unwrap_or(false) {
+        return Ok(serde_json::json!({ "conflicts": [] }));
+    }
     let mut conflicts = Vec::new();
     for port in &ports {
         // Try to bind — if it fails, the port is in use
@@ -2529,17 +2452,37 @@ pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> R
         builder = builder.danger_accept_invalid_certs(true);
     }
     let client = builder.build().unwrap_or_else(|_| reqwest::Client::new());
-    let resp = client
+    // Test connectivity (health endpoint — no auth required)
+    let health_resp = client
         .get(format!("{base}/health"))
-        .header("Authorization", format!("Bearer {token}"))
         .send()
         .await
         .map_err(|e| format!("Connection failed: {e}"))?;
-    let health: serde_json::Value = resp
+    let health: serde_json::Value = health_resp
         .json()
         .await
         .map_err(|e| format!("Invalid response: {e}"))?;
-    Ok(health)
+
+    // Test authentication (containers endpoint — requires valid token)
+    let auth_resp = client
+        .get(format!("{base}/containers"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .map_err(|e| format!("Auth test failed: {e}"))?;
+
+    let auth_ok = auth_resp.status().is_success();
+    let version = health.get("version").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+    if !auth_ok {
+        return Err(format!("Connected to daemon v{version}, but authentication failed. Check your API token."));
+    }
+
+    Ok(serde_json::json!({
+        "status": "ok",
+        "version": version,
+        "authenticated": true,
+    }))
 }
 
 /// Probe a host (local or remote) to gather health, container, and image data.
