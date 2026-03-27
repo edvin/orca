@@ -246,6 +246,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/system/host-uid", get(host_uid))
         // Templates
         .route("/templates", get(list_templates))
+        .route("/templates/refresh", post(refresh_templates))
         .route("/templates/user", post(save_user_template).delete(delete_user_template))
         .route("/templates/{id}/deploy", post(deploy_template))
         // AI
@@ -3217,6 +3218,14 @@ async fn list_templates() -> Json<Vec<orca_core::templates::AppTemplate>> {
     // Trigger community template fetch (cached for 1 hour)
     let _ = orca_backend_common::templates::fetch_community_templates().await;
     Json(orca_backend_common::templates::all_templates())
+}
+
+/// Force-refresh the community template catalog (ignores cache).
+async fn refresh_templates() -> Result<impl IntoResponse, ApiError> {
+    orca_backend_common::templates::invalidate_cache();
+    let _ = orca_backend_common::templates::fetch_community_templates().await;
+    let templates = orca_backend_common::templates::all_templates();
+    Ok(Json(serde_json::json!({ "count": templates.len() })))
 }
 
 async fn save_user_template(

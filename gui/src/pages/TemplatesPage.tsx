@@ -594,6 +594,15 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               value={search()}
               onInput={(e) => setSearch(e.currentTarget.value)}
             />
+            <button class="btn" onClick={async () => {
+              try {
+                await invoke("refresh_templates");
+                showToast("Catalog refreshed", "success");
+                refreshTemplates();
+              } catch (e) { showToast(`Refresh failed: ${e}`, "error"); }
+            }} title="Refresh community catalog">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
             <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
             <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank"
               class="btn" style={{ "font-size": "12px", "text-decoration": "none" }}>

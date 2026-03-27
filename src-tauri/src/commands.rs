@@ -1758,6 +1758,17 @@ pub async fn list_templates() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+pub async fn refresh_templates() -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .post(format!("{base}/templates/refresh"))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?;
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
+#[tauri::command]
 pub async fn deploy_template(
     id: String,
     name: Option<String>,

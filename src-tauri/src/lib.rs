@@ -130,6 +130,7 @@ pub fn run() {
             commands::env_fix,
             commands::env_fix_stream,
             commands::list_templates,
+            commands::refresh_templates,
             commands::deploy_template,
             commands::save_user_template,
             commands::delete_user_template,

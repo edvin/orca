@@ -20,6 +20,11 @@ fn user_templates_path() -> std::path::PathBuf {
     config_dir.join("orca").join("templates.json")
 }
 
+/// Delete the cache file to force a re-fetch on next request.
+pub fn invalidate_cache() {
+    let _ = std::fs::remove_file(community_cache_path());
+}
+
 /// Fetch community templates from the online catalog.
 /// Cached locally for 1 hour. Falls back to cache if offline.
 pub async fn fetch_community_templates() -> Vec<AppTemplate> {
