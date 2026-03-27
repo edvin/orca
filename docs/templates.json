@@ -326,7 +326,7 @@
     "name": "Claude Code Workspace",
     "description": "Full dev environment with Claude CLI, Node, Python, Go, Rust, PHP, and common tools. Mount your project and start coding with AI.",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"4 17 10 11 4 5\"/><line x1=\"12\" y1=\"19\" x2=\"20\" y2=\"19\"/></svg>",
-    "category": "Dev Tools",
+    "category": "Development",
     "image": "ghcr.io/edvin/orca-claude-workspace:latest",
     "default_ports": [],
     "default_env": ["ANTHROPIC_API_KEY=your-key-here"],
