@@ -1114,7 +1114,7 @@
 
       <!-- Category: Fleet -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">12</span></span>
+        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">13</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -1129,7 +1129,8 @@
       <div class="ft-row"><span><strong>Host selector</strong> — switch between local and remote in the titlebar, status bar indicator</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>One-liner server install</strong> — <code>apt install orca-daemon</code> via Cloudsmith</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Hot-swap reconnect</strong> — Diagnose button finds Docker and reconnects instantly</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row" style="border: none;"><span><strong>TLS ready</strong> — Caddy/nginx reverse proxy examples, bearer token auth</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>TLS ready</strong> — Caddy/nginx reverse proxy examples, bearer token auth</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row" style="border: none;"><span><strong>Remote port forwarding</strong> — WebSocket TCP tunnel to any service on any host, no VPN needed</span><span class="ft-check ft-unique">&#10003;</span></div>
       </div>
 
   </div>
@@ -1218,6 +1219,62 @@
     </div>
     <div class="highlight-screenshot" style="direction: ltr;">
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/00-fleet.png" alt="Fleet dashboard with host cards, tags, and status" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<!-- Remote Port Forwarding -->
+<section class="showcase" style="padding-bottom: 0;">
+  <div class="section-header">
+    <h2>Remote port forwarding</h2>
+    <p>Access any service on any remote host — as if it were running locally.</p>
+  </div>
+
+  <div style="max-width: 900px; margin: 0 auto; padding: 0 24px;">
+    <!-- Flow diagram -->
+    <div style="display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 40px; flex-wrap: wrap;">
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px 24px; text-align: center;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">Your browser</div>
+        <div style="font-size: 15px; font-weight: 600; color: #e6edf3; font-family: monospace;">localhost:8080</div>
+      </div>
+      <div style="padding: 0 8px; color: #30363d; font-size: 20px;">&#x2192;</div>
+      <div style="background: linear-gradient(135deg, rgba(88, 166, 255, 0.12), rgba(139, 92, 246, 0.12)); border: 1px solid rgba(88, 166, 255, 0.3); border-radius: 12px; padding: 16px 24px; text-align: center;">
+        <div style="font-size: 11px; color: #58a6ff; margin-bottom: 4px;">WebSocket tunnel</div>
+        <div style="font-size: 13px; color: #8b949e;">Encrypted &middot; Authenticated</div>
+      </div>
+      <div style="padding: 0 8px; color: #30363d; font-size: 20px;">&#x2192;</div>
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px 24px; text-align: center;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">Remote daemon</div>
+        <div style="font-size: 15px; font-weight: 600; color: #3fb950; font-family: monospace;">service:80</div>
+      </div>
+    </div>
+
+    <!-- Feature cards -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 40px;">
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
+        <div style="font-size: 14px; font-weight: 600; color: #58a6ff; margin-bottom: 8px;">No VPN required</div>
+        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
+          Tunnels through the existing HTTPS connection to the daemon. Works through any firewall or NAT. No SSH, no WireGuard, no extra software.
+        </div>
+      </div>
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
+        <div style="font-size: 14px; font-weight: 600; color: #3fb950; margin-bottom: 8px;">One-click forwarding</div>
+        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
+          Click "Port Forward" on any K8s service. Orca opens a local listener and tunnels traffic to the remote cluster. Access it at <code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">localhost</code>.
+        </div>
+      </div>
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
+        <div style="font-size: 14px; font-weight: 600; color: #d29922; margin-bottom: 8px;">Authenticated &amp; secure</div>
+        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
+          Every tunnel is authenticated with your API token. Constant-time token comparison prevents timing attacks. TLS supported for production deployments.
+        </div>
+      </div>
+      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
+        <div style="font-size: 14px; font-weight: 600; color: #bc8cff; margin-bottom: 8px;">Works everywhere</div>
+        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
+          Same UI for local and remote hosts. Switch between fleet members in the titlebar — port forwarding works on all of them. Multiple tunnels at once.
+        </div>
+      </div>
     </div>
   </div>
 </section>

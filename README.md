@@ -115,6 +115,19 @@
 - Health checks with fix buttons and detailed diagnostics
 - Coexistence with existing Docker installations
 
+### Remote Port Forwarding
+
+- **WebSocket TCP tunnel** — access any service on a remote host as if it were local
+- Click "Port Forward" on a K8s service → `localhost:8080` connects to the remote service
+- Works through any firewall/NAT — tunnels over the existing authenticated HTTPS connection
+- No VPN, no SSH, no extra tooling — just the Orca daemon you already have installed
+- Multiple concurrent tunnels supported
+- Works for both local and remote hosts with the same UI
+
+```
+Your browser → localhost:8080 → [WebSocket tunnel] → Remote daemon → K8s service:80
+```
+
 ### Security
 
 - **Mandatory API token authentication** — auto-generated on first run, required on every request
