@@ -2744,3 +2744,23 @@ pub async fn get_webhook_url() -> Result<String, String> {
     let base = daemon_url();
     Ok(format!("{base}/webhooks/github"))
 }
+
+/// Returns the base URL and auth token for the active daemon.
+/// Used by frontend for direct fetch() calls (SSE streaming, etc.)
+#[tauri::command]
+pub async fn get_daemon_base() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "url": daemon_url(),
+        "token": active_api_token().unwrap_or_default(),
+    }))
+}
+
+/// Returns a WebSocket URL for the active daemon with the auth token as query param.
+/// Converts http(s) to ws(s) and appends the given path + token.
+#[tauri::command]
+pub async fn get_daemon_ws_url(path: String) -> Result<String, String> {
+    let base = daemon_url();
+    let ws_base = base.replace("https://", "wss://").replace("http://", "ws://");
+    let token = active_api_token().unwrap_or_default();
+    Ok(format!("{ws_base}{path}?token={}", urlencoding::encode(&token)))
+}

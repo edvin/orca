@@ -171,6 +171,8 @@ pub fn run() {
             commands::test_deploy_webhook,
             commands::save_webhook_secret,
             commands::get_webhook_url,
+            commands::get_daemon_ws_url,
+            commands::get_daemon_base,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

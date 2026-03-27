@@ -275,12 +275,12 @@ export default function ImagesPage(props: ImagesPageProps) {
     setBuildOutput([]);
     setBuildLog([]);
     try {
-      const token = await invoke("get_api_token") as string;
-      const response = await fetch("http://127.0.0.1:9477/api/v1/images/build", {
+      const daemon = await invoke("get_daemon_base") as { url: string; token: string };
+      const response = await fetch(`${daemon.url}/images/build`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+          "Authorization": `Bearer ${daemon.token}`,
         },
         body: JSON.stringify({
           context_path: path,

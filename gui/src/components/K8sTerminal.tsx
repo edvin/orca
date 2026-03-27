@@ -82,10 +82,7 @@ export default function K8sTerminal(props: K8sTerminalProps) {
     fitAddon.fit();
     term.focus();
 
-    let token = "";
-    try { token = await invoke("get_api_token") as string; } catch {}
-
-    const wsUrl = `ws://127.0.0.1:9477/api/v1/k8s/pods/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.podName)}/terminal?token=${encodeURIComponent(token)}`;
+    const wsUrl = await invoke("get_daemon_ws_url", { path: `/k8s/pods/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.podName)}/terminal` }) as string;
     ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
 

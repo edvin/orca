@@ -357,11 +357,8 @@ export default function KubernetesPage() {
     setSetupDialogOpen(true);
 
     try {
-      // Get auth token for WebSocket
-      let token = "";
-      try { token = await invoke("get_api_token") as string; } catch {}
-
-      const wsUrl = `ws://127.0.0.1:9477/api/v1/k8s/enable-stream?token=${encodeURIComponent(token)}`;
+      // Get WebSocket URL for the active daemon (local or remote)
+      const wsUrl = await invoke("get_daemon_ws_url", { path: "/k8s/enable-stream" }) as string;
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {

@@ -1223,6 +1223,19 @@
       <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/00-fleet.png" alt="Fleet dashboard with host cards, tags, and status" loading="lazy">
     </div>
   </div>
+
+  <!-- Install instructions -->
+  <div style="max-width: 900px; margin: 20px auto 0; padding: 0 24px;">
+    <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 20px 24px;">
+      <div style="font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 12px;">Install the daemon on any Linux server</div>
+      <pre style="background: #161b22; border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 13px; margin-bottom: 12px;"><code style="color: #e6edf3;"># One-liner install (Ubuntu/Debian)
+curl -1sLf 'https://dl.cloudsmith.io/public/edvin/orca/setup.deb.sh' | sudo bash
+sudo apt install orca-daemon</code></pre>
+      <div style="font-size: 12px; color: #8b949e; line-height: 1.6;">
+        Starts automatically on boot. API token generated at <code style="color: #58a6ff;">/etc/orca/config.json</code>. Then add the host in Orca Desktop: Settings &rarr; Remote Hosts &rarr; paste URL and token.
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- Auto-Deploy -->
