@@ -186,6 +186,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/pvcs/{namespace}/{name}", delete(k8s_delete_pvc))
         .route("/k8s/pods/{namespace}/{name}/logs", get(k8s_pod_logs))
         .route("/k8s/apply", post(k8s_apply))
+        .route("/k8s/yaml/{kind}/{namespace}/{name}", get(k8s_get_yaml))
         .route("/k8s/events/{namespace}", get(k8s_events))
         .route("/k8s/namespaces", post(k8s_create_namespace))
         .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
@@ -2461,6 +2462,14 @@ async fn k8s_apply(
 ) -> Result<impl IntoResponse, ApiError> {
     let output = state.k8s.apply_yaml(&body.yaml).await?;
     Ok(Json(serde_json::json!({ "output": output })))
+}
+
+async fn k8s_get_yaml(
+    State(state): State<Arc<AppState>>,
+    Path((kind, namespace, name)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    let yaml = state.k8s.get_resource_yaml(&kind, &name, &namespace).await?;
+    Ok(yaml)
 }
 
 async fn k8s_events(

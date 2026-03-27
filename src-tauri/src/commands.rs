@@ -1127,43 +1127,19 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
     validate_k8s_name(&name)?;
     validate_k8s_name(&namespace)?;
 
-    let output = {
-        #[cfg(target_os = "windows")]
-        {
-            let mut cmd = tokio::process::Command::new("wsl");
-            cmd.args(["-u", "root", "--", "k3s", "kubectl", "get", &kind, &name, "-n", &namespace, "-o", "yaml"]);
-            #[cfg(target_os = "windows")]
-            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-            cmd.output().await.map_err(|e| format!("kubectl failed: {e}"))?
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            let path = std::env::var("PATH").unwrap_or_default();
-            tokio::process::Command::new("kubectl")
-                .env("PATH", format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{path}"))
-                .args(["--context", "orca", "get", &kind, &name, "-n", &namespace, "-o", "yaml"])
-                .output()
-                .await
-                .map_err(|e| format!("kubectl failed: {e}"))?
-        }
-    };
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let base = daemon_url();
+    let resp = client()
+        .get(format!("{base}/k8s/yaml/{kind}/{namespace}/{name}"))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to get YAML: {e}"))?;
 
-    if !output.status.success() {
-        return Err(if stderr.trim().is_empty() {
-    let _base = daemon_url();
-            format!("kubectl exited with code {}: {}", output.status, stdout)
-        } else {
-            stderr
-        });
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
     }
 
-    if stdout.trim().is_empty() {
-        return Err(format!("kubectl returned no output for {} {}/{}", kind, namespace, name));
-    }
-
-    Ok(stdout)
+    resp.text().await.map_err(|e| format!("Failed to read response: {e}"))
 }
 
 #[tauri::command]
@@ -1561,6 +1537,11 @@ pub async fn k8s_port_forward(
     local_port: Option<u16>,
     expose: Option<bool>,
 ) -> Result<serde_json::Value, String> {
+    // Port forwarding only works on local host — it spawns a local kubectl process
+    if DAEMON_URL_OVERRIDE.read().map(|g| g.is_some()).unwrap_or(false) {
+        return Err("Port forwarding is not supported for remote hosts. Connect to the server directly.".to_string());
+    }
+
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&service)?;
     let local = local_port.unwrap_or(port);

@@ -3803,6 +3803,31 @@ fn format_duration_between(start: &str, end: &str) -> String {
     format_chrono_duration(e.signed_duration_since(s))
 }
 
+// --- Methods outside the K8sManager trait ---
+
+impl K3sManager {
+    pub async fn get_resource_yaml(&self, kind: &str, name: &str, namespace: &str) -> anyhow::Result<String> {
+        let mut cmd = self.kubectl_command();
+        cmd.args(["get", kind, name, "-n", namespace, "-o", "yaml"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let output = cmd.output().await
+            .map_err(|e| anyhow::anyhow!("kubectl failed: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("{}", stderr.trim());
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        if stdout.trim().is_empty() {
+            anyhow::bail!("No output for {kind} {name} in namespace {namespace}");
+        }
+        Ok(stdout)
+    }
+}
+
 /// Parse an RFC 3339 timestamp and return duration since now.
 #[allow(dead_code)]
 fn format_duration_since(start: &str) -> String {
