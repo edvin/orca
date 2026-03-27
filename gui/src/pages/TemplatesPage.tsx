@@ -587,6 +587,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               onInput={(e) => setSearch(e.currentTarget.value)}
             />
             <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
+            <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank"
+              class="btn" style={{ "font-size": "12px", "text-decoration": "none" }}>
+              Contribute Template
+            </a>
           </div>
         </Show>
       </div>

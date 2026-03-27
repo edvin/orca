@@ -1,0 +1,72 @@
+[
+  {
+    "id": "valkey",
+    "name": "Valkey",
+    "description": "Open-source Redis fork maintained by the Linux Foundation. Drop-in Redis replacement.",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\" transform=\"rotate(45 12 12)\"/><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"16\"/><line x1=\"8\" y1=\"12\" x2=\"16\" y2=\"12\"/></svg>",
+    "category": "Database",
+    "image": "valkey/valkey:latest",
+    "default_ports": ["6379:6379"],
+    "default_env": [],
+    "default_volumes": ["valkeydata:/data"],
+    "restart_policy": "unless-stopped",
+    "notes": "Drop-in replacement for Redis. Connect with: valkey-cli or redis-cli",
+    "is_builtin": true
+  },
+  {
+    "id": "dozzle",
+    "name": "Dozzle",
+    "description": "Real-time Docker container log viewer in the browser. Lightweight and fast.",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/></svg>",
+    "category": "Monitoring",
+    "image": "amir20/dozzle:latest",
+    "default_ports": ["9999:8080"],
+    "default_env": [],
+    "default_volumes": ["/var/run/docker.sock:/var/run/docker.sock:ro"],
+    "restart_policy": "unless-stopped",
+    "notes": "Log viewer at http://localhost:9999. Read-only access to Docker socket.",
+    "is_builtin": true
+  },
+  {
+    "id": "uptime-kuma",
+    "name": "Uptime Kuma",
+    "description": "Self-hosted monitoring tool like Uptime Robot. Beautiful status pages.",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 12h-4l-3 9L9 3l-3 9H2\"/></svg>",
+    "category": "Monitoring",
+    "image": "louislam/uptime-kuma:latest",
+    "default_ports": ["3001:3001"],
+    "default_env": [],
+    "default_volumes": ["uptime-kuma-data:/app/data"],
+    "restart_policy": "unless-stopped",
+    "notes": "Dashboard at http://localhost:3001. Create an admin account on first visit.",
+    "is_builtin": true
+  },
+  {
+    "id": "plausible",
+    "name": "Plausible Analytics",
+    "description": "Privacy-friendly Google Analytics alternative. No cookies, GDPR compliant.",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 20V10\"/><path d=\"M12 20V4\"/><path d=\"M6 20v-6\"/></svg>",
+    "category": "Analytics",
+    "image": "ghcr.io/plausible/community-edition:latest",
+    "default_ports": ["8000:8000"],
+    "default_env": ["BASE_URL=http://localhost:8000", "SECRET_KEY_BASE=changeme"],
+    "default_volumes": ["plausible-data:/var/lib/plausible"],
+    "restart_policy": "unless-stopped",
+    "notes": "Dashboard at http://localhost:8000. Requires a PostgreSQL and ClickHouse database — see docs for full setup.",
+    "is_builtin": true
+  },
+  {
+    "id": "n8n",
+    "name": "n8n",
+    "description": "Workflow automation tool. Connect APIs, services, and databases with a visual editor.",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"/></svg>",
+    "category": "Automation",
+    "image": "n8nio/n8n:latest",
+    "default_ports": ["5678:5678"],
+    "default_env": [],
+    "default_volumes": ["n8n-data:/home/node/.n8n"],
+    "restart_policy": "unless-stopped",
+    "notes": "Editor at http://localhost:5678. Create an account on first visit.",
+    "is_builtin": true
+  }
+]

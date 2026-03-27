@@ -75,6 +75,46 @@ Run Kubernetes integration tests:
 - Fix lint warnings: `cargo clippy`
 - The project should compile with zero warnings.
 
+## Contributing App Templates
+
+The App Catalog is powered by an online community template catalog at `docs/templates.json`. Anyone can contribute new templates via a pull request.
+
+### How to add a template
+
+1. Fork the repository
+2. Edit `docs/templates.json` and add your template entry:
+
+```json
+{
+  "id": "my-app",
+  "name": "My App",
+  "description": "Short description of what this app does.",
+  "icon": "<svg ...>...</svg>",
+  "category": "Database",
+  "image": "myorg/myapp:latest",
+  "default_ports": ["8080:80"],
+  "default_env": ["KEY=value"],
+  "default_volumes": ["appdata:/data"],
+  "restart_policy": "unless-stopped",
+  "notes": "Access at http://localhost:8080. Configuration tips here.",
+  "is_builtin": true
+}
+```
+
+3. Open a pull request
+
+### Template guidelines
+
+- **`id`**: Unique lowercase identifier (e.g., `my-app`)
+- **`icon`**: Inline SVG string (24x24 viewBox, stroke-based Lucide style)
+- **`category`**: Use an existing category or create a new one (Database, Web Server, Monitoring, Tools, AI, Development, Message Queue, Search, Storage, Analytics, Automation, Dev Tools)
+- **`default_env`**: Use `changeme` for passwords — Orca auto-generates a unique password at deploy time
+- **`notes`**: Include how to access the app and any first-run instructions
+- **`restart_policy`**: Use `unless-stopped` for services, `no` for tools
+- **`is_builtin`**: Set to `true` so it appears as a catalog template (not user-created)
+
+The catalog is fetched by the app every hour and cached locally. New templates appear automatically — no app update needed.
+
 ## PR Process
 
 1. Fork the repository and create a feature branch.

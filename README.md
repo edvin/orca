@@ -77,9 +77,11 @@
 ### App Templates
 
 - **One-click deployable apps** — databases, web servers, monitoring, AI, dev tools, and more
+- **Community catalog** — templates fetched from [orca-desktop.com/templates.json](https://orca-desktop.com/templates.json), updated hourly
 - Pre-configured with sensible defaults (ports, volumes, env vars)
 - Structured editors for ports, env vars, and volumes before deploy
 - **Create your own templates** — saved locally and available alongside builtins
+- **Contribute templates** — add your favorite app to the catalog via [PR](CONTRIBUTING.md#contributing-app-templates)
 - Password/secret env vars auto-masked in the editor
 
 ### AI Assistant

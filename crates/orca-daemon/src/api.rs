@@ -3214,6 +3214,8 @@ async fn try_docker_connection() -> Option<(String, &'static str)> {
 // --- Templates ---
 
 async fn list_templates() -> Json<Vec<orca_core::templates::AppTemplate>> {
+    // Trigger community template fetch (cached for 1 hour)
+    let _ = orca_backend_common::templates::fetch_community_templates().await;
     Json(orca_backend_common::templates::all_templates())
 }
 

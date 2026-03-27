@@ -1,0 +1,96 @@
+name: App Catalog Template
+description: Submit a new app template for the Orca App Catalog
+title: "[Template] "
+labels: ["template"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for contributing a template! Fill in the details below and we'll add it to the community catalog.
+
+  - type: input
+    id: name
+    attributes:
+      label: App Name
+      placeholder: e.g., Traefik
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      placeholder: One or two sentences about what this app does.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Database
+        - Web Server
+        - Monitoring
+        - Tools
+        - AI
+        - Development
+        - Dev Tools
+        - Message Queue
+        - Search
+        - Storage
+        - Analytics
+        - Automation
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: image
+    attributes:
+      label: Docker Image
+      placeholder: e.g., traefik:v3
+    validations:
+      required: true
+
+  - type: input
+    id: ports
+    attributes:
+      label: Port Mappings
+      description: "Comma-separated host:container pairs"
+      placeholder: "8080:80, 443:443"
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment Variables
+      description: "One per line, KEY=value format. Use 'changeme' for passwords (auto-generated at deploy)."
+      placeholder: |
+        ADMIN_PASSWORD=changeme
+        DATABASE_URL=postgres://localhost/mydb
+
+  - type: input
+    id: volumes
+    attributes:
+      label: Volumes
+      description: "Comma-separated volume:path pairs"
+      placeholder: "appdata:/data, config:/etc/app"
+
+  - type: dropdown
+    id: restart_policy
+    attributes:
+      label: Restart Policy
+      options:
+        - unless-stopped
+        - always
+        - "no"
+      default: 0
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: How to access the app, first-run instructions, tips.
+      placeholder: "Access at http://localhost:8080. Default login: admin/changeme"
+    validations:
+      required: true
