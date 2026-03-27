@@ -179,6 +179,15 @@ impl Default for OrcaConfig {
 
 impl OrcaConfig {
     pub fn config_path() -> PathBuf {
+        // On Linux, prefer /etc/orca/config.json for system-wide daemon installs
+        // (e.g., apt-installed orca-daemon running as systemd service)
+        #[cfg(target_os = "linux")]
+        {
+            let etc_path = PathBuf::from("/etc/orca/config.json");
+            if etc_path.exists() {
+                return etc_path;
+            }
+        }
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("~/.config"))
             .join("orca")

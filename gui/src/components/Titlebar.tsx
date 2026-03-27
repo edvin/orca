@@ -50,7 +50,8 @@ export default function Titlebar(props: TitlebarProps) {
       setActiveHost(active);
       setHostMenuOpen(false);
       showToast(`Switched to ${active.name}`, "success");
-      // Trigger a refresh across the app
+      // Trigger a full refresh + chart reset across the app
+      document.dispatchEvent(new CustomEvent("orca-host-switch"));
       document.dispatchEvent(new CustomEvent("orca-refresh"));
     } catch (e) {
       showToast(`Failed to switch host: ${e}`, "error");

@@ -88,6 +88,24 @@ export default function DashboardPage(props: DashboardPageProps) {
 
   useRefresh(fetchAll);
 
+  // Reset chart history when switching hosts
+  const handleHostSwitch = () => {
+    setCpuHistory([]);
+    setMemHistory([]);
+    setPerContainerCpuHistory({});
+    setPerContainerMemHistory({});
+    setContainerStats({});
+    setContainersState("loading");
+    setImagesState("loading");
+    setStacksState("loading");
+    setHealthState("loading");
+    fetchAll();
+  };
+  onMount(() => {
+    document.addEventListener("orca-host-switch", handleHostSwitch);
+    onCleanup(() => document.removeEventListener("orca-host-switch", handleHostSwitch));
+  });
+
   const fetchStats = async () => {
     const running = containers().filter((c) => c.state === "Running");
     if (running.length === 0) return;
