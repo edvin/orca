@@ -298,7 +298,7 @@ export default function App() {
                   onNavigate={(p) => navigate(p)}
                 />
               )}
-              {page() === "images" && <ImagesPage autoOpenPull={detailId() === "pull"} onPullOpened={() => setDetailId(null)} />}
+              {page() === "images" && <ImagesPage autoOpenPull={detailId() === "pull"} onPullOpened={() => setDetailId(null)} onNavigate={(p) => navigate(p)} />}
               {page() === "volumes" && <VolumesPage onNavigate={(p) => navigate(p)} />}
               {page() === "volume-detail" && detailId() && (
                 <VolumeDetailPage

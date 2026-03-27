@@ -805,7 +805,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       <Show when={showRunDialog()}>
         <RunContainerDialog
           onClose={() => setShowRunDialog(false)}
-          onCreated={refresh}
+          onCreated={(id) => { refresh(); if (id) props.onNavigate?.(`container:${id}`); }}
         />
       </Show>
 

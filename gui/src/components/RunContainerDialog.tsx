@@ -6,7 +6,7 @@ import Dropdown from "./Dropdown";
 
 interface RunContainerDialogProps {
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (containerId?: string) => void;
   initialImage?: string;
 }
 
@@ -113,9 +113,10 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
       setStage("starting");
       setStageMessage("Container started!");
 
+      const containerId = (result as any)?.id;
       setTimeout(() => {
         showToast(`Container started from ${imgRef}`, "success");
-        props.onCreated();
+        props.onCreated(containerId);
         props.onClose();
       }, 600);
     } catch (err) {

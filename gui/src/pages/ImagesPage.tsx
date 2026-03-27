@@ -16,6 +16,7 @@ import { logError } from "../lib/activityStore";
 interface ImagesPageProps {
   autoOpenPull?: boolean;
   onPullOpened?: () => void;
+  onNavigate?: (target: string) => void;
 }
 
 export default function ImagesPage(props: ImagesPageProps) {
@@ -1252,7 +1253,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         <RunContainerDialog
           initialImage={runImage()!}
           onClose={() => setRunImage(null)}
-          onCreated={refresh}
+          onCreated={(id) => { refresh(); if (id) props.onNavigate?.(`container:${id}`); }}
         />
       </Show>
 
@@ -1356,12 +1357,12 @@ export default function ImagesPage(props: ImagesPageProps) {
       <Show when={showPull()}>
         <div class="modal-overlay"
           onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
-          onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !pulling()) setShowPull(false); (e.currentTarget as any).__mdOverlay = false; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) { setShowPull(false); setPulling(false); setPullStatus(""); } (e.currentTarget as any).__mdOverlay = false; }}
         >
           <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "min-height": "500px", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
               <span class="modal-title">Pull Image</span>
-              <button class="modal-close" onClick={() => { if (!pulling()) setShowPull(false); }}>{"\u00d7"}</button>
+              <button class="modal-close" onClick={() => { setShowPull(false); setPulling(false); setPullStatus(""); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
               <div style={{ position: "relative" }}>
@@ -1480,7 +1481,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               >
                 {showAuth() ? "Auth \u25B2" : "Auth \u25BC"}
               </button>
-              <button class="btn" onClick={() => { if (!pulling()) setShowPull(false); }} disabled={pulling()}>Cancel</button>
+              <button class="btn" onClick={() => { setShowPull(false); setPulling(false); setPullStatus(""); }}>{pulling() ? "Close" : "Cancel"}</button>
               <button
                 class="btn btn-primary"
                 onClick={() => doPull()}
