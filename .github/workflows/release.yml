@@ -179,13 +179,8 @@ jobs:
             done < <(find "$TARGET/bundle" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" -o -name "*-setup.exe" \) 2>/dev/null)
           fi
 
-          # Add standalone daemon binary (stripped for size)
-          if [ -f "$TARGET/orca-daemon.exe" ]; then
-            UPLOAD_FILES="$UPLOAD_FILES \"$TARGET/orca-daemon.exe\""
-          elif [ -f "$TARGET/orca-daemon" ]; then
-            strip "$TARGET/orca-daemon" 2>/dev/null || true
-            UPLOAD_FILES="$UPLOAD_FILES \"$TARGET/orca-daemon\""
-          fi
+          # Standalone daemon binaries are uploaded by the daemon-package workflow
+          # — don't duplicate them here to avoid name collisions
 
           if [ -n "$UPLOAD_FILES" ]; then
             echo "Uploading artifacts..."
