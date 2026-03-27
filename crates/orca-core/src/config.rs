@@ -106,6 +106,85 @@ pub struct OrcaConfig {
     /// Remote orca-daemon hosts.
     #[serde(default)]
     pub remote_hosts: Vec<RemoteHost>,
+    /// Global webhook secret for HMAC-SHA256 signature validation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webhook_secret: Option<String>,
+    /// Auto-deploy rules mapping image patterns to containers.
+    #[serde(default)]
+    pub deploy_rules: Vec<DeployRule>,
+    /// Recent deploy history (newest first, capped at 100).
+    #[serde(default)]
+    pub deploy_history: Vec<DeployRecord>,
+}
+
+/// A deployment rule that maps an image pattern to containers for auto-deploy.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeployRule {
+    pub id: String,
+    pub name: String,
+    /// Image to match (e.g., "ghcr.io/edvin/myapp"). Without tag.
+    pub image_pattern: String,
+    /// Tag filter: "latest", "v*" (glob), "*" for any, or empty for any.
+    #[serde(default)]
+    pub tag_filter: String,
+    /// Container names to redeploy. If empty, matches any container running this image.
+    #[serde(default)]
+    pub container_names: Vec<String>,
+    /// Per-rule webhook secret (overrides global).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webhook_secret: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeployRecord {
+    pub id: String,
+    pub rule_name: String,
+    pub image: String,
+    pub tag: String,
+    pub container_name: String,
+    pub status: DeployStatus,
+    pub timestamp: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DeployStatus {
+    Success,
+    Failed,
+}
+
+impl OrcaConfig {
+    /// Find deploy rules matching an image and tag.
+    pub fn find_matching_rules(&self, image: &str, tag: &str) -> Vec<&DeployRule> {
+        self.deploy_rules.iter().filter(|r| {
+            if !r.enabled { return false; }
+            // Match image pattern (substring or exact)
+            if !image.contains(&r.image_pattern) && r.image_pattern != image {
+                return false;
+            }
+            // Match tag filter
+            let filter = r.tag_filter.trim();
+            if filter.is_empty() || filter == "*" {
+                return true;
+            }
+            if filter.contains('*') {
+                // Simple glob: "v*" matches "v1.2.3"
+                let prefix = filter.trim_end_matches('*');
+                tag.starts_with(prefix)
+            } else {
+                tag == filter
+            }
+        }).collect()
+    }
+
+    /// Add a deploy record, capping history at 100 entries.
+    pub fn add_deploy_record(&mut self, record: DeployRecord) {
+        self.deploy_history.insert(0, record);
+        self.deploy_history.truncate(100);
+    }
 }
 
 fn default_ai_provider() -> String {
@@ -173,6 +252,9 @@ impl Default for OrcaConfig {
             openai_model: default_openai_model(),
             anthropic_model: default_anthropic_model(),
             remote_hosts: Vec::new(),
+            webhook_secret: None,
+            deploy_rules: Vec::new(),
+            deploy_history: Vec::new(),
         }
     }
 }

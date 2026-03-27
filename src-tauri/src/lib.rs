@@ -164,6 +164,10 @@ pub fn run() {
             commands::test_remote_host,
             commands::probe_host,
             commands::probe_all_hosts,
+            commands::list_deploy_rules,
+            commands::save_deploy_rule,
+            commands::delete_deploy_rule,
+            commands::list_deploy_history,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

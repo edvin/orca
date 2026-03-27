@@ -2716,3 +2716,52 @@ pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
 
     Ok(results)
 }
+
+// --- Auto-Deploy Rules ---
+
+#[tauri::command]
+pub async fn list_deploy_rules() -> Result<serde_json::Value, String> {
+    get_json("/deploy/rules").await
+}
+
+#[tauri::command]
+pub async fn save_deploy_rule(
+    id: Option<String>,
+    name: String,
+    image_pattern: String,
+    tag_filter: Option<String>,
+    container_names: Option<Vec<String>>,
+    webhook_secret: Option<String>,
+    enabled: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let body = serde_json::json!({
+        "id": id,
+        "name": name,
+        "image_pattern": image_pattern,
+        "tag_filter": tag_filter.unwrap_or_default(),
+        "container_names": container_names.unwrap_or_default(),
+        "webhook_secret": webhook_secret,
+        "enabled": enabled.unwrap_or(true),
+    });
+    let resp = client()
+        .post(format!("{base}/deploy/rules"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
+#[tauri::command]
+pub async fn delete_deploy_rule(id: String) -> Result<(), String> {
+    delete(&format!("/deploy/rules/{id}")).await
+}
+
+#[tauri::command]
+pub async fn list_deploy_history() -> Result<serde_json::Value, String> {
+    get_json("/deploy/history").await
+}

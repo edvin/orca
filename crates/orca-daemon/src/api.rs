@@ -71,6 +71,11 @@ pub async fn auth_middleware(
         return Ok(response);
     }
 
+    // Allow webhook endpoints — they validate via HMAC signature
+    if req.uri().path().contains("/webhooks/") {
+        return Ok(next.run(req).await);
+    }
+
     // Allow WebSocket endpoints — they do their own auth via query param
     if req.uri().path().ends_with("/terminal") || req.uri().path().ends_with("/enable-stream") || req.uri().path().ends_with("/tunnel") {
         return Ok(next.run(req).await);
@@ -190,6 +195,13 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/events/{namespace}", get(k8s_events))
         // TCP tunnel (WebSocket-based port forwarding for remote hosts)
         .route("/tunnel", get(tunnel_ws))
+        // Webhooks (HMAC-authenticated, no bearer token)
+        .route("/webhooks/github", post(webhook_github))
+        .route("/webhooks/dockerhub", post(webhook_dockerhub))
+        // Auto-deploy rules
+        .route("/deploy/rules", get(list_deploy_rules).post(save_deploy_rule))
+        .route("/deploy/rules/{id}", delete(delete_deploy_rule))
+        .route("/deploy/history", get(list_deploy_history))
         .route("/k8s/namespaces", post(k8s_create_namespace))
         .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
         .route("/k8s/configmaps/{namespace}", get(k8s_configmaps))
@@ -3728,6 +3740,352 @@ async fn handle_tunnel(socket: WebSocket, host: String, port: u16) {
         _ = ws_to_tcp => {},
     }
     tracing::info!("Tunnel: closed connection to {host}:{port}");
+}
+
+// --- Webhooks & Auto-Deploy ---
+
+async fn webhook_github(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> Result<impl IntoResponse, ApiError> {
+    let config = orca_core::config::OrcaConfig::load()?;
+
+    // Validate signature if a webhook secret is configured
+    if let Some(ref global_secret) = config.webhook_secret {
+        let sig = headers.get("x-hub-signature-256")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if !orca_core::webhook::validate_github_signature(global_secret, &body, sig) {
+            // Try per-rule secrets
+            let any_valid = config.deploy_rules.iter().any(|r| {
+                r.webhook_secret.as_ref().map(|s|
+                    orca_core::webhook::validate_github_signature(s, &body, sig)
+                ).unwrap_or(false)
+            });
+            if !any_valid {
+                return Err(anyhow::anyhow!("Invalid webhook signature").into());
+            }
+        }
+    }
+
+    let event_type = headers.get("x-github-event")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if event_type != "package" && event_type != "registry_package" {
+        // Not a package event — acknowledge but skip
+        return Ok(Json(serde_json::json!({ "accepted": true, "skipped": true, "reason": format!("event type '{event_type}' not handled") })));
+    }
+
+    let payload = orca_core::webhook::parse_github_package_event(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse webhook: {e}"))?;
+
+    if payload.action != "published" && payload.action != "updated" {
+        return Ok(Json(serde_json::json!({ "accepted": true, "skipped": true, "reason": format!("action '{}' not handled", payload.action) })));
+    }
+
+    let rules = config.find_matching_rules(&payload.image, &payload.tag);
+    let matched = rules.len();
+
+    if matched > 0 {
+        tracing::info!("Webhook: {} rule(s) matched for {}:{}", matched, payload.image, payload.tag);
+        let image_ref = format!("{}:{}", payload.image, payload.tag);
+        let rules: Vec<orca_core::config::DeployRule> = rules.into_iter().cloned().collect();
+        let state = state.clone();
+        tokio::spawn(async move {
+            execute_auto_deploy(&state, &image_ref, &rules).await;
+        });
+    } else {
+        tracing::info!("Webhook: no matching rules for {}:{}", payload.image, payload.tag);
+    }
+
+    Ok(Json(serde_json::json!({ "accepted": true, "matched_rules": matched })))
+}
+
+async fn webhook_dockerhub(
+    State(state): State<Arc<AppState>>,
+    body: axum::body::Bytes,
+) -> Result<impl IntoResponse, ApiError> {
+    let payload = orca_core::webhook::parse_dockerhub_event(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse Docker Hub webhook: {e}"))?;
+
+    let config = orca_core::config::OrcaConfig::load()?;
+    let rules = config.find_matching_rules(&payload.image, &payload.tag);
+    let matched = rules.len();
+
+    if matched > 0 {
+        tracing::info!("Docker Hub webhook: {} rule(s) matched for {}:{}", matched, payload.image, payload.tag);
+        let image_ref = format!("{}:{}", payload.image, payload.tag);
+        let rules: Vec<orca_core::config::DeployRule> = rules.into_iter().cloned().collect();
+        let state = state.clone();
+        tokio::spawn(async move {
+            execute_auto_deploy(&state, &image_ref, &rules).await;
+        });
+    }
+
+    Ok(Json(serde_json::json!({ "accepted": true, "matched_rules": matched })))
+}
+
+/// Execute auto-deploy for matched rules: pull image, stop old container, start new one.
+async fn execute_auto_deploy(state: &Arc<AppState>, image_ref: &str, rules: &[orca_core::config::DeployRule]) {
+    use bollard::container::ListContainersOptions;
+    use orca_core::config::{DeployRecord, DeployStatus};
+
+    // Pull the new image
+    tracing::info!("Auto-deploy: pulling {image_ref}...");
+    if let Err(e) = pull_image_blocking(&state.rt().await.docker, image_ref).await {
+        tracing::error!("Auto-deploy: failed to pull {image_ref}: {e}");
+        // Record failure for all rules
+        if let Ok(mut config) = orca_core::config::OrcaConfig::load() {
+            for rule in rules {
+                config.add_deploy_record(DeployRecord {
+                    id: format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
+                    rule_name: rule.name.clone(),
+                    image: image_ref.to_string(),
+                    tag: image_ref.split(':').nth(1).unwrap_or("latest").to_string(),
+                    container_name: "N/A".to_string(),
+                    status: DeployStatus::Failed,
+                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| format!("{}", d.as_secs())).unwrap_or_default(),
+                    error: Some(format!("Pull failed: {e}")),
+                });
+            }
+            let _ = config.save();
+        }
+        return;
+    }
+    tracing::info!("Auto-deploy: pulled {image_ref}");
+
+    // Find and redeploy matching containers
+    let containers = state.rt().await.docker.list_containers(Some(ListContainersOptions::<String> {
+        all: true,
+        ..Default::default()
+    })).await.unwrap_or_default();
+
+    for rule in rules {
+        let target_containers: Vec<_> = containers.iter().filter(|c| {
+            let c_image = c.image.as_deref().unwrap_or("");
+            let c_name = c.names.as_ref()
+                .and_then(|names| names.first())
+                .map(|n| n.trim_start_matches('/'))
+                .unwrap_or("");
+
+            // Match by container name if specified, otherwise by image
+            if !rule.container_names.is_empty() {
+                rule.container_names.iter().any(|n| n == c_name)
+            } else {
+                c_image.contains(&rule.image_pattern)
+            }
+        }).collect();
+
+        for container in target_containers {
+            let c_id = container.id.as_deref().unwrap_or("");
+            let c_name = container.names.as_ref()
+                .and_then(|names| names.first())
+                .map(|n| n.trim_start_matches('/').to_string())
+                .unwrap_or_else(|| c_id[..12].to_string());
+
+            tracing::info!("Auto-deploy: redeploying container '{c_name}' with {image_ref}");
+
+            match redeploy_container(&state.rt().await.docker, c_id, image_ref).await {
+                Ok(new_id) => {
+                    tracing::info!("Auto-deploy: container '{c_name}' redeployed as {}", &new_id[..12]);
+                    if let Ok(mut config) = orca_core::config::OrcaConfig::load() {
+                        config.add_deploy_record(DeployRecord {
+                            id: format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
+                            rule_name: rule.name.clone(),
+                            image: image_ref.to_string(),
+                            tag: image_ref.split(':').nth(1).unwrap_or("latest").to_string(),
+                            container_name: c_name.clone(),
+                            status: DeployStatus::Success,
+                            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| format!("{}", d.as_secs())).unwrap_or_default(),
+                            error: None,
+                        });
+                        let _ = config.save();
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Auto-deploy: failed to redeploy '{c_name}': {e}");
+                    if let Ok(mut config) = orca_core::config::OrcaConfig::load() {
+                        config.add_deploy_record(DeployRecord {
+                            id: format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
+                            rule_name: rule.name.clone(),
+                            image: image_ref.to_string(),
+                            tag: image_ref.split(':').nth(1).unwrap_or("latest").to_string(),
+                            container_name: c_name.clone(),
+                            status: DeployStatus::Failed,
+                            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| format!("{}", d.as_secs())).unwrap_or_default(),
+                            error: Some(format!("{e}")),
+                        });
+                        let _ = config.save();
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Pull an image and wait for completion.
+async fn pull_image_blocking(docker: &bollard::Docker, image_ref: &str) -> anyhow::Result<()> {
+    use bollard::image::CreateImageOptions;
+
+    let options = CreateImageOptions {
+        from_image: image_ref,
+        ..Default::default()
+    };
+    let stream = docker.create_image(Some(options), None, None);
+    let items: Vec<_> = tokio_stream::StreamExt::collect(stream).await;
+    for item in items {
+        item.map_err(|e| anyhow::anyhow!("Pull error: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Redeploy a container: inspect → stop → remove → create new with same config + new image → start.
+async fn redeploy_container(docker: &bollard::Docker, container_id: &str, new_image: &str) -> anyhow::Result<String> {
+    use bollard::container::{Config, CreateContainerOptions, StopContainerOptions, RemoveContainerOptions};
+    use bollard::models::HostConfig;
+
+    // Inspect the running container
+    let info = docker.inspect_container(container_id, None).await
+        .map_err(|e| anyhow::anyhow!("Failed to inspect container: {e}"))?;
+
+    let old_config = info.config.ok_or_else(|| anyhow::anyhow!("No config found"))?;
+    let old_host_config = info.host_config.unwrap_or_default();
+    let container_name = info.name.unwrap_or_default().trim_start_matches('/').to_string();
+
+    // Stop the old container
+    let _ = docker.stop_container(container_id, Some(StopContainerOptions { t: 10 })).await;
+
+    // Remove the old container
+    docker.remove_container(container_id, Some(RemoveContainerOptions {
+        force: true,
+        ..Default::default()
+    })).await.map_err(|e| anyhow::anyhow!("Failed to remove old container: {e}"))?;
+
+    // Create new container with same config but updated image
+    let new_config = Config {
+        image: Some(new_image.to_string()),
+        cmd: old_config.cmd,
+        env: old_config.env,
+        entrypoint: old_config.entrypoint,
+        exposed_ports: old_config.exposed_ports,
+        labels: old_config.labels,
+        user: old_config.user,
+        working_dir: old_config.working_dir,
+        host_config: Some(HostConfig {
+            binds: old_host_config.binds,
+            port_bindings: old_host_config.port_bindings,
+            network_mode: old_host_config.network_mode,
+            restart_policy: old_host_config.restart_policy,
+            memory: old_host_config.memory,
+            nano_cpus: old_host_config.nano_cpus,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let create_opts = if container_name.is_empty() {
+        None
+    } else {
+        Some(CreateContainerOptions { name: container_name.as_str(), platform: None })
+    };
+
+    let created = docker.create_container(create_opts, new_config).await
+        .map_err(|e| anyhow::anyhow!("Failed to create new container: {e}"))?;
+
+    // Start the new container
+    docker.start_container::<String>(&created.id, None).await
+        .map_err(|e| anyhow::anyhow!("Failed to start new container: {e}"))?;
+
+    Ok(created.id)
+}
+
+// --- Deploy Rules CRUD ---
+
+#[derive(Deserialize)]
+struct SaveDeployRuleRequest {
+    id: Option<String>,
+    name: String,
+    image_pattern: String,
+    #[serde(default)]
+    tag_filter: String,
+    #[serde(default)]
+    container_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    webhook_secret: Option<String>,
+    #[serde(default = "default_true_value")]
+    enabled: bool,
+}
+
+fn default_true_value() -> bool { true }
+
+async fn list_deploy_rules() -> Result<impl IntoResponse, ApiError> {
+    let config = orca_core::config::OrcaConfig::load()?;
+    // Don't expose webhook secrets to the frontend
+    let rules: Vec<serde_json::Value> = config.deploy_rules.iter().map(|r| {
+        serde_json::json!({
+            "id": r.id,
+            "name": r.name,
+            "image_pattern": r.image_pattern,
+            "tag_filter": r.tag_filter,
+            "container_names": r.container_names,
+            "has_secret": r.webhook_secret.is_some(),
+            "enabled": r.enabled,
+        })
+    }).collect();
+    Ok(Json(rules))
+}
+
+async fn save_deploy_rule(
+    Json(body): Json<SaveDeployRuleRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = orca_core::config::OrcaConfig::load()?;
+    let id = body.id.unwrap_or_else(|| {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        format!("{:x}{:04x}", now.as_millis(), now.subsec_nanos() & 0xFFFF)
+    });
+
+    // Update existing or add new
+    if let Some(existing) = config.deploy_rules.iter_mut().find(|r| r.id == id) {
+        existing.name = body.name;
+        existing.image_pattern = body.image_pattern;
+        existing.tag_filter = body.tag_filter;
+        existing.container_names = body.container_names;
+        if body.webhook_secret.is_some() {
+            existing.webhook_secret = body.webhook_secret;
+        }
+        existing.enabled = body.enabled;
+    } else {
+        config.deploy_rules.push(orca_core::config::DeployRule {
+            id: id.clone(),
+            name: body.name,
+            image_pattern: body.image_pattern,
+            tag_filter: body.tag_filter,
+            container_names: body.container_names,
+            webhook_secret: body.webhook_secret,
+            enabled: body.enabled,
+        });
+    }
+
+    config.save()?;
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn delete_deploy_rule(
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = orca_core::config::OrcaConfig::load()?;
+    config.deploy_rules.retain(|r| r.id != id);
+    config.save()?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn list_deploy_history() -> Result<impl IntoResponse, ApiError> {
+    let config = orca_core::config::OrcaConfig::load()?;
+    Ok(Json(config.deploy_history))
 }
 
 // --- AI Settings ---

@@ -8,7 +8,7 @@ import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, update
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 
-type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "maintenance" | "about";
+type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "maintenance" | "about";
 
 export default function SettingsPage() {
   const [tab, setTab] = createSignal<SettingsTab>("general");
@@ -34,6 +34,17 @@ export default function SettingsPage() {
   const [hostTesting, setHostTesting] = createSignal(false);
   const [hostTestResult, setHostTestResult] = createSignal<string | null>(null);
   const [showHostToken, setShowHostToken] = createSignal(false);
+
+  // Auto-deploy
+  const [deployRules, setDeployRules] = createSignal<any[]>([]);
+  const [deployHistory, setDeployHistory] = createSignal<any[]>([]);
+  const [showAddRule, setShowAddRule] = createSignal(false);
+  const [editingRule, setEditingRule] = createSignal<any>(null);
+  const [ruleName, setRuleName] = createSignal("");
+  const [ruleImage, setRuleImage] = createSignal("");
+  const [ruleTagFilter, setRuleTagFilter] = createSignal("");
+  const [ruleContainers, setRuleContainers] = createSignal("");
+  const [ruleEnabled, setRuleEnabled] = createSignal(true);
 
   // Maintenance / System Prune
   const [pruneContainers, setPruneContainers] = createSignal(false);
@@ -165,6 +176,69 @@ export default function SettingsPage() {
       // Notify titlebar to refresh host selector
       document.dispatchEvent(new CustomEvent("orca-refresh"));
     } catch {}
+  };
+
+  const refreshDeployRules = async () => {
+    try {
+      const rules = (await invoke("list_deploy_rules")) as any[];
+      setDeployRules(rules);
+    } catch {}
+  };
+
+  const refreshDeployHistory = async () => {
+    try {
+      const history = (await invoke("list_deploy_history")) as any[];
+      setDeployHistory(history);
+    } catch {}
+  };
+
+  const resetRuleForm = () => {
+    setEditingRule(null);
+    setRuleName("");
+    setRuleImage("");
+    setRuleTagFilter("");
+    setRuleContainers("");
+    setRuleEnabled(true);
+  };
+
+  const saveRule = async () => {
+    if (!ruleName().trim() || !ruleImage().trim()) return;
+    try {
+      await invoke("save_deploy_rule", {
+        id: editingRule()?.id || null,
+        name: ruleName().trim(),
+        imagePattern: ruleImage().trim(),
+        tagFilter: ruleTagFilter().trim() || null,
+        containerNames: ruleContainers().trim() ? ruleContainers().split(",").map(s => s.trim()).filter(s => s) : null,
+        enabled: ruleEnabled(),
+      });
+      showToast(editingRule() ? "Rule updated" : "Rule created", "success");
+      setShowAddRule(false);
+      resetRuleForm();
+      await refreshDeployRules();
+    } catch (e) {
+      showToast(`Failed to save rule: ${e}`, "error");
+    }
+  };
+
+  const deleteRule = async (id: string) => {
+    try {
+      await invoke("delete_deploy_rule", { id });
+      showToast("Rule deleted", "success");
+      await refreshDeployRules();
+    } catch (e) {
+      showToast(`Failed to delete rule: ${e}`, "error");
+    }
+  };
+
+  const startEditRule = (rule: any) => {
+    setEditingRule(rule);
+    setRuleName(rule.name);
+    setRuleImage(rule.image_pattern);
+    setRuleTagFilter(rule.tag_filter || "");
+    setRuleContainers((rule.container_names || []).join(", "));
+    setRuleEnabled(rule.enabled);
+    setShowAddRule(true);
   };
 
   const resetHostForm = () => {
@@ -592,6 +666,8 @@ export default function SettingsPage() {
     refresh();
     refreshRegistries();
     refreshRemoteHosts();
+    refreshDeployRules();
+    refreshDeployHistory();
     refreshGeneralSettings();
     refreshAiSettings();
     refreshWslConfig();
@@ -616,6 +692,7 @@ export default function SettingsPage() {
         <button class={`tab-item ${tab() === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>AI & Agents</button>
         <button class={`tab-item ${tab() === "registries" ? "active" : ""}`} onClick={() => setTab("registries")}>Registries</button>
         <button class={`tab-item ${tab() === "remote-hosts" ? "active" : ""}`} onClick={() => setTab("remote-hosts")}>Remote Hosts</button>
+        <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>Auto-Deploy</button>
         <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
         <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
       </div>
@@ -1366,6 +1443,169 @@ export default function SettingsPage() {
               </Show>
             </div>
           </div>
+        </Show>
+
+        {/* === Auto-Deploy Tab === */}
+        <Show when={tab() === "auto-deploy"}>
+          <div class="settings-section">
+            <h2 class="settings-section-title">Auto-Deploy</h2>
+            <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "8px", "line-height": "1.5" }}>
+              Automatically redeploy containers when a new image is pushed. Add a GitHub webhook pointing to your daemon's webhook URL.
+            </p>
+            <div style={{ background: "#0d1117", "border-radius": "8px", padding: "12px 16px", "margin-bottom": "16px", "font-size": "12px" }}>
+              <div style={{ color: "#8b949e", "margin-bottom": "4px" }}>Webhook URL (add this in your GitHub repo settings):</div>
+              <code class="mono" style={{ color: "#58a6ff", "word-break": "break-all" }}>
+                {"<your-daemon-url>/api/v1/webhooks/github"}
+              </code>
+              <div style={{ color: "#6e7681", "margin-top": "6px", "font-size": "11px" }}>
+                Event type: <strong style={{ color: "#8b949e" }}>Packages</strong> &middot; Content type: <strong style={{ color: "#8b949e" }}>application/json</strong>
+              </div>
+            </div>
+
+            <Show when={deployRules().length > 0}>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Image Pattern</th>
+                    <th>Tag Filter</th>
+                    <th>Containers</th>
+                    <th style={{ width: "60px" }}>Status</th>
+                    <th style={{ "text-align": "right", width: "80px" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={deployRules()}>
+                    {(rule) => (
+                      <tr>
+                        <td style={{ "font-weight": 500 }}>{rule.name}</td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{rule.image_pattern}</td>
+                        <td>
+                          <span class="mono" style={{ "font-size": "12px", padding: "1px 6px", "border-radius": "4px", background: "rgba(88, 166, 255, 0.1)", color: "#58a6ff" }}>
+                            {rule.tag_filter || "*"}
+                          </span>
+                        </td>
+                        <td style={{ "font-size": "12px", color: "#8b949e" }}>
+                          {rule.container_names?.length ? rule.container_names.join(", ") : "Any matching"}
+                        </td>
+                        <td>
+                          <span style={{
+                            "font-size": "11px", padding: "2px 6px", "border-radius": "4px",
+                            background: rule.enabled ? "rgba(63, 185, 80, 0.1)" : "rgba(139, 148, 158, 0.1)",
+                            color: rule.enabled ? "#3fb950" : "#8b949e",
+                          }}>{rule.enabled ? "Active" : "Paused"}</span>
+                        </td>
+                        <td style={{ "text-align": "right" }}>
+                          <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end" }}>
+                            <button class="btn btn-sm" onClick={() => startEditRule(rule)} title="Edit">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onClick={() => deleteRule(rule.id)} title="Delete">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
+
+            <div style={{ "margin-top": "12px" }}>
+              <Show when={!showAddRule()}>
+                <button class="btn btn-primary" onClick={() => { resetRuleForm(); setShowAddRule(true); }}>Add Rule</button>
+              </Show>
+            </div>
+
+            <Show when={showAddRule()}>
+              <div class="card" style={{ "margin-top": "12px" }}>
+                <h3 style={{ "font-size": "14px", "font-weight": 600, "margin-bottom": "12px", color: "#e6edf3" }}>
+                  {editingRule() ? `Edit "${editingRule().name}"` : "Add Deploy Rule"}
+                </h3>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                  <div class="form-group">
+                    <label class="form-label">Rule Name</label>
+                    <input class="form-input" type="text" placeholder="Production API" value={ruleName()} onInput={(e) => setRuleName(e.currentTarget.value)} />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Image Pattern</label>
+                    <input class="form-input mono" type="text" placeholder="ghcr.io/myorg/myapp" value={ruleImage()} onInput={(e) => setRuleImage(e.currentTarget.value)} />
+                    <span class="form-hint">The image name without tag. Matches if the pushed image contains this pattern.</span>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group" style={{ flex: 1 }}>
+                      <label class="form-label">Tag Filter</label>
+                      <input class="form-input mono" type="text" placeholder="latest, v*, main" value={ruleTagFilter()} onInput={(e) => setRuleTagFilter(e.currentTarget.value)} />
+                      <span class="form-hint">Empty or * for any tag. Use v* for version tags only.</span>
+                    </div>
+                    <div class="form-group" style={{ flex: 1 }}>
+                      <label class="form-label">Container Names</label>
+                      <input class="form-input" type="text" placeholder="Leave empty to match by image" value={ruleContainers()} onInput={(e) => setRuleContainers(e.currentTarget.value)} />
+                      <span class="form-hint">Comma-separated. Empty = any container running this image.</span>
+                    </div>
+                  </div>
+                  <div class="settings-row" style={{ padding: "4px 0" }}>
+                    <div class="settings-row-left">
+                      <span class="settings-label" style={{ "font-size": "13px" }}>Enabled</span>
+                      <span class="settings-description">Pause this rule without deleting it</span>
+                    </div>
+                    <label class="toggle">
+                      <input type="checkbox" checked={ruleEnabled()} onChange={(e) => setRuleEnabled(e.currentTarget.checked)} />
+                      <span class="toggle-slider" />
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button class="btn btn-primary" onClick={saveRule} disabled={!ruleName().trim() || !ruleImage().trim()}>
+                      {editingRule() ? "Update" : "Save"}
+                    </button>
+                    <button class="btn" onClick={() => { setShowAddRule(false); resetRuleForm(); }}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </Show>
+          </div>
+
+          <Show when={deployHistory().length > 0}>
+            <div class="settings-section" style={{ "margin-top": "24px" }}>
+              <h2 class="settings-section-title">Deploy History</h2>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Rule</th>
+                    <th>Image</th>
+                    <th>Container</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={deployHistory().slice(0, 20)}>
+                    {(record) => (
+                      <tr>
+                        <td style={{ "font-size": "12px", color: "#8b949e" }}>
+                          {new Date(parseInt(record.timestamp) * 1000).toLocaleString()}
+                        </td>
+                        <td style={{ "font-weight": 500 }}>{record.rule_name}</td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{record.image}</td>
+                        <td>{record.container_name}</td>
+                        <td>
+                          <span style={{
+                            "font-size": "11px", padding: "2px 6px", "border-radius": "4px",
+                            background: record.status === "Success" ? "rgba(63, 185, 80, 0.1)" : "rgba(248, 81, 73, 0.1)",
+                            color: record.status === "Success" ? "#3fb950" : "#f85149",
+                          }}>{record.status}</span>
+                          <Show when={record.error}>
+                            <div style={{ "font-size": "11px", color: "#f85149", "margin-top": "2px" }}>{record.error}</div>
+                          </Show>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+          </Show>
         </Show>
 
         {/* === Maintenance Tab === */}
