@@ -204,9 +204,18 @@ export default function ImagesPage(props: ImagesPageProps) {
       await invoke("remove_image", { id });
       showToast("Image removed", "success");
       await refresh();
-    } catch (e) {
-      logError(`Failed to remove image: ${e}`, `Image "${tag}"`);
-      showToast(`Failed to remove: ${e}`, "error");
+    } catch (err) {
+      // Parse Docker error JSON if present
+      let msg = String(err);
+      try {
+        const parsed = JSON.parse(msg);
+        if (parsed.error) msg = parsed.error;
+      } catch {}
+      // Extract the readable part from Docker's error format
+      if (msg.includes("conflict:")) msg = msg.split("conflict:").pop()!.trim();
+      else if (msg.includes("is being used")) msg = msg.substring(msg.indexOf("image"));
+      logError(`Failed to remove image: ${msg}`, `Image "${tag}"`);
+      showToast(`Cannot remove '${tag}': ${msg}`, "error");
     }
   };
 

@@ -986,7 +986,7 @@ spec:
               >
                 Enable Kubernetes
               </button>
-              <Show when={status()?.error}>
+              <Show when={status()?.error && !status()?.error?.includes("not found")}>
                 <div style={{
                   "margin-top": "16px",
                   padding: "10px 14px",
@@ -999,7 +999,7 @@ spec:
                   "max-width": "500px",
                   margin: "16px auto 0",
                 }}>
-                  <strong>Detection issue:</strong> {status()?.error}
+                  {status()?.error}
                 </div>
               </Show>
             </div>
