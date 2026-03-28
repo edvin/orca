@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/nicegui/static/tauri.conf.schema.json",
   "productName": "Orca Desktop",
-  "version": "0.22.1",
+  "version": "0.23.0",
   "identifier": "com.orca.desktop",
   "build": {
     "frontendDist": "../gui/dist",
