@@ -154,7 +154,15 @@ export default function Sidebar(props: SidebarProps) {
   onMount(() => {
     fetchCounts();
     const interval = setInterval(fetchCounts, 5000);
-    onCleanup(() => clearInterval(interval));
+    // Refresh immediately when switching hosts
+    const onHostSwitch = () => fetchCounts();
+    document.addEventListener("orca-host-switch", onHostSwitch);
+    document.addEventListener("orca-refresh", onHostSwitch);
+    onCleanup(() => {
+      clearInterval(interval);
+      document.removeEventListener("orca-host-switch", onHostSwitch);
+      document.removeEventListener("orca-refresh", onHostSwitch);
+    });
   });
 
   const toggleCollapsed = () => {
