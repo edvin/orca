@@ -56,9 +56,11 @@
 ### Compose Stacks
 
 - **Auto-detection** from container labels — no config file needed
+- **Compose editor** — create new docker-compose.yml with YAML editor and deploy from the UI
 - Service health dots with stack status rollup (Running / Partial / Stopped)
 - **Compose up / down / pull** — runs the actual `docker compose` CLI
 - Per-service logs, start/stop, restart within expanded stack view
+- Edit existing compose files with Monaco YAML editor and hot-reload
 
 ### Kubernetes (k3s)
 
