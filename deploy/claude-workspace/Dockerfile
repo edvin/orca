@@ -27,8 +27,11 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED && \
     pip3 install --no-cache-dir pipenv poetry black ruff mypy
 
-# Node tools + Claude CLI
-RUN npm install -g @anthropic-ai/claude-code typescript tsx pnpm yarn
+# Node tools
+RUN npm install -g typescript tsx pnpm yarn
+
+# Claude CLI (installed separately — large package)
+RUN npm install -g @anthropic-ai/claude-code
 
 # Go tools
 RUN go install golang.org/x/tools/gopls@latest && \
