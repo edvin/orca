@@ -188,7 +188,6 @@ export default function Titlebar(props: TitlebarProps) {
             </span>
           </Show>
         </div>
-        <Show when={remoteHosts().length > 0}>
           <div class="host-selector" data-tauri-drag-region-exclude>
             <button
               class={`host-selector-btn ${activeHost().is_remote ? "host-remote" : ""}`}
@@ -232,7 +231,6 @@ export default function Titlebar(props: TitlebarProps) {
               </div>
             </Show>
           </div>
-        </Show>
       </div>
       <button
         class="titlebar-search"
