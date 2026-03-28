@@ -886,19 +886,26 @@ export default function ImagesPage(props: ImagesPageProps) {
         </div>
       </Show>
 
-      {/* Batch action bar */}
+      {/* Floating batch action bar */}
       <Show when={selected().size > 0}>
         <div style={{
+          position: "fixed",
+          bottom: "32px",
+          left: "50%",
+          transform: "translateX(-50%)",
           display: "flex",
           "align-items": "center",
           gap: "12px",
-          padding: "10px 14px",
-          background: "#161b22",
-          border: "1px solid #21262d",
-          "border-radius": "8px",
-          "margin-bottom": "12px",
+          padding: "10px 20px",
+          background: "rgba(22, 27, 34, 0.95)",
+          "backdrop-filter": "blur(12px)",
+          "-webkit-backdrop-filter": "blur(12px)",
+          border: "1px solid #30363d",
+          "border-radius": "12px",
+          "box-shadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
+          "z-index": "100",
         }}>
-          <span style={{ "font-size": "13px" }}>
+          <span style={{ "font-size": "13px", color: "#e6edf3" }}>
             {selected().size} image{selected().size !== 1 ? "s" : ""} selected
           </span>
           <button class="btn btn-sm btn-danger" onClick={batchDelete}>
