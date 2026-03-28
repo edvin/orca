@@ -206,23 +206,42 @@ export default function ImagesPage(props: ImagesPageProps) {
   const batchDelete = async () => {
     const ids = Array.from(selected());
     if (ids.length === 0) return;
-    try {
-      const result = (await invoke("batch_delete_images", {
-        ids,
-        force: true,
-      })) as any;
-      const deleted = result.deleted?.length || 0;
-      const errors = result.errors?.length || 0;
-      showToast(
-        `Deleted ${deleted} image${deleted !== 1 ? "s" : ""}${errors ? `, ${errors} failed` : ""}`,
-        errors ? "error" : "success"
-      );
-      setSelected(new Set<string>());
-      await refresh();
-    } catch (e) {
-      logError(`Failed to batch delete images: ${e}`, `${ids.length} images selected`);
-      showToast(`Batch delete failed: ${e}`, "error");
+    const count = ids.length;
+    if (!await confirmDanger(
+      "Delete Images",
+      `Delete ${count} selected image${count !== 1 ? "s" : ""}? This cannot be undone.`
+    )) return;
+
+    // Delete in multiple passes — child images may block parent deletion
+    let totalDeleted = 0;
+    let lastErrors = 0;
+    for (let pass = 0; pass < 3; pass++) {
+      const remaining = Array.from(selected());
+      if (remaining.length === 0) break;
+      try {
+        const result = (await invoke("batch_delete_images", {
+          ids: remaining,
+          force: true,
+        })) as any;
+        const deleted = result.deleted?.length || 0;
+        totalDeleted += deleted;
+        lastErrors = result.errors?.length || 0;
+        // Remove successfully deleted from selection
+        const deletedSet = new Set(result.deleted || []);
+        setSelected(new Set(remaining.filter((id: string) => !deletedSet.has(id))));
+        await refresh();
+        if (lastErrors === 0) break; // All done
+      } catch (e) {
+        logError(`Failed to batch delete images: ${e}`, `${remaining.length} images remaining`);
+        break;
+      }
     }
+    showToast(
+      `Deleted ${totalDeleted} image${totalDeleted !== 1 ? "s" : ""}${lastErrors ? `, ${lastErrors} could not be removed` : ""}`,
+      lastErrors ? "info" : "success"
+    );
+    setSelected(new Set<string>());
+    await refresh();
   };
 
   const pruneUnused = async () => {
