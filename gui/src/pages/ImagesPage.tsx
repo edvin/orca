@@ -243,8 +243,10 @@ export default function ImagesPage(props: ImagesPageProps) {
   };
 
   const doPull = async (overrideRef?: string) => {
-    const ref_ = (overrideRef || pullRef()).trim();
+    let ref_ = (overrideRef || pullRef()).trim();
     if (!ref_) return;
+    // Append :latest if no tag specified
+    if (!ref_.includes(":")) ref_ += ":latest";
     setPulling(true);
     setPullStatus(`Pulling ${ref_}...`);
     setPullLayers({});
