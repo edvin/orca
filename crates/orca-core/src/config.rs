@@ -115,6 +115,27 @@ pub struct OrcaConfig {
     /// Recent deploy history (newest first, capped at 100).
     #[serde(default)]
     pub deploy_history: Vec<DeployRecord>,
+    /// Scheduled container actions (built-in cron).
+    #[serde(default)]
+    pub schedules: Vec<ScheduledAction>,
+}
+
+/// A scheduled container action (e.g., restart every Sunday).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduledAction {
+    pub id: String,
+    pub name: String,
+    /// Container name or ID to act on.
+    pub container: String,
+    /// Action to perform: "start", "stop", "restart".
+    pub action: String,
+    /// Cron expression (e.g., "0 3 * * 0" for Sunday at 3am).
+    pub cron: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Timestamp of last execution (unix seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_run: Option<u64>,
 }
 
 /// A deployment rule that maps an image pattern to containers for auto-deploy.
@@ -255,6 +276,7 @@ impl Default for OrcaConfig {
             webhook_secret: None,
             deploy_rules: Vec::new(),
             deploy_history: Vec::new(),
+            schedules: Vec::new(),
         }
     }
 }

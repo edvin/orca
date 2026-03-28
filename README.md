@@ -107,7 +107,23 @@
 - **Resource history charts** — CPU and memory time-series with hover tooltips
 - **Top CPU and memory consumers** with per-container mini charts
 - Container, image, stack counts, and GPU status at a glance
+- **Resource usage alerts** — toast notifications when containers exceed 90% memory or sustained 90% CPU
 - **System cleanup** — prune containers, images, volumes, networks, build cache
+
+### Container Backup & Export
+
+- **Export container** to tar file (container filesystem)
+- **Save image** to tar file (full image with layers)
+- File save dialog for choosing destination
+- Works for both local and remote hosts via daemon API
+
+### Scheduled Container Actions
+
+- **Built-in cron scheduler** — restart, stop, or start containers on a schedule
+- Standard cron expressions with common presets
+- Per-schedule enable/disable toggle
+- Runs in the daemon — works even when the desktop app is closed
+- Manage schedules from Settings → Schedules tab
 
 ### Environment Management
 

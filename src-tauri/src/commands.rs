@@ -831,6 +831,50 @@ pub async fn import_image(path: String) -> Result<serde_json::Value, String> {
         .json().await.map_err(|e| format!("{e}"))
 }
 
+// --- Container Export (tar) ---
+
+#[tauri::command]
+pub async fn export_container_tar(id: String, path: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let encoded = urlencoding::encode(&id);
+    let client = authed_client_with_timeout(600);
+    let resp = client
+        .get(format!("{base}/containers/{encoded}/export/tar"))
+        .query(&[("path", &path)])
+        .send()
+        .await
+        .map_err(|e| format!("Export failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Export failed: {body}"));
+    }
+
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
+// --- Image Save (tar) ---
+
+#[tauri::command]
+pub async fn save_image_tar(id: String, path: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let encoded = urlencoding::encode(&id);
+    let client = authed_client_with_timeout(600);
+    let resp = client
+        .get(format!("{base}/images/{encoded}/save"))
+        .query(&[("path", &path)])
+        .send()
+        .await
+        .map_err(|e| format!("Save failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Save failed: {body}"));
+    }
+
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
 // --- Image Scanning ---
 
 #[tauri::command]
@@ -2840,4 +2884,46 @@ pub async fn get_daemon_ws_url(path: String) -> Result<String, String> {
     let ws_base = base.replace("https://", "wss://").replace("http://", "ws://");
     let token = active_api_token().unwrap_or_default();
     Ok(format!("{ws_base}{path}?token={}", urlencoding::encode(&token)))
+}
+
+// --- Scheduled Actions ---
+
+#[tauri::command]
+pub async fn list_schedules() -> Result<serde_json::Value, String> {
+    get_json("/schedules").await
+}
+
+#[tauri::command]
+pub async fn save_schedule(
+    id: Option<String>,
+    name: String,
+    container: String,
+    action: String,
+    cron: String,
+    enabled: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let body = serde_json::json!({
+        "id": id,
+        "name": name,
+        "container": container,
+        "action": action,
+        "cron": cron,
+        "enabled": enabled.unwrap_or(true),
+    });
+    let resp = client()
+        .post(format!("{base}/schedules"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
+#[tauri::command]
+pub async fn delete_schedule(id: String) -> Result<(), String> {
+    delete(&format!("/schedules/{id}")).await
 }

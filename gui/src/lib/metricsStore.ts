@@ -1,4 +1,6 @@
 import { createSignal } from "solid-js";
+import { showToast } from "../components/Toast";
+import { formatBytes } from "./format";
 
 export interface MetricSnapshot {
   timestamp: number;
@@ -12,12 +14,67 @@ export interface MetricSnapshot {
 const MAX_POINTS = 60;
 const [metricsHistory, setMetricsHistory] = createSignal<Record<string, MetricSnapshot[]>>({});
 
-export function recordMetrics(containerId: string, snapshot: MetricSnapshot) {
+// --- Resource usage alerts ---
+const MEMORY_THRESHOLD_PERCENT = 90;
+const CPU_THRESHOLD_PERCENT = 90;
+const CPU_CONSECUTIVE_READINGS = 3;
+const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+// Track last alert time per container+metric to avoid spam
+const lastAlertTime: Record<string, number> = {};
+// Track consecutive high-CPU readings per container
+const highCpuStreak: Record<string, number> = {};
+
+function canAlert(key: string): boolean {
+  const now = Date.now();
+  const last = lastAlertTime[key];
+  if (last && now - last < ALERT_COOLDOWN_MS) return false;
+  lastAlertTime[key] = now;
+  return true;
+}
+
+function evaluateAlerts(containerId: string, containerName: string, snapshot: MetricSnapshot) {
+  // Memory alert: only when a limit is set
+  if (snapshot.memoryLimit > 0) {
+    const memPercent = (snapshot.memory / snapshot.memoryLimit) * 100;
+    if (memPercent > MEMORY_THRESHOLD_PERCENT) {
+      const key = `${containerId}:memory`;
+      if (canAlert(key)) {
+        showToast(
+          `Container '${containerName}' is using ${Math.round(memPercent)}% of its memory limit (${formatBytes(snapshot.memory)} / ${formatBytes(snapshot.memoryLimit)})`,
+          "info"
+        );
+      }
+    }
+  }
+
+  // CPU alert: must exceed threshold for N consecutive readings
+  if (snapshot.cpu > CPU_THRESHOLD_PERCENT) {
+    highCpuStreak[containerId] = (highCpuStreak[containerId] || 0) + 1;
+  } else {
+    highCpuStreak[containerId] = 0;
+  }
+
+  if (highCpuStreak[containerId] >= CPU_CONSECUTIVE_READINGS) {
+    const key = `${containerId}:cpu`;
+    if (canAlert(key)) {
+      showToast(
+        `Container '${containerName}' CPU usage is at ${snapshot.cpu.toFixed(1)}% (sustained high usage)`,
+        "info"
+      );
+    }
+  }
+}
+
+export function recordMetrics(containerId: string, snapshot: MetricSnapshot, containerName?: string) {
   setMetricsHistory((prev) => {
     const existing = prev[containerId] || [];
     const updated = [...existing, snapshot].slice(-MAX_POINTS);
     return { ...prev, [containerId]: updated };
   });
+
+  // Evaluate resource alerts after recording
+  evaluateAlerts(containerId, containerName || containerId.slice(0, 12), snapshot);
 }
 
 export function getMetricsHistory(containerId: string): MetricSnapshot[] {

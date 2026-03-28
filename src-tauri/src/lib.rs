@@ -53,6 +53,8 @@ pub fn run() {
             commands::image_list_files,
             commands::image_read_file,
             commands::import_image,
+            commands::export_container_tar,
+            commands::save_image_tar,
             commands::scan_image,
             commands::list_networks,
             commands::create_network,
@@ -175,6 +177,9 @@ pub fn run() {
             commands::get_webhook_url,
             commands::get_daemon_ws_url,
             commands::get_daemon_base,
+            commands::list_schedules,
+            commands::save_schedule,
+            commands::delete_schedule,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

@@ -132,6 +132,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}/files", get(container_list_files))
         .route("/containers/{id}/file", get(container_read_file))
         .route("/containers/{id}/commit", post(commit_container))
+        .route("/containers/{id}/export/tar", get(export_container_tar))
         // Registries
         .route("/registries", get(list_registries).post(add_registry))
         .route("/registries/{server}", delete(remove_registry_handler))
@@ -148,6 +149,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/{id}/files", get(image_list_files))
         .route("/images/{id}/file", get(image_read_file))
         .route("/images/import", post(import_image))
+        .route("/images/{id}/save", get(save_image_tar))
         .route("/images/{id}/scan", get(scan_image))
         .route("/images/{id}/history", get(image_history))
         // Volumes
@@ -204,6 +206,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/deploy/history", get(list_deploy_history))
         .route("/deploy/test", post(test_deploy_rule))
         .route("/deploy/webhook-secret", post(save_webhook_secret))
+        // Scheduled actions
+        .route("/schedules", get(list_schedules).post(save_schedule))
+        .route("/schedules/{id}", delete(delete_schedule))
         .route("/k8s/namespaces", post(k8s_create_namespace))
         .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
         .route("/k8s/configmaps/{namespace}", get(k8s_configmaps))
@@ -1749,6 +1754,67 @@ async fn import_image(
         }
     }
     Ok(Json(serde_json::json!({ "messages": messages })))
+}
+
+// --- Container Export (tar) ---
+
+#[derive(Deserialize)]
+struct ExportContainerQuery {
+    path: String,
+}
+
+async fn export_container_tar(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(query): Query<ExportContainerQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    let docker = &state.rt().await.docker;
+    let mut stream = docker.export_container(&id);
+    let mut file = tokio::fs::File::create(&query.path).await
+        .map_err(|e| anyhow::anyhow!("Failed to create file: {e}"))?;
+
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|e| anyhow::anyhow!("Export stream error: {e}"))?;
+        file.write_all(&bytes).await
+            .map_err(|e| anyhow::anyhow!("Failed to write file: {e}"))?;
+    }
+    file.flush().await.map_err(|e| anyhow::anyhow!("Failed to flush file: {e}"))?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// --- Image Save (tar) ---
+
+#[derive(Deserialize)]
+struct SaveImageQuery {
+    path: String,
+}
+
+async fn save_image_tar(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(query): Query<SaveImageQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    let image_ref = resolve_image_ref(&state, &id).await?;
+    let docker = &state.rt().await.docker;
+    let mut stream = docker.export_image(&image_ref);
+    let mut file = tokio::fs::File::create(&query.path).await
+        .map_err(|e| anyhow::anyhow!("Failed to create file: {e}"))?;
+
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|e| anyhow::anyhow!("Export stream error: {e}"))?;
+        file.write_all(&bytes).await
+            .map_err(|e| anyhow::anyhow!("Failed to write file: {e}"))?;
+    }
+    file.flush().await.map_err(|e| anyhow::anyhow!("Failed to flush file: {e}"))?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 /// Resolve an image ID to a usable reference (repo:tag or full sha).
@@ -4141,6 +4207,71 @@ async fn save_webhook_secret(
     config.webhook_secret = body.secret;
     config.save()?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// --- Scheduled Actions ---
+
+async fn list_schedules() -> Result<impl IntoResponse, ApiError> {
+    let config = orca_core::config::OrcaConfig::load()?;
+    Ok(Json(serde_json::to_value(&config.schedules).unwrap_or_default()))
+}
+
+#[derive(Deserialize)]
+struct SaveScheduleRequest {
+    id: Option<String>,
+    name: String,
+    container: String,
+    action: String,
+    cron: String,
+    #[serde(default = "default_true_value")]
+    enabled: bool,
+}
+
+async fn save_schedule(
+    Json(body): Json<SaveScheduleRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    // Validate cron expression
+    use std::str::FromStr;
+    cron::Schedule::from_str(&body.cron)
+        .map_err(|e| anyhow::anyhow!("Invalid cron expression: {e}"))?;
+
+    let mut config = orca_core::config::OrcaConfig::load()?;
+    let id = body.id.unwrap_or_else(|| {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        format!("{:x}{:04x}", now.as_millis(), now.subsec_nanos() & 0xFFFF)
+    });
+
+    if let Some(existing) = config.schedules.iter_mut().find(|s| s.id == id) {
+        existing.name = body.name;
+        existing.container = body.container;
+        existing.action = body.action;
+        existing.cron = body.cron;
+        existing.enabled = body.enabled;
+    } else {
+        config.schedules.push(orca_core::config::ScheduledAction {
+            id: id.clone(),
+            name: body.name,
+            container: body.container,
+            action: body.action,
+            cron: body.cron,
+            enabled: body.enabled,
+            last_run: None,
+        });
+    }
+
+    config.save()?;
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn delete_schedule(
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = orca_core::config::OrcaConfig::load()?;
+    config.schedules.retain(|s| s.id != id);
+    config.save()?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // --- AI Settings ---

@@ -87,6 +87,13 @@ export default function ImagesPage(props: ImagesPageProps) {
   // Build args state
   const [buildArgs, setBuildArgs] = createSignal<Array<{key: string, value: string}>>([]);
 
+  // Save image to tar state
+  const [showSaveTar, setShowSaveTar] = createSignal(false);
+  const [saveTarImageId, setSaveTarImageId] = createSignal("");
+  const [saveTarImageLabel, setSaveTarImageLabel] = createSignal("");
+  const [saveTarPath, setSaveTarPath] = createSignal("");
+  const [savingTar, setSavingTar] = createSignal(false);
+
   const refresh = async () => {
     try {
       const result = (await invoke("list_images")) as Image[];
@@ -416,6 +423,23 @@ export default function ImagesPage(props: ImagesPageProps) {
       showToast(`Import failed: ${e}`, "error");
     } finally {
       setImporting(false);
+    }
+  };
+
+  const doSaveTar = async () => {
+    const path = saveTarPath().trim();
+    if (!path) return;
+    setSavingTar(true);
+    try {
+      await invoke("save_image_tar", { id: saveTarImageId(), path });
+      showToast(`Image saved to ${path}`, "success");
+      setShowSaveTar(false);
+      setSaveTarPath("");
+    } catch (e) {
+      logError(`Failed to save image: ${e}`, `Path "${path}"`);
+      showToast(`Save failed: ${e}`, "error");
+    } finally {
+      setSavingTar(false);
     }
   };
 
@@ -1033,6 +1057,17 @@ export default function ImagesPage(props: ImagesPageProps) {
                           }}
                         ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></button>
                         <button
+                          class="action-icon"
+                          title="Save to tar"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSaveTarImageId(img.id);
+                            setSaveTarImageLabel(img.repo_tags[0] || img.id.slice(0, 12));
+                            setSaveTarPath("");
+                            setShowSaveTar(true);
+                          }}
+                        ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                        <button
                           class="action-icon action-icon-delete"
                           title="Remove image"
                           onClick={(e) => removeImage(img.id, img.repo_tags[0] || img.id, e)}
@@ -1381,6 +1416,48 @@ export default function ImagesPage(props: ImagesPageProps) {
                 }}
               >
                 {tagging() ? (<><Spinner size={12} />{" Tagging..."}</>) : "Tag"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Save Image to Tar Dialog */}
+      <Show when={showSaveTar()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay") && !savingTar()) setShowSaveTar(false); (e.currentTarget as any).__mdOverlay = false; }}
+        >
+          <div class="modal-dialog" style={{ "max-width": "500px" }}>
+            <div class="modal-header">
+              <span class="modal-title">Save Image to Tar</span>
+              <button class="modal-close" onClick={() => { if (!savingTar()) setShowSaveTar(false); }}>{"\u00d7"}</button>
+            </div>
+            <div class="modal-body">
+              <div style={{ "margin-bottom": "14px", color: "#8b949e", "font-size": "13px" }}>
+                Image: <span class="mono" style={{ color: "#e6edf3" }}>{saveTarImageLabel()}</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Save path</label>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="/path/to/image.tar"
+                  value={saveTarPath()}
+                  onInput={(e) => setSaveTarPath(e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") doSaveTar(); }}
+                  disabled={savingTar()}
+                />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => { if (!savingTar()) setShowSaveTar(false); }} disabled={savingTar()}>Cancel</button>
+              <button
+                class="btn btn-primary"
+                disabled={savingTar() || !saveTarPath().trim()}
+                onClick={doSaveTar}
+              >
+                {savingTar() ? (<><Spinner size={12} />{" Saving..."}</>) : "Save"}
               </button>
             </div>
           </div>

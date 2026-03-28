@@ -8,7 +8,7 @@ import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, update
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 
-type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "maintenance" | "about";
+type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "about";
 
 interface SettingsPageProps {
   initialTab?: string;
@@ -66,6 +66,44 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   const [webhookUrl, setWebhookUrl] = createSignal("");
   const [webhookUrlCopied, setWebhookUrlCopied] = createSignal(false);
   const [testingWebhook, setTestingWebhook] = createSignal(false);
+
+  // Schedules
+  const [schedules, setSchedules] = createSignal<any[]>([]);
+  const [showAddSchedule, setShowAddSchedule] = createSignal(false);
+  const [editingSchedule, setEditingSchedule] = createSignal<any>(null);
+  const [schedName, setSchedName] = createSignal("");
+  const [schedContainer, setSchedContainer] = createSignal("");
+  const [schedAction, setSchedAction] = createSignal("restart");
+  const [schedCron, setSchedCron] = createSignal("");
+  const [schedEnabled, setSchedEnabled] = createSignal(true);
+
+  const refreshSchedules = async () => {
+    try { setSchedules((await invoke("list_schedules")) as any[]); } catch {}
+  };
+
+  const resetSchedForm = () => {
+    setEditingSchedule(null); setSchedName(""); setSchedContainer(""); setSchedAction("restart"); setSchedCron(""); setSchedEnabled(true);
+  };
+
+  const saveSchedRule = async () => {
+    if (!schedName().trim() || !schedContainer().trim() || !schedCron().trim()) return;
+    try {
+      await invoke("save_schedule", {
+        id: editingSchedule()?.id || null,
+        name: schedName().trim(),
+        container: schedContainer().trim(),
+        action: schedAction(),
+        cron: schedCron().trim(),
+        enabled: schedEnabled(),
+      });
+      showToast(editingSchedule() ? "Schedule updated" : "Schedule created", "success");
+      setShowAddSchedule(false);
+      resetSchedForm();
+      await refreshSchedules();
+    } catch (e) {
+      showToast(`Failed: ${e}`, "error");
+    }
+  };
 
   // Maintenance / System Prune
   const [pruneContainers, setPruneContainers] = createSignal(false);
@@ -689,6 +727,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
     refreshRemoteHosts();
     refreshDeployRules();
     refreshDeployHistory();
+    refreshSchedules();
     invoke("get_webhook_url").then((u) => setWebhookUrl(u as string)).catch(() => {});
     refreshGeneralSettings();
     refreshAiSettings();
@@ -715,6 +754,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <button class={`tab-item ${tab() === "registries" ? "active" : ""}`} onClick={() => setTab("registries")}>Registries</button>
         <button class={`tab-item ${tab() === "remote-hosts" ? "active" : ""}`} onClick={() => setTab("remote-hosts")}>Remote Hosts</button>
         <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>Auto-Deploy</button>
+        <button class={`tab-item ${tab() === "schedules" ? "active" : ""}`} onClick={() => setTab("schedules")}>Schedules</button>
         <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
         <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
       </div>
@@ -1733,6 +1773,132 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               </table>
             </div>
           </Show>
+        </Show>
+
+        {/* === Schedules Tab === */}
+        <Show when={tab() === "schedules"}>
+          <div class="settings-section">
+            <h2 class="settings-section-title">Scheduled Actions</h2>
+            <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
+              Schedule container actions to run automatically. Uses standard cron expressions. The daemon checks every 60 seconds.
+            </p>
+
+            <Show when={schedules().length > 0}>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Container</th>
+                    <th>Action</th>
+                    <th>Schedule</th>
+                    <th style={{ width: "60px" }}>Status</th>
+                    <th style={{ "text-align": "right", width: "80px" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={schedules()}>
+                    {(sched) => (
+                      <tr>
+                        <td style={{ "font-weight": 500 }}>{sched.name}</td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{sched.container}</td>
+                        <td>
+                          <span style={{
+                            "font-size": "11px", padding: "2px 6px", "border-radius": "4px",
+                            background: sched.action === "restart" ? "rgba(210, 169, 34, 0.1)" : sched.action === "stop" ? "rgba(248, 81, 73, 0.1)" : "rgba(63, 185, 80, 0.1)",
+                            color: sched.action === "restart" ? "#d29922" : sched.action === "stop" ? "#f85149" : "#3fb950",
+                          }}>{sched.action}</span>
+                        </td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{sched.cron}</td>
+                        <td>
+                          <span style={{
+                            "font-size": "11px", padding: "2px 6px", "border-radius": "4px",
+                            background: sched.enabled ? "rgba(63, 185, 80, 0.1)" : "rgba(139, 148, 158, 0.1)",
+                            color: sched.enabled ? "#3fb950" : "#8b949e",
+                          }}>{sched.enabled ? "Active" : "Paused"}</span>
+                        </td>
+                        <td style={{ "text-align": "right" }}>
+                          <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end" }}>
+                            <button class="btn btn-sm" onClick={() => {
+                              setEditingSchedule(sched); setSchedName(sched.name); setSchedContainer(sched.container);
+                              setSchedAction(sched.action); setSchedCron(sched.cron); setSchedEnabled(sched.enabled);
+                              setShowAddSchedule(true);
+                            }} title="Edit">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onClick={async () => {
+                              try { await invoke("delete_schedule", { id: sched.id }); showToast("Deleted", "success"); await refreshSchedules(); }
+                              catch (e) { showToast(`Failed: ${e}`, "error"); }
+                            }} title="Delete">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
+
+            <div style={{ "margin-top": "12px" }}>
+              <Show when={!showAddSchedule()}>
+                <button class="btn btn-primary" onClick={() => { resetSchedForm(); setShowAddSchedule(true); }}>Add Schedule</button>
+              </Show>
+            </div>
+
+            <Show when={showAddSchedule()}>
+              <div class="card" style={{ "margin-top": "12px" }}>
+                <h3 style={{ "font-size": "14px", "font-weight": 600, "margin-bottom": "12px", color: "#e6edf3" }}>
+                  {editingSchedule() ? `Edit "${editingSchedule().name}"` : "Add Schedule"}
+                </h3>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                  <div class="form-row">
+                    <div class="form-group" style={{ flex: 1 }}>
+                      <label class="form-label">Name</label>
+                      <input class="form-input" type="text" placeholder="Nightly restart" value={schedName()} onInput={(e) => setSchedName(e.currentTarget.value)} />
+                    </div>
+                    <div class="form-group" style={{ flex: 1 }}>
+                      <label class="form-label">Container</label>
+                      <input class="form-input" type="text" placeholder="Container name or ID" value={schedContainer()} onInput={(e) => setSchedContainer(e.currentTarget.value)} />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group" style={{ flex: 1 }}>
+                      <label class="form-label">Action</label>
+                      <Dropdown value={schedAction()} options={[
+                        { value: "restart", label: "Restart" },
+                        { value: "stop", label: "Stop" },
+                        { value: "start", label: "Start" },
+                      ]} onChange={(v) => setSchedAction(v)} />
+                    </div>
+                    <div class="form-group" style={{ flex: 2 }}>
+                      <label class="form-label">Cron Expression</label>
+                      <input class="form-input mono" type="text" placeholder="0 3 * * 0" value={schedCron()} onInput={(e) => setSchedCron(e.currentTarget.value)} />
+                      <span class="form-hint">
+                        Examples: <code>0 3 * * 0</code> (Sun 3am), <code>0 18 * * 1-5</code> (weekdays 6pm), <code>0 */6 * * *</code> (every 6h), <code>0 0 1 * *</code> (1st of month)
+                      </span>
+                    </div>
+                  </div>
+                  <div class="settings-row" style={{ padding: "4px 0" }}>
+                    <div class="settings-row-left">
+                      <span class="settings-label" style={{ "font-size": "13px" }}>Enabled</span>
+                      <span class="settings-description">Pause this schedule without deleting it</span>
+                    </div>
+                    <label class="toggle">
+                      <input type="checkbox" checked={schedEnabled()} onChange={(e) => setSchedEnabled(e.currentTarget.checked)} />
+                      <span class="toggle-slider" />
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button class="btn btn-primary" onClick={saveSchedRule} disabled={!schedName().trim() || !schedContainer().trim() || !schedCron().trim()}>
+                      {editingSchedule() ? "Update" : "Save"}
+                    </button>
+                    <button class="btn" onClick={() => { setShowAddSchedule(false); resetSchedForm(); }}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </Show>
+          </div>
         </Show>
 
         {/* === Maintenance Tab === */}

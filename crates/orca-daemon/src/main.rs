@@ -86,6 +86,12 @@ async fn main() -> anyhow::Result<()> {
     let k8s = Arc::new(orca_backend_common::k8s::K3sManager::from_env());
     let state = Arc::new(AppState::new(config, runtime, k8s, events_tx, api_token));
 
+    // Start the scheduled actions runner (checks every 60 seconds)
+    let scheduler_state = state.clone();
+    tokio::spawn(async move {
+        run_scheduler(scheduler_state).await;
+    });
+
     let app = Router::new()
         .nest("/api/v1", api::routes())
         .layer(TraceLayer::new_for_http())
@@ -457,5 +463,78 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
     // The VM will be started by the caller (the existing start logic)
     tracing::info!("Lima VM '{vm_name}' config updated — VM will be started next");
     true
+}
+
+/// Background scheduler that runs scheduled container actions.
+/// Checks every 60 seconds if any schedule is due.
+async fn run_scheduler(state: Arc<state::AppState>) {
+    use cron::Schedule;
+    use std::str::FromStr;
+
+    tracing::info!("Scheduler started");
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+
+        let config = match orca_core::config::OrcaConfig::load() {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let now = chrono::Utc::now();
+
+        for schedule in &config.schedules {
+            if !schedule.enabled { continue; }
+
+            let cron_schedule = match Schedule::from_str(&schedule.cron) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!("Invalid cron expression '{}' for schedule '{}': {e}", schedule.cron, schedule.name);
+                    continue;
+                }
+            };
+
+            // Check if the schedule should have fired in the last 60 seconds
+            let last_run = schedule.last_run.map(|ts| {
+                chrono::DateTime::<chrono::Utc>::from_timestamp(ts as i64, 0).unwrap_or_default()
+            });
+
+            let should_run = cron_schedule.after(&(now - chrono::Duration::seconds(61)))
+                .take(1)
+                .any(|next| next <= now && last_run.map(|lr| next > lr).unwrap_or(true));
+
+            if !should_run { continue; }
+
+            tracing::info!("Scheduler: executing '{}' — {} on '{}'", schedule.name, schedule.action, schedule.container);
+
+            use orca_core::runtime::ContainerRuntime;
+            let rt = state.rt().await;
+            let result = match schedule.action.as_str() {
+                "start" => rt.as_ref().start_container(&schedule.container).await,
+                "stop" => rt.as_ref().stop_container(&schedule.container, 10).await,
+                "restart" => {
+                    let _ = rt.as_ref().stop_container(&schedule.container, 10).await;
+                    rt.as_ref().start_container(&schedule.container).await
+                },
+                _ => {
+                    tracing::warn!("Unknown schedule action: {}", schedule.action);
+                    continue;
+                }
+            };
+
+            match result {
+                Ok(_) => tracing::info!("Scheduler: '{}' completed successfully", schedule.name),
+                Err(e) => tracing::error!("Scheduler: '{}' failed: {e}", schedule.name),
+            }
+
+            // Update last_run timestamp
+            if let Ok(mut cfg) = orca_core::config::OrcaConfig::load() {
+                if let Some(s) = cfg.schedules.iter_mut().find(|s| s.id == schedule.id) {
+                    s.last_run = Some(now.timestamp() as u64);
+                }
+                let _ = cfg.save();
+            }
+        }
+    }
 }
 

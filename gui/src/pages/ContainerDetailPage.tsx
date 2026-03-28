@@ -57,6 +57,10 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [commitTag, setCommitTag] = createSignal("latest");
   const [committing, setCommitting] = createSignal(false);
 
+  // Export tar state
+  const [exportTarPath, setExportTarPath] = createSignal("");
+  const [exportingTar, setExportingTar] = createSignal(false);
+
   let statsInterval: ReturnType<typeof setInterval> | undefined;
 
   const fetchContainer = async () => {
@@ -268,6 +272,26 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       showToast(`Commit failed: ${e}`, "error");
     } finally {
       setCommitting(false);
+    }
+  };
+
+  // --- Container Export to Tar ---
+  const doExportTar = async () => {
+    const path = exportTarPath().trim();
+    if (!path) {
+      showToast("File path is required", "error");
+      return;
+    }
+    setExportingTar(true);
+    try {
+      await invoke("export_container_tar", { id: props.containerId, path });
+      showToast(`Container exported to ${path}`, "success");
+      setExportTarPath("");
+    } catch (e) {
+      logError(`Failed to export container: ${e}`, `Container ${container()?.name || props.containerId}`);
+      showToast(`Export failed: ${e}`, "error");
+    } finally {
+      setExportingTar(false);
     }
   };
 
@@ -1437,6 +1461,29 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   </div>
                 )}
               </Show>
+              <h3 class="detail-section-title" style={{ "margin-top": "24px" }}>Export Filesystem to Tar</h3>
+              <p style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "12px" }}>
+                Export the container's filesystem as a tar archive. This captures the current state of all files in the container.
+              </p>
+              <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                <input
+                  class="form-input"
+                  type="text"
+                  placeholder="/path/to/container-export.tar"
+                  value={exportTarPath()}
+                  onInput={(e) => setExportTarPath(e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") doExportTar(); }}
+                  style={{ flex: 1 }}
+                  disabled={exportingTar()}
+                />
+                <button
+                  class="btn btn-primary"
+                  onClick={doExportTar}
+                  disabled={exportingTar() || !exportTarPath().trim()}
+                >
+                  {exportingTar() ? (<><Spinner size={12} />{" Exporting..."}</>) : "Export"}
+                </button>
+              </div>
             </div>
           </div>
         </Show>

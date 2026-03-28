@@ -124,7 +124,7 @@ export default function DashboardPage(props: DashboardPageProps) {
           memoryLimit: s.memory_limit_bytes,
           networkRx: s.network_rx_bytes,
           networkTx: s.network_tx_bytes,
-        });
+        }, running[i].name);
       }
     });
     setContainerStats(newStats);

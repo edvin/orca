@@ -757,6 +757,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cron"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5877d3fbf742507b66bc2a1945106bd30dd8504019d596901ddd012a4dd01740"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "winnow 0.6.26",
+]
+
+[[package]]
 name = "crossbeam-channel"
 version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3154,7 +3165,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "orca-backend-common"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3176,7 +3187,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-macos"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3191,7 +3202,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-native"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3203,7 +3214,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-windows"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3218,7 +3229,7 @@ dependencies = [
 
 [[package]]
 name = "orca-cli"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3232,7 +3243,7 @@ dependencies = [
 
 [[package]]
 name = "orca-core"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3251,13 +3262,15 @@ dependencies = [
 
 [[package]]
 name = "orca-daemon"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-stream",
  "axum",
  "bollard",
+ "chrono",
  "clap",
+ "cron",
  "futures",
  "hyper-util",
  "openssl",
@@ -3279,7 +3292,7 @@ dependencies = [
 
 [[package]]
 name = "orca-gui"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "cocoa",
@@ -6878,6 +6891,15 @@ name = "winnow"
 version = "0.5.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "winnow"
+version = "0.6.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e90edd2ac1aa278a5c4599b1d89cf03074b610800f866d4026dc199d7929a28"
 dependencies = [
  "memchr",
 ]
