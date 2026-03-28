@@ -36,6 +36,7 @@ pub fn run() {
             commands::search_images,
             commands::list_images,
             commands::pull_image,
+            commands::pull_image_stream,
             commands::remove_image,
             commands::batch_delete_images,
             commands::prune_images,

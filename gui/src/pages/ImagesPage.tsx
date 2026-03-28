@@ -1,5 +1,6 @@
 import { createSignal, createEffect, onMount, onCleanup, For, Index, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Image, ImageSearchResult, ScanResult, ScanVulnerability } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
@@ -25,6 +26,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [pullRef, setPullRef] = createSignal("");
   const [pulling, setPulling] = createSignal(false);
   const [pullStatus, setPullStatus] = createSignal("");
+  const [pullLayers, setPullLayers] = createSignal<Record<string, { status: string; current: number; total: number }>>({});
   const [selected, setSelected] = createSignal<Set<string>>(new Set());
   const [showPull, setShowPull] = createSignal(false);
   const [showPruneConfirm, setShowPruneConfirm] = createSignal(false);
@@ -245,26 +247,60 @@ export default function ImagesPage(props: ImagesPageProps) {
     if (!ref_) return;
     setPulling(true);
     setPullStatus(`Pulling ${ref_}...`);
+    setPullLayers({});
+
+    // Listen for streaming progress events
+    let unlisten: (() => void) | null = null;
     try {
+      unlisten = await listen<any>("pull-progress", (event) => {
+        const data = event.payload;
+        if (data.event === "progress" && data.layer) {
+          setPullLayers((prev) => ({
+            ...prev,
+            [data.layer]: { status: data.status, current: data.current, total: data.total },
+          }));
+          // Update status with layer count
+          const layers = Object.values(pullLayers());
+          const done = layers.filter((l: any) => l.status === "Pull complete" || l.status === "Already exists").length;
+          const total = layers.length;
+          if (total > 0) setPullStatus(`Pulling ${ref_}... ${done}/${total} layers`);
+        } else if (data.event === "done") {
+          setPullStatus("");
+          setPullRef("");
+          setPullLayers({});
+          setAuthUsername("");
+          setAuthPassword("");
+          setShowPull(false);
+          setPulling(false);
+          showToast(`Pulled ${ref_}`, "success");
+          refresh();
+          unlisten?.();
+          unlisten = null;
+        } else if (data.event === "error") {
+          setPullStatus("");
+          setPullLayers({});
+          setPulling(false);
+          logError(`Failed to pull image: ${data.error}`, `Image "${ref_}"`);
+          showToast(`Pull failed: ${data.error}`, "error");
+          unlisten?.();
+          unlisten = null;
+        }
+      });
+
       const pullArgs: Record<string, any> = { reference: ref_ };
       if (showAuth() && authUsername().trim() && authPassword().trim()) {
         pullArgs.username = authUsername().trim();
         pullArgs.password = authPassword().trim();
       }
-      await invoke("pull_image", pullArgs);
-      setPullStatus("");
-      setPullRef("");
-      setAuthUsername("");
-      setAuthPassword("");
-      setShowPull(false);
-      showToast(`Pulled ${ref_}`, "success");
-      await refresh();
+      await invoke("pull_image_stream", pullArgs);
     } catch (e) {
       setPullStatus("");
+      setPullLayers({});
       logError(`Failed to pull image: ${e}`, `Image "${ref_}"`);
       showToast(`Pull failed: ${e}`, "error");
+      setPulling(false);
     }
-    setPulling(false);
+    unlisten?.();
   };
 
   let buildOutputRef: HTMLDivElement | undefined;
@@ -1469,8 +1505,46 @@ export default function ImagesPage(props: ImagesPageProps) {
                   />
                 </div>
               </Show>
-              <Show when={pullStatus()}>
-                <div class="pull-status" style={{ "margin-top": "12px" }}><Spinner size={12} />{" "}{pullStatus()}</div>
+              <Show when={pulling()}>
+                <div style={{ "margin-top": "12px" }}>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "8px" }}>
+                    <Spinner size={12} />
+                    <span style={{ "font-size": "13px", color: "#e6edf3" }}>{pullStatus()}</span>
+                  </div>
+                  <Show when={Object.keys(pullLayers()).length > 0}>
+                    <div style={{
+                      background: "#0d1117", "border-radius": "8px", padding: "10px 12px",
+                      "max-height": "200px", "overflow-y": "auto", "font-size": "11px",
+                    }}>
+                      <For each={Object.entries(pullLayers()).filter(([id]) => id.length > 0)}>
+                        {([layerId, info]) => {
+                          const pct = () => (info as any).total > 0 ? Math.round(((info as any).current / (info as any).total) * 100) : 0;
+                          const isDone = () => (info as any).status === "Pull complete" || (info as any).status === "Already exists";
+                          return (
+                            <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
+                              <span class="mono" style={{ color: "#6e7681", width: "80px", "flex-shrink": "0" }}>{layerId.slice(0, 12)}</span>
+                              <div style={{ flex: "1", height: "6px", background: "#21262d", "border-radius": "3px", overflow: "hidden" }}>
+                                <div style={{
+                                  height: "100%",
+                                  width: isDone() ? "100%" : `${pct()}%`,
+                                  background: isDone() ? "#3fb950" : "#58a6ff",
+                                  "border-radius": "3px",
+                                  transition: "width 0.3s ease",
+                                }} />
+                              </div>
+                              <span style={{
+                                "font-size": "10px", width: "70px", "text-align": "right", "flex-shrink": "0",
+                                color: isDone() ? "#3fb950" : "#8b949e",
+                              }}>
+                                {isDone() ? (info as any).status : (info as any).total > 0 ? `${formatBytes((info as any).current)}/${formatBytes((info as any).total)}` : (info as any).status}
+                              </span>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
               </Show>
             </div>
             <div class="modal-footer">

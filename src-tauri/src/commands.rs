@@ -560,6 +560,72 @@ pub async fn pull_image(
     }))
 }
 
+/// Streaming image pull — emits "pull-progress" events to the frontend as layers download.
+#[tauri::command]
+pub async fn pull_image_stream(
+    app: tauri::AppHandle,
+    reference: String,
+    username: Option<String>,
+    password: Option<String>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+
+    let base = daemon_url();
+    let mut body = serde_json::json!({ "reference": reference });
+    if let (Some(user), Some(pass)) = (username, password) {
+        body["auth"] = serde_json::json!({ "username": user, "password": pass });
+    }
+
+    let pull_client = authed_client_with_timeout(600);
+
+    let resp = pull_client
+        .post(format!("{base}/images/pull"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Pull failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let _ = app.emit("pull-progress", serde_json::json!({ "event": "error", "error": body }));
+        return Err(body);
+    }
+
+    // Stream SSE events to frontend
+    let mut stream = resp.bytes_stream();
+    let mut buffer = String::new();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Stream error: {e}"))?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        // Process complete lines
+        while let Some(pos) = buffer.find('\n') {
+            let line = buffer[..pos].trim().to_string();
+            buffer = buffer[pos + 1..].to_string();
+
+            if let Some(data) = line.strip_prefix("data:") {
+                if let Ok(event) = serde_json::from_str::<serde_json::Value>(data.trim()) {
+                    let _ = app.emit("pull-progress", serde_json::json!({
+                        "event": "progress",
+                        "layer": event.get("layer").and_then(|v| v.as_str()).unwrap_or(""),
+                        "status": event.get("status").and_then(|v| v.as_str()).unwrap_or(""),
+                        "current": event.get("current").and_then(|v| v.as_u64()).unwrap_or(0),
+                        "total": event.get("total").and_then(|v| v.as_u64()).unwrap_or(0),
+                    }));
+                }
+            } else if line.starts_with("event: done") {
+                let _ = app.emit("pull-progress", serde_json::json!({ "event": "done" }));
+            }
+        }
+    }
+
+    // Final done event
+    let _ = app.emit("pull-progress", serde_json::json!({ "event": "done" }));
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn remove_image(id: String) -> Result<(), String> {
     delete(&format!("/images/{id}")).await
