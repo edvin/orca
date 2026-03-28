@@ -1397,7 +1397,13 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     </div>
                     <div class="form-group">
                       <label class="form-label">Daemon URL</label>
-                      <input class="form-input" type="text" placeholder="https://prod.example.com:9477" value={hostUrl()} onInput={(e) => setHostUrl(e.currentTarget.value)} />
+                      <input class="form-input" type="text" placeholder="https://prod.example.com:9477" value={hostUrl()} onInput={(e) => {
+                        setHostUrl(e.currentTarget.value);
+                        // Auto-set TLS verify based on protocol
+                        const url = e.currentTarget.value.trim().toLowerCase();
+                        if (url.startsWith("http://")) setHostTlsVerify(false);
+                        else if (url.startsWith("https://")) setHostTlsVerify(true);
+                      }} />
                     </div>
                     <div class="form-group">
                       <label class="form-label">API Token {editingHost() ? "(leave blank to keep current)" : ""}</label>
@@ -1408,16 +1414,18 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         </button>
                       </div>
                     </div>
-                    <div class="settings-row" style={{ padding: "4px 0" }}>
-                      <div class="settings-row-left">
-                        <span class="settings-label" style={{ "font-size": "13px" }}>Verify TLS Certificate</span>
-                        <span class="settings-description">Disable for self-signed certificates</span>
+                    <Show when={!hostUrl().trim().toLowerCase().startsWith("http://")}>
+                      <div class="settings-row" style={{ padding: "4px 0" }}>
+                        <div class="settings-row-left">
+                          <span class="settings-label" style={{ "font-size": "13px" }}>Verify TLS Certificate</span>
+                          <span class="settings-description">Disable for self-signed certificates</span>
+                        </div>
+                        <label class="toggle">
+                          <input type="checkbox" checked={hostTlsVerify()} onChange={(e) => setHostTlsVerify(e.currentTarget.checked)} />
+                          <span class="toggle-slider" />
+                        </label>
                       </div>
-                      <label class="toggle">
-                        <input type="checkbox" checked={hostTlsVerify()} onChange={(e) => setHostTlsVerify(e.currentTarget.checked)} />
-                        <span class="toggle-slider" />
-                      </label>
-                    </div>
+                    </Show>
                     <div class="form-group">
                       <label class="form-label">Tags <span style={{ color: "#484f58", "font-weight": "400" }}>(comma-separated)</span></label>
                       <input class="form-input" type="text" placeholder="production, eu-west, staging" value={hostTags()} onInput={(e) => setHostTags(e.currentTarget.value)} />
