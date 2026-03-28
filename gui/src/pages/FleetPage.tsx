@@ -441,8 +441,14 @@ export default function FleetPage(props: FleetPageProps) {
 
       {/* Version mismatch warning */}
       <Show when={versionMismatch()}>
-        <div style={{ padding: "8px 16px", background: "rgba(210, 169, 34, 0.1)", border: "1px solid rgba(210, 169, 34, 0.2)", "border-radius": "6px", "font-size": "12px", color: "#d29922", "margin-bottom": "12px" }}>
-          Version mismatch detected — hosts are running different daemon versions. Update all hosts to the same version for best compatibility.
+        <div style={{ padding: "10px 16px", background: "rgba(210, 169, 34, 0.1)", border: "1px solid rgba(210, 169, 34, 0.2)", "border-radius": "8px", "font-size": "12px", color: "#d29922", "margin-bottom": "12px" }}>
+          <div style={{ "font-weight": 600, "margin-bottom": "4px" }}>Version mismatch detected</div>
+          <div style={{ color: "#8b949e" }}>
+            Some hosts are running different daemon versions. To upgrade, SSH into each host and run:
+          </div>
+          <code style={{ display: "block", "margin-top": "6px", padding: "6px 10px", background: "#0d1117", "border-radius": "4px", color: "#e6edf3", "font-size": "12px" }}>
+            sudo apt update && sudo apt upgrade orca-daemon
+          </code>
         </div>
       </Show>
 

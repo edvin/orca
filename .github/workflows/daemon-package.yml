@@ -91,10 +91,10 @@ jobs:
               echo "Orca: Generated API token in /etc/orca/config.json"
           fi
 
-          # Enable and start service
+          # Enable and start/restart service
           systemctl daemon-reload
           systemctl enable orca-daemon
-          systemctl start orca-daemon || true
+          systemctl restart orca-daemon || systemctl start orca-daemon || true
 
           # Print connection info
           TOKEN=$(grep -o '"api_token"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/orca/config.json | cut -d'"' -f4)
