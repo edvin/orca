@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup, Show, createEffect, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { copyToClipboard } from "../lib/clipboard";
 import Dropdown from "./Dropdown";
 
@@ -77,6 +78,12 @@ export default function LogViewer(props: LogViewerProps) {
     localStorage.setItem("log-font-size", String(next));
   };
 
+  const processLines = (raw: string[]): string[] =>
+    raw
+      .flatMap((l) => l.replace(/\r/g, "").split("\n"))
+      .map((l) => l.trimEnd())
+      .filter((l) => l.length > 0);
+
   const fetchLogs = async () => {
     setLoading(true);
     try {
@@ -84,11 +91,7 @@ export default function LogViewer(props: LogViewerProps) {
         id: props.containerId,
         tail: tail(),
       })) as string[];
-      setLines(result
-        .flatMap((l) => l.replace(/\r/g, "").split("\n"))
-        .map((l) => l.trimEnd())
-        .filter((l) => l.length > 0)
-      );
+      setLines(processLines(result));
     } catch (e) {
       setLines([`Error fetching logs: ${e}`]);
     }
@@ -103,11 +106,37 @@ export default function LogViewer(props: LogViewerProps) {
   };
 
   onMount(() => {
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 2000);
+    let unlisten: UnlistenFn | null = null;
+
+    // Fetch initial batch of logs, then start streaming
+    fetchLogs().then(async () => {
+      // Listen for streamed log lines
+      unlisten = await listen<{ containerId: string; line: string }>(
+        "container-log-line",
+        (event) => {
+          if (event.payload.containerId === props.containerId) {
+            const newLines = processLines([event.payload.line]);
+            if (newLines.length > 0) {
+              setLines((prev) => [...prev, ...newLines]);
+            }
+          }
+        }
+      );
+
+      // Start streaming subscription
+      invoke("subscribe_container_logs", {
+        id: props.containerId,
+        tail: 0,
+      }).catch((e) => {
+        console.error("Failed to subscribe to log stream:", e);
+      });
+    });
+
     document.addEventListener("keydown", handleKeyDown);
+
     onCleanup(() => {
-      clearInterval(interval);
+      unlisten?.();
+      invoke("unsubscribe_container_logs", { id: props.containerId }).catch(() => {});
       document.removeEventListener("keydown", handleKeyDown);
     });
   });
@@ -177,6 +206,18 @@ export default function LogViewer(props: LogViewerProps) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const reloadLogs = async () => {
+    // Unsubscribe, re-fetch, re-subscribe
+    await invoke("unsubscribe_container_logs", { id: props.containerId }).catch(() => {});
+    await fetchLogs();
+    invoke("subscribe_container_logs", {
+      id: props.containerId,
+      tail: 0,
+    }).catch((e) => {
+      console.error("Failed to re-subscribe to log stream:", e);
+    });
   };
 
   const toggleBtnStyle = (active: boolean) => ({
@@ -253,7 +294,7 @@ export default function LogViewer(props: LogViewerProps) {
             ]}
             onChange={(v) => {
               setTail(Number(v));
-              fetchLogs();
+              reloadLogs();
             }}
             style={{ width: "120px", "font-size": "12px" }}
           />
@@ -279,7 +320,7 @@ export default function LogViewer(props: LogViewerProps) {
           <button class="action-icon" onClick={downloadLogs} title="Download logs">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
-          <button class="action-icon" onClick={fetchLogs} title="Refresh">
+          <button class="action-icon" onClick={reloadLogs} title="Refresh">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
           </button>
           <Show when={props.onClose}>

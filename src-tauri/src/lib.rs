@@ -30,6 +30,8 @@ pub fn run() {
             commands::commit_container,
             commands::create_and_run_container,
             commands::container_logs,
+            commands::subscribe_container_logs,
+            commands::unsubscribe_container_logs,
             commands::list_registries,
             commands::add_registry,
             commands::remove_registry,

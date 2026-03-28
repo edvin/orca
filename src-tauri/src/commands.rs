@@ -25,6 +25,22 @@ fn port_forward_map() -> &'static Mutex<HashMap<String, TunnelHandle>> {
     PORT_FORWARDS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Active log stream subscriptions, keyed by container ID.
+/// Each entry holds a tokio task handle that is aborted on unsubscribe/drop.
+struct LogStreamHandle(tokio::task::JoinHandle<()>);
+
+impl Drop for LogStreamHandle {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+static LOG_STREAMS: OnceLock<Mutex<HashMap<String, LogStreamHandle>>> = OnceLock::new();
+
+fn log_stream_map() -> &'static Mutex<HashMap<String, LogStreamHandle>> {
+    LOG_STREAMS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 const LOCAL_DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
 
 /// Override for the daemon URL when a remote host is selected.
@@ -63,10 +79,14 @@ fn authed_client() -> reqwest::Client {
 
 /// Build an authed client with a custom timeout (in seconds).
 /// Use this for long-running operations (image pull, K8s enable, AI queries, etc.)
+/// Pass 0 for no timeout (useful for SSE streaming connections).
 fn authed_client_with_timeout(timeout_secs: u64) -> reqwest::Client {
     let mut builder = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_secs))
         .connect_timeout(std::time::Duration::from_secs(5));
+
+    if timeout_secs > 0 {
+        builder = builder.timeout(std::time::Duration::from_secs(timeout_secs));
+    }
 
     // Check if we should skip TLS verification for the active remote host
     if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
@@ -321,6 +341,105 @@ pub async fn container_logs(
         .collect();
 
     Ok(lines)
+}
+
+/// Subscribe to live log streaming for a container via SSE.
+/// Spawns a background task that emits "container-log-line" events.
+#[tauri::command]
+pub async fn subscribe_container_logs(
+    app: tauri::AppHandle,
+    id: String,
+    tail: Option<u32>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    use futures_util::StreamExt;
+
+    // Abort any existing subscription for this container
+    {
+        let mut map = log_stream_map().lock().unwrap();
+        map.remove(&id);
+    }
+
+    let base = daemon_url();
+    let container_id = id.clone();
+    let tail_n = tail.unwrap_or(500);
+
+    let handle = tokio::spawn(async move {
+        // Use no timeout for streaming
+        let stream_client = authed_client_with_timeout(0);
+
+        let resp = match stream_client
+            .get(format!(
+                "{base}/containers/{container_id}/logs?follow=true&tail={tail_n}"
+            ))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = app.emit(
+                    "container-log-line",
+                    serde_json::json!({
+                        "containerId": container_id,
+                        "line": format!("Error connecting to log stream: {e}"),
+                    }),
+                );
+                return;
+            }
+        };
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            let _ = app.emit(
+                "container-log-line",
+                serde_json::json!({
+                    "containerId": container_id,
+                    "line": format!("Log stream error: {body}"),
+                }),
+            );
+            return;
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut buffer = String::new();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = match chunk {
+                Ok(c) => c,
+                Err(_) => break,
+            };
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+            while let Some(pos) = buffer.find('\n') {
+                let line = buffer[..pos].trim().to_string();
+                buffer = buffer[pos + 1..].to_string();
+
+                if let Some(data) = line.strip_prefix("data:") {
+                    let _ = app.emit(
+                        "container-log-line",
+                        serde_json::json!({
+                            "containerId": container_id,
+                            "line": data.to_string(),
+                        }),
+                    );
+                }
+            }
+        }
+    });
+
+    let mut map = log_stream_map().lock().unwrap();
+    map.insert(id, LogStreamHandle(handle));
+
+    Ok(())
+}
+
+/// Unsubscribe from live log streaming for a container.
+/// Aborts the background SSE task.
+#[tauri::command]
+pub async fn unsubscribe_container_logs(id: String) -> Result<(), String> {
+    let mut map = log_stream_map().lock().unwrap();
+    map.remove(&id); // Drop aborts the task
+    Ok(())
 }
 
 // --- Container Create & Run ---
