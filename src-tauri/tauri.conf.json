@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src * ws: wss: http: https:; img-src 'self' data: https://github.com https://raw.githubusercontent.com https://img.shields.io"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http: https: ws: wss: tauri:; img-src 'self' data: https://github.com https://raw.githubusercontent.com https://img.shields.io"
     }
   },
   "bundle": {
