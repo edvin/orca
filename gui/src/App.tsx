@@ -162,6 +162,9 @@ export default function App() {
     } else if (target === "images:pull") {
       setDetailId("pull"); // Signal to ImagesPage to open pull dialog
       setPage("images");
+    } else if (target.startsWith("settings:")) {
+      setDetailId(target.split(":")[1]); // Signal to SettingsPage which tab to open
+      setPage("settings");
     } else {
       setDetailId(null);
       setBreadcrumbStack(null);
@@ -312,7 +315,7 @@ export default function App() {
               {/* Machine page merged into System Health */}
               {page() === "environment" && <EnvironmentPage />}
               {page() === "activity" && <ActivityPage />}
-              {page() === "settings" && <SettingsPage />}
+              {page() === "settings" && <SettingsPage initialTab={detailId() || undefined} onTabOpened={() => setDetailId(null)} />}
             </main>
           </div>
           {showCommandPalette() && (

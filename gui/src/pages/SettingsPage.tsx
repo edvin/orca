@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, For } from "solid-js";
+import { createSignal, createEffect, onMount, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { MachineInfo, RegistryCredential, RemoteHost } from "../lib/types";
 import { showToast } from "../components/Toast";
@@ -10,8 +10,24 @@ import Dropdown from "../components/Dropdown";
 
 type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "maintenance" | "about";
 
-export default function SettingsPage() {
-  const [tab, setTab] = createSignal<SettingsTab>("general");
+interface SettingsPageProps {
+  initialTab?: string;
+  onTabOpened?: () => void;
+}
+
+export default function SettingsPage(props: SettingsPageProps = {}) {
+  const [tab, setTab] = createSignal<SettingsTab>(
+    (props.initialTab as SettingsTab) || "general"
+  );
+
+  // Switch tab when navigated to with a specific tab (e.g., settings:remote-hosts)
+  createEffect(() => {
+    if (props.initialTab) {
+      setTab(props.initialTab as SettingsTab);
+      props.onTabOpened?.();
+    }
+  });
+
   const [machine, setMachine] = createSignal<MachineInfo | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [daemonConnected, setDaemonConnected] = createSignal(true);
