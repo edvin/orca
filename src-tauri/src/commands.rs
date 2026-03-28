@@ -967,6 +967,21 @@ pub async fn compose_up(name: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+pub async fn compose_deploy_path(path: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = authed_client_with_timeout(120)
+        .post(format!("{base}/stacks/deploy"))
+        .json(&serde_json::json!({ "path": path }))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
+#[tauri::command]
 pub async fn compose_down(name: String) -> Result<serde_json::Value, String> {
     post_json(&format!("/stacks/{name}/down")).await
 }

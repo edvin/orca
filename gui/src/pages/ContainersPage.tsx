@@ -42,6 +42,10 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const [containerMenuOpen, setContainerMenuOpen] = createSignal<string | null>(null);
   const [showMultiLog, setShowMultiLog] = createSignal(false);
+  const [showComposeEditor, setShowComposeEditor] = createSignal(false);
+  const [composePath, setComposePath] = createSignal("");
+  const [composeContent, setComposeContent] = createSignal("");
+  const [composeDeploying, setComposeDeploying] = createSignal(false);
 
   const refresh = async () => {
     try {
@@ -602,6 +606,13 @@ export default function ContainersPage(props: ContainersPageProps) {
               Combined Logs
             </button>
           </Show>
+          <button class="btn" onClick={() => {
+            setComposePath("");
+            setComposeContent(`version: "3.8"\n\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped\n`);
+            setShowComposeEditor(true);
+          }}>
+            Compose
+          </button>
           <button class="btn btn-primary" onClick={() => setShowRunDialog(true)}>
             Run
           </button>
@@ -814,6 +825,66 @@ export default function ContainersPage(props: ContainersPageProps) {
           containers={runningContainers().map((c) => ({ id: c.id, name: c.name }))}
           onClose={() => setShowMultiLog(false)}
         />
+      </Show>
+
+      {/* Compose Editor Dialog */}
+      <Show when={showComposeEditor()}>
+        <div class="modal-overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("modal-overlay") && !composeDeploying()) setShowComposeEditor(false); }}>
+          <div class="modal-dialog" style={{ "max-width": "800px", height: "80vh", display: "flex", "flex-direction": "column" }}>
+            <div class="modal-header">
+              <h2 class="modal-title">Deploy Compose Stack</h2>
+              <button class="modal-close" onClick={() => { if (!composeDeploying()) setShowComposeEditor(false); }}>{"\u00d7"}</button>
+            </div>
+            <div class="modal-body" style={{ flex: "1", display: "flex", "flex-direction": "column", gap: "12px", overflow: "hidden" }}>
+              <div class="form-group">
+                <label class="form-label">Directory Path</label>
+                <input class="form-input mono" type="text"
+                  placeholder="/path/to/project (docker-compose.yml will be saved here)"
+                  value={composePath()}
+                  onInput={(e) => setComposePath(e.currentTarget.value)}
+                />
+                <span class="form-hint">The directory where docker-compose.yml will be created. Must be an absolute path.</span>
+              </div>
+              <div style={{ flex: "1", "min-height": "0", border: "1px solid #30363d", "border-radius": "8px", overflow: "hidden" }}>
+                <textarea class="form-textarea mono" style={{
+                  width: "100%", height: "100%", resize: "none",
+                  background: "#0d1117", color: "#e6edf3", border: "none",
+                  "font-size": "13px", padding: "12px", "line-height": "1.5",
+                  "box-sizing": "border-box",
+                }}
+                  value={composeContent()}
+                  onInput={(e) => setComposeContent(e.currentTarget.value)}
+                  spellcheck={false}
+                />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setShowComposeEditor(false)} disabled={composeDeploying()}>Cancel</button>
+              <button class="btn btn-primary" disabled={composeDeploying() || !composePath().trim() || !composeContent().trim()}
+                onClick={async () => {
+                  const dir = composePath().trim();
+                  if (!dir) return;
+                  setComposeDeploying(true);
+                  try {
+                    // Save the compose file
+                    const filePath = dir.endsWith("/") ? `${dir}docker-compose.yml` : `${dir}/docker-compose.yml`;
+                    await invoke("save_compose_file", { path: filePath, content: composeContent() });
+                    // Run compose up from the directory
+                    await invoke("compose_deploy_path", { path: dir });
+                    showToast("Stack deployed!", "success");
+                    setShowComposeEditor(false);
+                    refresh();
+                  } catch (e) {
+                    showToast(`Deploy failed: ${e}`, "error");
+                  }
+                  setComposeDeploying(false);
+                }}
+              >
+                {composeDeploying() ? (<><Spinner size={12} />{" Deploying..."}</>) : "Deploy"}
+              </button>
+            </div>
+          </div>
+        </div>
       </Show>
     </div>
   );

@@ -172,6 +172,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/{name}/restart", post(restart_stack))
         .route("/stacks/{name}/up", post(compose_up))
         .route("/stacks/{name}/down", post(compose_down))
+        .route("/stacks/deploy", post(compose_deploy_path))
         .route("/stacks/{name}/pull", post(compose_pull))
         // Kubernetes
         .route("/k8s/status", get(k8s_status))
@@ -2300,6 +2301,19 @@ async fn compose_up(
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
     let output = state.rt().await
         .compose_up(&dir, config.as_deref())
+        .await?;
+    Ok(Json(output))
+}
+
+/// Deploy a compose stack from a directory path (for new stacks not yet running).
+async fn compose_deploy_path(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, ApiError> {
+    let dir = body.get("path").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing 'path' field"))?;
+    let output = state.rt().await
+        .compose_up(dir, None)
         .await?;
     Ok(Json(output))
 }

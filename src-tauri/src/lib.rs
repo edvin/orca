@@ -66,6 +66,7 @@ pub fn run() {
             commands::stop_stack,
             commands::restart_stack,
             commands::compose_up,
+            commands::compose_deploy_path,
             commands::compose_down,
             commands::compose_pull,
             commands::subscribe_events,
