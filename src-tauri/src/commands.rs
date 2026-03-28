@@ -41,20 +41,29 @@ fn log_stream_map() -> &'static Mutex<HashMap<String, LogStreamHandle>> {
     LOG_STREAMS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-const LOCAL_DAEMON_URL: &str = "http://127.0.0.1:9477/api/v1";
+const LOCAL_DAEMON_BASE: &str = "http://127.0.0.1:9477";
 
 /// Override for the daemon URL when a remote host is selected.
-/// Contains (url, token, tls_verify) when a remote host is active, None for local.
+/// Contains (base_url, token, tls_verify) when a remote host is active, None for local.
+/// base_url is scheme://host:port — /api/v1 is always appended by daemon_url().
 static DAEMON_URL_OVERRIDE: RwLock<Option<(String, String, bool)>> = RwLock::new(None);
 
-/// Returns the currently active daemon URL — remote override or local default.
+/// Normalize a daemon URL to just scheme://host:port (strip any /api/v1 suffix).
+fn normalize_daemon_url(url: &str) -> String {
+    url.trim_end_matches('/')
+        .trim_end_matches("/api/v1")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// Returns the currently active daemon API URL (always ends with /api/v1).
 fn daemon_url() -> String {
     if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
-        if let Some((url, _, _)) = guard.as_ref() {
-            return url.clone();
+        if let Some((base, _, _)) = guard.as_ref() {
+            return format!("{}/api/v1", normalize_daemon_url(base));
         }
     }
-    LOCAL_DAEMON_URL.to_string()
+    format!("{LOCAL_DAEMON_BASE}/api/v1")
 }
 
 /// Returns the API token for the active host.
@@ -2557,11 +2566,8 @@ pub async fn add_remote_host(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
     let id = format!("{:x}{:04x}", now.as_millis(), now.subsec_nanos() & 0xFFFF);
-    // Normalize URL: ensure it ends with /api/v1
-    let url = {
-        let base = url.trim_end_matches('/');
-        if base.ends_with("/api/v1") { base.to_string() } else { format!("{base}/api/v1") }
-    };
+    // Normalize URL: store just scheme://host:port (daemon_url() appends /api/v1)
+    let url = normalize_daemon_url(&url);
     config.remote_hosts.push(orca_core::config::RemoteHost {
         id: id.clone(),
         name,
@@ -2589,11 +2595,8 @@ pub async fn update_remote_host(
         .iter_mut()
         .find(|h| h.id == id)
         .ok_or("Host not found")?;
-    // Normalize URL: ensure it ends with /api/v1
-    let url = {
-        let base = url.trim_end_matches('/');
-        if base.ends_with("/api/v1") { base.to_string() } else { format!("{base}/api/v1") }
-    };
+    // Normalize URL: store just scheme://host:port (daemon_url() appends /api/v1)
+    let url = normalize_daemon_url(&url);
     host.name = name;
     host.url = url;
     // If token is "__KEEP__", preserve the existing token
@@ -2655,7 +2658,7 @@ pub async fn switch_host(id: Option<String>) -> Result<serde_json::Value, String
     } else {
         let mut guard = DAEMON_URL_OVERRIDE.write().map_err(|e| format!("{e}"))?;
         *guard = None;
-        Ok(serde_json::json!({ "host": "Local", "url": LOCAL_DAEMON_URL }))
+        Ok(serde_json::json!({ "host": "Local", "url": LOCAL_DAEMON_BASE }))
     }
 }
 
@@ -2685,20 +2688,15 @@ pub async fn get_active_host() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "id": null,
         "name": "Local",
-        "url": LOCAL_DAEMON_URL,
+        "url": LOCAL_DAEMON_BASE,
         "is_remote": false,
     }))
 }
 
 #[tauri::command]
 pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> Result<serde_json::Value, String> {
-    // Normalize URL: ensure it ends with /api/v1
-    let base = url.trim_end_matches('/');
-    let base = if base.ends_with("/api/v1") {
-        base.to_string()
-    } else {
-        format!("{base}/api/v1")
-    };
+    // Normalize to scheme://host:port then append /api/v1
+    let base = format!("{}/api/v1", normalize_daemon_url(&url));
 
     let mut builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -2755,7 +2753,7 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
     } else {
         // Local host
         let token = load_api_token().unwrap_or_default();
-        (LOCAL_DAEMON_URL.to_string(), token, true)
+        (LOCAL_DAEMON_BASE.to_string(), token, true)
     };
 
     let mut builder = reqwest::Client::builder()
@@ -2767,8 +2765,9 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
     let client = builder.build().unwrap_or_else(|_| reqwest::Client::new());
 
     // Health check
+    let api_url = format!("{}/api/v1", normalize_daemon_url(&url));
     let health = client
-        .get(format!("{url}/health"))
+        .get(format!("{api_url}/health"))
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await
@@ -2861,7 +2860,7 @@ pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
     // Check local daemon (always verify — it's localhost)
     let local_token = load_api_token().unwrap_or_default();
     let local_result = verify_client
-        .get(format!("{LOCAL_DAEMON_URL}/health"))
+        .get(format!("{LOCAL_DAEMON_BASE}/api/v1/health"))
         .header("Authorization", format!("Bearer {local_token}"))
         .send()
         .await;
