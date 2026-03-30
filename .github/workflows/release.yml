@@ -161,29 +161,56 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\sigs" | Out-Null
           Get-ChildItem -Path "target\${{ matrix.platform.target }}\release\bundle" -Recurse -Filter "*.sig" | Move-Item -Destination "$env:RUNNER_TEMP\sigs\" -Force
 
-      - name: Sign Windows NSIS installer
+      - name: Sign Windows installers
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
-        uses: sslcom/esigner-codesign@main
-        with:
-          command: batch_sign
-          username: ${{ secrets.SSLCOM_USERNAME }}
-          password: ${{ secrets.SSLCOM_PASSWORD }}
-          credential_id: ${{ secrets.SSLCOM_CREDENTIAL_ID }}
-          totp_secret: ${{ secrets.SSLCOM_TOTP_SECRET }}
-          dir_path: target/${{ matrix.platform.target }}/release/bundle/nsis
-          environment_name: PRODUCT
+        shell: pwsh
+        run: |
+          # Download and set up CodeSignTool manually with production endpoints
+          $cstVersion = "v1.3.0"
+          $cstDir = "$env:RUNNER_TEMP\CodeSignTool"
+          New-Item -ItemType Directory -Force -Path $cstDir | Out-Null
 
-      - name: Sign Windows MSI installer
-        if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
-        uses: sslcom/esigner-codesign@main
-        with:
-          command: batch_sign
-          username: ${{ secrets.SSLCOM_USERNAME }}
-          password: ${{ secrets.SSLCOM_PASSWORD }}
-          credential_id: ${{ secrets.SSLCOM_CREDENTIAL_ID }}
-          totp_secret: ${{ secrets.SSLCOM_TOTP_SECRET }}
-          dir_path: target/${{ matrix.platform.target }}/release/bundle/msi
-          environment_name: PRODUCT
+          # Download CodeSignTool
+          $zipUrl = "https://github.com/SSLcom/CodeSignTool/releases/download/$cstVersion/CodeSignTool-$cstVersion-windows.zip"
+          $zipPath = "$env:RUNNER_TEMP\CodeSignTool.zip"
+          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath $cstDir -Force
+
+          $cstPath = "$cstDir\CodeSignTool-$cstVersion"
+
+          # Write PRODUCTION config (not sandbox!)
+          @"
+          CLIENT_ID=kaXTRACNijSWsFdRKg_KAfD3fqrBlzMbWs6TwWHwAn8
+          OAUTH2_ENDPOINT=https://login.ssl.com/oauth2/token
+          CSC_API_ENDPOINT=https://cs.ssl.com
+          TSA_URL=http://ts.ssl.com
+          TSA_LEGACY_URL=http://ts.ssl.com/legacy
+          "@ | Set-Content -Path "$cstPath\conf\code_sign_tool.properties"
+
+          # Set up Java
+          $javaHome = "$cstPath\jdk-11.0.2"
+          if (-not (Test-Path $javaHome)) {
+            # Use the system Java
+            $javaHome = $env:JAVA_HOME
+          }
+
+          # Sign each installer
+          foreach ($dir in @("nsis", "msi")) {
+            $bundleDir = "target\${{ matrix.platform.target }}\release\bundle\$dir"
+            if (Test-Path $bundleDir) {
+              Get-ChildItem -Path $bundleDir -File | Where-Object { $_.Extension -in @('.exe', '.msi') } | ForEach-Object {
+                Write-Host "Signing $($_.Name)..."
+                & "$javaHome\bin\java" -jar "$cstPath\jar\code_sign_tool-1.3.0.jar" sign `
+                  -username="${{ secrets.SSLCOM_USERNAME }}" `
+                  -password="${{ secrets.SSLCOM_PASSWORD }}" `
+                  -credential_id="${{ secrets.SSLCOM_CREDENTIAL_ID }}" `
+                  -totp_secret="${{ secrets.SSLCOM_TOTP_SECRET }}" `
+                  -input_file_path="$($_.FullName)" `
+                  -override=true
+                if ($LASTEXITCODE -ne 0) { Write-Host "Warning: signing $($_.Name) failed" }
+              }
+            }
+          }
 
       - name: Restore sig files after signing
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
