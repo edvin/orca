@@ -167,12 +167,17 @@ jobs:
           CST_DIR="$RUNNER_TEMP/cst"
           mkdir -p "$CST_DIR"
           curl -fsSL "https://github.com/SSLcom/CodeSignTool/releases/download/v1.3.0/CodeSignTool-v1.3.0.zip" -o "$CST_DIR/cst.zip"
-          cd "$CST_DIR" && python3 -c "import zipfile; zipfile.ZipFile('cst.zip').extractall('.')"
+          python3 -c "import zipfile; zipfile.ZipFile('$CST_DIR/cst.zip').extractall('$CST_DIR')"
           CST_JAR="$CST_DIR/jar/code_sign_tool-1.3.0.jar"
+          WORKSPACE="$GITHUB_WORKSPACE"
 
           # Sign each .exe and .msi
+          echo "Looking for installers in $WORKSPACE/target/${{ matrix.platform.target }}/release/bundle/"
+          ls -la "$WORKSPACE/target/${{ matrix.platform.target }}/release/bundle/" 2>/dev/null || echo "Bundle dir not found"
           for dir in nsis msi; do
-            BUNDLE="target/${{ matrix.platform.target }}/release/bundle/$dir"
+            BUNDLE="$WORKSPACE/target/${{ matrix.platform.target }}/release/bundle/$dir"
+            echo "Checking $BUNDLE..."
+            ls -la "$BUNDLE" 2>/dev/null || echo "  Dir not found: $BUNDLE"
             [ -d "$BUNDLE" ] || continue
             for file in "$BUNDLE"/*.exe "$BUNDLE"/*.msi; do
               [ -f "$file" ] || continue
