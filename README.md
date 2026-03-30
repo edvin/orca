@@ -26,16 +26,21 @@
 
 ### Container Management
 
-- **Full lifecycle** — create, start, stop, restart, kill, remove containers
-- **Run containers from images** with ports, volumes, env vars, restart policies, CPU/memory limits
+- **Full lifecycle** — create, start, stop, restart, kill, remove, **rename** containers
+- **Stop all** — one-click stop all running containers with confirmation
+- **Run containers** with ports, volumes, env vars, restart policies, CPU/memory limits
+- **Image tag autocomplete** — type `nginx`, see `:latest`, `:alpine`, `:1.27` from Docker Hub
 - **Live resource editing** — change memory limits, CPU cores, and restart policy on running containers
-- **Live resource monitoring** — CPU, memory, network I/O with per-container stats
+- **Per-container resource charts** — full-size CPU and memory time-series on the detail page
+- **Resource usage alerts** — toast when containers exceed 90% memory or sustained CPU
 - **Exec terminal** — interactive shell inside containers
+- **Live log streaming** — real-time log tailing via SSE, per-layer pull progress bars
 - **Log viewer** with regex search, match highlighting, case sensitivity toggle, and download
 - **Multi-container log view** — combined, color-coded logs across containers
 - **Health checks** — live status indicator, health history, check output
-- **Restart policy** display, editing, and restart count tracking
+- **Restart count** — badge showing how many times a container has restarted
 - **Container file browser** — explore filesystem of running containers
+- **Export to tar** — save container filesystem or image to tar file
 - **Save as Image** — commit container state to a new image
 - **AI-powered diagnostics** — click the AI button on any container to analyze logs and troubleshoot
 - **Copy as `docker run`** / **Export as `docker-compose.yml`** for any running container
@@ -43,7 +48,7 @@
 
 ### Image Management
 
-- **Pull images** with Docker Hub search dialog and progress tracking
+- **Pull images** with Docker Hub search, **per-layer progress bars**, and streaming download
 - **Build images** from Dockerfile with streaming output, build args, and Dockerfile selection
 - **Vulnerability scanning** — one-click CVE scan powered by Trivy with severity badges
 - **Image layer visualization** — stacked bar chart with Dockerfile instructions
@@ -57,6 +62,7 @@
 
 - **Auto-detection** from container labels — no config file needed
 - **Compose editor** — create new docker-compose.yml with YAML editor and deploy from the UI
+- **Compose validation** — validates via `docker compose config` before deploy, errors shown inline
 - Service health dots with stack status rollup (Running / Partial / Stopped)
 - **Compose up / down / pull** — runs the actual `docker compose` CLI
 - Per-service logs, start/stop, restart within expanded stack view
