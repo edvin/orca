@@ -154,63 +154,47 @@ jobs:
         if: always() && runner.os == 'macOS'
         run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
-      - name: Move sig files before signing
-        if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\sigs" | Out-Null
-          Get-ChildItem -Path "target\${{ matrix.platform.target }}\release\bundle" -Recurse -Filter "*.sig" | Move-Item -Destination "$env:RUNNER_TEMP\sigs\" -Force
-
       - name: Sign Windows installers
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
-        shell: pwsh
+        shell: bash
+        env:
+          SSLCOM_USERNAME: ${{ secrets.SSLCOM_USERNAME }}
+          SSLCOM_PASSWORD: ${{ secrets.SSLCOM_PASSWORD }}
+          SSLCOM_CREDENTIAL_ID: ${{ secrets.SSLCOM_CREDENTIAL_ID }}
+          SSLCOM_TOTP_SECRET: ${{ secrets.SSLCOM_TOTP_SECRET }}
         run: |
-          # Download and set up CodeSignTool manually with production endpoints
-          $cstVersion = "v1.3.0"
-          $cstDir = "$env:RUNNER_TEMP\CodeSignTool"
-          New-Item -ItemType Directory -Force -Path $cstDir | Out-Null
-
           # Download CodeSignTool
-          $zipUrl = "https://github.com/SSLcom/CodeSignTool/releases/download/$cstVersion/CodeSignTool-$cstVersion-windows.zip"
-          $zipPath = "$env:RUNNER_TEMP\CodeSignTool.zip"
-          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
-          Expand-Archive -Path $zipPath -DestinationPath $cstDir -Force
+          curl -fsSL "https://github.com/SSLcom/CodeSignTool/releases/download/v1.3.0/CodeSignTool-v1.3.0.zip" -o /tmp/cst.zip
+          mkdir -p /tmp/cst && cd /tmp/cst && python3 -c "import zipfile; zipfile.ZipFile('/tmp/cst.zip').extractall('.')"
+          CST_JAR="/tmp/cst/jar/code_sign_tool-1.3.0.jar"
 
-          $cstPath = "$cstDir\CodeSignTool-$cstVersion"
-
-          # Write PRODUCTION config (not sandbox!)
-          @"
-          CLIENT_ID=kaXTRACNijSWsFdRKg_KAfD3fqrBlzMbWs6TwWHwAn8
-          OAUTH2_ENDPOINT=https://login.ssl.com/oauth2/token
-          CSC_API_ENDPOINT=https://cs.ssl.com
-          TSA_URL=http://ts.ssl.com
-          TSA_LEGACY_URL=http://ts.ssl.com/legacy
-          "@ | Set-Content -Path "$cstPath\conf\code_sign_tool.properties"
-
-          # Set up Java
-          $javaHome = "$cstPath\jdk-11.0.2"
-          if (-not (Test-Path $javaHome)) {
-            # Use the system Java
-            $javaHome = $env:JAVA_HOME
-          }
-
-          # Sign each installer
-          foreach ($dir in @("nsis", "msi")) {
-            $bundleDir = "target\${{ matrix.platform.target }}\release\bundle\$dir"
-            if (Test-Path $bundleDir) {
-              Get-ChildItem -Path $bundleDir -File | Where-Object { $_.Extension -in @('.exe', '.msi') } | ForEach-Object {
-                Write-Host "Signing $($_.Name)..."
-                & "$javaHome\bin\java" -jar "$cstPath\jar\code_sign_tool-1.3.0.jar" sign `
-                  -username="${{ secrets.SSLCOM_USERNAME }}" `
-                  -password="${{ secrets.SSLCOM_PASSWORD }}" `
-                  -credential_id="${{ secrets.SSLCOM_CREDENTIAL_ID }}" `
-                  -totp_secret="${{ secrets.SSLCOM_TOTP_SECRET }}" `
-                  -input_file_path="$($_.FullName)" `
-                  -override=true
-                if ($LASTEXITCODE -ne 0) { Write-Host "Warning: signing $($_.Name) failed" }
-              }
-            }
-          }
+          # Sign each .exe and .msi
+          for dir in nsis msi; do
+            BUNDLE="target/${{ matrix.platform.target }}/release/bundle/$dir"
+            [ -d "$BUNDLE" ] || continue
+            for file in "$BUNDLE"/*.exe "$BUNDLE"/*.msi; do
+              [ -f "$file" ] || continue
+              echo "Signing $(basename $file)..."
+              # Generate OTP and pipe it to CodeSignTool
+              OTP=$(python3 -c "
+          import hmac,hashlib,struct,time,base64
+          s='$SSLCOM_TOTP_SECRET'
+          s+='='*(8-len(s)%8) if len(s)%8 else ''
+          k=base64.b32decode(s,True)
+          c=int(time.time())//30
+          h=hmac.new(k,struct.pack('>Q',c),hashlib.sha1).digest()
+          o=h[-1]&0xF
+          print(f'{(struct.unpack(\">I\",h[o:o+4])[0]&0x7FFFFFFF)%1000000:06d}')
+          ")
+              echo "$OTP" | java -jar "$CST_JAR" sign \
+                -username="$SSLCOM_USERNAME" \
+                -password="$SSLCOM_PASSWORD" \
+                -credential_id="$SSLCOM_CREDENTIAL_ID" \
+                -input_file_path="$file" \
+                -override=true || echo "Warning: signing $(basename $file) failed"
+              sleep 5  # Wait between signings to avoid OTP reuse
+            done
+          done
 
       - name: Restore sig files after signing
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
