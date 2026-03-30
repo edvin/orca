@@ -160,6 +160,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/volumes/{name}/files", get(volume_list_files))
         .route("/volumes/{name}/file", get(volume_read_file))
         .route("/volumes/{name}/containers", get(volume_containers))
+        .route("/volumes/sizes", get(volume_sizes))
         // Networks
         .route("/networks", get(list_networks).post(create_network_handler))
         .route("/networks/topology", get(network_topology))
@@ -174,6 +175,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/{name}/up", post(compose_up))
         .route("/stacks/{name}/down", post(compose_down))
         .route("/stacks/deploy", post(compose_deploy_path))
+        .route("/stacks/validate", post(validate_compose))
         .route("/stacks/{name}/pull", post(compose_pull))
         // Kubernetes
         .route("/k8s/status", get(k8s_status))
@@ -2061,6 +2063,28 @@ async fn volume_containers(
     Ok(Json(using_volume))
 }
 
+/// Return disk usage sizes for all volumes via `docker system df`.
+async fn volume_sizes(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let rt = state.rt().await;
+    let df = rt.docker.df().await
+        .map_err(|e| anyhow::anyhow!("Failed to get system df: {e}"))?;
+
+    let mut sizes: HashMap<String, i64> = HashMap::new();
+    if let Some(volumes) = df.volumes {
+        for v in volumes {
+            if let Some(usage) = v.usage_data {
+                if usage.size >= 0 {
+                    sizes.insert(v.name, usage.size);
+                }
+            }
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "sizes": sizes })))
+}
+
 // --- Networks ---
 
 async fn list_networks(
@@ -2329,6 +2353,41 @@ async fn compose_deploy_path(
         .compose_up(dir, None)
         .await?;
     Ok(Json(output))
+}
+
+/// Validate a compose file by running `docker compose -f <path> config`.
+async fn validate_compose(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, ApiError> {
+    let path = body.get("path").and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing 'path' field"))?;
+
+    let rt = state.rt().await;
+    let runtime = rt.detect_runtime().await;
+
+    let (program, base_args): (&str, Vec<&str>) = match runtime {
+        orca_core::runtime::RuntimeKind::Podman => ("podman", vec!["compose"]),
+        orca_core::runtime::RuntimeKind::Docker => ("docker", vec!["compose"]),
+    };
+
+    let mut cmd = tokio::process::Command::new(program);
+    for arg in &base_args {
+        cmd.arg(arg);
+    }
+    cmd.arg("-f").arg(path).arg("config").arg("-q");
+    cmd.stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    let output = cmd.output().await
+        .map_err(|e| anyhow::anyhow!("Failed to run compose config: {e}"))?;
+
+    if output.status.success() {
+        Ok(Json(serde_json::json!({ "valid": true })))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        Ok(Json(serde_json::json!({ "valid": false, "error": stderr })))
+    }
 }
 
 async fn compose_down(

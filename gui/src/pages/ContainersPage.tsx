@@ -46,6 +46,8 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [composePath, setComposePath] = createSignal("");
   const [composeContent, setComposeContent] = createSignal("");
   const [composeDeploying, setComposeDeploying] = createSignal(false);
+  const [composeValidating, setComposeValidating] = createSignal(false);
+  const [composeError, setComposeError] = createSignal("");
 
   const refresh = async () => {
     try {
@@ -641,6 +643,7 @@ export default function ContainersPage(props: ContainersPageProps) {
           <button class="btn" onClick={() => {
             setComposePath("");
             setComposeContent(`version: "3.8"\n\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped\n`);
+            setComposeError("");
             setShowComposeEditor(true);
           }}>
             Compose
@@ -889,18 +892,63 @@ export default function ContainersPage(props: ContainersPageProps) {
                   spellcheck={false}
                 />
               </div>
+              <Show when={composeError()}>
+                <div style={{
+                  background: "rgba(248, 81, 73, 0.1)",
+                  border: "1px solid #f85149",
+                  "border-radius": "8px",
+                  padding: "10px 12px",
+                  color: "#f85149",
+                  "font-size": "12px",
+                  "font-family": "'JetBrains Mono', monospace",
+                  "white-space": "pre-wrap",
+                  "max-height": "120px",
+                  "overflow-y": "auto",
+                }}>{composeError()}</div>
+              </Show>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => setShowComposeEditor(false)} disabled={composeDeploying()}>Cancel</button>
-              <button class="btn btn-primary" disabled={composeDeploying() || !composePath().trim() || !composeContent().trim()}
+              <button class="btn" onClick={() => setShowComposeEditor(false)} disabled={composeDeploying() || composeValidating()}>Cancel</button>
+              <button class="btn" disabled={composeValidating() || composeDeploying() || !composePath().trim() || !composeContent().trim()}
+                onClick={async () => {
+                  const dir = composePath().trim();
+                  if (!dir) return;
+                  setComposeValidating(true);
+                  setComposeError("");
+                  try {
+                    const filePath = dir.endsWith("/") ? `${dir}docker-compose.yml` : `${dir}/docker-compose.yml`;
+                    await invoke("save_compose_file", { path: filePath, content: composeContent() });
+                    const result = await invoke("validate_compose", { path: filePath }) as { valid: boolean; error?: string };
+                    if (result.valid) {
+                      showToast("Compose file is valid", "success");
+                    } else {
+                      setComposeError(result.error || "Validation failed");
+                    }
+                  } catch (e) {
+                    setComposeError(`${e}`);
+                  }
+                  setComposeValidating(false);
+                }}
+              >
+                {composeValidating() ? (<><Spinner size={12} />{" Validating..."}</>) : "Validate"}
+              </button>
+              <button class="btn btn-primary" disabled={composeDeploying() || composeValidating() || !composePath().trim() || !composeContent().trim()}
                 onClick={async () => {
                   const dir = composePath().trim();
                   if (!dir) return;
                   setComposeDeploying(true);
+                  setComposeError("");
                   try {
                     // Save the compose file
                     const filePath = dir.endsWith("/") ? `${dir}docker-compose.yml` : `${dir}/docker-compose.yml`;
                     await invoke("save_compose_file", { path: filePath, content: composeContent() });
+                    // Validate before deploying
+                    const result = await invoke("validate_compose", { path: filePath }) as { valid: boolean; error?: string };
+                    if (!result.valid) {
+                      setComposeError(result.error || "Validation failed");
+                      setComposeDeploying(false);
+                      return;
+                    }
                     // Run compose up from the directory
                     await invoke("compose_deploy_path", { path: dir });
                     showToast("Stack deployed!", "success");

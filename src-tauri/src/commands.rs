@@ -910,6 +910,11 @@ pub async fn volume_containers(name: String) -> Result<serde_json::Value, String
     get_json(&format!("/volumes/{name}/containers")).await
 }
 
+#[tauri::command]
+pub async fn volume_sizes() -> Result<serde_json::Value, String> {
+    get_json("/volumes/sizes").await
+}
+
 // --- Container File Browsing ---
 
 #[tauri::command]
@@ -1117,6 +1122,21 @@ pub async fn compose_deploy_path(path: String) -> Result<serde_json::Value, Stri
     let base = daemon_url();
     let resp = authed_client_with_timeout(120)
         .post(format!("{base}/stacks/deploy"))
+        .json(&serde_json::json!({ "path": path }))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
+#[tauri::command]
+pub async fn validate_compose(path: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = authed_client()
+        .post(format!("{base}/stacks/validate"))
         .json(&serde_json::json!({ "path": path }))
         .send()
         .await
@@ -3077,4 +3097,59 @@ pub async fn save_schedule(
 #[tauri::command]
 pub async fn delete_schedule(id: String) -> Result<(), String> {
     delete(&format!("/schedules/{id}")).await
+}
+
+// --- Docker Hub Tag Autocomplete ---
+
+#[tauri::command]
+pub async fn fetch_image_tags(image: String) -> Result<Vec<String>, String> {
+    let image = image.trim().to_string();
+    if image.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Determine namespace/repo for Docker Hub API
+    let (namespace, repo) = if image.contains('/') {
+        let parts: Vec<&str> = image.splitn(2, '/').collect();
+        (parts[0].to_string(), parts[1].to_string())
+    } else {
+        ("library".to_string(), image.clone())
+    };
+
+    let url = format!(
+        "https://hub.docker.com/v2/repositories/{}/{}/tags?page_size=20&ordering=last_updated",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&repo),
+    );
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("{e}"))?;
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch tags: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Docker Hub returned {}", resp.status()));
+    }
+
+    let body: serde_json::Value = resp.json().await.map_err(|e| format!("{e}"))?;
+
+    let tags: Vec<String> = body
+        .get("results")
+        .and_then(|r| r.as_array())
+        .map(|results| {
+            results
+                .iter()
+                .filter_map(|entry| entry.get("name").and_then(|n| n.as_str()).map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(tags)
 }

@@ -156,10 +156,10 @@ jobs:
 
       - name: Move sig files before signing
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p /tmp/sigs
-          find target/${{ matrix.platform.target }}/release/bundle -name "*.sig" -exec mv {} /tmp/sigs/ \;
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\sigs" | Out-Null
+          Get-ChildItem -Path "target\${{ matrix.platform.target }}\release\bundle" -Recurse -Filter "*.sig" | Move-Item -Destination "$env:RUNNER_TEMP\sigs\" -Force
 
       - name: Sign Windows NSIS installer
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
@@ -187,9 +187,15 @@ jobs:
 
       - name: Restore sig files after signing
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
-        shell: bash
+        shell: pwsh
         run: |
-          find /tmp/sigs -name "*.sig" -exec bash -c 'f="{}"; name=$(basename "$f"); for dir in nsis msi; do dest="target/${{ matrix.platform.target }}/release/bundle/$dir/$name"; [ -d "target/${{ matrix.platform.target }}/release/bundle/$dir" ] && cp "$f" "target/${{ matrix.platform.target }}/release/bundle/$dir/" 2>/dev/null; done' \;
+          Get-ChildItem -Path "$env:RUNNER_TEMP\sigs" -Filter "*.sig" | ForEach-Object {
+            $name = $_.Name
+            foreach ($dir in @("nsis", "msi")) {
+              $dest = "target\${{ matrix.platform.target }}\release\bundle\$dir"
+              if (Test-Path $dest) { Copy-Item $_.FullName -Destination "$dest\$name" -Force }
+            }
+          }
 
       - name: Upload release artifacts
         shell: bash

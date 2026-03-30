@@ -51,6 +51,7 @@ pub fn run() {
             commands::volume_list_files,
             commands::volume_read_file,
             commands::volume_containers,
+            commands::volume_sizes,
             commands::inspect_image,
             commands::image_history,
             commands::image_list_files,
@@ -70,6 +71,7 @@ pub fn run() {
             commands::restart_stack,
             commands::compose_up,
             commands::compose_deploy_path,
+            commands::validate_compose,
             commands::compose_down,
             commands::compose_pull,
             commands::subscribe_events,
@@ -184,6 +186,7 @@ pub fn run() {
             commands::list_schedules,
             commands::save_schedule,
             commands::delete_schedule,
+            commands::fetch_image_tags,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

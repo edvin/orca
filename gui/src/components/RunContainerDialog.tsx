@@ -1,4 +1,4 @@
-import { createSignal, Show, onMount, onCleanup } from "solid-js";
+import { createSignal, Show, For, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import Spinner from "./Spinner";
@@ -12,9 +12,18 @@ interface RunContainerDialogProps {
 
 type RunStage = "form" | "pulling" | "creating" | "starting" | "done" | "error";
 
+// Simple cache for tag results
+const tagCache = new Map<string, string[]>();
+
 export default function RunContainerDialog(props: RunContainerDialogProps) {
   const handleEscape = (e: KeyboardEvent) => {
-    if (e.key === "Escape" && stage() === "form") props.onClose();
+    if (e.key === "Escape" && stage() === "form") {
+      if (showTagSuggestions()) {
+        setShowTagSuggestions(false);
+      } else {
+        props.onClose();
+      }
+    }
   };
   onMount(() => {
     document.addEventListener("keydown", handleEscape);
@@ -57,9 +66,87 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
   const [stageMessage, setStageMessage] = createSignal("");
   const [errorMessage, setErrorMessage] = createSignal("");
 
+  // Tag autocomplete state
+  const [tagSuggestions, setTagSuggestions] = createSignal<string[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = createSignal(false);
+  const [tagLoading, setTagLoading] = createSignal(false);
+  const [selectedTagIndex, setSelectedTagIndex] = createSignal(-1);
+  let tagFetchTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const fetchTags = (imageName: string) => {
+    if (tagFetchTimer) clearTimeout(tagFetchTimer);
+
+    // Don't fetch if image already has a tag or is empty
+    if (!imageName.trim() || imageName.includes(":")) {
+      setTagSuggestions([]);
+      setShowTagSuggestions(false);
+      return;
+    }
+
+    // Check cache first
+    const cached = tagCache.get(imageName.trim());
+    if (cached) {
+      setTagSuggestions(cached);
+      setShowTagSuggestions(cached.length > 0);
+      setSelectedTagIndex(-1);
+      return;
+    }
+
+    tagFetchTimer = setTimeout(async () => {
+      setTagLoading(true);
+      try {
+        const tags = await invoke("fetch_image_tags", { image: imageName.trim() }) as string[];
+        const limited = tags.slice(0, 10);
+        tagCache.set(imageName.trim(), limited);
+        setTagSuggestions(limited);
+        setShowTagSuggestions(limited.length > 0);
+        setSelectedTagIndex(-1);
+      } catch {
+        setTagSuggestions([]);
+        setShowTagSuggestions(false);
+      } finally {
+        setTagLoading(false);
+      }
+    }, 400);
+  };
+
+  const selectTag = (tag: string) => {
+    const base = image().split(":")[0];
+    setImage(`${base}:${tag}`);
+    setShowTagSuggestions(false);
+    setSelectedTagIndex(-1);
+  };
+
+  const handleImageInput = (value: string) => {
+    setImage(value);
+    fetchTags(value);
+  };
+
+  const handleImageKeyDown = (e: KeyboardEvent) => {
+    if (!showTagSuggestions()) return;
+    const tags = tagSuggestions();
+    if (tags.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedTagIndex((i) => Math.min(i + 1, tags.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedTagIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" && selectedTagIndex() >= 0) {
+      e.preventDefault();
+      selectTag(tags[selectedTagIndex()]);
+    } else if (e.key === "Tab" && tags.length > 0) {
+      e.preventDefault();
+      const idx = selectedTagIndex() >= 0 ? selectedTagIndex() : 0;
+      selectTag(tags[idx]);
+    }
+  };
+
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
     if (!image().trim()) return;
+    setShowTagSuggestions(false);
 
     const imgRef = image().trim();
 
@@ -207,16 +294,54 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
           <form onSubmit={handleSubmit}>
             <div class="modal-body">
               <div class="form-row">
-                <div class="form-group" style={{ flex: 2 }}>
+                <div class="form-group" style={{ flex: 2, position: "relative" }}>
                   <label class="form-label">Image <span style={{ color: "#f85149" }}>*</span></label>
                   <input
                     class="form-input mono"
                     type="text"
                     placeholder="nginx:latest"
                     value={image()}
-                    onInput={(e) => setImage(e.currentTarget.value)}
+                    onInput={(e) => handleImageInput(e.currentTarget.value)}
+                    onKeyDown={handleImageKeyDown}
+                    onBlur={() => {
+                      // Delay hiding so click on suggestion registers
+                      setTimeout(() => setShowTagSuggestions(false), 200);
+                    }}
+                    onFocus={() => {
+                      if (tagSuggestions().length > 0 && !image().includes(":")) {
+                        setShowTagSuggestions(true);
+                      }
+                    }}
                     autofocus
+                    autocomplete="off"
                   />
+                  <Show when={showTagSuggestions() && tagSuggestions().length > 0}>
+                    <div class="tag-suggestions">
+                      <For each={tagSuggestions()}>
+                        {(tag, index) => (
+                          <div
+                            class={`tag-suggestion-item ${selectedTagIndex() === index() ? "selected" : ""}`}
+                            onMouseDown={() => selectTag(tag)}
+                            onMouseEnter={() => setSelectedTagIndex(index())}
+                          >
+                            <span class="tag-suggestion-colon">:</span>
+                            <span class="tag-suggestion-name">{tag}</span>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                  <Show when={tagLoading()}>
+                    <div style={{
+                      position: "absolute",
+                      right: "10px",
+                      top: "34px",
+                      color: "#8b949e",
+                      "font-size": "11px",
+                    }}>
+                      loading tags...
+                    </div>
+                  </Show>
                 </div>
                 <div class="form-group" style={{ flex: 1 }}>
                   <label class="form-label">Name</label>

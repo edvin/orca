@@ -2,7 +2,7 @@ import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Volume } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
-import { formatTimestamp } from "../lib/format";
+import { formatTimestamp, formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import SortableHeader from "../components/SortableHeader";
@@ -15,6 +15,7 @@ interface VolumesPageProps {
 
 export default function VolumesPage(props: VolumesPageProps) {
   const [volumes, setVolumes] = createSignal<Volume[]>([]);
+  const [volumeSizes, setVolumeSizes] = createSignal<Record<string, number>>({});
   const [showCreate, setShowCreate] = createSignal(false);
   const [createName, setCreateName] = createSignal("");
   const [createDriver, setCreateDriver] = createSignal("local");
@@ -24,8 +25,12 @@ export default function VolumesPage(props: VolumesPageProps) {
 
   const refresh = async () => {
     try {
-      const result = (await invoke("list_volumes")) as Volume[];
-      setVolumes(result);
+      const [result, sizesResult] = await Promise.all([
+        invoke("list_volumes") as Promise<Volume[]>,
+        invoke("volume_sizes") as Promise<{ sizes: Record<string, number> }>,
+      ]);
+      setVolumes(result || []);
+      setVolumeSizes(sizesResult?.sizes || {});
     } catch (e) {
     }
   };
@@ -39,6 +44,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       switch (field) {
         case "name": return item.name;
         case "driver": return item.driver;
+        case "size": return volumeSizes()[item.name] ?? -1;
         case "created": return item.created_at;
         default: return "";
       }
@@ -103,7 +109,7 @@ export default function VolumesPage(props: VolumesPageProps) {
             <tr>
               <SortableHeader label="Name" field="name" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <SortableHeader label="Driver" field="driver" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <th>Size</th>
+              <SortableHeader label="Size" field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th style={{ "text-align": "right" }}>Actions</th>
             </tr>
@@ -121,7 +127,9 @@ export default function VolumesPage(props: VolumesPageProps) {
                     </Show>
                   </td>
                   <td style={{ color: "#8b949e" }}>{v.driver}</td>
-                  <td style={{ color: "#8b949e" }}>-</td>
+                  <td style={{ color: "#8b949e" }}>
+                    {volumeSizes()[v.name] !== undefined ? formatBytes(volumeSizes()[v.name]) : "-"}
+                  </td>
                   <td style={{ color: "#8b949e" }}>{formatTimestamp(v.created_at)}</td>
                   <td style={{ "text-align": "right" }}>
                     <button class="action-icon action-icon-delete" title="Remove volume" onClick={(e) => removeVolume(v.name, e)}>

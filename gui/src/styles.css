@@ -3704,3 +3704,107 @@ select option {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Tag suggestions dropdown */
+.tag-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  margin-top: 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.tag-suggestion-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: monospace;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid #21262d;
+}
+
+.tag-suggestion-item:last-child { border-bottom: none; }
+.tag-suggestion-item:hover,
+.tag-suggestion-item.selected {
+  background: rgba(88, 166, 255, 0.1);
+}
+
+.tag-suggestion-colon { color: #6e7681; }
+.tag-suggestion-name { color: #58a6ff; }
+
+.skeleton-card {
+  background: rgba(22, 27, 34, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #21262d 25%, #30363d 50%, #21262d 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-line-short { width: 40%; }
+.skeleton-line-medium { width: 70%; }
+
+.skeleton-row td {
+  padding: 12px 8px;
+}
+
+.skeleton-row .skeleton-line {
+  height: 14px;
+}
+
+/* Tag autocomplete suggestions */
+.tag-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  margin-top: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.tag-suggestion-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #e6edf3;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.tag-suggestion-item:hover,
+.tag-suggestion-item.selected {
+  background: #58a6ff22;
+}
+
+.tag-suggestion-colon {
+  color: #8b949e;
+}
+
+.tag-suggestion-name {
+  color: #58a6ff;
+}
