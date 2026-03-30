@@ -164,9 +164,11 @@ jobs:
           SSLCOM_TOTP_SECRET: ${{ secrets.SSLCOM_TOTP_SECRET }}
         run: |
           # Download CodeSignTool
-          curl -fsSL "https://github.com/SSLcom/CodeSignTool/releases/download/v1.3.0/CodeSignTool-v1.3.0.zip" -o /tmp/cst.zip
-          mkdir -p /tmp/cst && cd /tmp/cst && python3 -c "import zipfile; zipfile.ZipFile('/tmp/cst.zip').extractall('.')"
-          CST_JAR="/tmp/cst/jar/code_sign_tool-1.3.0.jar"
+          CST_DIR="$RUNNER_TEMP/cst"
+          mkdir -p "$CST_DIR"
+          curl -fsSL "https://github.com/SSLcom/CodeSignTool/releases/download/v1.3.0/CodeSignTool-v1.3.0.zip" -o "$CST_DIR/cst.zip"
+          cd "$CST_DIR" && python3 -c "import zipfile; zipfile.ZipFile('cst.zip').extractall('.')"
+          CST_JAR="$CST_DIR/jar/code_sign_tool-1.3.0.jar"
 
           # Sign each .exe and .msi
           for dir in nsis msi; do
