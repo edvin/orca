@@ -154,6 +154,13 @@ jobs:
         if: always() && runner.os == 'macOS'
         run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
+      - name: Move sig files before signing
+        if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
+        shell: bash
+        run: |
+          mkdir -p /tmp/sigs
+          find target/${{ matrix.platform.target }}/release/bundle -name "*.sig" -exec mv {} /tmp/sigs/ \;
+
       - name: Sign Windows NSIS installer
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
         uses: sslcom/esigner-codesign@main
@@ -177,6 +184,12 @@ jobs:
           totp_secret: ${{ secrets.SSLCOM_TOTP_SECRET }}
           dir_path: target/${{ matrix.platform.target }}/release/bundle/msi
           environment_name: PRODUCT
+
+      - name: Restore sig files after signing
+        if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
+        shell: bash
+        run: |
+          find /tmp/sigs -name "*.sig" -exec bash -c 'f="{}"; name=$(basename "$f"); for dir in nsis msi; do dest="target/${{ matrix.platform.target }}/release/bundle/$dir/$name"; [ -d "target/${{ matrix.platform.target }}/release/bundle/$dir" ] && cp "$f" "target/${{ matrix.platform.target }}/release/bundle/$dir/" 2>/dev/null; done' \;
 
       - name: Upload release artifacts
         shell: bash
