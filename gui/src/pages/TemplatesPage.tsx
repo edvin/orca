@@ -39,8 +39,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [deployVolumes, setDeployVolumes] = createSignal<VolumeEntry[]>([]);
   const [existingNames, setExistingNames] = createSignal<Set<string>>(new Set());
 
-  // Target host for deploy (fleet management)
-  const [deployHostId, setDeployHostId] = createSignal<string | null>(null); // null = current active host
+  // Target hosts for deploy (multi-host fleet management)
+  const [selectedHosts, setSelectedHosts] = createSignal<Set<string>>(new Set());
   const [hostOptions, setHostOptions] = createSignal<Array<{ value: string; label: string }>>([]);
 
   // Editor dialog state (create/edit user template)
@@ -179,7 +179,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       setNameConflict(names.has(template.id));
     } catch { setExistingNames(new Set<string>()); }
 
-    // Load host options for target host selector
+    // Load host options for multi-host deploy
     try {
       const activeHost = (await invoke("get_active_host")) as ActiveHost;
       const remoteHosts = (await invoke("list_remote_hosts")) as RemoteHost[];
@@ -188,11 +188,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         ...remoteHosts.map((h) => ({ value: h.id, label: h.name })),
       ];
       setHostOptions(options);
-      // Default to current active host
-      setDeployHostId(activeHost.is_remote && activeHost.id ? activeHost.id : "__local__");
+      // Default: only the current active host checked
+      const activeKey = activeHost.is_remote && activeHost.id ? activeHost.id : "__local__";
+      setSelectedHosts(new Set([activeKey]));
     } catch {
       setHostOptions([{ value: "__local__", label: "Local" }]);
-      setDeployHostId("__local__");
+      setSelectedHosts(new Set(["__local__"]));
     }
   };
 
@@ -278,96 +279,142 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const addEditorPort = () => setEditorPorts((prev) => [...prev, { host: "", container: "" }]);
   const removeEditorPort = (index: number) => setEditorPorts((prev) => prev.filter((_, i) => i !== index));
 
+  const toggleHost = (hostId: string) => {
+    const current = selectedHosts();
+    const next = new Set(current);
+    if (next.has(hostId)) {
+      next.delete(hostId);
+    } else {
+      next.add(hostId);
+    }
+    setSelectedHosts(next);
+  };
+
   const doDeploy = async () => {
     const template = deployTarget();
     if (!template) return;
 
+    const hosts = Array.from(selectedHosts());
+    if (hosts.length === 0) {
+      showToast("Select at least one host to deploy to.", "error");
+      return;
+    }
+
     setDeploying(true);
 
-    // Determine if we need to switch hosts for deployment
-    const targetHostId = deployHostId();
-    const targetHostLabel = hostOptions().find((o) => o.value === targetHostId)?.label || "Local";
-    let originalHost: ActiveHost | null = null;
-    let switchedHost = false;
+    const ports = deployPorts().filter((p) => p.host || p.container).map((p) => `${p.host}:${p.container}`);
+    const env = deployEnv().filter((e) => e.key).map((e) => `${e.key}=${e.value}`);
+    const volumes = deployVolumes().filter((v) => v.source || v.target).map((v) => `${v.source}:${v.target}`);
 
-    try {
-      // If deploying to a different host, switch first
-      originalHost = (await invoke("get_active_host")) as ActiveHost;
-      const currentHostKey = originalHost.is_remote && originalHost.id ? originalHost.id : "__local__";
-      if (targetHostId && targetHostId !== currentHostKey) {
-        setDeployStatus(`Switching to ${targetHostLabel}...`);
-        await invoke("switch_host", { id: targetHostId === "__local__" ? null : targetHostId });
-        switchedHost = true;
-      }
+    // Single host, and it's the currently active host — use existing fast path
+    const isMultiHost = hosts.length > 1;
+    if (!isMultiHost) {
+      const targetHostId = hosts[0];
+      const targetHostLabel = hostOptions().find((o) => o.value === targetHostId)?.label || "Local";
+      let originalHost: ActiveHost | null = null;
+      let switchedHost = false;
 
-      const ports = deployPorts().filter((p) => p.host || p.container).map((p) => `${p.host}:${p.container}`);
-      const env = deployEnv().filter((e) => e.key).map((e) => `${e.key}=${e.value}`);
-      const volumes = deployVolumes().filter((v) => v.source || v.target).map((v) => `${v.source}:${v.target}`);
-
-      // Pre-check: verify host ports are available
-      const hostPorts = deployPorts().filter((p) => p.host).map((p) => parseInt(p.host)).filter((p) => !isNaN(p));
-      if (hostPorts.length > 0) {
-        try {
-          const result = await invoke("check_ports", { ports: hostPorts }) as { conflicts: number[] };
-          if (result.conflicts && result.conflicts.length > 0) {
-            showToast(`Port${result.conflicts.length > 1 ? "s" : ""} ${result.conflicts.join(", ")} already in use. Change the port mappings and try again.`, "error");
-            return; // finally block will handle host switch-back and setDeploying(false)
-          }
-        } catch { /* port check failed, proceed anyway */ }
-      }
-
-      // Step 1: Pull image with progress
-      setDeployStatus(`Pulling ${template.image}...`);
       try {
-        await invoke("pull_image", { reference: template.image });
-      } catch (pullErr) {
-        // Pull may fail if image is already local or name is wrong — try deploy anyway
-        setDeployStatus("Image pull completed, creating container...");
-      }
+        originalHost = (await invoke("get_active_host")) as ActiveHost;
+        const currentHostKey = originalHost.is_remote && originalHost.id ? originalHost.id : "__local__";
+        if (targetHostId !== currentHostKey) {
+          setDeployStatus(`Switching to ${targetHostLabel}...`);
+          await invoke("switch_host", { id: targetHostId === "__local__" ? null : targetHostId });
+          switchedHost = true;
+        }
 
-      // Step 2: Deploy (image should now be local)
-      setDeployStatus("Creating and starting container...");
-      const result = (await invoke("deploy_template", {
+        // Pre-check: verify host ports are available
+        const hostPorts = deployPorts().filter((p) => p.host).map((p) => parseInt(p.host)).filter((p) => !isNaN(p));
+        if (hostPorts.length > 0) {
+          try {
+            const result = await invoke("check_ports", { ports: hostPorts }) as { conflicts: number[] };
+            if (result.conflicts && result.conflicts.length > 0) {
+              showToast(`Port${result.conflicts.length > 1 ? "s" : ""} ${result.conflicts.join(", ")} already in use. Change the port mappings and try again.`, "error");
+              return;
+            }
+          } catch { /* port check failed, proceed anyway */ }
+        }
+
+        setDeployStatus(`Pulling ${template.image}...`);
+        try {
+          await invoke("pull_image", { reference: template.image });
+        } catch {
+          setDeployStatus("Image pull completed, creating container...");
+        }
+
+        setDeployStatus("Creating and starting container...");
+        const result = (await invoke("deploy_template", {
+          id: template.id,
+          name: deployName() || null,
+          ports: ports.length > 0 ? ports : null,
+          env: env.length > 0 ? env : null,
+          volumes: volumes.length > 0 ? volumes : null,
+        })) as any;
+
+        closeDeploy();
+        const containerId = result?.id;
+        const containerName = result?.name;
+        const notes = result?.notes || template.notes;
+        const hostSuffix = switchedHost ? ` on ${targetHostLabel}` : "";
+        showToast(`${template.name} deployed${hostSuffix}!${notes ? " " + notes : ""}`, "success");
+        logInfo("Template deployed", `${template.name} → container ${containerName || containerId || "unknown"}${hostSuffix}`);
+        if (!switchedHost) {
+          if (containerId && props.onNavigate) {
+            props.onNavigate(`container:${containerId}`);
+          } else {
+            props.onNavigate?.("containers");
+          }
+        }
+      } catch (e: any) {
+        const err = String(e);
+        const isNameConflict = err.includes("is already in use") || err.includes("Conflict");
+        const isPortConflict = err.includes("port is already allocated") || err.includes("address already in use") || err.includes("Bind for");
+        const displayMsg = isNameConflict
+          ? `A container named "${deployName() || template.id}" already exists. Remove or rename it first.`
+          : isPortConflict
+          ? `Port conflict — one of the ports is already in use. Edit the port mappings above and try again.`
+          : err;
+        logError(`Deploy failed: ${displayMsg}`, `Template "${template.name}" (${template.image})`);
+        showToast(displayMsg, "error");
+      } finally {
+        if (switchedHost && originalHost) {
+          try {
+            await invoke("switch_host", { id: originalHost.is_remote && originalHost.id ? originalHost.id : null });
+          } catch { /* best effort switch-back */ }
+        }
+        setDeploying(false);
+      }
+      return;
+    }
+
+    // Multi-host deploy path — use deploy_template_to_hosts backend command
+    try {
+      const hostLabels = hosts.map((h) => hostOptions().find((o) => o.value === h)?.label || h);
+      setDeployStatus(`Deploying to ${hostLabels.join(", ")}...`);
+
+      const result = (await invoke("deploy_template_to_hosts", {
         id: template.id,
         name: deployName() || null,
         ports: ports.length > 0 ? ports : null,
         env: env.length > 0 ? env : null,
         volumes: volumes.length > 0 ? volumes : null,
-      })) as any;
+        hostIds: hosts,
+      })) as { results: Array<{ host_name: string; success: boolean; error?: string }>; total: number; successes: number; failures: number };
 
       closeDeploy();
-      const containerId = result?.id;
-      const containerName = result?.name;
-      const notes = result?.notes || template.notes;
-      const hostSuffix = switchedHost ? ` on ${targetHostLabel}` : "";
-      showToast(`${template.name} deployed${hostSuffix}!${notes ? " " + notes : ""}`, "success");
-      logInfo("Template deployed", `${template.name} → container ${containerName || containerId || "unknown"}${hostSuffix}`);
-      // Navigate to the container detail page (only if deployed on current host)
-      if (!switchedHost) {
-        if (containerId && props.onNavigate) {
-          props.onNavigate(`container:${containerId}`);
-        } else {
-          props.onNavigate?.("containers");
-        }
+
+      if (result.failures === 0) {
+        showToast(`${template.name} deployed to ${result.successes} host${result.successes > 1 ? "s" : ""}!`, "success");
+        logInfo("Multi-host deploy", `${template.name} → ${result.successes}/${result.total} hosts succeeded`);
+      } else {
+        const failedHosts = result.results.filter((r) => !r.success).map((r) => `${r.host_name}: ${r.error}`);
+        showToast(`Deployed ${result.successes}/${result.total}, ${result.failures} failed:\n${failedHosts.join("\n")}`, result.successes > 0 ? "info" : "error");
+        logError(`Multi-host deploy partial failure`, `${template.name}: ${result.successes}/${result.total} succeeded. Failures: ${failedHosts.join("; ")}`);
       }
     } catch (e: any) {
-      const err = String(e);
-      const isNameConflict = err.includes("is already in use") || err.includes("Conflict");
-      const isPortConflict = err.includes("port is already allocated") || err.includes("address already in use") || err.includes("Bind for");
-      const displayMsg = isNameConflict
-        ? `A container named "${deployName() || template.id}" already exists. Remove or rename it first.`
-        : isPortConflict
-        ? `Port conflict — one of the ports is already in use. Edit the port mappings above and try again.`
-        : err;
-      logError(`Deploy failed: ${displayMsg}`, `Template "${template.name}" (${template.image})`);
-      showToast(displayMsg, "error");
+      logError(`Deploy failed: ${String(e)}`, `Template "${template.name}" (${template.image})`);
+      showToast(String(e), "error");
     } finally {
-      // Always switch back to original host
-      if (switchedHost && originalHost) {
-        try {
-          await invoke("switch_host", { id: originalHost.is_remote && originalHost.id ? originalHost.id : null });
-        } catch { /* best effort switch-back */ }
-      }
       setDeploying(false);
     }
   };
@@ -770,12 +817,40 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               <div class="modal-body">
                 <Show when={hostOptions().length > 1}>
                   <div class="form-group">
-                    <label class="form-label">Target Host</label>
-                    <Dropdown
-                      value={deployHostId() || "__local__"}
-                      options={hostOptions()}
-                      onChange={(v) => setDeployHostId(v)}
-                    />
+                    <label class="form-label">Deploy to</label>
+                    <div style={{ display: "flex", "flex-wrap": "wrap", gap: "8px", "margin-top": "4px" }}>
+                      <For each={hostOptions()}>
+                        {(opt) => {
+                          const checked = () => selectedHosts().has(opt.value);
+                          return (
+                            <label
+                              style={{
+                                display: "flex",
+                                "align-items": "center",
+                                gap: "6px",
+                                padding: "5px 10px",
+                                "border-radius": "6px",
+                                border: `1px solid ${checked() ? "#58a6ff" : "#30363d"}`,
+                                background: checked() ? "rgba(88,166,255,0.1)" : "#0d1117",
+                                cursor: "pointer",
+                                "font-size": "13px",
+                                color: checked() ? "#e6edf3" : "#8b949e",
+                                "user-select": "none",
+                                transition: "border-color 0.15s, background 0.15s",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked()}
+                                onChange={() => toggleHost(opt.value)}
+                                style={{ "accent-color": "#58a6ff" }}
+                              />
+                              {opt.label}
+                            </label>
+                          );
+                        }}
+                      </For>
+                    </div>
                   </div>
                 </Show>
                 <div class="form-group">

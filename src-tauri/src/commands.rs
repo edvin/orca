@@ -2095,6 +2095,169 @@ pub async fn deploy_template(
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+/// Build an authed reqwest client for a specific host (does NOT use the global override).
+fn client_for_host(url: &str, token: &str, tls_verify: bool, timeout_secs: u64) -> reqwest::Client {
+    let mut builder = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5));
+
+    if timeout_secs > 0 {
+        builder = builder.timeout(std::time::Duration::from_secs(timeout_secs));
+    }
+
+    if !tls_verify {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+        headers.insert(reqwest::header::AUTHORIZATION, val);
+    }
+    let _ = url; // url is used by caller, not embedded in client
+    builder
+        .default_headers(headers)
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+#[tauri::command]
+pub async fn deploy_template_to_hosts(
+    id: String,
+    name: Option<String>,
+    ports: Option<Vec<String>>,
+    env: Option<Vec<String>>,
+    volumes: Option<Vec<String>>,
+    host_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    let body = serde_json::json!({
+        "name": name,
+        "ports": ports,
+        "env": env,
+        "volumes": volumes,
+    });
+
+    let mut results: Vec<serde_json::Value> = Vec::new();
+
+    for host_id in &host_ids {
+        if host_id == "__local__" {
+            // Deploy to local daemon
+            let base_url = format!("{LOCAL_DAEMON_BASE}/api/v1");
+            let token = load_api_token().unwrap_or_default();
+            let http = client_for_host(LOCAL_DAEMON_BASE, &token, true, 120);
+
+            // Pull image first
+            let pull_result = http.post(format!("{base_url}/images/pull"))
+                .json(&serde_json::json!({ "reference": &id }))
+                .send()
+                .await;
+            let _pull_ok = pull_result.map(|r| r.status().is_success()).unwrap_or(false);
+
+            let resp = http.post(format!("{base_url}/templates/{id}/deploy"))
+                .json(&body)
+                .send()
+                .await;
+            match resp {
+                Ok(r) if r.status().is_success() => {
+                    let data: serde_json::Value = r.json().await.unwrap_or(serde_json::json!({}));
+                    results.push(serde_json::json!({
+                        "host_id": "__local__",
+                        "host_name": "Local",
+                        "success": true,
+                        "result": data,
+                    }));
+                }
+                Ok(r) => {
+                    let body_text = r.text().await.unwrap_or_default();
+                    let msg = serde_json::from_str::<serde_json::Value>(&body_text)
+                        .ok()
+                        .and_then(|v| v.get("error").and_then(|e| e.as_str().map(String::from)))
+                        .unwrap_or(body_text);
+                    results.push(serde_json::json!({
+                        "host_id": "__local__",
+                        "host_name": "Local",
+                        "success": false,
+                        "error": msg,
+                    }));
+                }
+                Err(e) => {
+                    results.push(serde_json::json!({
+                        "host_id": "__local__",
+                        "host_name": "Local",
+                        "success": false,
+                        "error": format!("{e}"),
+                    }));
+                }
+            }
+        } else {
+            // Deploy to a remote host
+            let host = config.remote_hosts.iter().find(|h| &h.id == host_id);
+            let Some(host) = host else {
+                results.push(serde_json::json!({
+                    "host_id": host_id,
+                    "host_name": "Unknown",
+                    "success": false,
+                    "error": "Host not found in config",
+                }));
+                continue;
+            };
+            let base_url = format!("{}/api/v1", normalize_daemon_url(&host.url));
+            let http = client_for_host(&host.url, &host.token, host.tls_verify, 120);
+
+            // Pull image first (best effort)
+            let _pull = http.post(format!("{base_url}/images/pull"))
+                .json(&serde_json::json!({ "reference": &id }))
+                .send()
+                .await;
+
+            let resp = http.post(format!("{base_url}/templates/{id}/deploy"))
+                .json(&body)
+                .send()
+                .await;
+            match resp {
+                Ok(r) if r.status().is_success() => {
+                    let data: serde_json::Value = r.json().await.unwrap_or(serde_json::json!({}));
+                    results.push(serde_json::json!({
+                        "host_id": host.id,
+                        "host_name": host.name,
+                        "success": true,
+                        "result": data,
+                    }));
+                }
+                Ok(r) => {
+                    let body_text = r.text().await.unwrap_or_default();
+                    let msg = serde_json::from_str::<serde_json::Value>(&body_text)
+                        .ok()
+                        .and_then(|v| v.get("error").and_then(|e| e.as_str().map(String::from)))
+                        .unwrap_or(body_text);
+                    results.push(serde_json::json!({
+                        "host_id": host.id,
+                        "host_name": host.name,
+                        "success": false,
+                        "error": msg,
+                    }));
+                }
+                Err(e) => {
+                    results.push(serde_json::json!({
+                        "host_id": host.id,
+                        "host_name": host.name,
+                        "success": false,
+                        "error": format!("{e}"),
+                    }));
+                }
+            }
+        }
+    }
+
+    let successes = results.iter().filter(|r| r["success"].as_bool() == Some(true)).count();
+    let failures = results.len() - successes;
+    Ok(serde_json::json!({
+        "results": results,
+        "total": results.len(),
+        "successes": successes,
+        "failures": failures,
+    }))
+}
+
 #[tauri::command]
 pub async fn save_user_template(template: serde_json::Value) -> Result<serde_json::Value, String> {
     let base = daemon_url();
@@ -2950,6 +3113,83 @@ pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
     }
 
     Ok(results)
+}
+
+// --- Host Comparison ---
+
+/// Compare two or more hosts side-by-side: fetch containers, images, and system health for each.
+/// host_ids contains host IDs (or null for local).
+#[tauri::command]
+pub async fn compare_hosts(host_ids: Vec<Option<String>>) -> Result<serde_json::Value, String> {
+    let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    let local_token = load_api_token().unwrap_or_default();
+
+    let mut host_results = Vec::new();
+
+    for host_id in &host_ids {
+        let (url, token, tls_verify, name) = if let Some(id) = host_id {
+            let host = config
+                .remote_hosts
+                .iter()
+                .find(|h| h.id == *id)
+                .ok_or_else(|| format!("Host not found: {id}"))?;
+            (host.url.clone(), host.token.clone(), host.tls_verify, host.name.clone())
+        } else {
+            (LOCAL_DAEMON_BASE.to_string(), local_token.clone(), true, "Local".to_string())
+        };
+
+        let mut builder = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .connect_timeout(std::time::Duration::from_secs(5));
+        if !tls_verify {
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+        let client = builder.build().unwrap_or_else(|_| reqwest::Client::new());
+        let api_url = format!("{}/api/v1", normalize_daemon_url(&url));
+
+        // Fetch containers
+        let containers = match client
+            .get(format!("{api_url}/containers"))
+            .header("Authorization", format!("Bearer {token}"))
+            .send()
+            .await
+        {
+            Ok(resp) => resp.json::<serde_json::Value>().await.ok().unwrap_or(serde_json::json!([])),
+            Err(_) => serde_json::json!([]),
+        };
+
+        // Fetch images
+        let images = match client
+            .get(format!("{api_url}/images"))
+            .header("Authorization", format!("Bearer {token}"))
+            .send()
+            .await
+        {
+            Ok(resp) => resp.json::<serde_json::Value>().await.ok().unwrap_or(serde_json::json!([])),
+            Err(_) => serde_json::json!([]),
+        };
+
+        // Fetch system health
+        let health = match client
+            .get(format!("{api_url}/system/health"))
+            .header("Authorization", format!("Bearer {token}"))
+            .send()
+            .await
+        {
+            Ok(resp) => resp.json::<serde_json::Value>().await.ok().unwrap_or(serde_json::json!({})),
+            Err(_) => serde_json::json!({}),
+        };
+
+        host_results.push(serde_json::json!({
+            "id": host_id,
+            "name": name,
+            "containers": containers,
+            "images": images,
+            "health": health,
+        }));
+    }
+
+    Ok(serde_json::json!({ "hosts": host_results }))
 }
 
 // --- Auto-Deploy Rules ---

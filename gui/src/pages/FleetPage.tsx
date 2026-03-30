@@ -1,4 +1,4 @@
-import { createSignal, createMemo, onMount, onCleanup, For, Show } from "solid-js";
+import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
@@ -54,6 +54,9 @@ export default function FleetPage(props: FleetPageProps) {
   const [selectMode, setSelectMode] = createSignal(false);
   const [selectedHosts, setSelectedHosts] = createSignal<Set<string | null>>(new Set());
   const [probeProgress, setProbeProgress] = createSignal<{ current: number; total: number } | null>(null);
+  const [compareOpen, setCompareOpen] = createSignal(false);
+  const [compareData, setCompareData] = createSignal<any>(null);
+  const [compareLoading, setCompareLoading] = createSignal(false);
 
   // All unique tags across all hosts
   const allTags = createMemo(() => {
@@ -248,6 +251,33 @@ export default function FleetPage(props: FleetPageProps) {
     setSelectedHosts(new Set<string | null>());
   };
 
+  const openCompare = async () => {
+    const selected = selectedHosts();
+    if (selected.size !== 2) return;
+    setCompareLoading(true);
+    setCompareOpen(true);
+    try {
+      const hostIds = [...selected];
+      const result = await invoke("compare_hosts", { hostIds }) as any;
+      setCompareData(result);
+    } catch (e) {
+      showToast(`Compare failed: ${e}`, "error");
+      setCompareOpen(false);
+    } finally {
+      setCompareLoading(false);
+    }
+  };
+
+  // Escape to close compare modal
+  createEffect(() => {
+    if (!compareOpen()) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCompareOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    onCleanup(() => window.removeEventListener("keydown", handler));
+  });
+
   useRefresh(probeAll);
 
   onMount(() => {
@@ -385,6 +415,19 @@ export default function FleetPage(props: FleetPageProps) {
             }}
           >
             Test Selected
+          </button>
+          <button
+            onClick={openCompare}
+            disabled={selectedHosts().size !== 2}
+            style={{
+              padding: "4px 10px", "font-size": "12px", "border-radius": "6px",
+              background: selectedHosts().size === 2 ? "rgba(88, 166, 255, 0.1)" : "#21262d",
+              border: `1px solid ${selectedHosts().size === 2 ? "rgba(88, 166, 255, 0.2)" : "#30363d"}`,
+              color: "#58a6ff", cursor: selectedHosts().size !== 2 ? "not-allowed" : "pointer",
+              opacity: selectedHosts().size !== 2 ? "0.5" : "1",
+            }}
+          >
+            Compare
           </button>
           <button
             onClick={removeSelected}
@@ -689,6 +732,15 @@ export default function FleetPage(props: FleetPageProps) {
         </For>
       </div>
 
+      {/* Compare Modal */}
+      <Show when={compareOpen()}>
+        <CompareModal
+          data={compareData()}
+          loading={compareLoading()}
+          onClose={() => setCompareOpen(false)}
+        />
+      </Show>
+
       {/* Pulse animation for checking state */}
       <style>{`
         @keyframes pulse {
@@ -699,6 +751,319 @@ export default function FleetPage(props: FleetPageProps) {
           transform: scale(0.98) !important;
         }
       `}</style>
+    </div>
+  );
+}
+
+// ---- Compare Modal Component ----
+
+interface CompareModalProps {
+  data: any;
+  loading: boolean;
+  onClose: () => void;
+}
+
+function CompareModal(props: CompareModalProps) {
+  const hosts = () => props.data?.hosts || [];
+  const left = () => hosts()[0];
+  const right = () => hosts()[1];
+
+  // Extract image names from containers for diff
+  const containerImages = (host: any) => {
+    if (!host?.containers) return new Set<string>();
+    const arr = Array.isArray(host.containers) ? host.containers : [];
+    return new Set(arr.map((c: any) => c.image || ""));
+  };
+
+  // Extract image repo tags for diff
+  const imageRepoTags = (host: any) => {
+    if (!host?.images) return new Set<string>();
+    const arr = Array.isArray(host.images) ? host.images : [];
+    const tags = new Set<string>();
+    for (const img of arr) {
+      for (const tag of (img.repo_tags || [])) {
+        tags.add(tag);
+      }
+    }
+    return tags;
+  };
+
+  const leftContainerImages = createMemo(() => containerImages(left()));
+  const rightContainerImages = createMemo(() => containerImages(right()));
+  const leftImageTags = createMemo(() => imageRepoTags(left()));
+  const rightImageTags = createMemo(() => imageRepoTags(right()));
+
+  const containerOnlyLeft = (c: any) => !rightContainerImages().has(c.image || "");
+  const containerOnlyRight = (c: any) => !leftContainerImages().has(c.image || "");
+  const imageOnlyLeft = (tag: string) => !rightImageTags().has(tag);
+  const imageOnlyRight = (tag: string) => !leftImageTags().has(tag);
+
+  const sysRes = (host: any) => host?.health?.system_resources || {};
+
+  const stateColor = (state: string) => {
+    if (state === "Running" || state === "running") return "#3fb950";
+    if (state === "Exited" || state === "exited") return "#8b949e";
+    return "#d29922";
+  };
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
+      style={{
+        position: "fixed", inset: "0", "z-index": "9999",
+        background: "rgba(0, 0, 0, 0.7)", "backdrop-filter": "blur(8px)",
+        display: "flex", "align-items": "center", "justify-content": "center",
+      }}
+    >
+      <div style={{
+        width: "min(95vw, 1100px)", "max-height": "85vh",
+        background: "rgba(22, 27, 34, 0.95)", border: "1px solid #30363d",
+        "border-radius": "14px", "box-shadow": "0 20px 60px rgba(0,0,0,0.6)",
+        display: "flex", "flex-direction": "column", overflow: "hidden",
+      }}>
+        {/* Header */}
+        <div style={{
+          display: "flex", "align-items": "center", "justify-content": "space-between",
+          padding: "16px 24px", "border-bottom": "1px solid #21262d",
+        }}>
+          <h2 style={{ margin: 0, "font-size": "16px", "font-weight": 600, color: "#e6edf3" }}>
+            Host Comparison
+          </h2>
+          <button
+            onClick={props.onClose}
+            style={{
+              background: "none", border: "none", color: "#8b949e", cursor: "pointer",
+              "font-size": "20px", padding: "4px 8px", "line-height": "1",
+            }}
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: "1", "overflow-y": "auto", padding: "20px 24px" }}>
+          <Show when={props.loading}>
+            <div style={{ "text-align": "center", color: "#8b949e", padding: "40px 0" }}>
+              Fetching data from hosts...
+            </div>
+          </Show>
+
+          <Show when={!props.loading && hosts().length === 2}>
+            <div style={{ display: "grid", "grid-template-columns": "1fr 1px 1fr", gap: "0" }}>
+              {/* Left column */}
+              <div style={{ padding: "0 16px 0 0" }}>
+                <HostColumn
+                  host={left()}
+                  sysRes={sysRes(left())}
+                  containerHighlight={containerOnlyLeft}
+                  imageHighlight={imageOnlyLeft}
+                  stateColor={stateColor}
+                />
+              </div>
+
+              {/* Divider */}
+              <div style={{ background: "#30363d" }} />
+
+              {/* Right column */}
+              <div style={{ padding: "0 0 0 16px" }}>
+                <HostColumn
+                  host={right()}
+                  sysRes={sysRes(right())}
+                  containerHighlight={containerOnlyRight}
+                  imageHighlight={imageOnlyRight}
+                  stateColor={stateColor}
+                />
+              </div>
+            </div>
+          </Show>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Single Host Column ----
+
+interface HostColumnProps {
+  host: any;
+  sysRes: any;
+  containerHighlight: (c: any) => boolean;
+  imageHighlight: (tag: string) => boolean;
+  stateColor: (state: string) => string;
+}
+
+function HostColumn(props: HostColumnProps) {
+  const host = () => props.host;
+  const containers = () => {
+    const arr = host()?.containers;
+    return Array.isArray(arr) ? arr : [];
+  };
+  const images = () => {
+    const arr = host()?.images;
+    return Array.isArray(arr) ? arr : [];
+  };
+  const res = () => props.sysRes || {};
+  const health = () => host()?.health || {};
+  const isOnline = () => health()?.docker_connected !== false;
+
+  return (
+    <div>
+      {/* Host header */}
+      <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "16px" }}>
+        <span style={{
+          width: "10px", height: "10px", "border-radius": "50%", "flex-shrink": "0",
+          background: isOnline() ? "#3fb950" : "#f85149",
+          "box-shadow": isOnline() ? "0 0 8px rgba(63,185,80,0.4)" : "0 0 8px rgba(248,81,73,0.4)",
+          display: "inline-block",
+        }} />
+        <span style={{ "font-size": "15px", "font-weight": 600, color: "#e6edf3" }}>
+          {host()?.name || "Unknown"}
+        </span>
+        <Show when={health()?.docker_version}>
+          <span style={{ "font-size": "11px", color: "#484f58" }}>
+            Docker {health().docker_version}
+          </span>
+        </Show>
+      </div>
+
+      {/* Resources */}
+      <Show when={res().cpu_count || res().memory_total_bytes}>
+        <div style={{
+          display: "flex", gap: "12px", "margin-bottom": "14px", "flex-wrap": "wrap",
+        }}>
+          <Show when={res().cpu_count}>
+            <div style={{
+              padding: "6px 12px", background: "#0d1117", "border-radius": "6px",
+              border: "1px solid #21262d", "font-size": "12px",
+            }}>
+              <span style={{ color: "#8b949e" }}>CPU </span>
+              <span style={{ color: "#e6edf3", "font-weight": 600 }}>{res().cpu_count} cores</span>
+            </div>
+          </Show>
+          <Show when={res().memory_total_bytes}>
+            <div style={{
+              padding: "6px 12px", background: "#0d1117", "border-radius": "6px",
+              border: "1px solid #21262d", "font-size": "12px",
+            }}>
+              <span style={{ color: "#8b949e" }}>RAM </span>
+              <span style={{ color: "#e6edf3", "font-weight": 600 }}>
+                {formatBytes(res().memory_available_bytes || 0)} free / {formatBytes(res().memory_total_bytes)}
+              </span>
+            </div>
+          </Show>
+          <Show when={res().disk_usage_percent != null}>
+            <div style={{
+              padding: "6px 12px", background: "#0d1117", "border-radius": "6px",
+              border: "1px solid #21262d", "font-size": "12px",
+            }}>
+              <span style={{ color: "#8b949e" }}>Disk </span>
+              <span style={{
+                color: res().disk_usage_percent > 90 ? "#f85149" : res().disk_usage_percent > 75 ? "#d29922" : "#e6edf3",
+                "font-weight": 600,
+              }}>
+                {res().disk_usage_percent?.toFixed(1)}%
+              </span>
+            </div>
+          </Show>
+        </div>
+      </Show>
+
+      {/* Containers */}
+      <div style={{ "margin-bottom": "16px" }}>
+        <div style={{
+          "font-size": "12px", "font-weight": 600, color: "#8b949e",
+          "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "8px",
+        }}>
+          Containers ({containers().length})
+        </div>
+        <Show when={containers().length === 0}>
+          <div style={{ color: "#484f58", "font-size": "12px", "font-style": "italic" }}>
+            No containers
+          </div>
+        </Show>
+        <For each={containers()}>
+          {(c: any) => {
+            const unique = props.containerHighlight(c);
+            return (
+              <div style={{
+                display: "flex", "align-items": "center", gap: "8px",
+                padding: "6px 10px", "margin-bottom": "4px",
+                background: unique ? "rgba(210, 169, 34, 0.08)" : "#0d1117",
+                border: `1px solid ${unique ? "rgba(210, 169, 34, 0.2)" : "#21262d"}`,
+                "border-radius": "6px", "font-size": "12px",
+              }}>
+                <span style={{
+                  width: "7px", height: "7px", "border-radius": "50%",
+                  background: props.stateColor(c.state || ""),
+                  "flex-shrink": "0",
+                }} />
+                <span style={{ color: "#e6edf3", "font-weight": 500, "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: "1" }}>
+                  {c.name}
+                </span>
+                <span style={{ color: "#484f58", "font-size": "11px", "flex-shrink": "0" }}>
+                  {(c.image || "").replace(/^docker\.io\/library\//, "").replace(/^docker\.io\//, "")}
+                </span>
+                <Show when={unique}>
+                  <span style={{
+                    "font-size": "10px", color: "#d29922", "font-weight": 600,
+                    padding: "0 5px", "border-radius": "3px",
+                    background: "rgba(210, 169, 34, 0.12)", "flex-shrink": "0",
+                  }}>
+                    unique
+                  </span>
+                </Show>
+              </div>
+            );
+          }}
+        </For>
+      </div>
+
+      {/* Images */}
+      <div>
+        <div style={{
+          "font-size": "12px", "font-weight": 600, color: "#8b949e",
+          "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "8px",
+        }}>
+          Images ({images().length})
+        </div>
+        <Show when={images().length === 0}>
+          <div style={{ color: "#484f58", "font-size": "12px", "font-style": "italic" }}>
+            No images
+          </div>
+        </Show>
+        <For each={images()}>
+          {(img: any) => {
+            const tags: string[] = img.repo_tags || [];
+            const displayTag = tags.length > 0 ? tags[0] : (img.id || "").substring(0, 16);
+            const unique = tags.length > 0 && props.imageHighlight(tags[0]);
+            return (
+              <div style={{
+                display: "flex", "align-items": "center", gap: "8px",
+                padding: "5px 10px", "margin-bottom": "3px",
+                background: unique ? "rgba(210, 169, 34, 0.08)" : "#0d1117",
+                border: `1px solid ${unique ? "rgba(210, 169, 34, 0.2)" : "#21262d"}`,
+                "border-radius": "6px", "font-size": "12px",
+              }}>
+                <span style={{ color: "#e6edf3", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: "1" }}>
+                  {displayTag.replace(/^docker\.io\/library\//, "").replace(/^docker\.io\//, "")}
+                </span>
+                <span style={{ color: "#484f58", "font-size": "11px", "flex-shrink": "0" }}>
+                  {formatBytes(img.size_bytes || 0)}
+                </span>
+                <Show when={unique}>
+                  <span style={{
+                    "font-size": "10px", color: "#d29922", "font-weight": 600,
+                    padding: "0 5px", "border-radius": "3px",
+                    background: "rgba(210, 169, 34, 0.12)", "flex-shrink": "0",
+                  }}>
+                    unique
+                  </span>
+                </Show>
+              </div>
+            );
+          }}
+        </For>
+      </div>
     </div>
   );
 }
