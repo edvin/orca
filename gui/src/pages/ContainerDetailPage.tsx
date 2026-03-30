@@ -11,7 +11,8 @@ import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
 import ResourceBar from "../components/ResourceBar";
 import Sparkline from "../components/Sparkline";
-import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
+import TimeChart from "../components/TimeChart";
+import { recordMetrics, getCpuHistory, getMemoryHistory, getMetricsHistory } from "../lib/metricsStore";
 import { copyToClipboard } from "../lib/clipboard";
 import Breadcrumb from "../components/Breadcrumb";
 import Dropdown from "../components/Dropdown";
@@ -714,6 +715,30 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                 </Show>
               </div>
             </div>
+
+            {/* Resource history charts */}
+            <Show when={container()?.state === "Running" && getMetricsHistory(props.containerId).length > 2}>
+              <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "16px", "margin-bottom": "20px" }}>
+                <div class="card" style={{ padding: "16px" }}>
+                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px", "font-weight": 500 }}>CPU Usage</div>
+                  <TimeChart
+                    data={getMetricsHistory(props.containerId).map((s) => ({ time: s.timestamp, value: s.cpu }))}
+                    height={120}
+                    color="#58a6ff"
+                    unit="%"
+                  />
+                </div>
+                <div class="card" style={{ padding: "16px" }}>
+                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px", "font-weight": 500 }}>Memory Usage</div>
+                  <TimeChart
+                    data={getMetricsHistory(props.containerId).map((s) => ({ time: s.timestamp, value: s.memory }))}
+                    height={120}
+                    color="#a371f7"
+                    formatValue={(v) => formatBytes(v)}
+                  />
+                </div>
+              </div>
+            </Show>
 
             {/* Container info grid */}
             <Show when={container()}>
