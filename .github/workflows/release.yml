@@ -167,7 +167,7 @@ jobs:
           CST_DIR="$RUNNER_TEMP/cst"
           mkdir -p "$CST_DIR"
           curl -fsSL "https://github.com/SSLcom/CodeSignTool/releases/download/v1.3.0/CodeSignTool-v1.3.0.zip" -o "$CST_DIR/cst.zip"
-          python3 -c "import zipfile; zipfile.ZipFile('$CST_DIR/cst.zip').extractall('$CST_DIR')"
+          python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$CST_DIR/cst.zip" "$CST_DIR"
           CST_JAR="$CST_DIR/jar/code_sign_tool-1.3.0.jar"
 
           # Debug: show paths and find files
