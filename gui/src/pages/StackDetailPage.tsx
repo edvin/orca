@@ -147,8 +147,21 @@ export default function StackDetailPage(props: StackDetailPageProps) {
             <>
               <div class="detail-page-info">
                 <div class="detail-page-name">{s().name}</div>
-                <div class="detail-page-image">
+                <div class="detail-page-image" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
                   {s().working_dir || "No working directory"}
+                  <Show when={s().working_dir}>
+                    <button
+                      class="btn btn-sm"
+                      style={{ padding: "1px 6px", "font-size": "11px", "line-height": "1.4" }}
+                      title="Copy stack directory path"
+                      onClick={() => {
+                        navigator.clipboard.writeText(s().working_dir!);
+                        showToast("Path copied to clipboard", "success");
+                      }}
+                    >
+                      Copy path
+                    </button>
+                  </Show>
                   <Show when={s().services.length > 0}>
                     <span style={{ "margin-left": "12px", color: "#484f58" }}>
                       {runningCount()}/{s().services.length} services running

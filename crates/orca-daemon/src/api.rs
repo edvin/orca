@@ -258,6 +258,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/templates/refresh", post(refresh_templates))
         .route("/templates/user", post(save_user_template).delete(delete_user_template))
         .route("/templates/{id}/deploy", post(deploy_template))
+        .route("/stacks/{name}/dir", get(get_stack_dir))
         // AI
         .route("/ai/ask", post(ai_ask))
         .route("/settings/general", get(get_general_settings).post(save_general_settings))
@@ -3424,6 +3425,37 @@ struct DeployTemplateOverrides {
     env: Option<Vec<String>>,
     #[serde(default)]
     volumes: Option<Vec<String>>,
+    /// Optional compose YAML override (for compose templates).
+    #[serde(default)]
+    compose_yaml: Option<String>,
+}
+
+/// Base directory for compose stacks deployed from templates.
+fn stacks_base_dir() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("orca")
+        .join("stacks")
+}
+
+/// Generate a random alphanumeric password for compose template deployments.
+fn generate_password(len: usize) -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let mut seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    // Mix in process id for extra entropy
+    seed ^= std::process::id() as u128;
+    let mut result = String::with_capacity(len);
+    for i in 0..len {
+        // Simple LCG-style mixing
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407 + i as u128);
+        let idx = ((seed >> 64) as usize) % CHARS.len();
+        result.push(CHARS[idx] as char);
+    }
+    result
 }
 
 async fn deploy_template(
@@ -3431,13 +3463,57 @@ async fn deploy_template(
     Path(id): Path<String>,
     Json(overrides): Json<DeployTemplateOverrides>,
 ) -> Result<impl IntoResponse, ApiError> {
-    use orca_core::runtime::ContainerCreateOpts;
-
     let templates = orca_backend_common::templates::all_templates();
     let template = templates
         .iter()
         .find(|t| t.id == id)
         .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", id))?;
+
+    // Check if this is a compose template
+    let compose_yaml = overrides.compose_yaml
+        .or_else(|| template.compose_yaml.clone());
+
+    if let Some(yaml) = compose_yaml {
+        // --- Compose stack deploy path ---
+        let stack_name = overrides.name.unwrap_or_else(|| template.id.clone());
+        let stack_dir = stacks_base_dir().join(&stack_name);
+        std::fs::create_dir_all(&stack_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to create stack directory: {e}"))?;
+
+        // Replace all occurrences of "changeme" with generated passwords.
+        // Each unique password placeholder gets a distinct generated value per service context,
+        // but for simplicity we use one password per stack.
+        let password = generate_password(24);
+        let final_yaml = yaml.replace("changeme", &password);
+
+        let compose_path = stack_dir.join("docker-compose.yml");
+        std::fs::write(&compose_path, &final_yaml)
+            .map_err(|e| anyhow::anyhow!("Failed to write docker-compose.yml: {e}"))?;
+
+        let dir_str = stack_dir.to_string_lossy().to_string();
+        let output = state.rt().await
+            .compose_up(&dir_str, None)
+            .await
+            .map_err(|e| anyhow::anyhow!("Compose deploy failed: {e}"))?;
+
+        return Ok((
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "stack": stack_name,
+                "compose": true,
+                "working_dir": dir_str,
+                "notes": template.notes,
+                "output": {
+                    "stdout": output.stdout,
+                    "stderr": output.stderr,
+                    "exit_code": output.exit_code,
+                },
+            })),
+        ));
+    }
+
+    // --- Single container deploy path ---
+    use orca_core::runtime::ContainerCreateOpts;
 
     let container_name = overrides
         .name
@@ -3525,6 +3601,18 @@ async fn deploy_template(
             "notes": template.notes,
         })),
     ))
+}
+
+/// GET /stacks/dir/{name} — returns the stack directory path for a given stack name.
+async fn get_stack_dir(
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let dir = stacks_base_dir().join(&name);
+    Ok(Json(serde_json::json!({
+        "name": name,
+        "path": dir.to_string_lossy(),
+        "exists": dir.exists(),
+    })))
 }
 
 // --- AI Assistant ---

@@ -424,6 +424,7 @@ export interface AppTemplate {
   restart_policy: string;
   notes: string;
   is_builtin: boolean;
+  compose_yaml?: string;
 }
 
 // --- AI ---

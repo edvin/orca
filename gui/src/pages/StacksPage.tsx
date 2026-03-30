@@ -271,6 +271,18 @@ export default function StacksPage(props: StacksPageProps) {
                               {" "}
                               &middot; {stack.working_dir}
                             </span>
+                            <button
+                              class="btn btn-sm"
+                              style={{ padding: "0px 4px", "font-size": "10px", "line-height": "1.3", "margin-left": "4px", "vertical-align": "middle" }}
+                              title="Copy stack directory path"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(stack.working_dir!);
+                                showToast("Path copied to clipboard", "success");
+                              }}
+                            >
+                              Copy path
+                            </button>
                           </Show>
                         </div>
                       </div>

@@ -544,5 +544,35 @@
     "restart_policy": "unless-stopped",
     "notes": "Editor at http://localhost:5678. Create an account on first visit.",
     "is_builtin": true
+  },
+  {
+    "id": "wordpress-mysql",
+    "name": "WordPress + MySQL",
+    "description": "Full WordPress blog with MySQL database. Multi-service compose stack.",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M2 12h20\"/><path d=\"M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z\"/></svg>",
+    "category": "Stacks",
+    "image": "wordpress:latest",
+    "default_ports": [],
+    "default_env": [],
+    "default_volumes": [],
+    "restart_policy": "unless-stopped",
+    "notes": "WordPress at http://localhost:8080. Database password is auto-generated.",
+    "is_builtin": true,
+    "compose_yaml": "version: '3.8'\nservices:\n  wordpress:\n    image: wordpress:latest\n    ports:\n      - '8080:80'\n    environment:\n      WORDPRESS_DB_HOST: db\n      WORDPRESS_DB_PASSWORD: changeme\n    depends_on:\n      - db\n    restart: unless-stopped\n  db:\n    image: mysql:8\n    environment:\n      MYSQL_ROOT_PASSWORD: changeme\n      MYSQL_DATABASE: wordpress\n    volumes:\n      - wp-db:/var/lib/mysql\n    restart: unless-stopped\nvolumes:\n  wp-db:\n"
+  },
+  {
+    "id": "gitea-postgres",
+    "name": "Gitea + PostgreSQL",
+    "description": "Lightweight Git hosting with PostgreSQL backend. Multi-service compose stack.",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M17 8h1a4 4 0 1 1 0 8h-1\"/><path d=\"M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z\"/><line x1=\"6\" y1=\"2\" x2=\"6\" y2=\"4\"/><line x1=\"10\" y1=\"2\" x2=\"10\" y2=\"4\"/><line x1=\"14\" y1=\"2\" x2=\"14\" y2=\"4\"/></svg>",
+    "category": "Stacks",
+    "image": "gitea/gitea:latest",
+    "default_ports": [],
+    "default_env": [],
+    "default_volumes": [],
+    "restart_policy": "unless-stopped",
+    "notes": "Gitea at http://localhost:3000, SSH on port 2222. Database password is auto-generated.",
+    "is_builtin": true,
+    "compose_yaml": "version: '3.8'\nservices:\n  gitea:\n    image: gitea/gitea:latest\n    ports:\n      - '3000:3000'\n      - '2222:22'\n    environment:\n      GITEA__database__DB_TYPE: postgres\n      GITEA__database__HOST: db:5432\n      GITEA__database__NAME: gitea\n      GITEA__database__USER: gitea\n      GITEA__database__PASSWD: changeme\n    depends_on:\n      - db\n    volumes:\n      - gitea-data:/data\n    restart: unless-stopped\n  db:\n    image: postgres:16-alpine\n    environment:\n      POSTGRES_USER: gitea\n      POSTGRES_PASSWORD: changeme\n      POSTGRES_DB: gitea\n    volumes:\n      - gitea-db:/var/lib/postgresql/data\n    restart: unless-stopped\nvolumes:\n  gitea-data:\n  gitea-db:\n"
   }
 ]

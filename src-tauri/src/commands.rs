@@ -2066,6 +2066,7 @@ pub async fn deploy_template(
     ports: Option<Vec<String>>,
     env: Option<Vec<String>>,
     volumes: Option<Vec<String>>,
+    compose_yaml: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     let resp = client()
@@ -2075,6 +2076,7 @@ pub async fn deploy_template(
             "ports": ports,
             "env": env,
             "volumes": volumes,
+            "compose_yaml": compose_yaml,
         }))
         .send()
         .await
@@ -2126,6 +2128,7 @@ pub async fn deploy_template_to_hosts(
     ports: Option<Vec<String>>,
     env: Option<Vec<String>>,
     volumes: Option<Vec<String>>,
+    compose_yaml: Option<String>,
     host_ids: Vec<String>,
 ) -> Result<serde_json::Value, String> {
     let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
@@ -2134,6 +2137,7 @@ pub async fn deploy_template_to_hosts(
         "ports": ports,
         "env": env,
         "volumes": volumes,
+        "compose_yaml": compose_yaml,
     });
 
     let mut results: Vec<serde_json::Value> = Vec::new();

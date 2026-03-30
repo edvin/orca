@@ -38,6 +38,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [deployEnv, setDeployEnv] = createSignal<EnvEntry[]>([]);
   const [deployVolumes, setDeployVolumes] = createSignal<VolumeEntry[]>([]);
   const [existingNames, setExistingNames] = createSignal<Set<string>>(new Set());
+  const [deployComposeYaml, setDeployComposeYaml] = createSignal("");
 
   // Target hosts for deploy (multi-host fleet management)
   const [selectedHosts, setSelectedHosts] = createSignal<Set<string>>(new Set());
@@ -171,6 +172,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     setDeployPorts(template.default_ports.map(parsePort));
     setDeployEnv(template.default_env.map(parseEnv));
     setDeployVolumes(template.default_volumes.map(parseVolume));
+    setDeployComposeYaml(template.compose_yaml || "");
     // Fetch existing container names for validation
     try {
       const containers = (await invoke("list_containers")) as { name: string }[];
@@ -335,34 +337,49 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           } catch { /* port check failed, proceed anyway */ }
         }
 
-        setDeployStatus(`Pulling ${template.image}...`);
-        try {
-          await invoke("pull_image", { reference: template.image });
-        } catch {
-          setDeployStatus("Image pull completed, creating container...");
+        const isCompose = !!deployComposeYaml();
+
+        if (!isCompose) {
+          setDeployStatus(`Pulling ${template.image}...`);
+          try {
+            await invoke("pull_image", { reference: template.image });
+          } catch {
+            setDeployStatus("Image pull completed, creating container...");
+          }
         }
 
-        setDeployStatus("Creating and starting container...");
+        setDeployStatus(isCompose ? "Deploying compose stack..." : "Creating and starting container...");
         const result = (await invoke("deploy_template", {
           id: template.id,
           name: deployName() || null,
-          ports: ports.length > 0 ? ports : null,
-          env: env.length > 0 ? env : null,
-          volumes: volumes.length > 0 ? volumes : null,
+          ports: isCompose ? null : (ports.length > 0 ? ports : null),
+          env: isCompose ? null : (env.length > 0 ? env : null),
+          volumes: isCompose ? null : (volumes.length > 0 ? volumes : null),
+          composeYaml: isCompose ? deployComposeYaml() : null,
         })) as any;
 
         closeDeploy();
-        const containerId = result?.id;
-        const containerName = result?.name;
         const notes = result?.notes || template.notes;
         const hostSuffix = switchedHost ? ` on ${targetHostLabel}` : "";
-        showToast(`${template.name} deployed${hostSuffix}!${notes ? " " + notes : ""}`, "success");
-        logInfo("Template deployed", `${template.name} → container ${containerName || containerId || "unknown"}${hostSuffix}`);
-        if (!switchedHost) {
-          if (containerId && props.onNavigate) {
-            props.onNavigate(`container:${containerId}`);
-          } else {
-            props.onNavigate?.("containers");
+
+        if (isCompose) {
+          const stackName = result?.stack || deployName() || template.id;
+          showToast(`${template.name} stack deployed${hostSuffix}!${notes ? " " + notes : ""}`, "success");
+          logInfo("Compose stack deployed", `${template.name} → stack ${stackName}${hostSuffix}`);
+          if (!switchedHost) {
+            props.onNavigate?.("stacks");
+          }
+        } else {
+          const containerId = result?.id;
+          const containerName = result?.name;
+          showToast(`${template.name} deployed${hostSuffix}!${notes ? " " + notes : ""}`, "success");
+          logInfo("Template deployed", `${template.name} → container ${containerName || containerId || "unknown"}${hostSuffix}`);
+          if (!switchedHost) {
+            if (containerId && props.onNavigate) {
+              props.onNavigate(`container:${containerId}`);
+            } else {
+              props.onNavigate?.("containers");
+            }
           }
         }
       } catch (e: any) {
@@ -392,12 +409,14 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       const hostLabels = hosts.map((h) => hostOptions().find((o) => o.value === h)?.label || h);
       setDeployStatus(`Deploying to ${hostLabels.join(", ")}...`);
 
+      const isCompose = !!deployComposeYaml();
       const result = (await invoke("deploy_template_to_hosts", {
         id: template.id,
         name: deployName() || null,
-        ports: ports.length > 0 ? ports : null,
-        env: env.length > 0 ? env : null,
-        volumes: volumes.length > 0 ? volumes : null,
+        ports: isCompose ? null : (ports.length > 0 ? ports : null),
+        env: isCompose ? null : (env.length > 0 ? env : null),
+        volumes: isCompose ? null : (volumes.length > 0 ? volumes : null),
+        composeYaml: isCompose ? deployComposeYaml() : null,
         hostIds: hosts,
       })) as { results: Array<{ host_name: string; success: boolean; error?: string }>; total: number; successes: number; failures: number };
 
@@ -854,7 +873,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                   </div>
                 </Show>
                 <div class="form-group">
-                  <label class="form-label">Container Name</label>
+                  <label class="form-label">{deployComposeYaml() ? "Stack Name" : "Container Name"}</label>
                   <input
                     class="form-input"
                     value={deployName()}
@@ -863,7 +882,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                       setDeployName(name);
                       setNameConflict(existingNames().has(name));
                     }}
-                    placeholder="Container name"
+                    placeholder={deployComposeYaml() ? "Stack name" : "Container name"}
                     style={{ "border-color": nameConflict() ? "#f85149" : undefined }}
                   />
                   <Show when={nameConflict()}>
@@ -872,22 +891,50 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                     </span>
                   </Show>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">
-                    Image
-                    <Show when={imageRegistryLink(template().image)}>
-                      {(link) => (
-                        <a href={link().url} target="_blank" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
-                          {link().label} {"\u2197"}
-                        </a>
-                      )}
-                    </Show>
-                  </label>
-                  <input class="form-input" value={template().image} disabled style="opacity: 0.7" />
-                </div>
-                <PortEditor ports={deployPorts} update={updatePort} add={addPort} remove={removePort} />
-                <EnvEditor env={deployEnv} update={updateEnv} add={addEnv} remove={removeEnv} showWarning={hasPasswordEnv()} />
-                <VolumeEditor volumes={deployVolumes} update={updateVolume} add={addVolume} remove={removeVolume} />
+                <Show when={deployComposeYaml()} fallback={
+                  <>
+                    <div class="form-group">
+                      <label class="form-label">
+                        Image
+                        <Show when={imageRegistryLink(template().image)}>
+                          {(link) => (
+                            <a href={link().url} target="_blank" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
+                              {link().label} {"\u2197"}
+                            </a>
+                          )}
+                        </Show>
+                      </label>
+                      <input class="form-input" value={template().image} disabled style="opacity: 0.7" />
+                    </div>
+                    <PortEditor ports={deployPorts} update={updatePort} add={addPort} remove={removePort} />
+                    <EnvEditor env={deployEnv} update={updateEnv} add={addEnv} remove={removeEnv} showWarning={hasPasswordEnv()} />
+                    <VolumeEditor volumes={deployVolumes} update={updateVolume} add={addVolume} remove={removeVolume} />
+                  </>
+                }>
+                  <div style={{ background: "rgba(88,166,255,0.08)", border: "1px solid rgba(88,166,255,0.3)", "border-radius": "6px", padding: "8px 12px", "margin-bottom": "12px", "font-size": "12px", color: "#58a6ff", display: "flex", "align-items": "center", gap: "6px" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                    This template deploys a multi-service stack via docker-compose
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Compose YAML</label>
+                    <textarea
+                      class="form-input"
+                      value={deployComposeYaml()}
+                      onInput={(e) => setDeployComposeYaml(e.currentTarget.value)}
+                      style={{
+                        "min-height": "280px",
+                        "font-family": "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                        "font-size": "12px",
+                        "line-height": "1.5",
+                        "white-space": "pre",
+                        resize: "vertical",
+                        "tab-size": "2",
+                      }}
+                      spellcheck={false}
+                    />
+                    <span class="form-hint">Passwords set to "changeme" will be auto-generated on deploy</span>
+                  </div>
+                </Show>
                 <Show when={template().notes}>
                   <div class="form-group">
                     <label class="form-label">Notes</label>
@@ -905,7 +952,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 </Show>
                 <button class="btn" onClick={() => closeDeploy()} disabled={deploying()}>Cancel</button>
                 <button class="btn btn-primary" onClick={() => doDeploy()} disabled={deploying()}>
-                  {deploying() ? "Deploying..." : "Deploy"}
+                  {deploying() ? "Deploying..." : (deployComposeYaml() ? "Deploy Stack" : "Deploy")}
                 </button>
               </div>
             </div>
