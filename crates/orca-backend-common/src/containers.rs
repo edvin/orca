@@ -277,6 +277,14 @@ impl ContainerRuntime for BollardRuntime {
         Ok(())
     }
 
+    async fn rename_container(&self, id: &str, new_name: &str) -> anyhow::Result<()> {
+        use bollard::container::RenameContainerOptions;
+        self.docker
+            .rename_container(id, RenameContainerOptions { name: new_name })
+            .await?;
+        Ok(())
+    }
+
     async fn exec(&self, opts: ExecOpts) -> anyhow::Result<ExecResult> {
         let exec = self
             .docker

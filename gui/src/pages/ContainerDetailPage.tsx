@@ -62,6 +62,10 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [exportTarPath, setExportTarPath] = createSignal("");
   const [exportingTar, setExportingTar] = createSignal(false);
 
+  // Rename state
+  const [renaming, setRenaming] = createSignal(false);
+  const [renameValue, setRenameValue] = createSignal("");
+
   let statsInterval: ReturnType<typeof setInterval> | undefined;
 
   const fetchContainer = async () => {
@@ -296,6 +300,31 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     }
   };
 
+  const startRename = () => {
+    const c = container();
+    if (!c) return;
+    setRenameValue(c.name);
+    setRenaming(true);
+  };
+
+  const doRename = async () => {
+    const newName = renameValue().trim();
+    const c = container();
+    if (!newName || !c || newName === c.name) {
+      setRenaming(false);
+      return;
+    }
+    try {
+      await invoke("rename_container", { id: props.containerId, name: newName });
+      showToast(`Container renamed to "${newName}"`, "success");
+      await fetchContainer();
+    } catch (e) {
+      logError(`Failed to rename container: ${e}`, `Container ${c.name}`);
+      showToast(`Rename failed: ${e}`, "error");
+    }
+    setRenaming(false);
+  };
+
   const saveResources = async () => {
     setResourceSaving(true);
     try {
@@ -485,7 +514,42 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
           {(c) => (
             <>
               <div class="detail-page-info">
-                <div class="detail-page-name">{c().name}</div>
+                <Show when={renaming()} fallback={
+                  <div
+                    class="detail-page-name"
+                    onClick={startRename}
+                    title="Click to rename"
+                    style={{ cursor: "pointer" }}
+                  >
+                    {c().name}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-left": "6px", "vertical-align": "middle", opacity: "0.6" }}><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                  </div>
+                }>
+                  <div class="detail-page-name" style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <input
+                      class="form-input"
+                      type="text"
+                      value={renameValue()}
+                      onInput={(e) => setRenameValue(e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") doRename();
+                        if (e.key === "Escape") setRenaming(false);
+                      }}
+                      autofocus
+                      style={{
+                        "font-size": "18px",
+                        "font-weight": "600",
+                        padding: "2px 8px",
+                        width: "auto",
+                        "min-width": "200px",
+                        background: "#161b22",
+                        border: "1px solid #58a6ff",
+                      }}
+                    />
+                    <button class="btn btn-primary" style={{ padding: "4px 12px", "font-size": "12px" }} onClick={doRename}>Save</button>
+                    <button class="btn" style={{ padding: "4px 12px", "font-size": "12px" }} onClick={() => setRenaming(false)}>Cancel</button>
+                  </div>
+                </Show>
                 <div class="detail-page-image">{c().image}</div>
               </div>
 

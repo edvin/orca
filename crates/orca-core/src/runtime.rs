@@ -194,6 +194,7 @@ pub trait ContainerRuntime {
     ) -> anyhow::Result<tokio::sync::mpsc::Receiver<String>>;
     async fn container_stats(&self, id: &str) -> anyhow::Result<ContainerStats>;
     async fn update_container(&self, id: &str, opts: ContainerUpdateOpts) -> anyhow::Result<()>;
+    async fn rename_container(&self, id: &str, new_name: &str) -> anyhow::Result<()>;
 
     // Exec
     async fn exec(&self, opts: ExecOpts) -> anyhow::Result<ExecResult>;

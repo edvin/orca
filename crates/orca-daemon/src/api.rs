@@ -131,6 +131,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}/export/compose", get(export_compose))
         .route("/containers/{id}/files", get(container_list_files))
         .route("/containers/{id}/file", get(container_read_file))
+        .route("/containers/{id}/rename", post(rename_container))
         .route("/containers/{id}/commit", post(commit_container))
         .route("/containers/{id}/export/tar", get(export_container_tar))
         // Registries
@@ -418,6 +419,18 @@ async fn remove_container(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     state.rt().await.remove_container(&id, false).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn rename_container(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, ApiError> {
+    let name = body["name"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing 'name' field"))?;
+    state.rt().await.rename_container(&id, name).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

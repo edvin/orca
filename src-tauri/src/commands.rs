@@ -267,6 +267,24 @@ pub async fn remove_container(id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn rename_container(id: String, name: String) -> Result<(), String> {
+    let base = daemon_url();
+    let resp = client()
+        .post(format!("{base}/containers/{id}/rename"))
+        .json(&serde_json::json!({ "name": name }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}
+
+#[tauri::command]
 pub async fn update_container(
     id: String,
     memory_limit: Option<String>,

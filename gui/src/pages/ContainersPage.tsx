@@ -397,6 +397,19 @@ export default function ContainersPage(props: ContainersPageProps) {
               {"\u25CF"}
             </span>
           </Show>
+          <Show when={c.restart_count && c.restart_count > 0}>
+            <span
+              title={`Restarted ${c.restart_count} time${c.restart_count === 1 ? "" : "s"}`}
+              style={{
+                "margin-left": "6px",
+                "font-size": "10px",
+                color: "#d29922",
+                "font-weight": "500",
+              }}
+            >
+              {"\u21BB"} {c.restart_count}
+            </span>
+          </Show>
         </td>
         <td>
           <Show when={c.state === "Running" && cStats()} fallback={
@@ -604,6 +617,25 @@ export default function ContainersPage(props: ContainersPageProps) {
           <Show when={runningContainers().length >= 2}>
             <button class="btn" onClick={() => setShowMultiLog(true)}>
               Combined Logs
+            </button>
+          </Show>
+          <Show when={runningContainers().length > 0}>
+            <button class="btn" style={{ color: "#f85149" }} onClick={async () => {
+              const running = runningContainers();
+              if (!await confirmDanger("Stop All Containers", `Stop all ${running.length} running containers?`)) return;
+              let stopped = 0;
+              for (const c of running) {
+                try {
+                  await invoke("stop_container", { id: c.id });
+                  stopped++;
+                } catch (err) {
+                  logError(`Failed to stop container ${c.name}: ${err}`, `Container ${c.id}`);
+                }
+              }
+              showToast(`Stopped ${stopped} container${stopped !== 1 ? "s" : ""}`, "success");
+              await refresh();
+            }}>
+              Stop All
             </button>
           </Show>
           <button class="btn" onClick={() => {
