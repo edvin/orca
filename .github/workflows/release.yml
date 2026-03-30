@@ -169,21 +169,28 @@ jobs:
           curl -fsSL "https://github.com/SSLcom/CodeSignTool/releases/download/v1.3.0/CodeSignTool-v1.3.0.zip" -o "$CST_DIR/cst.zip"
           python3 -c "import zipfile; zipfile.ZipFile('$CST_DIR/cst.zip').extractall('$CST_DIR')"
           CST_JAR="$CST_DIR/jar/code_sign_tool-1.3.0.jar"
-          WORKSPACE="$GITHUB_WORKSPACE"
+
+          # Debug: show paths and find files
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          echo "PWD=$(pwd)"
+          BUNDLE_BASE="target/${{ matrix.platform.target }}/release/bundle"
+          echo "Looking for installers..."
+          find "$BUNDLE_BASE" -type f \( -name "*.exe" -o -name "*.msi" \) 2>/dev/null || echo "No installers found via find"
 
           # Sign each .exe and .msi
-          echo "Looking for installers in $WORKSPACE/target/${{ matrix.platform.target }}/release/bundle/"
-          ls -la "$WORKSPACE/target/${{ matrix.platform.target }}/release/bundle/" 2>/dev/null || echo "Bundle dir not found"
-          for dir in nsis msi; do
-            BUNDLE="$WORKSPACE/target/${{ matrix.platform.target }}/release/bundle/$dir"
-            echo "Checking $BUNDLE..."
-            ls -la "$BUNDLE" 2>/dev/null || echo "  Dir not found: $BUNDLE"
-            [ -d "$BUNDLE" ] || continue
-            for file in "$BUNDLE"/*.exe "$BUNDLE"/*.msi; do
-              [ -f "$file" ] || continue
-              echo "Signing $(basename $file)..."
-              # Generate OTP and pipe it to CodeSignTool
-              OTP=$(python3 -c "
+          find "$BUNDLE_BASE" -type f \( -name "*.exe" -o -name "*.msi" \) | while read -r file; do
+            echo "=== Signing: $file ==="
+            # Generate OTP
+            OTP=$(python -c "
+          import hmac,hashlib,struct,time,base64
+          s='$SSLCOM_TOTP_SECRET'
+          s+='='*(8-len(s)%8) if len(s)%8 else ''
+          k=base64.b32decode(s,True)
+          c=int(time.time())//30
+          h=hmac.new(k,struct.pack('>Q',c),hashlib.sha1).digest()
+          o=h[-1]&0xF
+          print(f'{(struct.unpack(\">I\",h[o:o+4])[0]&0x7FFFFFFF)%1000000:06d}')
+          " 2>/dev/null || python3 -c "
           import hmac,hashlib,struct,time,base64
           s='$SSLCOM_TOTP_SECRET'
           s+='='*(8-len(s)%8) if len(s)%8 else ''
@@ -193,14 +200,14 @@ jobs:
           o=h[-1]&0xF
           print(f'{(struct.unpack(\">I\",h[o:o+4])[0]&0x7FFFFFFF)%1000000:06d}')
           ")
-              echo "$OTP" | java -jar "$CST_JAR" sign \
-                -username="$SSLCOM_USERNAME" \
-                -password="$SSLCOM_PASSWORD" \
-                -credential_id="$SSLCOM_CREDENTIAL_ID" \
-                -input_file_path="$file" \
-                -override=true || echo "Warning: signing $(basename $file) failed"
-              sleep 5  # Wait between signings to avoid OTP reuse
-            done
+            echo "Generated OTP: ${OTP:0:2}****"
+            echo "$OTP" | java -jar "$CST_JAR" sign \
+              -username="$SSLCOM_USERNAME" \
+              -password="$SSLCOM_PASSWORD" \
+              -credential_id="$SSLCOM_CREDENTIAL_ID" \
+              -input_file_path="$(cygpath -w "$file" 2>/dev/null || echo "$file")" \
+              -override=true && echo "=== Signed successfully ===" || echo "=== WARNING: Signing failed ==="
+            sleep 5
           done
 
       - name: Upload release artifacts
