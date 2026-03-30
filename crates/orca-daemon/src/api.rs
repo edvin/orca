@@ -3428,6 +3428,9 @@ struct DeployTemplateOverrides {
     /// Optional compose YAML override (for compose templates).
     #[serde(default)]
     compose_yaml: Option<String>,
+    /// User-provided values for GeneratedValue::UserInput fields, keyed by env var or file path.
+    #[serde(default)]
+    user_inputs: Option<HashMap<String, String>>,
 }
 
 /// Base directory for compose stacks deployed from templates.
@@ -3456,6 +3459,84 @@ fn generate_password(len: usize) -> String {
         result.push(CHARS[idx] as char);
     }
     result
+}
+
+/// Generate random bytes using the same LCG approach as generate_password.
+fn generate_random_bytes(len: usize) -> Vec<u8> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let mut seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    seed ^= std::process::id() as u128;
+    let mut result = Vec::with_capacity(len);
+    for i in 0..len {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407 + i as u128);
+        result.push((seed >> 64) as u8);
+    }
+    result
+}
+
+/// Generate a random hex string of the given byte length.
+fn generate_random_hex(byte_len: usize) -> String {
+    let bytes = generate_random_bytes(byte_len);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Generate a random base64 string of the given byte length.
+fn generate_random_base64(byte_len: usize) -> String {
+    use base64::Engine;
+    let bytes = generate_random_bytes(byte_len);
+    base64::engine::general_purpose::STANDARD.encode(&bytes)
+}
+
+/// Detect LAN IP address using the UDP socket trick.
+fn detect_lan_ip() -> String {
+    match std::net::UdpSocket::bind("0.0.0.0:0") {
+        Ok(socket) => {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(addr) = socket.local_addr() {
+                    return addr.ip().to_string();
+                }
+            }
+            "127.0.0.1".to_string()
+        }
+        Err(_) => "127.0.0.1".to_string(),
+    }
+}
+
+/// Resolve a GeneratedValue to a string, using user_inputs for UserInput variants.
+fn resolve_generated_value(
+    key: &str,
+    value: &orca_core::templates::GeneratedValue,
+    user_inputs: &HashMap<String, String>,
+) -> Option<String> {
+    use orca_core::templates::GeneratedValue;
+    match value {
+        GeneratedValue::RandomHex { length } => {
+            Some(generate_random_hex(length.unwrap_or(32)))
+        }
+        GeneratedValue::RandomBase64 { length } => {
+            Some(generate_random_base64(length.unwrap_or(32)))
+        }
+        GeneratedValue::LanIp => Some(detect_lan_ip()),
+        GeneratedValue::UserInput { .. } => {
+            user_inputs.get(key).cloned().or_else(|| {
+                tracing::warn!("No user input provided for key '{key}', using empty string");
+                Some(String::new())
+            })
+        }
+        GeneratedValue::SelfSignedCert { .. } => {
+            tracing::warn!("SelfSignedCert generation not yet implemented, skipping key '{key}'");
+            None
+        }
+        GeneratedValue::SelfSignedKey => {
+            tracing::warn!("SelfSignedKey generation not yet implemented, skipping key '{key}'");
+            None
+        }
+    }
 }
 
 async fn deploy_template(
@@ -3489,6 +3570,42 @@ async fn deploy_template(
         let compose_path = stack_dir.join("docker-compose.yml");
         std::fs::write(&compose_path, &final_yaml)
             .map_err(|e| anyhow::anyhow!("Failed to write docker-compose.yml: {e}"))?;
+
+        let user_inputs = overrides.user_inputs.unwrap_or_default();
+
+        // Process generated_env: resolve values and write .env file
+        if let Some(ref gen_env) = template.generated_env {
+            let mut env_lines = Vec::new();
+            for (key, gen_value) in gen_env {
+                if let Some(resolved) = resolve_generated_value(key, gen_value, &user_inputs) {
+                    env_lines.push(format!("{key}={resolved}"));
+                }
+            }
+            if !env_lines.is_empty() {
+                env_lines.sort(); // deterministic ordering
+                let env_content = env_lines.join("\n") + "\n";
+                let env_path = stack_dir.join(".env");
+                std::fs::write(&env_path, &env_content)
+                    .map_err(|e| anyhow::anyhow!("Failed to write .env file: {e}"))?;
+                tracing::info!("Wrote {} env vars to {}", env_lines.len(), env_path.display());
+            }
+        }
+
+        // Process generated_files: resolve values and write files
+        if let Some(ref gen_files) = template.generated_files {
+            for (rel_path, gen_value) in gen_files {
+                if let Some(resolved) = resolve_generated_value(rel_path, gen_value, &user_inputs) {
+                    let file_path = stack_dir.join(rel_path);
+                    if let Some(parent) = file_path.parent() {
+                        std::fs::create_dir_all(parent)
+                            .map_err(|e| anyhow::anyhow!("Failed to create directory for '{}': {e}", rel_path))?;
+                    }
+                    std::fs::write(&file_path, &resolved)
+                        .map_err(|e| anyhow::anyhow!("Failed to write generated file '{}': {e}", rel_path))?;
+                    tracing::info!("Wrote generated file: {}", file_path.display());
+                }
+            }
+        }
 
         let dir_str = stack_dir.to_string_lossy().to_string();
         let output = state.rt().await
