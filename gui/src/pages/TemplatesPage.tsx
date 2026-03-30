@@ -39,6 +39,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [deployVolumes, setDeployVolumes] = createSignal<VolumeEntry[]>([]);
   const [existingNames, setExistingNames] = createSignal<Set<string>>(new Set());
   const [deployComposeYaml, setDeployComposeYaml] = createSignal("");
+  const [userInputs, setUserInputs] = createSignal<Record<string, string>>({});
 
   // Target hosts for deploy (multi-host fleet management)
   const [selectedHosts, setSelectedHosts] = createSignal<Set<string>>(new Set());
@@ -173,6 +174,14 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     setDeployEnv(template.default_env.map(parseEnv));
     setDeployVolumes(template.default_volumes.map(parseVolume));
     setDeployComposeYaml(template.compose_yaml || "");
+    // Initialize user inputs for generated_env fields
+    const inputs: Record<string, string> = {};
+    if (template.generated_env) {
+      for (const [key, val] of Object.entries(template.generated_env)) {
+        if (val.type === "user_input") inputs[key] = "";
+      }
+    }
+    setUserInputs(inputs);
     // Fetch existing container names for validation
     try {
       const containers = (await invoke("list_containers")) as { name: string }[];
@@ -356,6 +365,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           env: isCompose ? null : (env.length > 0 ? env : null),
           volumes: isCompose ? null : (volumes.length > 0 ? volumes : null),
           composeYaml: isCompose ? deployComposeYaml() : null,
+          userInputs: Object.keys(userInputs()).length > 0 ? userInputs() : null,
         })) as any;
 
         closeDeploy();
@@ -935,6 +945,34 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                     <span class="form-hint">Passwords set to "changeme" will be auto-generated on deploy</span>
                   </div>
                 </Show>
+                {/* User input fields from generated_env */}
+                <Show when={deployTarget()?.generated_env && Object.entries(deployTarget()!.generated_env!).some(([_, v]) => v.type === "user_input")}>
+                  <div class="form-group">
+                    <label class="form-label">Configuration</label>
+                    <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                      <For each={Object.entries(deployTarget()?.generated_env || {}).filter(([_, v]) => v.type === "user_input")}>
+                        {([key, val]) => (
+                          <div class="form-group" style={{ margin: 0 }}>
+                            <label class="form-label" style={{ "font-size": "12px" }}>
+                              {val.label || key}
+                              <Show when={val.required}><span style={{ color: "#f85149" }}> *</span></Show>
+                            </label>
+                            <input
+                              class="form-input mono"
+                              type={val.secret ? "password" : "text"}
+                              placeholder={val.placeholder || ""}
+                              value={userInputs()[key] || ""}
+                              onInput={(e) => setUserInputs((prev) => ({ ...prev, [key]: e.currentTarget.value }))}
+                              style={{ "font-size": "12px" }}
+                            />
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                    <span class="form-hint">Other settings (secrets, network config) are auto-generated</span>
+                  </div>
+                </Show>
+
                 <Show when={template().notes}>
                   <div class="form-group">
                     <label class="form-label">Notes</label>

@@ -425,6 +425,18 @@ export interface AppTemplate {
   notes: string;
   is_builtin: boolean;
   compose_yaml?: string;
+  generated_env?: Record<string, GeneratedValue>;
+  generated_files?: Record<string, GeneratedValue>;
+}
+
+export interface GeneratedValue {
+  type: "random_hex" | "random_base64" | "lan_ip" | "user_input" | "self_signed_cert" | "self_signed_key";
+  length?: number;
+  label?: string;
+  placeholder?: string;
+  required?: boolean;
+  secret?: boolean;
+  subject?: string;
 }
 
 // --- AI ---
