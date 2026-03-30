@@ -84,6 +84,8 @@ The App Catalog is powered by an online community template catalog at `docs/temp
 1. Fork the repository
 2. Edit `docs/templates.json` and add your template entry:
 
+#### Single container template
+
 ```json
 {
   "id": "my-app",
@@ -101,16 +103,41 @@ The App Catalog is powered by an online community template catalog at `docs/temp
 }
 ```
 
+#### Compose stack template (multi-service)
+
+For apps that need multiple services (e.g., WordPress + MySQL), use `compose_yaml` instead of `image`:
+
+```json
+{
+  "id": "my-stack",
+  "name": "My Stack",
+  "description": "Full stack with app + database.",
+  "icon": "<svg ...>...</svg>",
+  "category": "Web Server",
+  "image": "",
+  "compose_yaml": "version: '3.8'\nservices:\n  app:\n    image: myapp:latest\n    ports:\n      - '8080:80'\n    environment:\n      DB_PASSWORD: changeme\n    depends_on:\n      - db\n  db:\n    image: postgres:16-alpine\n    environment:\n      POSTGRES_PASSWORD: changeme\n    volumes:\n      - db-data:/var/lib/postgresql/data\nvolumes:\n  db-data:\n",
+  "default_ports": [],
+  "default_env": [],
+  "default_volumes": [],
+  "restart_policy": "",
+  "notes": "Access at http://localhost:8080. Database included.",
+  "is_builtin": true
+}
+```
+
+Compose stacks are saved to `~/.config/orca/stacks/<id>/docker-compose.yml` and can be edited later from the Stack Detail page.
+
 3. Open a pull request
 
 ### Template guidelines
 
 - **`id`**: Unique lowercase identifier (e.g., `my-app`)
 - **`icon`**: Inline SVG string (24x24 viewBox, stroke-based Lucide style)
-- **`category`**: Use an existing category or create a new one (Database, Web Server, Monitoring, Tools, AI, Development, Message Queue, Search, Storage, Analytics, Automation, Dev Tools)
+- **`category`**: Use an existing category or create a new one (Database, Web Server, Monitoring, Tools, AI, Development, Message Queue, Search, Storage, Analytics, Automation)
 - **`default_env`**: Use `changeme` for passwords — Orca auto-generates a unique password at deploy time
+- **`compose_yaml`**: For multi-service stacks. Use `changeme` for passwords. Newlines as `\n`.
 - **`notes`**: Include how to access the app and any first-run instructions
-- **`restart_policy`**: Use `unless-stopped` for services, `no` for tools
+- **`restart_policy`**: Use `unless-stopped` for services, `no` for tools (single container only)
 - **`is_builtin`**: Set to `true` so it appears as a catalog template (not user-created)
 
 The catalog is fetched by the app every hour and cached locally. New templates appear automatically — no app update needed.

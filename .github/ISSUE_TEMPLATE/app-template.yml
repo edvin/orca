@@ -8,6 +8,10 @@ body:
       value: |
         Thanks for contributing a template! Fill in the details below and we'll add it to the community catalog.
 
+        **Two types of templates:**
+        - **Single container** — one Docker image with ports, env vars, and volumes
+        - **Compose stack** — a full docker-compose.yml with multiple services (e.g., WordPress + MySQL)
+
   - type: input
     id: name
     attributes:
@@ -35,7 +39,6 @@ body:
         - Tools
         - AI
         - Development
-        - Dev Tools
         - Message Queue
         - Search
         - Storage
@@ -45,26 +48,37 @@ body:
     validations:
       required: true
 
-  - type: input
-    id: image
+  - type: dropdown
+    id: template_type
     attributes:
-      label: Docker Image
-      placeholder: e.g., traefik:v3
+      label: Template Type
+      description: Single container or multi-service compose stack?
+      options:
+        - Single Container
+        - Compose Stack (docker-compose.yml)
+      default: 0
     validations:
       required: true
 
   - type: input
+    id: image
+    attributes:
+      label: Docker Image (single container only)
+      description: "Leave empty for compose stacks"
+      placeholder: e.g., traefik:v3
+
+  - type: input
     id: ports
     attributes:
-      label: Port Mappings
-      description: "Comma-separated host:container pairs"
+      label: Port Mappings (single container only)
+      description: "Comma-separated host:container pairs. For compose stacks, define ports in the YAML."
       placeholder: "8080:80, 443:443"
 
   - type: textarea
     id: env
     attributes:
-      label: Environment Variables
-      description: "One per line, KEY=value format. Use 'changeme' for passwords (auto-generated at deploy)."
+      label: Environment Variables (single container only)
+      description: "One per line, KEY=value format. Use 'changeme' for passwords (auto-generated at deploy). For compose stacks, define env in the YAML."
       placeholder: |
         ADMIN_PASSWORD=changeme
         DATABASE_URL=postgres://localhost/mydb
@@ -72,14 +86,40 @@ body:
   - type: input
     id: volumes
     attributes:
-      label: Volumes
-      description: "Comma-separated volume:path pairs"
+      label: Volumes (single container only)
+      description: "Comma-separated volume:path pairs. For compose stacks, define volumes in the YAML."
       placeholder: "appdata:/data, config:/etc/app"
+
+  - type: textarea
+    id: compose_yaml
+    attributes:
+      label: Docker Compose YAML (compose stacks only)
+      description: "Paste the full docker-compose.yml content. Use 'changeme' for passwords — Orca auto-generates unique values at deploy time. The YAML is saved to ~/.config/orca/stacks/<template-id>/ and can be edited later."
+      placeholder: |
+        version: '3.8'
+        services:
+          app:
+            image: myapp:latest
+            ports:
+              - '8080:80'
+            environment:
+              DB_PASSWORD: changeme
+            depends_on:
+              - db
+          db:
+            image: postgres:16-alpine
+            environment:
+              POSTGRES_PASSWORD: changeme
+            volumes:
+              - db-data:/var/lib/postgresql/data
+        volumes:
+          db-data:
+      render: yaml
 
   - type: dropdown
     id: restart_policy
     attributes:
-      label: Restart Policy
+      label: Restart Policy (single container only)
       options:
         - unless-stopped
         - always
