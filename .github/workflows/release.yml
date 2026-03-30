@@ -154,7 +154,7 @@ jobs:
         if: always() && runner.os == 'macOS'
         run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
-      - name: Sign Windows installers
+      - name: Sign Windows NSIS installer
         if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
         uses: sslcom/esigner-codesign@main
         with:
@@ -163,7 +163,19 @@ jobs:
           password: ${{ secrets.SSLCOM_PASSWORD }}
           credential_id: ${{ secrets.SSLCOM_CREDENTIAL_ID }}
           totp_secret: ${{ secrets.SSLCOM_TOTP_SECRET }}
-          dir_path: target/${{ matrix.platform.target }}/release/bundle
+          dir_path: target/${{ matrix.platform.target }}/release/bundle/nsis
+          environment_name: PRODUCT
+
+      - name: Sign Windows MSI installer
+        if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
+        uses: sslcom/esigner-codesign@main
+        with:
+          command: batch_sign
+          username: ${{ secrets.SSLCOM_USERNAME }}
+          password: ${{ secrets.SSLCOM_PASSWORD }}
+          credential_id: ${{ secrets.SSLCOM_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.SSLCOM_TOTP_SECRET }}
+          dir_path: target/${{ matrix.platform.target }}/release/bundle/msi
           environment_name: PRODUCT
 
       - name: Upload release artifacts
