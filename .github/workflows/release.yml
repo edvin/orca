@@ -198,18 +198,6 @@ jobs:
             done
           done
 
-      - name: Restore sig files after signing
-        if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
-        shell: pwsh
-        run: |
-          Get-ChildItem -Path "$env:RUNNER_TEMP\sigs" -Filter "*.sig" | ForEach-Object {
-            $name = $_.Name
-            foreach ($dir in @("nsis", "msi")) {
-              $dest = "target\${{ matrix.platform.target }}\release\bundle\$dir"
-              if (Test-Path $dest) { Copy-Item $_.FullName -Destination "$dest\$name" -Force }
-            }
-          }
-
       - name: Upload release artifacts
         shell: bash
         run: |
