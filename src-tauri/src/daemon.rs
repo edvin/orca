@@ -179,11 +179,24 @@ pub fn find_daemon_binary() -> String {
     let bin_name = daemon_binary_name();
 
     // 1. Tauri sidecar: the binary is bundled alongside the app
-    //    Tauri puts sidecars next to the exe with target triple suffix,
-    //    but also copies without suffix
+    //    Tauri puts sidecars next to the exe with target triple suffix
+    let sidecar_name = if cfg!(target_os = "windows") {
+        format!("orca-daemon-{}.exe", std::env::consts::ARCH.replace("x86_64", "x86_64-pc-windows-msvc"))
+    } else if cfg!(target_os = "macos") {
+        format!("orca-daemon-{}-apple-darwin", std::env::consts::ARCH)
+    } else {
+        format!("orca-daemon-{}-unknown-linux-gnu", std::env::consts::ARCH)
+    };
+
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            // Check with no suffix first (how Tauri 2 resolves externalBin)
+            // Check with target triple suffix (Tauri sidecar convention)
+            let sidecar_triple = parent.join(&sidecar_name);
+            if sidecar_triple.exists() {
+                return sidecar_triple.to_string_lossy().to_string();
+            }
+
+            // Check without suffix
             let sidecar = parent.join(bin_name);
             if sidecar.exists() {
                 return sidecar.to_string_lossy().to_string();
@@ -194,13 +207,19 @@ pub fn find_daemon_binary() -> String {
             if sidecar_sub.exists() {
                 return sidecar_sub.to_string_lossy().to_string();
             }
+            let sidecar_sub_triple = parent.join("binaries").join(&sidecar_name);
+            if sidecar_sub_triple.exists() {
+                return sidecar_sub_triple.to_string_lossy().to_string();
+            }
 
             // Check Tauri resource directory patterns
             // On macOS: ../Resources/binaries/
             if let Some(grandparent) = parent.parent() {
-                let macos_resource = grandparent.join("Resources").join("binaries").join(bin_name);
-                if macos_resource.exists() {
-                    return macos_resource.to_string_lossy().to_string();
+                for name in &[bin_name, sidecar_name.as_str()] {
+                    let macos_resource = grandparent.join("Resources").join("binaries").join(name);
+                    if macos_resource.exists() {
+                        return macos_resource.to_string_lossy().to_string();
+                    }
                 }
             }
         }
