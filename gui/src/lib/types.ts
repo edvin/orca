@@ -428,6 +428,13 @@ export interface AppTemplate {
   generated_env?: Record<string, GeneratedValue>;
   generated_files?: Record<string, GeneratedValue>;
   setup_guide?: SetupGuide;
+  gateway_routes?: GatewayRouteTemplate[];
+}
+
+export interface GatewayRouteTemplate {
+  hostname: string;
+  service: string;
+  port: number;
 }
 
 export interface SetupGuide {

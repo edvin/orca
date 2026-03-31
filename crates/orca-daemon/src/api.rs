@@ -2368,7 +2368,24 @@ async fn compose_deploy_path(
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing 'path' field"))?;
     let output = state.rt().await.compose_up(dir, None).await?;
-    Ok(Json(output))
+
+    // Auto-register gateway routes from orca.yaml if present
+    let dir_path = std::path::Path::new(dir);
+    let gateway_routes = parse_orca_yaml_gateway_routes(dir_path);
+    let registered_routes = if let Some(routes) = gateway_routes {
+        // Derive stack name from directory name (same convention as compose)
+        let stack_name = dir_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
+        auto_register_gateway_routes(&state, stack_name, &routes).await
+    } else {
+        Vec::new()
+    };
+
+    Ok(Json(serde_json::json!({
+        "stdout": output.stdout,
+        "stderr": output.stderr,
+        "exit_code": output.exit_code,
+        "gateway_routes": registered_routes,
+    })))
 }
 
 /// Validate a compose file by running `docker compose -f <path> config`.
@@ -3451,6 +3468,129 @@ fn stacks_base_dir() -> std::path::PathBuf {
         .join("stacks")
 }
 
+/// Parse gateway routes from an orca.yaml file in the given directory.
+/// Expected format:
+/// ```yaml
+/// gateway:
+///   - hostname: app
+///     service: frontend
+///     port: 3000
+/// ```
+fn parse_orca_yaml_gateway_routes(dir: &std::path::Path) -> Option<Vec<orca_core::templates::GatewayRouteTemplate>> {
+    let yaml_path = dir.join("orca.yaml");
+    if !yaml_path.exists() {
+        return None;
+    }
+    let content = std::fs::read_to_string(&yaml_path).ok()?;
+
+    let mut routes = Vec::new();
+    let mut in_gateway = false;
+    let mut current_hostname: Option<String> = None;
+    let mut current_service: Option<String> = None;
+    let mut current_port: Option<u16> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        // Top-level key
+        if !line.starts_with(' ') && !line.starts_with('\t') && !trimmed.starts_with('-') {
+            if trimmed.starts_with("gateway:") {
+                in_gateway = true;
+            } else if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                in_gateway = false;
+            }
+            continue;
+        }
+        if !in_gateway {
+            continue;
+        }
+        // New list item
+        if trimmed.starts_with("- ") {
+            // Flush previous entry
+            if let (Some(h), Some(s), Some(p)) = (current_hostname.take(), current_service.take(), current_port.take())
+            {
+                routes.push(orca_core::templates::GatewayRouteTemplate {
+                    hostname: h,
+                    service: s,
+                    port: p,
+                });
+            }
+            // Parse inline key on the "- " line
+            let after_dash = trimmed.trim_start_matches("- ");
+            if let Some((key, val)) = after_dash.split_once(':') {
+                let key = key.trim();
+                let val = val.trim();
+                match key {
+                    "hostname" => current_hostname = Some(val.to_string()),
+                    "service" => current_service = Some(val.to_string()),
+                    "port" => current_port = val.parse().ok(),
+                    _ => {}
+                }
+            }
+        } else if let Some((key, val)) = trimmed.split_once(':') {
+            let key = key.trim();
+            let val = val.trim();
+            match key {
+                "hostname" => current_hostname = Some(val.to_string()),
+                "service" => current_service = Some(val.to_string()),
+                "port" => current_port = val.parse().ok(),
+                _ => {}
+            }
+        }
+    }
+    // Flush last entry
+    if let (Some(h), Some(s), Some(p)) = (current_hostname.take(), current_service.take(), current_port.take()) {
+        routes.push(orca_core::templates::GatewayRouteTemplate {
+            hostname: h,
+            service: s,
+            port: p,
+        });
+    }
+
+    if routes.is_empty() { None } else { Some(routes) }
+}
+
+/// Auto-register gateway routes after a compose stack deploy.
+/// Returns the list of newly registered routes.
+async fn auto_register_gateway_routes(
+    state: &Arc<AppState>,
+    stack_name: &str,
+    routes: &[orca_core::templates::GatewayRouteTemplate],
+) -> Vec<orca_core::config::GatewayRoute> {
+    let mut registered = Vec::new();
+    {
+        let mut config = state.config.lock().await;
+        for route in routes {
+            let container_name = format!("{}-{}-1", stack_name, route.service);
+            let gw_route = orca_core::config::GatewayRoute {
+                hostname: route.hostname.clone(),
+                container_name: container_name.clone(),
+                port: route.port,
+                enabled: true,
+            };
+            if !config.gateway.routes.iter().any(|r| r.hostname == route.hostname) {
+                config.gateway.routes.push(gw_route.clone());
+                registered.push(gw_route);
+            }
+        }
+        if !registered.is_empty()
+            && let Err(e) = config.save()
+        {
+            tracing::warn!("Failed to save config after registering gateway routes: {e}");
+        }
+    }
+    // Apply to running gateway
+    if !registered.is_empty() && crate::gateway::is_running(state).await.unwrap_or(false) {
+        let config = state.config.lock().await;
+        let gw_config = config.gateway.clone();
+        drop(config);
+        let _ = crate::gateway::apply_config(&gw_config).await;
+        for route in &registered {
+            let _ = crate::gateway::ensure_network_connectivity(state, &route.container_name).await;
+        }
+    }
+    registered
+}
+
 /// Generate a random alphanumeric password for compose template deployments.
 fn generate_password(len: usize) -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -3754,6 +3894,17 @@ async fn deploy_template(
             .await
             .map_err(|e| anyhow::anyhow!("Compose deploy failed: {e}"))?;
 
+        // Auto-register gateway routes from template or orca.yaml
+        let gateway_routes = template
+            .gateway_routes
+            .clone()
+            .or_else(|| parse_orca_yaml_gateway_routes(&stack_dir));
+        let registered_routes = if let Some(routes) = gateway_routes {
+            auto_register_gateway_routes(&state, &stack_name, &routes).await
+        } else {
+            Vec::new()
+        };
+
         return Ok((
             StatusCode::CREATED,
             Json(serde_json::json!({
@@ -3762,6 +3913,7 @@ async fn deploy_template(
                 "working_dir": dir_str,
                 "notes": template.notes,
                 "setup_guide": template.setup_guide,
+                "gateway_routes": registered_routes,
                 "output": {
                     "stdout": output.stdout,
                     "stderr": output.stderr,

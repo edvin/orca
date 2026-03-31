@@ -31,6 +31,17 @@ pub struct AppTemplate {
     /// Optional post-deploy setup guide shown to the user after deployment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setup_guide: Option<SetupGuide>,
+    /// Gateway routes to auto-register when deploying this template.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gateway_routes: Option<Vec<GatewayRouteTemplate>>,
+}
+
+/// A gateway route declared in a template or orca.yaml.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayRouteTemplate {
+    pub hostname: String,
+    pub service: String,
+    pub port: u16,
 }
 
 /// A post-deploy setup guide with step-by-step instructions.

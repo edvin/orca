@@ -389,6 +389,19 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           const stackName = result?.stack || deployName() || template.id;
           const guide = result?.setup_guide || template.setup_guide;
           showToast(`${template.name} stack deployed${hostSuffix}!${notes && !guide ? " " + notes : ""}`, "success");
+          // Show gateway routes if auto-registered
+          const gwRoutes = result?.gateway_routes as Array<{ hostname: string; container_name: string; port: number }> | undefined;
+          if (gwRoutes && gwRoutes.length > 0) {
+            try {
+              const gwConfig = (await invoke("gateway_get_config")) as any;
+              const domain = gwConfig?.domain || "localhost";
+              const urls = gwRoutes.map((r) => `${r.hostname}.${domain}`).join(", ");
+              showToast(`Gateway: ${urls}`, "success");
+            } catch {
+              const urls = gwRoutes.map((r) => r.hostname).join(", ");
+              showToast(`Gateway routes registered: ${urls}`, "info");
+            }
+          }
           logInfo("Compose stack deployed", `${template.name} → stack ${stackName}${hostSuffix}`);
           if (guide && !switchedHost) {
             setSetupGuide(guide);

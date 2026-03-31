@@ -637,6 +637,10 @@
           "url": "http://localhost:8095"
         }
       ]
-    }
+    },
+    "gateway_routes": [
+      { "hostname": "webmail", "service": "webmail", "port": 8095 },
+      { "hostname": "mail-admin", "service": "stalwart", "port": 8080 }
+    ]
   }
 ]
