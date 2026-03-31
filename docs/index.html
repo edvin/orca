@@ -887,6 +887,7 @@
       <span class="hero-pill"><span class="hero-pill-dot" style="background: #a371f7;"></span> MCP Agent APIs</span>
       <span class="hero-pill"><span class="hero-pill-dot" style="background: #d29922;"></span> Cross-Platform</span>
       <span class="hero-pill"><span class="hero-pill-dot" style="background: #f85149;"></span> GPU Accelerated</span>
+      <span class="hero-pill"><span class="hero-pill-dot" style="background: #3fb950;"></span> Zero Telemetry</span>
     </div>
     <img src="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png" alt="Orca Desktop" class="hero-logo">
     <h1>Orca Desktop</h1>
@@ -1605,6 +1606,121 @@ document.getElementById('lightbox').addEventListener('click', (e) => {
 document.addEventListener('DOMContentLoaded', initGallery);
 </script>
 
+<!-- Privacy & Security -->
+<section style="max-width: 1100px; margin: 0 auto; padding: 40px 20px 80px;">
+  <div class="section-header">
+    <h2>Privacy & Security</h2>
+    <p>Built for teams that take data security seriously.</p>
+  </div>
+
+  <!-- Zero Telemetry Hero Banner -->
+  <div style="background: linear-gradient(135deg, rgba(63, 185, 80, 0.08) 0%, rgba(88, 166, 255, 0.08) 100%); border: 1px solid rgba(63, 185, 80, 0.15); border-radius: 18px; padding: 40px 48px; margin-bottom: 32px; text-align: center; position: relative; overflow: hidden;">
+    <div style="position: absolute; top: -30px; right: -30px; width: 200px; height: 200px; background: radial-gradient(circle, rgba(63, 185, 80, 0.1) 0%, transparent 60%); pointer-events: none;"></div>
+    <div style="font-size: 48px; font-weight: 800; letter-spacing: -2px; margin-bottom: 8px; background: linear-gradient(135deg, #3fb950, #58a6ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Zero Telemetry</div>
+    <div style="font-size: 16px; color: #8b949e; max-width: 520px; margin: 0 auto; line-height: 1.6;">No analytics. No crash reporting. No accounts. No cloud service. Your containers are your business — we never see them.</div>
+  </div>
+
+  <!-- Privacy Cards -->
+  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px;">
+    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
+      <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: rgba(63, 185, 80, 0.1); border-radius: 10px; margin-bottom: 16px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+      </div>
+      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #e6edf3;">100% Local</h3>
+      <p style="font-size: 13px; color: #8b949e; line-height: 1.6;">Everything runs on your machine. The daemon binds to localhost only. Config, credentials, and logs never leave your system.</p>
+    </div>
+    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
+      <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: rgba(88, 166, 255, 0.1); border-radius: 10px; margin-bottom: 16px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #e6edf3;">No Phone Home</h3>
+      <p style="font-size: 13px; color: #8b949e; line-height: 1.6;">We don't operate servers. The only automatic calls are update checks (GitHub) and the template catalog — both plain GET requests with no user data.</p>
+    </div>
+    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
+      <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: rgba(163, 113, 247, 0.1); border-radius: 10px; margin-bottom: 16px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a371f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </div>
+      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #e6edf3;">Fully Auditable</h3>
+      <p style="font-size: 13px; color: #8b949e; line-height: 1.6;">MIT licensed and open source. Every network call is documented. Build from source to verify. Your security team can audit everything.</p>
+    </div>
+  </div>
+
+  <!-- Network Transparency Table -->
+  <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 16px; overflow: hidden; margin-bottom: 32px;">
+    <div style="padding: 16px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); font-size: 13px; font-weight: 700; color: #e6edf3; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      Every Network Connection — Full Transparency
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 10px 24px; font-size: 11px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; border-bottom: 1px solid rgba(255, 255, 255, 0.04); gap: 16px;">
+      <span></span><span>Connection</span><span>When</span><span>User Data?</span>
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid rgba(255, 255, 255, 0.03); gap: 16px; align-items: center;">
+      <span style="color: #d29922; font-size: 10px;">AUTO</span>
+      <span><strong style="color: #e6edf3;">Update check</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">github.com</code></span>
+      <span style="color: #8b949e; font-size: 12px;">On startup</span>
+      <span style="color: #3fb950; font-size: 12px; font-weight: 600;">None</span>
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid rgba(255, 255, 255, 0.03); gap: 16px; align-items: center;">
+      <span style="color: #d29922; font-size: 10px;">AUTO</span>
+      <span><strong style="color: #e6edf3;">Template catalog</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">orca-desktop.com</code></span>
+      <span style="color: #8b949e; font-size: 12px;">Hourly, cached</span>
+      <span style="color: #3fb950; font-size: 12px; font-weight: 600;">None</span>
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid rgba(255, 255, 255, 0.03); gap: 16px; align-items: center;">
+      <span style="color: #58a6ff; font-size: 10px;">USER</span>
+      <span><strong style="color: #e6edf3;">Docker Hub search</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">hub.docker.com</code></span>
+      <span style="color: #8b949e; font-size: 12px;">You search</span>
+      <span style="color: #d29922; font-size: 12px; font-weight: 600;">Query only</span>
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid rgba(255, 255, 255, 0.03); gap: 16px; align-items: center;">
+      <span style="color: #58a6ff; font-size: 10px;">USER</span>
+      <span><strong style="color: #e6edf3;">AI assistant</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">Your provider</code></span>
+      <span style="color: #8b949e; font-size: 12px;">You ask AI</span>
+      <span style="color: #d29922; font-size: 12px; font-weight: 600;">Context you see</span>
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; gap: 16px; align-items: center;">
+      <span style="color: #58a6ff; font-size: 10px;">USER</span>
+      <span><strong style="color: #e6edf3;">Image pull</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">Your registries</code></span>
+      <span style="color: #8b949e; font-size: 12px;">You pull</span>
+      <span style="color: #d29922; font-size: 12px; font-weight: 600;">Image ref</span>
+    </div>
+  </div>
+
+  <!-- Code Signing + Air-Gap -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
+      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #e6edf3; display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Code Signed Releases
+      </h3>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #8b949e; line-height: 1.6;">
+        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #3fb950;">&#10003;</span> macOS — Apple notarized with Developer ID</div>
+        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #3fb950;">&#10003;</span> Windows — EV code signed via SSL.com</div>
+        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #3fb950;">&#10003;</span> Signed update manifests — tamper-proof upgrades</div>
+        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #3fb950;">&#10003;</span> Built in GitHub Actions — reproducible CI</div>
+      </div>
+    </div>
+    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
+      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #e6edf3; display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a371f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+        Air-Gap Ready
+      </h3>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #8b949e; line-height: 1.6;">
+        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #a371f7;">&#10003;</span> Ollama integration — fully local AI, no cloud</div>
+        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #a371f7;">&#10003;</span> Private registries — no Docker Hub required</div>
+        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #a371f7;">&#10003;</span> Localhost-only daemon — no open ports</div>
+        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #a371f7;">&#10003;</span> Works offline — cached templates, no cloud deps</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: center; margin-top: 24px;">
+    <a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" style="font-size: 13px; color: #58a6ff;">Read the full Privacy Statement</a>
+    <span style="color: #484f58; margin: 0 8px;">&#183;</span>
+    <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" style="font-size: 13px; color: #58a6ff;">Security Policy</a>
+  </div>
+</section>
+
 <section class="cta">
   <h2>Ready to try it?</h2>
   <p>Free, open source, and works with your existing Docker and Kubernetes setup.</p>
@@ -1622,6 +1738,8 @@ document.addEventListener('DOMContentLoaded', initGallery);
     <a href="https://github.com/edvin/orca">GitHub</a> ·
     <a href="https://github.com/edvin/orca/releases">Releases</a> ·
     <a href="https://github.com/edvin/orca/blob/main/LICENSE">MIT License</a> ·
+    <a href="https://github.com/edvin/orca/blob/main/PRIVACY.md">Privacy</a> ·
+    <a href="https://github.com/edvin/orca/blob/main/SECURITY.md">Security</a> ·
     <a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md">Contributing</a>
   </p>
   <p style="margin-top: 12px;">Made by <a href="https://github.com/edvin">Edvin Syse</a></p>

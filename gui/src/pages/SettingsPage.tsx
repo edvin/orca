@@ -8,7 +8,7 @@ import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, update
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 
-type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "about";
+type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "privacy" | "about";
 
 interface SettingsPageProps {
   initialTab?: string;
@@ -760,6 +760,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>Auto-Deploy</button>
         <button class={`tab-item ${tab() === "schedules" ? "active" : ""}`} onClick={() => setTab("schedules")}>Schedules</button>
         <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
+        <button class={`tab-item ${tab() === "privacy" ? "active" : ""}`} onClick={() => setTab("privacy")}>Privacy & Security</button>
         <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
       </div>
 
@@ -2154,6 +2155,99 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </For>
                 </div>
               </Show>
+            </div>
+          </div>
+        </Show>
+
+        {/* === Privacy & Security Tab === */}
+        <Show when={tab() === "privacy"}>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
+
+            {/* Zero Telemetry Banner */}
+            <div style={{ background: "linear-gradient(135deg, rgba(63, 185, 80, 0.08) 0%, rgba(88, 166, 255, 0.08) 100%)", border: "1px solid rgba(63, 185, 80, 0.15)", "border-radius": "12px", padding: "24px 28px", "text-align": "center" }}>
+              <div style={{ "font-size": "28px", "font-weight": "800", "letter-spacing": "-1px", "margin-bottom": "6px", background: "linear-gradient(135deg, #3fb950, #58a6ff)", "-webkit-background-clip": "text", "-webkit-text-fill-color": "transparent", "background-clip": "text" }}>Zero Telemetry</div>
+              <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6" }}>Orca Desktop collects no analytics, no crash reports, and no usage data. Ever.</div>
+            </div>
+
+            {/* Network Connections */}
+            <div class="settings-section">
+              <h2 class="settings-section-title">Network Connections</h2>
+              <div class="card">
+                <p style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "12px" }}>Every network connection Orca makes — there are no hidden calls.</p>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "0" }}>
+                  {([
+                    ["AUTO", "#d29922", "Update check", "github.com", "Checks for new versions on startup", "No user data"],
+                    ["AUTO", "#d29922", "Template catalog", "orca-desktop.com", "Fetches app templates (cached hourly)", "No user data"],
+                    ["USER", "#58a6ff", "Docker Hub search", "hub.docker.com", "When you search for images", "Search query only"],
+                    ["USER", "#58a6ff", "AI assistant", "Your provider", "When you click 'Ask AI'", "Context you see on screen"],
+                    ["USER", "#58a6ff", "Image pull", "Your registries", "When you click 'Pull'", "Image reference"],
+                    ["USER", "#58a6ff", "Remote hosts", "Your Orca daemons", "When you add a remote host", "API token (yours)"],
+                  ] as [string, string, string, string, string, string][]).map(([type, color, name, dest, when, data]) => (
+                    <div style={{ display: "flex", "align-items": "center", gap: "12px", padding: "10px 0", "border-bottom": "1px solid #21262d" }}>
+                      <span style={{ "font-size": "9px", "font-weight": "700", "text-transform": "uppercase", color, "min-width": "32px", "letter-spacing": "0.5px" }}>{type}</span>
+                      <div style={{ flex: "1" }}>
+                        <div style={{ "font-size": "13px", "font-weight": "500" }}>{name} <span class="mono" style={{ "font-size": "11px", color: "#6e7681" }}>{dest}</span></div>
+                        <div style={{ "font-size": "11px", color: "#8b949e" }}>{when}</div>
+                      </div>
+                      <span style={{ "font-size": "11px", color: type === "AUTO" ? "#3fb950" : "#d29922", "font-weight": "600", "white-space": "nowrap" }}>{data}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Security */}
+            <div class="settings-section">
+              <h2 class="settings-section-title">Security</h2>
+              <div class="card">
+                <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
+                  {([
+                    ["Localhost only", "The daemon binds to 127.0.0.1:9477 — not accessible from the network"],
+                    ["Token auth", "All API calls require a locally-generated bearer token"],
+                    ["Code signed", "macOS releases are Apple notarized, Windows releases are EV code signed"],
+                    ["TLS support", "Remote host connections support TLS with certificate verification"],
+                    ["Webhook HMAC", "Incoming webhooks are validated with HMAC-SHA256 signatures"],
+                    ["Open source", "MIT licensed — audit every line of code on GitHub"],
+                  ] as [string, string][]).map(([title, desc]) => (
+                    <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0", "margin-top": "2px" }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                      <div>
+                        <div style={{ "font-size": "13px", "font-weight": "500" }}>{title}</div>
+                        <div style={{ "font-size": "12px", color: "#8b949e" }}>{desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* AI Privacy */}
+            <div class="settings-section">
+              <h2 class="settings-section-title">AI Privacy</h2>
+              <div class="card">
+                <div style={{ display: "flex", "flex-direction": "column", gap: "10px", "font-size": "13px", color: "#c9d1d9", "line-height": "1.6" }}>
+                  <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
+                    <span style={{ color: "#a371f7", "flex-shrink": "0", "margin-top": "2px" }}>&#10003;</span>
+                    <span>AI is <strong>entirely optional</strong> and off by default</span>
+                  </div>
+                  <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
+                    <span style={{ color: "#a371f7", "flex-shrink": "0", "margin-top": "2px" }}>&#10003;</span>
+                    <span>You provide your own API key — we never see it</span>
+                  </div>
+                  <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
+                    <span style={{ color: "#a371f7", "flex-shrink": "0", "margin-top": "2px" }}>&#10003;</span>
+                    <span>Only visible context (logs, errors, your question) is sent — never credentials or config</span>
+                  </div>
+                  <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
+                    <span style={{ color: "#a371f7", "flex-shrink": "0", "margin-top": "2px" }}>&#10003;</span>
+                    <span>Use <strong>Ollama</strong> for fully offline, air-gapped AI — zero network traffic</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ "text-align": "center", "font-size": "12px", color: "#484f58", "padding-top": "8px" }}>
+              Full details: <a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" style={{ color: "#58a6ff" }}>Privacy Statement</a> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" style={{ color: "#58a6ff" }}>Security Policy</a>
             </div>
           </div>
         </Show>
