@@ -292,6 +292,16 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/agent/execute", post(agent_execute_tool))
         .route("/agent/openai/chat/completions", post(agent_openai_proxy))
         .route("/agent/mcp", post(agent_mcp))
+        // Gateway
+        .route("/gateway/status", get(gateway_status))
+        .route("/gateway/start", post(gateway_start))
+        .route("/gateway/stop", post(gateway_stop))
+        .route("/gateway/routes", get(gateway_list_routes).post(gateway_add_route))
+        .route(
+            "/gateway/routes/{hostname}",
+            delete(gateway_remove_route).put(gateway_update_route),
+        )
+        .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
         // CA
         .route("/ca/certificate", get(ca_certificate))
         .route("/ca/info", get(ca_info))
@@ -5973,6 +5983,251 @@ async fn agent_mcp(State(state): State<Arc<AppState>>, Json(body): Json<serde_js
             }
         })),
     }
+}
+
+// --- Gateway ---
+
+async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    let gw = &config.gateway;
+    let running = crate::gateway::is_running(&state).await.unwrap_or(false);
+    let cid = crate::gateway::container_id(&state).await.unwrap_or(None);
+    let routes_active = gw.routes.iter().filter(|r| r.enabled).count();
+
+    Ok(Json(serde_json::json!({
+        "running": running,
+        "container_id": cid,
+        "routes_active": routes_active,
+        "domain": gw.domain,
+        "http_port": gw.http_port,
+        "https_port": gw.https_port,
+        "tls_mode": gw.tls_mode,
+    })))
+}
+
+async fn gateway_start(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await.clone();
+    let gw = &config.gateway;
+
+    let id = crate::gateway::start(&state, gw)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to start gateway: {e}"))?;
+
+    // Ensure network connectivity for all enabled routes
+    for route in &gw.routes {
+        if route.enabled
+            && let Err(e) = crate::gateway::ensure_network_connectivity(&state, &route.container_name).await
+        {
+            tracing::warn!(
+                "Failed to connect gateway to container '{}' networks: {e}",
+                route.container_name
+            );
+        }
+    }
+
+    Ok(Json(serde_json::json!({
+        "status": "started",
+        "container_id": id,
+    })))
+}
+
+async fn gateway_stop(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    crate::gateway::stop(&state)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to stop gateway: {e}"))?;
+
+    Ok(Json(serde_json::json!({ "status": "stopped" })))
+}
+
+async fn gateway_list_routes(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    let routes: Vec<serde_json::Value> = config
+        .gateway
+        .routes
+        .iter()
+        .map(|r| {
+            let url = format!("https://{}:{}", r.hostname, config.gateway.https_port);
+            serde_json::json!({
+                "hostname": r.hostname,
+                "container_name": r.container_name,
+                "port": r.port,
+                "enabled": r.enabled,
+                "url": url,
+            })
+        })
+        .collect();
+    Ok(Json(serde_json::json!(routes)))
+}
+
+#[derive(Deserialize)]
+struct AddRouteRequest {
+    hostname: String,
+    container_name: String,
+    port: u16,
+}
+
+async fn gateway_add_route(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<AddRouteRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.lock().await;
+
+    // Check for duplicate hostname
+    if config.gateway.routes.iter().any(|r| r.hostname == req.hostname) {
+        return Err(anyhow::anyhow!("Route for hostname '{}' already exists", req.hostname).into());
+    }
+
+    let route = orca_core::config::GatewayRoute {
+        hostname: req.hostname.clone(),
+        container_name: req.container_name.clone(),
+        port: req.port,
+        enabled: true,
+    };
+    config.gateway.routes.push(route);
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+
+    let gw_config = config.gateway.clone();
+    drop(config);
+
+    // Generate TLS cert if in OrcaCa mode
+    if matches!(gw_config.tls_mode, orca_core::config::GatewayTlsMode::OrcaCa)
+        && let Err(e) = crate::gateway::apply_config(&gw_config).await
+    {
+        tracing::warn!("Failed to apply gateway config after adding route: {e}");
+    }
+
+    // Ensure network connectivity
+    if let Err(e) = crate::gateway::ensure_network_connectivity(&state, &req.container_name).await {
+        tracing::warn!("Failed to connect gateway to container networks: {e}");
+    }
+
+    // Push updated config to Caddy if running
+    if crate::gateway::is_running(&state).await.unwrap_or(false)
+        && let Err(e) = crate::gateway::apply_config(&gw_config).await
+    {
+        tracing::warn!("Failed to push updated config to Caddy: {e}");
+    }
+
+    let url = format!("https://{}:{}", req.hostname, gw_config.https_port);
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "hostname": req.hostname,
+            "container_name": req.container_name,
+            "port": req.port,
+            "enabled": true,
+            "url": url,
+        })),
+    ))
+}
+
+async fn gateway_remove_route(
+    State(state): State<Arc<AppState>>,
+    Path(hostname): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.lock().await;
+    let before = config.gateway.routes.len();
+    config.gateway.routes.retain(|r| r.hostname != hostname);
+    if config.gateway.routes.len() == before {
+        return Err(anyhow::anyhow!("Route for hostname '{}' not found", hostname).into());
+    }
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+
+    let gw_config = config.gateway.clone();
+    drop(config);
+
+    // Push updated config to Caddy if running
+    if crate::gateway::is_running(&state).await.unwrap_or(false) {
+        let _ = crate::gateway::apply_config(&gw_config).await;
+    }
+
+    Ok(Json(serde_json::json!({ "removed": hostname })))
+}
+
+#[derive(Deserialize)]
+struct UpdateRouteRequest {
+    container_name: String,
+    port: u16,
+    enabled: bool,
+}
+
+async fn gateway_update_route(
+    State(state): State<Arc<AppState>>,
+    Path(hostname): Path<String>,
+    Json(req): Json<UpdateRouteRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.lock().await;
+    let route = config
+        .gateway
+        .routes
+        .iter_mut()
+        .find(|r| r.hostname == hostname)
+        .ok_or_else(|| anyhow::anyhow!("Route for hostname '{}' not found", hostname))?;
+
+    route.container_name = req.container_name;
+    route.port = req.port;
+    route.enabled = req.enabled;
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+
+    let gw_config = config.gateway.clone();
+    drop(config);
+
+    // Push updated config to Caddy if running
+    if crate::gateway::is_running(&state).await.unwrap_or(false) {
+        let _ = crate::gateway::apply_config(&gw_config).await;
+    }
+
+    Ok(Json(serde_json::json!({ "updated": hostname })))
+}
+
+async fn gateway_get_config(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    Ok(Json(serde_json::json!({
+        "enabled": config.gateway.enabled,
+        "domain": config.gateway.domain,
+        "http_port": config.gateway.http_port,
+        "https_port": config.gateway.https_port,
+        "tls_mode": config.gateway.tls_mode,
+        "custom_cert": config.gateway.custom_cert,
+        "custom_key": config.gateway.custom_key,
+        "routes": config.gateway.routes,
+    })))
+}
+
+#[derive(Deserialize)]
+struct UpdateGatewayConfigRequest {
+    domain: String,
+    http_port: u16,
+    https_port: u16,
+    tls_mode: String,
+    custom_cert: Option<String>,
+    custom_key: Option<String>,
+}
+
+async fn gateway_update_config(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<UpdateGatewayConfigRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.lock().await;
+    config.gateway.domain = req.domain;
+    config.gateway.http_port = req.http_port;
+    config.gateway.https_port = req.https_port;
+    config.gateway.tls_mode = match req.tls_mode.as_str() {
+        "custom" => orca_core::config::GatewayTlsMode::Custom,
+        _ => orca_core::config::GatewayTlsMode::OrcaCa,
+    };
+    config.gateway.custom_cert = req.custom_cert;
+    config.gateway.custom_key = req.custom_key;
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    Ok(Json(serde_json::json!({ "saved": true })))
 }
 
 // --- CA Certificate ---

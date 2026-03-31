@@ -3507,3 +3507,126 @@ pub async fn fetch_image_tags(image: String) -> Result<Vec<String>, String> {
 
     Ok(tags)
 }
+
+// --- Gateway ---
+
+#[tauri::command]
+pub async fn gateway_status() -> Result<serde_json::Value, String> {
+    get_json("/gateway/status").await
+}
+
+#[tauri::command]
+pub async fn gateway_start() -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = authed_client_with_timeout(120)
+        .post(format!("{base}/gateway/start"))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
+    }
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn gateway_stop() -> Result<(), String> {
+    post_empty("/gateway/stop").await
+}
+
+#[tauri::command]
+pub async fn gateway_list_routes() -> Result<serde_json::Value, String> {
+    get_json("/gateway/routes").await
+}
+
+#[tauri::command]
+pub async fn gateway_add_route(
+    hostname: String,
+    container_name: String,
+    port: u16,
+) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .post(format!("{base}/gateway/routes"))
+        .json(&serde_json::json!({
+            "hostname": hostname,
+            "container_name": container_name,
+            "port": port,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
+    }
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn gateway_remove_route(hostname: String) -> Result<(), String> {
+    delete(&format!("/gateway/routes/{hostname}")).await
+}
+
+#[tauri::command]
+pub async fn gateway_update_route(
+    hostname: String,
+    container_name: String,
+    port: u16,
+    enabled: bool,
+) -> Result<(), String> {
+    let base = daemon_url();
+    let resp = client()
+        .put(format!("{base}/gateway/routes/{hostname}"))
+        .json(&serde_json::json!({
+            "container_name": container_name,
+            "port": port,
+            "enabled": enabled,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}
+
+#[tauri::command]
+pub async fn gateway_get_config() -> Result<serde_json::Value, String> {
+    get_json("/gateway/config").await
+}
+
+#[tauri::command]
+pub async fn gateway_update_config(
+    domain: String,
+    http_port: u16,
+    https_port: u16,
+    tls_mode: String,
+    custom_cert: Option<String>,
+    custom_key: Option<String>,
+) -> Result<(), String> {
+    let base = daemon_url();
+    let resp = client()
+        .put(format!("{base}/gateway/config"))
+        .json(&serde_json::json!({
+            "domain": domain,
+            "http_port": http_port,
+            "https_port": https_port,
+            "tls_mode": tls_mode,
+            "custom_cert": custom_cert,
+            "custom_key": custom_key,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}

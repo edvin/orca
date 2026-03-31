@@ -192,6 +192,15 @@ pub fn run() {
             commands::save_schedule,
             commands::delete_schedule,
             commands::fetch_image_tags,
+            commands::gateway_status,
+            commands::gateway_start,
+            commands::gateway_stop,
+            commands::gateway_list_routes,
+            commands::gateway_add_route,
+            commands::gateway_remove_route,
+            commands::gateway_update_route,
+            commands::gateway_get_config,
+            commands::gateway_update_config,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

@@ -96,6 +96,17 @@
 - **Contribute templates** — add your favorite app to the catalog via [PR](CONTRIBUTING.md#contributing-app-templates)
 - Password/secret env vars auto-masked in the editor
 
+### Gateway (Reverse Proxy)
+
+- **Managed Caddy container** — automatic reverse proxy with zero configuration
+- **`.localhost` domains** — `webmail.localhost`, `grafana.localhost` etc. work in all browsers (RFC 6761)
+- **Custom domains** — configure any base domain (e.g., `*.local.mycompany.dev` with wildcard DNS)
+- **Automatic TLS** — certificates signed by the Orca CA, or bring your own wildcard cert
+- **WebSocket, SSE, HTTP/2** — Caddy proxies all protocols transparently
+- **Per-container "Expose" button** — one click from any container detail page to register a hostname
+- **Settings** — configurable domain, ports (default 80/443), TLS mode
+- **`orca.yaml`** — projects can declare gateway routes in their repo, auto-registered on deploy
+
 ### AI Assistant
 
 - **Separate floating window** — drag anywhere, resize, pin to another monitor
@@ -566,6 +577,12 @@ The daemon exposes a REST API at `http://127.0.0.1:9477/api/v1/`:
 | `/stacks/:name/env` | PATCH | Update env var in stack's .env file |
 | `/ca/certificate` | GET | Download CA certificate (no auth) |
 | `/ca/info` | GET | CA info (subject, expiry, fingerprint) |
+| `/gateway/status` | GET | Gateway running state and config |
+| `/gateway/start` | POST | Start the Caddy gateway container |
+| `/gateway/stop` | POST | Stop the gateway container |
+| `/gateway/routes` | GET, POST | List / add gateway routes |
+| `/gateway/routes/:hostname` | PUT, DELETE | Update / remove a route |
+| `/gateway/config` | GET, PUT | Get / update gateway settings |
 | `/environment/status` | GET | Environment health checks |
 | `/environment/fix` | POST | Run fix action |
 | `/system/health` | GET | System health overview |

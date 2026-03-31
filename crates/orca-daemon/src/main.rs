@@ -11,6 +11,7 @@ use tracing_subscriber::EnvFilter;
 
 mod agent;
 mod api;
+mod gateway;
 mod state;
 
 use state::AppState;

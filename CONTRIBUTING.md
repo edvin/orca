@@ -240,9 +240,42 @@ Steps show a numbered stepper UI with checkmarks. Users can mark steps as done t
 - **`compose_yaml`**: For multi-service stacks. Use `changeme` for passwords. Newlines as `\n`.
 - **`generated_env`**: Auto-generate secrets or prompt the user for values. Written to `.env` at deploy time.
 - **`setup_guide`**: Post-deploy wizard for complex stacks. See step types above.
+- **`gateway_routes`**: Auto-register hostnames with the Orca Gateway on deploy. See below.
 - **`notes`**: Short text shown as a toast after deploy (skipped if `setup_guide` is present)
 - **`restart_policy`**: Use `unless-stopped` for services, `no` for tools (single container only)
 - **`is_builtin`**: Set to `true` so it appears as a catalog template (not user-created)
+
+#### Gateway routes
+
+Templates can auto-register hostnames with the Orca Gateway on deploy:
+
+```json
+{
+  "gateway_routes": [
+    { "hostname": "app", "service": "frontend", "port": 3000 },
+    { "hostname": "api", "service": "backend", "port": 8080 }
+  ]
+}
+```
+
+With the default domain `localhost`, these become `https://app.localhost` and `https://api.localhost`. Users can change the base domain in Settings > Gateway.
+
+### `orca.yaml` — Project-level gateway config
+
+Any project with a `docker-compose.yml` can include an `orca.yaml` in the same directory to declare gateway routes:
+
+```yaml
+# orca.yaml — checked into your repo, shared with team
+gateway:
+  - hostname: app
+    service: frontend
+    port: 3000
+  - hostname: api
+    service: backend
+    port: 8080
+```
+
+When the stack is deployed through Orca, these routes are auto-registered with the gateway. Hostnames are editable during deploy and overrides are saved per-user in Orca's config.
 
 The catalog is fetched by the app every hour and cached locally. New templates appear automatically — no app update needed.
 

@@ -524,6 +524,37 @@ export interface HostStatus {
   error?: string;
 }
 
+// --- Gateway ---
+
+export interface GatewayStatus {
+  running: boolean;
+  container_id?: string;
+  routes_active: number;
+  domain: string;
+  http_port: number;
+  https_port: number;
+  tls_mode: string;
+}
+
+export interface GatewayRoute {
+  hostname: string;
+  container_name: string;
+  port: number;
+  enabled: boolean;
+  url?: string;
+}
+
+export interface GatewayConfig {
+  enabled: boolean;
+  domain: string;
+  http_port: number;
+  https_port: number;
+  tls_mode: "orca_ca" | "custom";
+  custom_cert?: string;
+  custom_key?: string;
+  routes: GatewayRoute[];
+}
+
 // --- Environment ---
 
 export interface EnvironmentStatus {

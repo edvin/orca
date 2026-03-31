@@ -52,6 +52,13 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [fileContent, setFileContent] = createSignal<string | null>(null);
   const [fileContentPath, setFileContentPath] = createSignal("");
 
+  // Gateway expose state
+  const [showExposeDialog, setShowExposeDialog] = createSignal(false);
+  const [exposeHostname, setExposeHostname] = createSignal("");
+  const [exposePort, setExposePort] = createSignal("80");
+  const [exposing, setExposing] = createSignal(false);
+  const [existingRoute, setExistingRoute] = createSignal<{ hostname: string; url: string } | null>(null);
+
   // Commit dialog state
   const [showCommitDialog, setShowCommitDialog] = createSignal(false);
   const [commitRepo, setCommitRepo] = createSignal("");
@@ -323,6 +330,71 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       showToast(`Rename failed: ${e}`, "error");
     }
     setRenaming(false);
+  };
+
+  const openExposeDialog = async () => {
+    const c = container();
+    if (!c) return;
+    // Check if route already exists
+    try {
+      const routes = (await invoke("gateway_list_routes")) as Array<{ hostname: string; container_name: string; url: string }>;
+      const existing = routes.find((r) => r.container_name === c.name);
+      if (existing) {
+        setExistingRoute({ hostname: existing.hostname, url: existing.url });
+        setShowExposeDialog(true);
+        return;
+      }
+    } catch {}
+    setExistingRoute(null);
+    // Pre-fill hostname from container name
+    const sanitized = c.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "");
+    setExposeHostname(sanitized);
+    // Use container's first exposed port if available
+    if (c.ports && c.ports.length > 0) {
+      setExposePort(String(c.ports[0].container_port));
+    } else {
+      setExposePort("80");
+    }
+    setShowExposeDialog(true);
+  };
+
+  const handleExpose = async (e: Event) => {
+    e.preventDefault();
+    const c = container();
+    if (!c) return;
+    const hostname = exposeHostname().trim();
+    const port = parseInt(exposePort(), 10);
+    if (!hostname || isNaN(port)) return;
+
+    const fullHostname = hostname.includes(".") ? hostname : `${hostname}.localhost`;
+    setExposing(true);
+    try {
+      await invoke("gateway_add_route", {
+        hostname: fullHostname,
+        containerName: c.name,
+        port,
+      });
+      showToast(`Exposed ${c.name} at ${fullHostname}`, "success");
+      setShowExposeDialog(false);
+    } catch (err) {
+      logError(`Failed to expose container: ${err}`);
+      showToast(`Failed to expose: ${err}`, "error");
+    }
+    setExposing(false);
+  };
+
+  const handleUnexpose = async () => {
+    const route = existingRoute();
+    if (!route) return;
+    try {
+      await invoke("gateway_remove_route", { hostname: route.hostname });
+      showToast(`Route ${route.hostname} removed`, "success");
+      setShowExposeDialog(false);
+      setExistingRoute(null);
+    } catch (err) {
+      logError(`Failed to remove route: ${err}`);
+      showToast(`Failed to remove: ${err}`, "error");
+    }
   };
 
   const saveResources = async () => {
@@ -606,6 +678,14 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   title="Save as Image"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                </button>
+                <button
+                  class="action-icon"
+                  onClick={openExposeDialog}
+                  disabled={actionInProgress()}
+                  title="Expose via Gateway"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 </button>
               </div>
             </>
@@ -1620,6 +1700,83 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Expose via Gateway Dialog */}
+      <Show when={showExposeDialog()}>
+        <div class="modal-overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("modal-overlay")) setShowExposeDialog(false); }}>
+          <div class="modal-dialog">
+            <div class="modal-header">
+              <h2 class="modal-title">{existingRoute() ? "Gateway Route" : "Expose via Gateway"}</h2>
+              <button class="modal-close" onClick={() => setShowExposeDialog(false)}>{"\u00d7"}</button>
+            </div>
+            <Show when={existingRoute()} fallback={
+              <form onSubmit={handleExpose}>
+                <div class="modal-body">
+                  <div class="form-group">
+                    <label class="form-label">Hostname <span style={{ color: "#f85149" }}>*</span></label>
+                    <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+                      <input
+                        class="form-input"
+                        type="text"
+                        placeholder="myapp"
+                        value={exposeHostname()}
+                        onInput={(e) => setExposeHostname(e.currentTarget.value)}
+                        autofocus
+                        style={{ flex: "1" }}
+                      />
+                      <span style={{ color: "#8b949e", "font-size": "13px" }}>.localhost</span>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Port <span style={{ color: "#f85149" }}>*</span></label>
+                    <input
+                      class="form-input"
+                      type="number"
+                      value={exposePort()}
+                      onInput={(e) => setExposePort(e.currentTarget.value)}
+                      min="1"
+                      max="65535"
+                    />
+                  </div>
+                  <Show when={exposeHostname().trim()}>
+                    <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "8px" }}>
+                      URL: <span class="mono" style={{ color: "#58a6ff" }}>https://{exposeHostname().includes(".") ? exposeHostname() : `${exposeHostname()}.localhost`}</span>
+                    </div>
+                  </Show>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn" onClick={() => setShowExposeDialog(false)} disabled={exposing()}>Cancel</button>
+                  <button type="submit" class="btn btn-primary" disabled={exposing() || !exposeHostname().trim()}>
+                    {exposing() ? "Exposing..." : "Expose"}
+                  </button>
+                </div>
+              </form>
+            }>
+              {(route) => (
+                <div class="modal-body">
+                  <p style={{ color: "#c9d1d9", "font-size": "13px", "margin-bottom": "12px" }}>
+                    This container is already exposed via the gateway.
+                  </p>
+                  <div class="card" style={{ "margin-bottom": "16px" }}>
+                    <div class="card-grid">
+                      <span class="card-label">Hostname</span>
+                      <span class="card-value mono">{route().hostname}</span>
+                      <span class="card-label">URL</span>
+                      <span class="card-value mono" style={{ color: "#58a6ff" }}>{route().url}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
+                    <button class="btn" onClick={() => setShowExposeDialog(false)}>Close</button>
+                    <button class="btn" style={{ color: "#f85149", "border-color": "#f85149" }} onClick={handleUnexpose}>
+                      Remove Route
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Show>
           </div>
         </div>
       </Show>

@@ -16,6 +16,7 @@ import ImagesPage from "./pages/ImagesPage";
 import VolumesPage from "./pages/VolumesPage";
 import VolumeDetailPage from "./pages/VolumeDetailPage";
 import NetworksPage from "./pages/NetworksPage";
+import GatewayPage from "./pages/GatewayPage";
 import KubernetesPage from "./pages/KubernetesPage";
 import SettingsPage from "./pages/SettingsPage";
 import EnvironmentPage from "./pages/EnvironmentPage";
@@ -30,7 +31,7 @@ import type { AiAssistantApi } from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
 
-export type Page = "fleet" | "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "kubernetes" | "environment" | "activity" | "settings";
+export type Page = "fleet" | "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "gateway" | "kubernetes" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
@@ -339,6 +340,7 @@ export default function App() {
                 />
               )}
               {page() === "networks" && <NetworksPage />}
+              {page() === "gateway" && <GatewayPage onNavigate={(p) => navigate(p)} />}
               {page() === "kubernetes" && <KubernetesPage />}
               {/* Machine page merged into System Health */}
               {page() === "environment" && <EnvironmentPage />}

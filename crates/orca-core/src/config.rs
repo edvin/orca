@@ -118,6 +118,9 @@ pub struct OrcaConfig {
     /// Scheduled container actions (built-in cron).
     #[serde(default)]
     pub schedules: Vec<ScheduledAction>,
+    /// Gateway (managed Caddy reverse proxy) configuration.
+    #[serde(default)]
+    pub gateway: GatewayConfig,
 }
 
 /// A scheduled container action (e.g., restart every Sunday).
@@ -136,6 +139,69 @@ pub struct ScheduledAction {
     /// Timestamp of last execution (unix seconds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_run: Option<u64>,
+}
+
+/// Gateway (managed Caddy reverse proxy) configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_gateway_domain")]
+    pub domain: String,
+    #[serde(default = "default_http_port")]
+    pub http_port: u16,
+    #[serde(default = "default_https_port")]
+    pub https_port: u16,
+    #[serde(default)]
+    pub tls_mode: GatewayTlsMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_cert: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_key: Option<String>,
+    #[serde(default)]
+    pub routes: Vec<GatewayRoute>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayRoute {
+    pub hostname: String,
+    pub container_name: String,
+    pub port: u16,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GatewayTlsMode {
+    #[default]
+    OrcaCa,
+    Custom,
+}
+
+impl Default for GatewayConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            domain: default_gateway_domain(),
+            http_port: default_http_port(),
+            https_port: default_https_port(),
+            tls_mode: GatewayTlsMode::default(),
+            custom_cert: None,
+            custom_key: None,
+            routes: Vec::new(),
+        }
+    }
+}
+
+fn default_gateway_domain() -> String {
+    "localhost".into()
+}
+fn default_http_port() -> u16 {
+    80
+}
+fn default_https_port() -> u16 {
+    443
 }
 
 /// A deployment rule that maps an image pattern to containers for auto-deploy.
@@ -282,6 +348,7 @@ impl Default for OrcaConfig {
             deploy_rules: Vec::new(),
             deploy_history: Vec::new(),
             schedules: Vec::new(),
+            gateway: GatewayConfig::default(),
         }
     }
 }

@@ -65,6 +65,8 @@ All data is stored locally on your machine:
 | Configuration | `~/.config/orca/config.json` (Linux), `~/Library/Application Support/orca/config.json` (macOS), `%APPDATA%/orca/config.json` (Windows) |
 | Daemon log | `~/.config/orca/daemon.log` |
 | Stack files | `~/.config/orca/stacks/` |
+| CA certificate & key | `~/.config/orca/ca/` |
+| Gateway TLS certs | `~/.config/orca/ca/certs/` |
 | API token | Generated locally, stored in config file |
 
 Registry credentials are stored **base64-encoded** (not encrypted) in the config file, consistent with how Docker itself stores credentials in `~/.docker/config.json`.
