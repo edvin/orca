@@ -381,7 +381,7 @@ export default function KubernetesPage() {
         } else {
           setSetupLog((prev) => prev + line + "\n");
           // Check for instruction-style output (not an actual install)
-          if (line.includes("To set up") || line.includes("Docker Desktop")) {
+          if (line.includes("To set up") || line.includes("Lima VM first")) {
             setSetupSuccess(null); // informational, not success/failure
           }
         }
@@ -398,7 +398,7 @@ export default function KubernetesPage() {
             if (output && output !== "{}" && output !== "null") {
               setSetupLog(output);
               const isReady = output.includes("cluster is ready") || output.includes("Ready");
-              const isInstructions = output.includes("To set up") || output.includes("Docker Desktop") || output.includes("Lima");
+              const isInstructions = output.includes("To set up") || output.includes("Lima VM first");
               setSetupSuccess(isReady ? true : isInstructions ? null : true);
             } else {
               setSetupLog("No output from daemon. Check the Activity tab and daemon log for details.\n");

@@ -174,14 +174,23 @@ export default function YamlEditor(props: YamlEditorProps) {
         }
       };
 
-      // Layout after modal is fully rendered (multiple frames to be safe)
-      requestAnimationFrame(() => {
+      // Force Monaco to re-measure all text by clearing and re-setting the value.
+      // This fixes jumbled/overlapping text when the editor opens inside a modal
+      // whose container dimensions aren't yet final at creation time.
+      const forceRemeasure = () => {
+        if (!editorInstance) return;
         doLayout();
-        requestAnimationFrame(() => {
-          doLayout();
-          // One more after 100ms for any CSS transitions
-          setTimeout(doLayout, 100);
-        });
+        const currentValue = editorInstance.getValue();
+        editorInstance.setValue("");
+        editorInstance.setValue(currentValue);
+      };
+
+      // Initial layout: immediate + staggered timers to cover modal animations
+      requestAnimationFrame(() => {
+        forceRemeasure();
+        // Cover CSS transitions / modal animation completion
+        setTimeout(forceRemeasure, 100);
+        setTimeout(forceRemeasure, 300);
       });
 
       const resizeObserver = new ResizeObserver(doLayout);

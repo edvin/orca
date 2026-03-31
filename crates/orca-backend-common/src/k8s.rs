@@ -473,17 +473,6 @@ impl K3sManager {
         if cfg!(target_os = "macos") {
             log.push_str("Platform: macOS\n\n");
 
-            if std::path::Path::new("/Applications/Docker.app").exists() {
-                log.push_str("Docker Desktop detected.\n\n");
-                log.push_str("Docker Desktop includes built-in Kubernetes support:\n");
-                log.push_str("  1. Open Docker Desktop\n");
-                log.push_str("  2. Go to Settings → Kubernetes\n");
-                log.push_str("  3. Check 'Enable Kubernetes'\n");
-                log.push_str("  4. Click 'Apply & Restart'\n\n");
-                log.push_str("Once enabled, Orca Desktop will detect the cluster automatically.\n");
-                return Ok(log);
-            }
-
             log.push_str("k3s requires Linux. Set up a Lima VM first via System Health,\n");
             log.push_str("then Orca Desktop can install k3s inside it.\n");
             return Ok(log);
@@ -635,20 +624,6 @@ impl K3sManager {
 
         if platform == "macos" {
             send("".into()).await;
-
-            // Check if Docker Desktop is installed — it has built-in K8s
-            if std::path::Path::new("/Applications/Docker.app").exists() {
-                send("Docker Desktop detected.".into()).await;
-                send("".into()).await;
-                send("Docker Desktop includes built-in Kubernetes support:".into()).await;
-                send("  1. Open Docker Desktop".into()).await;
-                send("  2. Go to Settings → Kubernetes".into()).await;
-                send("  3. Check 'Enable Kubernetes'".into()).await;
-                send("  4. Click 'Apply & Restart'".into()).await;
-                send("".into()).await;
-                send("Once enabled, Orca Desktop will detect the cluster automatically.".into()).await;
-                anyhow::bail!("Enable Kubernetes via Docker Desktop settings");
-            }
 
             // Check if Lima is available — install k3s inside the Lima VM
             send("Checking for Lima VM...".into()).await;
