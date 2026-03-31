@@ -41,6 +41,7 @@ export default function App() {
   const [showCommandPalette, setShowCommandPalette] = createSignal(false);
   const [showShortcuts, setShowShortcuts] = createSignal(false);
   const [environmentChecked, setEnvironmentChecked] = createSignal(false);
+  const [startupStep, setStartupStep] = createSignal("Starting Orca...");
   let aiApi: AiAssistantApi | undefined;
 
   // Fleet health polling state
@@ -121,23 +122,43 @@ export default function App() {
 
   const checkEnvironment = async () => {
     if (environmentChecked()) return;
+    setStartupStep("Checking environment...");
+
+    // Timeout: if env check takes >15s, show the environment page anyway
+    const timeout = setTimeout(() => {
+      if (!environmentChecked()) {
+        setStartupStep("Taking longer than expected...");
+        setTimeout(() => {
+          if (!environmentChecked()) {
+            setEnvironmentChecked(true);
+            setPage("environment");
+          }
+        }, 3000);
+      }
+    }, 15000);
+
     try {
       const envStatus = (await invoke("env_status")) as EnvironmentStatus;
+      clearTimeout(timeout);
       setEnvironmentChecked(true);
       if (!envStatus.ready) {
         setPage("environment");
       } else {
         // Environment says ready, but check if daemon can actually reach Docker
+        setStartupStep("Verifying Docker connection...");
         try {
           const health = (await invoke("system_health")) as any;
           if (!health?.docker_connected) {
             setPage("environment");
-            showToast("Docker detected but daemon not connected — check System Health", "info");
           }
         } catch {}
       }
     } catch {
-      // Daemon returned error, will retry next time
+      clearTimeout(timeout);
+      // Daemon couldn't check environment — still show the app
+      // The environment page will handle the error state
+      setEnvironmentChecked(true);
+      setPage("environment");
     }
   };
 
@@ -207,25 +228,29 @@ export default function App() {
       }
     });
 
-    // Auto-start daemon — keep "connecting" state until it responds or times out
+    // Auto-start daemon with progress feedback
     const startAndWait = async () => {
+      setStartupStep("Starting daemon...");
       try {
         await invoke("start_daemon");
       } catch {}
-      // Poll for readiness — daemon may take a moment after start returns
+
+      // Poll for readiness
+      setStartupStep("Waiting for daemon...");
       for (let i = 0; i < 10; i++) {
         try {
           const status = (await invoke("get_status")) as any;
           if (status.daemon_running) {
-            setDaemonStatus("running");
+            setStartupStep("Connecting to Docker...");
             // On Windows, Docker in WSL might need a reconnect
             try { await invoke("reconnect_runtime"); } catch {}
+            setDaemonStatus("running");
             return;
           }
         } catch {}
+        if (i >= 3) setStartupStep("Starting daemon... (this may take a moment)");
         await new Promise(r => setTimeout(r, 500));
       }
-      // After 5 seconds of trying, mark as stopped
       setDaemonStatus("stopped");
     };
     startAndWait();
@@ -269,14 +294,14 @@ export default function App() {
       {daemonStatus() === "connecting" ? (
         <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "calc(100vh - 40px)", gap: "16px" }}>
           <img src="/orca-logo-full.png" alt="Orca" style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
-          <div style={{ color: "#8b949e", "font-size": "14px" }}>Starting Orca...</div>
+          <div style={{ color: "#8b949e", "font-size": "14px" }}>{startupStep()}</div>
         </div>
       ) : daemonStatus() !== "running" ? (
         <ConnectionScreen status={daemonStatus()} onRetry={checkDaemon} />
       ) : !environmentChecked() ? (
         <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "calc(100vh - 40px)", gap: "16px" }}>
           <img src="/orca-logo-full.png" alt="Orca" style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
-          <div style={{ color: "#8b949e", "font-size": "14px" }}>Checking environment...</div>
+          <div style={{ color: "#8b949e", "font-size": "14px" }}>{startupStep()}</div>
         </div>
       ) : (
         <>
