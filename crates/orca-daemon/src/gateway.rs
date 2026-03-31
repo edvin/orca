@@ -117,6 +117,9 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
 
     let id = rt.create_container(opts).await?;
 
+    // Generate the landing page
+    let _ = write_landing_page(config);
+
     // Write the initial Caddy config file into the container
     let caddy_json = build_caddy_config(config);
     write_caddy_config_to_container(state, &id, &caddy_json).await?;
@@ -155,6 +158,8 @@ pub async fn apply_config(config: &GatewayConfig) -> Result<()> {
             }
         }
     }
+    // Regenerate the landing page
+    let _ = write_landing_page(config);
     push_caddy_config(config).await
 }
 
@@ -393,22 +398,36 @@ fn build_caddy_config(config: &GatewayConfig) -> String {
         }
     });
 
+    // Landing page fallback route (served when no hostname matches)
+    let landing_route = serde_json::json!({
+        "handle": [{
+            "handler": "file_server",
+            "root": "/certs",
+            "index_names": ["index.html"]
+        }]
+    });
+
+    // HTTP server: serves landing page (accessible without TLS trust)
+    caddy["apps"]["http"]["servers"]["http"] = serde_json::json!({
+        "listen": [":80"],
+        "routes": [{
+            "handle": [{
+                "handler": "file_server",
+                "root": "/certs",
+                "index_names": ["index.html"]
+            }]
+        }]
+    });
+
+    // HTTPS server with reverse proxy routes + landing page fallback
     if !routes.is_empty() {
+        let mut all_routes = routes;
+        all_routes.push(landing_route);
+
         caddy["apps"]["http"]["servers"]["gateway"] = serde_json::json!({
             "listen": [":443"],
-            "routes": routes,
+            "routes": all_routes,
             "tls_connection_policies": [{}]
-        });
-
-        caddy["apps"]["http"]["servers"]["http_redirect"] = serde_json::json!({
-            "listen": [":80"],
-            "routes": [{
-                "handle": [{
-                    "handler": "static_response",
-                    "headers": {"Location": ["https://{http.request.host}{http.request.uri}"]},
-                    "status_code": 301
-                }]
-            }]
         });
 
         if !load_files.is_empty() {
@@ -504,6 +523,276 @@ async fn push_caddy_config(config: &GatewayConfig) -> Result<()> {
     }
 
     tracing::info!("Caddy config updated successfully");
+    Ok(())
+}
+
+/// Generate the Gateway landing page HTML.
+/// This page is served at the root domain and shows all registered apps.
+fn generate_landing_page(config: &GatewayConfig) -> String {
+    let enabled_routes: Vec<&orca_core::config::GatewayRoute> = config.routes.iter().filter(|r| r.enabled).collect();
+    let domain = &config.domain;
+    let scheme = if matches!(config.tls_mode, GatewayTlsMode::Custom) || !config.routes.is_empty() {
+        "https"
+    } else {
+        "http"
+    };
+
+    let port_suffix = if config.https_port == 443 {
+        String::new()
+    } else {
+        format!(":{}", config.https_port)
+    };
+
+    let mut app_cards = String::new();
+    for route in &enabled_routes {
+        let url = format!("{scheme}://{}.{domain}{port_suffix}", route.hostname);
+        let initial = route.hostname.chars().next().unwrap_or('?').to_uppercase().to_string();
+        let display_name = route
+            .hostname
+            .replace('-', " ")
+            .split_whitespace()
+            .map(|w| {
+                let mut c = w.chars();
+                match c.next() {
+                    None => String::new(),
+                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        app_cards.push_str(&format!(
+            r#"
+      <a href="{url}" class="app-card">
+        <div class="app-icon">{initial}</div>
+        <div class="app-info">
+          <div class="app-name">{display_name}</div>
+          <div class="app-host">{hostname}.{domain}{port_suffix}</div>
+          <div class="app-target">{container} :{port}</div>
+        </div>
+        <div class="app-arrow">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </a>"#,
+            url = url,
+            initial = initial,
+            display_name = display_name,
+            hostname = route.hostname,
+            domain = domain,
+            port_suffix = port_suffix,
+            container = route.container_name,
+            port = route.port,
+        ));
+    }
+
+    let count = enabled_routes.len();
+    let count_label = if count == 1 { "service" } else { "services" };
+
+    format!(
+        r##"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orca Gateway</title>
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    background: #0a0e14;
+    color: #e6edf3;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }}
+  .bg {{ position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; pointer-events: none; }}
+  .orb {{
+    position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.5;
+    animation: drift 20s ease-in-out infinite alternate;
+  }}
+  .orb-1 {{
+    width: 600px; height: 600px; top: -15%; left: 30%;
+    background: radial-gradient(circle, rgba(31, 111, 235, 0.2) 0%, transparent 70%);
+  }}
+  .orb-2 {{
+    width: 500px; height: 500px; bottom: -10%; right: 15%;
+    background: radial-gradient(circle, rgba(163, 113, 247, 0.15) 0%, transparent 70%);
+    animation-delay: -7s; animation-direction: alternate-reverse;
+  }}
+  .orb-3 {{
+    width: 400px; height: 400px; top: 40%; left: -5%;
+    background: radial-gradient(circle, rgba(63, 185, 80, 0.12) 0%, transparent 70%);
+    animation-delay: -3s;
+  }}
+  @keyframes drift {{
+    0% {{ transform: translate(0, 0) scale(1); }}
+    100% {{ transform: translate(40px, -30px) scale(1.15); }}
+  }}
+  .container {{
+    position: relative; z-index: 1;
+    max-width: 720px; margin: 0 auto; padding: 60px 24px 40px;
+  }}
+  .header {{
+    text-align: center; margin-bottom: 48px;
+  }}
+  .logo {{
+    width: 64px; height: 64px; margin: 0 auto 20px;
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.15), rgba(163, 113, 247, 0.15));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    animation: float 6s ease-in-out infinite;
+  }}
+  @keyframes float {{
+    0%, 100% {{ transform: translateY(0); }}
+    50% {{ transform: translateY(-6px); }}
+  }}
+  .logo svg {{ width: 32px; height: 32px; }}
+  h1 {{
+    font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px;
+    background: linear-gradient(135deg, #ffffff 0%, #58a6ff 60%, #a371f7 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }}
+  .subtitle {{ color: #6e7681; font-size: 14px; }}
+  .stats {{
+    display: flex; justify-content: center; gap: 32px; margin-top: 20px;
+  }}
+  .stat {{ text-align: center; }}
+  .stat-value {{ font-size: 20px; font-weight: 700; color: #e6edf3; }}
+  .stat-label {{ font-size: 11px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }}
+  .apps {{ display: flex; flex-direction: column; gap: 8px; }}
+  .app-card {{
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 20px; border-radius: 14px;
+    background: rgba(22, 27, 34, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    text-decoration: none; color: inherit;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(12px);
+  }}
+  .app-card:hover {{
+    border-color: rgba(88, 166, 255, 0.3);
+    background: rgba(22, 27, 34, 0.8);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(88, 166, 255, 0.1);
+  }}
+  .app-icon {{
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.12), rgba(163, 113, 247, 0.12));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: #58a6ff; flex-shrink: 0;
+    transition: all 0.2s;
+  }}
+  .app-card:hover .app-icon {{
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(163, 113, 247, 0.2));
+    border-color: rgba(88, 166, 255, 0.2);
+    transform: scale(1.05);
+  }}
+  .app-info {{ flex: 1; min-width: 0; }}
+  .app-name {{ font-size: 15px; font-weight: 600; color: #e6edf3; margin-bottom: 2px; }}
+  .app-host {{
+    font-size: 13px; color: #58a6ff; font-family: "SF Mono", "Fira Code", monospace;
+  }}
+  .app-target {{
+    font-size: 11px; color: #484f58; margin-top: 2px;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }}
+  .app-arrow {{
+    color: #30363d; flex-shrink: 0; transition: all 0.2s;
+  }}
+  .app-card:hover .app-arrow {{
+    color: #58a6ff; transform: translateX(3px);
+  }}
+  .empty {{
+    text-align: center; padding: 48px 20px;
+    background: rgba(22, 27, 34, 0.4); border-radius: 14px;
+    border: 1px dashed rgba(255, 255, 255, 0.08);
+  }}
+  .empty-title {{ font-size: 16px; font-weight: 600; margin-bottom: 6px; }}
+  .empty-desc {{ font-size: 13px; color: #6e7681; line-height: 1.6; }}
+  .footer {{
+    text-align: center; margin-top: 48px; padding-top: 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    color: #30363d; font-size: 12px;
+  }}
+  .footer a {{ color: #484f58; text-decoration: none; }}
+  .footer a:hover {{ color: #8b949e; }}
+  .tls-badge {{
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; color: #3fb950; text-transform: uppercase;
+    letter-spacing: 0.5px; background: rgba(63, 185, 80, 0.1);
+    padding: 2px 8px; border-radius: 6px; margin-left: 8px;
+    border: 1px solid rgba(63, 185, 80, 0.15);
+  }}
+  @media (max-width: 500px) {{
+    .container {{ padding: 40px 16px 24px; }}
+    h1 {{ font-size: 22px; }}
+    .app-card {{ padding: 12px 14px; gap: 12px; }}
+    .app-icon {{ width: 36px; height: 36px; font-size: 15px; border-radius: 10px; }}
+  }}
+</style>
+</head>
+<body>
+<div class="bg">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+<div class="container">
+  <div class="header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    </div>
+    <h1>Orca Gateway</h1>
+    <div class="subtitle">*.{domain}{port_suffix}<span class="tls-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> TLS</span></div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value">{count}</div>
+        <div class="stat-label">{count_label}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">{domain}</div>
+        <div class="stat-label">Domain</div>
+      </div>
+    </div>
+  </div>
+  <div class="apps">
+    {app_cards}{empty_state}
+  </div>
+  <div class="footer">
+    Powered by <a href="https://orca-desktop.com">Orca Desktop</a>
+  </div>
+</div>
+</body>
+</html>"##,
+        domain = domain,
+        port_suffix = port_suffix,
+        count = count,
+        count_label = count_label,
+        app_cards = app_cards,
+        empty_state = if enabled_routes.is_empty() {
+            r#"
+    <div class="empty">
+      <div class="empty-title">No services registered</div>
+      <div class="empty-desc">Deploy an app template or click "Expose via Gateway" on any container in Orca Desktop.</div>
+    </div>"#
+        } else {
+            ""
+        },
+    )
+}
+
+/// Write the landing page HTML to the certs volume (mounted in Caddy).
+fn write_landing_page(config: &GatewayConfig) -> Result<()> {
+    let html = generate_landing_page(config);
+    let dir = certs_dir();
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join("index.html"), html)?;
     Ok(())
 }
 
