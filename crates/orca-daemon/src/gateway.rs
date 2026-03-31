@@ -53,8 +53,9 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
     let certs_dir = certs_dir();
     std::fs::create_dir_all(&certs_dir)?;
 
-    // Generate certs for all routes if in OrcaCa mode
+    // Generate certs for all routes + root domain if in OrcaCa mode
     if matches!(config.tls_mode, GatewayTlsMode::OrcaCa) {
+        generate_cert_for_hostname(&config.domain)?;
         for route in &config.routes {
             if route.enabled {
                 generate_cert_for_hostname(&route.hostname)?;
@@ -150,8 +151,9 @@ pub async fn stop(state: &AppState) -> Result<()> {
 
 /// Generate and push Caddy JSON config via the admin API.
 pub async fn apply_config(config: &GatewayConfig) -> Result<()> {
-    // Generate certs for all enabled routes
+    // Generate certs for all enabled routes + root domain
     if matches!(config.tls_mode, GatewayTlsMode::OrcaCa) {
+        generate_cert_for_hostname(&config.domain)?;
         for route in &config.routes {
             if route.enabled {
                 generate_cert_for_hostname(&route.hostname)?;
@@ -369,7 +371,7 @@ fn build_caddy_config(config: &GatewayConfig) -> String {
         .collect();
 
     // Build TLS certificates list
-    let load_files: Vec<serde_json::Value> = enabled_routes
+    let mut load_files: Vec<serde_json::Value> = enabled_routes
         .iter()
         .map(|route| match config.tls_mode {
             GatewayTlsMode::OrcaCa => serde_json::json!({
@@ -398,7 +400,7 @@ fn build_caddy_config(config: &GatewayConfig) -> String {
         }
     });
 
-    // Landing page fallback route (served when no hostname matches)
+    // Landing page fallback route (served when no hostname matches or at root domain)
     let landing_route = serde_json::json!({
         "handle": [{
             "handler": "file_server",
@@ -407,36 +409,42 @@ fn build_caddy_config(config: &GatewayConfig) -> String {
         }]
     });
 
-    // HTTP server: serves landing page (accessible without TLS trust)
-    caddy["apps"]["http"]["servers"]["http"] = serde_json::json!({
+    // Add a cert for the root domain so the landing page works over HTTPS
+    if matches!(config.tls_mode, GatewayTlsMode::OrcaCa) {
+        load_files.push(serde_json::json!({
+            "certificate": format!("/certs/{}.pem", config.domain),
+            "key": format!("/certs/{}-key.pem", config.domain),
+        }));
+    }
+
+    // HTTPS server: reverse proxy routes + landing page fallback
+    let mut all_routes = routes;
+    all_routes.push(landing_route);
+
+    caddy["apps"]["http"]["servers"]["gateway"] = serde_json::json!({
+        "listen": [":443"],
+        "routes": all_routes,
+        "tls_connection_policies": [{}]
+    });
+
+    // HTTP → HTTPS redirect
+    caddy["apps"]["http"]["servers"]["http_redirect"] = serde_json::json!({
         "listen": [":80"],
         "routes": [{
             "handle": [{
-                "handler": "file_server",
-                "root": "/certs",
-                "index_names": ["index.html"]
+                "handler": "static_response",
+                "headers": {"Location": ["https://{http.request.host}{http.request.uri}"]},
+                "status_code": 301
             }]
         }]
     });
 
-    // HTTPS server with reverse proxy routes + landing page fallback
-    if !routes.is_empty() {
-        let mut all_routes = routes;
-        all_routes.push(landing_route);
-
-        caddy["apps"]["http"]["servers"]["gateway"] = serde_json::json!({
-            "listen": [":443"],
-            "routes": all_routes,
-            "tls_connection_policies": [{}]
+    if !load_files.is_empty() {
+        caddy["apps"]["tls"] = serde_json::json!({
+            "certificates": {
+                "load_files": load_files
+            }
         });
-
-        if !load_files.is_empty() {
-            caddy["apps"]["tls"] = serde_json::json!({
-                "certificates": {
-                    "load_files": load_files
-                }
-            });
-        }
     }
 
     serde_json::to_string_pretty(&caddy).unwrap_or_default()
