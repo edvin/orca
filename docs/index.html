@@ -930,7 +930,7 @@
 
     <div class="hero-stats">
       <div class="hero-stat">
-        <div class="hero-stat-value">27</div>
+        <div class="hero-stat-value">43</div>
         <div class="hero-stat-label">AI Agent Tools</div>
       </div>
       <div class="hero-stat">
@@ -1001,7 +1001,7 @@
 
       <!-- Category: Container Management -->
       <div class="ft-category" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Containers</span><span class="ft-count">14</span></span>
+        <span class="ft-category-left"><span>Containers</span><span class="ft-count">18</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -1018,12 +1018,18 @@
       <div class="ft-row"><span><strong>Save as Image</strong> — commit container state to a new image</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Export as <code>docker run</code> / <code>docker-compose.yml</code></span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Docker Hub browser</strong> — search and pull images directly from Docker Hub</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Container rename</strong> — inline rename from the detail page</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Per-container charts</strong> — CPU and memory history per container</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Stop all containers</strong> — one-click stop with confirmation</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Live log streaming</strong> — SSE-based real-time logs, no polling</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>App Catalog</strong> — curated templates with auto-generated passwords</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Compose stack templates</strong> — multi-service apps deployed as stacks</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Post-deploy setup guides</strong> — step-by-step wizard with interactive actions</span><span class="ft-check ft-unique">&#10003;</span></div>
       </div>
 
       <!-- Category: Images -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Images &amp; Security</span><span class="ft-count">10</span></span>
+        <span class="ft-category-left"><span>Images &amp; Security</span><span class="ft-count">12</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -1036,6 +1042,8 @@
       <div class="ft-row"><span><strong>Image file browser</strong> — explore filesystem without running</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Import from tar</strong> — load images from tar archives</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Image tagging</strong> — tag images with custom repository and version</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Streaming pull</strong> — per-layer progress bars during image download</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Tag autocomplete</strong> — search tags from Docker Hub when pulling</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span>Private registry auth (Docker Hub, GitHub, GitLab, ECR)</span><span class="ft-check">&#10003;</span></div>
       </div>
 
@@ -1091,13 +1099,15 @@
 
       <!-- Category: Platform -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Platform</span><span class="ft-count">18</span></span>
+        <span class="ft-category-left"><span>Platform</span><span class="ft-count">20</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
       <div class="ft-row"><span>Linux, macOS, Windows — native on all platforms</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>Guided setup wizard with streaming progress</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Signed auto-updates</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span>Signed auto-updates with tamper-proof upgrade manifests</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Code signed</strong> — Apple notarized (macOS), EV signed (Windows)</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Startup progress</strong> — real-time feedback during daemon and environment checks</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span>macOS: Apple Virtualization.framework + VirtioFS + proxy passthrough</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>NVIDIA GPU detection</strong> — Container Toolkit auto-install</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>GPU VRAM monitoring</strong> — dashboard and status bar display</span><span class="ft-check ft-unique">&#10003;</span></div>
@@ -1118,7 +1128,7 @@
 
       <!-- Category: Fleet -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">15</span></span>
+        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">17</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -1136,7 +1146,9 @@
       <div class="ft-row"><span><strong>TLS ready</strong> — Caddy/nginx reverse proxy examples, bearer token auth</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Remote port forwarding</strong> — WebSocket TCP tunnel to any service on any host, no VPN needed</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Auto-deploy</strong> — GitHub/Docker Hub webhook triggers pull + redeploy with config preservation</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row" style="border: none;"><span><strong>Tag filters</strong> — deploy on v* (versions), latest, branch names, or any push</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Tag filters</strong> — deploy on v* (versions), latest, branch names, or any push</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Host comparison</strong> — side-by-side compare of containers, images, and resources across hosts</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row" style="border: none;"><span><strong>Multi-host deploy</strong> — deploy templates to multiple hosts simultaneously</span><span class="ft-check ft-unique">&#10003;</span></div>
       </div>
 
   </div>

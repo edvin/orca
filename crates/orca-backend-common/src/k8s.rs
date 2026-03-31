@@ -4310,23 +4310,48 @@ fn format_duration_between(start: &str, end: &str) -> String {
 
 impl K3sManager {
     pub async fn get_resource_yaml(&self, kind: &str, name: &str, namespace: &str) -> anyhow::Result<String> {
-        let mut cmd = self.kubectl_command();
-        cmd.args(["get", kind, name, "-n", namespace, "-o", "yaml"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        #[cfg(target_os = "windows")]
+        {
+            let output = Command::new("wsl")
+                .args(["-u", "root", "--", "k3s", "kubectl", "get", kind, name, "-n", namespace, "-o", "yaml"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+                .await
+                .map_err(|e| anyhow::anyhow!("kubectl failed: {e}"))?;
 
-        let output = cmd.output().await.map_err(|e| anyhow::anyhow!("kubectl failed: {e}"))?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("{}", stderr.trim());
+            }
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("{}", stderr.trim());
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            if stdout.trim().is_empty() {
+                anyhow::bail!("No output for {kind} {name} in namespace {namespace}");
+            }
+            return Ok(stdout);
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        if stdout.trim().is_empty() {
-            anyhow::bail!("No output for {kind} {name} in namespace {namespace}");
+        #[cfg(not(target_os = "windows"))]
+        {
+            let mut cmd = self.kubectl_command();
+            cmd.args(["get", kind, name, "-n", namespace, "-o", "yaml"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            let output = cmd.output().await.map_err(|e| anyhow::anyhow!("kubectl failed: {e}"))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("{}", stderr.trim());
+            }
+
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            if stdout.trim().is_empty() {
+                anyhow::bail!("No output for {kind} {name} in namespace {namespace}");
+            }
+            Ok(stdout)
         }
-        Ok(stdout)
     }
 }
 

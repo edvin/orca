@@ -3503,11 +3503,44 @@ fn detect_lan_ip() -> String {
     }
 }
 
+/// A cached self-signed certificate + private key pair, generated once per deploy.
+struct CachedCertKeyPair {
+    cert_pem: String,
+    key_pem: String,
+}
+
+/// Generate (or retrieve from cache) a self-signed certificate and key pair.
+/// The certificate uses `subject` as the CN (defaults to "localhost").
+fn get_or_generate_cert_key_pair<'a>(
+    subject: Option<&str>,
+    cache: &'a mut Option<CachedCertKeyPair>,
+) -> &'a CachedCertKeyPair {
+    if cache.is_none() {
+        let cn = subject.unwrap_or("localhost");
+        let mut params = rcgen::CertificateParams::new(vec![cn.to_string()])
+            .expect("Failed to create certificate params");
+        params.distinguished_name.push(rcgen::DnType::CommonName, cn);
+
+        let key_pair = rcgen::KeyPair::generate().expect("Failed to generate RSA key pair");
+        let cert = params.self_signed(&key_pair).expect("Failed to generate self-signed certificate");
+
+        let cert_pem = cert.pem();
+        let key_pem = key_pair.serialize_pem();
+
+        tracing::info!("Generated self-signed certificate for CN={cn}");
+
+        *cache = Some(CachedCertKeyPair { cert_pem, key_pem });
+    }
+    cache.as_ref().unwrap()
+}
+
 /// Resolve a GeneratedValue to a string, using user_inputs for UserInput variants.
+/// `cert_cache` is used to ensure SelfSignedCert and SelfSignedKey produce a matching pair.
 fn resolve_generated_value(
     key: &str,
     value: &orca_core::templates::GeneratedValue,
     user_inputs: &HashMap<String, String>,
+    cert_cache: &mut Option<CachedCertKeyPair>,
 ) -> Option<String> {
     use orca_core::templates::GeneratedValue;
     match value {
@@ -3518,13 +3551,13 @@ fn resolve_generated_value(
             tracing::warn!("No user input provided for key '{key}', using empty string");
             Some(String::new())
         }),
-        GeneratedValue::SelfSignedCert { .. } => {
-            tracing::warn!("SelfSignedCert generation not yet implemented, skipping key '{key}'");
-            None
+        GeneratedValue::SelfSignedCert { subject } => {
+            let pair = get_or_generate_cert_key_pair(subject.as_deref(), cert_cache);
+            Some(pair.cert_pem.clone())
         }
         GeneratedValue::SelfSignedKey => {
-            tracing::warn!("SelfSignedKey generation not yet implemented, skipping key '{key}'");
-            None
+            let pair = get_or_generate_cert_key_pair(None, cert_cache);
+            Some(pair.key_pem.clone())
         }
     }
 }
@@ -3560,12 +3593,13 @@ async fn deploy_template(
             .map_err(|e| anyhow::anyhow!("Failed to write docker-compose.yml: {e}"))?;
 
         let user_inputs = overrides.user_inputs.unwrap_or_default();
+        let mut cert_cache: Option<CachedCertKeyPair> = None;
 
         // Process generated_env: resolve values and write .env file
         if let Some(ref gen_env) = template.generated_env {
             let mut env_lines = Vec::new();
             for (key, gen_value) in gen_env {
-                if let Some(resolved) = resolve_generated_value(key, gen_value, &user_inputs) {
+                if let Some(resolved) = resolve_generated_value(key, gen_value, &user_inputs, &mut cert_cache) {
                     env_lines.push(format!("{key}={resolved}"));
                 }
             }
@@ -3582,7 +3616,7 @@ async fn deploy_template(
         // Process generated_files: resolve values and write files
         if let Some(ref gen_files) = template.generated_files {
             for (rel_path, gen_value) in gen_files {
-                if let Some(resolved) = resolve_generated_value(rel_path, gen_value, &user_inputs) {
+                if let Some(resolved) = resolve_generated_value(rel_path, gen_value, &user_inputs, &mut cert_cache) {
                     let file_path = stack_dir.join(rel_path);
                     if let Some(parent) = file_path.parent() {
                         std::fs::create_dir_all(parent)
