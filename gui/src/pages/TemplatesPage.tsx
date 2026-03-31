@@ -3,7 +3,8 @@ import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 import { invoke } from "@tauri-apps/api/core";
 import { useRefresh } from "../lib/useRefresh";
-import type { AppTemplate, ImageSearchResult, RemoteHost, ActiveHost } from "../lib/types";
+import type { AppTemplate, SetupGuide, ImageSearchResult, RemoteHost, ActiveHost } from "../lib/types";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "../components/Toast";
 import { logError, logInfo } from "../lib/activityStore";
 
@@ -59,6 +60,16 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [editorVolumes, setEditorVolumes] = createSignal<VolumeEntry[]>([]);
   const [editorSaving, setEditorSaving] = createSignal(false);
   const [editorIsNew, setEditorIsNew] = createSignal(true);
+
+  // Setup guide state (shown after deploy for complex stacks)
+  const [showSetupGuide, setShowSetupGuide] = createSignal(false);
+  const [setupGuide, setSetupGuide] = createSignal<SetupGuide | null>(null);
+  const [setupGuideStackName, setSetupGuideStackName] = createSignal("");
+  const [checkedSteps, setCheckedSteps] = createSignal<Set<number>>(new Set());
+  const [envInputValues, setEnvInputValues] = createSignal<Record<string, string>>({});
+  const [envSaving, setEnvSaving] = createSignal<Record<string, boolean>>({});
+  const [envSaved, setEnvSaved] = createSignal<Record<string, boolean>>({});
+  const [restartingService, setRestartingService] = createSignal<string | null>(null);
 
   // Tab state
   const [activeTab, setActiveTab] = createSignal<"curated" | "dockerhub">("curated");
@@ -374,9 +385,17 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
         if (isCompose) {
           const stackName = result?.stack || deployName() || template.id;
-          showToast(`${template.name} stack deployed${hostSuffix}!${notes ? " " + notes : ""}`, "success");
+          const guide = result?.setup_guide || template.setup_guide;
+          showToast(`${template.name} stack deployed${hostSuffix}!${notes && !guide ? " " + notes : ""}`, "success");
           logInfo("Compose stack deployed", `${template.name} → stack ${stackName}${hostSuffix}`);
-          if (!switchedHost) {
+          if (guide && !switchedHost) {
+            setSetupGuide(guide);
+            setSetupGuideStackName(stackName);
+            setCheckedSteps(new Set<number>());
+            setEnvInputValues({});
+            setEnvSaved({});
+            setShowSetupGuide(true);
+          } else if (!switchedHost) {
             props.onNavigate?.("stacks");
           }
         } else {
@@ -1049,6 +1068,167 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               <button class="btn" onClick={() => setEditorOpen(false)}>Cancel</button>
               <button class="btn btn-primary" onClick={saveTemplate} disabled={editorSaving()}>
                 {editorSaving() ? "Saving..." : editorIsNew() ? "Create" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+      {/* === Setup Guide Dialog === */}
+      <Show when={showSetupGuide() && setupGuide()}>
+        <div class="modal-overlay" onClick={() => setShowSetupGuide(false)}>
+          <div class="modal-content" style={{ "max-width": "600px", "max-height": "85vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <h2>{setupGuide()!.title}</h2>
+              <button class="modal-close" onClick={() => { setShowSetupGuide(false); props.onNavigate?.(`stack:${setupGuideStackName()}`); }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="modal-body" style={{ padding: "0 24px 24px" }}>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "0", position: "relative" }}>
+                <For each={setupGuide()!.steps}>
+                  {(step, i) => {
+                    const isChecked = () => checkedSteps().has(i());
+                    const toggleStep = () => {
+                      const next = new Set(checkedSteps());
+                      if (next.has(i())) next.delete(i());
+                      else next.add(i());
+                      setCheckedSteps(next);
+                    };
+                    return (
+                      <div style={{ display: "flex", gap: "16px", padding: "16px 0", "border-bottom": i() < setupGuide()!.steps.length - 1 ? "1px solid #21262d" : "none" }}>
+                        {/* Step number / check */}
+                        <div style={{ "flex-shrink": "0", display: "flex", "flex-direction": "column", "align-items": "center", gap: "4px" }}>
+                          <button
+                            onClick={toggleStep}
+                            style={{
+                              width: "28px", height: "28px", "border-radius": "50%",
+                              border: isChecked() ? "2px solid #3fb950" : "2px solid #30363d",
+                              background: isChecked() ? "rgba(63, 185, 80, 0.15)" : "transparent",
+                              color: isChecked() ? "#3fb950" : "#8b949e",
+                              display: "flex", "align-items": "center", "justify-content": "center",
+                              cursor: "pointer", "font-size": "12px", "font-weight": "700",
+                              transition: "all 0.15s"
+                            }}
+                          >
+                            {isChecked() ? (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            ) : i() + 1}
+                          </button>
+                        </div>
+                        {/* Step content */}
+                        <div style={{ flex: "1", "min-width": "0" }}>
+                          <div style={{ "font-size": "14px", "font-weight": "600", "margin-bottom": "4px", color: isChecked() ? "#8b949e" : "#e6edf3", "text-decoration": isChecked() ? "line-through" : "none" }}>{step.title}</div>
+                          <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.5", "margin-bottom": step.type && step.type !== "info" ? "10px" : "0" }}>{step.description}</div>
+
+                          {/* Link action */}
+                          <Show when={step.type === "link" && step.url}>
+                            <button class="btn btn-sm" style={{ gap: "6px" }} onClick={() => { shellOpen(step.url!); toggleStep(); }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                              Open
+                            </button>
+                          </Show>
+
+                          {/* View logs action */}
+                          <Show when={step.type === "action" && step.action === "view_logs" && step.service}>
+                            <button class="btn btn-sm" style={{ gap: "6px" }} onClick={async () => {
+                              // Find container by service name in the stack
+                              try {
+                                const stacks = (await invoke("list_stacks")) as any[];
+                                const stack = stacks.find((s: any) => s.name === setupGuideStackName());
+                                if (stack) {
+                                  const svc = stack.services?.find((s: any) => s.service === step.service || s.name?.includes(step.service));
+                                  if (svc?.id) {
+                                    setShowSetupGuide(false);
+                                    props.onNavigate?.(`container:${svc.id}`);
+                                    return;
+                                  }
+                                }
+                              } catch {}
+                              showToast(`Navigate to stack "${setupGuideStackName()}" and find the ${step.service} service`, "info");
+                              toggleStep();
+                            }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                              View Logs
+                            </button>
+                          </Show>
+
+                          {/* Restart service action */}
+                          <Show when={step.type === "action" && step.action === "restart_service" && step.service}>
+                            <button
+                              class="btn btn-sm"
+                              style={{ gap: "6px" }}
+                              disabled={restartingService() === step.service}
+                              onClick={async () => {
+                                setRestartingService(step.service!);
+                                try {
+                                  const stacks = (await invoke("list_stacks")) as any[];
+                                  const stack = stacks.find((s: any) => s.name === setupGuideStackName());
+                                  const svc = stack?.services?.find((s: any) => s.service === step.service || s.name?.includes(step.service));
+                                  if (svc?.id) {
+                                    await invoke("stop_container", { id: svc.id });
+                                    await invoke("start_container", { id: svc.id });
+                                    showToast(`${step.service} restarted`, "success");
+                                    toggleStep();
+                                  } else {
+                                    showToast(`Could not find ${step.service} container — try restarting the stack manually`, "error");
+                                  }
+                                } catch (e) {
+                                  showToast(`Restart failed: ${e}`, "error");
+                                } finally {
+                                  setRestartingService(null);
+                                }
+                              }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                              {restartingService() === step.service ? "Restarting..." : "Restart"}
+                            </button>
+                          </Show>
+
+                          {/* Set env var */}
+                          <Show when={step.type === "set_env" && step.env_key}>
+                            <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                              <input
+                                type="text"
+                                class="form-input"
+                                style={{ flex: "1", "font-size": "13px" }}
+                                placeholder={step.label || `Enter ${step.env_key}`}
+                                value={envInputValues()[step.env_key!] || ""}
+                                onInput={(e) => setEnvInputValues({ ...envInputValues(), [step.env_key!]: e.currentTarget.value })}
+                                disabled={!!envSaved()[step.env_key!]}
+                              />
+                              <button
+                                class="btn btn-sm btn-primary"
+                                disabled={!envInputValues()[step.env_key!]?.trim() || !!envSaving()[step.env_key!] || !!envSaved()[step.env_key!]}
+                                onClick={async () => {
+                                  const val = envInputValues()[step.env_key!]?.trim();
+                                  if (!val) return;
+                                  setEnvSaving({ ...envSaving(), [step.env_key!]: true });
+                                  try {
+                                    await invoke("update_stack_env", { name: setupGuideStackName(), key: step.env_key, value: val });
+                                    setEnvSaved({ ...envSaved(), [step.env_key!]: true });
+                                    showToast(`${step.env_key} saved to .env`, "success");
+                                    toggleStep();
+                                  } catch (e) {
+                                    showToast(`Failed to save: ${e}`, "error");
+                                  } finally {
+                                    setEnvSaving({ ...envSaving(), [step.env_key!]: false });
+                                  }
+                                }}
+                              >
+                                {envSaved()[step.env_key!] ? "Saved" : envSaving()[step.env_key!] ? "Saving..." : "Save"}
+                              </button>
+                            </div>
+                          </Show>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+            <div class="modal-footer" style={{ "justify-content": "flex-end" }}>
+              <button class="btn btn-primary" onClick={() => { setShowSetupGuide(false); props.onNavigate?.(`stack:${setupGuideStackName()}`); }}>
+                Done
               </button>
             </div>
           </div>

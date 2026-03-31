@@ -74,6 +74,7 @@ pub fn run() {
             commands::validate_compose,
             commands::compose_down,
             commands::compose_pull,
+            commands::update_stack_env,
             commands::subscribe_events,
             commands::get_machine_info,
             commands::k8s_status,

@@ -13,7 +13,7 @@ use axum::{
         IntoResponse,
         sse::{Event as SseEvent, KeepAlive, Sse},
     },
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
 };
 use futures::{SinkExt, StreamExt as FuturesStreamExt};
 use serde::{Deserialize, Serialize};
@@ -177,6 +177,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/deploy", post(compose_deploy_path))
         .route("/stacks/validate", post(validate_compose))
         .route("/stacks/{name}/pull", post(compose_pull))
+        .route("/stacks/{name}/env", patch(update_stack_env))
         // Kubernetes
         .route("/k8s/status", get(k8s_status))
         .route("/k8s/enable", post(k8s_enable))
@@ -3620,6 +3621,7 @@ async fn deploy_template(
                 "compose": true,
                 "working_dir": dir_str,
                 "notes": template.notes,
+                "setup_guide": template.setup_guide,
                 "output": {
                     "stdout": output.stdout,
                     "stderr": output.stderr,
@@ -3730,6 +3732,60 @@ async fn get_stack_dir(
         "path": dir.to_string_lossy(),
         "exists": dir.exists(),
     })))
+}
+
+/// PATCH /stacks/{name}/env — update a single env var in the stack's .env file.
+async fn update_stack_env(
+    Path(name): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, ApiError> {
+    let key = body["key"].as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing 'key' field"))?;
+    let value = body["value"].as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing 'value' field"))?;
+
+    // Validate key is a reasonable env var name
+    if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(anyhow::anyhow!("Invalid env var name: {key}").into());
+    }
+
+    let stack_dir = stacks_base_dir().join(&name);
+    if !stack_dir.exists() {
+        return Err(anyhow::anyhow!("Stack directory not found: {name}").into());
+    }
+
+    let env_path = stack_dir.join(".env");
+    let mut lines: Vec<String> = if env_path.exists() {
+        std::fs::read_to_string(&env_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read .env: {e}"))?
+            .lines()
+            .map(|l| l.to_string())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    // Update existing key or append
+    let prefix = format!("{key}=");
+    let new_line = format!("{key}={value}");
+    let mut found = false;
+    for line in &mut lines {
+        if line.starts_with(&prefix) {
+            *line = new_line.clone();
+            found = true;
+            break;
+        }
+    }
+    if !found {
+        lines.push(new_line);
+    }
+
+    let content = lines.join("\n") + "\n";
+    std::fs::write(&env_path, &content)
+        .map_err(|e| anyhow::anyhow!("Failed to write .env: {e}"))?;
+
+    tracing::info!("Updated {key} in {}", env_path.display());
+    Ok(Json(serde_json::json!({ "ok": true, "key": key })))
 }
 
 // --- AI Assistant ---

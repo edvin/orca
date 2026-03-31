@@ -574,5 +574,69 @@
     "notes": "Gitea at http://localhost:3000, SSH on port 2222. Database password is auto-generated.",
     "is_builtin": true,
     "compose_yaml": "version: '3.8'\nservices:\n  gitea:\n    image: gitea/gitea:latest\n    ports:\n      - '3000:3000'\n      - '2222:22'\n    environment:\n      GITEA__database__DB_TYPE: postgres\n      GITEA__database__HOST: db:5432\n      GITEA__database__NAME: gitea\n      GITEA__database__USER: gitea\n      GITEA__database__PASSWD: changeme\n    depends_on:\n      - db\n    volumes:\n      - gitea-data:/data\n    restart: unless-stopped\n  db:\n    image: postgres:16-alpine\n    environment:\n      POSTGRES_USER: gitea\n      POSTGRES_PASSWORD: changeme\n      POSTGRES_DB: gitea\n    volumes:\n      - gitea-db:/var/lib/postgresql/data\n    restart: unless-stopped\nvolumes:\n  gitea-data:\n  gitea-db:\n"
+  },
+  {
+    "id": "webmail-stalwart",
+    "name": "Webmail + Stalwart Mail Server",
+    "description": "Complete self-hosted email: modern webmail client with Stalwart mail server, PostgreSQL, and Valkey. One-click email infrastructure.",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z\"/><polyline points=\"22,6 12,13 2,6\"/></svg>",
+    "category": "Communication",
+    "image": "ghcr.io/massive-hosting/webmail:latest",
+    "default_ports": [],
+    "default_env": [],
+    "default_volumes": [],
+    "restart_policy": "unless-stopped",
+    "notes": "",
+    "is_builtin": true,
+    "compose_yaml": "services:\n  stalwart:\n    image: stalwartlabs/mail-server:latest\n    ports:\n      - '8080:8080'\n      - '25:25'\n      - '587:587'\n      - '465:465'\n      - '143:143'\n      - '993:993'\n      - '4190:4190'\n    volumes:\n      - stalwart_data:/opt/stalwart-mail\n    restart: unless-stopped\n\n  webmail:\n    image: ghcr.io/massive-hosting/webmail:latest\n    ports:\n      - '8095:8095'\n    env_file: .env\n    environment:\n      STALWART_URL: http://stalwart:8080\n      WEBMAIL_DATABASE_URL: postgres://webmail:changeme@postgres:5432/webmail?sslmode=disable\n      VALKEY_URL: redis://valkey:6379/0\n    depends_on:\n      postgres:\n        condition: service_healthy\n      valkey:\n        condition: service_started\n      stalwart:\n        condition: service_started\n    restart: unless-stopped\n\n  postgres:\n    image: postgres:17-alpine\n    environment:\n      POSTGRES_DB: webmail\n      POSTGRES_USER: webmail\n      POSTGRES_PASSWORD: changeme\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n    healthcheck:\n      test: ['CMD-SHELL', 'pg_isready -U webmail']\n      interval: 5s\n      timeout: 3s\n      retries: 5\n    restart: unless-stopped\n\n  valkey:\n    image: valkey/valkey:8-alpine\n    restart: unless-stopped\n\nvolumes:\n  stalwart_data:\n  pgdata:\n",
+    "generated_env": {
+      "SECRET_ENCRYPTION_KEY": { "type": "random_hex", "length": 64 }
+    },
+    "setup_guide": {
+      "title": "Webmail + Stalwart Setup",
+      "steps": [
+        {
+          "title": "Wait for services to start",
+          "description": "The stack is starting 4 services: Stalwart mail server, Webmail, PostgreSQL, and Valkey. This typically takes 15-30 seconds."
+        },
+        {
+          "title": "Open Stalwart Admin UI",
+          "description": "The Stalwart mail server admin panel lets you create domains and email accounts.",
+          "type": "link",
+          "url": "http://localhost:8080"
+        },
+        {
+          "title": "Get the admin password",
+          "description": "The default admin password is printed in the Stalwart container logs on first start. Click View Logs and look for a line containing the admin password.",
+          "type": "action",
+          "action": "view_logs",
+          "service": "stalwart"
+        },
+        {
+          "title": "Log in and configure Stalwart",
+          "description": "In the Stalwart admin UI, log in with username 'admin' and the password from the logs. Then go to Management \u2192 Directory \u2192 Accounts to create email accounts (e.g. you@example.com)."
+        },
+        {
+          "title": "Set the admin token",
+          "description": "In Stalwart admin UI, go to Settings \u2192 Authentication \u2192 Fallback Admin Secret and copy the token. Paste it below so the webmail can authenticate with Stalwart.",
+          "type": "set_env",
+          "env_key": "STALWART_ADMIN_TOKEN",
+          "label": "Paste the Stalwart admin token here"
+        },
+        {
+          "title": "Restart the webmail service",
+          "description": "The webmail needs to be restarted to pick up the admin token from the .env file.",
+          "type": "action",
+          "action": "restart_service",
+          "service": "webmail"
+        },
+        {
+          "title": "Open Webmail",
+          "description": "Sign in with the email account you created in Stalwart (e.g. you@example.com).",
+          "type": "link",
+          "url": "http://localhost:8095"
+        }
+      ]
+    }
   }
 ]

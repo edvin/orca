@@ -181,6 +181,25 @@ async fn post_json(path: &str) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
+async fn patch_json(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .patch(format!("{base}{path}"))
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
+    }
+
+    resp.json()
+        .await
+        .map_err(|e| format!("Invalid response: {e}"))
+}
+
 async fn delete(path: &str) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
@@ -1155,6 +1174,12 @@ pub async fn compose_down(name: String) -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn compose_pull(name: String) -> Result<serde_json::Value, String> {
     post_json(&format!("/stacks/{name}/pull")).await
+}
+
+#[tauri::command]
+pub async fn update_stack_env(name: String, key: String, value: String) -> Result<(), String> {
+    patch_json(&format!("/stacks/{name}/env"), &serde_json::json!({ "key": key, "value": value })).await?;
+    Ok(())
 }
 
 // --- Events ---

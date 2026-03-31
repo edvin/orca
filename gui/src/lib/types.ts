@@ -427,6 +427,23 @@ export interface AppTemplate {
   compose_yaml?: string;
   generated_env?: Record<string, GeneratedValue>;
   generated_files?: Record<string, GeneratedValue>;
+  setup_guide?: SetupGuide;
+}
+
+export interface SetupGuide {
+  title: string;
+  steps: SetupStep[];
+}
+
+export interface SetupStep {
+  title: string;
+  description: string;
+  type?: "info" | "link" | "action" | "set_env";
+  url?: string;
+  action?: "view_logs" | "restart_service";
+  service?: string;
+  env_key?: string;
+  label?: string;
 }
 
 export interface GeneratedValue {
