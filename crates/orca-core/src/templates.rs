@@ -51,12 +51,15 @@ pub struct SetupStep {
     /// URL to open in system browser (for "link" type).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
-    /// Action to execute (for "action" type): "view_logs", "restart_service"
+    /// Action to execute (for "action" type): "view_logs", "restart_service", "exec"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
     /// Service name within the compose stack (for service-specific actions).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service: Option<String>,
+    /// Command to run inside the container (for "exec" action).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<Vec<String>>,
     /// Environment variable key (for "set_env" type).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env_key: Option<String>,

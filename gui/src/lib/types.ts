@@ -440,8 +440,9 @@ export interface SetupStep {
   description: string;
   type?: "info" | "link" | "action" | "set_env";
   url?: string;
-  action?: "view_logs" | "restart_service";
+  action?: "view_logs" | "restart_service" | "exec" | "terminal";
   service?: string;
+  command?: string[];
   env_key?: string;
   label?: string;
 }

@@ -70,6 +70,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [envSaving, setEnvSaving] = createSignal<Record<string, boolean>>({});
   const [envSaved, setEnvSaved] = createSignal<Record<string, boolean>>({});
   const [restartingService, setRestartingService] = createSignal<string | null>(null);
+  const [execRunning, setExecRunning] = createSignal<Record<number, boolean>>({});
+  const [execOutput, setExecOutput] = createSignal<Record<number, { stdout: string; stderr: string; exit_code: number } | null>>({});
 
   // Tab state
   const [activeTab, setActiveTab] = createSignal<"curated" | "dockerhub">("curated");
@@ -1181,6 +1183,81 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                             >
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                               {restartingService() === step.service ? "Restarting..." : "Restart"}
+                            </button>
+                          </Show>
+
+                          {/* Exec command in container */}
+                          <Show when={step.type === "action" && step.action === "exec" && step.service && step.command}>
+                            <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                              <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                                <code style={{ flex: "1", "font-size": "12px", color: "#8b949e", background: "rgba(255,255,255,0.04)", padding: "4px 8px", "border-radius": "4px" }}>{step.command!.join(" ")}</code>
+                                <button
+                                  class="btn btn-sm"
+                                  style={{ gap: "6px" }}
+                                  disabled={!!execRunning()[i()]}
+                                  onClick={async () => {
+                                    setExecRunning({ ...execRunning(), [i()]: true });
+                                    setExecOutput({ ...execOutput(), [i()]: null });
+                                    try {
+                                      const stacks = (await invoke("list_stacks")) as any[];
+                                      const stack = stacks.find((s: any) => s.name === setupGuideStackName());
+                                      const svc = stack?.services?.find((s: any) => s.service === step.service || s.name?.includes(step.service));
+                                      if (!svc?.id) {
+                                        showToast(`Could not find ${step.service} container`, "error");
+                                        return;
+                                      }
+                                      const result = (await invoke("exec_container", { id: svc.id, command: step.command, workdir: null })) as any;
+                                      setExecOutput({ ...execOutput(), [i()]: result });
+                                      if (result.exit_code === 0) {
+                                        showToast("Command completed successfully", "success");
+                                        toggleStep();
+                                      } else {
+                                        showToast(`Command exited with code ${result.exit_code}`, "error");
+                                      }
+                                    } catch (e) {
+                                      showToast(`Exec failed: ${e}`, "error");
+                                    } finally {
+                                      setExecRunning({ ...execRunning(), [i()]: false });
+                                    }
+                                  }}
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                  {execRunning()[i()] ? "Running..." : "Run"}
+                                </button>
+                              </div>
+                              <Show when={execOutput()[i()]}>
+                                {(out) => (
+                                  <pre style={{
+                                    "font-size": "11px", "line-height": "1.5", color: "#c9d1d9",
+                                    background: "#0d1117", padding: "10px 12px", "border-radius": "6px",
+                                    "max-height": "200px", overflow: "auto", "white-space": "pre-wrap",
+                                    border: `1px solid ${out().exit_code === 0 ? "#21262d" : "#da363380"}`
+                                  }}>
+                                    {out().stdout || out().stderr || "(no output)"}
+                                  </pre>
+                                )}
+                              </Show>
+                            </div>
+                          </Show>
+
+                          {/* Open interactive terminal in container */}
+                          <Show when={step.type === "action" && step.action === "terminal" && step.service}>
+                            <button class="btn btn-sm" style={{ gap: "6px" }} onClick={async () => {
+                              try {
+                                const stacks = (await invoke("list_stacks")) as any[];
+                                const stack = stacks.find((s: any) => s.name === setupGuideStackName());
+                                const svc = stack?.services?.find((s: any) => s.service === step.service || s.name?.includes(step.service));
+                                if (svc?.id) {
+                                  setShowSetupGuide(false);
+                                  props.onNavigate?.(`container:${svc.id}`);
+                                } else {
+                                  showToast(`Could not find ${step.service} container`, "error");
+                                }
+                              } catch {}
+                              toggleStep();
+                            }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                              Open Terminal
                             </button>
                           </Show>
 
