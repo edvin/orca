@@ -88,6 +88,9 @@
 - **Community catalog** — templates fetched from [orca-desktop.com/templates.json](https://orca-desktop.com/templates.json), updated hourly
 - Pre-configured with sensible defaults (ports, volumes, env vars)
 - Structured editors for ports, env vars, and volumes before deploy
+- **Compose stacks** — multi-service templates with `compose_yaml` (e.g., WordPress + MySQL, Webmail + Stalwart)
+- **Auto-generated secrets** — `generated_env` creates random passwords, hex keys, and detects LAN IP at deploy time
+- **Post-deploy setup guides** — step-by-step wizard with interactive actions (open URLs, view logs, run commands, set env vars, restart services)
 - **Create your own templates** — saved locally and available alongside builtins
 - **Contribute templates** — add your favorite app to the catalog via [PR](CONTRIBUTING.md#contributing-app-templates)
 - Password/secret env vars auto-masked in the editor
@@ -559,6 +562,7 @@ The daemon exposes a REST API at `http://127.0.0.1:9477/api/v1/`:
 | `/templates` | GET | List app templates |
 | `/templates/user` | POST, DELETE | Create/update / delete user templates |
 | `/templates/:id/deploy` | POST | Deploy template |
+| `/stacks/:name/env` | PATCH | Update env var in stack's .env file |
 | `/environment/status` | GET | Environment health checks |
 | `/environment/fix` | POST | Run fix action |
 | `/system/health` | GET | System health overview |

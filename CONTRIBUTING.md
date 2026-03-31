@@ -127,16 +127,120 @@ For apps that need multiple services (e.g., WordPress + MySQL), use `compose_yam
 
 Compose stacks are saved to `~/.config/orca/stacks/<id>/docker-compose.yml` and can be edited later from the Stack Detail page.
 
+#### Auto-generated environment variables
+
+Use `generated_env` to auto-generate secrets, keys, or prompt the user for input at deploy time. Generated values are written to the stack's `.env` file.
+
+```json
+{
+  "generated_env": {
+    "SECRET_KEY": { "type": "random_hex", "length": 64 },
+    "SESSION_SECRET": { "type": "random_base64", "length": 32 },
+    "LAN_IP": { "type": "lan_ip" },
+    "ADMIN_EMAIL": {
+      "type": "user_input",
+      "label": "Admin email address",
+      "placeholder": "admin@example.com",
+      "required": true
+    }
+  }
+}
+```
+
+Available types:
+
+| Type | Description |
+|---|---|
+| `random_hex` | Random hex string. `length` = number of hex chars (default: 32) |
+| `random_base64` | Random base64 string. `length` = number of bytes (default: 32) |
+| `lan_ip` | Auto-detect the machine's LAN IP address |
+| `user_input` | Prompt the user during deploy. Fields: `label`, `placeholder`, `required`, `secret` |
+
+#### Post-deploy setup guide
+
+For complex stacks that need configuration after deployment, add a `setup_guide`. This shows a step-by-step wizard dialog after the stack is deployed.
+
+```json
+{
+  "setup_guide": {
+    "title": "My App Setup",
+    "steps": [
+      {
+        "title": "Wait for services to start",
+        "description": "The stack needs about 30 seconds to initialize."
+      },
+      {
+        "title": "Open the admin panel",
+        "description": "Create your admin account.",
+        "type": "link",
+        "url": "http://localhost:8080/admin"
+      },
+      {
+        "title": "Check the logs for the initial password",
+        "description": "The admin password is printed in the app container logs.",
+        "type": "action",
+        "action": "view_logs",
+        "service": "app"
+      },
+      {
+        "title": "Run database migrations",
+        "description": "Initialize the database schema.",
+        "type": "action",
+        "action": "exec",
+        "service": "app",
+        "command": ["python", "manage.py", "migrate"]
+      },
+      {
+        "title": "Set the API key",
+        "description": "Paste the API key from the admin panel.",
+        "type": "set_env",
+        "env_key": "API_KEY",
+        "label": "Paste the API key"
+      },
+      {
+        "title": "Restart the app",
+        "description": "Restart to pick up the new configuration.",
+        "type": "action",
+        "action": "restart_service",
+        "service": "app"
+      }
+    ]
+  }
+}
+```
+
+**Step types:**
+
+| Type | Fields | What it does |
+|---|---|---|
+| `info` (default) | — | Read-only instruction |
+| `link` | `url` | Opens URL in system browser |
+| `action` | `action`, `service` | Performs an action on a compose service |
+| `set_env` | `env_key`, `label` | Text input that saves a value to the stack's `.env` file |
+
+**Action types** (used with `"type": "action"`):
+
+| Action | Fields | What it does |
+|---|---|---|
+| `view_logs` | `service` | Navigate to the service's container logs |
+| `restart_service` | `service` | Stop and start the service container |
+| `exec` | `service`, `command` | Run a command inside the container, show output |
+| `terminal` | `service` | Open an interactive terminal in the container |
+
+Steps show a numbered stepper UI with checkmarks. Users can mark steps as done to track their progress.
+
 3. Open a pull request
 
 ### Template guidelines
 
 - **`id`**: Unique lowercase identifier (e.g., `my-app`)
 - **`icon`**: Inline SVG string (24x24 viewBox, stroke-based Lucide style)
-- **`category`**: Use an existing category or create a new one (Database, Web Server, Monitoring, Tools, AI, Development, Message Queue, Search, Storage, Analytics, Automation)
+- **`category`**: Use an existing category or create a new one (Database, Web Server, Monitoring, Tools, AI, Development, Message Queue, Search, Storage, Analytics, Automation, Communication)
 - **`default_env`**: Use `changeme` for passwords — Orca auto-generates a unique password at deploy time
 - **`compose_yaml`**: For multi-service stacks. Use `changeme` for passwords. Newlines as `\n`.
-- **`notes`**: Include how to access the app and any first-run instructions
+- **`generated_env`**: Auto-generate secrets or prompt the user for values. Written to `.env` at deploy time.
+- **`setup_guide`**: Post-deploy wizard for complex stacks. See step types above.
+- **`notes`**: Short text shown as a toast after deploy (skipped if `setup_guide` is present)
 - **`restart_policy`**: Use `unless-stopped` for services, `no` for tools (single container only)
 - **`is_builtin`**: Set to `true` so it appears as a catalog template (not user-created)
 
