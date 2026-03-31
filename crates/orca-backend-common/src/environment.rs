@@ -977,12 +977,17 @@ pub async fn check_environment() -> EnvironmentStatus {
 
     match platform.as_str() {
         "linux" => {
-            checks.push(check_docker_installed().await);
-            checks.push(check_podman_installed().await);
+            let docker = check_docker_installed().await;
+            let docker_ok = docker.status == CheckStatus::Pass;
+            checks.push(docker);
             checks.push(check_docker_socket().await);
-            checks.push(check_podman_socket().await);
             checks.push(check_docker_running().await);
             checks.push(check_docker_group().await);
+            // Only show Podman checks if Docker is not installed (it's an alternative, not required alongside Docker)
+            if !docker_ok {
+                checks.push(check_podman_installed().await);
+                checks.push(check_podman_socket().await);
+            }
             let gpu = check_nvidia_gpu().await;
             if gpu.details.is_some() { checks.push(gpu); }
         }
