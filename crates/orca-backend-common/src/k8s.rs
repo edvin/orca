@@ -4313,7 +4313,9 @@ impl K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "get", kind, name, "-n", namespace, "-o", "yaml"])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "get", kind, name, "-n", namespace, "-o", "yaml",
+                ])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output()

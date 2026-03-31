@@ -3517,12 +3517,14 @@ fn get_or_generate_cert_key_pair<'a>(
 ) -> &'a CachedCertKeyPair {
     if cache.is_none() {
         let cn = subject.unwrap_or("localhost");
-        let mut params = rcgen::CertificateParams::new(vec![cn.to_string()])
-            .expect("Failed to create certificate params");
+        let mut params =
+            rcgen::CertificateParams::new(vec![cn.to_string()]).expect("Failed to create certificate params");
         params.distinguished_name.push(rcgen::DnType::CommonName, cn);
 
         let key_pair = rcgen::KeyPair::generate().expect("Failed to generate RSA key pair");
-        let cert = params.self_signed(&key_pair).expect("Failed to generate self-signed certificate");
+        let cert = params
+            .self_signed(&key_pair)
+            .expect("Failed to generate self-signed certificate");
 
         let cert_pem = cert.pem();
         let key_pem = key_pair.serialize_pem();
