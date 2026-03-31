@@ -379,6 +379,10 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
     const url = hostUrl().trim().replace(/\/+$/, "");
     const token = hostToken().trim();
     if (!url) return;
+    if (!token && editingHost()) {
+      setHostTestResult("Enter the API token to test connection (leave blank to keep existing token on save)");
+      return;
+    }
     setHostTesting(true);
     setHostTestResult(null);
     try {
@@ -1448,7 +1452,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     <div class="form-group">
                       <label class="form-label">API Token {editingHost() ? "(leave blank to keep current)" : ""}</label>
                       <div style={{ display: "flex", gap: "4px" }}>
-                        <input class="form-input" type={showHostToken() ? "text" : "password"} placeholder="Bearer token" value={hostToken()} onInput={(e) => setHostToken(e.currentTarget.value)} style={{ flex: "1" }} />
+                        <input class="form-input" type={showHostToken() ? "text" : "password"} placeholder={editingHost() ? "Leave blank to keep current token" : "Bearer token"} value={hostToken()} onInput={(e) => setHostToken(e.currentTarget.value)} style={{ flex: "1" }} />
                         <button class="btn btn-sm" onClick={() => setShowHostToken(!showHostToken())} style={{ "flex-shrink": "0", "white-space": "nowrap" }}>
                           {showHostToken() ? "Hide" : "Show"}
                         </button>
