@@ -1459,6 +1459,17 @@ input[type="checkbox"]:checked::after {
   max-width: 420px;
 }
 
+@keyframes batch-bar-slide-in {
+  from {
+    transform: translateX(-50%) translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
 @keyframes toast-slide-in {
   from {
     transform: translateX(100%);

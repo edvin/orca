@@ -959,6 +959,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           "border-radius": "12px",
           "box-shadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
           "z-index": "100",
+          animation: "batch-bar-slide-in 0.25s ease-out",
         }}>
           <span style={{ "font-size": "13px", color: "#e6edf3" }}>
             {selected().size} image{selected().size !== 1 ? "s" : ""} selected

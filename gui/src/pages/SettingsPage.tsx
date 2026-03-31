@@ -8,7 +8,7 @@ import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, update
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 
-type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "gateway" | "maintenance" | "privacy" | "about";
+type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "privacy" | "about";
 
 interface SettingsPageProps {
   initialTab?: string;
@@ -121,162 +121,6 @@ function CertificateAuthoritySection() {
             )}</For>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function GatewaySettingsSection() {
-  const [domain, setDomain] = createSignal("localhost");
-  const [httpPort, setHttpPort] = createSignal("80");
-  const [httpsPort, setHttpsPort] = createSignal("443");
-  const [tlsMode, setTlsMode] = createSignal<"orca_ca" | "custom">("orca_ca");
-  const [customCert, setCustomCert] = createSignal("");
-  const [customKey, setCustomKey] = createSignal("");
-  const [saving, setSaving] = createSignal(false);
-  const [loaded, setLoaded] = createSignal(false);
-
-  onMount(async () => {
-    try {
-      const config = (await invoke("gateway_get_config")) as any;
-      setDomain(config.domain || "localhost");
-      setHttpPort(String(config.http_port || 80));
-      setHttpsPort(String(config.https_port || 443));
-      setTlsMode(config.tls_mode === "custom" ? "custom" : "orca_ca");
-      setCustomCert(config.custom_cert || "");
-      setCustomKey(config.custom_key || "");
-      setLoaded(true);
-    } catch (e) {
-      logError(`Failed to load gateway config: ${e}`);
-      setLoaded(true);
-    }
-  });
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await invoke("gateway_update_config", {
-        domain: domain(),
-        httpPort: parseInt(httpPort(), 10) || 80,
-        httpsPort: parseInt(httpsPort(), 10) || 443,
-        tlsMode: tlsMode(),
-        customCert: customCert() || null,
-        customKey: customKey() || null,
-      });
-      showToast("Gateway settings saved", "success");
-    } catch (e) {
-      logError(`Failed to save gateway settings: ${e}`);
-      showToast(`Failed to save: ${e}`, "error");
-    }
-    setSaving(false);
-  };
-
-  return (
-    <div class="settings-section">
-      <h2 class="settings-section-title">Gateway Configuration</h2>
-      <div class="card">
-        <Show when={loaded()} fallback={<p style={{ color: "#8b949e", "font-size": "13px" }}>Loading...</p>}>
-          <div class="form-group">
-            <label class="form-label">Domain</label>
-            <input
-              class="form-input"
-              type="text"
-              value={domain()}
-              onInput={(e) => setDomain(e.currentTarget.value)}
-              placeholder="localhost"
-            />
-            <p style={{ "font-size": "11px", color: "#8b949e", "margin-top": "4px" }}>
-              Routes will be created as subdomains (e.g., myapp.{domain()})
-            </p>
-          </div>
-
-          <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
-            <div class="form-group">
-              <label class="form-label">HTTP Port</label>
-              <input
-                class="form-input"
-                type="number"
-                value={httpPort()}
-                onInput={(e) => setHttpPort(e.currentTarget.value)}
-                min="1"
-                max="65535"
-              />
-            </div>
-            <div class="form-group">
-              <label class="form-label">HTTPS Port</label>
-              <input
-                class="form-input"
-                type="number"
-                value={httpsPort()}
-                onInput={(e) => setHttpsPort(e.currentTarget.value)}
-                min="1"
-                max="65535"
-              />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">TLS Mode</label>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button
-                class="btn"
-                style={{
-                  background: tlsMode() === "orca_ca" ? "#1f6feb" : undefined,
-                  color: tlsMode() === "orca_ca" ? "#fff" : undefined,
-                  "border-color": tlsMode() === "orca_ca" ? "#1f6feb" : undefined,
-                }}
-                onClick={() => setTlsMode("orca_ca")}
-              >
-                Orca CA (automatic)
-              </button>
-              <button
-                class="btn"
-                style={{
-                  background: tlsMode() === "custom" ? "#1f6feb" : undefined,
-                  color: tlsMode() === "custom" ? "#fff" : undefined,
-                  "border-color": tlsMode() === "custom" ? "#1f6feb" : undefined,
-                }}
-                onClick={() => setTlsMode("custom")}
-              >
-                Custom Certificate
-              </button>
-            </div>
-          </div>
-
-          <Show when={tlsMode() === "custom"}>
-            <div class="form-group">
-              <label class="form-label">Certificate PEM</label>
-              <textarea
-                class="form-input"
-                rows={6}
-                value={customCert()}
-                onInput={(e) => setCustomCert(e.currentTarget.value)}
-                placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-                style={{ "font-family": "monospace", "font-size": "11px" }}
-              />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Private Key PEM</label>
-              <textarea
-                class="form-input"
-                rows={6}
-                value={customKey()}
-                onInput={(e) => setCustomKey(e.currentTarget.value)}
-                placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-                style={{ "font-family": "monospace", "font-size": "11px" }}
-              />
-            </div>
-          </Show>
-
-          <div style={{ display: "flex", "align-items": "center", gap: "12px", "margin-top": "16px" }}>
-            <button class="btn btn-primary" onClick={save} disabled={saving()}>
-              {saving() ? "Saving..." : "Save"}
-            </button>
-            <span style={{ "font-size": "11px", color: "#8b949e" }}>
-              Changes may require restarting the gateway to take effect.
-            </span>
-          </div>
-        </Show>
       </div>
     </div>
   );
@@ -1024,7 +868,6 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <button class={`tab-item ${tab() === "remote-hosts" ? "active" : ""}`} onClick={() => setTab("remote-hosts")}>Remote Hosts</button>
         <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>Auto-Deploy</button>
         <button class={`tab-item ${tab() === "schedules" ? "active" : ""}`} onClick={() => setTab("schedules")}>Schedules</button>
-        <button class={`tab-item ${tab() === "gateway" ? "active" : ""}`} onClick={() => setTab("gateway")}>Gateway</button>
         <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
         <button class={`tab-item ${tab() === "privacy" ? "active" : ""}`} onClick={() => setTab("privacy")}>Privacy & Security</button>
         <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
@@ -2170,11 +2013,6 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               </div>
             </Show>
           </div>
-        </Show>
-
-        {/* === Gateway Tab === */}
-        <Show when={tab() === "gateway"}>
-          <GatewaySettingsSection />
         </Show>
 
         {/* === Maintenance Tab === */}

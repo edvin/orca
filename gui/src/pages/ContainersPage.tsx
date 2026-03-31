@@ -39,6 +39,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   let hasAutoExpanded = false;
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const [containerMenuOpen, setContainerMenuOpen] = createSignal<string | null>(null);
+  const [selected, setSelected] = createSignal<Set<string>>(new Set());
   const [showMultiLog, setShowMultiLog] = createSignal(false);
   const [showComposeEditor, setShowComposeEditor] = createSignal(false);
   const [composePath, setComposePath] = createSignal("");
@@ -251,6 +252,133 @@ export default function ContainersPage(props: ContainersPageProps) {
     return { stackGroups: filteredStacks, standalone: filteredStandalone };
   };
 
+  const toggleSelect = (id: string, e: MouseEvent) => {
+    e.stopPropagation();
+    const next = new Set(selected());
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  };
+
+  const toggleGroupSelect = (groupContainers: Container[]) => {
+    const ids = groupContainers.map((c) => c.id);
+    const sel = selected();
+    const allSelected = ids.length > 0 && ids.every((id) => sel.has(id));
+    const next = new Set(sel);
+    if (allSelected) {
+      for (const id of ids) next.delete(id);
+    } else {
+      for (const id of ids) next.add(id);
+    }
+    setSelected(next);
+  };
+
+  const groupCheckState = (groupContainers: Container[]): "none" | "some" | "all" => {
+    const ids = groupContainers.map((c) => c.id);
+    if (ids.length === 0) return "none";
+    const sel = selected();
+    const count = ids.filter((id) => sel.has(id)).length;
+    if (count === 0) return "none";
+    if (count === ids.length) return "all";
+    return "some";
+  };
+
+  const CheckboxIndicator = (p: { state: "none" | "some" | "all"; onClick: (e: MouseEvent) => void }) => (
+    <span
+      onClick={(e) => p.onClick(e)}
+      style={{
+        display: "inline-flex",
+        "align-items": "center",
+        "justify-content": "center",
+        width: "16px",
+        height: "16px",
+        "border-radius": "3px",
+        border: `1.5px solid ${p.state === "none" ? "#484f58" : "#58a6ff"}`,
+        background: p.state === "none" ? "transparent" : p.state === "all" ? "#58a6ff" : "transparent",
+        cursor: "pointer",
+        "flex-shrink": "0",
+        transition: "all 0.15s ease",
+      }}
+    >
+      <Show when={p.state === "all"}>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1.5,5.5 4,8 8.5,2" />
+        </svg>
+      </Show>
+      <Show when={p.state === "some"}>
+        <span style={{ width: "8px", height: "2px", background: "#58a6ff", "border-radius": "1px" }} />
+      </Show>
+    </span>
+  );
+
+  const batchStart = async () => {
+    const ids = Array.from(selected()).filter((id) => {
+      const c = containers().find((ct) => ct.id === id);
+      return c && c.state !== "Running";
+    });
+    if (ids.length === 0) {
+      showToast("No stopped containers selected", "info");
+      return;
+    }
+    let started = 0;
+    for (const id of ids) {
+      try {
+        await invoke("start_container", { id });
+        started++;
+      } catch (err) {
+        logError(`Failed to start container: ${err}`, `Container ${id}`);
+      }
+    }
+    showToast(`Started ${started} container${started !== 1 ? "s" : ""}`, "success");
+    setSelected(new Set<string>());
+    await refresh();
+  };
+
+  const batchStop = async () => {
+    const ids = Array.from(selected()).filter((id) => {
+      const c = containers().find((ct) => ct.id === id);
+      return c && c.state === "Running";
+    });
+    if (ids.length === 0) {
+      showToast("No running containers selected", "info");
+      return;
+    }
+    let stopped = 0;
+    for (const id of ids) {
+      try {
+        await invoke("stop_container", { id });
+        stopped++;
+      } catch (err) {
+        logError(`Failed to stop container: ${err}`, `Container ${id}`);
+      }
+    }
+    showToast(`Stopped ${stopped} container${stopped !== 1 ? "s" : ""}`, "success");
+    setSelected(new Set<string>());
+    await refresh();
+  };
+
+  const batchDelete = async () => {
+    const ids = Array.from(selected());
+    if (ids.length === 0) return;
+    const count = ids.length;
+    if (!await confirmDanger(
+      "Delete Containers",
+      `Delete ${count} selected container${count !== 1 ? "s" : ""}? This cannot be undone.`
+    )) return;
+    let deleted = 0;
+    for (const id of ids) {
+      try {
+        await invoke("remove_container", { id, force: true });
+        deleted++;
+      } catch (err) {
+        logError(`Failed to remove container: ${err}`, `Container ${id}`);
+      }
+    }
+    showToast(`Deleted ${deleted} container${deleted !== 1 ? "s" : ""}`, "success");
+    setSelected(new Set<string>());
+    await refresh();
+  };
+
   const totalCount = () => (containers() || []).length;
   const runningCount = () => (containers() || []).filter((c) => c.state === "Running").length;
   const stoppedCount = () => (containers() || []).filter((c) => c.state !== "Running").length;
@@ -358,8 +486,20 @@ export default function ContainersPage(props: ContainersPageProps) {
               : `container:${c.id}`
           )
         }
-        style={{ cursor: "pointer" }}
+        style={{
+          cursor: "pointer",
+          background: selected().has(c.id) ? "rgba(88, 166, 255, 0.06)" : undefined,
+        }}
       >
+        <td style={{ width: "36px" }}>
+          <input
+            type="checkbox"
+            checked={selected().has(c.id)}
+            onChange={(e) => toggleSelect(c.id, e as any)}
+            onClick={(e) => e.stopPropagation()}
+            style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
+          />
+        </td>
         <td style={{ "padding-left": stackName ? "44px" : "16px" }}>
           <span class={c.state === "Running" ? "state-indicator-running" : "state-indicator-stopped"}>
             {c.state === "Running" ? "\u25B6" : "\u25B7"}
@@ -684,6 +824,10 @@ export default function ContainersPage(props: ContainersPageProps) {
                       <span class={`expand-arrow ${isExpanded() ? "expanded" : ""}`}>
                         &#9654;
                       </span>
+                      <CheckboxIndicator
+                        state={groupCheckState(filteredContainers())}
+                        onClick={(e) => { e.stopPropagation(); toggleGroupSelect(filteredContainers()); }}
+                      />
                       <div>
                         <div class="stack-name">
                           <span
@@ -778,6 +922,12 @@ export default function ContainersPage(props: ContainersPageProps) {
                       <table class="table">
                         <thead>
                           <tr>
+                            <th style={{ width: "36px" }}>
+                              <CheckboxIndicator
+                                state={groupCheckState(filteredContainers())}
+                                onClick={() => toggleGroupSelect(filteredContainers())}
+                              />
+                            </th>
                             <th>Name</th>
                             <th>Image</th>
                             <th>State</th>
@@ -809,8 +959,30 @@ export default function ContainersPage(props: ContainersPageProps) {
                   <span class={`expand-arrow ${expanded().has("__standalone__") ? "expanded" : ""}`}>
                     &#9654;
                   </span>
+                  <CheckboxIndicator
+                    state={groupCheckState(filteredGroups().standalone)}
+                    onClick={(e) => { e.stopPropagation(); toggleGroupSelect(filteredGroups().standalone); }}
+                  />
                   <div>
-                    <div class="stack-name">Standalone</div>
+                    <div class="stack-name">
+                      Standalone
+                      <span class="service-dots" style={{ "margin-left": "10px", display: "inline-flex" }}>
+                        <For each={filteredGroups().standalone}>
+                          {(c) => (
+                            <span
+                              class={`service-dot ${
+                                c.state === "Running"
+                                  ? "service-dot-running"
+                                  : c.state === "Exited"
+                                  ? "service-dot-stopped"
+                                  : "service-dot-other"
+                              }`}
+                              title={`${c.name}: ${c.state}`}
+                            />
+                          )}
+                        </For>
+                      </span>
+                    </div>
                     <div class="stack-meta">
                       {filteredGroups().standalone.filter((c) => c.state === "Running").length}/{filteredGroups().standalone.length} running
                     </div>
@@ -823,6 +995,12 @@ export default function ContainersPage(props: ContainersPageProps) {
                   <table class="table">
                     <thead>
                       <tr>
+                        <th style={{ width: "36px" }}>
+                          <CheckboxIndicator
+                            state={groupCheckState(filteredGroups().standalone)}
+                            onClick={() => toggleGroupSelect(filteredGroups().standalone)}
+                          />
+                        </th>
                         <th>Name</th>
                         <th>Image</th>
                         <th>State</th>
@@ -843,6 +1021,45 @@ export default function ContainersPage(props: ContainersPageProps) {
               </Show>
             </div>
           </Show>
+        </div>
+      </Show>
+
+      {/* Floating batch action bar */}
+      <Show when={selected().size > 0}>
+        <div style={{
+          position: "fixed",
+          bottom: "32px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex",
+          "align-items": "center",
+          gap: "12px",
+          padding: "10px 20px",
+          background: "rgba(22, 27, 34, 0.95)",
+          "backdrop-filter": "blur(12px)",
+          "-webkit-backdrop-filter": "blur(12px)",
+          border: "1px solid #30363d",
+          "border-radius": "12px",
+          "box-shadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
+          "z-index": "100",
+          animation: "batch-bar-slide-in 0.25s ease-out",
+        }}>
+          <span style={{ "font-size": "13px", color: "#e6edf3" }}>
+            {selected().size} container{selected().size !== 1 ? "s" : ""} selected
+          </span>
+          <button class="btn btn-sm" onClick={batchStart}>
+            &#9654; Start Selected
+          </button>
+          <button class="btn btn-sm" onClick={batchStop}>
+            &#9632; Stop Selected
+          </button>
+          <button class="btn btn-sm btn-danger" onClick={batchDelete}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            {" "}Delete Selected
+          </button>
+          <button class="btn btn-sm" onClick={() => setSelected(new Set<string>())}>
+            Clear
+          </button>
         </div>
       </Show>
 

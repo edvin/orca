@@ -13,6 +13,18 @@ const CADDY_IMAGE: &str = "caddy:2-alpine";
 const CADDY_CONTAINER: &str = "orca-gateway";
 const CADDY_ADMIN_PORT: u16 = 2019;
 
+/// Check if the gateway ports are available.
+pub fn check_port_availability(http_port: u16, https_port: u16) -> Vec<String> {
+    let mut conflicts = Vec::new();
+    if std::net::TcpListener::bind(("0.0.0.0", http_port)).is_err() {
+        conflicts.push(format!("Port {} (HTTP) is already in use", http_port));
+    }
+    if std::net::TcpListener::bind(("0.0.0.0", https_port)).is_err() {
+        conflicts.push(format!("Port {} (HTTPS) is already in use", https_port));
+    }
+    conflicts
+}
+
 /// Check if the gateway container is running.
 pub async fn is_running(state: &AppState) -> Result<bool> {
     let rt = state.rt().await;
@@ -37,7 +49,10 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
     let rt = state.rt().await;
 
     // Remove any existing stopped container first
-    let containers = rt.list_containers(true).await?;
+    let containers = rt
+        .list_containers(true)
+        .await
+        .context("Failed to list containers while checking for existing gateway")?;
     if let Some(existing) = containers.iter().find(|c| c.name == CADDY_CONTAINER) {
         if existing.state != ContainerState::Running {
             let _ = rt.remove_container(&existing.id, true).await;
@@ -46,8 +61,16 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
         }
     }
 
+    // Check port availability (warn, don't block — Docker may handle it on some platforms)
+    let conflicts = check_port_availability(config.http_port, config.https_port);
+    if !conflicts.is_empty() {
+        tracing::warn!("Port conflicts detected: {}", conflicts.join(", "));
+    }
+
     // Pull the Caddy image if not present
-    pull_if_needed(state, CADDY_IMAGE).await?;
+    pull_if_needed(state, CADDY_IMAGE)
+        .await
+        .context("Could not download caddy:2-alpine. Check your internet connection")?;
 
     // Prepare the certs directory
     let certs_dir = certs_dir();
@@ -95,7 +118,7 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
             },
         ],
         volumes: vec![VolumeMount {
-            source: certs_dir.to_string_lossy().to_string(),
+            source: to_docker_mount_path(&certs_dir),
             target: "/certs".to_string(),
             read_only: true,
         }],
@@ -116,22 +139,33 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
         user: None,
     };
 
-    let id = rt.create_container(opts).await?;
+    let id = rt
+        .create_container(opts)
+        .await
+        .context("Failed to create gateway container")?;
 
     // Generate the landing page
     let _ = write_landing_page(config);
 
     // Write the initial Caddy config file into the container
     let caddy_json = build_caddy_config(config);
-    write_caddy_config_to_container(state, &id, &caddy_json).await?;
+    write_caddy_config_to_container(state, &id, &caddy_json)
+        .await
+        .context("Failed to write Caddy config into container")?;
 
-    rt.start_container(&id).await?;
+    rt.start_container(&id)
+        .await
+        .context("Failed to start gateway container")?;
 
     // Wait for Caddy admin API to be ready
-    wait_for_caddy_ready().await?;
+    wait_for_caddy_ready()
+        .await
+        .context("Gateway container started but Caddy admin API is not responding. Check daemon logs")?;
 
     // Push config via admin API
-    push_caddy_config(config).await?;
+    push_caddy_config(config)
+        .await
+        .context("Gateway started but failed to push Caddy configuration")?;
 
     Ok(id)
 }
@@ -228,6 +262,27 @@ pub async fn ensure_network_connectivity(state: &AppState, container_name: &str)
 }
 
 // --- Internal helpers ---
+
+/// Convert a host path to a Docker-compatible mount path.
+/// On Windows, `C:\Users\foo\bar` becomes `/mnt/c/Users/foo/bar` for WSL-based Docker.
+fn to_docker_mount_path(path: &std::path::Path) -> String {
+    let s = path.to_string_lossy();
+    #[cfg(target_os = "windows")]
+    {
+        // Convert Windows path like C:\Users\foo to /mnt/c/Users/foo
+        if s.len() >= 3 && s.as_bytes()[1] == b':' {
+            let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
+            let rest = s[2..].replace('\\', "/");
+            return format!("/mnt/{drive}{rest}");
+        }
+        // Already a unix-style path or relative
+        return s.replace('\\', "/");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        s.to_string()
+    }
+}
 
 fn certs_dir() -> std::path::PathBuf {
     dirs::config_dir()
@@ -500,7 +555,12 @@ async fn wait_for_caddy_ready() -> Result<()> {
                 tracing::info!("Caddy admin API ready (attempt {attempt})");
                 return Ok(());
             }
-            _ => {
+            Ok(resp) => {
+                tracing::debug!("Caddy admin API attempt {attempt}/20: HTTP {}", resp.status());
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            Err(e) => {
+                tracing::debug!("Caddy admin API attempt {attempt}/20: connection error: {e}");
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
         }
@@ -526,8 +586,17 @@ async fn push_caddy_config(config: &GatewayConfig) -> Result<()> {
         .context("Failed to push config to Caddy")?;
 
     if !resp.status().is_success() {
+        let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("Caddy config push failed: {body}");
+        anyhow::bail!(
+            "Caddy config push failed (HTTP {}): {}",
+            status,
+            if body.is_empty() {
+                "empty response".to_string()
+            } else {
+                body
+            }
+        );
     }
 
     tracing::info!("Caddy config updated successfully");

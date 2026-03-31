@@ -302,6 +302,7 @@ pub fn routes() -> Router<Arc<AppState>> {
             delete(gateway_remove_route).put(gateway_update_route),
         )
         .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
+        .route("/gateway/port-check", get(gateway_port_check))
         // CA
         .route("/ca/certificate", get(ca_certificate))
         .route("/ca/info", get(ca_info))
@@ -6145,6 +6146,11 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
     let running = crate::gateway::is_running(&state).await.unwrap_or(false);
     let cid = crate::gateway::container_id(&state).await.unwrap_or(None);
     let routes_active = gw.routes.iter().filter(|r| r.enabled).count();
+    let port_conflicts = if !running {
+        crate::gateway::check_port_availability(gw.http_port, gw.https_port)
+    } else {
+        vec![]
+    };
 
     Ok(Json(serde_json::json!({
         "running": running,
@@ -6154,6 +6160,7 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         "http_port": gw.http_port,
         "https_port": gw.https_port,
         "tls_mode": gw.tls_mode,
+        "port_conflicts": port_conflicts,
     })))
 }
 
@@ -6161,25 +6168,38 @@ async fn gateway_start(State(state): State<Arc<AppState>>) -> Result<impl IntoRe
     let config = state.config.lock().await.clone();
     let gw = &config.gateway;
 
-    let id = crate::gateway::start(&state, gw)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to start gateway: {e}"))?;
+    // Check port availability before starting (warning, not blocking)
+    let port_conflicts = crate::gateway::check_port_availability(gw.http_port, gw.https_port);
+    if !port_conflicts.is_empty() {
+        tracing::warn!("Port conflicts before gateway start: {}", port_conflicts.join(", "));
+    }
+
+    let id = crate::gateway::start(&state, gw).await.map_err(|e| {
+        let msg = format!("{e:#}");
+        tracing::error!("Gateway start failed: {msg}");
+        anyhow::anyhow!("{msg}")
+    })?;
 
     // Ensure network connectivity for all enabled routes
+    let mut network_warnings = Vec::new();
     for route in &gw.routes {
         if route.enabled
             && let Err(e) = crate::gateway::ensure_network_connectivity(&state, &route.container_name).await
         {
-            tracing::warn!(
+            let warn = format!(
                 "Failed to connect gateway to container '{}' networks: {e}",
                 route.container_name
             );
+            tracing::warn!("{warn}");
+            network_warnings.push(warn);
         }
     }
 
     Ok(Json(serde_json::json!({
         "status": "started",
         "container_id": id,
+        "port_conflicts": port_conflicts,
+        "network_warnings": network_warnings,
     })))
 }
 
@@ -6380,6 +6400,12 @@ async fn gateway_update_config(
         .save()
         .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
     Ok(Json(serde_json::json!({ "saved": true })))
+}
+
+async fn gateway_port_check(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    let conflicts = crate::gateway::check_port_availability(config.gateway.http_port, config.gateway.https_port);
+    Ok(Json(serde_json::json!({ "conflicts": conflicts })))
 }
 
 // --- CA Certificate ---

@@ -541,6 +541,7 @@ export interface GatewayStatus {
   http_port: number;
   https_port: number;
   tls_mode: string;
+  port_conflicts?: string[];
 }
 
 export interface GatewayRoute {

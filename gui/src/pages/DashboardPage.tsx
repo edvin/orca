@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { Container, ContainerStats, Image, ComposeProject, SystemHealth } from "../lib/types";
+import type { Container, ContainerStats, Image, ComposeProject, SystemHealth, GatewayStatus } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import { recordMetrics } from "../lib/metricsStore";
@@ -37,6 +37,8 @@ export default function DashboardPage(props: DashboardPageProps) {
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
   const [containerStats, setContainerStats] = createSignal<Record<string, ContainerStats>>({});
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
+
+  const [gatewayStatus, setGatewayStatus] = createSignal<GatewayStatus | null>(null);
 
   const [containersState, setContainersState] = createSignal<CardState>("loading");
   const [imagesState, setImagesState] = createSignal<CardState>("loading");
@@ -84,6 +86,10 @@ export default function DashboardPage(props: DashboardPageProps) {
     invokeWithTimeout<SystemHealth>("system_health", undefined, 15_000)
       .then((v) => { setHealth(v); setHealthState("ready"); })
       .catch((e) => { setHealthError(friendlyError(String(e))); setHealthState("error"); });
+
+    invokeWithTimeout<GatewayStatus>("gateway_status")
+      .then((v) => setGatewayStatus(v))
+      .catch(() => setGatewayStatus(null));
   };
 
   useRefresh(fetchAll);
@@ -333,6 +339,43 @@ export default function DashboardPage(props: DashboardPageProps) {
             </div>
           )}
         </Show>
+
+        <div
+          class="dashboard-stat-card"
+          style={{ cursor: "pointer" }}
+          onClick={() => props.onNavigate?.("gateway")}
+          title="Go to Gateway"
+        >
+          <div class="dashboard-stat-label">Gateway</div>
+          <Show when={gatewayStatus()} fallback={
+            <div class="dashboard-stat-value" style={{ "font-size": "14px", color: "#8b949e" }}>--</div>
+          }>
+            {(gw) => (
+              <>
+                <div class="dashboard-stat-value" style={{ "font-size": "14px" }}>
+                  <span style={{
+                    display: "inline-block",
+                    width: "8px",
+                    height: "8px",
+                    "border-radius": "50%",
+                    background: gw().running ? "#3fb950" : "#8b949e",
+                    "margin-right": "6px",
+                    "vertical-align": "middle",
+                  }} />
+                  {gw().running ? "Running" : "Inactive"}
+                </div>
+                <div class="dashboard-stat-sub">
+                  <Show when={gw().running} fallback={
+                    <span style={{ color: "#8b949e" }}>Click to configure</span>
+                  }>
+                    <span style={{ color: "#3fb950" }}>{gw().routes_active} route{gw().routes_active !== 1 ? "s" : ""}</span>
+                    <span style={{ color: "#8b949e" }}> on *.{gw().domain}</span>
+                  </Show>
+                </div>
+              </>
+            )}
+          </Show>
+        </div>
       </div>
 
       {/* Resource usage charts */}

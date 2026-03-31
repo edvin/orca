@@ -3596,6 +3596,11 @@ pub async fn gateway_update_route(
 }
 
 #[tauri::command]
+pub async fn gateway_check_ports() -> Result<serde_json::Value, String> {
+    get_json("/gateway/port-check").await
+}
+
+#[tauri::command]
 pub async fn gateway_get_config() -> Result<serde_json::Value, String> {
     get_json("/gateway/config").await
 }

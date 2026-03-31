@@ -199,6 +199,7 @@ pub fn run() {
             commands::gateway_add_route,
             commands::gateway_remove_route,
             commands::gateway_update_route,
+            commands::gateway_check_ports,
             commands::gateway_get_config,
             commands::gateway_update_config,
         ])

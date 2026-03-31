@@ -12,11 +12,27 @@ interface GatewayPageProps {
   onNavigate?: (target: string) => void;
 }
 
+/** Map common Docker / Caddy errors to user-friendly messages. */
+function friendlyStartError(raw: string): string {
+  if (raw.includes("port is already allocated")) {
+    const port = raw.match(/port\s+(\d+)/i)?.[1] ?? "";
+    return `Port ${port} is already in use. Change the port in Settings > Gateway or stop the conflicting service.`;
+  }
+  if (raw.includes("No such image") || raw.includes("not found") || raw.includes("pull")) {
+    return "Could not download caddy:2-alpine. Check your internet connection.";
+  }
+  if (raw.includes("admin API") || raw.includes("not responding")) {
+    return "Gateway started but Caddy is not responding. Check Settings > About > Daemon Log.";
+  }
+  return raw;
+}
+
 export default function GatewayPage(props: GatewayPageProps) {
   const [status, setStatus] = createSignal<GatewayStatus | null>(null);
   const [routes, setRoutes] = createSignal<GatewayRoute[]>([]);
   const [showAdd, setShowAdd] = createSignal(false);
   const [starting, setStarting] = createSignal(false);
+  const [startError, setStartError] = createSignal<string | null>(null);
 
   // Add route form
   const [addHostname, setAddHostname] = createSignal("");
@@ -24,6 +40,63 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [addPort, setAddPort] = createSignal("80");
   const [containers, setContainers] = createSignal<Container[]>([]);
   const [adding, setAdding] = createSignal(false);
+
+  // Configuration
+  const [showConfig, setShowConfig] = createSignal(false);
+  const [cfgDomain, setCfgDomain] = createSignal("localhost");
+  const [cfgHttpPort, setCfgHttpPort] = createSignal("80");
+  const [cfgHttpsPort, setCfgHttpsPort] = createSignal("443");
+  const [cfgTlsMode, setCfgTlsMode] = createSignal<"orca_ca" | "custom">("orca_ca");
+  const [cfgCustomCert, setCfgCustomCert] = createSignal("");
+  const [cfgCustomKey, setCfgCustomKey] = createSignal("");
+  const [cfgSaving, setCfgSaving] = createSignal(false);
+  const [cfgLoaded, setCfgLoaded] = createSignal(false);
+  const [portConflicts, setPortConflicts] = createSignal<string[]>([]);
+  const [checkingPorts, setCheckingPorts] = createSignal(false);
+
+  const loadConfig = async () => {
+    try {
+      const config = (await invoke("gateway_get_config")) as any;
+      setCfgDomain(config.domain || "localhost");
+      setCfgHttpPort(String(config.http_port || 80));
+      setCfgHttpsPort(String(config.https_port || 443));
+      setCfgTlsMode(config.tls_mode === "custom" ? "custom" : "orca_ca");
+      setCfgCustomCert(config.custom_cert || "");
+      setCfgCustomKey(config.custom_key || "");
+      setCfgLoaded(true);
+    } catch { setCfgLoaded(true); }
+  };
+
+  const saveConfig = async () => {
+    setCfgSaving(true);
+    try {
+      await invoke("gateway_update_config", {
+        domain: cfgDomain(),
+        httpPort: parseInt(cfgHttpPort(), 10) || 80,
+        httpsPort: parseInt(cfgHttpsPort(), 10) || 443,
+        tlsMode: cfgTlsMode(),
+        customCert: cfgCustomCert() || null,
+        customKey: cfgCustomKey() || null,
+      });
+      showToast("Gateway configuration saved", "success");
+    } catch (e) {
+      showToast(`Failed to save: ${e}`, "error");
+    }
+    setCfgSaving(false);
+  };
+
+  const checkPorts = async () => {
+    setCheckingPorts(true);
+    try {
+      const result = (await invoke("gateway_check_ports")) as { conflicts: string[] };
+      setPortConflicts(result.conflicts || []);
+      if (result.conflicts.length === 0) showToast("Ports are available", "success");
+    } catch {}
+    setCheckingPorts(false);
+  };
+
+  const httpConflict = () => portConflicts().find((c) => c.includes("HTTP"));
+  const httpsConflict = () => portConflicts().find((c) => c.includes("HTTPS"));
 
   const fetchStatus = async () => {
     try {
@@ -56,17 +129,21 @@ export default function GatewayPage(props: GatewayPageProps) {
   };
 
   useRefresh(refresh);
-  onMount(refresh);
+  onMount(() => { refresh(); loadConfig(); });
 
   const handleStart = async () => {
     setStarting(true);
+    setStartError(null);
     try {
       await invoke("gateway_start");
       showToast("Gateway started", "success");
       await refresh();
     } catch (e) {
-      logError(`Failed to start gateway: ${e}`);
-      showToast(`Failed to start gateway: ${e}`, "error");
+      const raw = String(e);
+      const friendly = friendlyStartError(raw);
+      logError(`Failed to start gateway: ${raw}`);
+      showToast(`Failed to start gateway: ${friendly}`, "error");
+      setStartError(friendly);
     }
     setStarting(false);
   };
@@ -75,6 +152,7 @@ export default function GatewayPage(props: GatewayPageProps) {
     try {
       await invoke("gateway_stop");
       showToast("Gateway stopped", "success");
+      setStartError(null);
       await refresh();
     } catch (e) {
       logError(`Failed to stop gateway: ${e}`);
@@ -151,6 +229,13 @@ export default function GatewayPage(props: GatewayPageProps) {
     });
   };
 
+  const landingUrl = () => {
+    const s = status();
+    if (!s) return "";
+    const port = s.https_port;
+    return port === 443 ? `https://${s.domain}` : `https://${s.domain}:${port}`;
+  };
+
   let mouseDownOnOverlay = false;
   const handleOverlayMouseDown = (e: MouseEvent) => {
     mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay");
@@ -178,6 +263,12 @@ export default function GatewayPage(props: GatewayPageProps) {
         <h1 class="page-title">Gateway</h1>
         <div class="page-actions">
           <Show when={status()?.running}>
+            <button class="btn" onClick={() => openUrl(landingUrl())} title="Open gateway landing page in browser">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px", "vertical-align": "-2px" }}>
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              Open Gateway
+            </button>
             <button class="btn" onClick={openAddDialog}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px", "vertical-align": "-2px" }}>
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -201,8 +292,76 @@ export default function GatewayPage(props: GatewayPageProps) {
         </div>
       </div>
 
-      {/* Status Card */}
-      <Show when={status()}>
+      {/* Port conflict warnings */}
+      <Show when={(status()?.port_conflicts?.length ?? 0) > 0}>
+        <div style={{
+          background: "rgba(210, 153, 34, 0.1)",
+          border: "1px solid rgba(210, 153, 34, 0.3)",
+          "border-radius": "8px",
+          padding: "12px 16px",
+          "margin-bottom": "16px",
+          display: "flex",
+          "align-items": "flex-start",
+          gap: "10px",
+          "font-size": "13px",
+          color: "#d29922",
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0", "margin-top": "1px" }}>
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <div>
+            <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>Port Conflict Detected</div>
+            <For each={status()?.port_conflicts ?? []}>
+              {(conflict) => <div>{conflict}</div>}
+            </For>
+            <div style={{ "margin-top": "4px", "font-size": "12px", color: "#8b949e" }}>
+              Change the ports in{" "}
+              <button
+                class="btn-link"
+                style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "12px", padding: "0" }}
+                onClick={() => props.onNavigate?.("settings:gateway")}
+              >
+                Settings &rarr; Gateway
+              </button>{" "}
+              or stop the conflicting service.
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Start error banner */}
+      <Show when={startError()}>
+        <div style={{
+          background: "rgba(248, 81, 73, 0.1)",
+          border: "1px solid rgba(248, 81, 73, 0.3)",
+          "border-radius": "8px",
+          padding: "12px 16px",
+          "margin-bottom": "16px",
+          display: "flex",
+          "align-items": "flex-start",
+          gap: "10px",
+          "font-size": "13px",
+          color: "#f85149",
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0", "margin-top": "1px" }}>
+            <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+          <div>
+            <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>Failed to Start Gateway</div>
+            <div style={{ color: "#e6edf3" }}>{startError()}</div>
+          </div>
+          <button
+            style={{ "margin-left": "auto", background: "none", border: "none", cursor: "pointer", color: "#8b949e", "flex-shrink": "0" }}
+            onClick={() => setStartError(null)}
+            title="Dismiss"
+          >
+            {"\u00d7"}
+          </button>
+        </div>
+      </Show>
+
+      {/* Status Card (when running) */}
+      <Show when={status()?.running ? status() : undefined}>
         {(s) => (
           <div class="card" style={{ "margin-bottom": "20px" }}>
             <div class="card-grid" style={{ "grid-template-columns": "repeat(4, 1fr)" }}>
@@ -214,11 +373,11 @@ export default function GatewayPage(props: GatewayPageProps) {
                     width: "8px",
                     height: "8px",
                     "border-radius": "50%",
-                    background: s().running ? "#3fb950" : "#8b949e",
+                    background: "#3fb950",
                     "margin-right": "6px",
                     "vertical-align": "middle",
                   }} />
-                  {s().running ? "Running" : "Stopped"}
+                  Running
                 </span>
               </div>
               <div>
@@ -241,6 +400,18 @@ export default function GatewayPage(props: GatewayPageProps) {
                 <span class="card-label">HTTPS Port</span>
                 <span class="card-value mono">:{s().https_port}</span>
               </div>
+              <div>
+                <span class="card-label">Landing Page</span>
+                <span class="card-value">
+                  <button
+                    class="btn-link"
+                    style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "13px", padding: "0" }}
+                    onClick={() => openUrl(landingUrl())}
+                  >
+                    {landingUrl()}
+                  </button>
+                </span>
+              </div>
               <Show when={s().container_id}>
                 <div>
                   <span class="card-label">Container ID</span>
@@ -252,23 +423,92 @@ export default function GatewayPage(props: GatewayPageProps) {
         )}
       </Show>
 
-      {/* Routes Table or CTA */}
+      {/* Routes Table or Onboarding */}
       <Show
         when={status()?.running}
         fallback={
-          <div class="empty">
-            <div class="empty-icon">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
+          <div>
+            {/* What is Orca Gateway? */}
+            <div class="card" style={{ "margin-bottom": "16px" }}>
+              <div style={{ "margin-bottom": "16px" }}>
+                <div style={{ display: "flex", "align-items": "center", gap: "10px", "margin-bottom": "12px" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                  <h2 style={{ color: "#e6edf3", "font-size": "16px", "font-weight": "600", margin: "0" }}>What is Orca Gateway?</h2>
+                </div>
+                <p style={{ color: "#8b949e", "font-size": "13px", "line-height": "1.6", margin: "0 0 16px 0" }}>
+                  Orca Gateway is a managed reverse proxy that gives your containers clean hostnames with automatic TLS.
+                </p>
+                <div style={{
+                  background: "#161b22",
+                  "border-radius": "8px",
+                  padding: "12px 16px",
+                  "margin-bottom": "16px",
+                  "font-family": "'SF Mono', 'Fira Code', monospace",
+                  "font-size": "13px",
+                  "line-height": "1.8",
+                }}>
+                  <div style={{ color: "#8b949e" }}>Instead of: <span style={{ color: "#f85149" }}>http://localhost:8095</span></div>
+                  <div style={{ color: "#8b949e" }}>Access at: <span style={{ color: "#3fb950" }}>https://webmail.localhost</span></div>
+                </div>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "8px", color: "#c9d1d9", "font-size": "13px" }}>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <span style={{ color: "#3fb950" }}>&#x2022;</span> Automatic HTTPS via the Orca Certificate Authority
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <span style={{ color: "#3fb950" }}>&#x2022;</span> .localhost domains work in all browsers
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <span style={{ color: "#3fb950" }}>&#x2022;</span> Custom domains for teams (*.local.company.dev)
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <span style={{ color: "#3fb950" }}>&#x2022;</span> WebSocket, SSE, HTTP/2 proxied transparently
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                    <span style={{ color: "#3fb950" }}>&#x2022;</span> orca.yaml in your repo auto-registers routes
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "8px", "margin-top": "20px" }}>
+                  <button class="btn btn-primary" onClick={handleStart} disabled={starting()}>
+                    {starting() ? "Starting..." : "Start Gateway"}
+                  </button>
+                  <button class="btn" onClick={() => props.onNavigate?.("settings:gateway")}>
+                    Configure in Settings
+                  </button>
+                </div>
+              </div>
             </div>
-            <p class="empty-title">Gateway is not running</p>
-            <p>Start the gateway to route hostnames to your containers with automatic TLS.</p>
-            <button class="btn btn-primary" onClick={handleStart} disabled={starting()} style={{ "margin-top": "12px" }}>
-              {starting() ? "Starting..." : "Enable Gateway"}
-            </button>
+
+            {/* Prerequisites */}
+            <div class="card">
+              <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", margin: "0 0 12px 0" }}>Prerequisites</h3>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "10px", color: "#c9d1d9", "font-size": "13px" }}>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <span style={{ color: "#58a6ff", "font-weight": "600", "flex-shrink": "0" }}>1.</span>
+                  <span>
+                    Install the Orca CA certificate for trusted TLS.{" "}
+                    <button
+                      class="btn-link"
+                      style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "13px", padding: "0" }}
+                      onClick={() => props.onNavigate?.("settings:privacy")}
+                    >
+                      Settings &rarr; Privacy &amp; Security &rarr; Download CA
+                    </button>
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <span style={{ color: "#58a6ff", "font-weight": "600", "flex-shrink": "0" }}>2.</span>
+                  <span>Start the Gateway (pulls caddy:2-alpine, ~40MB)</span>
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <span style={{ color: "#58a6ff", "font-weight": "600", "flex-shrink": "0" }}>3.</span>
+                  <span>Expose containers via the container detail page or here</span>
+                </div>
+              </div>
+            </div>
           </div>
         }
       >
@@ -466,6 +706,84 @@ export default function GatewayPage(props: GatewayPageProps) {
               </div>
             </form>
           </div>
+        </div>
+      </Show>
+
+      {/* Configuration Section (collapsible) */}
+      <Show when={cfgLoaded()}>
+        <div style={{ "margin-top": "24px" }}>
+          <button
+            onClick={() => setShowConfig(!showConfig())}
+            style={{
+              background: "none", border: "none", color: "#8b949e", cursor: "pointer",
+              "font-size": "13px", "font-weight": "500", display: "flex", "align-items": "center", gap: "6px",
+              padding: "0", "margin-bottom": showConfig() ? "16px" : "0",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ transform: showConfig() ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}><polyline points="9 18 15 12 9 6"/></svg>
+            Configuration
+          </button>
+          <Show when={showConfig()}>
+            <div class="card" style={{ padding: "20px" }}>
+              <div class="form-group">
+                <label class="form-label">Domain</label>
+                <input class="form-input" type="text" value={cfgDomain()} onInput={(e) => setCfgDomain(e.currentTarget.value)} placeholder="localhost" />
+                <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>Routes will be created as subdomains (e.g., myapp.{cfgDomain()})</p>
+              </div>
+
+              <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
+                <div class="form-group">
+                  <label class="form-label">HTTP Port</label>
+                  <input class="form-input" type="number" value={cfgHttpPort()} onInput={(e) => setCfgHttpPort(e.currentTarget.value)} min="1" max="65535" style={httpConflict() ? { "border-color": "#d29922" } : undefined} />
+                  <Show when={httpConflict()}><p style={{ "font-size": "11px", color: "#d29922", "margin-top": "4px" }}>{httpConflict()}</p></Show>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">HTTPS Port</label>
+                  <input class="form-input" type="number" value={cfgHttpsPort()} onInput={(e) => setCfgHttpsPort(e.currentTarget.value)} min="1" max="65535" style={httpsConflict() ? { "border-color": "#d29922" } : undefined} />
+                  <Show when={httpsConflict()}><p style={{ "font-size": "11px", color: "#d29922", "margin-top": "4px" }}>{httpsConflict()}</p></Show>
+                </div>
+              </div>
+
+              <div style={{ "margin-bottom": "12px" }}>
+                <button class="btn" onClick={checkPorts} disabled={checkingPorts()} style={{ "font-size": "12px" }}>
+                  {checkingPorts() ? "Checking..." : "Check Ports"}
+                </button>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">TLS Mode</label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button class="btn" style={{ background: cfgTlsMode() === "orca_ca" ? "#1f6feb" : undefined, color: cfgTlsMode() === "orca_ca" ? "#fff" : undefined, "border-color": cfgTlsMode() === "orca_ca" ? "#1f6feb" : undefined }} onClick={() => setCfgTlsMode("orca_ca")}>Orca CA (automatic)</button>
+                  <button class="btn" style={{ background: cfgTlsMode() === "custom" ? "#1f6feb" : undefined, color: cfgTlsMode() === "custom" ? "#fff" : undefined, "border-color": cfgTlsMode() === "custom" ? "#1f6feb" : undefined }} onClick={() => setCfgTlsMode("custom")}>Custom Certificate</button>
+                </div>
+              </div>
+
+              <Show when={cfgTlsMode() === "orca_ca"}>
+                <div style={{ background: "#161b22", "border-radius": "6px", padding: "10px 14px", "margin-bottom": "12px", display: "flex", "align-items": "center", gap: "8px", "font-size": "12px", color: "#8b949e" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                  Install the Orca CA certificate for trusted HTTPS. <a style={{ color: "#58a6ff", "margin-left": "4px", cursor: "pointer" }} onClick={() => props.onNavigate?.("settings:privacy")}>Go to Privacy & Security</a>
+                </div>
+              </Show>
+
+              <Show when={cfgTlsMode() === "custom"}>
+                <div class="form-group">
+                  <label class="form-label">Certificate PEM</label>
+                  <textarea class="form-input" rows={4} value={cfgCustomCert()} onInput={(e) => setCfgCustomCert(e.currentTarget.value)} placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"} style={{ "font-family": "monospace", "font-size": "11px" }} />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Private Key PEM</label>
+                  <textarea class="form-input" rows={4} value={cfgCustomKey()} onInput={(e) => setCfgCustomKey(e.currentTarget.value)} placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"} style={{ "font-family": "monospace", "font-size": "11px" }} />
+                </div>
+              </Show>
+
+              <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-top": "16px" }}>
+                <button class="btn btn-primary" onClick={saveConfig} disabled={cfgSaving()}>
+                  {cfgSaving() ? "Saving..." : "Save Configuration"}
+                </button>
+                <span style={{ "font-size": "11px", color: "#6e7681" }}>Changes may require restarting the gateway</span>
+              </div>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>
