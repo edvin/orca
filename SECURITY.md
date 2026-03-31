@@ -14,9 +14,7 @@ We recommend always running the latest version. Orca Desktop includes a built-in
 
 If you discover a security vulnerability in Orca Desktop, **please report it responsibly**.
 
-**Do NOT open a public issue for security vulnerabilities.**
-
-Instead, please email **security@orca-desktop.com** with:
+Please use [GitHub Security Advisories](https://github.com/edvin/orca/security/advisories/new) to report vulnerabilities privately. Include:
 
 1. A description of the vulnerability
 2. Steps to reproduce

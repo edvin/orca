@@ -86,4 +86,4 @@ Orca Desktop is [MIT licensed](LICENSE). The complete source code is available o
 
 ## Contact
 
-Questions about privacy? [Open an issue](https://github.com/edvin/orca/issues) or email privacy@orca-desktop.com.
+Questions about privacy? [Open an issue](https://github.com/edvin/orca/issues).
