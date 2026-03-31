@@ -90,6 +90,7 @@
 - Structured editors for ports, env vars, and volumes before deploy
 - **Compose stacks** — multi-service templates with `compose_yaml` (e.g., WordPress + MySQL, Webmail + Stalwart)
 - **Auto-generated secrets** — `generated_env` creates random passwords, hex keys, and detects LAN IP at deploy time
+- **Built-in Certificate Authority** — persistent local CA signs TLS certs for deployed stacks. Download and install the CA cert once to trust all Orca-deployed services
 - **Post-deploy setup guides** — step-by-step wizard with interactive actions (open URLs, view logs, run commands, set env vars, restart services)
 - **Create your own templates** — saved locally and available alongside builtins
 - **Contribute templates** — add your favorite app to the catalog via [PR](CONTRIBUTING.md#contributing-app-templates)
@@ -563,6 +564,8 @@ The daemon exposes a REST API at `http://127.0.0.1:9477/api/v1/`:
 | `/templates/user` | POST, DELETE | Create/update / delete user templates |
 | `/templates/:id/deploy` | POST | Deploy template |
 | `/stacks/:name/env` | PATCH | Update env var in stack's .env file |
+| `/ca/certificate` | GET | Download CA certificate (no auth) |
+| `/ca/info` | GET | CA info (subject, expiry, fingerprint) |
 | `/environment/status` | GET | Environment health checks |
 | `/environment/fix` | POST | Run fix action |
 | `/system/health` | GET | System health overview |

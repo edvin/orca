@@ -15,6 +15,117 @@ interface SettingsPageProps {
   onTabOpened?: () => void;
 }
 
+function CertificateAuthoritySection() {
+  const [caInfo, setCaInfo] = createSignal<{ subject: string; expires: string; fingerprint: string } | null>(null);
+  const [caError, setCaError] = createSignal<string | null>(null);
+  const [copiedCmd, setCopiedCmd] = createSignal<string | null>(null);
+
+  onMount(async () => {
+    try {
+      const info = await invoke("get_ca_info") as { subject: string; expires: string; fingerprint: string };
+      setCaInfo(info);
+    } catch (e) {
+      setCaError(String(e));
+    }
+  });
+
+  const downloadCaCert = async () => {
+    try {
+      const pem = await invoke("get_ca_certificate") as string;
+      const blob = new Blob([pem], { type: "application/x-pem-file" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "orca-ca.pem";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("CA certificate downloaded", "success");
+    } catch (e) {
+      showToast(`Failed to download CA certificate: ${e}`, "error");
+    }
+  };
+
+  const copyCommand = (cmd: string) => {
+    navigator.clipboard.writeText(cmd);
+    setCopiedCmd(cmd);
+    setTimeout(() => setCopiedCmd(null), 2000);
+  };
+
+  const installInstructions: [string, string, string][] = [
+    ["macOS", "sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain orca-ca.pem", ""],
+    ["Windows", "certutil -addstore -f \"ROOT\" orca-ca.pem", ""],
+    ["Linux", "sudo cp orca-ca.pem /usr/local/share/ca-certificates/orca-ca.crt && sudo update-ca-certificates", ""],
+  ];
+
+  return (
+    <div class="settings-section">
+      <h2 class="settings-section-title">Orca Certificate Authority</h2>
+      <div class="card">
+        <p style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.6" }}>
+          Orca generates a local CA to sign TLS certificates for deployed app templates.
+          Install the CA certificate to trust all Orca-deployed services.
+        </p>
+
+        <Show when={caInfo()}>
+          {(info) => (
+            <div class="card-grid" style={{ "margin-bottom": "16px" }}>
+              <span class="card-label">Subject</span>
+              <span class="card-value mono">{info().subject}</span>
+              <span class="card-label">Expires</span>
+              <span class="card-value">{info().expires}</span>
+              <span class="card-label">Fingerprint</span>
+              <span class="card-value mono" style={{ "font-size": "11px", "word-break": "break-all" }}>{info().fingerprint}</span>
+            </div>
+          )}
+        </Show>
+
+        <Show when={caError()}>
+          <div style={{ color: "#f85149", "font-size": "12px", "margin-bottom": "12px" }}>{caError()}</div>
+        </Show>
+
+        <button
+          class="btn btn-primary"
+          style={{ "margin-bottom": "20px" }}
+          onClick={downloadCaCert}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "6px" }}>
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download CA Certificate
+        </button>
+
+        <div style={{ "border-top": "1px solid #21262d", "padding-top": "16px" }}>
+          <div style={{ "font-size": "12px", "font-weight": "600", color: "#c9d1d9", "margin-bottom": "12px" }}>Install instructions</div>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
+            <For each={installInstructions}>{([platform, cmd]) => (
+              <div style={{ display: "flex", "align-items": "center", gap: "10px" }}>
+                <span style={{ "font-size": "11px", "font-weight": "600", color: "#58a6ff", "min-width": "60px" }}>{platform}</span>
+                <code class="mono" style={{ flex: "1", "font-size": "11px", color: "#c9d1d9", background: "#161b22", padding: "8px 10px", "border-radius": "6px", "word-break": "break-all", "line-height": "1.5" }}>{cmd}</code>
+                <button
+                  class="btn btn-ghost"
+                  style={{ padding: "4px 8px", "flex-shrink": "0" }}
+                  onClick={() => copyCommand(cmd)}
+                  title="Copy to clipboard"
+                >
+                  {copiedCmd() === cmd ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                  )}
+                </button>
+              </div>
+            )}</For>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage(props: SettingsPageProps = {}) {
   const [tab, setTab] = createSignal<SettingsTab>(
     (props.initialTab as SettingsTab) || "general"
@@ -2218,6 +2329,9 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 </div>
               </div>
             </div>
+
+            {/* Certificate Authority */}
+            <CertificateAuthoritySection />
 
             {/* AI Privacy */}
             <div class="settings-section">

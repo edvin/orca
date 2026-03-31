@@ -156,6 +156,8 @@ pub fn run() {
             commands::get_daemon_info,
             commands::check_for_updates,
             commands::get_api_token,
+            commands::get_ca_certificate,
+            commands::get_ca_info,
             commands::write_temp_file,
             commands::open_file_in_browser,
             commands::cleanup,

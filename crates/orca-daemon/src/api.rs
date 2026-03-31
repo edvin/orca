@@ -61,8 +61,11 @@ pub async fn auth_middleware(
     req: Request,
     next: Next,
 ) -> Result<axum::response::Response, StatusCode> {
-    // Allow health endpoint without auth
-    if req.uri().path() == "/api/v1/health" || req.uri().path() == "/health" {
+    // Allow health and CA certificate endpoints without auth
+    if req.uri().path() == "/api/v1/health"
+        || req.uri().path() == "/health"
+        || req.uri().path() == "/api/v1/ca/certificate"
+    {
         let mut response = next.run(req).await;
         response.headers_mut().insert(
             "x-orca-version",
@@ -289,6 +292,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/agent/execute", post(agent_execute_tool))
         .route("/agent/openai/chat/completions", post(agent_openai_proxy))
         .route("/agent/mcp", post(agent_mcp))
+        // CA
+        .route("/ca/certificate", get(ca_certificate))
+        .route("/ca/info", get(ca_info))
 }
 
 // --- Health ---
@@ -3503,13 +3509,79 @@ fn detect_lan_ip() -> String {
     }
 }
 
-/// A cached self-signed certificate + private key pair, generated once per deploy.
+/// A cached certificate + private key pair, generated once per deploy.
 struct CachedCertKeyPair {
     cert_pem: String,
     key_pem: String,
 }
 
-/// Generate (or retrieve from cache) a self-signed certificate and key pair.
+/// Returns the CA directory path (~/.config/orca/ca/).
+fn ca_dir() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("orca")
+        .join("ca")
+}
+
+/// Returns the persistent CA cert and key PEM strings.
+/// If the CA does not exist yet, generates a new root CA and saves it to disk.
+fn get_or_create_ca() -> (String, String) {
+    let dir = ca_dir();
+    let cert_path = dir.join("ca.pem");
+    let key_path = dir.join("ca-key.pem");
+
+    // If both files exist, read and return them
+    if cert_path.exists()
+        && key_path.exists()
+        && let (Ok(cert_pem), Ok(key_pem)) = (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path))
+    {
+        tracing::info!("Loaded existing CA from {}", dir.display());
+        return (cert_pem, key_pem);
+    }
+
+    // Generate a new root CA
+    tracing::info!("Generating new Orca root CA in {}", dir.display());
+    let mut params =
+        rcgen::CertificateParams::new(Vec::<String>::new()).expect("Failed to create CA certificate params");
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "Orca Desktop CA");
+    params
+        .distinguished_name
+        .push(rcgen::DnType::OrganizationName, "Orca Desktop");
+    params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    params.key_usages = vec![rcgen::KeyUsagePurpose::KeyCertSign, rcgen::KeyUsagePurpose::CrlSign];
+
+    // Validity: 10 years
+    let now = time::OffsetDateTime::now_utc();
+    params.not_before = now;
+    params.not_after = now + time::Duration::days(365 * 10);
+
+    let key_pair = rcgen::KeyPair::generate().expect("Failed to generate CA key pair");
+    let cert = params
+        .self_signed(&key_pair)
+        .expect("Failed to generate CA certificate");
+
+    let cert_pem = cert.pem();
+    let key_pem = key_pair.serialize_pem();
+
+    // Save to disk
+    std::fs::create_dir_all(&dir).expect("Failed to create CA directory");
+    std::fs::write(&cert_path, &cert_pem).expect("Failed to write CA certificate");
+    std::fs::write(&key_path, &key_pem).expect("Failed to write CA private key");
+
+    // Restrict key file permissions on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+    }
+
+    tracing::info!("Saved new CA certificate to {}", cert_path.display());
+    (cert_pem, key_pem)
+}
+
+/// Generate (or retrieve from cache) a leaf certificate signed by the Orca CA.
 /// The certificate uses `subject` as the CN (defaults to "localhost").
 fn get_or_generate_cert_key_pair<'a>(
     subject: Option<&str>,
@@ -3517,19 +3589,52 @@ fn get_or_generate_cert_key_pair<'a>(
 ) -> &'a CachedCertKeyPair {
     if cache.is_none() {
         let cn = subject.unwrap_or("localhost");
+
+        // Load the CA
+        let (ca_cert_pem, ca_key_pem) = get_or_create_ca();
+        let ca_key = rcgen::KeyPair::from_pem(&ca_key_pem).expect("Failed to parse CA key");
+        let ca_params =
+            rcgen::CertificateParams::from_ca_cert_pem(&ca_cert_pem).expect("Failed to parse CA certificate");
+        let ca_cert = ca_params
+            .self_signed(&ca_key)
+            .expect("Failed to reconstruct CA certificate");
+
+        // Build SANs: CN value + "localhost" + "127.0.0.1" (deduplicated)
+        let mut san_dns: Vec<String> = vec![cn.to_string()];
+        if cn != "localhost" {
+            san_dns.push("localhost".to_string());
+        }
+        let include_loopback = cn != "127.0.0.1";
+
+        let mut san_types: Vec<rcgen::SanType> = san_dns
+            .iter()
+            .map(|s| rcgen::SanType::DnsName(s.clone().try_into().unwrap()))
+            .collect();
+        if include_loopback {
+            san_types.push(rcgen::SanType::IpAddress(std::net::IpAddr::V4(
+                std::net::Ipv4Addr::new(127, 0, 0, 1),
+            )));
+        }
+
         let mut params =
-            rcgen::CertificateParams::new(vec![cn.to_string()]).expect("Failed to create certificate params");
+            rcgen::CertificateParams::new(Vec::<String>::new()).expect("Failed to create leaf certificate params");
         params.distinguished_name.push(rcgen::DnType::CommonName, cn);
+        params.subject_alt_names = san_types;
 
-        let key_pair = rcgen::KeyPair::generate().expect("Failed to generate RSA key pair");
-        let cert = params
-            .self_signed(&key_pair)
-            .expect("Failed to generate self-signed certificate");
+        // Validity: 1 year
+        let now = time::OffsetDateTime::now_utc();
+        params.not_before = now;
+        params.not_after = now + time::Duration::days(365);
 
-        let cert_pem = cert.pem();
-        let key_pem = key_pair.serialize_pem();
+        let leaf_key = rcgen::KeyPair::generate().expect("Failed to generate leaf key pair");
+        let leaf_cert = params
+            .signed_by(&leaf_key, &ca_cert, &ca_key)
+            .expect("Failed to sign leaf certificate with CA");
 
-        tracing::info!("Generated self-signed certificate for CN={cn}");
+        let cert_pem = leaf_cert.pem();
+        let key_pem = leaf_key.serialize_pem();
+
+        tracing::info!("Generated CA-signed certificate for CN={cn}");
 
         *cache = Some(CachedCertKeyPair { cert_pem, key_pem });
     }
@@ -5868,6 +5973,56 @@ async fn agent_mcp(State(state): State<Arc<AppState>>, Json(body): Json<serde_js
             }
         })),
     }
+}
+
+// --- CA Certificate ---
+
+/// GET /ca/certificate — returns the CA certificate PEM (no auth required).
+async fn ca_certificate() -> impl IntoResponse {
+    let (cert_pem, _) = get_or_create_ca();
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        cert_pem,
+    )
+}
+
+/// GET /ca/info — returns CA info as JSON (auth required).
+async fn ca_info() -> Result<impl IntoResponse, ApiError> {
+    let (cert_pem, _) = get_or_create_ca();
+
+    let x509 = openssl::x509::X509::from_pem(cert_pem.as_bytes())
+        .map_err(|e| anyhow::anyhow!("Failed to parse CA certificate: {e}"))?;
+
+    let subject = x509
+        .subject_name()
+        .entries()
+        .map(|e| {
+            format!(
+                "{}={}",
+                e.object().nid().short_name().unwrap_or("?"),
+                e.data().as_utf8().map(|s| s.to_string()).unwrap_or_default()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let expires = x509.not_after().to_string();
+
+    let fingerprint = x509
+        .digest(openssl::hash::MessageDigest::sha256())
+        .map_err(|e| anyhow::anyhow!("Failed to compute fingerprint: {e}"))?;
+    let fingerprint_hex = fingerprint
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(":");
+
+    Ok(Json(serde_json::json!({
+        "installed": true,
+        "subject": subject,
+        "expires": expires,
+        "fingerprint": fingerprint_hex,
+    })))
 }
 
 /// Generate a simple UUID v4 (random) without pulling in the uuid crate.

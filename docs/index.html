@@ -1099,7 +1099,7 @@
 
       <!-- Category: Platform -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Platform</span><span class="ft-count">20</span></span>
+        <span class="ft-category-left"><span>Platform</span><span class="ft-count">21</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -1108,6 +1108,7 @@
       <div class="ft-row"><span>Signed auto-updates with tamper-proof upgrade manifests</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Code signed</strong> — Apple notarized (macOS), EV signed (Windows)</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>Startup progress</strong> — real-time feedback during daemon and environment checks</span><span class="ft-check">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Built-in CA</strong> — persistent local Certificate Authority signs TLS certs for deployed templates</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span>macOS: Apple Virtualization.framework + VirtioFS + proxy passthrough</span><span class="ft-check">&#10003;</span></div>
       <div class="ft-row"><span><strong>NVIDIA GPU detection</strong> — Container Toolkit auto-install</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>GPU VRAM monitoring</strong> — dashboard and status bar display</span><span class="ft-check ft-unique">&#10003;</span></div>
@@ -1695,6 +1696,24 @@ document.addEventListener('DOMContentLoaded', initGallery);
       <span><strong style="color: #e6edf3;">Image pull</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">Your registries</code></span>
       <span style="color: #8b949e; font-size: 12px;">You pull</span>
       <span style="color: #d29922; font-size: 12px; font-weight: 600;">Image ref</span>
+    </div>
+  </div>
+
+  <!-- Built-in CA -->
+  <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px; margin-bottom: 16px;">
+    <div style="display: flex; align-items: flex-start; gap: 20px;">
+      <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: rgba(210, 153, 34, 0.1); border-radius: 10px; flex-shrink: 0;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d29922" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+      </div>
+      <div>
+        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 6px; color: #e6edf3;">Built-in Certificate Authority</h3>
+        <p style="font-size: 13px; color: #8b949e; line-height: 1.6; margin-bottom: 10px;">Orca generates a persistent local CA that signs TLS certificates for every deployed app template. Install the CA certificate once and all Orca-deployed services are automatically trusted — no more browser warnings.</p>
+        <div style="display: flex; gap: 20px; font-size: 12px; color: #6e7681;">
+          <span style="display: flex; align-items: center; gap: 5px;"><span style="color: #d29922;">&#10003;</span> One-click download in Settings</span>
+          <span style="display: flex; align-items: center; gap: 5px;"><span style="color: #d29922;">&#10003;</span> 10-year root CA, 1-year leaf certs</span>
+          <span style="display: flex; align-items: center; gap: 5px;"><span style="color: #d29922;">&#10003;</span> Install instructions for macOS, Windows, Linux</span>
+        </div>
+      </div>
     </div>
   </div>
 

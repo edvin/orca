@@ -36,4 +36,5 @@ cron = "0.15"
 chrono.workspace = true
 dirs.workspace = true
 base64.workspace = true
-rcgen = "0.13"
+rcgen = { version = "0.13", features = ["x509-parser"] }
+time = "0.3"

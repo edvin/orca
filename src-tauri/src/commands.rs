@@ -2699,6 +2699,27 @@ pub async fn get_api_token() -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn get_ca_certificate() -> Result<String, String> {
+    let base = daemon_url();
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/ca/certificate"))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch CA certificate: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("Daemon returned status {}", resp.status()));
+    }
+    resp.text()
+        .await
+        .map_err(|e| format!("Failed to read CA certificate: {e}"))
+}
+
+#[tauri::command]
+pub async fn get_ca_info() -> Result<serde_json::Value, String> {
+    get_json("/ca/info").await
+}
+
+#[tauri::command]
 pub async fn write_temp_file(name: String, content: String) -> Result<String, String> {
     let dir = std::env::temp_dir();
     // Sanitize: use only the filename component, reject path traversal
