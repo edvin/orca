@@ -273,6 +273,11 @@ export default function App() {
         </div>
       ) : daemonStatus() !== "running" ? (
         <ConnectionScreen status={daemonStatus()} onRetry={checkDaemon} />
+      ) : !environmentChecked() ? (
+        <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "calc(100vh - 40px)", gap: "16px" }}>
+          <img src="/orca-logo-full.png" alt="Orca" style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
+          <div style={{ color: "#8b949e", "font-size": "14px" }}>Checking environment...</div>
+        </div>
       ) : (
         <>
           <div class="app-body">

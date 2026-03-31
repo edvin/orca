@@ -38,8 +38,12 @@ export default function EnvironmentPage() {
       if (envRes.status === "fulfilled") setStatus(envRes.value as EnvironmentStatus);
       if (machineRes.status === "fulfilled") setMachine(machineRes.value as MachineInfo);
       if (healthRes.status === "fulfilled") setHealth(healthRes.value as SystemHealth);
+      // If all three failed, show a fallback state so the page isn't stuck on loading
+      if (envRes.status === "rejected" && machineRes.status === "rejected" && healthRes.status === "rejected") {
+        setHealth({ docker_connected: false, docker_version: null, disk_usage: null, system_resources: null, warnings: ["Could not reach Docker. The setup wizard below will help you get started."] } as SystemHealth);
+      }
     } catch (e) {
-      showToast(`Failed to check environment: ${e}`, "error");
+      // Don't show toast for expected failures during first setup
     } finally {
       setLoading(false);
     }
