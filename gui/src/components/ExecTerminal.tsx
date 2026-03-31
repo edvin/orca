@@ -110,7 +110,7 @@ export default function ExecTerminal(props: ExecTerminalProps) {
           >
             Copy Output
           </button>
-          <button class="btn btn-sm" onClick={props.onClose}>
+          <button class="btn btn-sm" onClick={() => props.onClose()}>
             Close
           </button>
         </div>

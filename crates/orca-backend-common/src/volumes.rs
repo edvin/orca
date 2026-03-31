@@ -23,15 +23,8 @@ impl VolumeManager for BollardRuntime {
             .collect())
     }
 
-    async fn create(
-        &self,
-        name: &str,
-        labels: HashMap<String, String>,
-    ) -> anyhow::Result<Volume> {
-        let str_labels: HashMap<&str, &str> = labels
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
+    async fn create(&self, name: &str, labels: HashMap<String, String>) -> anyhow::Result<Volume> {
+        let str_labels: HashMap<&str, &str> = labels.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
         let options = CreateVolumeOptions {
             name,
             labels: str_labels,
@@ -48,7 +41,9 @@ impl VolumeManager for BollardRuntime {
     }
 
     async fn remove(&self, name: &str, force: bool) -> anyhow::Result<()> {
-        self.docker.remove_volume(name, Some(bollard::volume::RemoveVolumeOptions { force })).await?;
+        self.docker
+            .remove_volume(name, Some(bollard::volume::RemoveVolumeOptions { force }))
+            .await?;
         Ok(())
     }
 

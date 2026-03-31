@@ -200,10 +200,7 @@ async fn cmd_containers_list(client: &client::DaemonClient) -> anyhow::Result<()
         return Ok(());
     }
 
-    println!(
-        "{:<14} {:<18} {:<20} {:<10} {}",
-        "ID", "NAME", "IMAGE", "STATE", "PORTS"
-    );
+    println!("{:<14} {:<18} {:<20} {:<10} PORTS", "ID", "NAME", "IMAGE", "STATE");
     for c in &containers {
         let short_id = if c.id.len() > 12 { &c.id[..12] } else { &c.id };
         let ports = c
@@ -232,11 +229,7 @@ async fn cmd_container_stop(client: &client::DaemonClient, id: &str) -> anyhow::
     Ok(())
 }
 
-async fn cmd_container_logs(
-    client: &client::DaemonClient,
-    id: &str,
-    tail: Option<u32>,
-) -> anyhow::Result<()> {
+async fn cmd_container_logs(client: &client::DaemonClient, id: &str, tail: Option<u32>) -> anyhow::Result<()> {
     let lines = client.container_logs(id, tail).await?;
     for line in &lines {
         println!("{line}");
@@ -244,11 +237,7 @@ async fn cmd_container_logs(
     Ok(())
 }
 
-async fn cmd_container_exec(
-    client: &client::DaemonClient,
-    id: &str,
-    cmd: Vec<String>,
-) -> anyhow::Result<()> {
+async fn cmd_container_exec(client: &client::DaemonClient, id: &str, cmd: Vec<String>) -> anyhow::Result<()> {
     let result = client.exec_container(id, cmd).await?;
     if !result.output.is_empty() {
         print!("{}", result.output);
@@ -268,10 +257,7 @@ async fn cmd_images_list(client: &client::DaemonClient) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!(
-        "{:<24} {:<10} {:<12} {}",
-        "REPOSITORY", "TAG", "SIZE", "CREATED"
-    );
+    println!("{:<24} {:<10} {:<12} CREATED", "REPOSITORY", "TAG", "SIZE");
     for img in &images {
         let (repo, tag) = if img.repo_tags.is_empty() {
             ("<untagged>".to_string(), String::new())
@@ -325,19 +311,10 @@ async fn cmd_stacks_list(client: &client::DaemonClient) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!(
-        "{:<24} {:<12} {:<6} {}",
-        "NAME", "STATUS", "SVCS", "DIRECTORY"
-    );
+    println!("{:<24} {:<12} {:<6} DIRECTORY", "NAME", "STATUS", "SVCS");
     for s in &stacks {
         let dir = s.working_dir.as_deref().unwrap_or("-");
-        println!(
-            "{:<24} {:<12} {:<6} {}",
-            s.name,
-            s.status,
-            s.services.len(),
-            dir
-        );
+        println!("{:<24} {:<12} {:<6} {}", s.name, s.status, s.services.len(), dir);
     }
     Ok(())
 }
@@ -370,10 +347,7 @@ async fn cmd_k8s_status(client: &client::DaemonClient) -> anyhow::Result<()> {
         let node_status = status.node_status.as_deref().unwrap_or("Unknown");
         println!("  Node:     {node} ({node_status})");
     }
-    println!(
-        "  Pods:     {}/{} running",
-        status.pods_running, status.pods_total
-    );
+    println!("  Pods:     {}/{} running", status.pods_running, status.pods_total);
     Ok(())
 }
 
@@ -400,10 +374,7 @@ async fn cmd_machine_list(client: &client::DaemonClient) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!(
-        "{:<16} {:<10} {:<6} {:<10} {}",
-        "NAME", "STATE", "CPUS", "MEMORY", "RUNTIME"
-    );
+    println!("{:<16} {:<10} {:<6} {:<10} RUNTIME", "NAME", "STATE", "CPUS", "MEMORY");
     for m in &machines {
         let mem = format!("{} MB", m.config.memory_mb);
         println!(

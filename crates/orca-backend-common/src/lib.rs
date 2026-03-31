@@ -5,17 +5,17 @@
 //! shared implementation so each backend only needs to handle
 //! platform-specific VM/machine management.
 
-pub mod containers;
-pub mod images;
-pub mod volumes;
-pub mod networks;
-pub mod events;
 pub mod compose;
-pub mod k8s;
+pub mod containers;
 pub mod environment;
+pub mod events;
 pub mod export;
+pub mod images;
+pub mod k8s;
+pub mod networks;
 pub mod search;
 pub mod templates;
+pub mod volumes;
 
 /// Shared container runtime client backed by bollard.
 /// Each platform backend embeds this and delegates trait impls to it.
@@ -30,12 +30,12 @@ impl BollardRuntime {
 
     /// Detect whether we're talking to Docker or Podman.
     pub async fn detect_runtime(&self) -> orca_core::runtime::RuntimeKind {
-        if let Ok(version) = self.docker.version().await {
-            if let Some(components) = version.components {
-                for c in &components {
-                    if c.name.to_lowercase().contains("podman") {
-                        return orca_core::runtime::RuntimeKind::Podman;
-                    }
+        if let Ok(version) = self.docker.version().await
+            && let Some(components) = version.components
+        {
+            for c in &components {
+                if c.name.to_lowercase().contains("podman") {
+                    return orca_core::runtime::RuntimeKind::Podman;
                 }
             }
         }

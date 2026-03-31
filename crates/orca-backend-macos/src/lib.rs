@@ -40,7 +40,9 @@ impl MacOSBackend {
         }
 
         let docker = bollard::Docker::connect_with_socket(
-            socket_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid socket path"))?,
+            socket_path
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid socket path"))?,
             120,
             bollard::API_DEFAULT_VERSION,
         )?;
@@ -55,8 +57,5 @@ impl MacOSBackend {
 
 fn lima_socket_path(vm_name: &str) -> PathBuf {
     let home = dirs::home_dir().unwrap_or_default();
-    home.join(".lima")
-        .join(vm_name)
-        .join("sock")
-        .join("docker.sock")
+    home.join(".lima").join(vm_name).join("sock").join("docker.sock")
 }

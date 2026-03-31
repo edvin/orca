@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use bollard::container::{
-    CreateContainerOptions, KillContainerOptions, ListContainersOptions, LogsOptions,
-    RemoveContainerOptions, StatsOptions, StopContainerOptions, UpdateContainerOptions,
+    CreateContainerOptions, KillContainerOptions, ListContainersOptions, LogsOptions, RemoveContainerOptions,
+    StatsOptions, StopContainerOptions, UpdateContainerOptions,
 };
 use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::models::HostConfig;
@@ -53,28 +53,19 @@ impl ContainerRuntime for BollardRuntime {
                 Some(opts.command.clone())
             },
             entrypoint: opts.entrypoint.clone(),
-            env: Some(
-                opts.env
-                    .iter()
-                    .map(|(k, v)| format!("{k}={v}"))
-                    .collect(),
-            ),
+            env: Some(opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect()),
             labels: Some(opts.labels.clone()),
             host_config: Some(HostConfig {
                 port_bindings: Some(port_bindings),
                 binds: Some(binds),
-                restart_policy: opts.restart_policy.map(|p| {
-                    bollard::models::RestartPolicy {
-                        name: Some(match p.as_str() {
-                            "always" => bollard::models::RestartPolicyNameEnum::ALWAYS,
-                            "unless-stopped" => {
-                                bollard::models::RestartPolicyNameEnum::UNLESS_STOPPED
-                            }
-                            "on-failure" => bollard::models::RestartPolicyNameEnum::ON_FAILURE,
-                            _ => bollard::models::RestartPolicyNameEnum::NO,
-                        }),
-                        maximum_retry_count: None,
-                    }
+                restart_policy: opts.restart_policy.map(|p| bollard::models::RestartPolicy {
+                    name: Some(match p.as_str() {
+                        "always" => bollard::models::RestartPolicyNameEnum::ALWAYS,
+                        "unless-stopped" => bollard::models::RestartPolicyNameEnum::UNLESS_STOPPED,
+                        "on-failure" => bollard::models::RestartPolicyNameEnum::ON_FAILURE,
+                        _ => bollard::models::RestartPolicyNameEnum::NO,
+                    }),
+                    maximum_retry_count: None,
                 }),
                 network_mode: opts.network.clone(),
                 auto_remove: Some(opts.remove_on_exit),
@@ -96,40 +87,30 @@ impl ContainerRuntime for BollardRuntime {
             ..Default::default()
         };
 
-        let create_opts = opts
-            .name
-            .as_ref()
-            .map(|n| CreateContainerOptions { name: n.as_str(), platform: None });
+        let create_opts = opts.name.as_ref().map(|n| CreateContainerOptions {
+            name: n.as_str(),
+            platform: None,
+        });
 
         let response = self.docker.create_container(create_opts, config).await?;
         Ok(response.id)
     }
 
     async fn start_container(&self, id: &str) -> anyhow::Result<()> {
-        self.docker
-            .start_container::<String>(id, None)
-            .await?;
+        self.docker.start_container::<String>(id, None).await?;
         Ok(())
     }
 
     async fn stop_container(&self, id: &str, timeout_secs: u32) -> anyhow::Result<()> {
         self.docker
-            .stop_container(
-                id,
-                Some(StopContainerOptions {
-                    t: timeout_secs as i64,
-                }),
-            )
+            .stop_container(id, Some(StopContainerOptions { t: timeout_secs as i64 }))
             .await?;
         Ok(())
     }
 
     async fn kill_container(&self, id: &str, signal: &str) -> anyhow::Result<()> {
         self.docker
-            .kill_container(
-                id,
-                Some(KillContainerOptions { signal }),
-            )
+            .kill_container(id, Some(KillContainerOptions { signal }))
             .await?;
         Ok(())
     }
@@ -172,9 +153,7 @@ impl ContainerRuntime for BollardRuntime {
             follow,
             stdout: true,
             stderr: true,
-            tail: tail
-                .map(|t| t.to_string())
-                .unwrap_or_else(|| "100".to_string()),
+            tail: tail.map(|t| t.to_string()).unwrap_or_else(|| "100".to_string()),
             ..Default::default()
         };
 
@@ -206,14 +185,10 @@ impl ContainerRuntime for BollardRuntime {
             .await
             .ok_or_else(|| anyhow::anyhow!("no stats returned"))??;
 
-        let cpu_delta = stats.cpu_stats.cpu_usage.total_usage as f64
-            - stats.precpu_stats.cpu_usage.total_usage as f64;
+        let cpu_delta = stats.cpu_stats.cpu_usage.total_usage as f64 - stats.precpu_stats.cpu_usage.total_usage as f64;
         let system_delta = stats.cpu_stats.system_cpu_usage.unwrap_or(0) as f64
             - stats.precpu_stats.system_cpu_usage.unwrap_or(0) as f64;
-        let num_cpus = stats
-            .cpu_stats
-            .online_cpus
-            .unwrap_or(1) as f64;
+        let num_cpus = stats.cpu_stats.online_cpus.unwrap_or(1) as f64;
 
         let cpu_percent = if system_delta > 0.0 {
             (cpu_delta / system_delta) * num_cpus * 100.0
@@ -236,22 +211,20 @@ impl ContainerRuntime for BollardRuntime {
                 .as_ref()
                 .map(|n| n.values().map(|v| v.tx_bytes).sum())
                 .unwrap_or(0),
-            block_read_bytes: 0,  // TODO: parse blkio stats
+            block_read_bytes: 0, // TODO: parse blkio stats
             block_write_bytes: 0,
         })
     }
 
     async fn update_container(&self, id: &str, opts: orca_core::runtime::ContainerUpdateOpts) -> anyhow::Result<()> {
-        let restart_policy = opts.restart_policy.map(|p| {
-            bollard::models::RestartPolicy {
-                name: Some(match p.as_str() {
-                    "always" => bollard::models::RestartPolicyNameEnum::ALWAYS,
-                    "unless-stopped" => bollard::models::RestartPolicyNameEnum::UNLESS_STOPPED,
-                    "on-failure" => bollard::models::RestartPolicyNameEnum::ON_FAILURE,
-                    _ => bollard::models::RestartPolicyNameEnum::NO,
-                }),
-                maximum_retry_count: None,
-            }
+        let restart_policy = opts.restart_policy.map(|p| bollard::models::RestartPolicy {
+            name: Some(match p.as_str() {
+                "always" => bollard::models::RestartPolicyNameEnum::ALWAYS,
+                "unless-stopped" => bollard::models::RestartPolicyNameEnum::UNLESS_STOPPED,
+                "on-failure" => bollard::models::RestartPolicyNameEnum::ON_FAILURE,
+                _ => bollard::models::RestartPolicyNameEnum::NO,
+            }),
+            maximum_retry_count: None,
         });
 
         // Docker's container update API does not support NanoCpus.
@@ -295,12 +268,7 @@ impl ContainerRuntime for BollardRuntime {
                     attach_stdout: Some(true),
                     attach_stderr: Some(true),
                     tty: Some(opts.tty),
-                    env: Some(
-                        opts.env
-                            .iter()
-                            .map(|(k, v)| format!("{k}={v}"))
-                            .collect(),
-                    ),
+                    env: Some(opts.env.iter().map(|(k, v)| format!("{k}={v}")).collect()),
                     working_dir: opts.workdir.clone(),
                     ..Default::default()
                 },
@@ -348,9 +316,12 @@ fn summary_to_container(c: &bollard::models::ContainerSummary) -> Container {
                 .filter_map(|p| {
                     Some(PortMapping {
                         host_ip: p.ip.clone(),
-                        host_port: p.public_port? as u16,
-                        container_port: p.private_port as u16,
-                        protocol: p.typ.map(|t| format!("{t:?}").to_lowercase()).unwrap_or_else(|| "tcp".into()),
+                        host_port: p.public_port?,
+                        container_port: p.private_port,
+                        protocol: p
+                            .typ
+                            .map(|t| format!("{t:?}").to_lowercase())
+                            .unwrap_or_else(|| "tcp".into()),
                     })
                 })
                 .collect()
@@ -366,11 +337,7 @@ fn summary_to_container(c: &bollard::models::ContainerSummary) -> Container {
             .map(|n| n.trim_start_matches('/').to_string())
             .unwrap_or_default(),
         image: c.image.clone().unwrap_or_default(),
-        state: c
-            .state
-            .as_deref()
-            .map(parse_state)
-            .unwrap_or(ContainerState::Dead),
+        state: c.state.as_deref().map(parse_state).unwrap_or(ContainerState::Dead),
         ports,
         labels: c.labels.clone().unwrap_or_default(),
         created_at: c.created.map(|t| t.to_string()).unwrap_or_default(),
@@ -411,19 +378,12 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
                     let container_port = parts[0].parse::<u16>().unwrap_or(0);
                     let protocol = parts.get(1).unwrap_or(&"tcp").to_string();
 
-                    bindings
-                        .iter()
-                        .flatten()
-                        .map(move |b| PortMapping {
-                            host_ip: b.host_ip.clone(),
-                            host_port: b
-                                .host_port
-                                .as_ref()
-                                .and_then(|p| p.parse::<u16>().ok())
-                                .unwrap_or(0),
-                            container_port,
-                            protocol: protocol.clone(),
-                        })
+                    bindings.iter().flatten().map(move |b| PortMapping {
+                        host_ip: b.host_ip.clone(),
+                        host_port: b.host_port.as_ref().and_then(|p| p.parse::<u16>().ok()).unwrap_or(0),
+                        container_port,
+                        protocol: protocol.clone(),
+                    })
                 })
                 .collect()
         })
@@ -431,19 +391,16 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
 
     let state_info = info.state.as_ref();
 
-    let mounts = info
-        .mounts
-        .as_ref()
-        .map(|ms| {
-            ms.iter()
-                .map(|m| ContainerMount {
-                    source: m.source.clone().unwrap_or_default(),
-                    destination: m.destination.clone().unwrap_or_default(),
-                    mode: m.mode.clone().unwrap_or_default(),
-                    rw: m.rw.unwrap_or(false),
-                })
-                .collect()
-        });
+    let mounts = info.mounts.as_ref().map(|ms| {
+        ms.iter()
+            .map(|m| ContainerMount {
+                source: m.source.clone().unwrap_or_default(),
+                destination: m.destination.clone().unwrap_or_default(),
+                mode: m.mode.clone().unwrap_or_default(),
+                rw: m.rw.unwrap_or(false),
+            })
+            .collect()
+    });
 
     let host_config = info.host_config.as_ref();
 
@@ -511,17 +468,17 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
         image: info.config.as_ref().and_then(|c| c.image.clone()).unwrap_or_default(),
         state,
         ports,
-        labels: info
-            .config
-            .as_ref()
-            .and_then(|c| c.labels.clone())
-            .unwrap_or_default(),
+        labels: info.config.as_ref().and_then(|c| c.labels.clone()).unwrap_or_default(),
         created_at: info.created.clone().unwrap_or_default(),
         exit_code: state_info.and_then(|s| s.exit_code),
         error: state_info.and_then(|s| s.error.clone()).filter(|e| !e.is_empty()),
         oom_killed: state_info.and_then(|s| s.oom_killed),
-        started_at: state_info.and_then(|s| s.started_at.clone()).filter(|s| !s.starts_with("0001")),
-        finished_at: state_info.and_then(|s| s.finished_at.clone()).filter(|s| !s.starts_with("0001")),
+        started_at: state_info
+            .and_then(|s| s.started_at.clone())
+            .filter(|s| !s.starts_with("0001")),
+        finished_at: state_info
+            .and_then(|s| s.finished_at.clone())
+            .filter(|s| !s.starts_with("0001")),
         command: info.config.as_ref().and_then(|c| c.cmd.clone()),
         env: info.config.as_ref().and_then(|c| c.env.clone()),
         mounts,

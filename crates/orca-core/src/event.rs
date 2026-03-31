@@ -52,9 +52,7 @@ mod tests {
 
     #[test]
     fn event_kind_machine_started_serialization() {
-        let kind = EventKind::MachineStarted {
-            name: "default".into(),
-        };
+        let kind = EventKind::MachineStarted { name: "default".into() };
         let json = serde_json::to_value(&kind).unwrap();
         assert_eq!(json["type"], "MachineStarted");
         assert_eq!(json["data"]["name"], "default");

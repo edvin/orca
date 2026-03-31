@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, For, Show, createEffect } from "solid-js";
+import { createSignal, onMount, onCleanup, For, Show, createEffect, untrack } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { copyToClipboard } from "../lib/clipboard";
 
@@ -64,16 +64,17 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
   const [useRegex, setUseRegex] = createSignal(false);
   const [caseSensitive, setCaseSensitive] = createSignal(false);
   const [autoScroll, setAutoScroll] = createSignal(true);
+  const initialContainers = untrack(() => props.containers);
   const [visibleContainers, setVisibleContainers] = createSignal<Set<string>>(
-    new Set(props.containers.map((c) => c.id))
+    new Set(initialContainers.map((c) => c.id))
   );
-  const [fontSize, setFontSize] = createSignal(
+  const [fontSize] = createSignal(
     parseInt(localStorage.getItem("log-font-size") || "13", 10)
   );
   let logContainer: HTMLDivElement | undefined;
 
   const colorMap = new Map<string, string>();
-  props.containers.forEach((c, i) => {
+  initialContainers.forEach((c, i) => {
     colorMap.set(c.id, COLORS[i % COLORS.length]);
   });
 
@@ -285,7 +286,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
             <button class="action-icon" onClick={fetchAllLogs} title="Refresh">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
             </button>
-            <button class="action-icon" onClick={props.onClose} title="Close">
+            <button class="action-icon" onClick={() => props.onClose()} title="Close">
               {"\u2715"}
             </button>
           </div>

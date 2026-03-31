@@ -8,15 +8,13 @@ const CACHE_MAX_AGE_SECS: u64 = 3600;
 
 /// Path to cached community templates.
 fn community_cache_path() -> std::path::PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let config_dir = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
     config_dir.join("orca").join("community-templates.json")
 }
 
 /// Path to user-created templates.
 fn user_templates_path() -> std::path::PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let config_dir = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
     config_dir.join("orca").join("templates.json")
 }
 
@@ -31,19 +29,20 @@ pub async fn fetch_community_templates() -> Vec<AppTemplate> {
     let cache_path = community_cache_path();
 
     // Check if cache is fresh enough
-    let cache_fresh = cache_path.exists() && cache_path.metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.elapsed().ok())
-        .map(|age: std::time::Duration| age.as_secs() < CACHE_MAX_AGE_SECS)
-        .unwrap_or(false);
+    let cache_fresh = cache_path.exists()
+        && cache_path
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.elapsed().ok())
+            .map(|age: std::time::Duration| age.as_secs() < CACHE_MAX_AGE_SECS)
+            .unwrap_or(false);
 
-    if cache_fresh {
-        if let Ok(data) = std::fs::read_to_string(&cache_path) {
-            if let Ok(templates) = serde_json::from_str::<Vec<AppTemplate>>(&data) {
-                return templates;
-            }
-        }
+    if cache_fresh
+        && let Ok(data) = std::fs::read_to_string(&cache_path)
+        && let Ok(templates) = serde_json::from_str::<Vec<AppTemplate>>(&data)
+    {
+        return templates;
     }
 
     // Cache is stale or missing — fetch from the web
@@ -54,21 +53,21 @@ pub async fn fetch_community_templates() -> Vec<AppTemplate> {
 
     match client.get(CATALOG_URL).send().await {
         Ok(resp) if resp.status().is_success() => {
-            if let Ok(body) = resp.text().await {
-                if let Ok(templates) = serde_json::from_str::<Vec<AppTemplate>>(&body) {
-                    let _ = std::fs::write(&cache_path, &body);
-                    return templates;
-                }
+            if let Ok(body) = resp.text().await
+                && let Ok(templates) = serde_json::from_str::<Vec<AppTemplate>>(&body)
+            {
+                let _ = std::fs::write(&cache_path, &body);
+                return templates;
             }
         }
         _ => {}
     }
 
     // Fall back to stale cache
-    if cache_path.exists() {
-        if let Ok(data) = std::fs::read_to_string(&cache_path) {
-            return serde_json::from_str(&data).unwrap_or_default();
-        }
+    if cache_path.exists()
+        && let Ok(data) = std::fs::read_to_string(&cache_path)
+    {
+        return serde_json::from_str(&data).unwrap_or_default();
     }
 
     vec![]
@@ -124,12 +123,11 @@ pub fn all_templates() -> Vec<AppTemplate> {
 
     // Load cached community templates
     let cache_path = community_cache_path();
-    if cache_path.exists() {
-        if let Ok(data) = std::fs::read_to_string(&cache_path) {
-            if let Ok(community) = serde_json::from_str::<Vec<AppTemplate>>(&data) {
-                templates.extend(community);
-            }
-        }
+    if cache_path.exists()
+        && let Ok(data) = std::fs::read_to_string(&cache_path)
+        && let Ok(community) = serde_json::from_str::<Vec<AppTemplate>>(&data)
+    {
+        templates.extend(community);
     }
 
     // Add user templates (skip duplicates by id)

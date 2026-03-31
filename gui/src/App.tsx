@@ -17,7 +17,6 @@ import VolumesPage from "./pages/VolumesPage";
 import VolumeDetailPage from "./pages/VolumeDetailPage";
 import NetworksPage from "./pages/NetworksPage";
 import KubernetesPage from "./pages/KubernetesPage";
-import MachinePage from "./pages/MachinePage";
 import SettingsPage from "./pages/SettingsPage";
 import EnvironmentPage from "./pages/EnvironmentPage";
 import ActivityPage from "./pages/ActivityPage";
@@ -45,8 +44,8 @@ export default function App() {
   let aiApi: AiAssistantApi | undefined;
 
   // Fleet health polling state
-  let lastFleetStatus: Record<string, boolean> = {};
-  let fleetStatusCount: Record<string, number> = {};
+  const lastFleetStatus: Record<string, boolean> = {};
+  const fleetStatusCount: Record<string, number> = {};
   let fleetPollInterval: ReturnType<typeof setInterval> | null = null;
 
   const pollFleetHealth = async () => {
@@ -276,19 +275,18 @@ export default function App() {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const win = getCurrentWindow();
       // Tauri 2 uses startResizing or the ResizeDirection enum
-      await (win as any).startResizing?.("BottomRight")
-        ?? (win as any).startDragging?.();
+      const started = await (win as any).startResizing?.("BottomRight");
+      if (started === undefined) await (win as any).startDragging?.();
     } catch (err) {
       console.error("Resize failed:", err);
     }
   };
 
   // If loaded with #ai hash, render standalone AI window
-  if (window.location.hash === "#ai") {
-    return <AiWindow />;
-  }
+  const isAiWindow = window.location.hash === "#ai";
 
   return (
+    <Show when={!isAiWindow} fallback={<AiWindow />}>
     <div class={`app-root ${navigator.platform.includes("Mac") ? "platform-macos" : ""}`}>
       <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => navigate(p)} />
       {daemonStatus() === "connecting" ? (
@@ -365,5 +363,6 @@ export default function App() {
       </Show>
       <div class="resize-handle" onMouseDown={startResize} />
     </div>
+    </Show>
   );
 }

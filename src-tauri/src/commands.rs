@@ -2,7 +2,7 @@
 //! These proxy to the Orca daemon's HTTP API.
 
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock, Mutex, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use serde::Deserialize;
 use tauri::Manager;
@@ -90,8 +90,7 @@ fn authed_client() -> reqwest::Client {
 /// Use this for long-running operations (image pull, K8s enable, AI queries, etc.)
 /// Pass 0 for no timeout (useful for SSE streaming connections).
 fn authed_client_with_timeout(timeout_secs: u64) -> reqwest::Client {
-    let mut builder = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5));
+    let mut builder = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(5));
 
     if timeout_secs > 0 {
         builder = builder.timeout(std::time::Duration::from_secs(timeout_secs));
@@ -120,9 +119,9 @@ fn authed_client_with_timeout(timeout_secs: u64) -> reqwest::Client {
 
 /// Read the API token from the Orca config file (cached after first read).
 fn load_api_token() -> Option<String> {
-    API_TOKEN.get_or_init(|| {
-        orca_core::config::OrcaConfig::load().ok()?.api_token
-    }).clone()
+    API_TOKEN
+        .get_or_init(|| orca_core::config::OrcaConfig::load().ok()?.api_token)
+        .clone()
 }
 
 fn client() -> reqwest::Client {
@@ -142,9 +141,7 @@ async fn get_json<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, String>
         return Err(body);
     }
 
-    resp.json::<T>()
-        .await
-        .map_err(|e| format!("Invalid response: {e}"))
+    resp.json::<T>().await.map_err(|e| format!("Invalid response: {e}"))
 }
 
 async fn post_empty(path: &str) -> Result<(), String> {
@@ -176,9 +173,7 @@ async fn post_json(path: &str) -> Result<serde_json::Value, String> {
         return Err(body);
     }
 
-    resp.json()
-        .await
-        .map_err(|e| format!("Invalid response: {e}"))
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
 }
 
 async fn patch_json(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -195,9 +190,7 @@ async fn patch_json(path: &str, body: &serde_json::Value) -> Result<serde_json::
         return Err(body);
     }
 
-    resp.json()
-        .await
-        .map_err(|e| format!("Invalid response: {e}"))
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
 }
 
 async fn delete(path: &str) -> Result<(), String> {
@@ -360,10 +353,7 @@ pub async fn export_compose(id: String) -> Result<String, String> {
 // --- Container Logs ---
 
 #[tauri::command]
-pub async fn container_logs(
-    id: String,
-    tail: Option<u32>,
-) -> Result<Vec<String>, String> {
+pub async fn container_logs(id: String, tail: Option<u32>) -> Result<Vec<String>, String> {
     let base = daemon_url();
     // Fetch logs as SSE, collect lines (non-streaming for Tauri command).
     // For follow mode we'd use Tauri events, but batch fetch is fine for initial view.
@@ -392,13 +382,9 @@ pub async fn container_logs(
 /// Subscribe to live log streaming for a container via SSE.
 /// Spawns a background task that emits "container-log-line" events.
 #[tauri::command]
-pub async fn subscribe_container_logs(
-    app: tauri::AppHandle,
-    id: String,
-    tail: Option<u32>,
-) -> Result<(), String> {
-    use tauri::Emitter;
+pub async fn subscribe_container_logs(app: tauri::AppHandle, id: String, tail: Option<u32>) -> Result<(), String> {
     use futures_util::StreamExt;
+    use tauri::Emitter;
 
     // Abort any existing subscription for this container
     {
@@ -634,12 +620,7 @@ pub async fn list_registries() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn add_registry(
-    server: String,
-    name: String,
-    username: String,
-    password: String,
-) -> Result<(), String> {
+pub async fn add_registry(server: String, name: String, username: String, password: String) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
         .post(format!("{base}/registries"))
@@ -669,11 +650,7 @@ pub async fn remove_registry(server: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn search_images(query: String) -> Result<serde_json::Value, String> {
-    get_json(&format!(
-        "/images/search?q={}&limit=20",
-        urlencoding::encode(&query)
-    ))
-    .await
+    get_json(&format!("/images/search?q={}&limit=20", urlencoding::encode(&query))).await
 }
 
 // --- Images ---
@@ -772,13 +749,16 @@ pub async fn pull_image_stream(
 
             if let Some(data) = line.strip_prefix("data:") {
                 if let Ok(event) = serde_json::from_str::<serde_json::Value>(data.trim()) {
-                    let _ = app.emit("pull-progress", serde_json::json!({
-                        "event": "progress",
-                        "layer": event.get("layer").and_then(|v| v.as_str()).unwrap_or(""),
-                        "status": event.get("status").and_then(|v| v.as_str()).unwrap_or(""),
-                        "current": event.get("current").and_then(|v| v.as_u64()).unwrap_or(0),
-                        "total": event.get("total").and_then(|v| v.as_u64()).unwrap_or(0),
-                    }));
+                    let _ = app.emit(
+                        "pull-progress",
+                        serde_json::json!({
+                            "event": "progress",
+                            "layer": event.get("layer").and_then(|v| v.as_str()).unwrap_or(""),
+                            "status": event.get("status").and_then(|v| v.as_str()).unwrap_or(""),
+                            "current": event.get("current").and_then(|v| v.as_u64()).unwrap_or(0),
+                            "total": event.get("total").and_then(|v| v.as_u64()).unwrap_or(0),
+                        }),
+                    );
                 }
             } else if line.starts_with("event: done") {
                 let _ = app.emit("pull-progress", serde_json::json!({ "event": "done" }));
@@ -819,10 +799,7 @@ pub async fn prune_images() -> Result<serde_json::Value, String> {
 pub async fn tag_image(source: String, repo: String, tag: String) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
-        .post(format!(
-            "{base}/images/{}/tag",
-            urlencoding::encode(&source)
-        ))
+        .post(format!("{base}/images/{}/tag", urlencoding::encode(&source)))
         .json(&serde_json::json!({ "repo": repo, "tag": tag }))
         .send()
         .await
@@ -891,7 +868,11 @@ pub async fn remove_volume(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn create_volume(name: String, driver: Option<String>, labels: Option<Vec<String>>) -> Result<serde_json::Value, String> {
+pub async fn create_volume(
+    name: String,
+    driver: Option<String>,
+    labels: Option<Vec<String>>,
+) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     client()
         .post(format!("{base}/volumes"))
@@ -939,7 +920,9 @@ pub async fn volume_sizes() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn container_list_files(id: String, path: Option<String>) -> Result<serde_json::Value, String> {
     let encoded_id = urlencoding::encode(&id);
-    let path_param = path.map(|p| format!("?path={}", urlencoding::encode(&p))).unwrap_or_default();
+    let path_param = path
+        .map(|p| format!("?path={}", urlencoding::encode(&p)))
+        .unwrap_or_default();
     get_json(&format!("/containers/{encoded_id}/files{path_param}")).await
 }
 
@@ -958,8 +941,12 @@ pub async fn commit_container(id: String, repo: String, tag: Option<String>) -> 
     client()
         .post(format!("{base}/containers/{}/commit", urlencoding::encode(&id)))
         .json(&serde_json::json!({ "repo": repo, "tag": tag.unwrap_or_else(|| "latest".into()) }))
-        .send().await.map_err(|e| format!("{e}"))?
-        .json().await.map_err(|e| format!("{e}"))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("{e}"))
 }
 
 // --- Images (inspect) ---
@@ -977,7 +964,9 @@ pub async fn image_history(id: String) -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn image_list_files(id: String, path: Option<String>) -> Result<serde_json::Value, String> {
     let encoded_id = urlencoding::encode(&id);
-    let path_param = path.map(|p| format!("?path={}", urlencoding::encode(&p))).unwrap_or_default();
+    let path_param = path
+        .map(|p| format!("?path={}", urlencoding::encode(&p)))
+        .unwrap_or_default();
     get_json(&format!("/images/{encoded_id}/files{path_param}")).await
 }
 
@@ -997,8 +986,12 @@ pub async fn import_image(path: String) -> Result<serde_json::Value, String> {
         .post(format!("{base}/images/import"))
         .json(&serde_json::json!({ "path": path }))
         .timeout(std::time::Duration::from_secs(300))
-        .send().await.map_err(|e| format!("{e}"))?
-        .json().await.map_err(|e| format!("{e}"))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("{e}"))
 }
 
 // --- Container Export (tar) ---
@@ -1065,9 +1058,7 @@ pub async fn scan_image(id: String) -> Result<serde_json::Value, String> {
         return Err(format!("Scan failed: {body}"));
     }
 
-    resp.json()
-        .await
-        .map_err(|e| format!("Invalid scan response: {e}"))
+    resp.json().await.map_err(|e| format!("Invalid scan response: {e}"))
 }
 
 // --- Networks ---
@@ -1178,7 +1169,11 @@ pub async fn compose_pull(name: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn update_stack_env(name: String, key: String, value: String) -> Result<(), String> {
-    patch_json(&format!("/stacks/{name}/env"), &serde_json::json!({ "key": key, "value": value })).await?;
+    patch_json(
+        &format!("/stacks/{name}/env"),
+        &serde_json::json!({ "key": key, "value": value }),
+    )
+    .await?;
     Ok(())
 }
 
@@ -1202,9 +1197,7 @@ pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
         use tokio_stream::StreamExt;
 
         let stream = resp.bytes_stream();
-        let mapped = stream.map(|r| {
-            r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-        });
+        let mapped = stream.map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
         let reader = tokio_util::io::StreamReader::new(mapped);
         let mut lines = reader.lines();
 
@@ -1305,11 +1298,7 @@ pub async fn k8s_delete_pvc(namespace: String, name: String) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub async fn k8s_scale_deployment(
-    namespace: String,
-    name: String,
-    replicas: u32,
-) -> Result<(), String> {
+pub async fn k8s_scale_deployment(namespace: String, name: String, replicas: u32) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
         .post(format!("{base}/k8s/deployments/{namespace}/{name}/scale"))
@@ -1346,7 +1335,7 @@ pub async fn k8s_pod_logs(
         query_parts.push(format!("tail={t}"));
     }
     let query = if query_parts.is_empty() {
-    let _base = daemon_url();
+        let _base = daemon_url();
         String::new()
     } else {
         format!("?{}", query_parts.join("&"))
@@ -1380,32 +1369,77 @@ fn validate_k8s_name(name: &str) -> Result<(), String> {
 }
 
 const ALLOWED_K8S_KINDS: &[&str] = &[
-    "pod", "pods",
-    "service", "services", "svc",
-    "deployment", "deployments", "deploy",
-    "statefulset", "statefulsets", "sts",
-    "daemonset", "daemonsets", "ds",
-    "replicaset", "replicasets", "rs",
-    "job", "jobs",
-    "cronjob", "cronjobs", "cj",
-    "configmap", "configmaps", "cm",
-    "secret", "secrets",
-    "ingress", "ingresses", "ing",
-    "persistentvolumeclaim", "persistentvolumeclaims", "pvc",
-    "persistentvolume", "persistentvolumes", "pv",
-    "namespace", "namespaces", "ns",
-    "node", "nodes",
-    "serviceaccount", "serviceaccounts", "sa",
-    "role", "roles",
-    "rolebinding", "rolebindings",
-    "clusterrole", "clusterroles",
-    "clusterrolebinding", "clusterrolebindings",
-    "networkpolicy", "networkpolicies", "netpol",
-    "horizontalpodautoscaler", "horizontalpodautoscalers", "hpa",
-    "endpoint", "endpoints", "ep",
-    "event", "events", "ev",
-    "storageclass", "storageclasses", "sc",
-    "customresourcedefinition", "customresourcedefinitions", "crd", "crds",
+    "pod",
+    "pods",
+    "service",
+    "services",
+    "svc",
+    "deployment",
+    "deployments",
+    "deploy",
+    "statefulset",
+    "statefulsets",
+    "sts",
+    "daemonset",
+    "daemonsets",
+    "ds",
+    "replicaset",
+    "replicasets",
+    "rs",
+    "job",
+    "jobs",
+    "cronjob",
+    "cronjobs",
+    "cj",
+    "configmap",
+    "configmaps",
+    "cm",
+    "secret",
+    "secrets",
+    "ingress",
+    "ingresses",
+    "ing",
+    "persistentvolumeclaim",
+    "persistentvolumeclaims",
+    "pvc",
+    "persistentvolume",
+    "persistentvolumes",
+    "pv",
+    "namespace",
+    "namespaces",
+    "ns",
+    "node",
+    "nodes",
+    "serviceaccount",
+    "serviceaccounts",
+    "sa",
+    "role",
+    "roles",
+    "rolebinding",
+    "rolebindings",
+    "clusterrole",
+    "clusterroles",
+    "clusterrolebinding",
+    "clusterrolebindings",
+    "networkpolicy",
+    "networkpolicies",
+    "netpol",
+    "horizontalpodautoscaler",
+    "horizontalpodautoscalers",
+    "hpa",
+    "endpoint",
+    "endpoints",
+    "ep",
+    "event",
+    "events",
+    "ev",
+    "storageclass",
+    "storageclasses",
+    "sc",
+    "customresourcedefinition",
+    "customresourcedefinitions",
+    "crd",
+    "crds",
 ];
 
 fn validate_k8s_kind(kind: &str) -> Result<(), String> {
@@ -1478,7 +1512,12 @@ pub async fn k8s_secrets(namespace: String) -> Result<serde_json::Value, String>
 }
 
 #[tauri::command]
-pub async fn k8s_create_secret(namespace: String, name: String, data: serde_json::Value, secret_type: Option<String>) -> Result<(), String> {
+pub async fn k8s_create_secret(
+    namespace: String,
+    name: String,
+    data: serde_json::Value,
+    secret_type: Option<String>,
+) -> Result<(), String> {
     let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
@@ -1523,7 +1562,13 @@ pub async fn k8s_update_secret(namespace: String, name: String, data: serde_json
 }
 
 #[tauri::command]
-pub async fn k8s_create_pvc(namespace: String, name: String, storage_class: String, size: String, access_modes: Vec<String>) -> Result<(), String> {
+pub async fn k8s_create_pvc(
+    namespace: String,
+    name: String,
+    storage_class: String,
+    size: String,
+    access_modes: Vec<String>,
+) -> Result<(), String> {
     let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
@@ -1554,10 +1599,7 @@ pub async fn k8s_pod_metrics(namespace: String) -> Result<serde_json::Value, Str
 }
 
 #[tauri::command]
-pub async fn k8s_rollout_history(
-    namespace: String,
-    name: String,
-) -> Result<serde_json::Value, String> {
+pub async fn k8s_rollout_history(namespace: String, name: String) -> Result<serde_json::Value, String> {
     get_json(&format!("/k8s/deployments/{namespace}/{name}/history")).await
 }
 
@@ -1600,11 +1642,7 @@ pub async fn k8s_replicasets(namespace: String) -> Result<serde_json::Value, Str
 }
 
 #[tauri::command]
-pub async fn k8s_scale_statefulset(
-    namespace: String,
-    name: String,
-    replicas: u32,
-) -> Result<(), String> {
+pub async fn k8s_scale_statefulset(namespace: String, name: String, replicas: u32) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
         .post(format!("{base}/k8s/statefulsets/{namespace}/{name}/scale"))
@@ -1835,7 +1873,11 @@ pub async fn k8s_port_forward(
     validate_k8s_name(&service)?;
     let local = local_port.unwrap_or(port);
     let key = format!("{namespace}/{service}/{local}");
-    let address: &str = if expose.unwrap_or(false) { "0.0.0.0" } else { "127.0.0.1" };
+    let address: &str = if expose.unwrap_or(false) {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    };
 
     {
         let map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
@@ -1850,12 +1892,14 @@ pub async fn k8s_port_forward(
     let ws_base = base_url.replace("https://", "wss://").replace("http://", "ws://");
     let target_host = format!("{service}.{namespace}.svc.cluster.local");
 
-    let tls_verify = DAEMON_URL_OVERRIDE.read()
+    let tls_verify = DAEMON_URL_OVERRIDE
+        .read()
         .map(|g| g.as_ref().map(|(_, _, v)| *v).unwrap_or(true))
         .unwrap_or(true);
 
     // Bind local TCP listener
-    let listener = tokio::net::TcpListener::bind((address, local)).await
+    let listener = tokio::net::TcpListener::bind((address, local))
+        .await
         .map_err(|e| format!("Failed to bind port {local}: {e}"))?;
 
     let task = tokio::spawn(async move {
@@ -1864,7 +1908,8 @@ pub async fn k8s_port_forward(
                 Ok(conn) => conn,
                 Err(_) => break,
             };
-            let url = format!("{ws_base}/tunnel?host={}&port={}&token={}",
+            let url = format!(
+                "{ws_base}/tunnel?host={}&port={}&token={}",
                 urlencoding::encode(&target_host),
                 port,
                 urlencoding::encode(&token),
@@ -1878,22 +1923,22 @@ pub async fn k8s_port_forward(
         }
     });
 
-    port_forward_map().lock().map_err(|e| format!("{e}"))?.insert(key, TunnelHandle(task));
+    port_forward_map()
+        .lock()
+        .map_err(|e| format!("{e}"))?
+        .insert(key, TunnelHandle(task));
 
     Ok(serde_json::json!({ "status": "started", "port": local, "mode": "tunnel" }))
 }
 
 /// Proxy a single TCP connection bidirectionally through a WebSocket tunnel.
-async fn proxy_tcp_to_ws(
-    tcp_stream: tokio::net::TcpStream,
-    ws_url: &str,
-    _tls_verify: bool,
-) -> Result<(), String> {
-    use tokio_tungstenite::tungstenite::Message as WsMessage;
+async fn proxy_tcp_to_ws(tcp_stream: tokio::net::TcpStream, ws_url: &str, _tls_verify: bool) -> Result<(), String> {
     use futures_util::{SinkExt as _, StreamExt as _};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_tungstenite::tungstenite::Message as WsMessage;
 
-    let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url).await
+    let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
+        .await
         .map_err(|e| format!("WebSocket connect failed: {e}"))?;
 
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
@@ -1906,7 +1951,11 @@ async fn proxy_tcp_to_ws(
             match tcp_read.read(&mut buf).await {
                 Ok(0) => break,
                 Ok(n) => {
-                    if ws_sender.send(WsMessage::Binary(buf[..n].to_vec().into())).await.is_err() {
+                    if ws_sender
+                        .send(WsMessage::Binary(buf[..n].to_vec().into()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -1939,11 +1988,7 @@ async fn proxy_tcp_to_ws(
 }
 
 #[tauri::command]
-pub async fn k8s_stop_port_forward(
-    namespace: String,
-    service: String,
-    port: u16,
-) -> Result<(), String> {
+pub async fn k8s_stop_port_forward(namespace: String, service: String, port: u16) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&service)?;
     let key = format!("{namespace}/{service}/{port}");
@@ -1955,14 +2000,17 @@ pub async fn k8s_stop_port_forward(
 #[tauri::command]
 pub async fn k8s_list_port_forwards() -> Result<serde_json::Value, String> {
     let map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
-    let forwards: Vec<serde_json::Value> = map.keys().map(|k| {
-        let parts: Vec<&str> = k.split('/').collect();
-        serde_json::json!({
-            "namespace": parts.first().unwrap_or(&""),
-            "service": parts.get(1).unwrap_or(&""),
-            "port": parts.get(2).unwrap_or(&""),
+    let forwards: Vec<serde_json::Value> = map
+        .keys()
+        .map(|k| {
+            let parts: Vec<&str> = k.split('/').collect();
+            serde_json::json!({
+                "namespace": parts.first().unwrap_or(&""),
+                "service": parts.get(1).unwrap_or(&""),
+                "port": parts.get(2).unwrap_or(&""),
+            })
         })
-    }).collect();
+        .collect();
     Ok(serde_json::json!(forwards))
 }
 
@@ -2117,15 +2165,12 @@ pub async fn deploy_template(
         return Err(msg);
     }
 
-    resp.json()
-        .await
-        .map_err(|e| format!("Invalid response: {e}"))
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
 }
 
 /// Build an authed reqwest client for a specific host (does NOT use the global override).
 fn client_for_host(url: &str, token: &str, tls_verify: bool, timeout_secs: u64) -> reqwest::Client {
-    let mut builder = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5));
+    let mut builder = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(5));
 
     if timeout_secs > 0 {
         builder = builder.timeout(std::time::Duration::from_secs(timeout_secs));
@@ -2175,13 +2220,15 @@ pub async fn deploy_template_to_hosts(
             let http = client_for_host(LOCAL_DAEMON_BASE, &token, true, 120);
 
             // Pull image first
-            let pull_result = http.post(format!("{base_url}/images/pull"))
+            let pull_result = http
+                .post(format!("{base_url}/images/pull"))
                 .json(&serde_json::json!({ "reference": &id }))
                 .send()
                 .await;
             let _pull_ok = pull_result.map(|r| r.status().is_success()).unwrap_or(false);
 
-            let resp = http.post(format!("{base_url}/templates/{id}/deploy"))
+            let resp = http
+                .post(format!("{base_url}/templates/{id}/deploy"))
                 .json(&body)
                 .send()
                 .await;
@@ -2233,12 +2280,14 @@ pub async fn deploy_template_to_hosts(
             let http = client_for_host(&host.url, &host.token, host.tls_verify, 120);
 
             // Pull image first (best effort)
-            let _pull = http.post(format!("{base_url}/images/pull"))
+            let _pull = http
+                .post(format!("{base_url}/images/pull"))
                 .json(&serde_json::json!({ "reference": &id }))
                 .send()
                 .await;
 
-            let resp = http.post(format!("{base_url}/templates/{id}/deploy"))
+            let resp = http
+                .post(format!("{base_url}/templates/{id}/deploy"))
                 .json(&body)
                 .send()
                 .await;
@@ -2359,17 +2408,15 @@ pub async fn ai_ask(
         return Err(format!("AI error: {body}"));
     }
 
-    resp.json()
-        .await
-        .map_err(|e| format!("Invalid response: {e}"))
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
 }
 
 // --- WSL2 Config (Windows) ---
 
 #[tauri::command]
 pub async fn get_wsl_config() -> Result<serde_json::Value, String> {
-    let userprofile = std::env::var("USERPROFILE")
-        .map_err(|_| "USERPROFILE environment variable not set".to_string())?;
+    let userprofile =
+        std::env::var("USERPROFILE").map_err(|_| "USERPROFILE environment variable not set".to_string())?;
     let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
 
     let mut memory = String::new();
@@ -2377,8 +2424,7 @@ pub async fn get_wsl_config() -> Result<serde_json::Value, String> {
     let mut swap = String::new();
 
     if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path)
-            .map_err(|e| format!("Failed to read .wslconfig: {e}"))?;
+        let content = std::fs::read_to_string(&config_path).map_err(|e| format!("Failed to read .wslconfig: {e}"))?;
 
         let mut in_wsl2_section = false;
         for line in content.lines() {
@@ -2415,14 +2461,18 @@ pub async fn get_wsl_config() -> Result<serde_json::Value, String> {
 
 fn validate_wsl_value(val: &str, allow_unit: bool) -> Result<(), String> {
     let val = val.trim();
-    if val.is_empty() { return Ok(()); }
+    if val.is_empty() {
+        return Ok(());
+    }
     if val.contains('\n') || val.contains('\r') || val.contains('=') || val.contains('[') {
         return Err(format!("Invalid value: {val}"));
     }
     if allow_unit {
         // e.g. "4GB", "512MB", "2"
         let numeric_end = val.find(|c: char| !c.is_ascii_digit()).unwrap_or(val.len());
-        if numeric_end == 0 { return Err(format!("Invalid value: {val}")); }
+        if numeric_end == 0 {
+            return Err(format!("Invalid value: {val}"));
+        }
         let unit = &val[numeric_end..];
         if !unit.is_empty() && !["GB", "MB", "KB", "TB"].contains(&unit.to_uppercase().as_str()) {
             return Err(format!("Invalid unit in: {val}"));
@@ -2442,14 +2492,13 @@ pub async fn save_wsl_config(memory: String, processors: String, swap: String) -
     validate_wsl_value(&processors, false)?;
     validate_wsl_value(&swap, true)?;
 
-    let userprofile = std::env::var("USERPROFILE")
-        .map_err(|_| "USERPROFILE environment variable not set".to_string())?;
+    let userprofile =
+        std::env::var("USERPROFILE").map_err(|_| "USERPROFILE environment variable not set".to_string())?;
     let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
 
     // Read existing config and preserve non-wsl2 sections
     let existing = if config_path.exists() {
-        std::fs::read_to_string(&config_path)
-            .map_err(|e| format!("Failed to read .wslconfig: {e}"))?
+        std::fs::read_to_string(&config_path).map_err(|e| format!("Failed to read .wslconfig: {e}"))?
     } else {
         String::new()
     };
@@ -2499,11 +2548,7 @@ pub async fn get_general_settings() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn save_general_settings(
-    start_on_login: bool,
-    show_tray_icon: bool,
-    telemetry: bool,
-) -> Result<(), String> {
+pub async fn save_general_settings(start_on_login: bool, show_tray_icon: bool, telemetry: bool) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
         .post(format!("{base}/settings/general"))
@@ -2532,7 +2577,12 @@ pub async fn get_lima_settings() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn save_lima_settings(name: String, cpus: u32, memory_gib: u32, disk_gib: u32) -> Result<serde_json::Value, String> {
+pub async fn save_lima_settings(
+    name: String,
+    cpus: u32,
+    memory_gib: u32,
+    disk_gib: u32,
+) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     let long_client = authed_client_with_timeout(600);
     long_client
@@ -2670,12 +2720,14 @@ pub async fn open_file_in_browser(path: String) -> Result<(), String> {
     }
     // For file paths, only allow temp directory.
     // Canonicalize both paths to handle Windows UNC prefixes (\\?\)
-    let canonical = std::fs::canonicalize(&path)
-        .map_err(|e| format!("Invalid path: {e}"))?;
-    let temp_dir = std::fs::canonicalize(std::env::temp_dir())
-        .unwrap_or_else(|_| std::env::temp_dir());
+    let canonical = std::fs::canonicalize(&path).map_err(|e| format!("Invalid path: {e}"))?;
+    let temp_dir = std::fs::canonicalize(std::env::temp_dir()).unwrap_or_else(|_| std::env::temp_dir());
     if !canonical.starts_with(&temp_dir) {
-        return Err(format!("Access denied: only temp directory files can be opened (got: {}, temp: {})", canonical.display(), temp_dir.display()));
+        return Err(format!(
+            "Access denied: only temp directory files can be opened (got: {}, temp: {})",
+            canonical.display(),
+            temp_dir.display()
+        ));
     }
     open::that(&path).map_err(|e| format!("Failed to open file: {e}"))
 }
@@ -2715,9 +2767,7 @@ pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
 pub async fn read_file(path: String) -> Result<String, String> {
     // Only allow reading YAML files (compose files, etc.)
     let p = std::path::Path::new(&path);
-    let fname = p.file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("");
+    let fname = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
     if !(fname.ends_with(".yml") || fname.ends_with(".yaml")) {
         return Err("Only .yml/.yaml files can be read".to_string());
     }
@@ -2730,9 +2780,7 @@ pub async fn read_file(path: String) -> Result<String, String> {
 pub async fn save_compose_file(path: String, content: String) -> Result<(), String> {
     // Validate the path points to a compose/yaml file
     let p = std::path::Path::new(&path);
-    let fname = p.file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("");
+    let fname = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
     if !(fname.ends_with(".yml") || fname.ends_with(".yaml")) {
         return Err("Only .yml/.yaml files can be saved".to_string());
     }
@@ -2941,10 +2989,7 @@ pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> R
         .send()
         .await
         .map_err(|e| format!("Connection failed: {e}"))?;
-    let health: serde_json::Value = health_resp
-        .json()
-        .await
-        .map_err(|e| format!("Invalid response: {e}"))?;
+    let health: serde_json::Value = health_resp.json().await.map_err(|e| format!("Invalid response: {e}"))?;
 
     // Test authentication (containers endpoint — requires valid token)
     let auth_resp = client
@@ -2958,7 +3003,9 @@ pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> R
     let version = health.get("version").and_then(|v| v.as_str()).unwrap_or("unknown");
 
     if !auth_ok {
-        return Err(format!("Connected to daemon v{version}, but authentication failed. Check your API token."));
+        return Err(format!(
+            "Connected to daemon v{version}, but authentication failed. Check your API token."
+        ));
     }
 
     Ok(serde_json::json!({
@@ -3042,11 +3089,7 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
         .send()
         .await
     {
-        Ok(resp) => resp
-            .json::<Vec<serde_json::Value>>()
-            .await
-            .ok()
-            .map(|v| v.len()),
+        Ok(resp) => resp.json::<Vec<serde_json::Value>>().await.ok().map(|v| v.len()),
         Err(_) => None,
     };
 
@@ -3113,7 +3156,11 @@ pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
 
     // Check each remote host, respecting tls_verify per host
     for host in &config.remote_hosts {
-        let client = if host.tls_verify { &verify_client } else { &noverify_client };
+        let client = if host.tls_verify {
+            &verify_client
+        } else {
+            &noverify_client
+        };
         let resp = client
             .get(format!("{}/health", host.url))
             .header("Authorization", format!("Bearer {}", host.token))
@@ -3164,7 +3211,12 @@ pub async fn compare_hosts(host_ids: Vec<Option<String>>) -> Result<serde_json::
                 .ok_or_else(|| format!("Host not found: {id}"))?;
             (host.url.clone(), host.token.clone(), host.tls_verify, host.name.clone())
         } else {
-            (LOCAL_DAEMON_BASE.to_string(), local_token.clone(), true, "Local".to_string())
+            (
+                LOCAL_DAEMON_BASE.to_string(),
+                local_token.clone(),
+                true,
+                "Local".to_string(),
+            )
         };
 
         let mut builder = reqwest::Client::builder()
@@ -3183,7 +3235,11 @@ pub async fn compare_hosts(host_ids: Vec<Option<String>>) -> Result<serde_json::
             .send()
             .await
         {
-            Ok(resp) => resp.json::<serde_json::Value>().await.ok().unwrap_or(serde_json::json!([])),
+            Ok(resp) => resp
+                .json::<serde_json::Value>()
+                .await
+                .ok()
+                .unwrap_or(serde_json::json!([])),
             Err(_) => serde_json::json!([]),
         };
 
@@ -3194,7 +3250,11 @@ pub async fn compare_hosts(host_ids: Vec<Option<String>>) -> Result<serde_json::
             .send()
             .await
         {
-            Ok(resp) => resp.json::<serde_json::Value>().await.ok().unwrap_or(serde_json::json!([])),
+            Ok(resp) => resp
+                .json::<serde_json::Value>()
+                .await
+                .ok()
+                .unwrap_or(serde_json::json!([])),
             Err(_) => serde_json::json!([]),
         };
 
@@ -3205,7 +3265,11 @@ pub async fn compare_hosts(host_ids: Vec<Option<String>>) -> Result<serde_json::
             .send()
             .await
         {
-            Ok(resp) => resp.json::<serde_json::Value>().await.ok().unwrap_or(serde_json::json!({})),
+            Ok(resp) => resp
+                .json::<serde_json::Value>()
+                .await
+                .ok()
+                .unwrap_or(serde_json::json!({})),
             Err(_) => serde_json::json!({}),
         };
 

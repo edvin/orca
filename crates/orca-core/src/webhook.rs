@@ -82,12 +82,14 @@ pub fn parse_github_package_event(body: &[u8]) -> anyhow::Result<WebhookPayload>
             anyhow::bail!("Not a container registry_package event (type: {pkg_type})");
         }
 
-        let namespace = pkg["namespace"].as_str()
+        let namespace = pkg["namespace"]
+            .as_str()
             .or_else(|| v["repository"]["owner"]["login"].as_str())
             .unwrap_or("");
         let name = pkg["name"].as_str().unwrap_or("");
 
-        let tag = pkg["package_version"]["version"].as_str()
+        let tag = pkg["package_version"]["version"]
+            .as_str()
             .unwrap_or("latest")
             .to_string();
 
@@ -111,7 +113,8 @@ pub fn parse_dockerhub_event(body: &[u8]) -> anyhow::Result<WebhookPayload> {
     let v: serde_json::Value = serde_json::from_slice(body)?;
 
     let tag = v["push_data"]["tag"].as_str().unwrap_or("latest").to_string();
-    let repo = v["repository"]["repo_name"].as_str()
+    let repo = v["repository"]["repo_name"]
+        .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing repository.repo_name"))?;
 
     // Docker Hub repo_name is "user/image" — add docker.io prefix
@@ -153,7 +156,9 @@ mod tests {
         // Test via OrcaConfig::find_matching_rules indirectly
         let filter_matches = |filter: &str, tag: &str| -> bool {
             let f = filter.trim();
-            if f.is_empty() || f == "*" { return true; }
+            if f.is_empty() || f == "*" {
+                return true;
+            }
             if f.contains('*') {
                 let prefix = f.trim_end_matches('*');
                 tag.starts_with(prefix)

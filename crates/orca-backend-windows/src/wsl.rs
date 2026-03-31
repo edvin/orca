@@ -61,12 +61,8 @@ impl MachineManager for WindowsBackend {
 
         // Install container runtime
         let runtime_install = match config.runtime {
-            RuntimeKind::Podman => {
-                "apt-get update -qq && apt-get install -y -qq podman"
-            }
-            RuntimeKind::Docker => {
-                "curl -fsSL https://get.docker.com | sh"
-            }
+            RuntimeKind::Podman => "apt-get update -qq && apt-get install -y -qq podman",
+            RuntimeKind::Docker => "curl -fsSL https://get.docker.com | sh",
         };
         wsl_exec(distro_name, runtime_install).await?;
 
@@ -215,9 +211,7 @@ impl MachineManager for WindowsBackend {
 
 impl WindowsBackend {
     async fn configure_wsl_resources(&self, config: &MachineConfig) -> anyhow::Result<()> {
-        let wslconfig_path = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".wslconfig");
+        let wslconfig_path = dirs::home_dir().unwrap_or_default().join(".wslconfig");
 
         // Enable mirrored networking for automatic port forwarding to host
         // and DNS resolution. Requires Windows 11 22H2+.

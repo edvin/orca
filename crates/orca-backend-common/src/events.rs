@@ -16,22 +16,13 @@ impl BollardRuntime {
 
         let docker = self.docker.clone();
         tokio::spawn(async move {
-            let options = EventsOptions::<String> {
-                ..Default::default()
-            };
+            let options = EventsOptions::<String> { ..Default::default() };
             let mut stream = docker.events(Some(options));
 
             while let Some(Ok(event)) = stream.next().await {
-                let kind = match (
-                    event.typ.as_ref().map(|t| format!("{t:?}")),
-                    event.action.as_deref(),
-                ) {
+                let kind = match (event.typ.as_ref().map(|t| format!("{t:?}")), event.action.as_deref()) {
                     (Some(typ), Some(action)) if typ.contains("Container") => {
-                        let id = event
-                            .actor
-                            .as_ref()
-                            .and_then(|a| a.id.clone())
-                            .unwrap_or_default();
+                        let id = event.actor.as_ref().and_then(|a| a.id.clone()).unwrap_or_default();
                         let name = event
                             .actor
                             .as_ref()
@@ -40,22 +31,10 @@ impl BollardRuntime {
                             .unwrap_or_default();
 
                         match action {
-                            "create" => Some(EventKind::ContainerCreated {
-                                id,
-                                name,
-                            }),
-                            "start" => Some(EventKind::ContainerStarted {
-                                id,
-                                name,
-                            }),
-                            "stop" => Some(EventKind::ContainerStopped {
-                                id,
-                                name,
-                            }),
-                            "destroy" => Some(EventKind::ContainerRemoved {
-                                id,
-                                name,
-                            }),
+                            "create" => Some(EventKind::ContainerCreated { id, name }),
+                            "start" => Some(EventKind::ContainerStarted { id, name }),
+                            "stop" => Some(EventKind::ContainerStopped { id, name }),
+                            "destroy" => Some(EventKind::ContainerRemoved { id, name }),
                             "die" => {
                                 let exit_code = event
                                     .actor
@@ -64,39 +43,25 @@ impl BollardRuntime {
                                     .and_then(|attrs| attrs.get("exitCode"))
                                     .and_then(|c| c.parse().ok())
                                     .unwrap_or(-1);
-                                Some(EventKind::ContainerDied {
-                                    id,
-                                    name,
-                                    exit_code,
-                                })
+                                Some(EventKind::ContainerDied { id, name, exit_code })
                             }
                             _ => None,
                         }
                     }
                     (Some(typ), Some(action)) if typ.contains("Image") => {
-                        let id = event
-                            .actor
-                            .as_ref()
-                            .and_then(|a| a.id.clone())
-                            .unwrap_or_default();
+                        let id = event.actor.as_ref().and_then(|a| a.id.clone()).unwrap_or_default();
 
                         match action {
                             "pull" => Some(EventKind::ImagePulled {
                                 id: id.clone(),
                                 reference: id,
                             }),
-                            "delete" | "untag" => {
-                                Some(EventKind::ImageRemoved { id })
-                            }
+                            "delete" | "untag" => Some(EventKind::ImageRemoved { id }),
                             _ => None,
                         }
                     }
                     (Some(typ), Some(action)) if typ.contains("Volume") => {
-                        let name = event
-                            .actor
-                            .as_ref()
-                            .and_then(|a| a.id.clone())
-                            .unwrap_or_default();
+                        let name = event.actor.as_ref().and_then(|a| a.id.clone()).unwrap_or_default();
 
                         match action {
                             "create" => Some(EventKind::VolumeCreated { name }),

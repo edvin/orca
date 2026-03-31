@@ -48,7 +48,7 @@ const BATCH_SIZE = 3;
 
 export default function FleetPage(props: FleetPageProps) {
   const [hosts, setHosts] = createSignal<HostStatus[]>([]);
-  const [loading, setLoading] = createSignal(true);
+  const [_loading, setLoading] = createSignal(true);
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
   const [activeTag, setActiveTag] = createSignal<string | null>(null);
   const [selectMode, setSelectMode] = createSignal(false);
@@ -303,8 +303,6 @@ export default function FleetPage(props: FleetPageProps) {
 
   const totalRunning = () =>
     hosts().reduce((sum, h) => sum + (h.containers_running || 0), 0);
-  const totalContainers = () =>
-    hosts().reduce((sum, h) => sum + (h.containers_total || 0), 0);
   const onlineCount = () => hosts().filter((h) => h.online).length;
 
   const versionMismatch = () => {
@@ -647,11 +645,9 @@ export default function FleetPage(props: FleetPageProps) {
                   {(() => {
                     const key = host.id || "__local__";
                     const ts = lastSeen()[key];
-                    return ts ? (
-                      <span style={{ color: "#8b949e", "font-size": "12px", display: "block", "margin-top": "4px" }}>
+                    return <Show when={ts}><span style={{ color: "#8b949e", "font-size": "12px", display: "block", "margin-top": "4px" }}>
                         Last seen {relativeTime(ts)}
-                      </span>
-                    ) : null;
+                      </span></Show>;
                   })()}
                 </div>
               </Show>
@@ -830,7 +826,7 @@ function CompareModal(props: CompareModalProps) {
             Host Comparison
           </h2>
           <button
-            onClick={props.onClose}
+            onClick={() => props.onClose()}
             style={{
               background: "none", border: "none", color: "#8b949e", cursor: "pointer",
               "font-size": "20px", padding: "4px 8px", "line-height": "1",

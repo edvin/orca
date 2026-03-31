@@ -1,41 +1,25 @@
 use std::process::Stdio;
 
-use tokio::process::Command;
 use orca_core::compose::{ComposeOutput, ComposeRunner};
 use orca_core::runtime::RuntimeKind;
+use tokio::process::Command;
 
 use crate::BollardRuntime;
 
 impl ComposeRunner for BollardRuntime {
-    async fn compose_up(
-        &self,
-        working_dir: &str,
-        config_file: Option<&str>,
-    ) -> anyhow::Result<ComposeOutput> {
+    async fn compose_up(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput> {
         run_compose(self, working_dir, config_file, &["up", "-d"]).await
     }
 
-    async fn compose_down(
-        &self,
-        working_dir: &str,
-        config_file: Option<&str>,
-    ) -> anyhow::Result<ComposeOutput> {
+    async fn compose_down(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput> {
         run_compose(self, working_dir, config_file, &["down"]).await
     }
 
-    async fn compose_restart(
-        &self,
-        working_dir: &str,
-        config_file: Option<&str>,
-    ) -> anyhow::Result<ComposeOutput> {
+    async fn compose_restart(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput> {
         run_compose(self, working_dir, config_file, &["restart"]).await
     }
 
-    async fn compose_pull(
-        &self,
-        working_dir: &str,
-        config_file: Option<&str>,
-    ) -> anyhow::Result<ComposeOutput> {
+    async fn compose_pull(&self, working_dir: &str, config_file: Option<&str>) -> anyhow::Result<ComposeOutput> {
         run_compose(self, working_dir, config_file, &["pull"]).await
     }
 }

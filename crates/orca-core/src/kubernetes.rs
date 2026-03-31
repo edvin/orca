@@ -147,8 +147,8 @@ pub struct K8sConfigMap {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PodMetrics {
     pub name: String,
-    pub cpu: String,      // e.g. "50m", "250m"
-    pub memory: String,   // e.g. "128Mi", "1Gi"
+    pub cpu: String,    // e.g. "50m", "250m"
+    pub memory: String, // e.g. "128Mi", "1Gi"
 }
 
 /// A rollout revision for a deployment.
@@ -163,8 +163,8 @@ pub struct RolloutRevision {
 pub struct Job {
     pub name: String,
     pub namespace: String,
-    pub status: String,       // "Active" | "Succeeded" | "Failed"
-    pub completions: String,  // "1/1" format
+    pub status: String,      // "Active" | "Succeeded" | "Failed"
+    pub completions: String, // "1/1" format
     pub duration: String,
     pub start_time: Option<String>,
     pub created_at: String,
@@ -200,7 +200,7 @@ pub struct DaemonSet {
 pub struct StatefulSet {
     pub name: String,
     pub namespace: String,
-    pub ready: String,  // "2/3" format
+    pub ready: String, // "2/3" format
     pub replicas: i32,
     pub images: Vec<String>,
     pub created_at: String,
@@ -248,12 +248,12 @@ pub struct K8sSecret {
 pub struct HorizontalPodAutoscaler {
     pub name: String,
     pub namespace: String,
-    pub reference: String,      // "Deployment/nginx"
+    pub reference: String, // "Deployment/nginx"
     pub min_replicas: i32,
     pub max_replicas: i32,
     pub current_replicas: i32,
-    pub target_cpu: Option<String>,   // "50%"
-    pub current_cpu: Option<String>,  // "30%"
+    pub target_cpu: Option<String>,  // "50%"
+    pub current_cpu: Option<String>, // "30%"
     pub created_at: String,
 }
 
@@ -263,7 +263,7 @@ pub struct NetworkPolicy {
     pub name: String,
     pub namespace: String,
     pub pod_selector: String,
-    pub policy_types: Vec<String>,  // ["Ingress", "Egress"]
+    pub policy_types: Vec<String>, // ["Ingress", "Egress"]
     pub created_at: String,
 }
 
@@ -284,7 +284,7 @@ pub struct CustomResourceDefinition {
     pub name: String,
     pub group: String,
     pub kind: String,
-    pub scope: String,  // "Namespaced" or "Cluster"
+    pub scope: String, // "Namespaced" or "Cluster"
     pub versions: Vec<String>,
     pub created_at: String,
 }
@@ -323,12 +323,7 @@ pub trait K8sManager {
     // --- Workload actions ---
 
     async fn delete_pod(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
-    async fn scale_deployment(
-        &self,
-        namespace: &str,
-        name: &str,
-        replicas: u32,
-    ) -> anyhow::Result<()>;
+    async fn scale_deployment(&self, namespace: &str, name: &str, replicas: u32) -> anyhow::Result<()>;
     async fn restart_deployment(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
     async fn delete_pvc(&self, namespace: &str, name: &str) -> anyhow::Result<()>;
 
@@ -387,12 +382,7 @@ pub trait K8sManager {
     async fn list_replicasets(&self, namespace: &str) -> anyhow::Result<Vec<ReplicaSet>>;
 
     /// Scale a StatefulSet.
-    async fn scale_statefulset(
-        &self,
-        namespace: &str,
-        name: &str,
-        replicas: u32,
-    ) -> anyhow::Result<()>;
+    async fn scale_statefulset(&self, namespace: &str, name: &str, replicas: u32) -> anyhow::Result<()>;
 
     /// Restart a StatefulSet.
     async fn restart_statefulset(&self, namespace: &str, name: &str) -> anyhow::Result<()>;

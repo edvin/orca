@@ -1,7 +1,7 @@
 //! Container image management.
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Image {
@@ -59,10 +59,7 @@ pub struct RegistryAuth {
 #[trait_variant::make(Send)]
 pub trait ImageManager {
     async fn list(&self) -> anyhow::Result<Vec<Image>>;
-    async fn pull(
-        &self,
-        reference: &str,
-    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<PullProgress>>;
+    async fn pull(&self, reference: &str) -> anyhow::Result<tokio::sync::mpsc::Receiver<PullProgress>>;
     async fn remove(&self, id: &str, force: bool) -> anyhow::Result<()>;
     async fn inspect(&self, id: &str) -> anyhow::Result<Image>;
     async fn prune(&self) -> anyhow::Result<PruneResult>;

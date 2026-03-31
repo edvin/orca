@@ -27,16 +27,21 @@ impl NativeBackend {
     /// Checks DOCKER_HOST, Docker context, standard paths, and Lima/Colima sockets.
     pub fn connect() -> anyhow::Result<Self> {
         // 1. Check DOCKER_HOST env var (set by `docker context use lima` etc.)
-        if let Ok(host) = std::env::var("DOCKER_HOST") {
-            if let Some(path) = host.strip_prefix("unix://") {
-                let sock = PathBuf::from(path);
-                if sock.exists() {
-                    tracing::info!("Connecting to Docker via DOCKER_HOST: {}", sock.display());
-                    let docker = bollard::Docker::connect_with_socket(
-                        sock.to_str().unwrap_or(""), 120, bollard::API_DEFAULT_VERSION,
-                    )?;
-                    return Ok(Self { runtime: BollardRuntime::new(docker), socket_path: sock });
-                }
+        if let Ok(host) = std::env::var("DOCKER_HOST")
+            && let Some(path) = host.strip_prefix("unix://")
+        {
+            let sock = PathBuf::from(path);
+            if sock.exists() {
+                tracing::info!("Connecting to Docker via DOCKER_HOST: {}", sock.display());
+                let docker = bollard::Docker::connect_with_socket(
+                    sock.to_str().unwrap_or(""),
+                    120,
+                    bollard::API_DEFAULT_VERSION,
+                )?;
+                return Ok(Self {
+                    runtime: BollardRuntime::new(docker),
+                    socket_path: sock,
+                });
             }
         }
 
@@ -44,32 +49,36 @@ impl NativeBackend {
         if let Ok(output) = std::process::Command::new("docker")
             .args(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"])
             .output()
+            && output.status.success()
         {
-            if output.status.success() {
-                let host = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if let Some(path) = host.strip_prefix("unix://") {
-                    let sock = PathBuf::from(path);
-                    if sock.exists() {
-                        tracing::info!("Connecting to Docker via context: {}", sock.display());
-                        let docker = bollard::Docker::connect_with_socket(
-                            sock.to_str().unwrap_or(""), 120, bollard::API_DEFAULT_VERSION,
-                        )?;
-                        return Ok(Self { runtime: BollardRuntime::new(docker), socket_path: sock });
-                    }
+            let host = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if let Some(path) = host.strip_prefix("unix://") {
+                let sock = PathBuf::from(path);
+                if sock.exists() {
+                    tracing::info!("Connecting to Docker via context: {}", sock.display());
+                    let docker = bollard::Docker::connect_with_socket(
+                        sock.to_str().unwrap_or(""),
+                        120,
+                        bollard::API_DEFAULT_VERSION,
+                    )?;
+                    return Ok(Self {
+                        runtime: BollardRuntime::new(docker),
+                        socket_path: sock,
+                    });
                 }
             }
         }
 
         // 3. Check standard and platform-specific socket paths
-        let mut candidates: Vec<PathBuf> = vec![
-            PathBuf::from("/var/run/docker.sock"),
-        ];
+        let mut candidates: Vec<PathBuf> = vec![PathBuf::from("/var/run/docker.sock")];
 
         if let Ok(home) = std::env::var("HOME") {
             // macOS Docker Desktop (various versions use different paths)
             candidates.push(PathBuf::from(format!("{home}/.docker/run/docker.sock")));
             candidates.push(PathBuf::from(format!("{home}/.docker/desktop/docker.sock")));
-            candidates.push(PathBuf::from(format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock")));
+            candidates.push(PathBuf::from(format!(
+                "{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock"
+            )));
             // Lima VMs
             for vm in &["orca", "docker", "default", "colima"] {
                 candidates.push(PathBuf::from(format!("{home}/.lima/{vm}/sock/docker.sock")));
@@ -91,13 +100,14 @@ impl NativeBackend {
                 let result = if sock == &PathBuf::from("/var/run/docker.sock") {
                     bollard::Docker::connect_with_socket_defaults()
                 } else {
-                    bollard::Docker::connect_with_socket(
-                        sock.to_str().unwrap_or(""), 120, bollard::API_DEFAULT_VERSION,
-                    )
+                    bollard::Docker::connect_with_socket(sock.to_str().unwrap_or(""), 120, bollard::API_DEFAULT_VERSION)
                 };
                 match result {
                     Ok(docker) => {
-                        return Ok(Self { runtime: BollardRuntime::new(docker), socket_path: sock.clone() });
+                        return Ok(Self {
+                            runtime: BollardRuntime::new(docker),
+                            socket_path: sock.clone(),
+                        });
                     }
                     Err(e) => {
                         tracing::debug!("Socket {} found but connection failed: {e}", sock.display());
@@ -106,13 +116,16 @@ impl NativeBackend {
             }
         }
 
-        let tried = candidates.iter().map(|p| format!("- {}", p.display())).collect::<Vec<_>>().join("\n");
+        let tried = candidates
+            .iter()
+            .map(|p| format!("- {}", p.display()))
+            .collect::<Vec<_>>()
+            .join("\n");
         anyhow::bail!("No container runtime socket found. Looked for:\n{tried}")
     }
 
     pub fn connect_with_socket(path: &str) -> anyhow::Result<Self> {
-        let docker =
-            bollard::Docker::connect_with_socket(path, 120, bollard::API_DEFAULT_VERSION)?;
+        let docker = bollard::Docker::connect_with_socket(path, 120, bollard::API_DEFAULT_VERSION)?;
         Ok(Self {
             runtime: BollardRuntime::new(docker),
             socket_path: PathBuf::from(path),

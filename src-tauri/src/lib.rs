@@ -201,7 +201,7 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.with_webview(move |webview| {
                         use cocoa::appkit::{NSWindow, NSWindowStyleMask, NSWindowTitleVisibility};
-                        use cocoa::base::{id, YES, NO};
+                        use cocoa::base::{NO, YES, id};
                         unsafe {
                             let ns_window: id = webview.ns_window() as id;
                             // Re-add titled mask for native rounded corners + traffic light buttons

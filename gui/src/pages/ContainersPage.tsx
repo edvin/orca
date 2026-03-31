@@ -2,16 +2,14 @@ import { createSignal, onMount, onCleanup, For, Show, createMemo } from "solid-j
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, ComposeProject } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
-import { formatPorts, formatTimestamp, shortId, formatBytes } from "../lib/format";
+import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import RunContainerDialog from "../components/RunContainerDialog";
-import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
 import ResourceBar from "../components/ResourceBar";
-import Sparkline from "../components/Sparkline";
 import LastUpdated from "../components/LastUpdated";
-import { recordMetrics, getCpuHistory, getMemoryHistory } from "../lib/metricsStore";
+import { recordMetrics } from "../lib/metricsStore";
 import { logError } from "../lib/activityStore";
 import MultiLogViewer from "../components/MultiLogViewer";
 

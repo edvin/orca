@@ -29,7 +29,7 @@ interface FileEntry {
 export default function VolumeDetailPage(props: VolumeDetailPageProps) {
   const [volume, setVolume] = createSignal<Volume | null>(null);
   const [activeTab, setActiveTab] = createSignal<DetailTab>("overview");
-  const [loading, setLoading] = createSignal(false);
+  const [_loading, setLoading] = createSignal(false);
   const [containers, setContainers] = createSignal<Container[]>([]);
   const [containersLoading, setContainersLoading] = createSignal(false);
 
@@ -48,7 +48,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       const vols = (await invoke("list_volumes")) as Volume[];
       const v = vols.find((x) => x.name === props.volumeName);
       if (v) setVolume(v);
-    } catch (e) {
+    } catch {
     }
   };
 
@@ -59,7 +59,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
     try {
       const result = (await invoke("volume_containers", { name: props.volumeName })) as Container[];
       setContainers(result);
-    } catch (e) {
+    } catch {
     }
     setContainersLoading(false);
   };

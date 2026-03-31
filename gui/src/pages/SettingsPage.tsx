@@ -61,7 +61,6 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   const [ruleTagFilter, setRuleTagFilter] = createSignal("");
   const [ruleContainers, setRuleContainers] = createSignal("");
   const [ruleEnabled, setRuleEnabled] = createSignal(true);
-  const [ruleSecret, setRuleSecret] = createSignal("");
   const [webhookSecret, setWebhookSecret] = createSignal("");
   const [webhookUrl, setWebhookUrl] = createSignal("");
   const [webhookUrlCopied, setWebhookUrlCopied] = createSignal(false);
@@ -134,8 +133,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   const [availableModels, setAvailableModels] = createSignal<string[]>([]);
   const [loadingModels, setLoadingModels] = createSignal(false);
   const [apiToken, setApiToken] = createSignal("");
-  const [daemonLog, setDaemonLog] = createSignal("");
-  const [daemonLogPath, setDaemonLogPath] = createSignal("");
+  const [daemonLogPath] = createSignal("");
 
   // WSL2 config (Windows only)
   const [wslMemory, setWslMemory] = createSignal("");
@@ -174,7 +172,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
       setMachine(info);
       setError(null);
       setDaemonConnected(true);
-    } catch (e) {
+    } catch {
       setDaemonConnected(false);
       setError(null);
     }
@@ -184,7 +182,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
     try {
       const result = (await invoke("list_registries")) as RegistryCredential[];
       setRegistries(result);
-    } catch (e) {
+    } catch {
     }
   };
 
@@ -410,7 +408,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
       setShowTrayIcon(settings.show_tray_icon);
       setTelemetry(settings.telemetry);
       setDaemonConnected(true);
-    } catch (e) {
+    } catch {
     }
   };
 
@@ -463,7 +461,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
       setAiApiKey("");
       // Load available models
       loadModels();
-    } catch (e) {
+    } catch {
     }
   };
 
@@ -506,10 +504,10 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
     setAiTesting(true);
     setAiTestResult(null);
     try {
-      const result = (await invoke("ai_ask", {
+      await invoke("ai_ask", {
         query: "Say 'AI connection successful!' in exactly those words.",
         context: null,
-      })) as { answer: string };
+      });
       setAiTestResult("success");
       showToast("AI connection test passed", "success");
     } catch (e) {
@@ -662,7 +660,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         setLimaOrigMemoryGib(memGib);
         setLimaOrigDiskGib(diskGib);
       }
-    } catch (_e) {
+    } catch {
       // Not on macOS or limactl not available
     }
   };
@@ -704,7 +702,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
       setWslMemory(config.memory);
       setWslProcessors(config.processors);
       setWslSwap(config.swap);
-    } catch (_e) {
+    } catch {
       // Not on Windows or command unavailable
     }
   };
@@ -752,7 +750,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
       </Show>
 
       {/* Tabs */}
-      <div class="tab-bar" style="margin-bottom: 24px">
+      <div class="tab-bar" style={{"margin-bottom":"24px"}}>
         <button class={`tab-item ${tab() === "general" ? "active" : ""}`} onClick={() => setTab("general")}>General</button>
         <button class={`tab-item ${tab() === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>AI & Agents</button>
         <button class={`tab-item ${tab() === "registries" ? "active" : ""}`} onClick={() => setTab("registries")}>Registries</button>
@@ -981,13 +979,13 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <div class="form-group">
                     <label class="form-label">Provider</label>
                     <div style={{ display: "flex", gap: "8px", "margin-top": "4px", "flex-wrap": "wrap" }}>
-                      {([
+                      <For each={[
                         ["anthropic", "Anthropic (Claude)"],
                         ["openai", "OpenAI (GPT)"],
                         ["gemini", "Google (Gemini)"],
                         ["ollama", "Ollama (Local)"],
                         ["custom", "Custom"],
-                      ] as [AiProviderType, string][]).map(([id, label]) => (
+                      ] as [AiProviderType, string][]}>{([id, label]) => (
                         <button
                           class={`btn btn-sm ${aiProvider() === id ? "btn-primary" : ""}`}
                           onClick={() => {
@@ -1008,7 +1006,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         >
                           {label}
                         </button>
-                      ))}
+                      )}</For>
                     </div>
                   </div>
 
@@ -2175,14 +2173,14 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <div class="card">
                 <p style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "12px" }}>Every network connection Orca makes — there are no hidden calls.</p>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "0" }}>
-                  {([
+                  <For each={[
                     ["AUTO", "#d29922", "Update check", "github.com", "Checks for new versions on startup", "No user data"],
                     ["AUTO", "#d29922", "Template catalog", "orca-desktop.com", "Fetches app templates (cached hourly)", "No user data"],
                     ["USER", "#58a6ff", "Docker Hub search", "hub.docker.com", "When you search for images", "Search query only"],
                     ["USER", "#58a6ff", "AI assistant", "Your provider", "When you click 'Ask AI'", "Context you see on screen"],
                     ["USER", "#58a6ff", "Image pull", "Your registries", "When you click 'Pull'", "Image reference"],
                     ["USER", "#58a6ff", "Remote hosts", "Your Orca daemons", "When you add a remote host", "API token (yours)"],
-                  ] as [string, string, string, string, string, string][]).map(([type, color, name, dest, when, data]) => (
+                  ] as [string, string, string, string, string, string][]}>{([type, color, name, dest, when, data]) => (
                     <div style={{ display: "flex", "align-items": "center", gap: "12px", padding: "10px 0", "border-bottom": "1px solid #21262d" }}>
                       <span style={{ "font-size": "9px", "font-weight": "700", "text-transform": "uppercase", color, "min-width": "32px", "letter-spacing": "0.5px" }}>{type}</span>
                       <div style={{ flex: "1" }}>
@@ -2191,7 +2189,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       </div>
                       <span style={{ "font-size": "11px", color: type === "AUTO" ? "#3fb950" : "#d29922", "font-weight": "600", "white-space": "nowrap" }}>{data}</span>
                     </div>
-                  ))}
+                  )}</For>
                 </div>
               </div>
             </div>
@@ -2201,14 +2199,14 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <h2 class="settings-section-title">Security</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
-                  {([
+                  <For each={[
                     ["Localhost only", "The daemon binds to 127.0.0.1:9477 — not accessible from the network"],
                     ["Token auth", "All API calls require a locally-generated bearer token"],
                     ["Code signed", "macOS releases are Apple notarized, Windows releases are EV code signed"],
                     ["TLS support", "Remote host connections support TLS with certificate verification"],
                     ["Webhook HMAC", "Incoming webhooks are validated with HMAC-SHA256 signatures"],
                     ["Open source", "MIT licensed — audit every line of code on GitHub"],
-                  ] as [string, string][]).map(([title, desc]) => (
+                  ] as [string, string][]}>{([title, desc]) => (
                     <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": "0", "margin-top": "2px" }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                       <div>
@@ -2216,7 +2214,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         <div style={{ "font-size": "12px", color: "#8b949e" }}>{desc}</div>
                       </div>
                     </div>
-                  ))}
+                  )}</For>
                 </div>
               </div>
             </div>
@@ -2289,11 +2287,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <h2 class="settings-section-title">Paths</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
-                  {([
+                  <For each={[
                     ["Config File", "~/.config/orca/config.json"],
                     ["Data Directory", "~/.local/share/orca/"],
                     ["Daemon Log", daemonLogPath() || "~/.config/orca/daemon.log"],
-                  ] as [string, string][]).map(([label, path]) => (
+                  ] as [string, string][]}>{([label, path]) => (
                     <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
                       <div>
                         <div style={{ "font-size": "11px", color: "#6e7681" }}>{label}</div>
@@ -2308,7 +2306,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                       </button>
                     </div>
-                  ))}
+                  )}</For>
                 </div>
               </div>
             </div>
@@ -2354,7 +2352,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     <button class="btn btn-sm" style={{ color: "#f85149", "border-color": "#da363380" }} onClick={async () => {
                       if (!await confirmDanger("Reset Everything", "This will remove ALL Orca Desktop data including config, API keys, templates, and VMs.\n\nThis cannot be undone. Continue?")) return;
                       try {
-                        const result = (await invoke("cleanup", { scope: "all" })) as { log: string[] };
+                        await invoke("cleanup", { scope: "all" });
                         showToast("Orca Desktop has been fully reset. Restart the app.", "success");
                       } catch (e) { logError(`Failed to reset everything: ${e}`); showToast(`Failed: ${e}`, "error"); }
                     }}>Reset All</button>

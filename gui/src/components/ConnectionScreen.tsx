@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, createEffect, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ConnectionScreenProps {
@@ -25,9 +25,11 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
   };
 
   // Fetch daemon info when disconnected
-  if (props.status !== "connecting") {
-    fetchDaemonInfo();
-  }
+  createEffect(() => {
+    if (props.status !== "connecting") {
+      fetchDaemonInfo();
+    }
+  });
 
   const startDaemon = async () => {
     setStarting(true);
@@ -100,7 +102,7 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
           >
             {starting() ? "Starting..." : "Start Daemon"}
           </button>
-          <button class="btn" onClick={props.onRetry}>
+          <button class="btn" onClick={() => props.onRetry()}>
             Retry Connection
           </button>
         </div>

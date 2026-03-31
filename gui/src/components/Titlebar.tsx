@@ -26,7 +26,6 @@ function relativeTime(date: Date): string {
 export default function Titlebar(props: TitlebarProps) {
   const [maximized, setMaximized] = createSignal(false);
   const [dockerConnected, setDockerConnected] = createSignal<boolean | null>(null);
-  const [wasDisconnected, setWasDisconnected] = createSignal(false);
   const [warningCount, setWarningCount] = createSignal(0);
   const [runtimeInfo, setRuntimeInfo] = createSignal<string | null>(null);
   const [bellOpen, setBellOpen] = createSignal(false);
@@ -68,11 +67,7 @@ export default function Titlebar(props: TitlebarProps) {
 
       // Detect reconnection
       if (prevConnected === false && health.docker_connected) {
-        setWasDisconnected(false);
         showToast("Docker connection restored", "success");
-      }
-      if (!health.docker_connected && prevConnected !== false) {
-        setWasDisconnected(true);
       }
     } catch {
       // Daemon not reachable — docker status unknown

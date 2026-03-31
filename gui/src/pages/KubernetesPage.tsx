@@ -210,7 +210,7 @@ export default function KubernetesPage() {
           setTraefikService(null);
         }
       }
-    } catch (e) {
+    } catch {
     }
   };
 
@@ -315,7 +315,7 @@ export default function KubernetesPage() {
           setPodMetrics(map);
         }
       }
-    } catch (e) {
+    } catch {
     } finally {
       setLoading(false);
       hasLoadedOnce = true;
@@ -516,7 +516,6 @@ export default function KubernetesPage() {
     if (!target) return;
     try {
       const command = tab() === "statefulsets" ? "k8s_scale_statefulset" : "k8s_scale_deployment";
-      const kind = tab() === "statefulsets" ? "StatefulSet" : "Deployment";
       await invoke(command, { namespace: target.namespace, name: target.name, replicas: scaleValue() });
       showToast(`Scaled ${target.name} to ${scaleValue()} replicas`, "success");
       setScaleTarget(null);
@@ -1750,7 +1749,7 @@ spec:
                   <th>Ports</th>
                   <th>Age</th>
                   <th style={{ "text-align": "right" }}>Access</th>
-                  <th></th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -2002,7 +2001,7 @@ spec:
                   <th>Hosts</th>
                   <th>Address</th>
                   <th>Age</th>
-                  <th></th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -3272,7 +3271,7 @@ spec:
                       <tr>
                         <th>Revision</th>
                         <th>Change Cause</th>
-                        <th></th>
+                        <th />
                       </tr>
                     </thead>
                     <tbody>
@@ -4095,7 +4094,7 @@ spec:
               </div>
               <div>
                 <label style={{ "font-size": "12px", color: "#8b949e", display: "block", "margin-bottom": "8px" }}>Access Modes</label>
-                {(["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany"] as const).map((mode) => (
+                <For each={["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany"] as const}>{(mode) => (
                   <label style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "6px", "font-size": "13px", color: "#c9d1d9", cursor: "pointer" }}>
                     <input
                       type="checkbox"
@@ -4108,7 +4107,7 @@ spec:
                     />
                     {mode}
                   </label>
-                ))}
+                )}</For>
               </div>
             </div>
             <div class="modal-footer">

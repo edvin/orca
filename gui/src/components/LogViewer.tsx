@@ -107,6 +107,7 @@ export default function LogViewer(props: LogViewerProps) {
 
   onMount(() => {
     let unlisten: UnlistenFn | null = null;
+    const containerId = props.containerId;
 
     // Fetch initial batch of logs, then start streaming
     fetchLogs().then(async () => {
@@ -114,7 +115,7 @@ export default function LogViewer(props: LogViewerProps) {
       unlisten = await listen<{ containerId: string; line: string }>(
         "container-log-line",
         (event) => {
-          if (event.payload.containerId === props.containerId) {
+          if (event.payload.containerId === containerId) {
             const newLines = processLines([event.payload.line]);
             if (newLines.length > 0) {
               setLines((prev) => [...prev, ...newLines]);
@@ -125,7 +126,7 @@ export default function LogViewer(props: LogViewerProps) {
 
       // Start streaming subscription
       invoke("subscribe_container_logs", {
-        id: props.containerId,
+        id: containerId,
         tail: 0,
       }).catch((e) => {
         console.error("Failed to subscribe to log stream:", e);
@@ -324,7 +325,7 @@ export default function LogViewer(props: LogViewerProps) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
           </button>
           <Show when={props.onClose}>
-            <button class="action-icon" onClick={props.onClose} title="Close">
+            <button class="action-icon" onClick={() => props.onClose?.()} title="Close">
               {"\u2715"}
             </button>
           </Show>
@@ -360,6 +361,7 @@ export default function LogViewer(props: LogViewerProps) {
                         "word-break": "break-all",
                         "line-height": "1.4",
                       }}
+                      // eslint-disable-next-line solid/no-innerhtml -- highlightLine produces pre-escaped HTML with safe <mark> tags
                       innerHTML={highlightLine(line, f, useRegex(), caseSensitive())}
                     />
                   );

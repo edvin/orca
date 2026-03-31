@@ -9,10 +9,7 @@ pub struct ImageSearchResult {
     pub pulls: Option<String>,
 }
 
-pub async fn search_docker_hub(
-    query: &str,
-    limit: u32,
-) -> anyhow::Result<Vec<ImageSearchResult>> {
+pub async fn search_docker_hub(query: &str, limit: u32) -> anyhow::Result<Vec<ImageSearchResult>> {
     let url = format!(
         "https://hub.docker.com/v2/search/repositories/?query={}&page_size={}",
         urlencoding::encode(query),
@@ -39,18 +36,9 @@ pub async fn search_docker_hub(
                             .and_then(|d| d.as_str())
                             .unwrap_or("")
                             .to_string(),
-                        stars: item
-                            .get("star_count")
-                            .and_then(|s| s.as_u64())
-                            .unwrap_or(0),
-                        official: item
-                            .get("is_official")
-                            .and_then(|o| o.as_bool())
-                            .unwrap_or(false),
-                        pulls: item
-                            .get("pull_count")
-                            .and_then(|p| p.as_u64())
-                            .map(format_pulls),
+                        stars: item.get("star_count").and_then(|s| s.as_u64()).unwrap_or(0),
+                        official: item.get("is_official").and_then(|o| o.as_bool()).unwrap_or(false),
+                        pulls: item.get("pull_count").and_then(|p| p.as_u64()).map(format_pulls),
                     })
                 })
                 .collect()

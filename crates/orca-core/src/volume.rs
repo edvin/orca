@@ -16,11 +16,7 @@ pub struct Volume {
 #[trait_variant::make(Send)]
 pub trait VolumeManager {
     async fn list(&self) -> anyhow::Result<Vec<Volume>>;
-    async fn create(
-        &self,
-        name: &str,
-        labels: HashMap<String, String>,
-    ) -> anyhow::Result<Volume>;
+    async fn create(&self, name: &str, labels: HashMap<String, String>) -> anyhow::Result<Volume>;
     async fn remove(&self, name: &str, force: bool) -> anyhow::Result<()>;
     async fn inspect(&self, name: &str) -> anyhow::Result<Volume>;
     async fn prune(&self) -> anyhow::Result<u64>;

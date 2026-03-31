@@ -32,7 +32,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
     try {
       const result = (await invoke("get_stack", { name: props.stackName })) as ComposeProject;
       setStack(result);
-    } catch (e) {
+    } catch {
     }
   };
 
@@ -509,6 +509,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   value={composeContent()!}
                   readOnly={false}
                   title={`${props.stackName} — docker-compose.yml`}
+                  // eslint-disable-next-line solid/reactivity -- async event handler, reactivity not needed
                   onSave={async (content: string) => {
                     const configFile = stack()?.config_file;
                     if (!configFile) {

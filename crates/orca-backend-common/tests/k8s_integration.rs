@@ -66,10 +66,7 @@ async fn test_list_namespaces() {
 async fn test_list_pods_kube_system() {
     let Some(manager) = create_manager() else { return };
 
-    let pods = manager
-        .list_pods("kube-system")
-        .await
-        .expect("Failed to list pods");
+    let pods = manager.list_pods("kube-system").await.expect("Failed to list pods");
 
     assert!(!pods.is_empty(), "kube-system should have pods");
 
@@ -89,10 +86,7 @@ async fn test_list_pods_kube_system() {
 async fn test_list_services_default() {
     let Some(manager) = create_manager() else { return };
 
-    let services = manager
-        .list_services("default")
-        .await
-        .expect("Failed to list services");
+    let services = manager.list_services("default").await.expect("Failed to list services");
 
     let has_kubernetes = services.iter().any(|s| s.name == "kubernetes");
     assert!(has_kubernetes, "Should have 'kubernetes' service in default namespace");
@@ -167,20 +161,14 @@ data:
   test_key: test_value
 "#;
 
-    let output = manager
-        .apply_yaml(yaml)
-        .await
-        .expect("Failed to apply YAML");
+    let output = manager.apply_yaml(yaml).await.expect("Failed to apply YAML");
     println!("Apply output: {output}");
     assert!(
         output.contains("created") || output.contains("configured"),
         "Should create or configure the resource"
     );
 
-    let output = manager
-        .delete_yaml(yaml)
-        .await
-        .expect("Failed to delete YAML");
+    let output = manager.delete_yaml(yaml).await.expect("Failed to delete YAML");
     println!("Delete output: {output}");
     assert!(output.contains("deleted"), "Should delete the resource");
 }
@@ -190,10 +178,7 @@ data:
 async fn test_pod_logs() {
     let Some(manager) = create_manager() else { return };
 
-    let pods = manager
-        .list_pods("kube-system")
-        .await
-        .expect("Failed to list pods");
+    let pods = manager.list_pods("kube-system").await.expect("Failed to list pods");
 
     let coredns = pods.iter().find(|p| p.name.contains("coredns"));
     if let Some(pod) = coredns {

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "solid-js";
 import { logError } from "../lib/activityStore";
 import { showToast } from "./Toast";
 
@@ -66,9 +66,10 @@ export default function AiAssistant(props: AiAssistantProps) {
     }, 500);
   };
 
-  if (props.ref) {
-    props.ref({ askAboutContainer });
-  }
+  // Pass API ref to parent via callback
+  onMount(() => {
+    props.ref?.({ askAboutContainer });
+  });
 
   return null;
 }

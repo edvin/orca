@@ -34,18 +34,26 @@ pub fn container_to_docker_run(container: &Container) -> String {
     if let Some(mounts) = &container.mounts {
         for m in mounts {
             if m.rw {
-                cmd.push(format!("-v {}:{}", shell_escape(&m.source), shell_escape(&m.destination)));
+                cmd.push(format!(
+                    "-v {}:{}",
+                    shell_escape(&m.source),
+                    shell_escape(&m.destination)
+                ));
             } else {
-                cmd.push(format!("-v {}:{}:ro", shell_escape(&m.source), shell_escape(&m.destination)));
+                cmd.push(format!(
+                    "-v {}:{}:ro",
+                    shell_escape(&m.source),
+                    shell_escape(&m.destination)
+                ));
             }
         }
     }
 
     // Restart policy from labels
-    if let Some(policy) = container.labels.get("com.docker.compose.restart") {
-        if policy != "no" {
-            cmd.push(format!("--restart {policy}"));
-        }
+    if let Some(policy) = container.labels.get("com.docker.compose.restart")
+        && policy != "no"
+    {
+        cmd.push(format!("--restart {policy}"));
     }
 
     // Image
@@ -73,46 +81,43 @@ pub fn containers_to_compose(containers: &[Container], project_name: &str) -> St
         if !container.ports.is_empty() {
             yaml.push_str("    ports:\n");
             for port in &container.ports {
-                yaml.push_str(&format!(
-                    "      - \"{}:{}\"\n",
-                    port.host_port, port.container_port
-                ));
+                yaml.push_str(&format!("      - \"{}:{}\"\n", port.host_port, port.container_port));
             }
         }
 
-        if let Some(env) = &container.env {
-            if !env.is_empty() {
-                yaml.push_str("    environment:\n");
-                for e in env {
-                    yaml.push_str(&format!("      - \"{}\"\n", e.replace('"', "\\\"")));
+        if let Some(env) = &container.env
+            && !env.is_empty()
+        {
+            yaml.push_str("    environment:\n");
+            for e in env {
+                yaml.push_str(&format!("      - \"{}\"\n", e.replace('"', "\\\"")));
+            }
+        }
+
+        if let Some(mounts) = &container.mounts
+            && !mounts.is_empty()
+        {
+            yaml.push_str("    volumes:\n");
+            for m in mounts {
+                if m.rw {
+                    yaml.push_str(&format!("      - {}:{}\n", m.source, m.destination));
+                } else {
+                    yaml.push_str(&format!("      - {}:{}:ro\n", m.source, m.destination));
                 }
             }
         }
 
-        if let Some(mounts) = &container.mounts {
-            if !mounts.is_empty() {
-                yaml.push_str("    volumes:\n");
-                for m in mounts {
-                    if m.rw {
-                        yaml.push_str(&format!("      - {}:{}\n", m.source, m.destination));
-                    } else {
-                        yaml.push_str(&format!("      - {}:{}:ro\n", m.source, m.destination));
-                    }
-                }
-            }
-        }
-
-        if let Some(command) = &container.command {
-            if !command.is_empty() {
-                yaml.push_str(&format!(
-                    "    command: [{}]\n",
-                    command
-                        .iter()
-                        .map(|c| format!("\"{}\"", c.replace('"', "\\\"")))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ));
-            }
+        if let Some(command) = &container.command
+            && !command.is_empty()
+        {
+            yaml.push_str(&format!(
+                "    command: [{}]\n",
+                command
+                    .iter()
+                    .map(|c| format!("\"{}\"", c.replace('"', "\\\"")))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
 
         yaml.push('\n');
@@ -141,13 +146,7 @@ fn shell_escape(s: &str) -> String {
 fn sanitize_service_name(name: &str) -> String {
     let sanitized: String = name
         .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
+        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
         .collect();
     if sanitized.is_empty() {
         "service".to_string()
@@ -254,7 +253,10 @@ mod tests {
         };
         let yaml = containers_to_compose(&[c], "test");
         // Dots and dashes should be replaced with underscores
-        assert!(yaml.contains("my_app_v2:"), "dots/dashes should be sanitized to underscores");
+        assert!(
+            yaml.contains("my_app_v2:"),
+            "dots/dashes should be sanitized to underscores"
+        );
         assert!(yaml.contains("image: redis:7"));
     }
 

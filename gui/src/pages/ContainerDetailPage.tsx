@@ -2,7 +2,7 @@ import { createSignal, onMount, onCleanup, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
-import { formatBytes, formatTimestamp, shortId, formatPorts } from "../lib/format";
+import { formatBytes, formatTimestamp } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import LogViewer from "../components/LogViewer";
@@ -32,7 +32,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [stats, setStats] = createSignal<ContainerStats | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
   const [activeTab, setActiveTab] = createSignal<DetailTab>("overview");
-  const [loading, setLoading] = createSignal(false);
+  const [_loading, setLoading] = createSignal(false);
   const [actionInProgress, setActionInProgress] = createSignal(false);
   const [dockerRunCmd, setDockerRunCmd] = createSignal<string | null>(null);
   const [composeYaml, setComposeYaml] = createSignal<string | null>(null);
@@ -73,7 +73,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       const containers = (await invoke("list_containers")) as Container[];
       const c = containers.find((x) => x.id === props.containerId);
       if (c) setContainer(c);
-    } catch (e) {
+    } catch {
     }
   };
 

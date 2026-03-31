@@ -139,7 +139,7 @@ export default function AiWindow() {
   };
 
   const renderMarkdown = (text: string) => {
-    let html = text
+    const html = text
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
@@ -231,12 +231,17 @@ export default function AiWindow() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
                 </div>
               </Show>
-              <div
-                class={`ai-window-msg-bubble ${msg.role === "user" ? "ai-window-msg-user" : "ai-window-msg-ai"}`}
-                innerHTML={msg.role === "ai" ? renderMarkdown(msg.content) : undefined}
-              >
-                {msg.role === "user" ? msg.content : undefined}
-              </div>
+              <Show when={msg.role === "ai"} fallback={
+                <div class="ai-window-msg-bubble ai-window-msg-user">
+                  {msg.content}
+                </div>
+              }>
+                <div
+                  class="ai-window-msg-bubble ai-window-msg-ai"
+                  // eslint-disable-next-line solid/no-innerhtml -- sanitized via renderMarkdown/DOMPurify
+                  innerHTML={renderMarkdown(msg.content)}
+                />
+              </Show>
             </div>
           )}
         </For>

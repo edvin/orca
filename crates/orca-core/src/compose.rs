@@ -57,15 +57,11 @@ const LABEL_CONFIG_FILES: &str = "com.docker.compose.project.config_files";
 /// Extract compose projects from a list of containers.
 /// Containers without compose labels are ignored.
 pub fn extract_projects(containers: &[Container]) -> Vec<ComposeProject> {
-    let mut projects: std::collections::BTreeMap<String, Vec<&Container>> =
-        std::collections::BTreeMap::new();
+    let mut projects: std::collections::BTreeMap<String, Vec<&Container>> = std::collections::BTreeMap::new();
 
     for c in containers {
         if let Some(project_name) = c.labels.get(LABEL_PROJECT) {
-            projects
-                .entry(project_name.clone())
-                .or_default()
-                .push(c);
+            projects.entry(project_name.clone()).or_default().push(c);
         }
     }
 
@@ -82,11 +78,7 @@ pub fn extract_projects(containers: &[Container]) -> Vec<ComposeProject> {
             let services: Vec<ComposeService> = containers
                 .iter()
                 .map(|c| {
-                    let service_name = c
-                        .labels
-                        .get(LABEL_SERVICE)
-                        .cloned()
-                        .unwrap_or_else(|| c.name.clone());
+                    let service_name = c.labels.get(LABEL_SERVICE).cloned().unwrap_or_else(|| c.name.clone());
 
                     ComposeService {
                         name: service_name,
@@ -99,10 +91,7 @@ pub fn extract_projects(containers: &[Container]) -> Vec<ComposeProject> {
                 })
                 .collect();
 
-            let running_count = services
-                .iter()
-                .filter(|s| s.state == ContainerState::Running)
-                .count();
+            let running_count = services.iter().filter(|s| s.state == ContainerState::Running).count();
             let total = services.len();
 
             let status = if total == 0 {
@@ -192,12 +181,7 @@ mod tests {
     }
 
     /// Shorthand: compose-labeled container with common defaults.
-    fn compose_container(
-        id: &str,
-        project: &str,
-        service: &str,
-        state: ContainerState,
-    ) -> Container {
+    fn compose_container(id: &str, project: &str, service: &str, state: ContainerState) -> Container {
         make_container(
             id,
             &format!("{}-{}-1", project, service),
@@ -219,8 +203,26 @@ mod tests {
     #[test]
     fn containers_without_compose_labels_are_ignored() {
         let containers = vec![
-            make_container("c1", "nginx", "nginx:latest", ContainerState::Running, None, None, None, None),
-            make_container("c2", "redis", "redis:latest", ContainerState::Running, None, None, None, None),
+            make_container(
+                "c1",
+                "nginx",
+                "nginx:latest",
+                ContainerState::Running,
+                None,
+                None,
+                None,
+                None,
+            ),
+            make_container(
+                "c2",
+                "redis",
+                "redis:latest",
+                ContainerState::Running,
+                None,
+                None,
+                None,
+                None,
+            ),
         ];
         let projects = extract_projects(&containers);
         assert!(projects.is_empty());
@@ -284,9 +286,7 @@ mod tests {
 
     #[test]
     fn working_dir_and_config_file_extracted_from_labels() {
-        let containers = vec![
-            compose_container("c1", "myproj", "web", ContainerState::Running),
-        ];
+        let containers = vec![compose_container("c1", "myproj", "web", ContainerState::Running)];
         let projects = extract_projects(&containers);
         assert_eq!(projects[0].working_dir.as_deref(), Some("/home/user/myproj"));
         assert_eq!(
@@ -297,9 +297,16 @@ mod tests {
 
     #[test]
     fn working_dir_none_when_label_missing() {
-        let containers = vec![
-            make_container("c1", "web-1", "nginx:latest", ContainerState::Running, Some("proj"), Some("web"), None, None),
-        ];
+        let containers = vec![make_container(
+            "c1",
+            "web-1",
+            "nginx:latest",
+            ContainerState::Running,
+            Some("proj"),
+            Some("web"),
+            None,
+            None,
+        )];
         let projects = extract_projects(&containers);
         assert!(projects[0].working_dir.is_none());
         assert!(projects[0].config_file.is_none());
@@ -319,9 +326,16 @@ mod tests {
 
     #[test]
     fn service_name_falls_back_to_container_name_without_label() {
-        let containers = vec![
-            make_container("c1", "my-container", "nginx:latest", ContainerState::Running, Some("proj"), None, None, None),
-        ];
+        let containers = vec![make_container(
+            "c1",
+            "my-container",
+            "nginx:latest",
+            ContainerState::Running,
+            Some("proj"),
+            None,
+            None,
+            None,
+        )];
         let projects = extract_projects(&containers);
         assert_eq!(projects[0].services[0].name, "my-container");
     }
@@ -330,7 +344,16 @@ mod tests {
     fn mixed_compose_and_standalone_containers() {
         let containers = vec![
             compose_container("c1", "proj", "web", ContainerState::Running),
-            make_container("c2", "standalone", "redis:latest", ContainerState::Running, None, None, None, None),
+            make_container(
+                "c2",
+                "standalone",
+                "redis:latest",
+                ContainerState::Running,
+                None,
+                None,
+                None,
+                None,
+            ),
             compose_container("c3", "proj", "db", ContainerState::Running),
         ];
         let projects = extract_projects(&containers);
@@ -340,9 +363,7 @@ mod tests {
 
     #[test]
     fn service_fields_match_container_data() {
-        let containers = vec![
-            compose_container("abc123", "proj", "web", ContainerState::Running),
-        ];
+        let containers = vec![compose_container("abc123", "proj", "web", ContainerState::Running)];
         let projects = extract_projects(&containers);
         let svc = &projects[0].services[0];
         assert_eq!(svc.container_id, "abc123");

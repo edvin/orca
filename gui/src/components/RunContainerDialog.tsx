@@ -223,24 +223,13 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
     mouseDownOnOverlay = false;
   };
 
-  const stageIcon = () => {
-    switch (stage()) {
-      case "pulling": return "\u2B07";
-      case "creating": return "\u2692";
-      case "starting": return "\u2713";
-      case "done": return "\u2713";
-      case "error": return "\u2717";
-      default: return "";
-    }
-  };
-
   return (
     <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
       <div class="modal-dialog">
         <div class="modal-header">
           <h2 class="modal-title">Run Container</h2>
           <Show when={stage() === "form" || stage() === "error"}>
-            <button class="modal-close" onClick={props.onClose}>{"\u00d7"}</button>
+            <button class="modal-close" onClick={() => props.onClose()}>{"\u00d7"}</button>
           </Show>
         </div>
 
@@ -285,7 +274,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
           </div>
           <div class="modal-footer">
             <button class="btn" onClick={() => setStage("form")}>Back</button>
-            <button class="btn" onClick={props.onClose}>Close</button>
+            <button class="btn" onClick={() => props.onClose()}>Close</button>
           </div>
         </Show>
 
@@ -461,7 +450,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
             </div>
 
             <div class="modal-footer">
-              <button type="button" class="btn" onClick={props.onClose}>Cancel</button>
+              <button type="button" class="btn" onClick={() => props.onClose()}>Cancel</button>
               <button type="submit" class="btn btn-primary" disabled={!image().trim()}>Run</button>
             </div>
           </form>

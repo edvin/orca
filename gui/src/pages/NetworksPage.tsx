@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from "solid-js";
+import { createSignal, onMount, For, Index, Show, untrack } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Network } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
@@ -308,12 +308,13 @@ export default function NetworksPage() {
               </For>
 
               {/* Network nodes */}
-              <For each={topology()}>
-                {(net, i) => {
+              <Index each={topology()}>
+                {(netAccessor, index) => {
+                  const net = untrack(netAccessor);
                   const cols = 3;
-                  const x = 150 + (i() % cols) * 250;
-                  const y = 80 + Math.floor(i() / cols) * 200;
-                  const color = NETWORK_COLORS[i() % NETWORK_COLORS.length];
+                  const x = 150 + (index % cols) * 250;
+                  const y = 80 + Math.floor(index / cols) * 200;
+                  const color = NETWORK_COLORS[index % NETWORK_COLORS.length];
                   const containerCount = net.containers.length;
                   const netWidth = Math.max(200, containerCount * 50 + 20);
                   const halfW = netWidth / 2;
@@ -344,11 +345,12 @@ export default function NetworksPage() {
                       </text>
 
                       {/* Connected containers */}
-                      <For each={net.containers}>
-                        {(container, j) => {
+                      <Index each={net.containers}>
+                        {(containerAccessor, jIndex) => {
+                          const container = untrack(containerAccessor);
                           const maxPerRow = Math.max(1, Math.floor(netWidth / 50));
-                          const cx = x - halfW + 25 + (j() % maxPerRow) * 50;
-                          const cy = y + 30 + Math.floor(j() / maxPerRow) * 28;
+                          const cx = x - halfW + 25 + (jIndex % maxPerRow) * 50;
+                          const cy = y + 30 + Math.floor(jIndex / maxPerRow) * 28;
                           const shortName = container.name.length > 7 ? container.name.slice(0, 7) : container.name;
                           return (
                             <g
@@ -371,11 +373,11 @@ export default function NetworksPage() {
                             </g>
                           );
                         }}
-                      </For>
+                      </Index>
                     </g>
                   );
                 }}
-              </For>
+              </Index>
             </svg>
 
             {/* Hover tooltip */}

@@ -7,16 +7,16 @@ fn main() {
         // Workaround for WebKitGTK EGL crash on some Linux setups (Manjaro, Wayland, etc.)
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             // SAFETY: called before any threads are spawned (start of main)
-            unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1"); }
+            unsafe {
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
         }
 
         // Workaround for Wayland libwayland-client version mismatch in AppImage.
         // The AppImage bundles an older libwayland-client that conflicts with the
         // system's version. LD_PRELOAD must be set before process start, so we
         // re-exec ourselves with it set.
-        if std::env::var("WAYLAND_DISPLAY").is_ok()
-            && std::env::var("__ORCA_WAYLAND_FIX").is_err()
-        {
+        if std::env::var("WAYLAND_DISPLAY").is_ok() && std::env::var("__ORCA_WAYLAND_FIX").is_err() {
             let wayland_lib = "/usr/lib/libwayland-client.so";
             // Also check multilib path
             let wayland_lib_64 = "/usr/lib64/libwayland-client.so";
@@ -31,7 +31,9 @@ fn main() {
             if let Some(lib) = lib_path {
                 // Set marker to prevent infinite re-exec loop
                 // SAFETY: called before any threads are spawned (start of main)
-                unsafe { std::env::set_var("__ORCA_WAYLAND_FIX", "1"); }
+                unsafe {
+                    std::env::set_var("__ORCA_WAYLAND_FIX", "1");
+                }
                 // Prepend to existing LD_PRELOAD
                 let existing = std::env::var("LD_PRELOAD").unwrap_or_default();
                 let preload = if existing.is_empty() {

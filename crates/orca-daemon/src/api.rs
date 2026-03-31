@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, Request, State},
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    extract::{Path, Query, Request, State},
     http::StatusCode,
     middleware::Next,
     response::{
@@ -16,8 +16,6 @@ use axum::{
     routing::{delete, get, patch, post, put},
 };
 use futures::{SinkExt, StreamExt as FuturesStreamExt};
-use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use orca_core::compose::{self, ComposeRunner};
 use orca_core::image::ImageManager;
 use orca_core::kubernetes::K8sManager;
@@ -25,6 +23,8 @@ use orca_core::machine::{MachineBackend, MachineConfig, MachineInfo, MachineStat
 use orca_core::network::NetworkManager;
 use orca_core::runtime::{ContainerRuntime, ContainerStats};
 use orca_core::volume::VolumeManager;
+use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::state::AppState;
 
@@ -77,14 +77,14 @@ pub async fn auth_middleware(
     }
 
     // Allow WebSocket endpoints — they do their own auth via query param
-    if req.uri().path().ends_with("/terminal") || req.uri().path().ends_with("/enable-stream") || req.uri().path().ends_with("/tunnel") {
+    if req.uri().path().ends_with("/terminal")
+        || req.uri().path().ends_with("/enable-stream")
+        || req.uri().path().ends_with("/tunnel")
+    {
         return Ok(next.run(req).await);
     }
 
-    let auth_header = req
-        .headers()
-        .get("authorization")
-        .and_then(|v| v.to_str().ok());
+    let auth_header = req.headers().get("authorization").and_then(|v| v.to_str().ok());
 
     let provided_token = match auth_header {
         Some(h) if h.starts_with("Bearer ") => &h[7..],
@@ -218,7 +218,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/namespaces/{name}", delete(k8s_delete_namespace))
         .route("/k8s/configmaps/{namespace}", get(k8s_configmaps))
         .route("/k8s/secrets/{namespace}", get(k8s_secrets).post(k8s_create_secret))
-        .route("/k8s/secrets/{namespace}/{name}", delete(k8s_delete_secret).put(k8s_update_secret))
+        .route(
+            "/k8s/secrets/{namespace}/{name}",
+            delete(k8s_delete_secret).put(k8s_update_secret),
+        )
         .route("/k8s/metrics/{namespace}", get(k8s_pod_metrics))
         .route("/k8s/deployments/{namespace}/{name}/history", get(k8s_rollout_history))
         .route("/k8s/deployments/{namespace}/{name}/rollback", post(k8s_rollout_undo))
@@ -229,8 +232,14 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/daemonsets/{namespace}", get(k8s_daemonsets))
         .route("/k8s/statefulsets/{namespace}", get(k8s_statefulsets))
         .route("/k8s/replicasets/{namespace}", get(k8s_replicasets))
-        .route("/k8s/statefulsets/{namespace}/{name}/scale", post(k8s_scale_statefulset))
-        .route("/k8s/statefulsets/{namespace}/{name}/restart", post(k8s_restart_statefulset))
+        .route(
+            "/k8s/statefulsets/{namespace}/{name}/scale",
+            post(k8s_scale_statefulset),
+        )
+        .route(
+            "/k8s/statefulsets/{namespace}/{name}/restart",
+            post(k8s_restart_statefulset),
+        )
         .route("/k8s/daemonsets/{namespace}/{name}", delete(k8s_delete_daemonset))
         .route("/k8s/statefulsets/{namespace}/{name}", delete(k8s_delete_statefulset))
         .route("/k8s/replicasets/{namespace}/{name}", delete(k8s_delete_replicaset))
@@ -243,7 +252,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/hpas/{namespace}", get(k8s_hpas).post(k8s_create_hpa))
         .route("/k8s/hpas/{namespace}/{name}", delete(k8s_delete_hpa))
         .route("/k8s/network-policies/{namespace}", get(k8s_network_policies))
-        .route("/k8s/network-policies/{namespace}/{name}", delete(k8s_delete_network_policy))
+        .route(
+            "/k8s/network-policies/{namespace}/{name}",
+            delete(k8s_delete_network_policy),
+        )
         .route("/k8s/storage-classes", get(k8s_storage_classes))
         .route("/k8s/crds", get(k8s_crds))
         .route("/k8s/pods/{namespace}/{name}/terminal", get(k8s_pod_terminal_ws))
@@ -262,7 +274,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/{name}/dir", get(get_stack_dir))
         // AI
         .route("/ai/ask", post(ai_ask))
-        .route("/settings/general", get(get_general_settings).post(save_general_settings))
+        .route(
+            "/settings/general",
+            get(get_general_settings).post(save_general_settings),
+        )
         .route("/settings/ai", post(save_ai_settings))
         .route("/settings/ai", get(get_ai_settings))
         .route("/settings/ai/models", get(list_ai_models))
@@ -308,11 +323,7 @@ async fn events_stream(
         }
     };
 
-    Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(Duration::from_secs(15))
-            .text("keepalive"),
-    )
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keepalive"))
 }
 
 fn event_type_name(kind: &orca_core::event::EventKind) -> &'static str {
@@ -335,9 +346,7 @@ fn event_type_name(kind: &orca_core::event::EventKind) -> &'static str {
 
 // --- Machines ---
 
-async fn list_machines(
-    State(_state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn list_machines(State(_state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     Ok(Json(vec![native_machine_info()]))
 }
 
@@ -379,9 +388,7 @@ fn native_machine_info() -> MachineInfo {
 
 // --- Containers ---
 
-async fn list_containers(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn list_containers(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let containers = state.rt().await.list_containers(true).await?;
     Ok(Json(containers))
 }
@@ -460,11 +467,7 @@ async fn update_container(
 ) -> Result<impl IntoResponse, ApiError> {
     use orca_core::runtime::ContainerUpdateOpts;
 
-    let memory_limit = body
-        .memory_limit
-        .as_deref()
-        .map(parse_memory_string)
-        .transpose()?;
+    let memory_limit = body.memory_limit.as_deref().map(parse_memory_string).transpose()?;
 
     // If memory limit is set but no swap specified, set swap to 2x memory
     // (Docker default behavior when --memory-swap is not explicitly set)
@@ -555,11 +558,7 @@ async fn create_container(
 ) -> Result<impl IntoResponse, ApiError> {
     use orca_core::runtime::ContainerCreateOpts;
 
-    let memory_limit = body
-        .memory_limit
-        .as_deref()
-        .map(parse_memory_string)
-        .transpose()?;
+    let memory_limit = body.memory_limit.as_deref().map(parse_memory_string).transpose()?;
 
     let opts = ContainerCreateOpts {
         image: body.image,
@@ -583,10 +582,7 @@ async fn create_container(
 
     let id = state.rt().await.create_container(opts).await?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(serde_json::json!({ "id": id })),
-    ))
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id }))))
 }
 
 async fn container_stats(
@@ -641,8 +637,7 @@ async fn container_terminal_ws(
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
     use subtle::ConstantTimeEq;
     if !state.api_token.is_empty()
-        && (state.api_token.len() != token.len()
-            || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+        && (state.api_token.len() != token.len() || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
     {
         return Err(StatusCode::UNAUTHORIZED);
     }
@@ -653,24 +648,30 @@ async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: 
     use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions, StartExecResults};
 
     // Create exec with TTY
-    let exec = match state.rt().await.docker.create_exec(
-        &container_id,
-        CreateExecOptions {
-            cmd: Some(vec![
-                "sh".to_string(),
-                "-c".to_string(),
-                "if command -v bash > /dev/null 2>&1; then exec bash; else exec sh; fi"
-                    .to_string(),
-            ]),
-            attach_stdin: Some(true),
-            attach_stdout: Some(true),
-            attach_stderr: Some(true),
-            tty: Some(true),
-            env: Some(vec!["TERM=xterm-256color".to_string(), "COLORTERM=truecolor".to_string()]),
-            ..Default::default()
-        },
-    )
-    .await
+    let exec = match state
+        .rt()
+        .await
+        .docker
+        .create_exec(
+            &container_id,
+            CreateExecOptions {
+                cmd: Some(vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    "if command -v bash > /dev/null 2>&1; then exec bash; else exec sh; fi".to_string(),
+                ]),
+                attach_stdin: Some(true),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                tty: Some(true),
+                env: Some(vec![
+                    "TERM=xterm-256color".to_string(),
+                    "COLORTERM=truecolor".to_string(),
+                ]),
+                ..Default::default()
+            },
+        )
+        .await
     {
         Ok(e) => e,
         Err(e) => {
@@ -692,10 +693,7 @@ async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: 
     });
 
     match state.rt().await.docker.start_exec(&exec_id, start_opts).await {
-        Ok(StartExecResults::Attached {
-            mut output,
-            mut input,
-        }) => {
+        Ok(StartExecResults::Attached { mut output, mut input }) => {
             let (mut ws_sender, mut ws_receiver) = socket.split();
 
             // Container stdout/stderr -> WebSocket
@@ -717,22 +715,22 @@ async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: 
                     match msg {
                         Message::Text(text) => {
                             // Check for resize message (JSON with cols/rows)
-                            if let Ok(resize) = serde_json::from_str::<serde_json::Value>(&text) {
-                                if let (Some(cols), Some(rows)) = (
+                            if let Ok(resize) = serde_json::from_str::<serde_json::Value>(&text)
+                                && let (Some(cols), Some(rows)) = (
                                     resize.get("cols").and_then(|c| c.as_u64()),
                                     resize.get("rows").and_then(|r| r.as_u64()),
-                                ) {
-                                    let _ = docker
-                                        .resize_exec(
-                                            &exec_id_for_input,
-                                            ResizeExecOptions {
-                                                width: cols as u16,
-                                                height: rows as u16,
-                                            },
-                                        )
-                                        .await;
-                                    continue;
-                                }
+                                )
+                            {
+                                let _ = docker
+                                    .resize_exec(
+                                        &exec_id_for_input,
+                                        ResizeExecOptions {
+                                            width: cols as u16,
+                                            height: rows as u16,
+                                        },
+                                    )
+                                    .await;
+                                continue;
                             }
                             if input.write_all(text.as_bytes()).await.is_err() {
                                 break;
@@ -764,9 +762,7 @@ async fn handle_terminal(socket: WebSocket, state: Arc<AppState>, container_id: 
         Err(e) => {
             let (mut ws_sender, _) = socket.split();
             let _ = ws_sender
-                .send(Message::Text(
-                    format!("\r\nFailed to start exec: {e}\r\n").into(),
-                ))
+                .send(Message::Text(format!("\r\nFailed to start exec: {e}\r\n").into()))
                 .await;
         }
     }
@@ -817,18 +813,12 @@ async fn container_logs_sse(
         }
     };
 
-    Ok(Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(Duration::from_secs(15))
-            .text("keepalive"),
-    ))
+    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keepalive")))
 }
 
 // --- Images ---
 
-async fn list_images(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn list_images(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let images = ImageManager::list(state.rt().await.as_ref()).await?;
     Ok(Json(images))
 }
@@ -838,7 +828,12 @@ async fn inspect_image(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Return raw Docker inspect data (includes RootFS, Config, etc.)
-    let raw = state.rt().await.docker.inspect_image(&id).await
+    let raw = state
+        .rt()
+        .await
+        .docker
+        .inspect_image(&id)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to inspect image: {e}"))?;
     Ok(Json(raw))
 }
@@ -848,11 +843,10 @@ async fn image_history(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     tracing::debug!("image_history: id={id}");
-    let history = state.rt().await.docker.image_history(&id).await
-        .map_err(|e| {
-            tracing::error!("image_history failed for {id}: {e}");
-            anyhow::anyhow!("Failed to get image history: {e}")
-        })?;
+    let history = state.rt().await.docker.image_history(&id).await.map_err(|e| {
+        tracing::error!("image_history failed for {id}: {e}");
+        anyhow::anyhow!("Failed to get image history: {e}")
+    })?;
     tracing::debug!("image_history: got {} layers for {id}", history.len());
     Ok(Json(history))
 }
@@ -889,9 +883,7 @@ async fn pull_image(
             password: auth.password.clone(),
             server: None,
         };
-        state.rt().await
-            .pull_with_auth(&body.reference, &registry_auth)
-            .await?
+        state.rt().await.pull_with_auth(&body.reference, &registry_auth).await?
     } else {
         // Auto-lookup saved credentials for this registry
         let config = state.config.lock().await;
@@ -902,9 +894,7 @@ async fn pull_image(
                 server: Some(cred.server.clone()),
             };
             drop(config);
-            state.rt().await
-                .pull_with_auth(&body.reference, &registry_auth)
-                .await?
+            state.rt().await.pull_with_auth(&body.reference, &registry_auth).await?
         } else {
             drop(config);
             ImageManager::pull(state.rt().await.as_ref(), &body.reference).await?
@@ -921,11 +911,7 @@ async fn pull_image(
         yield Ok(SseEvent::default().event("done").data("{}"));
     };
 
-    Ok(Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(Duration::from_secs(15))
-            .text("keepalive"),
-    ))
+    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keepalive")))
 }
 
 #[derive(Deserialize)]
@@ -959,16 +945,10 @@ async fn build_image(
         yield Ok(SseEvent::default().event("done").data("{}"));
     };
 
-    Ok(Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(Duration::from_secs(15))
-            .text("keepalive"),
-    ))
+    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keepalive")))
 }
 
-async fn prune_images(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn prune_images(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let result = ImageManager::prune(state.rt().await.as_ref()).await?;
     Ok(Json(result))
 }
@@ -1017,9 +997,7 @@ async fn tag_image(
 
 // --- Registries ---
 
-async fn list_registries(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn list_registries(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let config = state.config.lock().await;
     // Never return passwords to the frontend — mask them
     let masked: Vec<serde_json::Value> = config
@@ -1048,8 +1026,7 @@ async fn add_registry(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AddRegistryRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let cred =
-        orca_core::config::RegistryCredential::new(&body.server, &body.name, &body.username, &body.password);
+    let cred = orca_core::config::RegistryCredential::new(&body.server, &body.name, &body.username, &body.password);
     let mut config = state.config.lock().await;
     config.add_registry(cred)?;
     Ok(StatusCode::CREATED)
@@ -1080,18 +1057,14 @@ fn default_search_limit() -> u32 {
     20
 }
 
-async fn search_images(
-    Query(query): Query<SearchQuery>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn search_images(Query(query): Query<SearchQuery>) -> Result<impl IntoResponse, ApiError> {
     let results = orca_backend_common::search::search_docker_hub(&query.q, query.limit).await?;
     Ok(Json(results))
 }
 
 // --- Volumes ---
 
-async fn list_volumes(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn list_volumes(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let volumes = VolumeManager::list(state.rt().await.as_ref()).await?;
     Ok(Json(volumes))
 }
@@ -1208,11 +1181,7 @@ async fn volume_list_files(
     let opts = ContainerCreateOpts {
         image: "alpine:latest".to_string(),
         name: None,
-        command: vec![
-            "ls".to_string(),
-            "-la".to_string(),
-            data_path.clone(),
-        ],
+        command: vec!["ls".to_string(), "-la".to_string(), data_path.clone()],
         env: HashMap::new(),
         ports: vec![],
         volumes: vec![VolumeMount {
@@ -1240,11 +1209,14 @@ async fn volume_list_files(
     {
         use bollard::container::WaitContainerOptions;
         use futures::StreamExt;
-        let wait_opts = WaitContainerOptions { condition: "not-running" };
+        let wait_opts = WaitContainerOptions {
+            condition: "not-running",
+        };
         let _ = tokio::time::timeout(
             Duration::from_secs(10),
             state.rt().await.docker.wait_container(&id, Some(wait_opts)).next(),
-        ).await;
+        )
+        .await;
     }
 
     // Collect logs
@@ -1265,17 +1237,17 @@ async fn volume_list_files(
     let _ = state.rt().await.remove_container(&id, true).await;
 
     // If the container exited with non-zero, return an error
-    if let Some(code) = exit_code {
-        if code != 0 {
-            // Lines likely contain stderr/error output
-            let stderr = lines.join("\n");
-            let msg = if stderr.is_empty() {
-                format!("Command failed with exit code {code}")
-            } else {
-                format!("Command failed with exit code {code}: {stderr}")
-            };
-            return Err(anyhow::anyhow!("{msg}").into());
-        }
+    if let Some(code) = exit_code
+        && code != 0
+    {
+        // Lines likely contain stderr/error output
+        let stderr = lines.join("\n");
+        let msg = if stderr.is_empty() {
+            format!("Command failed with exit code {code}")
+        } else {
+            format!("Command failed with exit code {code}: {stderr}")
+        };
+        return Err(anyhow::anyhow!("{msg}").into());
     }
 
     // Parse ls -la output into structured data
@@ -1358,11 +1330,14 @@ async fn volume_read_file(
     {
         use bollard::container::WaitContainerOptions;
         use futures::StreamExt;
-        let wait_opts = WaitContainerOptions { condition: "not-running" };
+        let wait_opts = WaitContainerOptions {
+            condition: "not-running",
+        };
         let _ = tokio::time::timeout(
             Duration::from_secs(10),
             state.rt().await.docker.wait_container(&id, Some(wait_opts)).next(),
-        ).await;
+        )
+        .await;
     }
 
     let log_rx = state.rt().await.container_logs(&id, false, Some(10000)).await?;
@@ -1398,8 +1373,7 @@ async fn image_list_files(
         format!("/{}", sanitized)
     };
 
-    let lines = run_in_image(&state.rt().await.docker, &image_ref,
-        vec!["ls", "-la", &browse_path]).await?;
+    let lines = run_in_image(&state.rt().await.docker, &image_ref, vec!["ls", "-la", &browse_path]).await?;
 
     let mut entries = Vec::new();
     for line in &lines {
@@ -1454,19 +1428,14 @@ async fn image_read_file(
         .join("/");
     let full_path = format!("/{}", sanitized);
 
-    let lines = run_in_image(&state.rt().await.docker, &image_ref,
-        vec!["cat", &full_path]).await?;
+    let lines = run_in_image(&state.rt().await.docker, &image_ref, vec!["cat", &full_path]).await?;
 
     Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
 }
 
 /// Run a command inside an image by creating a temporary container,
 /// waiting for it to finish, collecting output, and cleaning up.
-async fn run_in_image(
-    docker: &bollard::Docker,
-    image: &str,
-    cmd: Vec<&str>,
-) -> anyhow::Result<Vec<String>> {
+async fn run_in_image(docker: &bollard::Docker, image: &str, cmd: Vec<&str>) -> anyhow::Result<Vec<String>> {
     use bollard::container::{Config, CreateContainerOptions, LogsOptions, WaitContainerOptions};
     use bollard::models::ContainerWaitResponse;
     use futures::StreamExt;
@@ -1491,18 +1460,20 @@ async fn run_in_image(
 
     let id = &container.id;
 
-    docker.start_container::<String>(id, None).await
-        .map_err(|e| {
-            tracing::error!("run_in_image: failed to start container {id}: {e}");
-            anyhow::anyhow!("Failed to start container: {e}")
-        })?;
+    docker.start_container::<String>(id, None).await.map_err(|e| {
+        tracing::error!("run_in_image: failed to start container {id}: {e}");
+        anyhow::anyhow!("Failed to start container: {e}")
+    })?;
 
     // Wait for the container to finish (max 10 seconds)
-    let wait_opts = WaitContainerOptions { condition: "not-running" };
+    let wait_opts = WaitContainerOptions {
+        condition: "not-running",
+    };
     let wait_result = tokio::time::timeout(
         Duration::from_secs(10),
         docker.wait_container(id, Some(wait_opts)).next(),
-    ).await;
+    )
+    .await;
 
     let exit_code = match wait_result {
         Ok(Some(Ok(ContainerWaitResponse { status_code, .. }))) => Some(status_code),
@@ -1544,22 +1515,27 @@ async fn run_in_image(
     }
 
     // Clean up
-    let _ = docker.remove_container(id, Some(bollard::container::RemoveContainerOptions {
-        force: true,
-        ..Default::default()
-    })).await;
+    let _ = docker
+        .remove_container(
+            id,
+            Some(bollard::container::RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            }),
+        )
+        .await;
 
     // If the container exited with non-zero, return an error with stderr
-    if let Some(code) = exit_code {
-        if code != 0 {
-            let stderr = stderr_lines.join("\n");
-            let msg = if stderr.is_empty() {
-                format!("Command failed with exit code {code}")
-            } else {
-                format!("Command failed with exit code {code}: {stderr}")
-            };
-            return Err(anyhow::anyhow!("{msg}"));
-        }
+    if let Some(code) = exit_code
+        && code != 0
+    {
+        let stderr = stderr_lines.join("\n");
+        let msg = if stderr.is_empty() {
+            format!("Command failed with exit code {code}")
+        } else {
+            format!("Command failed with exit code {code}: {stderr}")
+        };
+        return Err(anyhow::anyhow!("{msg}"));
     }
 
     Ok(stdout_lines)
@@ -1567,7 +1543,9 @@ async fn run_in_image(
 
 /// Simple shell escaping for arguments.
 fn shell_escape(s: &str) -> String {
-    if s.chars().all(|c| c.is_alphanumeric() || c == '/' || c == '.' || c == '-' || c == '_') {
+    if s.chars()
+        .all(|c| c.is_alphanumeric() || c == '/' || c == '.' || c == '-' || c == '_')
+    {
         s.to_string()
     } else {
         format!("'{}'", s.replace('\'', "'\\''"))
@@ -1593,8 +1571,7 @@ async fn container_list_files(
         format!("/{}", sanitized)
     };
 
-    let lines = run_in_container(&state.rt().await.docker, &id,
-        vec!["ls", "-la", &browse_path]).await?;
+    let lines = run_in_container(&state.rt().await.docker, &id, vec!["ls", "-la", &browse_path]).await?;
 
     let mut entries = Vec::new();
     for line in &lines {
@@ -1645,30 +1622,33 @@ async fn container_read_file(
         .join("/");
     let full_path = format!("/{}", sanitized);
 
-    let lines = run_in_container(&state.rt().await.docker, &id,
-        vec!["cat", &full_path]).await?;
+    let lines = run_in_container(&state.rt().await.docker, &id, vec!["cat", &full_path]).await?;
 
     Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
 }
 
 /// Run a command inside a running container using docker exec,
 /// collecting stdout and returning lines.
-async fn run_in_container(
-    docker: &bollard::Docker,
-    container_id: &str,
-    cmd: Vec<&str>,
-) -> anyhow::Result<Vec<String>> {
+async fn run_in_container(docker: &bollard::Docker, container_id: &str, cmd: Vec<&str>) -> anyhow::Result<Vec<String>> {
     use bollard::exec::{CreateExecOptions, StartExecResults};
     use futures::StreamExt;
 
-    let exec = docker.create_exec(container_id, CreateExecOptions {
-        cmd: Some(cmd.iter().map(|s| s.to_string()).collect()),
-        attach_stdout: Some(true),
-        attach_stderr: Some(true),
-        ..Default::default()
-    }).await.map_err(|e| anyhow::anyhow!("Failed to create exec: {e}"))?;
+    let exec = docker
+        .create_exec(
+            container_id,
+            CreateExecOptions {
+                cmd: Some(cmd.iter().map(|s| s.to_string()).collect()),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create exec: {e}"))?;
 
-    let output = docker.start_exec(&exec.id, None).await
+    let output = docker
+        .start_exec(&exec.id, None)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to start exec: {e}"))?;
 
     let mut stdout_lines = Vec::new();
@@ -1691,19 +1671,21 @@ async fn run_in_container(
     }
 
     // Check exit code
-    let inspect = docker.inspect_exec(&exec.id).await
+    let inspect = docker
+        .inspect_exec(&exec.id)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to inspect exec: {e}"))?;
 
-    if let Some(code) = inspect.exit_code {
-        if code != 0 {
-            let stderr = stderr_lines.join("\n");
-            let msg = if stderr.is_empty() {
-                format!("Command failed with exit code {code}")
-            } else {
-                format!("Command failed with exit code {code}: {stderr}")
-            };
-            return Err(anyhow::anyhow!("{msg}"));
-        }
+    if let Some(code) = inspect.exit_code
+        && code != 0
+    {
+        let stderr = stderr_lines.join("\n");
+        let msg = if stderr.is_empty() {
+            format!("Command failed with exit code {code}")
+        } else {
+            format!("Command failed with exit code {code}: {stderr}")
+        };
+        return Err(anyhow::anyhow!("{msg}"));
     }
 
     Ok(stdout_lines)
@@ -1723,8 +1705,8 @@ async fn commit_container(
     Path(id): Path<String>,
     Json(body): Json<CommitRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    use bollard::image::CommitContainerOptions;
     use bollard::container::Config;
+    use bollard::image::CommitContainerOptions;
 
     let tag_value = body.tag.unwrap_or_else(|| "latest".into());
     let options = CommitContainerOptions {
@@ -1736,10 +1718,13 @@ async fn commit_container(
         pause: true,
         changes: None,
     };
-    let config = Config::<String> {
-        ..Default::default()
-    };
-    let result = state.rt().await.docker.commit_container(options, config).await
+    let config = Config::<String> { ..Default::default() };
+    let result = state
+        .rt()
+        .await
+        .docker
+        .commit_container(options, config)
+        .await
         .map_err(|e| anyhow::anyhow!("Commit failed: {e}"))?;
 
     Ok(Json(serde_json::json!({ "id": result.id.unwrap_or_default() })))
@@ -1756,18 +1741,24 @@ async fn import_image(
     State(state): State<Arc<AppState>>,
     Json(body): Json<ImportImageRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let file = tokio::fs::read(&body.path).await
+    let file = tokio::fs::read(&body.path)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to read file: {e}"))?;
-    let mut stream = state.rt().await.docker.import_image(
-        bollard::image::ImportImageOptions { quiet: false },
-        file.into(),
-        None,
-    );
+    let mut stream =
+        state
+            .rt()
+            .await
+            .docker
+            .import_image(bollard::image::ImportImageOptions { quiet: false }, file.into(), None);
     use futures::StreamExt;
     let mut messages = Vec::new();
     while let Some(result) = stream.next().await {
         match result {
-            Ok(info) => if let Some(status) = info.status { messages.push(status); },
+            Ok(info) => {
+                if let Some(status) = info.status {
+                    messages.push(status);
+                }
+            }
             Err(e) => messages.push(format!("Error: {e}")),
         }
     }
@@ -1791,15 +1782,19 @@ async fn export_container_tar(
 
     let docker = &state.rt().await.docker;
     let mut stream = docker.export_container(&id);
-    let mut file = tokio::fs::File::create(&query.path).await
+    let mut file = tokio::fs::File::create(&query.path)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to create file: {e}"))?;
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.map_err(|e| anyhow::anyhow!("Export stream error: {e}"))?;
-        file.write_all(&bytes).await
+        file.write_all(&bytes)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to write file: {e}"))?;
     }
-    file.flush().await.map_err(|e| anyhow::anyhow!("Failed to flush file: {e}"))?;
+    file.flush()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to flush file: {e}"))?;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -1822,15 +1817,19 @@ async fn save_image_tar(
     let image_ref = resolve_image_ref(&state, &id).await?;
     let docker = &state.rt().await.docker;
     let mut stream = docker.export_image(&image_ref);
-    let mut file = tokio::fs::File::create(&query.path).await
+    let mut file = tokio::fs::File::create(&query.path)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to create file: {e}"))?;
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.map_err(|e| anyhow::anyhow!("Export stream error: {e}"))?;
-        file.write_all(&bytes).await
+        file.write_all(&bytes)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to write file: {e}"))?;
     }
-    file.flush().await.map_err(|e| anyhow::anyhow!("Failed to flush file: {e}"))?;
+    file.flush()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to flush file: {e}"))?;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -1840,10 +1839,10 @@ async fn resolve_image_ref(state: &AppState, id: &str) -> anyhow::Result<String>
     let images: Vec<orca_core::image::Image> = ImageManager::list(state.rt().await.as_ref()).await?;
     if let Some(img) = images.iter().find(|i| i.id == id || i.id.contains(id)) {
         // Prefer a repo:tag if available
-        if let Some(tag) = img.repo_tags.first() {
-            if tag != "<none>:<none>" {
-                return Ok(tag.clone());
-            }
+        if let Some(tag) = img.repo_tags.first()
+            && tag != "<none>:<none>"
+        {
+            return Ok(tag.clone());
         }
         Ok(img.id.clone())
     } else {
@@ -1933,32 +1932,30 @@ async fn scan_image(
                     .await
                     .map_err(|e2| {
                         tracing::error!("scan_image: still can't create container after pull: {e2}");
-                        anyhow::anyhow!(
-                            "Failed to create Trivy container after pulling image: {e2}"
-                        )
+                        anyhow::anyhow!("Failed to create Trivy container after pulling image: {e2}")
                     })?
             } else {
-                return Err(anyhow::anyhow!(
-                    "Failed to start Trivy scanner: {e}"
-                ).into());
+                return Err(anyhow::anyhow!("Failed to start Trivy scanner: {e}").into());
             }
         }
     };
 
     let id = &container.id;
 
-    docker.start_container::<String>(id, None).await
-        .map_err(|e| {
-            tracing::error!("scan_image: failed to start Trivy container: {e}");
-            anyhow::anyhow!("Failed to start Trivy container: {e}")
-        })?;
+    docker.start_container::<String>(id, None).await.map_err(|e| {
+        tracing::error!("scan_image: failed to start Trivy container: {e}");
+        anyhow::anyhow!("Failed to start Trivy container: {e}")
+    })?;
 
     // Trivy scans can take a while — wait up to 5 minutes
-    let wait_opts = WaitContainerOptions { condition: "not-running" };
+    let wait_opts = WaitContainerOptions {
+        condition: "not-running",
+    };
     let _ = tokio::time::timeout(
         Duration::from_secs(300),
         docker.wait_container(id, Some(wait_opts)).next(),
-    ).await;
+    )
+    .await;
 
     // Collect stdout and stderr
     let log_opts_out = LogsOptions::<String> {
@@ -1985,10 +1982,15 @@ async fn scan_image(
     }
 
     // Clean up
-    let _ = docker.remove_container(id, Some(bollard::container::RemoveContainerOptions {
-        force: true,
-        ..Default::default()
-    })).await;
+    let _ = docker
+        .remove_container(
+            id,
+            Some(bollard::container::RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            }),
+        )
+        .await;
 
     // If no stdout, return error with stderr details
     if stdout.trim().is_empty() {
@@ -2056,8 +2058,10 @@ async fn volume_containers(
     let using_volume: Vec<_> = containers
         .into_iter()
         .filter(|c| {
-            c.mounts.as_ref().map_or(false, |mounts| {
-                mounts.iter().any(|m| m.source == name || m.source.ends_with(&format!("/{name}")))
+            c.mounts.as_ref().is_some_and(|mounts| {
+                mounts
+                    .iter()
+                    .any(|m| m.source == name || m.source.ends_with(&format!("/{name}")))
             })
         })
         .collect();
@@ -2066,20 +2070,21 @@ async fn volume_containers(
 }
 
 /// Return disk usage sizes for all volumes via `docker system df`.
-async fn volume_sizes(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn volume_sizes(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let rt = state.rt().await;
-    let df = rt.docker.df().await
+    let df = rt
+        .docker
+        .df()
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to get system df: {e}"))?;
 
     let mut sizes: HashMap<String, i64> = HashMap::new();
     if let Some(volumes) = df.volumes {
         for v in volumes {
-            if let Some(usage) = v.usage_data {
-                if usage.size >= 0 {
-                    sizes.insert(v.name, usage.size);
-                }
+            if let Some(usage) = v.usage_data
+                && usage.size >= 0
+            {
+                sizes.insert(v.name, usage.size);
             }
         }
     }
@@ -2089,9 +2094,7 @@ async fn volume_sizes(
 
 // --- Networks ---
 
-async fn list_networks(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn list_networks(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let networks = NetworkManager::list(state.rt().await.as_ref()).await?;
     Ok(Json(networks))
 }
@@ -2131,10 +2134,13 @@ async fn remove_network_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn network_topology(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
-    let networks = state.rt().await.docker.list_networks::<String>(None).await
+async fn network_topology(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let networks = state
+        .rt()
+        .await
+        .docker
+        .list_networks::<String>(None)
+        .await
         .map_err(|e| ApiError(anyhow::anyhow!("Failed to list networks: {e}")))?;
 
     let mut topology = Vec::new();
@@ -2153,19 +2159,20 @@ async fn network_topology(
 
         // Inspect the network to get connected containers (list doesn't include them)
         let mut containers = Vec::new();
-        if let Ok(detail) = state.rt().await.docker.inspect_network::<String>(&net_id, None).await {
-            if let Some(ref cmap) = detail.containers {
-                for (cid, endpoint) in cmap {
-                    let cname = endpoint.name.clone()
-                        .unwrap_or_else(|| cid[..12.min(cid.len())].to_string());
-                    let ip = endpoint.ipv4_address.clone()
-                        .unwrap_or_default();
-                    containers.push(serde_json::json!({
-                        "id": cid,
-                        "name": cname,
-                        "ip": ip,
-                    }));
-                }
+        if let Ok(detail) = state.rt().await.docker.inspect_network::<String>(&net_id, None).await
+            && let Some(ref cmap) = detail.containers
+        {
+            for (cid, endpoint) in cmap {
+                let cname = endpoint
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| cid[..12.min(cid.len())].to_string());
+                let ip = endpoint.ipv4_address.clone().unwrap_or_default();
+                containers.push(serde_json::json!({
+                    "id": cid,
+                    "name": cname,
+                    "ip": ip,
+                }));
             }
         }
 
@@ -2184,16 +2191,12 @@ async fn network_topology(
 
 // --- Stacks (Compose Projects) ---
 
-async fn get_stacks(
-    state: &AppState,
-) -> Result<Vec<compose::ComposeProject>, ApiError> {
+async fn get_stacks(state: &AppState) -> Result<Vec<compose::ComposeProject>, ApiError> {
     let containers = state.rt().await.list_containers(true).await?;
     Ok(compose::extract_projects(&containers))
 }
 
-async fn list_stacks(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn list_stacks(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let stacks = get_stacks(&state).await?;
     Ok(Json(stacks))
 }
@@ -2222,10 +2225,10 @@ async fn start_stack(
 
     let mut errors = Vec::new();
     for service in &stack.services {
-        if service.state != orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.rt().await.start_container(&service.container_id).await {
-                errors.push(format!("{}: {e}", service.name));
-            }
+        if service.state != orca_core::runtime::ContainerState::Running
+            && let Err(e) = state.rt().await.start_container(&service.container_id).await
+        {
+            errors.push(format!("{}: {e}", service.name));
         }
     }
 
@@ -2254,10 +2257,10 @@ async fn stop_stack(
 
     let mut errors = Vec::new();
     for service in &stack.services {
-        if service.state == orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.rt().await.stop_container(&service.container_id, 10).await {
-                errors.push(format!("{}: {e}", service.name));
-            }
+        if service.state == orca_core::runtime::ContainerState::Running
+            && let Err(e) = state.rt().await.stop_container(&service.container_id, 10).await
+        {
+            errors.push(format!("{}: {e}", service.name));
         }
     }
 
@@ -2287,10 +2290,10 @@ async fn restart_stack(
     let mut errors = Vec::new();
     // Stop all running
     for service in &stack.services {
-        if service.state == orca_core::runtime::ContainerState::Running {
-            if let Err(e) = state.rt().await.stop_container(&service.container_id, 10).await {
-                errors.push(format!("stop {}: {e}", service.name));
-            }
+        if service.state == orca_core::runtime::ContainerState::Running
+            && let Err(e) = state.rt().await.stop_container(&service.container_id, 10).await
+        {
+            errors.push(format!("stop {}: {e}", service.name));
         }
     }
     // Start all
@@ -2316,10 +2319,7 @@ async fn restart_stack(
 // --- Compose CLI operations ---
 
 /// Resolve a stack by name and return its working_dir + config_file.
-async fn resolve_stack_dir(
-    state: &AppState,
-    name: &str,
-) -> Result<(String, Option<String>), ApiError> {
+async fn resolve_stack_dir(state: &AppState, name: &str) -> Result<(String, Option<String>), ApiError> {
     let stacks = get_stacks(state).await?;
     let stack = stacks
         .into_iter()
@@ -2338,9 +2338,7 @@ async fn compose_up(
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
-    let output = state.rt().await
-        .compose_up(&dir, config.as_deref())
-        .await?;
+    let output = state.rt().await.compose_up(&dir, config.as_deref()).await?;
     Ok(Json(output))
 }
 
@@ -2349,11 +2347,11 @@ async fn compose_deploy_path(
     State(state): State<Arc<AppState>>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let dir = body.get("path").and_then(|v| v.as_str())
+    let dir = body
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing 'path' field"))?;
-    let output = state.rt().await
-        .compose_up(dir, None)
-        .await?;
+    let output = state.rt().await.compose_up(dir, None).await?;
     Ok(Json(output))
 }
 
@@ -2362,7 +2360,9 @@ async fn validate_compose(
     State(state): State<Arc<AppState>>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let path = body.get("path").and_then(|v| v.as_str())
+    let path = body
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing 'path' field"))?;
 
     let rt = state.rt().await;
@@ -2381,7 +2381,9 @@ async fn validate_compose(
     cmd.stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    let output = cmd.output().await
+    let output = cmd
+        .output()
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to run compose config: {e}"))?;
 
     if output.status.success() {
@@ -2397,9 +2399,7 @@ async fn compose_down(
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
-    let output = state.rt().await
-        .compose_down(&dir, config.as_deref())
-        .await?;
+    let output = state.rt().await.compose_down(&dir, config.as_deref()).await?;
     Ok(Json(output))
 }
 
@@ -2408,39 +2408,34 @@ async fn compose_pull(
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
-    let output = state.rt().await
-        .compose_pull(&dir, config.as_deref())
-        .await?;
+    let output = state.rt().await.compose_pull(&dir, config.as_deref()).await?;
     Ok(Json(output))
 }
 
 // --- Kubernetes ---
 
-async fn k8s_status(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     // Timeout prevents hanging when kubeconfig points to unreachable cluster
-    match tokio::time::timeout(
-        Duration::from_secs(10),
-        state.k8s.status(),
-    ).await {
+    match tokio::time::timeout(Duration::from_secs(10), state.k8s.status()).await {
         Ok(result) => Ok(Json(result?)),
         Err(_) => {
             tracing::warn!("K8s status timed out after 10s");
             Ok(Json(orca_core::kubernetes::ClusterStatus {
                 enabled: false,
                 running: false,
-                version: None, node_name: None, node_status: None,
-                pods_running: 0, pods_total: 0, traefik_dashboard: None,
+                version: None,
+                node_name: None,
+                node_status: None,
+                pods_running: 0,
+                pods_total: 0,
+                traefik_dashboard: None,
                 error: Some("Kubernetes status check timed out".to_string()),
             }))
         }
     }
 }
 
-async fn k8s_enable(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_enable(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let log = state.k8s.enable_with_progress().await?;
     Ok(Json(serde_json::json!({ "output": log })))
 }
@@ -2454,8 +2449,7 @@ async fn k8s_enable_ws(
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
     use subtle::ConstantTimeEq;
     if !state.api_token.is_empty()
-        && (state.api_token.len() != token.len()
-            || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+        && (state.api_token.len() != token.len() || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
     {
         return Err(StatusCode::UNAUTHORIZED);
     }
@@ -2469,7 +2463,9 @@ async fn handle_k8s_enable(mut socket: WebSocket, state: Arc<AppState>) {
     // Spawn the enable task
     tokio::spawn(async move {
         match k8s.enable_streaming(tx.clone()).await {
-            Ok(_) => { let _ = tx.send("[DONE]".into()).await; }
+            Ok(_) => {
+                let _ = tx.send("[DONE]".into()).await;
+            }
             Err(e) => {
                 for line in e.to_string().lines() {
                     let _ = tx.send(line.to_string()).await;
@@ -2488,30 +2484,22 @@ async fn handle_k8s_enable(mut socket: WebSocket, state: Arc<AppState>) {
     let _ = socket.close().await;
 }
 
-async fn k8s_disable(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_disable(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     state.k8s.disable().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn k8s_reset(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_reset(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     state.k8s.reset().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn k8s_kubeconfig(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_kubeconfig(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let kubeconfig = state.k8s.kubeconfig().await?;
     Ok(Json(serde_json::json!({ "kubeconfig": kubeconfig })))
 }
 
-async fn k8s_namespaces(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_namespaces(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let namespaces = state.k8s.list_namespaces().await?;
     Ok(Json(namespaces))
 }
@@ -2556,9 +2544,7 @@ async fn k8s_pvcs(
     Ok(Json(pvcs))
 }
 
-async fn k8s_pvs(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_pvs(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let pvs = state.k8s.list_pvs().await?;
     Ok(Json(pvs))
 }
@@ -2581,10 +2567,7 @@ async fn k8s_scale(
     Path((namespace, name)): Path<(String, String)>,
     Json(body): Json<ScaleRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state
-        .k8s
-        .scale_deployment(&namespace, &name, body.replicas)
-        .await?;
+    state.k8s.scale_deployment(&namespace, &name, body.replicas).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2745,7 +2728,13 @@ async fn k8s_create_pvc(
 ) -> Result<impl IntoResponse, ApiError> {
     state
         .k8s
-        .create_pvc(&namespace, &body.name, &body.storage_class, &body.size, body.access_modes)
+        .create_pvc(
+            &namespace,
+            &body.name,
+            &body.storage_class,
+            &body.size,
+            body.access_modes,
+        )
         .await?;
     Ok(StatusCode::CREATED)
 }
@@ -2811,10 +2800,7 @@ async fn k8s_scale_statefulset(
     Path((namespace, name)): Path<(String, String)>,
     Json(body): Json<ScaleRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state
-        .k8s
-        .scale_statefulset(&namespace, &name, body.replicas)
-        .await?;
+    state.k8s.scale_statefulset(&namespace, &name, body.replicas).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2930,7 +2916,17 @@ async fn k8s_create_hpa(
     Path(namespace): Path<String>,
     Json(body): Json<CreateHpaRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.k8s.create_hpa(&namespace, &body.name, &body.deployment, body.min, body.max, body.cpu_target).await?;
+    state
+        .k8s
+        .create_hpa(
+            &namespace,
+            &body.name,
+            &body.deployment,
+            body.min,
+            body.max,
+            body.cpu_target,
+        )
+        .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -2958,23 +2954,17 @@ async fn k8s_delete_network_policy(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn k8s_storage_classes(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_storage_classes(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let classes = state.k8s.list_storage_classes().await?;
     Ok(Json(classes))
 }
 
-async fn k8s_crds(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_crds(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let crds = state.k8s.list_crds().await?;
     Ok(Json(crds))
 }
 
-async fn k8s_helm_list(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_helm_list(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let releases = state.k8s.helm_list().await?;
     Ok(Json(releases))
 }
@@ -2993,9 +2983,7 @@ async fn k8s_helm_uninstall(
     Ok(Json(serde_json::json!({ "output": result })))
 }
 
-async fn k8s_helm_available(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn k8s_helm_available(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let available = state.k8s.helm_available().await;
     Ok(Json(serde_json::json!({ "available": available })))
 }
@@ -3016,7 +3004,12 @@ async fn k8s_helm_install(
 ) -> Result<impl IntoResponse, ApiError> {
     let result = state
         .k8s
-        .helm_install(&body.release_name, &body.chart, &body.namespace, body.set_values.as_deref())
+        .helm_install(
+            &body.release_name,
+            &body.chart,
+            &body.namespace,
+            body.set_values.as_deref(),
+        )
         .await?;
     Ok(Json(serde_json::json!({ "output": result })))
 }
@@ -3033,8 +3026,7 @@ async fn k8s_pod_terminal_ws(
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
     use subtle::ConstantTimeEq;
     if !state.api_token.is_empty()
-        && (state.api_token.len() != token.len()
-            || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+        && (state.api_token.len() != token.len() || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
     {
         return Err(StatusCode::UNAUTHORIZED);
     }
@@ -3050,7 +3042,9 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
         TokioCommand::new("wsl")
             .env("TERM", "xterm-256color")
             .env("COLORTERM", "truecolor")
-            .args(["-u", "root", "--", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--", "sh"])
+            .args([
+                "-u", "root", "--", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--", "sh",
+            ])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -3061,7 +3055,10 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
     let child_result = {
         let path = std::env::var("PATH").unwrap_or_default();
         TokioCommand::new("kubectl")
-            .env("PATH", format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{path}"))
+            .env(
+                "PATH",
+                format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:{path}"),
+            )
             .env("TERM", "xterm-256color")
             .env("COLORTERM", "truecolor")
             .args(["--context", "orca", "exec", "-it", &name, "-n", &namespace, "--", "sh"])
@@ -3165,12 +3162,12 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
             match msg {
                 Message::Text(text) => {
                     // Ignore resize JSON messages (kubectl exec doesn't support dynamic resize)
-                    if text.starts_with('{') {
-                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
-                            if val.get("cols").is_some() && val.get("rows").is_some() {
-                                continue;
-                            }
-                        }
+                    if text.starts_with('{')
+                        && let Ok(val) = serde_json::from_str::<serde_json::Value>(&text)
+                        && val.get("cols").is_some()
+                        && val.get("rows").is_some()
+                    {
+                        continue;
                     }
                     if stdin.write_all(text.as_bytes()).await.is_err() {
                         break;
@@ -3198,9 +3195,7 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
 
 // --- Environment ---
 
-async fn env_status(
-    State(_state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn env_status(State(_state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let status = orca_backend_common::environment::check_environment().await;
     Ok(Json(status))
 }
@@ -3220,13 +3215,11 @@ async fn env_fix(
     Ok(Json(serde_json::json!({ "output": output })))
 }
 
-async fn env_fix_stream(
-    Json(body): Json<FixRequest>,
-) -> impl IntoResponse {
+async fn env_fix_stream(Json(body): Json<FixRequest>) -> impl IntoResponse {
     tracing::info!("env_fix_stream: action={}", body.action);
     use axum::response::sse::{Event, Sse};
-    use tokio_stream::wrappers::ReceiverStream;
     use futures::StreamExt;
+    use tokio_stream::wrappers::ReceiverStream;
 
     let (tx, rx) = tokio::sync::mpsc::channel::<String>(100);
     let action = body.action.clone();
@@ -3248,18 +3241,14 @@ async fn env_fix_stream(
         }
     });
 
-    let stream = ReceiverStream::new(rx).map(|line| {
-        Ok::<_, std::convert::Infallible>(Event::default().data(line))
-    });
+    let stream = ReceiverStream::new(rx).map(|line| Ok::<_, std::convert::Infallible>(Event::default().data(line)));
 
     Sse::new(stream)
 }
 
 // --- System Health ---
 
-async fn system_health(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn system_health(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let mut health = orca_backend_common::environment::check_system_health().await;
 
     // Check the daemon's ACTUAL Docker connection (what the app uses)
@@ -3268,7 +3257,9 @@ async fn system_health(
         health.docker_version = version.version;
         health.os = version.os;
         health.arch = version.arch;
-        health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable") && !w.contains("Restart"));
+        health
+            .warnings
+            .retain(|w| !w.contains("not running") && !w.contains("not reachable") && !w.contains("Restart"));
     } else {
         // The daemon's connection is dead. Docker might still be running
         // (e.g. in WSL) but the daemon can't reach it.
@@ -3280,8 +3271,12 @@ async fn system_health(
             health.docker_version = Some(version);
             // Docker IS running but daemon can't connect — show as disconnected
             // with a clear warning
-            health.warnings.retain(|w| !w.contains("not running") && !w.contains("not reachable"));
-            health.warnings.push("Docker is running but Orca is disconnected. Click 'Restart Docker' to reconnect.".to_string());
+            health
+                .warnings
+                .retain(|w| !w.contains("not running") && !w.contains("not reachable"));
+            health
+                .warnings
+                .push("Docker is running but Orca is disconnected. Click 'Restart Docker' to reconnect.".to_string());
         }
     }
 
@@ -3340,10 +3335,10 @@ fn nix_gid() -> u32 {
 /// Try to connect to Docker via various methods. Returns (version, method) on success.
 async fn try_docker_connection() -> Option<(String, &'static str)> {
     // Try local defaults (Unix socket on Linux/macOS, named pipe on Windows)
-    if let Ok(docker) = bollard::Docker::connect_with_local_defaults() {
-        if let Ok(ver) = docker.version().await {
-            return Some((ver.version.unwrap_or_default(), "local"));
-        }
+    if let Ok(docker) = bollard::Docker::connect_with_local_defaults()
+        && let Ok(ver) = docker.version().await
+    {
+        return Some((ver.version.unwrap_or_default(), "local"));
     }
 
     // On Windows, try TCP to WSL Docker
@@ -3354,9 +3349,9 @@ async fn try_docker_connection() -> Option<(String, &'static str)> {
                 return Some((ver.version.unwrap_or_default(), "pipe"));
             }
         }
-        if let Ok(docker) = bollard::Docker::connect_with_http(
-            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
-        ) {
+        if let Ok(docker) =
+            bollard::Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION)
+        {
             if let Ok(ver) = docker.version().await {
                 return Some((ver.version.unwrap_or_default(), "tcp"));
             }
@@ -3403,9 +3398,7 @@ struct DeleteTemplateParams {
     id: String,
 }
 
-async fn delete_user_template(
-    Query(params): Query<DeleteTemplateParams>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn delete_user_template(Query(params): Query<DeleteTemplateParams>) -> Result<impl IntoResponse, ApiError> {
     let mut user_templates = orca_backend_common::templates::load_user_templates();
     let before = user_templates.len();
     user_templates.retain(|t| t.id != params.id);
@@ -3455,7 +3448,9 @@ fn generate_password(len: usize) -> String {
     let mut result = String::with_capacity(len);
     for i in 0..len {
         // Simple LCG-style mixing
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407 + i as u128);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407 + i as u128);
         let idx = ((seed >> 64) as usize) % CHARS.len();
         result.push(CHARS[idx] as char);
     }
@@ -3497,10 +3492,10 @@ fn generate_random_base64(byte_len: usize) -> String {
 fn detect_lan_ip() -> String {
     match std::net::UdpSocket::bind("0.0.0.0:0") {
         Ok(socket) => {
-            if socket.connect("8.8.8.8:80").is_ok() {
-                if let Ok(addr) = socket.local_addr() {
-                    return addr.ip().to_string();
-                }
+            if socket.connect("8.8.8.8:80").is_ok()
+                && let Ok(addr) = socket.local_addr()
+            {
+                return addr.ip().to_string();
             }
             "127.0.0.1".to_string()
         }
@@ -3516,19 +3511,13 @@ fn resolve_generated_value(
 ) -> Option<String> {
     use orca_core::templates::GeneratedValue;
     match value {
-        GeneratedValue::RandomHex { length } => {
-            Some(generate_random_hex(length.unwrap_or(32)))
-        }
-        GeneratedValue::RandomBase64 { length } => {
-            Some(generate_random_base64(length.unwrap_or(32)))
-        }
+        GeneratedValue::RandomHex { length } => Some(generate_random_hex(length.unwrap_or(32))),
+        GeneratedValue::RandomBase64 { length } => Some(generate_random_base64(length.unwrap_or(32))),
         GeneratedValue::LanIp => Some(detect_lan_ip()),
-        GeneratedValue::UserInput { .. } => {
-            user_inputs.get(key).cloned().or_else(|| {
-                tracing::warn!("No user input provided for key '{key}', using empty string");
-                Some(String::new())
-            })
-        }
+        GeneratedValue::UserInput { .. } => user_inputs.get(key).cloned().or_else(|| {
+            tracing::warn!("No user input provided for key '{key}', using empty string");
+            Some(String::new())
+        }),
         GeneratedValue::SelfSignedCert { .. } => {
             tracing::warn!("SelfSignedCert generation not yet implemented, skipping key '{key}'");
             None
@@ -3552,15 +3541,13 @@ async fn deploy_template(
         .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", id))?;
 
     // Check if this is a compose template
-    let compose_yaml = overrides.compose_yaml
-        .or_else(|| template.compose_yaml.clone());
+    let compose_yaml = overrides.compose_yaml.or_else(|| template.compose_yaml.clone());
 
     if let Some(yaml) = compose_yaml {
         // --- Compose stack deploy path ---
         let stack_name = overrides.name.unwrap_or_else(|| template.id.clone());
         let stack_dir = stacks_base_dir().join(&stack_name);
-        std::fs::create_dir_all(&stack_dir)
-            .map_err(|e| anyhow::anyhow!("Failed to create stack directory: {e}"))?;
+        std::fs::create_dir_all(&stack_dir).map_err(|e| anyhow::anyhow!("Failed to create stack directory: {e}"))?;
 
         // Replace all occurrences of "changeme" with generated passwords.
         // Each unique password placeholder gets a distinct generated value per service context,
@@ -3609,7 +3596,9 @@ async fn deploy_template(
         }
 
         let dir_str = stack_dir.to_string_lossy().to_string();
-        let output = state.rt().await
+        let output = state
+            .rt()
+            .await
             .compose_up(&dir_str, None)
             .await
             .map_err(|e| anyhow::anyhow!("Compose deploy failed: {e}"))?;
@@ -3634,9 +3623,7 @@ async fn deploy_template(
     // --- Single container deploy path ---
     use orca_core::runtime::ContainerCreateOpts;
 
-    let container_name = overrides
-        .name
-        .unwrap_or_else(|| template.id.clone());
+    let container_name = overrides.name.unwrap_or_else(|| template.id.clone());
 
     let ports_str = overrides.ports.unwrap_or_else(|| template.default_ports.clone());
     let ports: Vec<orca_core::runtime::PortMapping> = ports_str
@@ -3723,9 +3710,7 @@ async fn deploy_template(
 }
 
 /// GET /stacks/dir/{name} — returns the stack directory path for a given stack name.
-async fn get_stack_dir(
-    Path(name): Path<String>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn get_stack_dir(Path(name): Path<String>) -> Result<impl IntoResponse, ApiError> {
     let dir = stacks_base_dir().join(&name);
     Ok(Json(serde_json::json!({
         "name": name,
@@ -3739,9 +3724,11 @@ async fn update_stack_env(
     Path(name): Path<String>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let key = body["key"].as_str()
+    let key = body["key"]
+        .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing 'key' field"))?;
-    let value = body["value"].as_str()
+    let value = body["value"]
+        .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing 'value' field"))?;
 
     // Validate key is a reasonable env var name
@@ -3781,8 +3768,7 @@ async fn update_stack_env(
     }
 
     let content = lines.join("\n") + "\n";
-    std::fs::write(&env_path, &content)
-        .map_err(|e| anyhow::anyhow!("Failed to write .env: {e}"))?;
+    std::fs::write(&env_path, &content).map_err(|e| anyhow::anyhow!("Failed to write .env: {e}"))?;
 
     tracing::info!("Updated {key} in {}", env_path.display());
     Ok(Json(serde_json::json!({ "ok": true, "key": key })))
@@ -3838,7 +3824,13 @@ async fn ai_ask(
         (provider, key, model, url)
     };
 
-    tracing::info!("AI ask: provider={}, model={}, url={}, has_key={}", provider, model, openai_url, api_key.is_some());
+    tracing::info!(
+        "AI ask: provider={}, model={}, url={}, has_key={}",
+        provider,
+        model,
+        openai_url,
+        api_key.is_some()
+    );
 
     let api_key = match api_key {
         Some(key) if !key.is_empty() => key,
@@ -3876,7 +3868,7 @@ async fn ai_ask(
          When the user refers to a container, image, or resource by a partial name, \
          use your tools to find matches. If exactly one match is found, act on it directly \
          without asking for confirmation. Only ask to disambiguate when there are multiple matches. \
-         Be decisive and action-oriented — the user expects you to just do it."
+         Be decisive and action-oriented — the user expects you to just do it.",
     );
 
     let user_message = body.query.clone();
@@ -3911,34 +3903,57 @@ async fn ai_ask(
 
     // Build tool definitions for the LLM
     let catalog = orca_core::agent_tools::tool_catalog();
-    let anthropic_tools: Vec<serde_json::Value> = catalog.iter().map(|t| {
-        serde_json::json!({
-            "name": t.name,
-            "description": t.description,
-            "input_schema": t.parameters,
-        })
-    }).collect();
-    let openai_tools: Vec<serde_json::Value> = catalog.iter().map(|t| {
-        serde_json::json!({
-            "type": "function",
-            "function": {
+    let anthropic_tools: Vec<serde_json::Value> = catalog
+        .iter()
+        .map(|t| {
+            serde_json::json!({
                 "name": t.name,
                 "description": t.description,
-                "parameters": t.parameters,
-            }
+                "input_schema": t.parameters,
+            })
         })
-    }).collect();
+        .collect();
+    let openai_tools: Vec<serde_json::Value> = catalog
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.parameters,
+                }
+            })
+        })
+        .collect();
 
     // Build conversation history for multi-turn support
-    let prior_messages: Vec<(String, String)> = history.iter()
-        .map(|m| (
-            if m.role == "ai" { "assistant".to_string() } else { m.role.clone() },
-            m.content.clone(),
-        ))
+    let prior_messages: Vec<(String, String)> = history
+        .iter()
+        .map(|m| {
+            (
+                if m.role == "ai" {
+                    "assistant".to_string()
+                } else {
+                    m.role.clone()
+                },
+                m.content.clone(),
+            )
+        })
         .collect();
 
     let answer = if provider == "anthropic" {
-        call_anthropic_with_tools(&http_client, &api_key, &model, &system_prompt, &user_message, &anthropic_tools, &state, &prior_messages).await?
+        call_anthropic_with_tools(
+            &http_client,
+            &api_key,
+            &model,
+            &system_prompt,
+            &user_message,
+            &anthropic_tools,
+            &state,
+            &prior_messages,
+        )
+        .await?
     } else {
         // OpenAI-compatible API (OpenAI, Gemini, Custom)
         let base_url = match provider.as_str() {
@@ -3946,7 +3961,18 @@ async fn ai_ask(
             "custom" => openai_url.clone(),
             _ => openai_url.clone(), // "openai"
         };
-        call_openai_with_tools(&http_client, &api_key, &model, &base_url, &system_prompt, &user_message, &openai_tools, &state, &prior_messages).await?
+        call_openai_with_tools(
+            &http_client,
+            &api_key,
+            &model,
+            &base_url,
+            &system_prompt,
+            &user_message,
+            &openai_tools,
+            &state,
+            &prior_messages,
+        )
+        .await?
     };
 
     Ok(Json(orca_core::ai::AiResponse {
@@ -3964,9 +3990,7 @@ struct GeneralSettingsRequest {
     telemetry: bool,
 }
 
-async fn get_general_settings(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn get_general_settings(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let config = state.config.lock().await;
     Ok(Json(serde_json::json!({
         "start_on_login": config.start_on_login,
@@ -3983,7 +4007,9 @@ async fn save_general_settings(
     config.start_on_login = body.start_on_login;
     config.show_tray_icon = body.show_tray_icon;
     config.telemetry = body.telemetry;
-    config.save().map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -4000,7 +4026,13 @@ struct LimaSettingsRequest {
 async fn get_lima_settings() -> Result<impl IntoResponse, ApiError> {
     let output = tokio::process::Command::new("limactl")
         .args(["list", "--json"])
-        .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default()))
+        .env(
+            "PATH",
+            format!(
+                "/opt/homebrew/bin:/usr/local/bin:{}",
+                std::env::var("PATH").unwrap_or_default()
+            ),
+        )
         .output()
         .await
         .map_err(|e| anyhow::anyhow!("limactl failed: {e}"))?;
@@ -4012,9 +4044,9 @@ async fn get_lima_settings() -> Result<impl IntoResponse, ApiError> {
         .filter_map(|line| serde_json::from_str(line).ok())
         .collect();
 
-    let vm = vms.iter().find(|v| {
-        v["name"].as_str() == Some("orca") || v["name"].as_str() == Some("docker")
-    });
+    let vm = vms
+        .iter()
+        .find(|v| v["name"].as_str() == Some("orca") || v["name"].as_str() == Some("docker"));
 
     if let Some(vm) = vm {
         Ok(Json(serde_json::json!({
@@ -4030,10 +4062,11 @@ async fn get_lima_settings() -> Result<impl IntoResponse, ApiError> {
     }
 }
 
-async fn save_lima_settings(
-    Json(body): Json<LimaSettingsRequest>,
-) -> Result<impl IntoResponse, ApiError> {
-    let path_env = format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default());
+async fn save_lima_settings(Json(body): Json<LimaSettingsRequest>) -> Result<impl IntoResponse, ApiError> {
+    let path_env = format!(
+        "/opt/homebrew/bin:/usr/local/bin:{}",
+        std::env::var("PATH").unwrap_or_default()
+    );
 
     // Stop the VM
     let _ = tokio::process::Command::new("limactl")
@@ -4118,10 +4151,12 @@ async fn handle_tunnel(socket: WebSocket, host: String, port: u16) {
         Err(e) => {
             tracing::warn!("Tunnel: failed to connect to {host}:{port}: {e}");
             let (mut sender, _) = socket.split();
-            let _ = sender.send(Message::Close(Some(axum::extract::ws::CloseFrame {
-                code: 1011,
-                reason: format!("Cannot connect to {host}:{port}: {e}").into(),
-            }))).await;
+            let _ = sender
+                .send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 1011,
+                    reason: format!("Cannot connect to {host}:{port}: {e}").into(),
+                })))
+                .await;
             return;
         }
     };
@@ -4179,15 +4214,17 @@ async fn webhook_github(
 
     // Validate signature if a webhook secret is configured
     if let Some(ref global_secret) = config.webhook_secret {
-        let sig = headers.get("x-hub-signature-256")
+        let sig = headers
+            .get("x-hub-signature-256")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
         if !orca_core::webhook::validate_github_signature(global_secret, &body, sig) {
             // Try per-rule secrets
             let any_valid = config.deploy_rules.iter().any(|r| {
-                r.webhook_secret.as_ref().map(|s|
-                    orca_core::webhook::validate_github_signature(s, &body, sig)
-                ).unwrap_or(false)
+                r.webhook_secret
+                    .as_ref()
+                    .map(|s| orca_core::webhook::validate_github_signature(s, &body, sig))
+                    .unwrap_or(false)
             });
             if !any_valid {
                 return Err(anyhow::anyhow!("Invalid webhook signature").into());
@@ -4195,27 +4232,37 @@ async fn webhook_github(
         }
     }
 
-    let event_type = headers.get("x-github-event")
+    let event_type = headers
+        .get("x-github-event")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
     if event_type != "package" && event_type != "registry_package" {
         // Not a package event — acknowledge but skip
-        return Ok(Json(serde_json::json!({ "accepted": true, "skipped": true, "reason": format!("event type '{event_type}' not handled") })));
+        return Ok(Json(
+            serde_json::json!({ "accepted": true, "skipped": true, "reason": format!("event type '{event_type}' not handled") }),
+        ));
     }
 
     let payload = orca_core::webhook::parse_github_package_event(&body)
         .map_err(|e| anyhow::anyhow!("Failed to parse webhook: {e}"))?;
 
     if payload.action != "published" && payload.action != "updated" {
-        return Ok(Json(serde_json::json!({ "accepted": true, "skipped": true, "reason": format!("action '{}' not handled", payload.action) })));
+        return Ok(Json(
+            serde_json::json!({ "accepted": true, "skipped": true, "reason": format!("action '{}' not handled", payload.action) }),
+        ));
     }
 
     let rules = config.find_matching_rules(&payload.image, &payload.tag);
     let matched = rules.len();
 
     if matched > 0 {
-        tracing::info!("Webhook: {} rule(s) matched for {}:{}", matched, payload.image, payload.tag);
+        tracing::info!(
+            "Webhook: {} rule(s) matched for {}:{}",
+            matched,
+            payload.image,
+            payload.tag
+        );
         let image_ref = format!("{}:{}", payload.image, payload.tag);
         let rules: Vec<orca_core::config::DeployRule> = rules.into_iter().cloned().collect();
         let state = state.clone();
@@ -4241,7 +4288,12 @@ async fn webhook_dockerhub(
     let matched = rules.len();
 
     if matched > 0 {
-        tracing::info!("Docker Hub webhook: {} rule(s) matched for {}:{}", matched, payload.image, payload.tag);
+        tracing::info!(
+            "Docker Hub webhook: {} rule(s) matched for {}:{}",
+            matched,
+            payload.image,
+            payload.tag
+        );
         let image_ref = format!("{}:{}", payload.image, payload.tag);
         let rules: Vec<orca_core::config::DeployRule> = rules.into_iter().cloned().collect();
         let state = state.clone();
@@ -4266,13 +4318,22 @@ async fn execute_auto_deploy(state: &Arc<AppState>, image_ref: &str, rules: &[or
         if let Ok(mut config) = orca_core::config::OrcaConfig::load() {
             for rule in rules {
                 config.add_deploy_record(DeployRecord {
-                    id: format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
+                    id: format!(
+                        "{:x}",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis()
+                    ),
                     rule_name: rule.name.clone(),
                     image: image_ref.to_string(),
                     tag: image_ref.split(':').nth(1).unwrap_or("latest").to_string(),
                     container_name: "N/A".to_string(),
                     status: DeployStatus::Failed,
-                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| format!("{}", d.as_secs())).unwrap_or_default(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| format!("{}", d.as_secs()))
+                        .unwrap_or_default(),
                     error: Some(format!("Pull failed: {e}")),
                 });
             }
@@ -4283,30 +4344,43 @@ async fn execute_auto_deploy(state: &Arc<AppState>, image_ref: &str, rules: &[or
     tracing::info!("Auto-deploy: pulled {image_ref}");
 
     // Find and redeploy matching containers
-    let containers = state.rt().await.docker.list_containers(Some(ListContainersOptions::<String> {
-        all: true,
-        ..Default::default()
-    })).await.unwrap_or_default();
+    let containers = state
+        .rt()
+        .await
+        .docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+        .unwrap_or_default();
 
     for rule in rules {
-        let target_containers: Vec<_> = containers.iter().filter(|c| {
-            let c_image = c.image.as_deref().unwrap_or("");
-            let c_name = c.names.as_ref()
-                .and_then(|names| names.first())
-                .map(|n| n.trim_start_matches('/'))
-                .unwrap_or("");
+        let target_containers: Vec<_> = containers
+            .iter()
+            .filter(|c| {
+                let c_image = c.image.as_deref().unwrap_or("");
+                let c_name = c
+                    .names
+                    .as_ref()
+                    .and_then(|names| names.first())
+                    .map(|n| n.trim_start_matches('/'))
+                    .unwrap_or("");
 
-            // Match by container name if specified, otherwise by image
-            if !rule.container_names.is_empty() {
-                rule.container_names.iter().any(|n| n == c_name)
-            } else {
-                c_image.contains(&rule.image_pattern)
-            }
-        }).collect();
+                // Match by container name if specified, otherwise by image
+                if !rule.container_names.is_empty() {
+                    rule.container_names.iter().any(|n| n == c_name)
+                } else {
+                    c_image.contains(&rule.image_pattern)
+                }
+            })
+            .collect();
 
         for container in target_containers {
             let c_id = container.id.as_deref().unwrap_or("");
-            let c_name = container.names.as_ref()
+            let c_name = container
+                .names
+                .as_ref()
                 .and_then(|names| names.first())
                 .map(|n| n.trim_start_matches('/').to_string())
                 .unwrap_or_else(|| c_id[..12].to_string());
@@ -4318,13 +4392,22 @@ async fn execute_auto_deploy(state: &Arc<AppState>, image_ref: &str, rules: &[or
                     tracing::info!("Auto-deploy: container '{c_name}' redeployed as {}", &new_id[..12]);
                     if let Ok(mut config) = orca_core::config::OrcaConfig::load() {
                         config.add_deploy_record(DeployRecord {
-                            id: format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
+                            id: format!(
+                                "{:x}",
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis()
+                            ),
                             rule_name: rule.name.clone(),
                             image: image_ref.to_string(),
                             tag: image_ref.split(':').nth(1).unwrap_or("latest").to_string(),
                             container_name: c_name.clone(),
                             status: DeployStatus::Success,
-                            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| format!("{}", d.as_secs())).unwrap_or_default(),
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| format!("{}", d.as_secs()))
+                                .unwrap_or_default(),
                             error: None,
                         });
                         let _ = config.save();
@@ -4334,13 +4417,22 @@ async fn execute_auto_deploy(state: &Arc<AppState>, image_ref: &str, rules: &[or
                     tracing::error!("Auto-deploy: failed to redeploy '{c_name}': {e}");
                     if let Ok(mut config) = orca_core::config::OrcaConfig::load() {
                         config.add_deploy_record(DeployRecord {
-                            id: format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
+                            id: format!(
+                                "{:x}",
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis()
+                            ),
                             rule_name: rule.name.clone(),
                             image: image_ref.to_string(),
                             tag: image_ref.split(':').nth(1).unwrap_or("latest").to_string(),
                             container_name: c_name.clone(),
                             status: DeployStatus::Failed,
-                            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| format!("{}", d.as_secs())).unwrap_or_default(),
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| format!("{}", d.as_secs()))
+                                .unwrap_or_default(),
                             error: Some(format!("{e}")),
                         });
                         let _ = config.save();
@@ -4369,11 +4461,13 @@ async fn pull_image_blocking(docker: &bollard::Docker, image_ref: &str) -> anyho
 
 /// Redeploy a container: inspect → stop → remove → create new with same config + new image → start.
 async fn redeploy_container(docker: &bollard::Docker, container_id: &str, new_image: &str) -> anyhow::Result<String> {
-    use bollard::container::{Config, CreateContainerOptions, StopContainerOptions, RemoveContainerOptions};
+    use bollard::container::{Config, CreateContainerOptions, RemoveContainerOptions, StopContainerOptions};
     use bollard::models::HostConfig;
 
     // Inspect the running container
-    let info = docker.inspect_container(container_id, None).await
+    let info = docker
+        .inspect_container(container_id, None)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to inspect container: {e}"))?;
 
     let old_config = info.config.ok_or_else(|| anyhow::anyhow!("No config found"))?;
@@ -4381,13 +4475,21 @@ async fn redeploy_container(docker: &bollard::Docker, container_id: &str, new_im
     let container_name = info.name.unwrap_or_default().trim_start_matches('/').to_string();
 
     // Stop the old container
-    let _ = docker.stop_container(container_id, Some(StopContainerOptions { t: 10 })).await;
+    let _ = docker
+        .stop_container(container_id, Some(StopContainerOptions { t: 10 }))
+        .await;
 
     // Remove the old container
-    docker.remove_container(container_id, Some(RemoveContainerOptions {
-        force: true,
-        ..Default::default()
-    })).await.map_err(|e| anyhow::anyhow!("Failed to remove old container: {e}"))?;
+    docker
+        .remove_container(
+            container_id,
+            Some(RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            }),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to remove old container: {e}"))?;
 
     // Create new container with same config but updated image
     let new_config = Config {
@@ -4414,14 +4516,21 @@ async fn redeploy_container(docker: &bollard::Docker, container_id: &str, new_im
     let create_opts = if container_name.is_empty() {
         None
     } else {
-        Some(CreateContainerOptions { name: container_name.as_str(), platform: None })
+        Some(CreateContainerOptions {
+            name: container_name.as_str(),
+            platform: None,
+        })
     };
 
-    let created = docker.create_container(create_opts, new_config).await
+    let created = docker
+        .create_container(create_opts, new_config)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to create new container: {e}"))?;
 
     // Start the new container
-    docker.start_container::<String>(&created.id, None).await
+    docker
+        .start_container::<String>(&created.id, None)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to start new container: {e}"))?;
 
     Ok(created.id)
@@ -4444,28 +4553,32 @@ struct SaveDeployRuleRequest {
     enabled: bool,
 }
 
-fn default_true_value() -> bool { true }
+fn default_true_value() -> bool {
+    true
+}
 
 async fn list_deploy_rules() -> Result<impl IntoResponse, ApiError> {
     let config = orca_core::config::OrcaConfig::load()?;
     // Don't expose webhook secrets to the frontend
-    let rules: Vec<serde_json::Value> = config.deploy_rules.iter().map(|r| {
-        serde_json::json!({
-            "id": r.id,
-            "name": r.name,
-            "image_pattern": r.image_pattern,
-            "tag_filter": r.tag_filter,
-            "container_names": r.container_names,
-            "has_secret": r.webhook_secret.is_some(),
-            "enabled": r.enabled,
+    let rules: Vec<serde_json::Value> = config
+        .deploy_rules
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.id,
+                "name": r.name,
+                "image_pattern": r.image_pattern,
+                "tag_filter": r.tag_filter,
+                "container_names": r.container_names,
+                "has_secret": r.webhook_secret.is_some(),
+                "enabled": r.enabled,
+            })
         })
-    }).collect();
+        .collect();
     Ok(Json(rules))
 }
 
-async fn save_deploy_rule(
-    Json(body): Json<SaveDeployRuleRequest>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn save_deploy_rule(Json(body): Json<SaveDeployRuleRequest>) -> Result<impl IntoResponse, ApiError> {
     let mut config = orca_core::config::OrcaConfig::load()?;
     let id = body.id.unwrap_or_else(|| {
         let now = std::time::SystemTime::now()
@@ -4500,9 +4613,7 @@ async fn save_deploy_rule(
     Ok(Json(serde_json::json!({ "id": id })))
 }
 
-async fn delete_deploy_rule(
-    Path(id): Path<String>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn delete_deploy_rule(Path(id): Path<String>) -> Result<impl IntoResponse, ApiError> {
     let mut config = orca_core::config::OrcaConfig::load()?;
     config.deploy_rules.retain(|r| r.id != id);
     config.save()?;
@@ -4521,19 +4632,20 @@ struct TestDeployRequest {
 }
 
 /// Simulate a webhook — find matching rules and return what would be deployed (dry run).
-async fn test_deploy_rule(
-    Json(body): Json<TestDeployRequest>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn test_deploy_rule(Json(body): Json<TestDeployRequest>) -> Result<impl IntoResponse, ApiError> {
     let config = orca_core::config::OrcaConfig::load()?;
     let rules = config.find_matching_rules(&body.image, &body.tag);
-    let matches: Vec<serde_json::Value> = rules.iter().map(|r| {
-        serde_json::json!({
-            "rule_name": r.name,
-            "image_pattern": r.image_pattern,
-            "tag_filter": r.tag_filter,
-            "container_names": r.container_names,
+    let matches: Vec<serde_json::Value> = rules
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "rule_name": r.name,
+                "image_pattern": r.image_pattern,
+                "tag_filter": r.tag_filter,
+                "container_names": r.container_names,
+            })
         })
-    }).collect();
+        .collect();
     Ok(Json(serde_json::json!({
         "image": body.image,
         "tag": body.tag,
@@ -4547,9 +4659,7 @@ struct WebhookSecretRequest {
     secret: Option<String>,
 }
 
-async fn save_webhook_secret(
-    Json(body): Json<WebhookSecretRequest>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn save_webhook_secret(Json(body): Json<WebhookSecretRequest>) -> Result<impl IntoResponse, ApiError> {
     let mut config = orca_core::config::OrcaConfig::load()?;
     config.webhook_secret = body.secret;
     config.save()?;
@@ -4574,13 +4684,10 @@ struct SaveScheduleRequest {
     enabled: bool,
 }
 
-async fn save_schedule(
-    Json(body): Json<SaveScheduleRequest>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn save_schedule(Json(body): Json<SaveScheduleRequest>) -> Result<impl IntoResponse, ApiError> {
     // Validate cron expression
     use std::str::FromStr;
-    cron::Schedule::from_str(&body.cron)
-        .map_err(|e| anyhow::anyhow!("Invalid cron expression: {e}"))?;
+    cron::Schedule::from_str(&body.cron).map_err(|e| anyhow::anyhow!("Invalid cron expression: {e}"))?;
 
     let mut config = orca_core::config::OrcaConfig::load()?;
     let id = body.id.unwrap_or_else(|| {
@@ -4612,9 +4719,7 @@ async fn save_schedule(
     Ok(Json(serde_json::json!({ "id": id })))
 }
 
-async fn delete_schedule(
-    Path(id): Path<String>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn delete_schedule(Path(id): Path<String>) -> Result<impl IntoResponse, ApiError> {
     let mut config = orca_core::config::OrcaConfig::load()?;
     config.schedules.retain(|s| s.id != id);
     config.save()?;
@@ -4633,6 +4738,7 @@ struct AiSettingsRequest {
 }
 
 /// Call Anthropic Claude API with tool use support
+#[allow(clippy::too_many_arguments)]
 async fn call_anthropic_with_tools(
     client: &reqwest::Client,
     api_key: &str,
@@ -4643,7 +4749,8 @@ async fn call_anthropic_with_tools(
     state: &Arc<AppState>,
     history: &[(String, String)],
 ) -> Result<String, ApiError> {
-    let mut messages: Vec<serde_json::Value> = history.iter()
+    let mut messages: Vec<serde_json::Value> = history
+        .iter()
         .map(|(role, content)| serde_json::json!({ "role": role, "content": content }))
         .collect();
     messages.push(serde_json::json!({ "role": "user", "content": user_message }));
@@ -4711,12 +4818,17 @@ async fn call_anthropic_with_tools(
             messages.push(serde_json::json!({ "role": "user", "content": tool_results }));
         } else {
             // Final text response — extract all text blocks
-            let text: String = content.iter()
+            let text: String = content
+                .iter()
                 .filter(|b| b["type"].as_str() == Some("text"))
                 .filter_map(|b| b["text"].as_str())
                 .collect::<Vec<_>>()
                 .join("\n");
-            return Ok(if text.is_empty() { "No response received from AI.".to_string() } else { text });
+            return Ok(if text.is_empty() {
+                "No response received from AI.".to_string()
+            } else {
+                text
+            });
         }
     }
 
@@ -4724,6 +4836,7 @@ async fn call_anthropic_with_tools(
 }
 
 /// Call OpenAI-compatible API with tool use support
+#[allow(clippy::too_many_arguments)]
 async fn call_openai_with_tools(
     client: &reqwest::Client,
     api_key: &str,
@@ -4735,15 +4848,19 @@ async fn call_openai_with_tools(
     state: &Arc<AppState>,
     history: &[(String, String)],
 ) -> Result<String, ApiError> {
-    let mut messages: Vec<serde_json::Value> = vec![
-        serde_json::json!({ "role": "system", "content": system_prompt }),
-    ];
+    let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({ "role": "system", "content": system_prompt })];
     for (role, content) in history {
         messages.push(serde_json::json!({ "role": role, "content": content }));
     }
     messages.push(serde_json::json!({ "role": "user", "content": user_message }));
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    tracing::info!("OpenAI-compatible API call: url={}, model={}, tools={}, history_msgs={}", url, model, tools.len(), history.len());
+    tracing::info!(
+        "OpenAI-compatible API call: url={}, model={}, tools={}, history_msgs={}",
+        url,
+        model,
+        tools.len(),
+        history.len()
+    );
 
     for round in 0..5 {
         let mut body = serde_json::json!({
@@ -4768,7 +4885,11 @@ async fn call_openai_with_tools(
 
         if !status.is_success() {
             let err_body = api_resp.text().await.unwrap_or_default();
-            tracing::warn!("OpenAI API error: status={}, body={}", status, &err_body[..err_body.len().min(500)]);
+            tracing::warn!(
+                "OpenAI API error: status={}, body={}",
+                status,
+                &err_body[..err_body.len().min(500)]
+            );
             return Err(anyhow::anyhow!("OpenAI API error ({}): {}", status, err_body).into());
         }
 
@@ -4777,7 +4898,8 @@ async fn call_openai_with_tools(
             .await
             .map_err(|e| anyhow::anyhow!("Failed to parse OpenAI API response: {e}"))?;
 
-        let choice = resp_json["choices"].as_array()
+        let choice = resp_json["choices"]
+            .as_array()
             .and_then(|arr| arr.first())
             .cloned()
             .unwrap_or_default();
@@ -4789,7 +4911,10 @@ async fn call_openai_with_tools(
             let tool_calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
             if tool_calls.is_empty() {
                 // No actual tool calls, treat as final response
-                return Ok(message["content"].as_str().unwrap_or("No response received from AI.").to_string());
+                return Ok(message["content"]
+                    .as_str()
+                    .unwrap_or("No response received from AI.")
+                    .to_string());
             }
 
             // Add assistant message with tool calls
@@ -4816,7 +4941,10 @@ async fn call_openai_with_tools(
                 }));
             }
         } else {
-            return Ok(message["content"].as_str().unwrap_or("No response received from AI.").to_string());
+            return Ok(message["content"]
+                .as_str()
+                .unwrap_or("No response received from AI.")
+                .to_string());
         }
     }
 
@@ -4824,9 +4952,7 @@ async fn call_openai_with_tools(
 }
 
 /// List available models for the current AI provider
-async fn list_ai_models(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn list_ai_models(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let (provider, api_key, base_url) = {
         let config = state.config.lock().await;
         let provider = config.ai_provider.clone();
@@ -4872,10 +4998,8 @@ async fn list_ai_models(
                     json["data"]
                         .as_array()
                         .map(|arr| {
-                            let mut ids: Vec<String> = arr
-                                .iter()
-                                .filter_map(|m| m["id"].as_str().map(String::from))
-                                .collect();
+                            let mut ids: Vec<String> =
+                                arr.iter().filter_map(|m| m["id"].as_str().map(String::from)).collect();
                             ids.sort();
                             ids
                         })
@@ -4908,20 +5032,20 @@ async fn save_ai_settings(
                 config.openai_api_key = Some(body.api_key);
             }
             config.openai_model = body.model;
-            if let Some(url) = body.url {
-                if !url.is_empty() {
-                    config.openai_url = url;
-                }
+            if let Some(url) = body.url
+                && !url.is_empty()
+            {
+                config.openai_url = url;
             }
         }
     }
-    config.save().map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-async fn get_ai_settings(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn get_ai_settings(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let config = state.config.lock().await;
     Ok(Json(serde_json::json!({
         "provider": config.ai_provider,
@@ -4988,12 +5112,20 @@ async fn cleanup(
         {
             log.push("Removing Docker TCP override from WSL...".to_string());
             let _ = tokio::process::Command::new("wsl")
-                .args(["-u", "root", "--", "rm", "-f",
-                    "/etc/systemd/system/docker.service.d/override.conf"])
-                .output().await;
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "rm",
+                    "-f",
+                    "/etc/systemd/system/docker.service.d/override.conf",
+                ])
+                .output()
+                .await;
             let _ = tokio::process::Command::new("wsl")
                 .args(["-u", "root", "--", "systemctl", "daemon-reload"])
-                .output().await;
+                .output()
+                .await;
             log.push("  Done".to_string());
         }
     }
@@ -5001,7 +5133,9 @@ async fn cleanup(
     // Remove user templates
     if scope == "templates" || scope == "all" {
         let config_dir = orca_core::config::OrcaConfig::config_path()
-            .parent().map(|p| p.to_path_buf()).unwrap_or_default();
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default();
         let templates_path = config_dir.join("templates.json");
         if templates_path.exists() {
             let _ = std::fs::remove_file(&templates_path);
@@ -5012,7 +5146,9 @@ async fn cleanup(
     // Remove config
     if scope == "config" || scope == "all" {
         let config_path = orca_core::config::OrcaConfig::config_path()
-            .parent().map(|p| p.to_path_buf()).unwrap_or_default();
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default();
         if config_path.exists() {
             log.push(format!("Removing config at {}", config_path.display()));
             let _ = std::fs::remove_dir_all(&config_path);
@@ -5024,9 +5160,17 @@ async fn cleanup(
         let containers = state.rt().await.list_containers(true).await?;
         let mut removed = 0u64;
         for c in &containers {
-            if matches!(c.state, orca_core::runtime::ContainerState::Exited | orca_core::runtime::ContainerState::Dead | orca_core::runtime::ContainerState::Created) {
+            if matches!(
+                c.state,
+                orca_core::runtime::ContainerState::Exited
+                    | orca_core::runtime::ContainerState::Dead
+                    | orca_core::runtime::ContainerState::Created
+            ) {
                 if let Err(e) = state.rt().await.remove_container(&c.id, true).await {
-                    log.push(format!("Failed to remove container {}: {e}", &c.id[..12.min(c.id.len())]));
+                    log.push(format!(
+                        "Failed to remove container {}: {e}",
+                        &c.id[..12.min(c.id.len())]
+                    ));
                 } else {
                     removed += 1;
                 }
@@ -5084,7 +5228,8 @@ async fn cleanup(
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 if output.status.success() {
-                    let reclaimed_line = stdout.lines()
+                    let reclaimed_line = stdout
+                        .lines()
                         .find(|l| l.contains("reclaimed") || l.contains("Total:"))
                         .unwrap_or("Build cache cleared");
                     log.push(reclaimed_line.to_string());
@@ -5116,16 +5261,12 @@ fn extended_path() -> String {
 
 /// Try to ping a Docker socket and return the server version + client on success.
 async fn try_socket_ping(socket_path: &str) -> Option<(String, bollard::Docker)> {
-    let docker = bollard::Docker::connect_with_socket(
-        socket_path, 120, bollard::API_DEFAULT_VERSION,
-    ).ok()?;
+    let docker = bollard::Docker::connect_with_socket(socket_path, 120, bollard::API_DEFAULT_VERSION).ok()?;
     let ver = docker.version().await.ok()?;
     ver.version.map(|v| (v, docker))
 }
 
-async fn reconnect_runtime(
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
+async fn reconnect_runtime(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let mut log = Vec::new();
     let mut connected_version: Option<String> = None;
     let mut connected_method: Option<String> = None;
@@ -5162,7 +5303,12 @@ async fn reconnect_runtime(
     let extended = extended_path();
     match tokio::process::Command::new("docker")
         .env("PATH", &extended)
-        .args(["context", "inspect", "--format", "{{.Name}} \u{2192} {{.Endpoints.docker.Host}}"])
+        .args([
+            "context",
+            "inspect",
+            "--format",
+            "{{.Name}} \u{2192} {{.Endpoints.docker.Host}}",
+        ])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
@@ -5200,7 +5346,10 @@ async fn reconnect_runtime(
         ("Standard Docker", "/var/run/docker.sock".to_string()),
         ("Docker Desktop", format!("{home}/.docker/run/docker.sock")),
         ("Docker Desktop (alt)", format!("{home}/.docker/desktop/docker.sock")),
-        ("Docker Desktop (legacy)", format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock")),
+        (
+            "Docker Desktop (legacy)",
+            format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock"),
+        ),
         ("Lima VM 'orca'", format!("{home}/.lima/orca/sock/docker.sock")),
         ("Lima VM 'docker'", format!("{home}/.lima/docker/sock/docker.sock")),
         ("Lima VM 'default'", format!("{home}/.lima/default/sock/docker.sock")),
@@ -5213,7 +5362,9 @@ async fn reconnect_runtime(
     let mut podman_candidates: Vec<(&str, String)> = Vec::new();
     if let Ok(uid) = std::env::var("UID").or_else(|_| {
         // UID isn't always set; try id -u
-        std::process::Command::new("id").arg("-u").output()
+        std::process::Command::new("id")
+            .arg("-u")
+            .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .map_err(|e| e.to_string())
     }) {
@@ -5323,40 +5474,34 @@ async fn reconnect_runtime(
     {
         log.push("Method: Windows named pipe".to_string());
         match bollard::Docker::connect_with_named_pipe_defaults() {
-            Ok(docker) => {
-                match docker.version().await {
-                    Ok(ver) => {
-                        let v = ver.version.unwrap_or_default();
-                        log.push(format!("  Connected! Docker {v}"));
-                        if connected_version.is_none() {
-                            connected_version = Some(v);
-                            connected_method = Some("Windows named pipe".to_string());
-                        }
+            Ok(docker) => match docker.version().await {
+                Ok(ver) => {
+                    let v = ver.version.unwrap_or_default();
+                    log.push(format!("  Connected! Docker {v}"));
+                    if connected_version.is_none() {
+                        connected_version = Some(v);
+                        connected_method = Some("Windows named pipe".to_string());
                     }
-                    Err(e) => log.push(format!("  Pipe exists but ping failed: {e}")),
                 }
-            }
+                Err(e) => log.push(format!("  Pipe exists but ping failed: {e}")),
+            },
             Err(e) => log.push(format!("  Not available: {e}")),
         }
 
         log.push("".to_string());
         log.push("Method: TCP localhost:2375".to_string());
-        match bollard::Docker::connect_with_http(
-            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
-        ) {
-            Ok(docker) => {
-                match docker.version().await {
-                    Ok(ver) => {
-                        let v = ver.version.unwrap_or_default();
-                        log.push(format!("  Connected! Docker {v}"));
-                        if connected_version.is_none() {
-                            connected_version = Some(v);
-                            connected_method = Some("TCP localhost:2375".to_string());
-                        }
+        match bollard::Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION) {
+            Ok(docker) => match docker.version().await {
+                Ok(ver) => {
+                    let v = ver.version.unwrap_or_default();
+                    log.push(format!("  Connected! Docker {v}"));
+                    if connected_version.is_none() {
+                        connected_version = Some(v);
+                        connected_method = Some("TCP localhost:2375".to_string());
                     }
-                    Err(e) => log.push(format!("  TCP connection failed: {e}")),
                 }
-            }
+                Err(e) => log.push(format!("  TCP connection failed: {e}")),
+            },
             Err(e) => log.push(format!("  Not available: {e}")),
         }
 
@@ -5389,7 +5534,9 @@ async fn reconnect_runtime(
                             log.push("  TCP listener configured and Docker restarted!".to_string());
                             tokio::time::sleep(Duration::from_secs(3)).await;
                             if let Ok(docker) = bollard::Docker::connect_with_http(
-                                "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
+                                "http://localhost:2375",
+                                120,
+                                bollard::API_DEFAULT_VERSION,
                             ) {
                                 if let Ok(ver) = docker.version().await {
                                     let v2 = ver.version.unwrap_or_default();
@@ -5481,14 +5628,8 @@ async fn agent_execute_tool(
     Json(body): Json<AgentExecuteRequest>,
 ) -> impl IntoResponse {
     match crate::agent::execute_tool(&state, &body.tool, body.arguments).await {
-        Ok(result) => (
-            StatusCode::OK,
-            Json(serde_json::json!({ "result": result })),
-        ),
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": err })),
-        ),
+        Ok(result) => (StatusCode::OK, Json(serde_json::json!({ "result": result }))),
+        Err(err) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))),
     }
 }
 
@@ -5514,11 +5655,7 @@ async fn agent_openai_proxy(
         .cloned();
 
     // Also support direct tool_calls at top level for simpler usage
-    let tool_calls = tool_calls.or_else(|| {
-        body.get("tool_calls")
-            .and_then(|tc| tc.as_array())
-            .cloned()
-    });
+    let tool_calls = tool_calls.or_else(|| body.get("tool_calls").and_then(|tc| tc.as_array()).cloned());
 
     let tool_calls = match tool_calls {
         Some(tc) => tc,
@@ -5560,15 +5697,9 @@ async fn agent_openai_proxy(
     // Execute each tool call
     let mut tool_results = Vec::new();
     for tc in &tool_calls {
-        let tool_call_id = tc
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
+        let tool_call_id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
         let function = tc.get("function").cloned().unwrap_or_default();
-        let name = function
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
+        let name = function.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
         let arguments: serde_json::Value = function
             .get("arguments")
             .and_then(|v| {
@@ -5618,16 +5749,10 @@ async fn agent_openai_proxy(
 /// - `initialize` — server info
 /// - `tools/list` — tool catalog in MCP format
 /// - `tools/call` — execute a tool
-async fn agent_mcp(
-    State(state): State<Arc<AppState>>,
-    Json(body): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
+async fn agent_mcp(State(state): State<Arc<AppState>>, Json(body): Json<serde_json::Value>) -> Json<serde_json::Value> {
     let jsonrpc = "2.0";
     let id = body.get("id").cloned().unwrap_or(serde_json::json!(null));
-    let method = body
-        .get("method")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let method = body.get("method").and_then(|v| v.as_str()).unwrap_or("");
 
     match method {
         "initialize" => Json(serde_json::json!({
@@ -5666,14 +5791,8 @@ async fn agent_mcp(
 
         "tools/call" => {
             let params = body.get("params").cloned().unwrap_or_default();
-            let tool_name = params
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let arguments = params
-                .get("arguments")
-                .cloned()
-                .unwrap_or(serde_json::json!({}));
+            let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let arguments = params.get("arguments").cloned().unwrap_or(serde_json::json!({}));
 
             match crate::agent::execute_tool(&state, tool_name, arguments).await {
                 Ok(result) => {

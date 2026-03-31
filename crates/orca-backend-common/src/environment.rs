@@ -1,8 +1,8 @@
+use orca_core::environment::*;
+use serde::Deserialize as SerdeDeserialize;
 use std::process::Stdio;
 use tokio::process::Command;
 use tokio::sync::OnceCell;
-use orca_core::environment::*;
-use serde::Deserialize as SerdeDeserialize;
 
 /// Cached container CLI detection result.
 static CLI_CELL: OnceCell<&'static str> = OnceCell::const_new();
@@ -136,7 +136,10 @@ pub async fn run_cmd_streaming(
     let last_output = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let update_last = |ts: &std::sync::Arc<std::sync::atomic::AtomicU64>| {
         ts.store(
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
             std::sync::atomic::Ordering::Relaxed,
         );
     };
@@ -175,7 +178,10 @@ pub async fn run_cmd_streaming(
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             elapsed += 5;
-            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
             let last = last_hb.load(std::sync::atomic::Ordering::Relaxed);
             if now - last >= 4 {
                 let msg = match elapsed {
@@ -204,13 +210,12 @@ pub async fn run_cmd_streaming(
 }
 
 /// Run a fix action with streaming output to a sender.
-pub async fn run_fix_streaming(
-    action: &str,
-    tx: tokio::sync::mpsc::Sender<String>,
-) -> anyhow::Result<()> {
+pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<String>) -> anyhow::Result<()> {
     let send = |msg: String| {
         let tx = tx.clone();
-        async move { let _ = tx.send(msg).await; }
+        async move {
+            let _ = tx.send(msg).await;
+        }
     };
 
     tracing::info!("run_fix_streaming: action={action}");
@@ -220,11 +225,14 @@ pub async fn run_fix_streaming(
             {
                 send(">>> Checking WSL status...".into()).await;
                 if let Ok(v) = run_cmd("wsl", &["--version"]).await {
-                    for line in v.lines() { send(line.to_string()).await; }
+                    for line in v.lines() {
+                        send(line.to_string()).await;
+                    }
                 }
 
                 send("\n>>> Probing WSL...".into()).await;
-                let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"]).await
+                let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"])
+                    .await
                     .map_err(|e| anyhow::anyhow!("WSL not available: {e}"))?;
                 if !probe.contains("wsl-ok") {
                     anyhow::bail!("No WSL distro found. Install Ubuntu from the Microsoft Store.");
@@ -255,14 +263,34 @@ pub async fn run_fix_streaming(
                 // Stream the install script
                 send(">>> Downloading and running Docker install script...".into()).await;
                 send("    (this will take a minute or two)\n".into()).await;
-                run_cmd_streaming("wsl", &["-u", "root", "--", "bash", "-c",
-                    "curl -fsSL https://get.docker.com | sh"
-                ], &tx).await.map_err(|e| anyhow::anyhow!("Install failed: {e}"))?;
+                run_cmd_streaming(
+                    "wsl",
+                    &[
+                        "-u",
+                        "root",
+                        "--",
+                        "bash",
+                        "-c",
+                        "curl -fsSL https://get.docker.com | sh",
+                    ],
+                    &tx,
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!("Install failed: {e}"))?;
 
                 send("\n>>> Adding user to docker group...".into()).await;
-                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && usermod -aG docker \"$DEFAULT_USER\""
-                ]).await;
+                let _ = run_cmd(
+                    "wsl",
+                    &[
+                        "-u",
+                        "root",
+                        "--",
+                        "bash",
+                        "-c",
+                        "DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && usermod -aG docker \"$DEFAULT_USER\"",
+                    ],
+                )
+                .await;
 
                 send(">>> Configuring TCP listener...".into()).await;
                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
@@ -298,10 +326,7 @@ pub async fn run_fix_streaming(
             // password from stdin (will fail if sudo requires password without
             // NOPASSWD, but that's expected for a desktop app).
             // First try without password (NOPASSWD configured or already cached)
-            let result = run_cmd_streaming(
-                "sh", &["-c", "curl -fsSL https://get.docker.com | sudo -n sh"],
-                &tx
-            ).await;
+            let result = run_cmd_streaming("sh", &["-c", "curl -fsSL https://get.docker.com | sudo -n sh"], &tx).await;
 
             match result {
                 Ok(_) => {
@@ -337,15 +362,18 @@ pub async fn run_fix_streaming(
             // Detect package manager
             if run_cmd("apt", &["--version"]).await.is_ok() {
                 send(">>> Using apt...\n".into()).await;
-                run_cmd_streaming("sudo", &["-n", "apt", "install", "-y", "podman"], &tx).await
+                run_cmd_streaming("sudo", &["-n", "apt", "install", "-y", "podman"], &tx)
+                    .await
                     .map_err(|e| anyhow::anyhow!("apt install failed (sudo may require password): {e}"))?;
             } else if run_cmd("dnf", &["--version"]).await.is_ok() {
                 send(">>> Using dnf...\n".into()).await;
-                run_cmd_streaming("sudo", &["-n", "dnf", "install", "-y", "podman"], &tx).await
+                run_cmd_streaming("sudo", &["-n", "dnf", "install", "-y", "podman"], &tx)
+                    .await
                     .map_err(|e| anyhow::anyhow!("dnf install failed: {e}"))?;
             } else if run_cmd("pacman", &["--version"]).await.is_ok() {
                 send(">>> Using pacman...\n".into()).await;
-                run_cmd_streaming("sudo", &["-n", "pacman", "-S", "--noconfirm", "podman"], &tx).await
+                run_cmd_streaming("sudo", &["-n", "pacman", "-S", "--noconfirm", "podman"], &tx)
+                    .await
                     .map_err(|e| anyhow::anyhow!("pacman install failed: {e}"))?;
             } else {
                 anyhow::bail!("No supported package manager found. Install podman manually.");
@@ -371,7 +399,8 @@ pub async fn run_fix_streaming(
                     systemctl daemon-reload && \
                     systemctl restart docker
                 "#;
-                run_cmd_streaming("wsl", &["-u", "root", "--", "bash", "-c", script], &tx).await
+                run_cmd_streaming("wsl", &["-u", "root", "--", "bash", "-c", script], &tx)
+                    .await
                     .map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit installation failed: {e}"))?;
             }
 
@@ -386,7 +415,8 @@ pub async fn run_fix_streaming(
                     sudo nvidia-ctk runtime configure --runtime=docker && \
                     sudo systemctl restart docker
                 "#;
-                run_cmd_streaming("bash", &["-c", script], &tx).await
+                run_cmd_streaming("bash", &["-c", script], &tx)
+                    .await
                     .map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit installation failed: {e}"))?;
             }
 
@@ -398,9 +428,13 @@ pub async fn run_fix_streaming(
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 let check = {
                     #[cfg(target_os = "windows")]
-                    { run_cmd("wsl", &["-u", "root", "--", "docker", "info"]).await }
+                    {
+                        run_cmd("wsl", &["-u", "root", "--", "docker", "info"]).await
+                    }
                     #[cfg(not(target_os = "windows"))]
-                    { run_cmd("docker", &["info"]).await }
+                    {
+                        run_cmd("docker", &["info"]).await
+                    }
                 };
                 if check.is_ok() {
                     send("    Docker is back online.\n".into()).await;
@@ -445,19 +479,25 @@ pub async fn run_fix_streaming(
 
             {
                 let mut packages = Vec::new();
-                if !lima_installed { packages.push("lima"); }
-                if !docker_cli_installed { packages.push("docker"); }
-                if !compose_installed { packages.push("docker-compose"); }
-                if !buildx_installed { packages.push("docker-buildx"); }
+                if !lima_installed {
+                    packages.push("lima");
+                }
+                if !docker_cli_installed {
+                    packages.push("docker");
+                }
+                if !compose_installed {
+                    packages.push("docker-compose");
+                }
+                if !buildx_installed {
+                    packages.push("docker-buildx");
+                }
 
                 if packages.is_empty() {
                     send("    Lima, Docker CLI, Compose, and Buildx already installed.\n".into()).await;
                 } else {
                     send(format!("    Installing: {}\n", packages.join(", "))).await;
-                    let install_result = run_cmd_streaming(
-                        "brew", &[&["install"][..], &packages.iter().map(|s| *s).collect::<Vec<_>>()].concat(),
-                        &tx
-                    ).await;
+                    let install_result =
+                        run_cmd_streaming("brew", &[&["install"][..], &packages.to_vec()].concat(), &tx).await;
                     if let Err(e) = install_result {
                         send(format!("\n    brew install failed: {e}\n")).await;
                         anyhow::bail!("Failed to install Lima/Docker via Homebrew: {e}");
@@ -501,7 +541,8 @@ pub async fn run_fix_streaming(
             send(">>> Step 3/5: Creating Lima VM with Docker...\n".into()).await;
 
             // Check if a Lima VM already exists
-            let existing_vms = run_cmd("limactl", &["list", "--format", "{{.Name}}"]).await
+            let existing_vms = run_cmd("limactl", &["list", "--format", "{{.Name}}"])
+                .await
                 .unwrap_or_default();
             let has_orca_vm = existing_vms.lines().any(|l| {
                 let name = l.trim();
@@ -517,7 +558,7 @@ pub async fn run_fix_streaming(
             };
 
             if has_orca_vm {
-                send(format!("    Lima VM '{}' already exists.\n", vm_name).into()).await;
+                send(format!("    Lima VM '{}' already exists.\n", vm_name)).await;
             } else {
                 send("    Creating 'orca' VM with Apple Virtualization...\n".into()).await;
                 send("    This downloads a Linux image, installs Docker, and upgrades the kernel.\n".into()).await;
@@ -548,14 +589,13 @@ pub async fn run_fix_streaming(
             // Step 4: Start the VM
             send(">>> Step 4/5: Starting Lima VM...\n".into()).await;
 
-            let start_result = run_cmd_streaming(
-                "limactl", &["start", vm_name],
-                &tx
-            ).await;
+            let start_result = run_cmd_streaming("limactl", &["start", vm_name], &tx).await;
 
             if let Err(e) = start_result {
                 // VM might already be running
-                let status = run_cmd("limactl", &["list", "--format", "{{.Name}} {{.Status}}"]).await.unwrap_or_default();
+                let status = run_cmd("limactl", &["list", "--format", "{{.Name}} {{.Status}}"])
+                    .await
+                    .unwrap_or_default();
                 if !status.contains("Running") {
                     send(format!("\n    Failed to start VM: {e}\n")).await;
                     anyhow::bail!("Failed to start Lima VM: {e}");
@@ -564,15 +604,28 @@ pub async fn run_fix_streaming(
             send("    VM is running.\n".into()).await;
 
             // Reboot to activate HWE kernel (6.17) if it was just provisioned
-            let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
+            let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
+                .await
+                .unwrap_or_default();
             if kernel_ver.trim().starts_with("6.8.") || kernel_ver.trim().starts_with("6.5.") {
                 send(">>> Activating upgraded kernel...\n".into()).await;
                 send("    Rebooting VM to switch from kernel ".into()).await;
-                send(format!("{} to HWE kernel. This takes ~30 seconds.\n", kernel_ver.trim())).await;
+                send(format!(
+                    "{} to HWE kernel. This takes ~30 seconds.\n",
+                    kernel_ver.trim()
+                ))
+                .await;
                 let _ = run_cmd("limactl", &["stop", vm_name]).await;
                 let _ = run_cmd_streaming("limactl", &["start", vm_name], &tx).await;
-                let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
-                send(format!("    Kernel upgraded: {} → {}\n", kernel_ver.trim(), new_ver.trim())).await;
+                let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
+                    .await
+                    .unwrap_or_default();
+                send(format!(
+                    "    Kernel upgraded: {} → {}\n",
+                    kernel_ver.trim(),
+                    new_ver.trim()
+                ))
+                .await;
             }
 
             // Step 5: Configure Docker context to use Lima
@@ -591,8 +644,12 @@ pub async fn run_fix_streaming(
                 send("    Waiting for Docker socket...\n".into()).await;
                 for i in 0..15 {
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                    if std::path::Path::new(&socket_path).exists() { break; }
-                    if i % 3 == 2 { send(format!("    Waiting... ({}s)\n", (i + 1) * 2)).await; }
+                    if std::path::Path::new(&socket_path).exists() {
+                        break;
+                    }
+                    if i % 3 == 2 {
+                        send(format!("    Waiting... ({}s)\n", (i + 1) * 2)).await;
+                    }
                 }
             }
 
@@ -603,9 +660,17 @@ pub async fn run_fix_streaming(
                 let _ = run_cmd("docker", &["context", "rm", "-f", "lima"]).await;
                 let _ = run_cmd("docker", &["context", "rm", "-f", "lima-orca"]).await;
                 let _ = run_cmd("docker", &["context", "rm", "-f", "lima-docker"]).await;
-                let _ = run_cmd("docker", &["context", "create", "lima-orca",
-                    "--docker", &format!("host=unix://{socket_path}"),
-                ]).await;
+                let _ = run_cmd(
+                    "docker",
+                    &[
+                        "context",
+                        "create",
+                        "lima-orca",
+                        "--docker",
+                        &format!("host=unix://{socket_path}"),
+                    ],
+                )
+                .await;
                 let _ = run_cmd("docker", &["context", "use", "lima-orca"]).await;
                 send("    Docker context 'lima-orca' configured.\n".into()).await;
             } else {
@@ -614,7 +679,18 @@ pub async fn run_fix_streaming(
 
             // Verify Docker works via the correct socket directly
             send("\n>>> Verifying Docker connection...\n".into()).await;
-            match run_cmd("docker", &["-H", &format!("unix://{socket_path}"), "info", "--format", "{{.ServerVersion}}"]).await {
+            match run_cmd(
+                "docker",
+                &[
+                    "-H",
+                    &format!("unix://{socket_path}"),
+                    "info",
+                    "--format",
+                    "{{.ServerVersion}}",
+                ],
+            )
+            .await
+            {
                 Ok(version) => {
                     send(format!("    Docker {} is ready!\n", version.trim())).await;
                     send("\n>>> Setup complete. Orca Desktop is ready to use.\n".into()).await;
@@ -648,7 +724,11 @@ fn decode_output(bytes: &[u8]) -> String {
         || (bytes.len() >= 4 && bytes[1] == 0 && bytes[3] == 0);
 
     if is_utf16 {
-        let skip = if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE { 2 } else { 0 };
+        let skip = if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
+            2
+        } else {
+            0
+        };
         let u16s: Vec<u16> = bytes[skip..]
             .chunks_exact(2)
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
@@ -782,9 +862,7 @@ async fn check_docker_group() -> HealthCheck {
                 }
             } else {
                 // Check if running as root (root doesn't need docker group)
-                let is_root = std::env::var("USER")
-                    .map(|u| u == "root")
-                    .unwrap_or(false);
+                let is_root = std::env::var("USER").map(|u| u == "root").unwrap_or(false);
                 if is_root {
                     HealthCheck {
                         name: "Docker Group".to_string(),
@@ -813,7 +891,6 @@ async fn check_docker_group() -> HealthCheck {
         },
     }
 }
-
 
 async fn check_wsl2_enabled() -> HealthCheck {
     match run_cmd("wsl", &["--status"]).await {
@@ -852,12 +929,11 @@ async fn check_docker_desktop() -> HealthCheck {
     let desktop_installed = if cfg!(target_os = "macos") {
         std::path::Path::new("/Applications/Docker.app").exists()
     } else if cfg!(target_os = "windows") {
-        std::path::Path::new(
-            &format!(
-                "{}\\Docker\\Docker\\Docker Desktop.exe",
-                std::env::var("ProgramFiles").unwrap_or_default()
-            ),
-        ).exists()
+        std::path::Path::new(&format!(
+            "{}\\Docker\\Docker\\Docker Desktop.exe",
+            std::env::var("ProgramFiles").unwrap_or_default()
+        ))
+        .exists()
     } else if cfg!(target_os = "linux") {
         std::path::Path::new("/opt/docker-desktop").exists()
     } else {
@@ -888,10 +964,7 @@ async fn check_docker_desktop() -> HealthCheck {
 async fn check_podman_socket() -> HealthCheck {
     // Check rootless socket first, then root socket
     let uid = std::env::var("UID")
-        .or_else(|_| {
-            std::fs::read_to_string("/proc/self/loginuid")
-                .map(|s| s.trim().to_string())
-        })
+        .or_else(|_| std::fs::read_to_string("/proc/self/loginuid").map(|s| s.trim().to_string()))
         .unwrap_or_default();
 
     let rootless = format!("/run/user/{uid}/podman/podman.sock");
@@ -928,7 +1001,18 @@ async fn check_nvidia_gpu() -> HealthCheck {
     // Check for NVIDIA GPU
     let has_gpu = if cfg!(target_os = "windows") {
         // On Windows, check inside WSL
-        run_cmd("wsl", &["-u", "root", "--", "nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]).await
+        run_cmd(
+            "wsl",
+            &[
+                "-u",
+                "root",
+                "--",
+                "nvidia-smi",
+                "--query-gpu=name",
+                "--format=csv,noheader",
+            ],
+        )
+        .await
     } else {
         run_cmd("nvidia-smi", &["--query-gpu=name", "--format=csv,noheader"]).await
     };
@@ -949,14 +1033,21 @@ async fn check_nvidia_gpu() -> HealthCheck {
                     description: "GPU acceleration available for AI workloads".to_string(),
                     status: CheckStatus::Pass,
                     fix_action: None,
-                    details: Some(format!("{} — Container Toolkit {}", gpu, ver.trim().lines().next().unwrap_or(""))),
+                    details: Some(format!(
+                        "{} — Container Toolkit {}",
+                        gpu,
+                        ver.trim().lines().next().unwrap_or("")
+                    )),
                 },
                 Err(_) => HealthCheck {
                     name: "NVIDIA GPU".to_string(),
                     description: format!("{} detected but Container Toolkit not installed", gpu),
                     status: CheckStatus::Warning,
                     fix_action: Some("install_nvidia_toolkit".to_string()),
-                    details: Some(format!("{} — install nvidia-container-toolkit for GPU in containers", gpu)),
+                    details: Some(format!(
+                        "{} — install nvidia-container-toolkit for GPU in containers",
+                        gpu
+                    )),
                 },
             }
         }
@@ -989,7 +1080,9 @@ pub async fn check_environment() -> EnvironmentStatus {
                 checks.push(check_podman_socket().await);
             }
             let gpu = check_nvidia_gpu().await;
-            if gpu.details.is_some() { checks.push(gpu); }
+            if gpu.details.is_some() {
+                checks.push(gpu);
+            }
         }
         "macos" => {
             // Always check if Docker is actually running — regardless of Docker Desktop
@@ -1005,7 +1098,10 @@ pub async fn check_environment() -> EnvironmentStatus {
                             let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
                             if std::path::Path::new(&socket).exists() {
                                 let host_arg = format!("unix://{socket}");
-                                if let Ok(version) = run_cmd("docker", &["-H", &host_arg, "info", "--format", "{{.ServerVersion}}"]).await {
+                                if let Ok(version) =
+                                    run_cmd("docker", &["-H", &host_arg, "info", "--format", "{{.ServerVersion}}"])
+                                        .await
+                                {
                                     let v = version.trim().to_string();
                                     if !v.is_empty() {
                                         found_version = Some(v);
@@ -1019,7 +1115,10 @@ pub async fn check_environment() -> EnvironmentStatus {
                             let colima_sock = format!("{home}/.colima/default/docker.sock");
                             if std::path::Path::new(&colima_sock).exists() {
                                 let host_arg = format!("unix://{colima_sock}");
-                                if let Ok(version) = run_cmd("docker", &["-H", &host_arg, "info", "--format", "{{.ServerVersion}}"]).await {
+                                if let Ok(version) =
+                                    run_cmd("docker", &["-H", &host_arg, "info", "--format", "{{.ServerVersion}}"])
+                                        .await
+                                {
                                     let v = version.trim().to_string();
                                     if !v.is_empty() {
                                         found_version = Some(v);
@@ -1029,7 +1128,7 @@ pub async fn check_environment() -> EnvironmentStatus {
                         }
                     }
                     found_version
-                },
+                }
             };
 
             if let Some(version) = docker_running {
@@ -1048,7 +1147,10 @@ pub async fn check_environment() -> EnvironmentStatus {
                     description: "Docker is not running. Click Fix to install and configure automatically.".to_string(),
                     status: CheckStatus::Fail,
                     fix_action: Some("setup_docker_macos".to_string()),
-                    details: Some("Installs Homebrew, Lima, and Docker in a lightweight Linux VM using Apple Virtualization".to_string()),
+                    details: Some(
+                        "Installs Homebrew, Lima, and Docker in a lightweight Linux VM using Apple Virtualization"
+                            .to_string(),
+                    ),
                 });
             }
         }
@@ -1076,7 +1178,12 @@ pub async fn check_environment() -> EnvironmentStatus {
 
             // Check if Docker daemon is actually running
             if docker_installed {
-                match run_cmd("wsl", &["-u", "root", "--", "docker", "info", "--format", "{{.ServerVersion}}"]).await {
+                match run_cmd(
+                    "wsl",
+                    &["-u", "root", "--", "docker", "info", "--format", "{{.ServerVersion}}"],
+                )
+                .await
+                {
                     Ok(version) => {
                         checks.push(HealthCheck {
                             name: "Docker Service".to_string(),
@@ -1106,7 +1213,9 @@ pub async fn check_environment() -> EnvironmentStatus {
 
             // GPU check
             let gpu = check_nvidia_gpu().await;
-            if gpu.details.is_some() { checks.push(gpu); }
+            if gpu.details.is_some() {
+                checks.push(gpu);
+            }
         }
         _ => {}
     }
@@ -1146,35 +1255,41 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
     match action {
         "install_podman_linux" => {
             // Detect package manager and install
-            if let Ok(_) = run_cmd("apt", &["--version"]).await {
-                let output =
-                    run_cmd("sudo", &["apt", "install", "-y", "podman"]).await
-                        .map_err(|e| anyhow::anyhow!(
+            if run_cmd("apt", &["--version"]).await.is_ok() {
+                let output = run_cmd("sudo", &["apt", "install", "-y", "podman"])
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!(
                             "Failed to install Podman via apt.\n\n\
                              You can try installing manually by running:\n\
                              sudo apt install -y podman\n\n\
                              Error: {e}"
-                        ))?;
+                        )
+                    })?;
                 Ok(format!("Installed podman via apt:\n{output}"))
-            } else if let Ok(_) = run_cmd("dnf", &["--version"]).await {
-                let output =
-                    run_cmd("sudo", &["dnf", "install", "-y", "podman"]).await
-                        .map_err(|e| anyhow::anyhow!(
+            } else if run_cmd("dnf", &["--version"]).await.is_ok() {
+                let output = run_cmd("sudo", &["dnf", "install", "-y", "podman"])
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!(
                             "Failed to install Podman via dnf.\n\n\
                              You can try installing manually by running:\n\
                              sudo dnf install -y podman\n\n\
                              Error: {e}"
-                        ))?;
+                        )
+                    })?;
                 Ok(format!("Installed podman via dnf:\n{output}"))
-            } else if let Ok(_) = run_cmd("pacman", &["--version"]).await {
-                let output =
-                    run_cmd("sudo", &["pacman", "-S", "--noconfirm", "podman"]).await
-                        .map_err(|e| anyhow::anyhow!(
+            } else if run_cmd("pacman", &["--version"]).await.is_ok() {
+                let output = run_cmd("sudo", &["pacman", "-S", "--noconfirm", "podman"])
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!(
                             "Failed to install Podman via pacman.\n\n\
                              You can try installing manually by running:\n\
                              sudo pacman -S podman\n\n\
                              Error: {e}"
-                        ))?;
+                        )
+                    })?;
                 Ok(format!("Installed podman via pacman:\n{output}"))
             } else {
                 anyhow::bail!(
@@ -1187,13 +1302,15 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
         "install_docker_linux" => {
             let output = run_cmd("sh", &["-c", "curl -fsSL https://get.docker.com | sh"])
                 .await
-                .map_err(|e| anyhow::anyhow!(
-                    "The Docker install script failed.\n\n\
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "The Docker install script failed.\n\n\
                      You can try installing manually by running:\n\
                      curl -fsSL https://get.docker.com | sh\n\n\
                      Or see: https://docs.docker.com/engine/install/\n\n\
                      Error: {e}"
-                ))?;
+                    )
+                })?;
             Ok(format!("Docker installed:\n{output}"))
         }
         "start_docker" => {
@@ -1215,15 +1332,15 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             }
             #[cfg(not(target_os = "windows"))]
             {
-                let output = run_cmd("sudo", &["systemctl", "start", "docker"])
-                    .await
-                    .map_err(|e| anyhow::anyhow!(
+                let output = run_cmd("sudo", &["systemctl", "start", "docker"]).await.map_err(|e| {
+                    anyhow::anyhow!(
                         "Failed to start the Docker daemon.\n\n\
                          Try running manually:\n\
                          sudo systemctl start docker\n\n\
                          If Docker is not installed, use the Install button above first.\n\n\
                          Error: {e}"
-                    ))?;
+                    )
+                })?;
                 Ok(format!(
                     "Docker daemon started.{}",
                     if output.is_empty() {
@@ -1240,22 +1357,32 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             match output {
                 Ok(out) => Ok(format!(
                     "Podman socket started (rootless).{}",
-                    if out.is_empty() { String::new() } else { format!("\n{out}") }
+                    if out.is_empty() {
+                        String::new()
+                    } else {
+                        format!("\n{out}")
+                    }
                 )),
                 Err(_) => {
                     let out = run_cmd("sudo", &["systemctl", "start", "podman.socket"])
                         .await
-                        .map_err(|e| anyhow::anyhow!(
-                            "Failed to start the Podman socket.\n\n\
+                        .map_err(|e| {
+                            anyhow::anyhow!(
+                                "Failed to start the Podman socket.\n\n\
                              Try running manually:\n\
                              systemctl --user start podman.socket\n\
                              or: sudo systemctl start podman.socket\n\n\
                              If Podman is not installed, use the Install button above first.\n\n\
                              Error: {e}"
-                        ))?;
+                            )
+                        })?;
                     Ok(format!(
                         "Podman socket started (root).{}",
-                        if out.is_empty() { String::new() } else { format!("\n{out}") }
+                        if out.is_empty() {
+                            String::new()
+                        } else {
+                            format!("\n{out}")
+                        }
                     ))
                 }
             }
@@ -1264,17 +1391,23 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             let user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
             let output = run_cmd("sudo", &["usermod", "-aG", "docker", &user])
                 .await
-                .map_err(|e| anyhow::anyhow!(
-                    "Failed to add your user to the docker group.\n\n\
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to add your user to the docker group.\n\n\
                      Try running manually:\n\
                      sudo usermod -aG docker {user}\n\n\
                      Then log out and back in for the change to take effect.\n\n\
                      Error: {e}"
-                ))?;
+                    )
+                })?;
             Ok(format!(
                 "Added {user} to docker group.\n\n\
                  Important: You need to log out and back in (or restart) for this to take effect.{}",
-                if output.is_empty() { String::new() } else { format!("\n{output}") }
+                if output.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n{output}")
+                }
             ))
         }
         "install_docker" => {
@@ -1301,9 +1434,11 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 // Use the default WSL distro (no -d flag) to avoid UTF-16 distro name issues.
                 // First verify WSL can run a simple command.
                 log.push_str("\n>>> Probing WSL...\n");
-                let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"]).await
-                    .map_err(|e| anyhow::anyhow!(
-                        "No WSL2 Linux distribution found.\n\n\
+                let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"])
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "No WSL2 Linux distribution found.\n\n\
                          To install Docker on Windows, Orca needs a Linux environment via WSL2.\n\n\
                          How to set up WSL2:\n\
                          1. Open the Microsoft Store app\n\
@@ -1313,7 +1448,8 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                          Alternatively, run this in PowerShell (as Administrator):\n\
                          wsl --install -d Ubuntu\n\n\
                          Error details: {e}"
-                    ))?;
+                        )
+                    })?;
 
                 log.push_str(&format!("Probe result: '{}'\n", probe));
 
@@ -1369,7 +1505,11 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 // Install Docker using the official convenience script, running as root.
                 log.push_str("\n>>> Stopping any existing Docker service...\n");
                 let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "stop"]).await;
-                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c", "pkill dockerd 2>/dev/null || true"]).await;
+                let _ = run_cmd(
+                    "wsl",
+                    &["-u", "root", "--", "bash", "-c", "pkill dockerd 2>/dev/null || true"],
+                )
+                .await;
 
                 log.push_str(">>> Downloading Docker install script...\n");
                 match run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
@@ -1383,9 +1523,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 }
 
                 log.push_str("\n>>> Running install script (this takes a while)...\n");
-                match run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "sh /tmp/get-docker.sh 2>&1"
-                ]).await {
+                match run_cmd("wsl", &["-u", "root", "--", "bash", "-c", "sh /tmp/get-docker.sh 2>&1"]).await {
                     Ok(o) => log.push_str(&format!("{o}\n")),
                     Err(e) => {
                         log.push_str(&format!("Install script failed: {e}\n"));
@@ -1438,13 +1576,15 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             {
                 let output = run_cmd("bash", &["-c", "curl -fsSL https://get.docker.com | sh"])
                     .await
-                    .map_err(|e| anyhow::anyhow!(
-                        "The Docker install script failed.\n\n\
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "The Docker install script failed.\n\n\
                          You can try installing manually:\n\
                          curl -fsSL https://get.docker.com | sh\n\n\
                          Or see: https://docs.docker.com/engine/install/\n\n\
                          Error: {e}"
-                    ))?;
+                        )
+                    })?;
                 Ok(format!("Docker installed:\n{output}"))
             }
         }
@@ -1461,21 +1601,20 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             Ok(format!("Homebrew installed:\n{output}"))
         }
         "install_lima" => {
-            let output = run_cmd("brew", &["install", "lima"])
-                .await
-                .map_err(|e| anyhow::anyhow!(
+            let output = run_cmd("brew", &["install", "lima"]).await.map_err(|e| {
+                anyhow::anyhow!(
                     "Failed to install Lima via Homebrew.\n\n\
                      You can try installing manually by running:\n\
                      brew install lima\n\n\
                      Make sure Homebrew is installed first (see https://brew.sh).\n\n\
                      Error: {e}"
-                ))?;
+                )
+            })?;
             Ok(format!("Lima installed:\n{output}"))
         }
         "enable_wsl2" => {
-            let output = run_cmd("wsl", &["--install"])
-                .await
-                .map_err(|e| anyhow::anyhow!(
+            let output = run_cmd("wsl", &["--install"]).await.map_err(|e| {
+                anyhow::anyhow!(
                     "Failed to enable WSL2.\n\n\
                      You can try enabling it manually:\n\
                      1. Open PowerShell as Administrator\n\
@@ -1483,7 +1622,8 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                      3. Restart your computer when prompted\n\n\
                      See: https://learn.microsoft.com/en-us/windows/wsl/install\n\n\
                      Error: {e}"
-                ))?;
+                )
+            })?;
             Ok(format!(
                 "WSL2 installation initiated.\n\n\
                  Important: You may need to restart your computer to complete the setup.\n\
@@ -1510,18 +1650,36 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                  sudo systemctl restart docker"
             ]).await.map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit install failed: {e}"))?;
 
-            Ok(format!("NVIDIA Container Toolkit installed!\n\nRestart any running Ollama containers to use GPU.\n\n{output}"))
+            Ok(format!(
+                "NVIDIA Container Toolkit installed!\n\nRestart any running Ollama containers to use GPU.\n\n{output}"
+            ))
         }
         "install_helm" => {
             #[cfg(target_os = "windows")]
-            let output = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
-            ]).await.map_err(|e| anyhow::anyhow!("Helm install failed: {e}"))?;
+            let output = run_cmd(
+                "wsl",
+                &[
+                    "-u",
+                    "root",
+                    "--",
+                    "bash",
+                    "-c",
+                    "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash",
+                ],
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Helm install failed: {e}"))?;
 
             #[cfg(not(target_os = "windows"))]
-            let output = run_cmd("bash", &["-c",
-                "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | sudo bash"
-            ]).await.map_err(|e| anyhow::anyhow!("Helm install failed: {e}"))?;
+            let output = run_cmd(
+                "bash",
+                &[
+                    "-c",
+                    "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | sudo bash",
+                ],
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Helm install failed: {e}"))?;
 
             Ok(format!("Helm installed!\n\n{output}"))
         }
@@ -1548,10 +1706,18 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             let buildx_ok = run_cmd("docker", &["buildx", "version"]).await.is_ok();
             {
                 let mut pkgs: Vec<&str> = Vec::new();
-                if !lima_ok { pkgs.push("lima"); }
-                if !docker_ok { pkgs.push("docker"); }
-                if !compose_ok { pkgs.push("docker-compose"); }
-                if !buildx_ok { pkgs.push("docker-buildx"); }
+                if !lima_ok {
+                    pkgs.push("lima");
+                }
+                if !docker_ok {
+                    pkgs.push("docker");
+                }
+                if !compose_ok {
+                    pkgs.push("docker-compose");
+                }
+                if !buildx_ok {
+                    pkgs.push("docker-buildx");
+                }
                 if pkgs.is_empty() {
                     output.push_str("Lima, Docker CLI, Compose, and Buildx: installed\n");
                 } else {
@@ -1590,11 +1756,20 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             }
 
             // Create/start Lima VM
-            let vms = run_cmd("limactl", &["list", "--format", "{{.Name}}"]).await.unwrap_or_default();
-            let vm_name = if vms.lines().any(|l| l.trim() == "orca") { "orca" }
-                else if vms.lines().any(|l| l.trim() == "docker") { "docker" }
-                else { "orca" };
-            if !vms.lines().any(|l| l.trim() == "orca" || l.trim() == "docker" || l.trim() == "default") {
+            let vms = run_cmd("limactl", &["list", "--format", "{{.Name}}"])
+                .await
+                .unwrap_or_default();
+            let vm_name = if vms.lines().any(|l| l.trim() == "orca") {
+                "orca"
+            } else if vms.lines().any(|l| l.trim() == "docker") {
+                "docker"
+            } else {
+                "orca"
+            };
+            if !vms
+                .lines()
+                .any(|l| l.trim() == "orca" || l.trim() == "docker" || l.trim() == "default")
+            {
                 output.push_str("Creating Lima VM 'orca'...\n");
                 match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs",
                     "--memory=8", "--cpus=4",
@@ -1611,13 +1786,21 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             let _ = run_cmd("limactl", &["start", vm_name]).await;
 
             // Reboot to activate HWE kernel if needed
-            let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
+            let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
+                .await
+                .unwrap_or_default();
             if kernel_ver.trim().starts_with("6.8.") || kernel_ver.trim().starts_with("6.5.") {
                 output.push_str("Activating HWE kernel (reboot)...\n");
                 let _ = run_cmd("limactl", &["stop", vm_name]).await;
                 let _ = run_cmd("limactl", &["start", vm_name]).await;
-                let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"]).await.unwrap_or_default();
-                output.push_str(&format!("Kernel upgraded: {} → {}\n", kernel_ver.trim(), new_ver.trim()));
+                let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
+                    .await
+                    .unwrap_or_default();
+                output.push_str(&format!(
+                    "Kernel upgraded: {} → {}\n",
+                    kernel_ver.trim(),
+                    new_ver.trim()
+                ));
             }
 
             // Verify
@@ -1639,9 +1822,7 @@ pub async fn check_docker_connection() -> bool {
     // First try via the extended PATH
     let cli = detect_cli().await;
     let mut cmd = Command::new(cli);
-    cmd.args(["info"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+    cmd.args(["info"]).stdout(Stdio::null()).stderr(Stdio::null());
     let path = extended_path();
     cmd.env("PATH", &path);
 
@@ -1802,9 +1983,7 @@ pub async fn get_system_resources() -> Option<SystemResources> {
     // Memory from /proc/meminfo (Linux)
     let (memory_total, memory_available) = if cfg!(target_os = "linux") {
         if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
-            let total = parse_meminfo_kb(&meminfo, "MemTotal:")
-                .map(|kb| kb * 1024)
-                .unwrap_or(0);
+            let total = parse_meminfo_kb(&meminfo, "MemTotal:").map(|kb| kb * 1024).unwrap_or(0);
             let available = parse_meminfo_kb(&meminfo, "MemAvailable:")
                 .map(|kb| kb * 1024)
                 .unwrap_or(0);
@@ -1822,12 +2001,14 @@ pub async fn get_system_resources() -> Option<SystemResources> {
         let available = match run_cmd("vm_stat", &[]).await {
             Ok(output) => {
                 let page_size = 16384u64; // default on Apple Silicon
-                let free_pages = output.lines()
+                let free_pages = output
+                    .lines()
                     .find(|l| l.contains("Pages free"))
                     .and_then(|l| l.split_whitespace().last())
                     .and_then(|s| s.trim_end_matches('.').parse::<u64>().ok())
                     .unwrap_or(0);
-                let inactive_pages = output.lines()
+                let inactive_pages = output
+                    .lines()
                     .find(|l| l.contains("Pages inactive"))
                     .and_then(|l| l.split_whitespace().last())
                     .and_then(|s| s.trim_end_matches('.').parse::<u64>().ok())
@@ -1843,7 +2024,7 @@ pub async fn get_system_resources() -> Option<SystemResources> {
             "Get-CimInstance Win32_OperatingSystem | ForEach-Object { \"$($_.TotalVisibleMemorySize) $($_.FreePhysicalMemory)\" }"
         ]).await {
             Ok(output) => {
-                let parts: Vec<&str> = output.trim().split_whitespace().collect();
+                let parts: Vec<&str> = output.split_whitespace().collect();
                 if parts.len() >= 2 {
                     let total_kb = parts[0].parse::<u64>().unwrap_or(0);
                     let free_kb = parts[1].parse::<u64>().unwrap_or(0);
@@ -1865,7 +2046,7 @@ pub async fn get_system_resources() -> Option<SystemResources> {
             "Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='C:'\" | ForEach-Object { \"$($_.Size) $($_.FreeSpace)\" }"
         ]).await {
             Ok(output) => {
-                let parts: Vec<&str> = output.trim().split_whitespace().collect();
+                let parts: Vec<&str> = output.split_whitespace().collect();
                 if parts.len() >= 2 {
                     let total = parts[0].parse::<u64>().unwrap_or(0);
                     let free = parts[1].parse::<u64>().unwrap_or(0);
@@ -1879,22 +2060,24 @@ pub async fn get_system_resources() -> Option<SystemResources> {
     } else {
         // Linux/macOS: use df -k
         match run_cmd("df", &["-k", "/"]).await {
-        Ok(output) => {
-            let mut total = 0u64;
-            let mut free = 0u64;
-            for (i, line) in output.lines().enumerate() {
-                if i == 0 { continue; }
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 4 {
-                    total = parts[1].parse::<u64>().unwrap_or(0) * 1024; // KB to bytes
-                    free = parts[3].parse::<u64>().unwrap_or(0) * 1024;
+            Ok(output) => {
+                let mut total = 0u64;
+                let mut free = 0u64;
+                for (i, line) in output.lines().enumerate() {
+                    if i == 0 {
+                        continue;
+                    }
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 4 {
+                        total = parts[1].parse::<u64>().unwrap_or(0) * 1024; // KB to bytes
+                        free = parts[3].parse::<u64>().unwrap_or(0) * 1024;
+                    }
+                    break;
                 }
-                break;
+                (total, free)
             }
-            (total, free)
+            Err(_) => (0, 0),
         }
-        Err(_) => (0, 0),
-    }
     };
 
     let disk_usage_percent = if disk_total > 0 {
@@ -1923,7 +2106,7 @@ pub async fn check_system_health() -> SystemHealth {
         run_cmd(cli, &["version", "--format", "{{.Server.Version}}"])
             .await
             .ok()
-            .or_else(|| {
+            .or({
                 // On macOS, the CLI might not be in PATH even though docker is running.
                 // Try to extract version from the socket connection later (via bollard in daemon).
                 None
@@ -1932,17 +2115,16 @@ pub async fn check_system_health() -> SystemHealth {
         None
     };
 
-    let disk = if connected {
-        get_disk_usage().await
-    } else {
-        None
-    };
+    let disk = if connected { get_disk_usage().await } else { None };
 
     let resources = get_system_resources().await;
 
     let mut warnings = Vec::new();
     if !connected {
-        warnings.push(format!("{} is not running or not reachable", if cli == "podman" { "Podman" } else { "Docker" }));
+        warnings.push(format!(
+            "{} is not running or not reachable",
+            if cli == "podman" { "Podman" } else { "Docker" }
+        ));
     }
     if let Some(ref res) = resources {
         if res.disk_usage_percent > 90.0 {
@@ -1952,13 +2134,11 @@ pub async fn check_system_health() -> SystemHealth {
             warnings.push("Less than 512MB memory available".to_string());
         }
     }
-    if let Some(ref du) = disk {
-        if du.reclaimable_bytes > 5 * 1024 * 1024 * 1024 {
-            let gb = du.reclaimable_bytes / (1024 * 1024 * 1024);
-            warnings.push(format!(
-                "{gb}GB of Docker storage is reclaimable — consider pruning"
-            ));
-        }
+    if let Some(ref du) = disk
+        && du.reclaimable_bytes > 5 * 1024 * 1024 * 1024
+    {
+        let gb = du.reclaimable_bytes / (1024 * 1024 * 1024);
+        warnings.push(format!("{gb}GB of Docker storage is reclaimable — consider pruning"));
     }
 
     // GPU info (if NVIDIA GPU available)
@@ -1978,13 +2158,27 @@ pub async fn check_system_health() -> SystemHealth {
 
 async fn get_gpu_info() -> Option<GpuInfo> {
     let output = if cfg!(target_os = "windows") {
-        run_cmd("wsl", &["-u", "root", "--", "nvidia-smi",
-            "--query-gpu=name,memory.used,memory.total,utilization.gpu",
-            "--format=csv,noheader,nounits"]).await
+        run_cmd(
+            "wsl",
+            &[
+                "-u",
+                "root",
+                "--",
+                "nvidia-smi",
+                "--query-gpu=name,memory.used,memory.total,utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+        )
+        .await
     } else {
-        run_cmd("nvidia-smi", &[
-            "--query-gpu=name,memory.used,memory.total,utilization.gpu",
-            "--format=csv,noheader,nounits"]).await
+        run_cmd(
+            "nvidia-smi",
+            &[
+                "--query-gpu=name,memory.used,memory.total,utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+        )
+        .await
     };
 
     let text = output.ok()?;

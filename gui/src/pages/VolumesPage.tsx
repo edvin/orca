@@ -31,7 +31,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       ]);
       setVolumes(result || []);
       setVolumeSizes(sizesResult?.sizes || {});
-    } catch (e) {
+    } catch {
     }
   };
 
@@ -40,11 +40,12 @@ export default function VolumesPage(props: VolumesPageProps) {
   onMount(refresh);
 
   const sorted = () => {
+    const sizes = volumeSizes();
     return sortFn(volumes(), (item, field) => {
       switch (field) {
         case "name": return item.name;
         case "driver": return item.driver;
-        case "size": return volumeSizes()[item.name] ?? -1;
+        case "size": return sizes[item.name] ?? -1;
         case "created": return item.created_at;
         default: return "";
       }

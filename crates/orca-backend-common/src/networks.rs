@@ -1,5 +1,5 @@
-use bollard::network::{ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions};
 use bollard::models::EndpointSettings;
+use bollard::network::{ConnectNetworkOptions, CreateNetworkOptions, DisconnectNetworkOptions};
 
 use orca_core::network::*;
 

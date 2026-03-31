@@ -149,17 +149,16 @@ export default function YamlEditor(props: YamlEditorProps) {
         bracketPairColorization: { enabled: true },
       });
 
+      const initialValue = props.value;
       editorInstance.onDidChangeModelContent(() => {
-        setModified(editorInstance!.getValue() !== props.value);
+        setModified(editorInstance!.getValue() !== initialValue);
       });
 
       // Ctrl+S to save
       editorInstance.addCommand(
         monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
         () => {
-          if (props.onSave && !props.readOnly) {
-            handleSave();
-          }
+          handleSave();
         }
       );
 
@@ -236,7 +235,7 @@ export default function YamlEditor(props: YamlEditorProps) {
               </button>
             </Show>
             <Show when={props.onClose}>
-              <button class="btn btn-sm" onClick={props.onClose} style={{ "font-size": "11px" }}>
+              <button class="btn btn-sm" onClick={() => props.onClose?.()} style={{ "font-size": "11px" }}>
                 Close
               </button>
             </Show>

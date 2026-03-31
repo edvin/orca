@@ -35,7 +35,9 @@ impl DaemonManager {
                     self.kill_existing_daemon().await;
                 }
                 None => {
-                    tracing::info!("Orca daemon already running (version unknown) — restarting to ensure correct version");
+                    tracing::info!(
+                        "Orca daemon already running (version unknown) — restarting to ensure correct version"
+                    );
                     self.kill_existing_daemon().await;
                 }
             }
@@ -55,22 +57,21 @@ impl DaemonManager {
             .map(Stdio::from)
             .unwrap_or_else(|_| Stdio::null());
         let err_file = std::fs::OpenOptions::new()
-            .create(true).append(true).open(&log_path)
+            .create(true)
+            .append(true)
+            .open(&log_path)
             .map(Stdio::from)
             .unwrap_or_else(|_| Stdio::null());
         tracing::info!("Daemon log: {}", log_path.display());
 
         let mut cmd = Command::new(&daemon_path);
-        cmd.stdout(log_file)
-            .stderr(err_file)
-            .kill_on_drop(true);
+        cmd.stdout(log_file).stderr(err_file).kill_on_drop(true);
 
         // On Windows, prevent the daemon from opening a visible console window
         #[cfg(target_os = "windows")]
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
-        let child = cmd.spawn()
-            .map_err(|e| format!("Failed to start daemon: {e}"))?;
+        let child = cmd.spawn().map_err(|e| format!("Failed to start daemon: {e}"))?;
 
         *self.child.lock().map_err(|e| format!("Lock poisoned: {e}"))? = Some(child);
 
@@ -102,10 +103,7 @@ impl DaemonManager {
         if let Some(mut child) = self.child.lock().ok().and_then(|mut guard| guard.take()) {
             tracing::info!("Stopping orca-daemon and waiting for exit");
             let _ = child.start_kill();
-            let _ = tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                child.wait(),
-            ).await;
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await;
             tracing::info!("orca-daemon stopped");
         }
     }
@@ -126,9 +124,7 @@ impl DaemonManager {
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = std::process::Command::new("pkill")
-                .args(["-f", "orca-daemon"])
-                .output();
+            let _ = std::process::Command::new("pkill").args(["-f", "orca-daemon"]).output();
         }
 
         // Wait for the process to fully exit and release the port
@@ -181,7 +177,10 @@ pub fn find_daemon_binary() -> String {
     // 1. Tauri sidecar: the binary is bundled alongside the app
     //    Tauri puts sidecars next to the exe with target triple suffix
     let sidecar_name = if cfg!(target_os = "windows") {
-        format!("orca-daemon-{}.exe", std::env::consts::ARCH.replace("x86_64", "x86_64-pc-windows-msvc"))
+        format!(
+            "orca-daemon-{}.exe",
+            std::env::consts::ARCH.replace("x86_64", "x86_64-pc-windows-msvc")
+        )
     } else if cfg!(target_os = "macos") {
         format!("orca-daemon-{}-apple-darwin", std::env::consts::ARCH)
     } else {
@@ -240,7 +239,8 @@ pub fn find_daemon_binary() -> String {
 
     for path in &dev_paths {
         if path.exists() {
-            return path.canonicalize()
+            return path
+                .canonicalize()
                 .map(|c| c.to_string_lossy().to_string())
                 .unwrap_or_else(|_| path.to_string_lossy().to_string());
         }

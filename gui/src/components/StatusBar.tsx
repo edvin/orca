@@ -2,7 +2,6 @@ import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import type { SystemHealth, ActiveHost } from "../lib/types";
-import { formatBytes } from "../lib/format";
 import { showToast } from "./Toast";
 import { confirm } from "./ConfirmDialog";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning } from "../lib/ollamaSetup";

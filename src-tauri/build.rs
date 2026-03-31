@@ -21,7 +21,10 @@ fn main() {
         // Create an empty stub — enough to pass Tauri's resource check.
         // It will be replaced by the actual daemon binary at build time.
         std::fs::write(&bin_path, b"").ok();
-        println!("cargo:warning=Created stub binary at {}, build the daemon for a real binary", bin_path.display());
+        println!(
+            "cargo:warning=Created stub binary at {}, build the daemon for a real binary",
+            bin_path.display()
+        );
     }
 
     tauri_build::build()

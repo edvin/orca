@@ -37,6 +37,15 @@ base64 = "0.22"
 reqwest = { version = "0.12", features = ["json"] }
 urlencoding = "2"
 
+[workspace.lints.clippy]
+needless_return = "warn"
+redundant_closure = "warn"
+manual_map = "warn"
+single_match = "warn"
+map_unwrap_or = "warn"
+inefficient_to_string = "warn"
+uninlined_format_args = "warn"
+
 [profile.release]
 strip = true
 lto = "thin"

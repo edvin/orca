@@ -23,6 +23,7 @@ pub struct Container {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct PortMapping {
     pub host_port: u16,
     pub container_port: u16,
@@ -30,6 +31,7 @@ pub struct PortMapping {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct Image {
     pub id: String,
     pub repo_tags: Vec<String>,
@@ -52,6 +54,7 @@ pub struct ComposeProject {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ComposeService {
     pub name: String,
     pub container_name: String,
@@ -71,6 +74,7 @@ pub struct ClusterStatus {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct MachineInfo {
     pub name: String,
     pub state: String,
@@ -79,6 +83,7 @@ pub struct MachineInfo {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct MachineConfig {
     pub name: String,
     pub cpus: u32,
@@ -97,17 +102,13 @@ impl DaemonClient {
     /// Create a new client. If `token` is provided it will be used for auth;
     /// otherwise the token is read from the Orca config file.
     pub fn new(base_url: &str, token: Option<String>) -> Self {
-        let token = token.or_else(|| {
-            orca_core::config::OrcaConfig::load()
-                .ok()
-                .and_then(|c| c.api_token)
-        });
+        let token = token.or_else(|| orca_core::config::OrcaConfig::load().ok().and_then(|c| c.api_token));
 
         let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(t) = token {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {t}")) {
-                headers.insert(reqwest::header::AUTHORIZATION, val);
-            }
+        if let Some(t) = token
+            && let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {t}"))
+        {
+            headers.insert(reqwest::header::AUTHORIZATION, val);
         }
 
         let http = reqwest::Client::builder()
@@ -161,21 +162,14 @@ impl DaemonClient {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn remove_container(&self, id: &str) -> anyhow::Result<()> {
-        let resp = self
-            .http
-            .delete(self.url(&format!("/containers/{id}")))
-            .send()
-            .await?;
+        let resp = self.http.delete(self.url(&format!("/containers/{id}"))).send().await?;
         check_status(&resp)?;
         Ok(())
     }
 
-    pub async fn container_logs(
-        &self,
-        id: &str,
-        tail: Option<u32>,
-    ) -> anyhow::Result<Vec<String>> {
+    pub async fn container_logs(&self, id: &str, tail: Option<u32>) -> anyhow::Result<Vec<String>> {
         let mut url = format!("{}/api/v1/containers/{id}/logs?follow=false", self.base_url);
         if let Some(n) = tail {
             url.push_str(&format!("&tail={n}"));
@@ -192,11 +186,7 @@ impl DaemonClient {
         Ok(lines)
     }
 
-    pub async fn exec_container(
-        &self,
-        id: &str,
-        command: Vec<String>,
-    ) -> anyhow::Result<ExecResult> {
+    pub async fn exec_container(&self, id: &str, command: Vec<String>) -> anyhow::Result<ExecResult> {
         let resp = self
             .http
             .post(self.url(&format!("/containers/{id}/exec")))
@@ -228,11 +218,7 @@ impl DaemonClient {
     }
 
     pub async fn remove_image(&self, id: &str) -> anyhow::Result<()> {
-        let resp = self
-            .http
-            .delete(self.url(&format!("/images/{id}")))
-            .send()
-            .await?;
+        let resp = self.http.delete(self.url(&format!("/images/{id}"))).send().await?;
         check_status(&resp)?;
         Ok(())
     }
@@ -252,21 +238,13 @@ impl DaemonClient {
     }
 
     pub async fn stack_up(&self, name: &str) -> anyhow::Result<()> {
-        let resp = self
-            .http
-            .post(self.url(&format!("/stacks/{name}/up")))
-            .send()
-            .await?;
+        let resp = self.http.post(self.url(&format!("/stacks/{name}/up"))).send().await?;
         check_status(&resp)?;
         Ok(())
     }
 
     pub async fn stack_down(&self, name: &str) -> anyhow::Result<()> {
-        let resp = self
-            .http
-            .post(self.url(&format!("/stacks/{name}/down")))
-            .send()
-            .await?;
+        let resp = self.http.post(self.url(&format!("/stacks/{name}/down"))).send().await?;
         check_status(&resp)?;
         Ok(())
     }

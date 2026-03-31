@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
+import { createSignal, createEffect, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth } from "../lib/types";
@@ -42,7 +42,7 @@ export default function EnvironmentPage() {
       if (envRes.status === "rejected" && machineRes.status === "rejected" && healthRes.status === "rejected") {
         setHealth({ docker_connected: false, docker_version: null, disk_usage: null, system_resources: null, warnings: ["Could not reach Docker. The setup wizard below will help you get started."] } as SystemHealth);
       }
-    } catch (e) {
+    } catch {
       // Don't show toast for expected failures during first setup
     } finally {
       setLoading(false);
@@ -176,7 +176,7 @@ export default function EnvironmentPage() {
   const [restartingOrca, setRestartingOrca] = createSignal(false);
   const [restartingDocker, setRestartingDocker] = createSignal(false);
 
-  const restartOrcaDaemon = async () => {
+  const _restartOrcaDaemon = async () => {
     setRestartingOrca(true);
     try {
       showToast("Restarting Orca daemon...", "info");

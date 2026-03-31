@@ -8,8 +8,8 @@
 use std::path::PathBuf;
 use std::process::Stdio;
 
-use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams};
 use kube::Client;
+use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams};
 use tokio::process::Command;
 
 use orca_core::kubernetes::*;
@@ -50,6 +50,12 @@ pub struct K3sManager {
     kubeconfig_override: Option<PathBuf>,
     /// Cached kube client (re-created on failure).
     client: tokio::sync::Mutex<Option<Client>>,
+}
+
+impl Default for K3sManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl K3sManager {
@@ -103,7 +109,8 @@ impl K3sManager {
     /// Always uses --context orca to avoid connecting to the user's remote clusters.
     fn kubectl_command(&self) -> Command {
         let bin = self.kubectl_bin();
-        let cmd = if bin.starts_with("k3s ") {
+
+        if bin.starts_with("k3s ") {
             let mut c = Command::new("k3s");
             c.arg("kubectl");
             c
@@ -113,8 +120,7 @@ impl K3sManager {
             // Use our context (k3s kubectl doesn't need this — it only has one context)
             c.arg("--context").arg(Self::CONTEXT_NAME);
             c
-        };
-        cmd
+        }
     }
 
     /// Our context name in ~/.kube/config
@@ -141,12 +147,16 @@ impl K3sManager {
         // Windows
         if let Ok(profile) = std::env::var("USERPROFILE") {
             let p = PathBuf::from(profile).join(".kube").join("config");
-            if p.exists() { return p; }
+            if p.exists() {
+                return p;
+            }
         }
         // Unix
         if let Some(home) = dirs::home_dir() {
             let p = home.join(".kube").join("config");
-            if p.exists() { return p; }
+            if p.exists() {
+                return p;
+            }
         }
         // Linux native k3s (direct install, not merged yet)
         if PathBuf::from("/etc/rancher/k3s/k3s.yaml").exists() {
@@ -155,7 +165,8 @@ impl K3sManager {
         // Fallback — standard path (won't exist = K8s not enabled)
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("/root"))
-            .join(".kube").join("config")
+            .join(".kube")
+            .join("config")
     }
 
     /// Merge k3s kubeconfig into ~/.kube/config as the "orca" context.
@@ -165,19 +176,39 @@ impl K3sManager {
         let k3s_content = std::fs::read_to_string(k3s_config)?;
 
         // Extract server URL from k3s config (usually https://127.0.0.1:6443)
-        let server = k3s_content.lines()
+        let server = k3s_content
+            .lines()
             .find(|l| l.trim().starts_with("server:"))
-            .map(|l| l.trim().trim_start_matches("server:").trim().trim_matches('"').to_string())
+            .map(|l| {
+                l.trim()
+                    .trim_start_matches("server:")
+                    .trim()
+                    .trim_matches('"')
+                    .to_string()
+            })
             .unwrap_or_else(|| "https://127.0.0.1:6443".to_string());
 
         // Extract certificate-authority-data and client certs from k3s config
-        let ca_data = k3s_content.lines()
+        let ca_data = k3s_content
+            .lines()
             .find(|l| l.trim().starts_with("certificate-authority-data:"))
-            .map(|l| l.trim().trim_start_matches("certificate-authority-data:").trim().to_string());
-        let client_cert = k3s_content.lines()
+            .map(|l| {
+                l.trim()
+                    .trim_start_matches("certificate-authority-data:")
+                    .trim()
+                    .to_string()
+            });
+        let client_cert = k3s_content
+            .lines()
             .find(|l| l.trim().starts_with("client-certificate-data:"))
-            .map(|l| l.trim().trim_start_matches("client-certificate-data:").trim().to_string());
-        let client_key = k3s_content.lines()
+            .map(|l| {
+                l.trim()
+                    .trim_start_matches("client-certificate-data:")
+                    .trim()
+                    .to_string()
+            });
+        let client_key = k3s_content
+            .lines()
             .find(|l| l.trim().starts_with("client-key-data:"))
             .map(|l| l.trim().trim_start_matches("client-key-data:").trim().to_string());
 
@@ -228,7 +259,9 @@ impl K3sManager {
     /// Check if our "orca" context exists in the kubeconfig
     fn has_orca_context(&self) -> bool {
         let path = self.kubeconfig_path();
-        if !path.exists() { return false; }
+        if !path.exists() {
+            return false;
+        }
         let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
         // k3s.yaml is always ours (direct install, not yet merged)
         if filename == "k3s.yaml" {
@@ -253,11 +286,15 @@ impl K3sManager {
             anyhow::bail!("Kubernetes not enabled — no kubeconfig found");
         }
         if !self.has_orca_context() {
-            anyhow::bail!("Kubernetes not enabled — no 'orca' context in kubeconfig. Enable Kubernetes from the Orca UI.");
+            anyhow::bail!(
+                "Kubernetes not enabled — no 'orca' context in kubeconfig. Enable Kubernetes from the Orca UI."
+            );
         }
 
-        let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path)
-            .map_err(|e| { tracing::warn!("K8s: failed to parse kubeconfig: {e}"); e })?;
+        let kubeconfig = kube::config::Kubeconfig::read_from(&kubeconfig_path).map_err(|e| {
+            tracing::warn!("K8s: failed to parse kubeconfig: {e}");
+            e
+        })?;
 
         // Use our "orca" context, or default for k3s.yaml (direct install)
         let filename = kubeconfig_path.file_name().and_then(|f| f.to_str()).unwrap_or("");
@@ -273,10 +310,7 @@ impl K3sManager {
         };
 
         // Try to create a client from kubeconfig with our specific context
-        let config = match kube::Config::from_custom_kubeconfig(
-            kubeconfig.clone(),
-            &kube_opts,
-        ).await {
+        let config = match kube::Config::from_custom_kubeconfig(kubeconfig.clone(), &kube_opts).await {
             Ok(config) => config,
             Err(e) => {
                 let err_str = e.to_string();
@@ -285,8 +319,10 @@ impl K3sManager {
                     // Try inferring config from the cluster/user data directly
                     tracing::warn!("K8s: exec auth failed ({e}), trying in-cluster or default config");
                     // Try the default config which handles more auth methods
-                    kube::Config::infer().await
-                        .map_err(|e2| { tracing::warn!("K8s: infer config also failed: {e2}"); e })?
+                    kube::Config::infer().await.map_err(|e2| {
+                        tracing::warn!("K8s: infer config also failed: {e2}");
+                        e
+                    })?
                 } else {
                     tracing::warn!("K8s: failed to create config from kubeconfig: {e}");
                     return Err(e.into());
@@ -294,8 +330,10 @@ impl K3sManager {
             }
         };
 
-        let client = Client::try_from(config)
-            .map_err(|e| { tracing::warn!("K8s: failed to create client: {e}"); e })?;
+        let client = Client::try_from(config).map_err(|e| {
+            tracing::warn!("K8s: failed to create client: {e}");
+            e
+        })?;
         tracing::info!("K8s: client created successfully");
         *cached = Some(client.clone());
         Ok(client)
@@ -323,16 +361,24 @@ impl K3sManager {
                 pod_cmd.args(["get", "pods", "-A", "--no-headers"]);
                 let (pods_r, pods_t) = if let Ok(pod_out) = pod_cmd.output().await {
                     let pod_text = String::from_utf8_lossy(&pod_out.stdout);
-                    (pod_text.lines().filter(|l| l.contains("Running")).count() as u32,
-                     pod_text.lines().count() as u32)
-                } else { (0, 0) };
+                    (
+                        pod_text.lines().filter(|l| l.contains("Running")).count() as u32,
+                        pod_text.lines().count() as u32,
+                    )
+                } else {
+                    (0, 0)
+                };
 
                 return Ok(ClusterStatus {
                     enabled: true,
                     running: ready,
                     version: if version.is_empty() { None } else { Some(version) },
                     node_name: if node_name.is_empty() { None } else { Some(node_name) },
-                    node_status: if ready { Some("Ready".to_string()) } else { Some("NotReady".to_string()) },
+                    node_status: if ready {
+                        Some("Ready".to_string())
+                    } else {
+                        Some("NotReady".to_string())
+                    },
                     pods_running: pods_r,
                     pods_total: pods_t,
                     traefik_dashboard: None,
@@ -344,8 +390,12 @@ impl K3sManager {
         Ok(ClusterStatus {
             enabled: true,
             running: false,
-            version: None, node_name: None, node_status: None,
-            pods_running: 0, pods_total: 0, traefik_dashboard: None,
+            version: None,
+            node_name: None,
+            node_status: None,
+            pods_running: 0,
+            pods_total: 0,
+            traefik_dashboard: None,
             error: Some("Kubernetes detected but not reachable — check your cluster".to_string()),
         })
     }
@@ -474,10 +524,7 @@ impl K3sManager {
 
         // Step 2: Start k3s
         log.push_str(">>> Starting k3s server...\n");
-        let systemd_result = Command::new("systemctl")
-            .args(["start", "k3s"])
-            .output()
-            .await;
+        let systemd_result = Command::new("systemctl").args(["start", "k3s"]).output().await;
 
         match &systemd_result {
             Ok(o) if o.status.success() => {
@@ -524,7 +571,10 @@ impl K3sManager {
             if let Ok(client) = self.get_client().await {
                 match client.apiserver_version().await {
                     Ok(ver) => {
-                        log.push_str(&format!("    API server ready — Kubernetes v{}.{}\n\n", ver.major, ver.minor));
+                        log.push_str(&format!(
+                            "    API server ready — Kubernetes v{}.{}\n\n",
+                            ver.major, ver.minor
+                        ));
 
                         // Step 4: Enable Traefik dashboard
                         log.push_str(">>> Enabling Traefik dashboard...\n");
@@ -555,7 +605,9 @@ impl K3sManager {
 
         let send = |msg: String| {
             let tx = tx.clone();
-            async move { let _ = tx.send(msg).await; }
+            async move {
+                let _ = tx.send(msg).await;
+            }
         };
 
         // Platform check
@@ -570,7 +622,9 @@ impl K3sManager {
             "linux"
         } else {
             // Runtime fallback: check for WSL
-            if std::env::var("WSL_DISTRO_NAME").is_ok() || std::path::Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists() {
+            if std::env::var("WSL_DISTRO_NAME").is_ok()
+                || std::path::Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+            {
                 "linux"
             } else {
                 "unsupported"
@@ -620,8 +674,11 @@ impl K3sManager {
                                 // Copy kubeconfig from VM
                                 send(">>> Copying kubeconfig...".into()).await;
                                 match crate::environment::run_cmd(
-                                    "limactl", &["shell", vm, "sudo", "cat", "/etc/rancher/k3s/k3s.yaml"]
-                                ).await {
+                                    "limactl",
+                                    &["shell", vm, "sudo", "cat", "/etc/rancher/k3s/k3s.yaml"],
+                                )
+                                .await
+                                {
                                     Ok(kubeconfig) => {
                                         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
                                         let kube_dir = format!("{home}/.kube");
@@ -641,22 +698,65 @@ impl K3sManager {
                                             .env("PATH", Self::extended_path())
                                             .args(["--kubeconfig", &tmp_path, "config", "view", "--raw", "-o", "json"])
                                             .output()
-                                            .and_then(|o| {
-                                                if o.status.success() {
-                                                    if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&o.stdout) {
-                                                        let server = v["clusters"][0]["cluster"]["server"].as_str().unwrap_or("https://localhost:6443");
-                                                        let ca = v["clusters"][0]["cluster"]["certificate-authority-data"].as_str().unwrap_or("");
-                                                        let cert = v["users"][0]["user"]["client-certificate-data"].as_str().unwrap_or("");
-                                                        let key = v["users"][0]["user"]["client-key-data"].as_str().unwrap_or("");
+                                            .inspect(|o| {
+                                                if o.status.success()
+                                                    && let Ok(v) =
+                                                        serde_json::from_slice::<serde_json::Value>(&o.stdout)
+                                                {
+                                                    let server = v["clusters"][0]["cluster"]["server"]
+                                                        .as_str()
+                                                        .unwrap_or("https://localhost:6443");
+                                                    let ca = v["clusters"][0]["cluster"]["certificate-authority-data"]
+                                                        .as_str()
+                                                        .unwrap_or("");
+                                                    let cert = v["users"][0]["user"]["client-certificate-data"]
+                                                        .as_str()
+                                                        .unwrap_or("");
+                                                    let key =
+                                                        v["users"][0]["user"]["client-key-data"].as_str().unwrap_or("");
 
-                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set-cluster", "orca", &format!("--server={server}")]).output();
-                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set", "clusters.orca.certificate-authority-data", ca]).output();
-                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set", "users.orca.client-certificate-data", cert]).output();
-                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set", "users.orca.client-key-data", key]).output();
-                                                        let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path()).args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"]).output();
-                                                    }
+                                                    let _ = std::process::Command::new("kubectl")
+                                                        .env("PATH", Self::extended_path())
+                                                        .args([
+                                                            "config",
+                                                            "set-cluster",
+                                                            "orca",
+                                                            &format!("--server={server}"),
+                                                        ])
+                                                        .output();
+                                                    let _ = std::process::Command::new("kubectl")
+                                                        .env("PATH", Self::extended_path())
+                                                        .args([
+                                                            "config",
+                                                            "set",
+                                                            "clusters.orca.certificate-authority-data",
+                                                            ca,
+                                                        ])
+                                                        .output();
+                                                    let _ = std::process::Command::new("kubectl")
+                                                        .env("PATH", Self::extended_path())
+                                                        .args([
+                                                            "config",
+                                                            "set",
+                                                            "users.orca.client-certificate-data",
+                                                            cert,
+                                                        ])
+                                                        .output();
+                                                    let _ = std::process::Command::new("kubectl")
+                                                        .env("PATH", Self::extended_path())
+                                                        .args(["config", "set", "users.orca.client-key-data", key])
+                                                        .output();
+                                                    let _ = std::process::Command::new("kubectl")
+                                                        .env("PATH", Self::extended_path())
+                                                        .args([
+                                                            "config",
+                                                            "set-context",
+                                                            "orca",
+                                                            "--cluster=orca",
+                                                            "--user=orca",
+                                                        ])
+                                                        .output();
                                                 }
-                                                Ok(o)
                                             });
                                         let _ = std::fs::remove_file(&tmp_path);
 
@@ -671,8 +771,11 @@ impl K3sManager {
                                                 send("Use: kubectl --context orca get pods".into()).await;
                                             }
                                             _ => {
-                                                send("Warning: 'orca' context may not be properly configured".into()).await;
-                                                tracing::warn!("kubectl --context orca cluster-info failed after kubeconfig merge");
+                                                send("Warning: 'orca' context may not be properly configured".into())
+                                                    .await;
+                                                tracing::warn!(
+                                                    "kubectl --context orca cluster-info failed after kubeconfig merge"
+                                                );
                                             }
                                         }
 
@@ -689,14 +792,16 @@ impl K3sManager {
                                 for i in 0..60 {
                                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                                     if let Ok(output) = crate::environment::run_cmd(
-                                        "limactl", &["shell", vm, "sudo", "k3s", "kubectl", "get", "nodes"]
-                                    ).await {
-                                        if output.contains("Ready") {
-                                            send(format!("    Cluster ready!\n\n{output}")).await;
-                                            send("".into()).await;
-                                            send(">>> Kubernetes is ready in your Lima VM.".into()).await;
-                                            return Ok(());
-                                        }
+                                        "limactl",
+                                        &["shell", vm, "sudo", "k3s", "kubectl", "get", "nodes"],
+                                    )
+                                    .await
+                                        && output.contains("Ready")
+                                    {
+                                        send(format!("    Cluster ready!\n\n{output}")).await;
+                                        send("".into()).await;
+                                        send(">>> Kubernetes is ready in your Lima VM.".into()).await;
+                                        return Ok(());
                                     }
                                     if i % 5 == 4 {
                                         send(format!("    Waiting... ({i}s)")).await;
@@ -750,10 +855,7 @@ impl K3sManager {
 
             // Check WSL is available
             send(">>> Checking WSL2...".into()).await;
-            let wsl_check = Command::new("wsl")
-                .args(["--status"])
-                .output()
-                .await;
+            let wsl_check = Command::new("wsl").args(["--status"]).output().await;
 
             if wsl_check.is_err() || !wsl_check.as_ref().unwrap().status.success() {
                 send("WSL2 is not installed or not running.".into()).await;
@@ -813,7 +915,8 @@ impl K3sManager {
             match kubeconfig_result {
                 Ok(output) if output.status.success() => {
                     let kubeconfig = String::from_utf8_lossy(&output.stdout).to_string();
-                    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| "C:\\Users\\Default".into()));
+                    let home = std::env::var("USERPROFILE")
+                        .unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| "C:\\Users\\Default".into()));
                     let kube_dir = format!("{home}\\.kube");
                     let _ = std::fs::create_dir_all(&kube_dir);
 
@@ -834,21 +937,35 @@ impl K3sManager {
                         .and_then(|o| {
                             if o.status.success() {
                                 if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&o.stdout) {
-                                    let server = v["clusters"][0]["cluster"]["server"].as_str().unwrap_or("https://localhost:6443");
-                                    let ca = v["clusters"][0]["cluster"]["certificate-authority-data"].as_str().unwrap_or("");
+                                    let server = v["clusters"][0]["cluster"]["server"]
+                                        .as_str()
+                                        .unwrap_or("https://localhost:6443");
+                                    let ca = v["clusters"][0]["cluster"]["certificate-authority-data"]
+                                        .as_str()
+                                        .unwrap_or("");
                                     let cert = v["users"][0]["user"]["client-certificate-data"].as_str().unwrap_or("");
                                     let key = v["users"][0]["user"]["client-key-data"].as_str().unwrap_or("");
 
-                                    let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path())
-                                        .args(["config", "set-cluster", "orca", &format!("--server={server}")]).output();
-                                    let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path())
-                                        .args(["config", "set", "clusters.orca.certificate-authority-data", ca]).output();
-                                    let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path())
-                                        .args(["config", "set", "users.orca.client-certificate-data", cert]).output();
-                                    let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path())
-                                        .args(["config", "set", "users.orca.client-key-data", key]).output();
-                                    let _ = std::process::Command::new("kubectl").env("PATH", Self::extended_path())
-                                        .args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"]).output();
+                                    let _ = std::process::Command::new("kubectl")
+                                        .env("PATH", Self::extended_path())
+                                        .args(["config", "set-cluster", "orca", &format!("--server={server}")])
+                                        .output();
+                                    let _ = std::process::Command::new("kubectl")
+                                        .env("PATH", Self::extended_path())
+                                        .args(["config", "set", "clusters.orca.certificate-authority-data", ca])
+                                        .output();
+                                    let _ = std::process::Command::new("kubectl")
+                                        .env("PATH", Self::extended_path())
+                                        .args(["config", "set", "users.orca.client-certificate-data", cert])
+                                        .output();
+                                    let _ = std::process::Command::new("kubectl")
+                                        .env("PATH", Self::extended_path())
+                                        .args(["config", "set", "users.orca.client-key-data", key])
+                                        .output();
+                                    let _ = std::process::Command::new("kubectl")
+                                        .env("PATH", Self::extended_path())
+                                        .args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"])
+                                        .output();
                                 }
                             }
                             Ok(o)
@@ -921,10 +1038,7 @@ impl K3sManager {
 
         // Step 2: Start k3s
         send(">>> Starting k3s server...".into()).await;
-        let systemd_result = Command::new("systemctl")
-            .args(["start", "k3s"])
-            .output()
-            .await;
+        let systemd_result = Command::new("systemctl").args(["start", "k3s"]).output().await;
 
         match &systemd_result {
             Ok(o) if o.status.success() => {
@@ -962,7 +1076,11 @@ impl K3sManager {
             if let Ok(client) = self.get_client().await {
                 match client.apiserver_version().await {
                     Ok(ver) => {
-                        send(format!("    API server ready — Kubernetes v{}.{}\n", ver.major, ver.minor)).await;
+                        send(format!(
+                            "    API server ready — Kubernetes v{}.{}\n",
+                            ver.major, ver.minor
+                        ))
+                        .await;
 
                         // Step 4: Enable Traefik dashboard
                         send(">>> Enabling Traefik dashboard...".into()).await;
@@ -995,10 +1113,7 @@ impl K8sManager for K3sManager {
         }
 
         // Start k3s via systemd if available, otherwise direct
-        let systemd_result = Command::new("systemctl")
-            .args(["start", "k3s"])
-            .status()
-            .await;
+        let systemd_result = Command::new("systemctl").args(["start", "k3s"]).status().await;
 
         if systemd_result.is_err() || !systemd_result.as_ref().is_ok_and(|s| s.success()) {
             // Fallback: start k3s directly in background
@@ -1012,17 +1127,16 @@ impl K8sManager for K3sManager {
         // Wait for k3s to become ready
         for _ in 0..60 {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            if self.kubeconfig_path().exists() {
-                if let Ok(client) = self.get_client().await {
-                    if let Ok(_) = client.apiserver_version().await.map(|_| ()) {
-                        tracing::info!("k3s cluster is ready");
+            if self.kubeconfig_path().exists()
+                && let Ok(client) = self.get_client().await
+                && let Ok(_) = client.apiserver_version().await.map(|_| ())
+            {
+                tracing::info!("k3s cluster is ready");
 
-                        // Enable Traefik dashboard
-                        self.enable_traefik_dashboard().await.ok();
+                // Enable Traefik dashboard
+                self.enable_traefik_dashboard().await.ok();
 
-                        return Ok(());
-                    }
-                }
+                return Ok(());
             }
         }
 
@@ -1031,10 +1145,7 @@ impl K8sManager for K3sManager {
 
     async fn disable(&self) -> anyhow::Result<()> {
         // Try systemd first
-        let _ = Command::new("systemctl")
-            .args(["stop", "k3s"])
-            .status()
-            .await;
+        let _ = Command::new("systemctl").args(["stop", "k3s"]).status().await;
 
         // Also try k3s-killall.sh which k3s installs
         let _ = Command::new("sh")
@@ -1084,8 +1195,14 @@ impl K8sManager for K3sManager {
             tracing::info!("K8s status: checking via WSL kubectl...");
             // Ensure k3s is running
             let _ = Command::new("wsl")
-                .args(["-u", "root", "--", "bash", "-c",
-                    "systemctl start k3s 2>/dev/null || service k3s start 2>/dev/null || true"])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "bash",
+                    "-c",
+                    "systemctl start k3s 2>/dev/null || service k3s start 2>/dev/null || true",
+                ])
                 .output()
                 .await;
 
@@ -1130,8 +1247,12 @@ impl K8sManager for K3sManager {
             return Ok(ClusterStatus {
                 enabled: self.is_k3s_installed().await,
                 running: false,
-                version: None, node_name: None, node_status: None,
-                pods_running: 0, pods_total: 0, traefik_dashboard: None,
+                version: None,
+                node_name: None,
+                node_status: None,
+                pods_running: 0,
+                pods_total: 0,
+                traefik_dashboard: None,
                 error: Some("Could not reach k3s via WSL".to_string()),
             });
         }
@@ -1141,7 +1262,11 @@ impl K8sManager for K3sManager {
         {
             let kubeconfig_path = self.kubeconfig_path();
             let has_context = self.has_orca_context();
-            tracing::info!("K8s status: kubeconfig={}, has_orca_context={}", kubeconfig_path.display(), has_context);
+            tracing::info!(
+                "K8s status: kubeconfig={}, has_orca_context={}",
+                kubeconfig_path.display(),
+                has_context
+            );
 
             if !kubeconfig_path.exists() || !has_context {
                 let installed = self.is_k3s_installed().await;
@@ -1175,44 +1300,85 @@ impl K8sManager for K3sManager {
             }
 
             let version = if running {
-                client.apiserver_version().await.ok().map(|v| format!("v{}.{}", v.major, v.minor))
-            } else { None };
+                client
+                    .apiserver_version()
+                    .await
+                    .ok()
+                    .map(|v| format!("v{}.{}", v.major, v.minor))
+            } else {
+                None
+            };
 
             let (node_name, node_status) = if running {
                 let nodes: Api<k8s_openapi::api::core::v1::Node> = Api::all(client.clone());
-                nodes.list(&ListParams::default()).await.ok()
-                    .and_then(|list| list.items.first().map(|n| {
-                        let name = n.metadata.name.clone().unwrap_or_default();
-                        let status = n.status.as_ref()
-                            .and_then(|s| s.conditions.as_ref())
-                            .and_then(|conds| conds.iter().find(|c| c.type_ == "Ready")
-                                .map(|c| if c.status == "True" { "Ready".to_string() } else { "NotReady".to_string() }))
-                            .unwrap_or_else(|| "Unknown".to_string());
-                        (name, status)
-                    }))
+                nodes
+                    .list(&ListParams::default())
+                    .await
+                    .ok()
+                    .and_then(|list| {
+                        list.items.first().map(|n| {
+                            let name = n.metadata.name.clone().unwrap_or_default();
+                            let status = n
+                                .status
+                                .as_ref()
+                                .and_then(|s| s.conditions.as_ref())
+                                .and_then(|conds| {
+                                    conds.iter().find(|c| c.type_ == "Ready").map(|c| {
+                                        if c.status == "True" {
+                                            "Ready".to_string()
+                                        } else {
+                                            "NotReady".to_string()
+                                        }
+                                    })
+                                })
+                                .unwrap_or_else(|| "Unknown".to_string());
+                            (name, status)
+                        })
+                    })
                     .map(|(n, s)| (Some(n), Some(s)))
                     .unwrap_or((None, None))
-            } else { (None, None) };
+            } else {
+                (None, None)
+            };
 
             let (pods_running, pods_total) = if running {
                 let pods: Api<k8s_openapi::api::core::v1::Pod> = Api::all(client.clone());
-                pods.list(&ListParams::default()).await.ok()
+                pods.list(&ListParams::default())
+                    .await
+                    .ok()
                     .map(|list| {
                         let total = list.items.len() as u32;
-                        let r = list.items.iter()
+                        let r = list
+                            .items
+                            .iter()
                             .filter(|p| p.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Running"))
                             .count() as u32;
                         (r, total)
                     })
                     .unwrap_or((0, 0))
-            } else { (0, 0) };
+            } else {
+                (0, 0)
+            };
 
-            return Ok(ClusterStatus {
-                enabled: true, running, version, node_name, node_status,
-                pods_running, pods_total,
-                traefik_dashboard: if running { Some("http://127.0.0.1:9000/dashboard/".to_string()) } else { None },
-                error: if !running { Some("Kubernetes API server not reachable".to_string()) } else { None },
-            });
+            Ok(ClusterStatus {
+                enabled: true,
+                running,
+                version,
+                node_name,
+                node_status,
+                pods_running,
+                pods_total,
+                traefik_dashboard: if running {
+                    Some("http://127.0.0.1:9000/dashboard/".to_string())
+                } else {
+                    None
+                },
+                error: if !running {
+                    Some("Kubernetes API server not reachable".to_string())
+                } else {
+                    None
+                },
+            })
         }
     }
 
@@ -1227,11 +1393,9 @@ impl K8sManager for K3sManager {
     async fn install_kubeconfig(&self) -> anyhow::Result<PathBuf> {
         let source = self.kubeconfig().await?;
         // Replace 127.0.0.1:6443 server address if needed
-        let kubeconfig = source.replace("127.0.0.1", "127.0.0.1");
+        let kubeconfig = source;
 
-        let dest = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".kube");
+        let dest = dirs::home_dir().unwrap_or_default().join(".kube");
         tokio::fs::create_dir_all(&dest).await?;
 
         let dest_file = dest.join("config");
@@ -1250,7 +1414,12 @@ impl K8sManager for K3sManager {
             .env("KUBECONFIG", &merge_env)
             .args(["config", "view", "--flatten"])
             .output()
-            .and_then(|o| { if o.status.success() { std::fs::write(&dest_file, &o.stdout)?; } Ok(o) });
+            .and_then(|o| {
+                if o.status.success() {
+                    std::fs::write(&dest_file, &o.stdout)?;
+                }
+                Ok(o)
+            });
         let _ = std::process::Command::new("kubectl")
             .env("PATH", Self::extended_path())
             .args(["config", "rename-context", "default", "orca"])
@@ -1269,13 +1438,14 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "namespaces"]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|ns: &serde_json::Value| {
-                Namespace {
+            return Ok(items
+                .iter()
+                .map(|ns: &serde_json::Value| Namespace {
                     name: ns["metadata"]["name"].as_str().unwrap_or("").to_string(),
                     status: ns["status"]["phase"].as_str().unwrap_or("Active").to_string(),
                     age: ns["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -1283,12 +1453,20 @@ impl K8sManager for K3sManager {
             let client = self.get_client().await?;
             let api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(client.clone());
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|ns| {
-                let name = ns.metadata.name.clone().unwrap_or_default();
-                let status = ns.status.as_ref().and_then(|s| s.phase.clone()).unwrap_or_else(|| "Active".to_string());
-                let age = format_k8s_age(&ns.metadata.creation_timestamp);
-                Namespace { name, status, age }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|ns| {
+                    let name = ns.metadata.name.clone().unwrap_or_default();
+                    let status = ns
+                        .status
+                        .as_ref()
+                        .and_then(|s| s.phase.clone())
+                        .unwrap_or_else(|| "Active".to_string());
+                    let age = format_k8s_age(&ns.metadata.creation_timestamp);
+                    Namespace { name, status, age }
+                })
+                .collect())
         }
     }
 
@@ -1298,65 +1476,64 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "pods", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|p: &serde_json::Value| {
-                let name = p["metadata"]["name"].as_str().unwrap_or("").to_string();
-                let phase = p["status"]["phase"].as_str().unwrap_or("Unknown").to_string();
+            return Ok(items
+                .iter()
+                .map(|p: &serde_json::Value| {
+                    let name = p["metadata"]["name"].as_str().unwrap_or("").to_string();
+                    let phase = p["status"]["phase"].as_str().unwrap_or("Unknown").to_string();
 
-                let empty_containers: Vec<serde_json::Value> = vec![];
-                let container_statuses = p["status"]["containerStatuses"]
-                    .as_array()
-                    .unwrap_or(&empty_containers);
+                    let empty_containers: Vec<serde_json::Value> = vec![];
+                    let container_statuses = p["status"]["containerStatuses"].as_array().unwrap_or(&empty_containers);
 
-                let ready_count = container_statuses
-                    .iter()
-                    .filter(|c: &&serde_json::Value| c["ready"].as_bool().unwrap_or(false))
-                    .count();
+                    let ready_count = container_statuses
+                        .iter()
+                        .filter(|c: &&serde_json::Value| c["ready"].as_bool().unwrap_or(false))
+                        .count();
 
-                let spec_containers = p["spec"]["containers"]
-                    .as_array()
-                    .unwrap_or(&empty_containers);
-                let total_count = spec_containers.len();
+                    let spec_containers = p["spec"]["containers"].as_array().unwrap_or(&empty_containers);
+                    let total_count = spec_containers.len();
 
-                let restarts: u32 = container_statuses
-                    .iter()
-                    .map(|c: &serde_json::Value| c["restartCount"].as_u64().unwrap_or(0) as u32)
-                    .sum();
+                    let restarts: u32 = container_statuses
+                        .iter()
+                        .map(|c: &serde_json::Value| c["restartCount"].as_u64().unwrap_or(0) as u32)
+                        .sum();
 
-                let containers: Vec<PodContainer> = container_statuses
-                    .iter()
-                    .map(|cs: &serde_json::Value| {
-                        let state = if cs["state"]["running"].is_object() {
-                            "Running"
-                        } else if cs["state"]["waiting"].is_object() {
-                            "Waiting"
-                        } else if cs["state"]["terminated"].is_object() {
-                            "Terminated"
-                        } else {
-                            "Unknown"
-                        };
-                        PodContainer {
-                            name: cs["name"].as_str().unwrap_or("").to_string(),
-                            image: cs["image"].as_str().unwrap_or("").to_string(),
-                            ready: cs["ready"].as_bool().unwrap_or(false),
-                            restart_count: cs["restartCount"].as_u64().unwrap_or(0) as u32,
-                            state: state.to_string(),
-                        }
-                    })
-                    .collect();
+                    let containers: Vec<PodContainer> = container_statuses
+                        .iter()
+                        .map(|cs: &serde_json::Value| {
+                            let state = if cs["state"]["running"].is_object() {
+                                "Running"
+                            } else if cs["state"]["waiting"].is_object() {
+                                "Waiting"
+                            } else if cs["state"]["terminated"].is_object() {
+                                "Terminated"
+                            } else {
+                                "Unknown"
+                            };
+                            PodContainer {
+                                name: cs["name"].as_str().unwrap_or("").to_string(),
+                                image: cs["image"].as_str().unwrap_or("").to_string(),
+                                ready: cs["ready"].as_bool().unwrap_or(false),
+                                restart_count: cs["restartCount"].as_u64().unwrap_or(0) as u32,
+                                state: state.to_string(),
+                            }
+                        })
+                        .collect();
 
-                let age = p["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string();
-                Pod {
-                    name,
-                    namespace: namespace.to_string(),
-                    status: phase,
-                    ready: format!("{ready_count}/{total_count}"),
-                    restarts,
-                    age,
-                    node: p["spec"]["nodeName"].as_str().map(|s: &str| s.to_string()),
-                    ip: p["status"]["podIP"].as_str().map(|s: &str| s.to_string()),
-                    containers,
-                }
-            }).collect());
+                    let age = p["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string();
+                    Pod {
+                        name,
+                        namespace: namespace.to_string(),
+                        status: phase,
+                        ready: format!("{ready_count}/{total_count}"),
+                        restarts,
+                        age,
+                        node: p["spec"]["nodeName"].as_str().map(|s: &str| s.to_string()),
+                        ip: p["status"]["podIP"].as_str().map(|s: &str| s.to_string()),
+                        containers,
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -1374,26 +1551,36 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "deployments", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|d: &serde_json::Value| {
-                let name = d["metadata"]["name"].as_str().unwrap_or("").to_string();
-                let replicas_ready = d["status"]["readyReplicas"].as_u64().unwrap_or(0) as u32;
-                let replicas_desired = d["spec"]["replicas"].as_u64().unwrap_or(1) as u32;
-                let age = d["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string();
-                let empty_containers: Vec<serde_json::Value> = vec![];
-                let images: Vec<String> = d["spec"]["template"]["spec"]["containers"].as_array()
-                    .unwrap_or(&empty_containers)
-                    .iter()
-                    .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
-                    .collect();
-                Deployment { name, namespace: namespace.to_string(), replicas_ready, replicas_desired, age, images }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|d: &serde_json::Value| {
+                    let name = d["metadata"]["name"].as_str().unwrap_or("").to_string();
+                    let replicas_ready = d["status"]["readyReplicas"].as_u64().unwrap_or(0) as u32;
+                    let replicas_desired = d["spec"]["replicas"].as_u64().unwrap_or(1) as u32;
+                    let age = d["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string();
+                    let empty_containers: Vec<serde_json::Value> = vec![];
+                    let images: Vec<String> = d["spec"]["template"]["spec"]["containers"]
+                        .as_array()
+                        .unwrap_or(&empty_containers)
+                        .iter()
+                        .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
+                        .collect();
+                    Deployment {
+                        name,
+                        namespace: namespace.to_string(),
+                        replicas_ready,
+                        replicas_desired,
+                        age,
+                        images,
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::Deployment> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::Deployment> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
 
             Ok(list
@@ -1403,22 +1590,13 @@ impl K8sManager for K3sManager {
                     let name = d.metadata.name.clone().unwrap_or_default();
                     let status = d.status.as_ref();
                     let replicas_ready = status.and_then(|s| s.ready_replicas).unwrap_or(0) as u32;
-                    let replicas_desired = d
-                        .spec
-                        .as_ref()
-                        .and_then(|s| s.replicas)
-                        .unwrap_or(1) as u32;
+                    let replicas_desired = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1) as u32;
                     let age = format_k8s_age(&d.metadata.creation_timestamp);
                     let images = d
                         .spec
                         .as_ref()
                         .and_then(|s| s.template.spec.as_ref())
-                        .map(|spec| {
-                            spec.containers
-                                .iter()
-                                .filter_map(|c| c.image.clone())
-                                .collect()
-                        })
+                        .map(|spec| spec.containers.iter().filter_map(|c| c.image.clone()).collect())
                         .unwrap_or_default();
 
                     Deployment {
@@ -1440,43 +1618,48 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "services", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|svc: &serde_json::Value| {
-                let empty_ports: Vec<serde_json::Value> = vec![];
-                let ports: Vec<ServicePort> = svc["spec"]["ports"].as_array()
-                    .unwrap_or(&empty_ports)
-                    .iter()
-                    .map(|p: &serde_json::Value| ServicePort {
-                        name: p["name"].as_str().map(|s: &str| s.to_string()),
-                        port: p["port"].as_i64().unwrap_or(0) as i32,
-                        target_port: p["targetPort"].as_i64()
-                            .map(|i: i64| i.to_string())
-                            .or_else(|| p["targetPort"].as_str().map(|s: &str| s.to_string()))
-                            .unwrap_or_default(),
-                        node_port: p["nodePort"].as_i64().map(|n: i64| n as i32),
-                        protocol: p["protocol"].as_str().unwrap_or("TCP").to_string(),
-                    })
-                    .collect();
-                let external_ip = svc["status"]["loadBalancer"]["ingress"].as_array()
-                    .and_then(|ing: &Vec<serde_json::Value>| ing.first())
-                    .and_then(|i: &serde_json::Value| i["ip"].as_str())
-                    .map(|s: &str| s.to_string());
-                Service {
-                    name: svc["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    namespace: namespace.to_string(),
-                    service_type: svc["spec"]["type"].as_str().unwrap_or("ClusterIP").to_string(),
-                    cluster_ip: svc["spec"]["clusterIP"].as_str().map(|s: &str| s.to_string()),
-                    external_ip,
-                    ports,
-                    age: svc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|svc: &serde_json::Value| {
+                    let empty_ports: Vec<serde_json::Value> = vec![];
+                    let ports: Vec<ServicePort> = svc["spec"]["ports"]
+                        .as_array()
+                        .unwrap_or(&empty_ports)
+                        .iter()
+                        .map(|p: &serde_json::Value| ServicePort {
+                            name: p["name"].as_str().map(|s: &str| s.to_string()),
+                            port: p["port"].as_i64().unwrap_or(0) as i32,
+                            target_port: p["targetPort"]
+                                .as_i64()
+                                .map(|i: i64| i.to_string())
+                                .or_else(|| p["targetPort"].as_str().map(|s: &str| s.to_string()))
+                                .unwrap_or_default(),
+                            node_port: p["nodePort"].as_i64().map(|n: i64| n as i32),
+                            protocol: p["protocol"].as_str().unwrap_or("TCP").to_string(),
+                        })
+                        .collect();
+                    let external_ip = svc["status"]["loadBalancer"]["ingress"]
+                        .as_array()
+                        .and_then(|ing: &Vec<serde_json::Value>| ing.first())
+                        .and_then(|i: &serde_json::Value| i["ip"].as_str())
+                        .map(|s: &str| s.to_string());
+                    Service {
+                        name: svc["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        namespace: namespace.to_string(),
+                        service_type: svc["spec"]["type"].as_str().unwrap_or("ClusterIP").to_string(),
+                        cluster_ip: svc["spec"]["clusterIP"].as_str().map(|s: &str| s.to_string()),
+                        external_ip,
+                        ports,
+                        age: svc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::core::v1::Service> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::core::v1::Service> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
 
             Ok(list
@@ -1496,8 +1679,12 @@ impl K8sManager for K3sManager {
                                         .target_port
                                         .as_ref()
                                         .map(|tp| match tp {
-                                            k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(i) => i.to_string(),
-                                            k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::String(s) => s.clone(),
+                                            k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(i) => {
+                                                i.to_string()
+                                            }
+                                            k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::String(s) => {
+                                                s.clone()
+                                            }
                                         })
                                         .unwrap_or_default(),
                                     node_port: p.node_port,
@@ -1535,32 +1722,36 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "ingresses", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|ing: &serde_json::Value| {
-                let empty_rules: Vec<serde_json::Value> = vec![];
-                let hosts: Vec<String> = ing["spec"]["rules"].as_array()
-                    .unwrap_or(&empty_rules)
-                    .iter()
-                    .filter_map(|r: &serde_json::Value| r["host"].as_str().map(|s: &str| s.to_string()))
-                    .collect();
-                let address = ing["status"]["loadBalancer"]["ingress"].as_array()
-                    .and_then(|arr: &Vec<serde_json::Value>| arr.first())
-                    .and_then(|i: &serde_json::Value| i["ip"].as_str())
-                    .map(|s: &str| s.to_string());
-                Ingress {
-                    name: ing["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    namespace: namespace.to_string(),
-                    hosts,
-                    address,
-                    age: ing["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|ing: &serde_json::Value| {
+                    let empty_rules: Vec<serde_json::Value> = vec![];
+                    let hosts: Vec<String> = ing["spec"]["rules"]
+                        .as_array()
+                        .unwrap_or(&empty_rules)
+                        .iter()
+                        .filter_map(|r: &serde_json::Value| r["host"].as_str().map(|s: &str| s.to_string()))
+                        .collect();
+                    let address = ing["status"]["loadBalancer"]["ingress"]
+                        .as_array()
+                        .and_then(|arr: &Vec<serde_json::Value>| arr.first())
+                        .and_then(|i: &serde_json::Value| i["ip"].as_str())
+                        .map(|s: &str| s.to_string());
+                    Ingress {
+                        name: ing["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        namespace: namespace.to_string(),
+                        hosts,
+                        address,
+                        age: ing["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::networking::v1::Ingress> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::networking::v1::Ingress> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
 
             Ok(list
@@ -1571,12 +1762,7 @@ impl K8sManager for K3sManager {
                         .spec
                         .as_ref()
                         .and_then(|s| s.rules.as_ref())
-                        .map(|rules| {
-                            rules
-                                .iter()
-                                .filter_map(|r| r.host.clone())
-                                .collect()
-                        })
+                        .map(|rules| rules.iter().filter_map(|r| r.host.clone()).collect())
                         .unwrap_or_default();
 
                     let address = i
@@ -1605,24 +1791,30 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "pvc", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|pvc: &serde_json::Value| {
-                let empty_modes: Vec<serde_json::Value> = vec![];
-                let access_modes: Vec<String> = pvc["spec"]["accessModes"].as_array()
-                    .unwrap_or(&empty_modes)
-                    .iter()
-                    .filter_map(|m: &serde_json::Value| m.as_str().map(|s: &str| s.to_string()))
-                    .collect();
-                PersistentVolumeClaim {
-                    name: pvc["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    namespace: namespace.to_string(),
-                    status: pvc["status"]["phase"].as_str().unwrap_or("Pending").to_string(),
-                    volume: pvc["spec"]["volumeName"].as_str().map(|s: &str| s.to_string()),
-                    capacity: pvc["status"]["capacity"]["storage"].as_str().map(|s: &str| s.to_string()),
-                    access_modes,
-                    storage_class: pvc["spec"]["storageClassName"].as_str().map(|s: &str| s.to_string()),
-                    age: pvc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|pvc: &serde_json::Value| {
+                    let empty_modes: Vec<serde_json::Value> = vec![];
+                    let access_modes: Vec<String> = pvc["spec"]["accessModes"]
+                        .as_array()
+                        .unwrap_or(&empty_modes)
+                        .iter()
+                        .filter_map(|m: &serde_json::Value| m.as_str().map(|s: &str| s.to_string()))
+                        .collect();
+                    PersistentVolumeClaim {
+                        name: pvc["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        namespace: namespace.to_string(),
+                        status: pvc["status"]["phase"].as_str().unwrap_or("Pending").to_string(),
+                        volume: pvc["spec"]["volumeName"].as_str().map(|s: &str| s.to_string()),
+                        capacity: pvc["status"]["capacity"]["storage"]
+                            .as_str()
+                            .map(|s: &str| s.to_string()),
+                        access_modes,
+                        storage_class: pvc["spec"]["storageClassName"].as_str().map(|s: &str| s.to_string()),
+                        age: pvc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -1650,9 +1842,7 @@ impl K8sManager for K3sManager {
                             .and_then(|s| s.capacity.as_ref())
                             .and_then(|c| c.get("storage"))
                             .map(|q| q.0.clone()),
-                        access_modes: spec
-                            .and_then(|s| s.access_modes.clone())
-                            .unwrap_or_default(),
+                        access_modes: spec.and_then(|s| s.access_modes.clone()).unwrap_or_default(),
                         storage_class: spec.and_then(|s| s.storage_class_name.clone()),
                         age: format_k8s_age(&pvc.metadata.creation_timestamp),
                     }
@@ -1667,29 +1857,44 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "pv"]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|pv: &serde_json::Value| {
-                let empty_modes: Vec<serde_json::Value> = vec![];
-                let access_modes: Vec<String> = pv["spec"]["accessModes"].as_array()
-                    .unwrap_or(&empty_modes)
-                    .iter()
-                    .filter_map(|m: &serde_json::Value| m.as_str().map(|s: &str| s.to_string()))
-                    .collect();
-                let claim = pv["spec"]["claimRef"].as_object().map(|cr: &serde_json::Map<String, serde_json::Value>| {
-                    format!("{}/{}",
-                        cr.get("namespace").and_then(|v: &serde_json::Value| v.as_str()).unwrap_or("default"),
-                        cr.get("name").and_then(|v: &serde_json::Value| v.as_str()).unwrap_or(""))
-                });
-                PersistentVolume {
-                    name: pv["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    capacity: pv["spec"]["capacity"]["storage"].as_str().map(|s: &str| s.to_string()),
-                    access_modes,
-                    reclaim_policy: pv["spec"]["persistentVolumeReclaimPolicy"].as_str().map(|s: &str| s.to_string()),
-                    status: pv["status"]["phase"].as_str().unwrap_or("Available").to_string(),
-                    claim,
-                    storage_class: pv["spec"]["storageClassName"].as_str().map(|s: &str| s.to_string()),
-                    age: pv["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|pv: &serde_json::Value| {
+                    let empty_modes: Vec<serde_json::Value> = vec![];
+                    let access_modes: Vec<String> = pv["spec"]["accessModes"]
+                        .as_array()
+                        .unwrap_or(&empty_modes)
+                        .iter()
+                        .filter_map(|m: &serde_json::Value| m.as_str().map(|s: &str| s.to_string()))
+                        .collect();
+                    let claim =
+                        pv["spec"]["claimRef"]
+                            .as_object()
+                            .map(|cr: &serde_json::Map<String, serde_json::Value>| {
+                                format!(
+                                    "{}/{}",
+                                    cr.get("namespace")
+                                        .and_then(|v: &serde_json::Value| v.as_str())
+                                        .unwrap_or("default"),
+                                    cr.get("name")
+                                        .and_then(|v: &serde_json::Value| v.as_str())
+                                        .unwrap_or("")
+                                )
+                            });
+                    PersistentVolume {
+                        name: pv["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        capacity: pv["spec"]["capacity"]["storage"].as_str().map(|s: &str| s.to_string()),
+                        access_modes,
+                        reclaim_policy: pv["spec"]["persistentVolumeReclaimPolicy"]
+                            .as_str()
+                            .map(|s: &str| s.to_string()),
+                        status: pv["status"]["phase"].as_str().unwrap_or("Available").to_string(),
+                        claim,
+                        storage_class: pv["spec"]["storageClassName"].as_str().map(|s: &str| s.to_string()),
+                        age: pv["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -1711,22 +1916,18 @@ impl K8sManager for K3sManager {
                             .and_then(|s| s.capacity.as_ref())
                             .and_then(|c| c.get("storage"))
                             .map(|q| q.0.clone()),
-                        access_modes: spec
-                            .and_then(|s| s.access_modes.clone())
-                            .unwrap_or_default(),
+                        access_modes: spec.and_then(|s| s.access_modes.clone()).unwrap_or_default(),
                         reclaim_policy: spec.and_then(|s| s.persistent_volume_reclaim_policy.clone()),
                         status: status
                             .and_then(|s| s.phase.clone())
                             .unwrap_or_else(|| "Available".to_string()),
-                        claim: spec
-                            .and_then(|s| s.claim_ref.as_ref())
-                            .map(|cr| {
-                                format!(
-                                    "{}/{}",
-                                    cr.namespace.as_deref().unwrap_or("default"),
-                                    cr.name.as_deref().unwrap_or("")
-                                )
-                            }),
+                        claim: spec.and_then(|s| s.claim_ref.as_ref()).map(|cr| {
+                            format!(
+                                "{}/{}",
+                                cr.namespace.as_deref().unwrap_or("default"),
+                                cr.name.as_deref().unwrap_or("")
+                            )
+                        }),
                         storage_class: spec.and_then(|s| s.storage_class_name.clone()),
                         age: format_k8s_age(&pv.metadata.creation_timestamp),
                     }
@@ -1743,7 +1944,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "pod", name, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "delete", "pod", name, "-n", namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -1756,25 +1959,30 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::core::v1::Pod> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(client.clone(), namespace);
             api.delete(name, &DeleteParams::default()).await?;
             Ok(())
         }
     }
 
-    async fn scale_deployment(
-        &self,
-        namespace: &str,
-        name: &str,
-        replicas: u32,
-    ) -> anyhow::Result<()> {
+    async fn scale_deployment(&self, namespace: &str, name: &str, replicas: u32) -> anyhow::Result<()> {
         #[cfg(target_os = "windows")]
         {
             let replicas_arg = format!("--replicas={replicas}");
             let dep_arg = format!("deployment/{name}");
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "scale", &dep_arg, &replicas_arg, "-n", namespace])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "scale",
+                    &dep_arg,
+                    &replicas_arg,
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -1787,8 +1995,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::Deployment> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::Deployment> = Api::namespaced(client.clone(), namespace);
 
             let patch = serde_json::json!({
                 "spec": {
@@ -1808,7 +2015,9 @@ impl K8sManager for K3sManager {
         {
             let dep_arg = format!("deployment/{name}");
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "rollout", "restart", &dep_arg, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "rollout", "restart", &dep_arg, "-n", namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -1821,8 +2030,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::Deployment> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::Deployment> = Api::namespaced(client.clone(), namespace);
 
             // Trigger a rollout restart by updating an annotation
             let now = chrono::Utc::now().to_rfc3339();
@@ -1849,7 +2057,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "pvc", name, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "delete", "pvc", name, "-n", namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -1878,7 +2088,9 @@ impl K8sManager for K3sManager {
     ) -> anyhow::Result<Vec<String>> {
         validate_k8s_name(namespace)?;
         validate_k8s_name(name)?;
-        if let Some(c) = container { validate_k8s_name(c)?; }
+        if let Some(c) = container {
+            validate_k8s_name(c)?;
+        }
         #[cfg(target_os = "windows")]
         {
             let mut cmd_args = vec!["-u", "root", "--", "k3s", "kubectl", "logs", name, "-n", namespace];
@@ -1892,10 +2104,7 @@ impl K8sManager for K3sManager {
                 tail_arg = format!("--tail={t}");
                 cmd_args.push(&tail_arg);
             }
-            let output = Command::new("wsl")
-                .args(&cmd_args)
-                .output()
-                .await?;
+            let output = Command::new("wsl").args(&cmd_args).output().await?;
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 anyhow::bail!("kubectl logs failed: {stderr}");
@@ -1907,8 +2116,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::core::v1::Pod> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(client.clone(), namespace);
 
             let mut params = kube::api::LogParams {
                 tail_lines: tail.map(|t| t as i64),
@@ -1932,11 +2140,27 @@ impl K8sManager for K3sManager {
         // Validate resource kind against allowlist
         if let Some(kind) = extract_yaml_kind(yaml) {
             const ALLOWED_KINDS: &[&str] = &[
-                "Pod", "Service", "ConfigMap", "Secret", "Deployment", "DaemonSet",
-                "StatefulSet", "ReplicaSet", "Job", "CronJob", "Ingress",
-                "PersistentVolumeClaim", "Namespace", "HorizontalPodAutoscaler",
-                "ServiceAccount", "Role", "RoleBinding", "NetworkPolicy",
-                "IngressRoute", "Middleware", "HelmChartConfig",
+                "Pod",
+                "Service",
+                "ConfigMap",
+                "Secret",
+                "Deployment",
+                "DaemonSet",
+                "StatefulSet",
+                "ReplicaSet",
+                "Job",
+                "CronJob",
+                "Ingress",
+                "PersistentVolumeClaim",
+                "Namespace",
+                "HorizontalPodAutoscaler",
+                "ServiceAccount",
+                "Role",
+                "RoleBinding",
+                "NetworkPolicy",
+                "IngressRoute",
+                "Middleware",
+                "HelmChartConfig",
             ];
             if !ALLOWED_KINDS.contains(&kind.as_str()) {
                 anyhow::bail!(
@@ -1974,7 +2198,8 @@ impl K8sManager for K3sManager {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let mut child = self.kubectl_command()
+            let mut child = self
+                .kubectl_command()
                 .args(["apply", "-f", "-"])
                 .env("KUBECONFIG", self.kubeconfig_path())
                 .stdin(Stdio::piped())
@@ -2027,7 +2252,8 @@ impl K8sManager for K3sManager {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let mut child = self.kubectl_command()
+            let mut child = self
+                .kubectl_command()
                 .args(["delete", "-f", "-"])
                 .env("KUBECONFIG", self.kubeconfig_path())
                 .stdin(Stdio::piped())
@@ -2059,19 +2285,22 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "events", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|e: &serde_json::Value| {
-                let involved = &e["involvedObject"];
-                let kind = involved["kind"].as_str().unwrap_or("");
-                let obj_name = involved["name"].as_str().unwrap_or("");
-                K8sEvent {
-                    event_type: e["type"].as_str().unwrap_or("Normal").to_string(),
-                    reason: e["reason"].as_str().unwrap_or("").to_string(),
-                    object: format!("{kind}/{obj_name}"),
-                    message: e["message"].as_str().unwrap_or("").to_string(),
-                    age: e["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                    count: e["count"].as_u64().unwrap_or(1) as u32,
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|e: &serde_json::Value| {
+                    let involved = &e["involvedObject"];
+                    let kind = involved["kind"].as_str().unwrap_or("");
+                    let obj_name = involved["name"].as_str().unwrap_or("");
+                    K8sEvent {
+                        event_type: e["type"].as_str().unwrap_or("Normal").to_string(),
+                        reason: e["reason"].as_str().unwrap_or("").to_string(),
+                        object: format!("{kind}/{obj_name}"),
+                        message: e["message"].as_str().unwrap_or("").to_string(),
+                        age: e["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                        count: e["count"].as_u64().unwrap_or(1) as u32,
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -2079,19 +2308,23 @@ impl K8sManager for K3sManager {
             let client = self.get_client().await?;
             let api: Api<k8s_openapi::api::core::v1::Event> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|e| {
-                let involved = e.involved_object.clone();
-                let kind = involved.kind.unwrap_or_default();
-                let obj_name = involved.name.unwrap_or_default();
-                K8sEvent {
-                    event_type: e.type_.clone().unwrap_or_else(|| "Normal".to_string()),
-                    reason: e.reason.clone().unwrap_or_default(),
-                    object: format!("{kind}/{obj_name}"),
-                    message: e.message.clone().unwrap_or_default(),
-                    age: format_k8s_age(&e.metadata.creation_timestamp),
-                    count: e.count.unwrap_or(1) as u32,
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|e| {
+                    let involved = e.involved_object.clone();
+                    let kind = involved.kind.unwrap_or_default();
+                    let obj_name = involved.name.unwrap_or_default();
+                    K8sEvent {
+                        event_type: e.type_.clone().unwrap_or_else(|| "Normal".to_string()),
+                        reason: e.reason.clone().unwrap_or_default(),
+                        object: format!("{kind}/{obj_name}"),
+                        message: e.message.clone().unwrap_or_default(),
+                        age: format_k8s_age(&e.metadata.creation_timestamp),
+                        count: e.count.unwrap_or(1) as u32,
+                    }
+                })
+                .collect())
         }
     }
 
@@ -2156,20 +2389,27 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "configmaps", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|cm: &serde_json::Value| {
-                let data_obj = cm["data"].as_object();
-                let keys: Vec<String> = data_obj.map(|d| d.keys().cloned().collect()).unwrap_or_default();
-                let data: std::collections::HashMap<String, String> = data_obj
-                    .map(|d| d.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect())
-                    .unwrap_or_default();
-                K8sConfigMap {
-                    name: cm["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    namespace: namespace.to_string(),
-                    keys,
-                    data,
-                    age: cm["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|cm: &serde_json::Value| {
+                    let data_obj = cm["data"].as_object();
+                    let keys: Vec<String> = data_obj.map(|d| d.keys().cloned().collect()).unwrap_or_default();
+                    let data: std::collections::HashMap<String, String> = data_obj
+                        .map(|d| {
+                            d.iter()
+                                .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    K8sConfigMap {
+                        name: cm["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        namespace: namespace.to_string(),
+                        keys,
+                        data,
+                        age: cm["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -2177,18 +2417,22 @@ impl K8sManager for K3sManager {
             let client = self.get_client().await?;
             let api: Api<k8s_openapi::api::core::v1::ConfigMap> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|cm| {
-                let btree_data = cm.data.clone().unwrap_or_default();
-                let keys: Vec<String> = btree_data.keys().cloned().collect();
-                let data: std::collections::HashMap<String, String> = btree_data.into_iter().collect();
-                K8sConfigMap {
-                    name: cm.metadata.name.clone().unwrap_or_default(),
-                    namespace: namespace.to_string(),
-                    keys,
-                    data,
-                    age: format_k8s_age(&cm.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|cm| {
+                    let btree_data = cm.data.clone().unwrap_or_default();
+                    let keys: Vec<String> = btree_data.keys().cloned().collect();
+                    let data: std::collections::HashMap<String, String> = btree_data.into_iter().collect();
+                    K8sConfigMap {
+                        name: cm.metadata.name.clone().unwrap_or_default(),
+                        namespace: namespace.to_string(),
+                        keys,
+                        data,
+                        age: format_k8s_age(&cm.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
@@ -2198,21 +2442,28 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "secrets", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|s: &serde_json::Value| {
-                let data_obj = s["data"].as_object();
-                let keys: Vec<String> = data_obj.map(|d| d.keys().cloned().collect()).unwrap_or_default();
-                let data: std::collections::HashMap<String, String> = data_obj
-                    .map(|d| d.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect())
-                    .unwrap_or_default();
-                K8sSecret {
-                    name: s["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    namespace: namespace.to_string(),
-                    secret_type: s["type"].as_str().unwrap_or("Opaque").to_string(),
-                    keys,
-                    data,
-                    age: s["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|s: &serde_json::Value| {
+                    let data_obj = s["data"].as_object();
+                    let keys: Vec<String> = data_obj.map(|d| d.keys().cloned().collect()).unwrap_or_default();
+                    let data: std::collections::HashMap<String, String> = data_obj
+                        .map(|d| {
+                            d.iter()
+                                .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    K8sSecret {
+                        name: s["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        namespace: namespace.to_string(),
+                        secret_type: s["type"].as_str().unwrap_or("Opaque").to_string(),
+                        keys,
+                        data,
+                        age: s["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -2221,26 +2472,30 @@ impl K8sManager for K3sManager {
             let client = self.get_client().await?;
             let api: Api<k8s_openapi::api::core::v1::Secret> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|s| {
-                let raw_data = s.data.clone().unwrap_or_default();
-                let keys: Vec<String> = raw_data.keys().cloned().collect();
-                // Return base64-encoded values (frontend will decode for reveal)
-                let data: std::collections::HashMap<String, String> = raw_data
-                    .iter()
-                    .map(|(k, ByteString(v))| {
-                        use base64::Engine;
-                        (k.clone(), base64::engine::general_purpose::STANDARD.encode(v))
-                    })
-                    .collect();
-                K8sSecret {
-                    name: s.metadata.name.clone().unwrap_or_default(),
-                    namespace: namespace.to_string(),
-                    secret_type: s.type_.clone().unwrap_or_else(|| "Opaque".to_string()),
-                    keys,
-                    data,
-                    age: format_k8s_age(&s.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|s| {
+                    let raw_data = s.data.clone().unwrap_or_default();
+                    let keys: Vec<String> = raw_data.keys().cloned().collect();
+                    // Return base64-encoded values (frontend will decode for reveal)
+                    let data: std::collections::HashMap<String, String> = raw_data
+                        .iter()
+                        .map(|(k, ByteString(v))| {
+                            use base64::Engine;
+                            (k.clone(), base64::engine::general_purpose::STANDARD.encode(v))
+                        })
+                        .collect();
+                    K8sSecret {
+                        name: s.metadata.name.clone().unwrap_or_default(),
+                        namespace: namespace.to_string(),
+                        secret_type: s.type_.clone().unwrap_or_else(|| "Opaque".to_string()),
+                        keys,
+                        data,
+                        age: format_k8s_age(&s.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
@@ -2249,7 +2504,18 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         let output = {
             Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "top", "pods", "-n", namespace, "--no-headers"])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "top",
+                    "pods",
+                    "-n",
+                    namespace,
+                    "--no-headers",
+                ])
                 .output()
                 .await?
         };
@@ -2266,7 +2532,10 @@ impl K8sManager for K3sManager {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             // Metrics server not installed is a common case, return empty
-            if stderr.contains("Metrics API not available") || stderr.contains("metrics") || stderr.contains("not found") {
+            if stderr.contains("Metrics API not available")
+                || stderr.contains("metrics")
+                || stderr.contains("not found")
+            {
                 return Ok(vec![]);
             }
             anyhow::bail!("kubectl top pods failed: {stderr}");
@@ -2299,7 +2568,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         let output = {
             Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "rollout", "history", &dep_arg, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "rollout", "history", &dep_arg, "-n", namespace,
+                ])
                 .output()
                 .await?
         };
@@ -2332,7 +2603,8 @@ impl K8sManager for K3sManager {
                 let parts: Vec<&str> = line.splitn(2, char::is_whitespace).collect();
                 let rev_str = parts.first()?.trim();
                 let revision: u32 = rev_str.parse().ok()?;
-                let change_cause = parts.get(1)
+                let change_cause = parts
+                    .get(1)
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty() && s != "<none>");
                 Some(RolloutRevision { revision, change_cause })
@@ -2347,16 +2619,15 @@ impl K8sManager for K3sManager {
 
         #[cfg(target_os = "windows")]
         let output = {
-            let mut args: Vec<&str> = vec!["-u", "root", "--", "k3s", "kubectl", "rollout", "undo", &dep_arg, "-n", namespace];
+            let mut args: Vec<&str> = vec![
+                "-u", "root", "--", "k3s", "kubectl", "rollout", "undo", &dep_arg, "-n", namespace,
+            ];
             let rev_arg;
             if let Some(rev) = revision {
                 rev_arg = format!("--to-revision={rev}");
                 args.push(&rev_arg);
             }
-            Command::new("wsl")
-                .args(&args)
-                .output()
-                .await?
+            Command::new("wsl").args(&args).output().await?
         };
 
         #[cfg(not(target_os = "windows"))]
@@ -2385,37 +2656,41 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "jobs", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|j: &serde_json::Value| {
-                let name = j["metadata"]["name"].as_str().unwrap_or("").to_string();
-                let succeeded = j["status"]["succeeded"].as_u64().unwrap_or(0) as u32;
-                let failed = j["status"]["failed"].as_u64().unwrap_or(0) as u32;
-                let active = j["status"]["active"].as_u64().unwrap_or(0) as u32;
-                let completions_desired = j["spec"]["completions"].as_u64().unwrap_or(1) as u32;
-                let status = if succeeded >= completions_desired {
-                    "Succeeded"
-                } else if failed > 0 && active == 0 {
-                    "Failed"
-                } else {
-                    "Active"
-                }.to_string();
-                let completions = format!("{succeeded}/{completions_desired}");
-                let start_time = j["status"]["startTime"].as_str().map(|s: &str| s.to_string());
-                let completion_time = j["status"]["completionTime"].as_str();
-                let duration = match (j["status"]["startTime"].as_str(), completion_time) {
-                    (Some(start), Some(end)) => format_duration_between(start, end),
-                    (Some(start), None) => format_duration_since(start),
-                    _ => String::new(),
-                };
-                Job {
-                    name,
-                    namespace: namespace.to_string(),
-                    status,
-                    completions,
-                    duration,
-                    start_time,
-                    created_at: j["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|j: &serde_json::Value| {
+                    let name = j["metadata"]["name"].as_str().unwrap_or("").to_string();
+                    let succeeded = j["status"]["succeeded"].as_u64().unwrap_or(0) as u32;
+                    let failed = j["status"]["failed"].as_u64().unwrap_or(0) as u32;
+                    let active = j["status"]["active"].as_u64().unwrap_or(0) as u32;
+                    let completions_desired = j["spec"]["completions"].as_u64().unwrap_or(1) as u32;
+                    let status = if succeeded >= completions_desired {
+                        "Succeeded"
+                    } else if failed > 0 && active == 0 {
+                        "Failed"
+                    } else {
+                        "Active"
+                    }
+                    .to_string();
+                    let completions = format!("{succeeded}/{completions_desired}");
+                    let start_time = j["status"]["startTime"].as_str().map(|s: &str| s.to_string());
+                    let completion_time = j["status"]["completionTime"].as_str();
+                    let duration = match (j["status"]["startTime"].as_str(), completion_time) {
+                        (Some(start), Some(end)) => format_duration_between(start, end),
+                        (Some(start), None) => format_duration_since(start),
+                        _ => String::new(),
+                    };
+                    Job {
+                        name,
+                        namespace: namespace.to_string(),
+                        status,
+                        completions,
+                        duration,
+                        start_time,
+                        created_at: j["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -2423,45 +2698,50 @@ impl K8sManager for K3sManager {
             let client = self.get_client().await?;
             let api: Api<k8s_openapi::api::batch::v1::Job> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|j| {
-                let name = j.metadata.name.clone().unwrap_or_default();
-                let status_ref = j.status.as_ref();
-                let succeeded = status_ref.and_then(|s| s.succeeded).unwrap_or(0) as u32;
-                let failed = status_ref.and_then(|s| s.failed).unwrap_or(0) as u32;
-                let active = status_ref.and_then(|s| s.active).unwrap_or(0) as u32;
-                let completions_desired = j.spec.as_ref().and_then(|s| s.completions).unwrap_or(1) as u32;
-                let status_str = if succeeded >= completions_desired {
-                    "Succeeded"
-                } else if failed > 0 && active == 0 {
-                    "Failed"
-                } else {
-                    "Active"
-                }.to_string();
-                let completions = format!("{succeeded}/{completions_desired}");
-                let start_time_ts = status_ref.and_then(|s| s.start_time.as_ref());
-                let completion_time_ts = status_ref.and_then(|s| s.completion_time.as_ref());
-                let duration = match (start_time_ts, completion_time_ts) {
-                    (Some(start), Some(end)) => {
-                        let dur = end.0.signed_duration_since(start.0);
-                        format_chrono_duration(dur)
+            Ok(list
+                .items
+                .iter()
+                .map(|j| {
+                    let name = j.metadata.name.clone().unwrap_or_default();
+                    let status_ref = j.status.as_ref();
+                    let succeeded = status_ref.and_then(|s| s.succeeded).unwrap_or(0) as u32;
+                    let failed = status_ref.and_then(|s| s.failed).unwrap_or(0) as u32;
+                    let active = status_ref.and_then(|s| s.active).unwrap_or(0) as u32;
+                    let completions_desired = j.spec.as_ref().and_then(|s| s.completions).unwrap_or(1) as u32;
+                    let status_str = if succeeded >= completions_desired {
+                        "Succeeded"
+                    } else if failed > 0 && active == 0 {
+                        "Failed"
+                    } else {
+                        "Active"
                     }
-                    (Some(start), None) => {
-                        let dur = chrono::Utc::now().signed_duration_since(start.0);
-                        format_chrono_duration(dur)
+                    .to_string();
+                    let completions = format!("{succeeded}/{completions_desired}");
+                    let start_time_ts = status_ref.and_then(|s| s.start_time.as_ref());
+                    let completion_time_ts = status_ref.and_then(|s| s.completion_time.as_ref());
+                    let duration = match (start_time_ts, completion_time_ts) {
+                        (Some(start), Some(end)) => {
+                            let dur = end.0.signed_duration_since(start.0);
+                            format_chrono_duration(dur)
+                        }
+                        (Some(start), None) => {
+                            let dur = chrono::Utc::now().signed_duration_since(start.0);
+                            format_chrono_duration(dur)
+                        }
+                        _ => String::new(),
+                    };
+                    let start_time = start_time_ts.map(|t| t.0.to_rfc3339());
+                    Job {
+                        name,
+                        namespace: namespace.to_string(),
+                        status: status_str,
+                        completions,
+                        duration,
+                        start_time,
+                        created_at: format_k8s_age(&j.metadata.creation_timestamp),
                     }
-                    _ => String::new(),
-                };
-                let start_time = start_time_ts.map(|t| t.0.to_rfc3339());
-                Job {
-                    name,
-                    namespace: namespace.to_string(),
-                    status: status_str,
-                    completions,
-                    duration,
-                    start_time,
-                    created_at: format_k8s_age(&j.metadata.creation_timestamp),
-                }
-            }).collect())
+                })
+                .collect())
         }
     }
 
@@ -2471,23 +2751,26 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "cronjobs", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|cj: &serde_json::Value| {
-                let name = cj["metadata"]["name"].as_str().unwrap_or("").to_string();
-                let schedule = cj["spec"]["schedule"].as_str().unwrap_or("").to_string();
-                let suspend = cj["spec"]["suspend"].as_bool().unwrap_or(false);
-                let empty_arr: Vec<serde_json::Value> = vec![];
-                let active = cj["status"]["active"].as_array().unwrap_or(&empty_arr).len() as u32;
-                let last_schedule = cj["status"]["lastScheduleTime"].as_str().map(|s: &str| s.to_string());
-                CronJob {
-                    name,
-                    namespace: namespace.to_string(),
-                    schedule,
-                    suspend,
-                    active,
-                    last_schedule,
-                    created_at: cj["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|cj: &serde_json::Value| {
+                    let name = cj["metadata"]["name"].as_str().unwrap_or("").to_string();
+                    let schedule = cj["spec"]["schedule"].as_str().unwrap_or("").to_string();
+                    let suspend = cj["spec"]["suspend"].as_bool().unwrap_or(false);
+                    let empty_arr: Vec<serde_json::Value> = vec![];
+                    let active = cj["status"]["active"].as_array().unwrap_or(&empty_arr).len() as u32;
+                    let last_schedule = cj["status"]["lastScheduleTime"].as_str().map(|s: &str| s.to_string());
+                    CronJob {
+                        name,
+                        namespace: namespace.to_string(),
+                        schedule,
+                        suspend,
+                        active,
+                        last_schedule,
+                        created_at: cj["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -2495,26 +2778,33 @@ impl K8sManager for K3sManager {
             let client = self.get_client().await?;
             let api: Api<k8s_openapi::api::batch::v1::CronJob> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|cj| {
-                let name = cj.metadata.name.clone().unwrap_or_default();
-                let spec = cj.spec.as_ref();
-                let schedule = spec.map(|s| s.schedule.clone()).unwrap_or_default();
-                let suspend = spec.and_then(|s| s.suspend).unwrap_or(false);
-                let status_ref = cj.status.as_ref();
-                let active = status_ref.and_then(|s| s.active.as_ref()).map(|a| a.len() as u32).unwrap_or(0);
-                let last_schedule = status_ref
-                    .and_then(|s| s.last_schedule_time.as_ref())
-                    .map(|t| t.0.to_rfc3339());
-                CronJob {
-                    name,
-                    namespace: namespace.to_string(),
-                    schedule,
-                    suspend,
-                    active,
-                    last_schedule,
-                    created_at: format_k8s_age(&cj.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|cj| {
+                    let name = cj.metadata.name.clone().unwrap_or_default();
+                    let spec = cj.spec.as_ref();
+                    let schedule = spec.map(|s| s.schedule.clone()).unwrap_or_default();
+                    let suspend = spec.and_then(|s| s.suspend).unwrap_or(false);
+                    let status_ref = cj.status.as_ref();
+                    let active = status_ref
+                        .and_then(|s| s.active.as_ref())
+                        .map(|a| a.len() as u32)
+                        .unwrap_or(0);
+                    let last_schedule = status_ref
+                        .and_then(|s| s.last_schedule_time.as_ref())
+                        .map(|t| t.0.to_rfc3339());
+                    CronJob {
+                        name,
+                        namespace: namespace.to_string(),
+                        schedule,
+                        suspend,
+                        active,
+                        last_schedule,
+                        created_at: format_k8s_age(&cj.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
@@ -2524,63 +2814,78 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "daemonsets", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|d: &serde_json::Value| {
-                let name = d["metadata"]["name"].as_str().unwrap_or("").to_string();
-                let desired = d["status"]["desiredNumberScheduled"].as_i64().unwrap_or(0) as i32;
-                let current = d["status"]["currentNumberScheduled"].as_i64().unwrap_or(0) as i32;
-                let ready = d["status"]["numberReady"].as_i64().unwrap_or(0) as i32;
-                let node_selector = d["spec"]["template"]["spec"]["nodeSelector"].as_object()
-                    .map(|m| m.iter().map(|(k, v)| format!("{k}={}", v.as_str().unwrap_or(""))).collect::<Vec<_>>().join(", "));
-                let empty_containers: Vec<serde_json::Value> = vec![];
-                let images: Vec<String> = d["spec"]["template"]["spec"]["containers"].as_array()
-                    .unwrap_or(&empty_containers)
-                    .iter()
-                    .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
-                    .collect();
-                DaemonSet {
-                    name,
-                    namespace: namespace.to_string(),
-                    desired,
-                    current,
-                    ready,
-                    node_selector,
-                    images,
-                    created_at: d["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|d: &serde_json::Value| {
+                    let name = d["metadata"]["name"].as_str().unwrap_or("").to_string();
+                    let desired = d["status"]["desiredNumberScheduled"].as_i64().unwrap_or(0) as i32;
+                    let current = d["status"]["currentNumberScheduled"].as_i64().unwrap_or(0) as i32;
+                    let ready = d["status"]["numberReady"].as_i64().unwrap_or(0) as i32;
+                    let node_selector = d["spec"]["template"]["spec"]["nodeSelector"].as_object().map(|m| {
+                        m.iter()
+                            .map(|(k, v)| format!("{k}={}", v.as_str().unwrap_or("")))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    });
+                    let empty_containers: Vec<serde_json::Value> = vec![];
+                    let images: Vec<String> = d["spec"]["template"]["spec"]["containers"]
+                        .as_array()
+                        .unwrap_or(&empty_containers)
+                        .iter()
+                        .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
+                        .collect();
+                    DaemonSet {
+                        name,
+                        namespace: namespace.to_string(),
+                        desired,
+                        current,
+                        ready,
+                        node_selector,
+                        images,
+                        created_at: d["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::DaemonSet> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::DaemonSet> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|d| {
-                let name = d.metadata.name.clone().unwrap_or_default();
-                let status = d.status.as_ref();
-                let desired = status.map(|s| s.desired_number_scheduled).unwrap_or(0);
-                let current = status.map(|s| s.current_number_scheduled).unwrap_or(0);
-                let ready = status.map(|s| s.number_ready).unwrap_or(0);
-                let node_selector = d.spec.as_ref()
-                    .and_then(|s| s.template.spec.as_ref())
-                    .and_then(|s| s.node_selector.as_ref())
-                    .map(|m| m.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", "));
-                let images = d.spec.as_ref()
-                    .and_then(|s| s.template.spec.as_ref())
-                    .map(|spec| spec.containers.iter().filter_map(|c| c.image.clone()).collect())
-                    .unwrap_or_default();
-                DaemonSet {
-                    name,
-                    namespace: namespace.to_string(),
-                    desired,
-                    current,
-                    ready,
-                    node_selector,
-                    images,
-                    created_at: format_k8s_age(&d.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|d| {
+                    let name = d.metadata.name.clone().unwrap_or_default();
+                    let status = d.status.as_ref();
+                    let desired = status.map(|s| s.desired_number_scheduled).unwrap_or(0);
+                    let current = status.map(|s| s.current_number_scheduled).unwrap_or(0);
+                    let ready = status.map(|s| s.number_ready).unwrap_or(0);
+                    let node_selector = d
+                        .spec
+                        .as_ref()
+                        .and_then(|s| s.template.spec.as_ref())
+                        .and_then(|s| s.node_selector.as_ref())
+                        .map(|m| m.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", "));
+                    let images = d
+                        .spec
+                        .as_ref()
+                        .and_then(|s| s.template.spec.as_ref())
+                        .map(|spec| spec.containers.iter().filter_map(|c| c.image.clone()).collect())
+                        .unwrap_or_default();
+                    DaemonSet {
+                        name,
+                        namespace: namespace.to_string(),
+                        desired,
+                        current,
+                        ready,
+                        node_selector,
+                        images,
+                        created_at: format_k8s_age(&d.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
@@ -2590,52 +2895,61 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "statefulsets", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|s: &serde_json::Value| {
-                let name = s["metadata"]["name"].as_str().unwrap_or("").to_string();
-                let replicas = s["spec"]["replicas"].as_i64().unwrap_or(1) as i32;
-                let ready_count = s["status"]["readyReplicas"].as_i64().unwrap_or(0) as i32;
-                let ready = format!("{ready_count}/{replicas}");
-                let empty_containers: Vec<serde_json::Value> = vec![];
-                let images: Vec<String> = s["spec"]["template"]["spec"]["containers"].as_array()
-                    .unwrap_or(&empty_containers)
-                    .iter()
-                    .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
-                    .collect();
-                StatefulSet {
-                    name,
-                    namespace: namespace.to_string(),
-                    ready,
-                    replicas,
-                    images,
-                    created_at: s["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|s: &serde_json::Value| {
+                    let name = s["metadata"]["name"].as_str().unwrap_or("").to_string();
+                    let replicas = s["spec"]["replicas"].as_i64().unwrap_or(1) as i32;
+                    let ready_count = s["status"]["readyReplicas"].as_i64().unwrap_or(0) as i32;
+                    let ready = format!("{ready_count}/{replicas}");
+                    let empty_containers: Vec<serde_json::Value> = vec![];
+                    let images: Vec<String> = s["spec"]["template"]["spec"]["containers"]
+                        .as_array()
+                        .unwrap_or(&empty_containers)
+                        .iter()
+                        .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
+                        .collect();
+                    StatefulSet {
+                        name,
+                        namespace: namespace.to_string(),
+                        ready,
+                        replicas,
+                        images,
+                        created_at: s["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::StatefulSet> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::StatefulSet> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|s| {
-                let name = s.metadata.name.clone().unwrap_or_default();
-                let replicas = s.spec.as_ref().and_then(|sp| sp.replicas).unwrap_or(1);
-                let ready_count = s.status.as_ref().and_then(|st| st.ready_replicas).unwrap_or(0);
-                let ready = format!("{ready_count}/{replicas}");
-                let images = s.spec.as_ref()
-                    .and_then(|sp| sp.template.spec.as_ref())
-                    .map(|spec| spec.containers.iter().filter_map(|c| c.image.clone()).collect())
-                    .unwrap_or_default();
-                StatefulSet {
-                    name,
-                    namespace: namespace.to_string(),
-                    ready,
-                    replicas,
-                    images,
-                    created_at: format_k8s_age(&s.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|s| {
+                    let name = s.metadata.name.clone().unwrap_or_default();
+                    let replicas = s.spec.as_ref().and_then(|sp| sp.replicas).unwrap_or(1);
+                    let ready_count = s.status.as_ref().and_then(|st| st.ready_replicas).unwrap_or(0);
+                    let ready = format!("{ready_count}/{replicas}");
+                    let images = s
+                        .spec
+                        .as_ref()
+                        .and_then(|sp| sp.template.spec.as_ref())
+                        .map(|spec| spec.containers.iter().filter_map(|c| c.image.clone()).collect())
+                        .unwrap_or_default();
+                    StatefulSet {
+                        name,
+                        namespace: namespace.to_string(),
+                        ready,
+                        replicas,
+                        images,
+                        created_at: format_k8s_age(&s.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
@@ -2645,81 +2959,100 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "replicasets", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|r: &serde_json::Value| {
-                let name = r["metadata"]["name"].as_str().unwrap_or("").to_string();
-                let desired = r["spec"]["replicas"].as_i64().unwrap_or(0) as i32;
-                let current = r["status"]["replicas"].as_i64().unwrap_or(0) as i32;
-                let ready = r["status"]["readyReplicas"].as_i64().unwrap_or(0) as i32;
-                let empty_containers: Vec<serde_json::Value> = vec![];
-                let images: Vec<String> = r["spec"]["template"]["spec"]["containers"].as_array()
-                    .unwrap_or(&empty_containers)
-                    .iter()
-                    .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
-                    .collect();
-                let empty_refs: Vec<serde_json::Value> = vec![];
-                let owner = r["metadata"]["ownerReferences"].as_array()
-                    .unwrap_or(&empty_refs)
-                    .first()
-                    .and_then(|o| o["name"].as_str())
-                    .map(|s| s.to_string());
-                ReplicaSet {
-                    name,
-                    namespace: namespace.to_string(),
-                    desired,
-                    current,
-                    ready,
-                    images,
-                    owner,
-                    created_at: r["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|r: &serde_json::Value| {
+                    let name = r["metadata"]["name"].as_str().unwrap_or("").to_string();
+                    let desired = r["spec"]["replicas"].as_i64().unwrap_or(0) as i32;
+                    let current = r["status"]["replicas"].as_i64().unwrap_or(0) as i32;
+                    let ready = r["status"]["readyReplicas"].as_i64().unwrap_or(0) as i32;
+                    let empty_containers: Vec<serde_json::Value> = vec![];
+                    let images: Vec<String> = r["spec"]["template"]["spec"]["containers"]
+                        .as_array()
+                        .unwrap_or(&empty_containers)
+                        .iter()
+                        .filter_map(|c: &serde_json::Value| c["image"].as_str().map(|s: &str| s.to_string()))
+                        .collect();
+                    let empty_refs: Vec<serde_json::Value> = vec![];
+                    let owner = r["metadata"]["ownerReferences"]
+                        .as_array()
+                        .unwrap_or(&empty_refs)
+                        .first()
+                        .and_then(|o| o["name"].as_str())
+                        .map(|s| s.to_string());
+                    ReplicaSet {
+                        name,
+                        namespace: namespace.to_string(),
+                        desired,
+                        current,
+                        ready,
+                        images,
+                        owner,
+                        created_at: r["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::ReplicaSet> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::ReplicaSet> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|r| {
-                let name = r.metadata.name.clone().unwrap_or_default();
-                let desired = r.spec.as_ref().and_then(|sp| sp.replicas).unwrap_or(0);
-                let current = r.status.as_ref().map(|st| st.replicas).unwrap_or(0);
-                let ready = r.status.as_ref().and_then(|st| st.ready_replicas).unwrap_or(0);
-                let images = r.spec.as_ref()
-                    .and_then(|sp| sp.template.as_ref())
-                    .and_then(|t| t.spec.as_ref())
-                    .map(|spec| spec.containers.iter().filter_map(|c| c.image.clone()).collect())
-                    .unwrap_or_default();
-                let owner = r.metadata.owner_references.as_ref()
-                    .and_then(|refs| refs.first())
-                    .map(|o| o.name.clone());
-                ReplicaSet {
-                    name,
-                    namespace: namespace.to_string(),
-                    desired,
-                    current,
-                    ready,
-                    images,
-                    owner,
-                    created_at: format_k8s_age(&r.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|r| {
+                    let name = r.metadata.name.clone().unwrap_or_default();
+                    let desired = r.spec.as_ref().and_then(|sp| sp.replicas).unwrap_or(0);
+                    let current = r.status.as_ref().map(|st| st.replicas).unwrap_or(0);
+                    let ready = r.status.as_ref().and_then(|st| st.ready_replicas).unwrap_or(0);
+                    let images = r
+                        .spec
+                        .as_ref()
+                        .and_then(|sp| sp.template.as_ref())
+                        .and_then(|t| t.spec.as_ref())
+                        .map(|spec| spec.containers.iter().filter_map(|c| c.image.clone()).collect())
+                        .unwrap_or_default();
+                    let owner = r
+                        .metadata
+                        .owner_references
+                        .as_ref()
+                        .and_then(|refs| refs.first())
+                        .map(|o| o.name.clone());
+                    ReplicaSet {
+                        name,
+                        namespace: namespace.to_string(),
+                        desired,
+                        current,
+                        ready,
+                        images,
+                        owner,
+                        created_at: format_k8s_age(&r.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
-    async fn scale_statefulset(
-        &self,
-        namespace: &str,
-        name: &str,
-        replicas: u32,
-    ) -> anyhow::Result<()> {
+    async fn scale_statefulset(&self, namespace: &str, name: &str, replicas: u32) -> anyhow::Result<()> {
         #[cfg(target_os = "windows")]
         {
             let replicas_arg = format!("--replicas={replicas}");
             let sts_arg = format!("statefulset/{name}");
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "scale", &sts_arg, &replicas_arg, "-n", namespace])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "scale",
+                    &sts_arg,
+                    &replicas_arg,
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2732,8 +3065,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::StatefulSet> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::StatefulSet> = Api::namespaced(client.clone(), namespace);
             let patch = serde_json::json!({
                 "spec": {
                     "replicas": replicas
@@ -2752,7 +3084,9 @@ impl K8sManager for K3sManager {
         {
             let sts_arg = format!("statefulset/{name}");
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "rollout", "restart", &sts_arg, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "rollout", "restart", &sts_arg, "-n", namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2765,8 +3099,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::StatefulSet> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::StatefulSet> = Api::namespaced(client.clone(), namespace);
             let now = chrono::Utc::now().to_rfc3339();
             let patch = serde_json::json!({
                 "spec": {
@@ -2791,7 +3124,18 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "daemonset", name, "-n", namespace])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "delete",
+                    "daemonset",
+                    name,
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2804,8 +3148,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::DaemonSet> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::DaemonSet> = Api::namespaced(client.clone(), namespace);
             api.delete(name, &DeleteParams::default()).await?;
             Ok(())
         }
@@ -2817,7 +3160,18 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "statefulset", name, "-n", namespace])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "delete",
+                    "statefulset",
+                    name,
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2830,8 +3184,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::StatefulSet> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::StatefulSet> = Api::namespaced(client.clone(), namespace);
             api.delete(name, &DeleteParams::default()).await?;
             Ok(())
         }
@@ -2843,7 +3196,18 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "replicaset", name, "-n", namespace])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "delete",
+                    "replicaset",
+                    name,
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2856,8 +3220,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::apps::v1::ReplicaSet> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::apps::v1::ReplicaSet> = Api::namespaced(client.clone(), namespace);
             api.delete(name, &DeleteParams::default()).await?;
             Ok(())
         }
@@ -2871,8 +3234,19 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         let output = {
             Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "create", "job", &job_name,
-                       &format!("--from=cronjob/{name}"), "-n", namespace])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "create",
+                    "job",
+                    &job_name,
+                    &format!("--from=cronjob/{name}"),
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?
         };
@@ -2880,7 +3254,14 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         let output = {
             self.kubectl_command()
-                .args(["create", "job", &job_name, &format!("--from=cronjob/{name}"), "-n", namespace])
+                .args([
+                    "create",
+                    "job",
+                    &job_name,
+                    &format!("--from=cronjob/{name}"),
+                    "-n",
+                    namespace,
+                ])
                 .env("KUBECONFIG", self.kubeconfig_path())
                 .output()
                 .await?
@@ -2900,7 +3281,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "job", name, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "delete", "job", name, "-n", namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2926,7 +3309,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "cronjob", name, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "delete", "cronjob", name, "-n", namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2953,8 +3338,22 @@ impl K8sManager for K3sManager {
         {
             let patch_json = format!(r#"{{"spec":{{"suspend":{suspend}}}}}"#);
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "patch", "cronjob", name,
-                       "-n", namespace, "--type", "merge", "-p", &patch_json])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "patch",
+                    "cronjob",
+                    name,
+                    "-n",
+                    namespace,
+                    "--type",
+                    "merge",
+                    "-p",
+                    &patch_json,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2988,18 +3387,24 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let mut args: Vec<String> = vec![
-                "-u".into(), "root".into(), "--".into(),
-                "k3s".into(), "kubectl".into(), "create".into(), "secret".into(), "generic".into(),
-                name.to_string(), "-n".into(), namespace.to_string(),
-                "--type".into(), stype.to_string(),
+                "-u".into(),
+                "root".into(),
+                "--".into(),
+                "k3s".into(),
+                "kubectl".into(),
+                "create".into(),
+                "secret".into(),
+                "generic".into(),
+                name.to_string(),
+                "-n".into(),
+                namespace.to_string(),
+                "--type".into(),
+                stype.to_string(),
             ];
             for (k, v) in &data {
                 args.push(format!("--from-literal={k}={v}"));
             }
-            let output = Command::new("wsl")
-                .args(&args)
-                .output()
-                .await?;
+            let output = Command::new("wsl").args(&args).output().await?;
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 anyhow::bail!("kubectl create secret failed: {stderr}");
@@ -3011,8 +3416,7 @@ impl K8sManager for K3sManager {
         {
             use k8s_openapi::ByteString;
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::core::v1::Secret> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::core::v1::Secret> = Api::namespaced(client.clone(), namespace);
             let secret_data: std::collections::BTreeMap<String, ByteString> = data
                 .iter()
                 .map(|(k, v)| (k.clone(), ByteString(v.as_bytes().to_vec())))
@@ -3037,7 +3441,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "secret", name, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "delete", "secret", name, "-n", namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -3050,8 +3456,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::core::v1::Secret> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::core::v1::Secret> = Api::namespaced(client.clone(), namespace);
             api.delete(name, &DeleteParams::default()).await?;
             Ok(())
         }
@@ -3070,21 +3475,28 @@ impl K8sManager for K3sManager {
         {
             // Delete and recreate on Windows
             let _ = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "secret", name, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "delete", "secret", name, "-n", namespace,
+                ])
                 .output()
                 .await?;
             let mut args: Vec<String> = vec![
-                "-u".into(), "root".into(), "--".into(),
-                "k3s".into(), "kubectl".into(), "create".into(), "secret".into(), "generic".into(),
-                name.to_string(), "-n".into(), namespace.to_string(),
+                "-u".into(),
+                "root".into(),
+                "--".into(),
+                "k3s".into(),
+                "kubectl".into(),
+                "create".into(),
+                "secret".into(),
+                "generic".into(),
+                name.to_string(),
+                "-n".into(),
+                namespace.to_string(),
             ];
             for (k, v) in &data {
                 args.push(format!("--from-literal={k}={v}"));
             }
-            let output = Command::new("wsl")
-                .args(&args)
-                .output()
-                .await?;
+            let output = Command::new("wsl").args(&args).output().await?;
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 anyhow::bail!("kubectl create secret (update) failed: {stderr}");
@@ -3096,8 +3508,7 @@ impl K8sManager for K3sManager {
         {
             use k8s_openapi::ByteString;
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::core::v1::Secret> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::core::v1::Secret> = Api::namespaced(client.clone(), namespace);
             let secret_data: std::collections::BTreeMap<String, ByteString> = data
                 .iter()
                 .map(|(k, v)| (k.clone(), ByteString(v.as_bytes().to_vec())))
@@ -3108,7 +3519,8 @@ impl K8sManager for K3sManager {
                     (k.clone(), serde_json::Value::String(base64::engine::general_purpose::STANDARD.encode(v)))
                 }).collect::<serde_json::Map<String, serde_json::Value>>()
             });
-            api.patch(name, &PatchParams::apply("orca"), &Patch::Merge(&patch)).await?;
+            api.patch(name, &PatchParams::apply("orca"), &Patch::Merge(&patch))
+                .await?;
             Ok(())
         }
     }
@@ -3128,7 +3540,11 @@ impl K8sManager for K3sManager {
         {
             let pvc_yaml = format!(
                 "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: {name}\n  namespace: {namespace}\nspec:\n  accessModes:\n{modes}\n  storageClassName: {storage_class}\n  resources:\n    requests:\n      storage: {size}",
-                modes = access_modes.iter().map(|m| format!("    - {m}")).collect::<Vec<_>>().join("\n"),
+                modes = access_modes
+                    .iter()
+                    .map(|m| format!("    - {m}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
             );
             self.apply_yaml(&pvc_yaml).await?;
             return Ok(());
@@ -3166,33 +3582,48 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "hpa", "-n", namespace]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|h: &serde_json::Value| {
-                let spec = &h["spec"];
-                let status = &h["status"];
-                let scale_ref = &spec["scaleTargetRef"];
-                let reference = format!("{}/{}",
-                    scale_ref["kind"].as_str().unwrap_or(""),
-                    scale_ref["name"].as_str().unwrap_or(""));
-                let target_cpu = spec["metrics"].as_array()
-                    .and_then(|metrics| metrics.iter().find(|m| m["type"].as_str() == Some("Resource") && m["resource"]["name"].as_str() == Some("cpu")))
-                    .and_then(|m| m["resource"]["target"]["averageUtilization"].as_i64())
-                    .map(|v| format!("{v}%"));
-                let current_cpu = status["currentMetrics"].as_array()
-                    .and_then(|metrics| metrics.iter().find(|m| m["type"].as_str() == Some("Resource") && m["resource"]["name"].as_str() == Some("cpu")))
-                    .and_then(|m| m["resource"]["current"]["averageUtilization"].as_i64())
-                    .map(|v| format!("{v}%"));
-                HorizontalPodAutoscaler {
-                    name: h["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    namespace: namespace.to_string(),
-                    reference,
-                    min_replicas: spec["minReplicas"].as_i64().unwrap_or(1) as i32,
-                    max_replicas: spec["maxReplicas"].as_i64().unwrap_or(1) as i32,
-                    current_replicas: status["currentReplicas"].as_i64().unwrap_or(0) as i32,
-                    target_cpu,
-                    current_cpu,
-                    created_at: h["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|h: &serde_json::Value| {
+                    let spec = &h["spec"];
+                    let status = &h["status"];
+                    let scale_ref = &spec["scaleTargetRef"];
+                    let reference = format!(
+                        "{}/{}",
+                        scale_ref["kind"].as_str().unwrap_or(""),
+                        scale_ref["name"].as_str().unwrap_or("")
+                    );
+                    let target_cpu = spec["metrics"]
+                        .as_array()
+                        .and_then(|metrics| {
+                            metrics.iter().find(|m| {
+                                m["type"].as_str() == Some("Resource") && m["resource"]["name"].as_str() == Some("cpu")
+                            })
+                        })
+                        .and_then(|m| m["resource"]["target"]["averageUtilization"].as_i64())
+                        .map(|v| format!("{v}%"));
+                    let current_cpu = status["currentMetrics"]
+                        .as_array()
+                        .and_then(|metrics| {
+                            metrics.iter().find(|m| {
+                                m["type"].as_str() == Some("Resource") && m["resource"]["name"].as_str() == Some("cpu")
+                            })
+                        })
+                        .and_then(|m| m["resource"]["current"]["averageUtilization"].as_i64())
+                        .map(|v| format!("{v}%"));
+                    HorizontalPodAutoscaler {
+                        name: h["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        namespace: namespace.to_string(),
+                        reference,
+                        min_replicas: spec["minReplicas"].as_i64().unwrap_or(1) as i32,
+                        max_replicas: spec["maxReplicas"].as_i64().unwrap_or(1) as i32,
+                        current_replicas: status["currentReplicas"].as_i64().unwrap_or(0) as i32,
+                        target_cpu,
+                        current_cpu,
+                        created_at: h["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -3201,41 +3632,47 @@ impl K8sManager for K3sManager {
             let api: Api<k8s_openapi::api::autoscaling::v2::HorizontalPodAutoscaler> =
                 Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|h| {
-                let spec = h.spec.as_ref();
-                let status = h.status.as_ref();
-                let scale_ref = spec.map(|s| &s.scale_target_ref);
-                let reference = scale_ref
-                    .map(|r| format!("{}/{}", r.kind, r.name))
-                    .unwrap_or_default();
-                let target_cpu = spec
-                    .and_then(|s| s.metrics.as_ref())
-                    .and_then(|metrics| metrics.iter().find(|m| {
-                        m.type_ == "Resource" && m.resource.as_ref().map(|r| r.name.as_str()) == Some("cpu")
-                    }))
-                    .and_then(|m| m.resource.as_ref())
-                    .and_then(|r| r.target.average_utilization)
-                    .map(|v| format!("{v}%"));
-                let current_cpu = status
-                    .and_then(|s| s.current_metrics.as_ref())
-                    .and_then(|metrics| metrics.iter().find(|m| {
-                        m.type_ == "Resource" && m.resource.as_ref().map(|r| r.name.as_str()) == Some("cpu")
-                    }))
-                    .and_then(|m| m.resource.as_ref())
-                    .and_then(|r| r.current.average_utilization)
-                    .map(|v| format!("{v}%"));
-                HorizontalPodAutoscaler {
-                    name: h.metadata.name.clone().unwrap_or_default(),
-                    namespace: namespace.to_string(),
-                    reference,
-                    min_replicas: spec.and_then(|s| s.min_replicas).unwrap_or(1),
-                    max_replicas: spec.map(|s| s.max_replicas).unwrap_or(1),
-                    current_replicas: status.map(|s| s.current_replicas).flatten().unwrap_or(0),
-                    target_cpu,
-                    current_cpu,
-                    created_at: format_k8s_age(&h.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|h| {
+                    let spec = h.spec.as_ref();
+                    let status = h.status.as_ref();
+                    let scale_ref = spec.map(|s| &s.scale_target_ref);
+                    let reference = scale_ref.map(|r| format!("{}/{}", r.kind, r.name)).unwrap_or_default();
+                    let target_cpu = spec
+                        .and_then(|s| s.metrics.as_ref())
+                        .and_then(|metrics| {
+                            metrics.iter().find(|m| {
+                                m.type_ == "Resource" && m.resource.as_ref().map(|r| r.name.as_str()) == Some("cpu")
+                            })
+                        })
+                        .and_then(|m| m.resource.as_ref())
+                        .and_then(|r| r.target.average_utilization)
+                        .map(|v| format!("{v}%"));
+                    let current_cpu = status
+                        .and_then(|s| s.current_metrics.as_ref())
+                        .and_then(|metrics| {
+                            metrics.iter().find(|m| {
+                                m.type_ == "Resource" && m.resource.as_ref().map(|r| r.name.as_str()) == Some("cpu")
+                            })
+                        })
+                        .and_then(|m| m.resource.as_ref())
+                        .and_then(|r| r.current.average_utilization)
+                        .map(|v| format!("{v}%"));
+                    HorizontalPodAutoscaler {
+                        name: h.metadata.name.clone().unwrap_or_default(),
+                        namespace: namespace.to_string(),
+                        reference,
+                        min_replicas: spec.and_then(|s| s.min_replicas).unwrap_or(1),
+                        max_replicas: spec.map(|s| s.max_replicas).unwrap_or(1),
+                        current_replicas: status.and_then(|s| s.current_replicas).unwrap_or(0),
+                        target_cpu,
+                        current_cpu,
+                        created_at: format_k8s_age(&h.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
@@ -3259,10 +3696,22 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "autoscale", "deployment",
-                       deployment, &format!("--name={name}"),
-                       &format!("--min={min_str}"), &format!("--max={max_str}"),
-                       &format!("--cpu-percent={cpu_str}"), "-n", namespace])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "autoscale",
+                    "deployment",
+                    deployment,
+                    &format!("--name={name}"),
+                    &format!("--min={min_str}"),
+                    &format!("--max={max_str}"),
+                    &format!("--cpu-percent={cpu_str}"),
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -3274,11 +3723,19 @@ impl K8sManager for K3sManager {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let output = self.kubectl_command()
-                .args(["autoscale", "deployment", deployment,
-                       &format!("--name={name}"),
-                       &format!("--min={min_str}"), &format!("--max={max_str}"),
-                       &format!("--cpu-percent={cpu_str}"), "-n", namespace])
+            let output = self
+                .kubectl_command()
+                .args([
+                    "autoscale",
+                    "deployment",
+                    deployment,
+                    &format!("--name={name}"),
+                    &format!("--min={min_str}"),
+                    &format!("--max={max_str}"),
+                    &format!("--cpu-percent={cpu_str}"),
+                    "-n",
+                    namespace,
+                ])
                 .env("KUBECONFIG", self.kubeconfig_path())
                 .output()
                 .await?;
@@ -3296,7 +3753,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "hpa", name, "-n", namespace])
+                .args([
+                    "-u", "root", "--", "k3s", "kubectl", "delete", "hpa", name, "-n", namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -3320,53 +3779,70 @@ impl K8sManager for K3sManager {
         validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
-            let json = self.wsl_kubectl_json(&["get", "networkpolicies", "-n", namespace]).await?;
+            let json = self
+                .wsl_kubectl_json(&["get", "networkpolicies", "-n", namespace])
+                .await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|np: &serde_json::Value| {
-                let pod_selector = np["spec"]["podSelector"]["matchLabels"]
-                    .as_object()
-                    .map(|m| m.iter().map(|(k, v)| format!("{k}={}", v.as_str().unwrap_or(""))).collect::<Vec<_>>().join(", "))
-                    .unwrap_or_else(|| "(all pods)".to_string());
-                let empty_arr: Vec<serde_json::Value> = vec![];
-                let policy_types: Vec<String> = np["spec"]["policyTypes"]
-                    .as_array()
-                    .unwrap_or(&empty_arr)
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect();
-                NetworkPolicy {
-                    name: np["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    namespace: namespace.to_string(),
-                    pod_selector,
-                    policy_types,
-                    created_at: np["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|np: &serde_json::Value| {
+                    let pod_selector = np["spec"]["podSelector"]["matchLabels"]
+                        .as_object()
+                        .map(|m| {
+                            m.iter()
+                                .map(|(k, v)| format!("{k}={}", v.as_str().unwrap_or("")))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .unwrap_or_else(|| "(all pods)".to_string());
+                    let empty_arr: Vec<serde_json::Value> = vec![];
+                    let policy_types: Vec<String> = np["spec"]["policyTypes"]
+                        .as_array()
+                        .unwrap_or(&empty_arr)
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
+                    NetworkPolicy {
+                        name: np["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        namespace: namespace.to_string(),
+                        pod_selector,
+                        policy_types,
+                        created_at: np["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::networking::v1::NetworkPolicy> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::networking::v1::NetworkPolicy> = Api::namespaced(client.clone(), namespace);
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|np| {
-                let pod_selector = np.spec.as_ref()
-                    .and_then(|s| s.pod_selector.match_labels.as_ref())
-                    .map(|m| m.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", "))
-                    .unwrap_or_else(|| "(all pods)".to_string());
-                let policy_types = np.spec.as_ref()
-                    .and_then(|s| s.policy_types.clone())
-                    .unwrap_or_default();
-                NetworkPolicy {
-                    name: np.metadata.name.clone().unwrap_or_default(),
-                    namespace: namespace.to_string(),
-                    pod_selector,
-                    policy_types,
-                    created_at: format_k8s_age(&np.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|np| {
+                    let pod_selector = np
+                        .spec
+                        .as_ref()
+                        .and_then(|s| s.pod_selector.match_labels.as_ref())
+                        .map(|m| m.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", "))
+                        .unwrap_or_else(|| "(all pods)".to_string());
+                    let policy_types = np
+                        .spec
+                        .as_ref()
+                        .and_then(|s| s.policy_types.clone())
+                        .unwrap_or_default();
+                    NetworkPolicy {
+                        name: np.metadata.name.clone().unwrap_or_default(),
+                        namespace: namespace.to_string(),
+                        pod_selector,
+                        policy_types,
+                        created_at: format_k8s_age(&np.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
@@ -3376,7 +3852,18 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "delete", "networkpolicy", name, "-n", namespace])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "k3s",
+                    "kubectl",
+                    "delete",
+                    "networkpolicy",
+                    name,
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -3389,8 +3876,7 @@ impl K8sManager for K3sManager {
         #[cfg(not(target_os = "windows"))]
         {
             let client = self.get_client().await?;
-            let api: Api<k8s_openapi::api::networking::v1::NetworkPolicy> =
-                Api::namespaced(client.clone(), namespace);
+            let api: Api<k8s_openapi::api::networking::v1::NetworkPolicy> = Api::namespaced(client.clone(), namespace);
             api.delete(name, &DeleteParams::default()).await?;
             Ok(())
         }
@@ -3402,26 +3888,29 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "storageclasses"]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|sc: &serde_json::Value| {
-                let annotations = sc["metadata"]["annotations"].as_object();
-                let is_default = annotations
-                    .map(|a| {
-                        a.get("storageclass.kubernetes.io/is-default-class")
-                            .or_else(|| a.get("storageclass.beta.kubernetes.io/is-default-class"))
-                            .and_then(|v| v.as_str())
-                            .map(|v| v == "true")
-                            .unwrap_or(false)
-                    })
-                    .unwrap_or(false);
-                StorageClass {
-                    name: sc["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    provisioner: sc["provisioner"].as_str().unwrap_or("").to_string(),
-                    reclaim_policy: sc["reclaimPolicy"].as_str().unwrap_or("Delete").to_string(),
-                    volume_binding_mode: sc["volumeBindingMode"].as_str().unwrap_or("Immediate").to_string(),
-                    is_default,
-                    created_at: sc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|sc: &serde_json::Value| {
+                    let annotations = sc["metadata"]["annotations"].as_object();
+                    let is_default = annotations
+                        .map(|a| {
+                            a.get("storageclass.kubernetes.io/is-default-class")
+                                .or_else(|| a.get("storageclass.beta.kubernetes.io/is-default-class"))
+                                .and_then(|v| v.as_str())
+                                .map(|v| v == "true")
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(false);
+                    StorageClass {
+                        name: sc["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        provisioner: sc["provisioner"].as_str().unwrap_or("").to_string(),
+                        reclaim_policy: sc["reclaimPolicy"].as_str().unwrap_or("Delete").to_string(),
+                        volume_binding_mode: sc["volumeBindingMode"].as_str().unwrap_or("Immediate").to_string(),
+                        is_default,
+                        created_at: sc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -3429,24 +3918,34 @@ impl K8sManager for K3sManager {
             let client = self.get_client().await?;
             let api: Api<k8s_openapi::api::storage::v1::StorageClass> = Api::all(client.clone());
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|sc| {
-                let is_default = sc.metadata.annotations.as_ref()
-                    .map(|a| {
-                        a.get("storageclass.kubernetes.io/is-default-class")
-                            .or_else(|| a.get("storageclass.beta.kubernetes.io/is-default-class"))
-                            .map(|v| v == "true")
-                            .unwrap_or(false)
-                    })
-                    .unwrap_or(false);
-                StorageClass {
-                    name: sc.metadata.name.clone().unwrap_or_default(),
-                    provisioner: sc.provisioner.clone(),
-                    reclaim_policy: sc.reclaim_policy.clone().unwrap_or_else(|| "Delete".to_string()),
-                    volume_binding_mode: sc.volume_binding_mode.clone().unwrap_or_else(|| "Immediate".to_string()),
-                    is_default,
-                    created_at: format_k8s_age(&sc.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|sc| {
+                    let is_default = sc
+                        .metadata
+                        .annotations
+                        .as_ref()
+                        .map(|a| {
+                            a.get("storageclass.kubernetes.io/is-default-class")
+                                .or_else(|| a.get("storageclass.beta.kubernetes.io/is-default-class"))
+                                .map(|v| v == "true")
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(false);
+                    StorageClass {
+                        name: sc.metadata.name.clone().unwrap_or_default(),
+                        provisioner: sc.provisioner.clone(),
+                        reclaim_policy: sc.reclaim_policy.clone().unwrap_or_else(|| "Delete".to_string()),
+                        volume_binding_mode: sc
+                            .volume_binding_mode
+                            .clone()
+                            .unwrap_or_else(|| "Immediate".to_string()),
+                        is_default,
+                        created_at: format_k8s_age(&sc.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 
@@ -3456,24 +3955,27 @@ impl K8sManager for K3sManager {
             let json = self.wsl_kubectl_json(&["get", "crds"]).await?;
             let empty_vec = vec![];
             let items = json["items"].as_array().unwrap_or(&empty_vec);
-            return Ok(items.iter().map(|crd: &serde_json::Value| {
-                let names = &crd["spec"]["names"];
-                let empty_arr: Vec<serde_json::Value> = vec![];
-                let versions: Vec<String> = crd["spec"]["versions"]
-                    .as_array()
-                    .unwrap_or(&empty_arr)
-                    .iter()
-                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
-                    .collect();
-                CustomResourceDefinition {
-                    name: crd["metadata"]["name"].as_str().unwrap_or("").to_string(),
-                    group: crd["spec"]["group"].as_str().unwrap_or("").to_string(),
-                    kind: names["kind"].as_str().unwrap_or("").to_string(),
-                    scope: crd["spec"]["scope"].as_str().unwrap_or("Namespaced").to_string(),
-                    versions,
-                    created_at: crd["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
-                }
-            }).collect());
+            return Ok(items
+                .iter()
+                .map(|crd: &serde_json::Value| {
+                    let names = &crd["spec"]["names"];
+                    let empty_arr: Vec<serde_json::Value> = vec![];
+                    let versions: Vec<String> = crd["spec"]["versions"]
+                        .as_array()
+                        .unwrap_or(&empty_arr)
+                        .iter()
+                        .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                        .collect();
+                    CustomResourceDefinition {
+                        name: crd["metadata"]["name"].as_str().unwrap_or("").to_string(),
+                        group: crd["spec"]["group"].as_str().unwrap_or("").to_string(),
+                        kind: names["kind"].as_str().unwrap_or("").to_string(),
+                        scope: crd["spec"]["scope"].as_str().unwrap_or("Namespaced").to_string(),
+                        versions,
+                        created_at: crd["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                    }
+                })
+                .collect());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -3482,20 +3984,22 @@ impl K8sManager for K3sManager {
             let api: Api<k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition> =
                 Api::all(client.clone());
             let list = api.list(&ListParams::default()).await?;
-            Ok(list.items.iter().map(|crd| {
-                let spec = &crd.spec;
-                let versions: Vec<String> = spec.versions.iter()
-                    .map(|v| v.name.clone())
-                    .collect();
-                CustomResourceDefinition {
-                    name: crd.metadata.name.clone().unwrap_or_default(),
-                    group: spec.group.clone(),
-                    kind: spec.names.kind.clone(),
-                    scope: spec.scope.clone(),
-                    versions,
-                    created_at: format_k8s_age(&crd.metadata.creation_timestamp),
-                }
-            }).collect())
+            Ok(list
+                .items
+                .iter()
+                .map(|crd| {
+                    let spec = &crd.spec;
+                    let versions: Vec<String> = spec.versions.iter().map(|v| v.name.clone()).collect();
+                    CustomResourceDefinition {
+                        name: crd.metadata.name.clone().unwrap_or_default(),
+                        group: spec.group.clone(),
+                        kind: spec.names.kind.clone(),
+                        scope: spec.scope.clone(),
+                        versions,
+                        created_at: format_k8s_age(&crd.metadata.creation_timestamp),
+                    }
+                })
+                .collect())
         }
     }
 }
@@ -3530,15 +4034,18 @@ impl K3sManager {
         }
 
         let releases: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout)?;
-        Ok(releases.iter().map(|r| HelmRelease {
-            name: r["name"].as_str().unwrap_or("").to_string(),
-            namespace: r["namespace"].as_str().unwrap_or("").to_string(),
-            chart: r["chart"].as_str().unwrap_or("").to_string(),
-            status: r["status"].as_str().unwrap_or("").to_string(),
-            revision: r["revision"].as_str().unwrap_or("").to_string(),
-            updated: r["updated"].as_str().unwrap_or("").to_string(),
-            app_version: r["app_version"].as_str().unwrap_or("").to_string(),
-        }).collect())
+        Ok(releases
+            .iter()
+            .map(|r| HelmRelease {
+                name: r["name"].as_str().unwrap_or("").to_string(),
+                namespace: r["namespace"].as_str().unwrap_or("").to_string(),
+                chart: r["chart"].as_str().unwrap_or("").to_string(),
+                status: r["status"].as_str().unwrap_or("").to_string(),
+                revision: r["revision"].as_str().unwrap_or("").to_string(),
+                updated: r["updated"].as_str().unwrap_or("").to_string(),
+                app_version: r["app_version"].as_str().unwrap_or("").to_string(),
+            })
+            .collect())
     }
 
     /// Uninstall a Helm release.
@@ -3581,10 +4088,15 @@ impl K3sManager {
         #[cfg(target_os = "windows")]
         let output = {
             let mut args = vec![
-                "-u".to_string(), "root".to_string(), "--".to_string(),
-                "helm".to_string(), "install".to_string(),
-                release_name.to_string(), chart.to_string(),
-                "-n".to_string(), namespace.to_string(),
+                "-u".to_string(),
+                "root".to_string(),
+                "--".to_string(),
+                "helm".to_string(),
+                "install".to_string(),
+                release_name.to_string(),
+                chart.to_string(),
+                "-n".to_string(),
+                namespace.to_string(),
                 "--create-namespace".to_string(),
             ];
             if let Some(vals) = set_values {
@@ -3593,10 +4105,7 @@ impl K3sManager {
                     args.push(v.to_string());
                 }
             }
-            Command::new("wsl")
-                .args(&args)
-                .output()
-                .await?
+            Command::new("wsl").args(&args).output().await?
         };
 
         #[cfg(not(target_os = "windows"))]
@@ -3658,10 +4167,7 @@ impl K3sManager {
         let mut cmd_args = vec!["-u", "root", "--", "k3s", "kubectl"];
         cmd_args.extend_from_slice(args);
         cmd_args.extend_from_slice(&["-o", "json"]);
-        let output = Command::new("wsl")
-            .args(&cmd_args)
-            .output()
-            .await?;
+        let output = Command::new("wsl").args(&cmd_args).output().await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("kubectl failed: {stderr}");
@@ -3705,17 +4211,12 @@ fn k8s_pod_to_pod(p: &k8s_openapi::api::core::v1::Pod, namespace: &str) -> Pod {
         .and_then(|s| s.phase.clone())
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let container_statuses = status
-        .and_then(|s| s.container_statuses.clone())
-        .unwrap_or_default();
+    let container_statuses = status.and_then(|s| s.container_statuses.clone()).unwrap_or_default();
 
     let ready_count = container_statuses.iter().filter(|c| c.ready).count();
     let total_count = container_statuses.len();
 
-    let restarts: u32 = container_statuses
-        .iter()
-        .map(|c| c.restart_count as u32)
-        .sum();
+    let restarts: u32 = container_statuses.iter().map(|c| c.restart_count as u32).sum();
 
     let containers = container_statuses
         .iter()
@@ -3757,9 +4258,7 @@ fn k8s_pod_to_pod(p: &k8s_openapi::api::core::v1::Pod, namespace: &str) -> Pod {
     }
 }
 
-fn format_k8s_age(
-    timestamp: &Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time>,
-) -> String {
+fn format_k8s_age(timestamp: &Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time>) -> String {
     match timestamp {
         Some(t) => {
             let now = chrono::Utc::now();
@@ -3798,8 +4297,12 @@ fn format_chrono_duration(dur: chrono::Duration) -> String {
 /// Parse two RFC 3339 timestamps and return a human-readable duration.
 #[allow(dead_code)]
 fn format_duration_between(start: &str, end: &str) -> String {
-    let Ok(s) = chrono::DateTime::parse_from_rfc3339(start) else { return String::new() };
-    let Ok(e) = chrono::DateTime::parse_from_rfc3339(end) else { return String::new() };
+    let Ok(s) = chrono::DateTime::parse_from_rfc3339(start) else {
+        return String::new();
+    };
+    let Ok(e) = chrono::DateTime::parse_from_rfc3339(end) else {
+        return String::new();
+    };
     format_chrono_duration(e.signed_duration_since(s))
 }
 
@@ -3812,8 +4315,7 @@ impl K3sManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let output = cmd.output().await
-            .map_err(|e| anyhow::anyhow!("kubectl failed: {e}"))?;
+        let output = cmd.output().await.map_err(|e| anyhow::anyhow!("kubectl failed: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -3831,6 +4333,8 @@ impl K3sManager {
 /// Parse an RFC 3339 timestamp and return duration since now.
 #[allow(dead_code)]
 fn format_duration_since(start: &str) -> String {
-    let Ok(s) = chrono::DateTime::parse_from_rfc3339(start) else { return String::new() };
+    let Ok(s) = chrono::DateTime::parse_from_rfc3339(start) else {
+        return String::new();
+    };
     format_chrono_duration(chrono::Utc::now().signed_duration_since(s))
 }

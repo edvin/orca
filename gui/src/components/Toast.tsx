@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import { logError, logWarning, logInfo } from "../lib/activityStore";
+import { logError } from "../lib/activityStore";
 
 export type ToastType = "success" | "error" | "info";
 

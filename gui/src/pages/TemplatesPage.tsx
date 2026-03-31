@@ -556,7 +556,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
         <label class="form-label" style={{ margin: 0 }}>Port Mappings</label>
-        <button class="btn btn-sm" onClick={props.add} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
+        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.ports().length > 0} fallback={
         <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No port mappings. Add one to expose a container port to the host (e.g., 8080:80).</div>
@@ -586,7 +586,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
         <label class="form-label" style={{ margin: 0 }}>Environment Variables</label>
-        <button class="btn btn-sm" onClick={props.add} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
+        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.env().length > 0} fallback={
         <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No environment variables. Add KEY=VALUE pairs to configure the application.</div>
@@ -610,7 +610,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         </div>
       </Show>
       <Show when={props.showWarning}>
-        <span class="form-hint" style="color: #d29922; margin-top: 6px; display: block">
+        <span class="form-hint" style={{"color":"#d29922","margin-top":"6px","display":"block"}}>
           {"\u26a0"} Contains default passwords — change before production use!
         </span>
       </Show>
@@ -621,7 +621,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
         <label class="form-label" style={{ margin: 0 }}>Volumes</label>
-        <button class="btn btn-sm" onClick={props.add} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
+        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.volumes().length > 0} fallback={
         <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No volumes. Add one to persist data (e.g., data:/var/lib/myapp).</div>
@@ -665,6 +665,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     const colors = () => categoryColors[props.template.category] || categoryColors["Tools"];
     return (
     <div class="template-card" onClick={() => openDeploy(props.template)} style={{ position: "relative" }}>
+      {/* eslint-disable-next-line solid/no-innerhtml -- template icons are trusted inline SVG strings */}
       <div class="template-icon" style={{ background: colors().bg, color: colors().color, "border-color": colors().border }} innerHTML={props.template.icon} />
       <div class="template-name">{props.template.name}</div>
       <div class="template-desc">{props.template.description}</div>
@@ -731,7 +732,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       {/* Curated tab content */}
       <Show when={activeTab() === "curated"}>
         {/* Category filter tabs */}
-        <div class="tab-bar" style="margin-bottom: 24px">
+        <div class="tab-bar" style={{"margin-bottom":"24px"}}>
           <For each={categories()}>
             {(cat) => (
               <button
@@ -935,7 +936,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                           )}
                         </Show>
                       </label>
-                      <input class="form-input" value={template().image} disabled style="opacity: 0.7" />
+                      <input class="form-input" value={template().image} disabled style={{"opacity":"0.7"}} />
                     </div>
                     <PortEditor ports={deployPorts} update={updatePort} add={addPort} remove={removePort} />
                     <EnvEditor env={deployEnv} update={updateEnv} add={addEnv} remove={removeEnv} showWarning={hasPasswordEnv()} />
@@ -997,7 +998,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 <Show when={template().notes}>
                   <div class="form-group">
                     <label class="form-label">Notes</label>
-                    <div style="font-size: 12px; color: #8b949e; background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #21262d">
+                    <div style={{"font-size":"12px","color":"#8b949e","background":"#0d1117","padding":"10px","border-radius":"6px","border":"1px solid #21262d"}}>
                       {template().notes}
                     </div>
                   </div>

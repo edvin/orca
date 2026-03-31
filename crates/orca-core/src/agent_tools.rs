@@ -366,11 +366,7 @@ mod tests {
         let catalog = tool_catalog();
         let mut seen = HashSet::new();
         for tool in &catalog {
-            assert!(
-                seen.insert(&tool.name),
-                "duplicate tool name: '{}'",
-                tool.name
-            );
+            assert!(seen.insert(&tool.name), "duplicate tool name: '{}'", tool.name);
         }
     }
 

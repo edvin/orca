@@ -1,6 +1,4 @@
-use bollard::image::{
-    BuildImageOptions, CreateImageOptions, ListImagesOptions, RemoveImageOptions, TagImageOptions,
-};
+use bollard::image::{BuildImageOptions, CreateImageOptions, ListImagesOptions, RemoveImageOptions, TagImageOptions};
 use tokio_stream::StreamExt;
 
 use orca_core::image::*;
@@ -26,10 +24,7 @@ impl ImageManager for BollardRuntime {
             .collect())
     }
 
-    async fn pull(
-        &self,
-        reference: &str,
-    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<PullProgress>> {
+    async fn pull(&self, reference: &str) -> anyhow::Result<tokio::sync::mpsc::Receiver<PullProgress>> {
         let reference = reference.to_string();
         let options = CreateImageOptions {
             from_image: reference.as_str(),
@@ -107,10 +102,7 @@ impl ImageManager for BollardRuntime {
 
     async fn tag(&self, source: &str, repo: &str, tag: &str) -> anyhow::Result<()> {
         self.docker
-            .tag_image(
-                source,
-                Some(TagImageOptions { repo, tag }),
-            )
+            .tag_image(source, Some(TagImageOptions { repo, tag }))
             .await?;
         Ok(())
     }
@@ -176,9 +168,7 @@ impl BollardRuntime {
             serveraddress: auth.server.clone(),
             ..Default::default()
         };
-        let stream = self
-            .docker
-            .create_image(Some(options), None, Some(credentials));
+        let stream = self.docker.create_image(Some(options), None, Some(credentials));
         let items: Vec<_> = stream.collect().await;
         let items: Vec<_> = items.into_iter().filter_map(|r| r.ok()).collect();
         let (tx, rx) = tokio::sync::mpsc::channel(64);
@@ -240,11 +230,7 @@ fn add_dir_to_tar(
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        let relative = path
-            .strip_prefix(base)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .to_string();
+        let relative = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string();
 
         // Skip .git and .dockerignore patterns
         if relative == ".git" || relative.starts_with(".git/") {

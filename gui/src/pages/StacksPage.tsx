@@ -47,7 +47,7 @@ export default function StacksPage(props: StacksPageProps) {
       const result = (await invoke("list_stacks")) as ComposeProject[];
       setStacks(result);
       setLastUpdated(new Date());
-    } catch (e) {
+    } catch {
     }
   };
 

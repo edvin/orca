@@ -1,5 +1,4 @@
 import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
-import type { Page } from "../App";
 
 interface Command {
   id: string;

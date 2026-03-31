@@ -1,7 +1,7 @@
-import { createSignal, createEffect, onMount, onCleanup, For, Index, Show } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, Index, Show, untrack } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Image, ImageSearchResult, ScanResult, ScanVulnerability } from "../lib/types";
+import type { Image, ImageSearchResult, ScanResult } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes, formatTimestamp, shortId } from "../lib/format";
 import { showToast } from "../components/Toast";
@@ -37,7 +37,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [buildDockerfile, setBuildDockerfile] = createSignal("");
   const [buildTag, setBuildTag] = createSignal("");
   const [building, setBuilding] = createSignal(false);
-  const [buildLog, setBuildLog] = createSignal<string[]>([]);
+  const [_buildLog, setBuildLog] = createSignal<string[]>([]);
   const [buildOutput, setBuildOutput] = createSignal<string[]>([]);
   const [showAuth, setShowAuth] = createSignal(false);
   const [authUsername, setAuthUsername] = createSignal("");
@@ -99,7 +99,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       const result = (await invoke("list_images")) as Image[];
       setImages(result);
       setLastUpdated(new Date());
-    } catch (e) {
+    } catch {
     }
   };
 
@@ -292,15 +292,18 @@ export default function ImagesPage(props: ImagesPageProps) {
       unlisten = await listen<any>("pull-progress", (event) => {
         const data = event.payload;
         if (data.event === "progress" && data.layer) {
-          setPullLayers((prev) => ({
-            ...prev,
-            [data.layer]: { status: data.status, current: data.current, total: data.total },
-          }));
-          // Update status with layer count
-          const layers = Object.values(pullLayers());
-          const done = layers.filter((l: any) => l.status === "Pull complete" || l.status === "Already exists").length;
-          const total = layers.length;
-          if (total > 0) setPullStatus(`Pulling ${ref_}... ${done}/${total} layers`);
+          setPullLayers((prev) => {
+            const next = {
+              ...prev,
+              [data.layer]: { status: data.status, current: data.current, total: data.total },
+            };
+            // Update status with layer count
+            const layers = Object.values(next);
+            const done = layers.filter((l: any) => l.status === "Pull complete" || l.status === "Already exists").length;
+            const total = layers.length;
+            if (total > 0) setPullStatus(`Pulling ${ref_}... ${done}/${total} layers`);
+            return next;
+          });
         } else if (data.event === "done") {
           setPullStatus("");
           setPullRef("");
@@ -1885,12 +1888,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                     <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "12px" }}>
                       {historyItems.length} layers — Total: {formatBytes(totalSize)}
                     </div>
-                    <For each={historyItems}>
-                      {(item: any, idx) => {
+                    <Index each={historyItems}>
+                      {(itemAccessor: () => any, index: number) => {
+                        const item = untrack(itemAccessor);
                         const layerSize = item.Size || item.size || 0;
                         const createdBy = item.CreatedBy || item.created_by || "";
                         const instruction = parseInstruction(createdBy);
-                        const isBaseLayer = idx() < Math.max(1, historyItems.length - 4) && layerSize > 0;
+                        const isBaseLayer = index < Math.max(1, historyItems.length - 4) && layerSize > 0;
                         const barWidth = maxSize > 0 ? Math.max(2, (layerSize / maxSize) * 100) : 2;
                         const barColor = isBaseLayer ? "#30363d" : "#1f6feb";
                         const borderColor = isBaseLayer ? "#484f58" : "#58a6ff";
@@ -1932,7 +1936,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                           </div>
                         );
                       }}
-                    </For>
+                    </Index>
                   </>
                 );
               })()}

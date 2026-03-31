@@ -180,25 +180,30 @@ pub enum DeployStatus {
 impl OrcaConfig {
     /// Find deploy rules matching an image and tag.
     pub fn find_matching_rules(&self, image: &str, tag: &str) -> Vec<&DeployRule> {
-        self.deploy_rules.iter().filter(|r| {
-            if !r.enabled { return false; }
-            // Match image pattern (substring or exact)
-            if !image.contains(&r.image_pattern) && r.image_pattern != image {
-                return false;
-            }
-            // Match tag filter
-            let filter = r.tag_filter.trim();
-            if filter.is_empty() || filter == "*" {
-                return true;
-            }
-            if filter.contains('*') {
-                // Simple glob: "v*" matches "v1.2.3"
-                let prefix = filter.trim_end_matches('*');
-                tag.starts_with(prefix)
-            } else {
-                tag == filter
-            }
-        }).collect()
+        self.deploy_rules
+            .iter()
+            .filter(|r| {
+                if !r.enabled {
+                    return false;
+                }
+                // Match image pattern (substring or exact)
+                if !image.contains(&r.image_pattern) && r.image_pattern != image {
+                    return false;
+                }
+                // Match tag filter
+                let filter = r.tag_filter.trim();
+                if filter.is_empty() || filter == "*" {
+                    return true;
+                }
+                if filter.contains('*') {
+                    // Simple glob: "v*" matches "v1.2.3"
+                    let prefix = filter.trim_end_matches('*');
+                    tag.starts_with(prefix)
+                } else {
+                    tag == filter
+                }
+            })
+            .collect()
     }
 
     /// Add a deploy record, capping history at 100 entries.
@@ -311,7 +316,8 @@ impl OrcaConfig {
                     tracing::warn!(
                         "Config file at {} could not be parsed ({}), using in-memory defaults. \
                          File NOT overwritten — may recover on next load.",
-                        path.display(), e
+                        path.display(),
+                        e
                     );
                     Ok(Self::default())
                 }
@@ -349,17 +355,12 @@ impl OrcaConfig {
     /// "ghcr.io/user/repo:tag" -> look for "ghcr.io" or "https://ghcr.io"
     /// "nginx:latest" -> look for "docker.io" or "https://index.docker.io/v1/"
     pub fn find_credentials(&self, image_ref: &str) -> Option<&RegistryCredential> {
-        let registry = if image_ref.contains('/')
-            && image_ref
-                .split('/')
-                .next()
-                .map(|s| s.contains('.'))
-                .unwrap_or(false)
-        {
-            image_ref.split('/').next().unwrap_or("")
-        } else {
-            "docker.io"
-        };
+        let registry =
+            if image_ref.contains('/') && image_ref.split('/').next().map(|s| s.contains('.')).unwrap_or(false) {
+                image_ref.split('/').next().unwrap_or("")
+            } else {
+                "docker.io"
+            };
 
         self.registries.iter().find(|r| {
             let normalized = r
@@ -472,12 +473,9 @@ mod tests {
     #[test]
     fn find_credentials_no_match() {
         let mut config = OrcaConfig::default();
-        config.registries.push(RegistryCredential::new(
-            "https://ghcr.io",
-            "GitHub",
-            "user",
-            "pass",
-        ));
+        config
+            .registries
+            .push(RegistryCredential::new("https://ghcr.io", "GitHub", "user", "pass"));
         let cred = config.find_credentials("registry.example.com/image:v1");
         assert!(cred.is_none(), "should not match unknown registry");
     }
@@ -505,11 +503,14 @@ mod tests {
     #[test]
     fn remove_registry_works() {
         let mut config = OrcaConfig::default();
+        config
+            .registries
+            .push(RegistryCredential::new("https://ghcr.io", "GH", "user", "pass"));
         config.registries.push(RegistryCredential::new(
-            "https://ghcr.io", "GH", "user", "pass",
-        ));
-        config.registries.push(RegistryCredential::new(
-            "https://index.docker.io/v1/", "Docker Hub", "user2", "pass2",
+            "https://index.docker.io/v1/",
+            "Docker Hub",
+            "user2",
+            "pass2",
         ));
         config.registries.retain(|r| r.server != "https://ghcr.io");
         assert_eq!(config.registries.len(), 1);

@@ -30,7 +30,6 @@ struct Args {
     /// Bind address for TCP mode.
     #[arg(long, default_value = "127.0.0.1")]
     bind: String,
-
 }
 
 fn default_socket_path() -> PathBuf {
@@ -44,10 +43,11 @@ fn default_socket_path() -> PathBuf {
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_ansi(false) // No ANSI colors — output goes to a log file
-        .with_env_filter(EnvFilter::from_default_env()
-            .add_directive("orca_daemon=debug".parse()?)
-            .add_directive("orca_backend_common=debug".parse()?)
-            .add_directive("orca_core=debug".parse()?)
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive("orca_daemon=debug".parse()?)
+                .add_directive("orca_backend_common=debug".parse()?)
+                .add_directive("orca_core=debug".parse()?),
         )
         .init();
 
@@ -139,11 +139,10 @@ async fn main() -> anyhow::Result<()> {
                 .timeout(std::time::Duration::from_secs(2))
                 .send()
                 .await
+                && resp.status().is_success()
             {
-                if resp.status().is_success() {
-                    tracing::info!("Another Orca daemon is already running on {addr}");
-                    return Ok(());
-                }
+                tracing::info!("Another Orca daemon is already running on {addr}");
+                return Ok(());
             }
             anyhow::bail!(
                 "Port {addr} is already in use by another process. \
@@ -176,7 +175,12 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     );
     if let Ok(output) = std::process::Command::new("docker")
         .env("PATH", &extended_path)
-        .args(["context", "inspect", "--format", "{{.Name}} -> {{.Endpoints.docker.Host}}"])
+        .args([
+            "context",
+            "inspect",
+            "--format",
+            "{{.Name}} -> {{.Endpoints.docker.Host}}",
+        ])
         .output()
     {
         if output.status.success() {
@@ -225,14 +229,25 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
         use tokio::process::Command;
         // Check if a Lima VM exists (orca or docker)
         if let Ok(output) = Command::new("limactl")
-            .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default()))
+            .env(
+                "PATH",
+                format!(
+                    "/opt/homebrew/bin:/usr/local/bin:{}",
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
             .args(["list", "--format", "{{.Name}} {{.Status}}"])
-            .output().await
+            .output()
+            .await
         {
             let text = String::from_utf8_lossy(&output.stdout);
-            let vm_name = if text.lines().any(|l| l.starts_with("orca ")) { Some("orca") }
-                else if text.lines().any(|l| l.starts_with("docker ")) { Some("docker") }
-                else { None };
+            let vm_name = if text.lines().any(|l| l.starts_with("orca ")) {
+                Some("orca")
+            } else if text.lines().any(|l| l.starts_with("docker ")) {
+                Some("docker")
+            } else {
+                None
+            };
 
             if let Some(name) = vm_name {
                 let is_running = text.lines().any(|l| l.starts_with(name) && l.contains("Running"));
@@ -244,9 +259,16 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
                 if !is_running || was_reconfigured {
                     tracing::info!("Starting Lima VM '{name}'...");
                     let _ = Command::new("limactl")
-                        .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default()))
+                        .env(
+                            "PATH",
+                            format!(
+                                "/opt/homebrew/bin:/usr/local/bin:{}",
+                                std::env::var("PATH").unwrap_or_default()
+                            ),
+                        )
                         .args(["start", name])
-                        .output().await;
+                        .output()
+                        .await;
                 }
 
                 // Wait for Docker socket to appear
@@ -255,7 +277,9 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
                 for attempt in 1..=15 {
                     if std::path::Path::new(&socket).exists() {
                         tracing::info!("Lima socket ready: {socket}");
-                        if let Ok(docker) = bollard::Docker::connect_with_socket(&socket, 120, bollard::API_DEFAULT_VERSION) {
+                        if let Ok(docker) =
+                            bollard::Docker::connect_with_socket(&socket, 120, bollard::API_DEFAULT_VERSION)
+                        {
                             if docker.ping().await.is_ok() {
                                 tracing::info!("Connected to Docker via Lima VM '{name}' (attempt {attempt})");
                                 return Arc::new(orca_backend_common::BollardRuntime::new(docker));
@@ -283,9 +307,9 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
         }
 
         // Try TCP on localhost:2375 (Docker in WSL2 with TCP listener)
-        if let Ok(docker) = bollard::Docker::connect_with_http(
-            "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
-        ) {
+        if let Ok(docker) =
+            bollard::Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION)
+        {
             if docker.ping().await.is_ok() {
                 tracing::info!("Connected to Docker via TCP (localhost:2375)");
                 return Arc::new(orca_backend_common::BollardRuntime::new(docker));
@@ -314,11 +338,13 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
             tracing::info!("WSL2 Docker connection attempt {attempt}/7...");
 
             // Try TCP
-            if let Ok(docker) = bollard::Docker::connect_with_http(
-                "http://localhost:2375", 120, bollard::API_DEFAULT_VERSION
-            ) {
+            if let Ok(docker) =
+                bollard::Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION)
+            {
                 if docker.ping().await.is_ok() {
-                    tracing::info!("Connected to Docker via TCP after starting WSL2 Docker service (attempt {attempt})");
+                    tracing::info!(
+                        "Connected to Docker via TCP after starting WSL2 Docker service (attempt {attempt})"
+                    );
                     return Arc::new(orca_backend_common::BollardRuntime::new(docker));
                 }
             }
@@ -326,7 +352,9 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
             // Try socket via WSL interop
             if let Ok(docker) = bollard::Docker::connect_with_local_defaults() {
                 if docker.ping().await.is_ok() {
-                    tracing::info!("Connected to Docker via socket after starting WSL2 Docker service (attempt {attempt})");
+                    tracing::info!(
+                        "Connected to Docker via socket after starting WSL2 Docker service (attempt {attempt})"
+                    );
                     return Arc::new(orca_backend_common::BollardRuntime::new(docker));
                 }
             }
@@ -338,14 +366,13 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     tracing::warn!("No container runtime available");
     tracing::warn!("Daemon will start without runtime — Environment page will guide setup");
 
-
     // Create a fallback connection that will error on use
     Arc::new(orca_backend_common::BollardRuntime::new(
-        bollard::Docker::connect_with_local_defaults()
-            .unwrap_or_else(|_| bollard::Docker::connect_with_defaults().unwrap_or_else(|_| {
-                bollard::Docker::connect_with_http_defaults()
-                    .expect("failed to create fallback Docker client")
-            }))
+        bollard::Docker::connect_with_local_defaults().unwrap_or_else(|_| {
+            bollard::Docker::connect_with_defaults().unwrap_or_else(|_| {
+                bollard::Docker::connect_with_http_defaults().expect("failed to create fallback Docker client")
+            })
+        }),
     ))
 }
 
@@ -359,7 +386,10 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
 
     let home = std::env::var("HOME").unwrap_or_default();
     let lima_yaml_path = format!("{home}/.lima/{vm_name}/lima.yaml");
-    let path_env = format!("/opt/homebrew/bin:/usr/local/bin:{}", std::env::var("PATH").unwrap_or_default());
+    let path_env = format!(
+        "/opt/homebrew/bin:/usr/local/bin:{}",
+        std::env::var("PATH").unwrap_or_default()
+    );
 
     let yaml_content = match tokio::fs::read_to_string(&lima_yaml_path).await {
         Ok(c) => c,
@@ -426,7 +456,8 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
         let _ = Command::new("limactl")
             .env("PATH", &path_env)
             .args(["stop", vm_name])
-            .output().await;
+            .output()
+            .await;
     }
 
     // Remove the broken ignore rule if present
@@ -434,9 +465,14 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
         // Filter out the portForward entry that has ignore: true
         let _ = Command::new("limactl")
             .env("PATH", &path_env)
-            .args(["edit", vm_name, "--set",
-                r#".portForwards = [.portForwards[] | select(.ignore != true)]"#])
-            .output().await;
+            .args([
+                "edit",
+                vm_name,
+                "--set",
+                r#".portForwards = [.portForwards[] | select(.ignore != true)]"#,
+            ])
+            .output()
+            .await;
         tracing::info!("Removed 'ignore: true' port forwarding rule");
     }
 
@@ -445,7 +481,8 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
         let output = Command::new("limactl")
             .env("PATH", &path_env)
             .args(["edit", vm_name, "--set", set_expr])
-            .output().await;
+            .output()
+            .await;
         match output {
             Ok(o) if o.status.success() => {
                 tracing::info!("Applied: {desc}");
@@ -484,28 +521,42 @@ async fn run_scheduler(state: Arc<state::AppState>) {
         let now = chrono::Utc::now();
 
         for schedule in &config.schedules {
-            if !schedule.enabled { continue; }
+            if !schedule.enabled {
+                continue;
+            }
 
             let cron_schedule = match Schedule::from_str(&schedule.cron) {
                 Ok(s) => s,
                 Err(e) => {
-                    tracing::warn!("Invalid cron expression '{}' for schedule '{}': {e}", schedule.cron, schedule.name);
+                    tracing::warn!(
+                        "Invalid cron expression '{}' for schedule '{}': {e}",
+                        schedule.cron,
+                        schedule.name
+                    );
                     continue;
                 }
             };
 
             // Check if the schedule should have fired in the last 60 seconds
-            let last_run = schedule.last_run.map(|ts| {
-                chrono::DateTime::<chrono::Utc>::from_timestamp(ts as i64, 0).unwrap_or_default()
-            });
+            let last_run = schedule
+                .last_run
+                .map(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts as i64, 0).unwrap_or_default());
 
-            let should_run = cron_schedule.after(&(now - chrono::Duration::seconds(61)))
+            let should_run = cron_schedule
+                .after(&(now - chrono::Duration::seconds(61)))
                 .take(1)
                 .any(|next| next <= now && last_run.map(|lr| next > lr).unwrap_or(true));
 
-            if !should_run { continue; }
+            if !should_run {
+                continue;
+            }
 
-            tracing::info!("Scheduler: executing '{}' — {} on '{}'", schedule.name, schedule.action, schedule.container);
+            tracing::info!(
+                "Scheduler: executing '{}' — {} on '{}'",
+                schedule.name,
+                schedule.action,
+                schedule.container
+            );
 
             use orca_core::runtime::ContainerRuntime;
             let rt = state.rt().await;
@@ -515,7 +566,7 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                 "restart" => {
                     let _ = rt.as_ref().stop_container(&schedule.container, 10).await;
                     rt.as_ref().start_container(&schedule.container).await
-                },
+                }
                 _ => {
                     tracing::warn!("Unknown schedule action: {}", schedule.action);
                     continue;
@@ -537,4 +588,3 @@ async fn run_scheduler(state: Arc<state::AppState>) {
         }
     }
 }
-

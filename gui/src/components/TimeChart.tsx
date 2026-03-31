@@ -116,7 +116,6 @@ export default function TimeChart(props: TimeChartProps) {
     const svg = e.currentTarget as SVGSVGElement;
     const rect = svg.getBoundingClientRect();
     const relX = e.clientX - rect.left;
-    const relY = e.clientY - rect.top;
     const svgX = (relX / rect.width) * WIDTH;
 
     setMouseX(e.clientX);

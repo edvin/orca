@@ -93,7 +93,14 @@ propagateProxyEnv: true
         tokio::fs::write(&config_path, &lima_config).await?;
 
         let output = Command::new("limactl")
-            .args(["create", "--name", &config.name, config_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid config path"))?])
+            .args([
+                "create",
+                "--name",
+                &config.name,
+                config_path
+                    .to_str()
+                    .ok_or_else(|| anyhow::anyhow!("Invalid config path"))?,
+            ])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -183,10 +190,10 @@ propagateProxyEnv: true
 
         // limactl list --json outputs one JSON object per line
         for line in stdout.lines() {
-            if let Ok(vm) = serde_json::from_str::<serde_json::Value>(line) {
-                if vm.get("name").and_then(|n| n.as_str()) == Some(name) {
-                    return Ok(parse_lima_vm(&vm));
-                }
+            if let Ok(vm) = serde_json::from_str::<serde_json::Value>(line)
+                && vm.get("name").and_then(|n| n.as_str()) == Some(name)
+            {
+                return Ok(parse_lima_vm(&vm));
             }
         }
 
@@ -218,16 +225,9 @@ propagateProxyEnv: true
 }
 
 fn parse_lima_vm(vm: &serde_json::Value) -> MachineInfo {
-    let name = vm
-        .get("name")
-        .and_then(|n| n.as_str())
-        .unwrap_or("unknown")
-        .to_string();
+    let name = vm.get("name").and_then(|n| n.as_str()).unwrap_or("unknown").to_string();
 
-    let status = vm
-        .get("status")
-        .and_then(|s| s.as_str())
-        .unwrap_or("Unknown");
+    let status = vm.get("status").and_then(|s| s.as_str()).unwrap_or("Unknown");
 
     let state = match status {
         "Running" => MachineState::Running,
@@ -235,20 +235,9 @@ fn parse_lima_vm(vm: &serde_json::Value) -> MachineInfo {
         _ => MachineState::Error,
     };
 
-    let cpus = vm
-        .get("cpus")
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as u32;
-    let memory = vm
-        .get("memory")
-        .and_then(|m| m.as_u64())
-        .unwrap_or(0)
-        / (1024 * 1024); // bytes to MB
-    let disk = vm
-        .get("disk")
-        .and_then(|d| d.as_u64())
-        .unwrap_or(0)
-        / (1024 * 1024 * 1024); // bytes to GB
+    let cpus = vm.get("cpus").and_then(|c| c.as_u64()).unwrap_or(0) as u32;
+    let memory = vm.get("memory").and_then(|m| m.as_u64()).unwrap_or(0) / (1024 * 1024); // bytes to MB
+    let disk = vm.get("disk").and_then(|d| d.as_u64()).unwrap_or(0) / (1024 * 1024 * 1024); // bytes to GB
 
     MachineInfo {
         name: name.clone(),
