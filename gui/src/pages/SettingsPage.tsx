@@ -42,7 +42,7 @@ function CertificateAuthoritySection() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast("CA Certificate saved. Check your Downloads folder for orca-ca.pem", "success");
+      showToast(`CA Certificate saved to ${downloadPath}`, "success");
     } catch (e) {
       showToast(`Failed to download CA certificate: ${e}`, "error");
     }
@@ -54,10 +54,14 @@ function CertificateAuthoritySection() {
     setTimeout(() => setCopiedCmd(null), 2000);
   };
 
+  const downloadPath = navigator.platform.includes("Win")
+    ? "%USERPROFILE%\\Downloads\\orca-ca.pem"
+    : "~/Downloads/orca-ca.pem";
+
   const installInstructions: [string, string, string][] = [
-    ["macOS", "sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain orca-ca.pem", ""],
-    ["Windows", "certutil -addstore -f \"ROOT\" orca-ca.pem", ""],
-    ["Linux", "sudo cp orca-ca.pem /usr/local/share/ca-certificates/orca-ca.crt && sudo update-ca-certificates", ""],
+    ["macOS", `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/Downloads/orca-ca.pem`, ""],
+    ["Windows", `certutil -addstore -f "ROOT" %USERPROFILE%\\Downloads\\orca-ca.pem`, ""],
+    ["Linux", "sudo cp ~/Downloads/orca-ca.pem /usr/local/share/ca-certificates/orca-ca.crt && sudo update-ca-certificates", ""],
   ];
 
   return (
