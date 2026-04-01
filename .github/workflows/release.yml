@@ -244,5 +244,49 @@ jobs:
     needs: [create-release, build-and-upload]
     runs-on: ubuntu-latest
     steps:
+      - name: Generate updater latest.json
+        shell: bash
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          REPO="${{ github.repository }}"
+          BASE="https://github.com/${REPO}/releases/download/v${VERSION}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Download signature files
+          gh release download "v${VERSION}" --repo "${REPO}" \
+            --pattern "*.sig" --dir /tmp/sigs || true
+
+          read_sig() {
+            local file="/tmp/sigs/$1"
+            if [ -f "$file" ]; then cat "$file"; else echo ""; fi
+          }
+
+          WIN_SIG=$(read_sig "Orca.Desktop_${VERSION}_x64-setup.exe.sig")
+          MAC_SIG=$(read_sig "Orca.Desktop.app.tar.gz.sig")
+          LINUX_SIG=$(read_sig "Orca.Desktop_${VERSION}_amd64.AppImage.sig")
+
+          cat > /tmp/latest.json << ENDJSON
+          {
+            "version": "${VERSION}",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "windows-x86_64": {
+                "url": "${BASE}/Orca.Desktop_${VERSION}_x64-setup.exe",
+                "signature": "${WIN_SIG}"
+              },
+              "darwin-aarch64": {
+                "url": "${BASE}/Orca.Desktop.app.tar.gz",
+                "signature": "${MAC_SIG}"
+              },
+              "linux-x86_64": {
+                "url": "${BASE}/Orca.Desktop_${VERSION}_amd64.AppImage",
+                "signature": "${LINUX_SIG}"
+              }
+            }
+          }
+          ENDJSON
+
+          gh release upload "v${VERSION}" /tmp/latest.json --repo "${REPO}" --clobber
+
       - name: Publish release
         run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false

@@ -69,10 +69,12 @@ export default function StatusBar(props: StatusBarProps) {
 
   onMount(() => {
     pollHealth();
-    checkUpdate();
+    // Check for updates after 5 seconds, then every hour
+    setTimeout(checkUpdate, 5000);
+    const updateInterval = setInterval(checkUpdate, 3600000);
     getVersion().then((v) => setAppVersion(v)).catch(() => {});
     const interval = setInterval(pollHealth, 15000);
-    onCleanup(() => clearInterval(interval));
+    onCleanup(() => { clearInterval(interval); clearInterval(updateInterval); });
   });
 
   const memPercent = () => {
