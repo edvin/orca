@@ -103,9 +103,10 @@
 - **Custom domains** — configure any base domain (e.g., `*.local.mycompany.dev` with wildcard DNS)
 - **Automatic TLS** — certificates signed by the Orca CA, or bring your own wildcard cert
 - **WebSocket, SSE, HTTP/2** — Caddy proxies all protocols transparently
+- **Path-based routing** — route `/api/*` and `/ws/*` to different containers on the same hostname
 - **Per-container "Expose" button** — one click from any container detail page to register a hostname
-- **Settings** — configurable domain, ports (default 80/443), TLS mode
-- **`orca.yaml`** — projects can declare gateway routes in their repo, auto-registered on deploy
+- **Environment links** — group URLs by section and environment (Local/Staging/Production) in `orca.yaml`
+- **`orca.yaml`** — projects declare gateway routes, path overlays, and environment links in their repo
 
 ### AI Assistant
 

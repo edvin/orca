@@ -1049,7 +1049,7 @@
 
       <!-- Category: Orchestration -->
       <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Orchestration</span><span class="ft-count">32</span></span>
+        <span class="ft-category-left"><span>Orchestration</span><span class="ft-count">33</span></span>
         <span class="ft-chevron">&#9662;</span>
       </div>
       <div class="ft-category-rows">
@@ -1082,6 +1082,7 @@
       <div class="ft-row"><span><strong>Gateway reverse proxy</strong> — managed Caddy with automatic TLS, hostname routing to containers</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>.localhost domains</strong> — <code>app.localhost</code> works in all browsers, no DNS config</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>Custom domains</strong> — configurable base domain with wildcard cert support</span><span class="ft-check ft-unique">&#10003;</span></div>
+      <div class="ft-row"><span><strong>Path-based routing</strong> — overlay <code>/api/*</code>, <code>/ws/*</code> on the same hostname for different services</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>One-click expose</strong> — register any container with the gateway from its detail page</span><span class="ft-check ft-unique">&#10003;</span></div>
       <div class="ft-row"><span><strong>orca.yaml</strong> — projects declare gateway routes in their repo, auto-registered on deploy</span><span class="ft-check ft-unique">&#10003;</span></div>
       </div>
@@ -1171,6 +1172,7 @@
       <ul>
         <li><code>*.localhost</code> works in all browsers — zero DNS config needed</li>
         <li>Custom domains for teams (e.g., <code>*.dev.example.com</code>)</li>
+        <li>Path-based routing — overlay <code>/api/*</code> and <code>/ws/*</code> on the same hostname</li>
         <li>TLS certificates signed by the Orca CA — or bring your own wildcard cert</li>
         <li>One-click "Expose" from any container detail page</li>
         <li><code>orca.yaml</code> in project repos — gateway routes auto-register on deploy</li>
@@ -1178,16 +1180,23 @@
       </ul>
     </div>
     <div class="highlight-visual">
-<span style="color:#6e7681"># orca.yaml — checked into your repo</span>
+<span style="color:#6e7681"># orca.yaml — path-based routing</span>
 <span style="color:#ff7b72">gateway</span>:
   - <span style="color:#ff7b72">hostname</span>: <span style="color:#a5d6ff">app</span>
     <span style="color:#ff7b72">service</span>: <span style="color:#a5d6ff">frontend</span>
     <span style="color:#ff7b72">port</span>: <span style="color:#79c0ff">3000</span>
-  - <span style="color:#ff7b72">hostname</span>: <span style="color:#a5d6ff">api</span>
+  - <span style="color:#ff7b72">hostname</span>: <span style="color:#a5d6ff">app</span>
+    <span style="color:#ff7b72">path</span>: <span style="color:#a5d6ff">/api/*</span>
     <span style="color:#ff7b72">service</span>: <span style="color:#a5d6ff">backend</span>
     <span style="color:#ff7b72">port</span>: <span style="color:#79c0ff">8080</span>
+  - <span style="color:#ff7b72">hostname</span>: <span style="color:#a5d6ff">app</span>
+    <span style="color:#ff7b72">path</span>: <span style="color:#a5d6ff">/ws/*</span>
+    <span style="color:#ff7b72">service</span>: <span style="color:#a5d6ff">reverb</span>
+    <span style="color:#ff7b72">port</span>: <span style="color:#79c0ff">6001</span>
 
-<span style="color:#6e7681"># Deploy → https://app.localhost, https://api.localhost</span>
+<span style="color:#6e7681"># app.localhost → frontend</span>
+<span style="color:#6e7681"># app.localhost/api/* → backend</span>
+<span style="color:#6e7681"># app.localhost/ws/* → reverb</span>
     </div>
   </div>
 

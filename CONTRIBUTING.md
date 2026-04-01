@@ -272,13 +272,23 @@ gateway:
   - hostname: app
     service: frontend
     port: 3000
-  - hostname: api
+  - hostname: app
+    path: /api/*
     service: backend
     port: 8080
+  - hostname: app
+    path: /ws/*
+    service: reverb
+    port: 6001
   - hostname: admin
     service: admin-panel
     port: 3001
 ```
+
+The `path` field is optional. When set, only requests matching that path are routed to the service. Routes with paths are matched before catch-all routes for the same hostname. This lets you overlay multiple services on a single hostname:
+- `https://app.localhost` → frontend
+- `https://app.localhost/api/*` → backend
+- `https://app.localhost/ws/*` → WebSocket server
 
 Routes are auto-registered when the stack is deployed. Hostnames are editable during deploy and overrides are saved per-user in Orca's config.
 
@@ -331,9 +341,14 @@ gateway:
   - hostname: app
     service: frontend
     port: 3000
-  - hostname: api
+  - hostname: app
+    path: /api/*
     service: backend
     port: 8080
+  - hostname: app
+    path: /ws/*
+    service: reverb
+    port: 6001
 
 links:
   Frontend:

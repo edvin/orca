@@ -157,6 +157,7 @@ async function injectTauriBridge(page: Page) {
             { hostname: "webmail.localhost", container_name: "webmail-stalwart-webmail-1", port: 8095, enabled: true },
             { hostname: "mail-admin.localhost", container_name: "webmail-stalwart-stalwart-1", port: 8080, enabled: true },
             { hostname: "app.localhost", container_name: "my-project-frontend-1", port: 3000, enabled: true },
+            { hostname: "app.localhost", container_name: "my-project-ws-1", port: 4000, enabled: true, path: "/ws/*" },
             { hostname: "api.localhost", container_name: "my-project-backend-1", port: 8080, enabled: true },
           ]),
           gateway_get_config: () => Promise.resolve({

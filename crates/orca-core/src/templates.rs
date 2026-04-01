@@ -52,6 +52,8 @@ pub struct GatewayRouteTemplate {
     pub hostname: String,
     pub service: String,
     pub port: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 /// A post-deploy setup guide with step-by-step instructions.

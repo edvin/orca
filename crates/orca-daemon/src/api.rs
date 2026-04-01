@@ -3503,11 +3503,13 @@ fn parse_orca_yaml_gateway_routes(dir: &std::path::Path) -> Option<Vec<orca_core
         let hostname = item.get("hostname").and_then(|v| v.as_str());
         let service = item.get("service").and_then(|v| v.as_str());
         let port = item.get("port").and_then(|v| v.as_u64()).map(|p| p as u16);
+        let path = item.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
         if let (Some(h), Some(s), Some(p)) = (hostname, service, port) {
             routes.push(orca_core::templates::GatewayRouteTemplate {
                 hostname: h.to_string(),
                 service: s.to_string(),
                 port: p,
+                path,
             });
         }
     }
@@ -3590,8 +3592,14 @@ async fn auto_register_gateway_routes(
                 container_name: container_name.clone(),
                 port: route.port,
                 enabled: true,
+                path: route.path.clone(),
             };
-            if !config.gateway.routes.iter().any(|r| r.hostname == route.hostname) {
+            if !config
+                .gateway
+                .routes
+                .iter()
+                .any(|r| r.hostname == route.hostname && r.path == route.path)
+            {
                 config.gateway.routes.push(gw_route.clone());
                 registered.push(gw_route);
             }
@@ -6288,6 +6296,7 @@ async fn gateway_list_routes(State(state): State<Arc<AppState>>) -> Result<impl 
                 "port": r.port,
                 "enabled": r.enabled,
                 "url": url,
+                "path": r.path,
             })
         })
         .collect();
@@ -6299,6 +6308,8 @@ struct AddRouteRequest {
     hostname: String,
     container_name: String,
     port: u16,
+    #[serde(default)]
+    path: Option<String>,
 }
 
 async fn gateway_add_route(
@@ -6307,9 +6318,18 @@ async fn gateway_add_route(
 ) -> Result<impl IntoResponse, ApiError> {
     let mut config = state.config.lock().await;
 
-    // Check for duplicate hostname
-    if config.gateway.routes.iter().any(|r| r.hostname == req.hostname) {
-        return Err(anyhow::anyhow!("Route for hostname '{}' already exists", req.hostname).into());
+    // Check for duplicate hostname+path combination
+    if config
+        .gateway
+        .routes
+        .iter()
+        .any(|r| r.hostname == req.hostname && r.path == req.path)
+    {
+        let label = match &req.path {
+            Some(p) => format!("{}{}", req.hostname, p),
+            None => req.hostname.clone(),
+        };
+        return Err(anyhow::anyhow!("Route for '{}' already exists", label).into());
     }
 
     let route = orca_core::config::GatewayRoute {
@@ -6317,6 +6337,7 @@ async fn gateway_add_route(
         container_name: req.container_name.clone(),
         port: req.port,
         enabled: true,
+        path: req.path.clone(),
     };
     config.gateway.routes.push(route);
     config
@@ -6354,6 +6375,7 @@ async fn gateway_add_route(
             "port": req.port,
             "enabled": true,
             "url": url,
+            "path": req.path,
         })),
     ))
 }

@@ -36,6 +36,7 @@ export default function GatewayPage(props: GatewayPageProps) {
 
   // Add route form
   const [addHostname, setAddHostname] = createSignal("");
+  const [addPath, setAddPath] = createSignal("");
   const [addContainer, setAddContainer] = createSignal("");
   const [addPort, setAddPort] = createSignal("80");
   const [containers, setContainers] = createSignal<Container[]>([]);
@@ -177,6 +178,7 @@ export default function GatewayPage(props: GatewayPageProps) {
 
   const openAddDialog = () => {
     setAddHostname("");
+    setAddPath("");
     setAddContainer("");
     setAddPort("80");
     fetchContainers();
@@ -200,6 +202,7 @@ export default function GatewayPage(props: GatewayPageProps) {
         hostname: fullHostname,
         containerName,
         port,
+        path: addPath().trim() || null,
       });
       showToast(`Route added: ${fullHostname}`, "success");
       setShowAdd(false);
@@ -302,7 +305,9 @@ export default function GatewayPage(props: GatewayPageProps) {
     const domain = s?.domain || "localhost";
     const full = hostname.includes(".") ? hostname : `${hostname}.${domain}`;
     const port = s?.https_port || 443;
-    return port === 443 ? `https://${full}` : `https://${full}:${port}`;
+    const pathPart = addPath().trim();
+    const base = port === 443 ? `https://${full}` : `https://${full}:${port}`;
+    return pathPart ? `${base}${pathPart}` : base;
   };
 
   return (
@@ -600,7 +605,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                         onClick={() => route.url && openUrl(route.url)}
                         title={route.url}
                       >
-                        {route.hostname}
+                        {route.hostname}{route.path || ""}
                       </button>
                     </td>
                     <td class="mono" style={{ color: "#c9d1d9" }}>{route.container_name}</td>
@@ -858,6 +863,20 @@ export default function GatewayPage(props: GatewayPageProps) {
                       .{status()?.domain || "localhost"}
                     </span>
                   </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Path (optional)</label>
+                  <input
+                    class="form-input"
+                    type="text"
+                    placeholder="/api/*"
+                    value={addPath()}
+                    onInput={(e) => setAddPath(e.currentTarget.value)}
+                  />
+                  <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>
+                    Route specific paths to different containers on the same hostname
+                  </p>
                 </div>
 
                 <div class="form-group">

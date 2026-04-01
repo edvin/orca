@@ -441,6 +441,7 @@ export interface GatewayRouteTemplate {
   hostname: string;
   service: string;
   port: number;
+  path?: string;
 }
 
 export interface SetupGuide {
@@ -557,6 +558,7 @@ export interface GatewayRoute {
   port: number;
   enabled: boolean;
   url?: string;
+  path?: string;
 }
 
 export interface GatewayConfig {

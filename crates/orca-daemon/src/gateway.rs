@@ -434,14 +434,28 @@ fn generate_cert_for_hostname(hostname: &str) -> Result<()> {
 
 /// Build the Caddy JSON configuration from gateway config.
 fn build_caddy_config(config: &GatewayConfig) -> String {
-    let enabled_routes: Vec<&orca_core::config::GatewayRoute> = config.routes.iter().filter(|r| r.enabled).collect();
+    let mut enabled_routes: Vec<&orca_core::config::GatewayRoute> =
+        config.routes.iter().filter(|r| r.enabled).collect();
+
+    // Sort routes so path-specific routes come before hostname-only routes.
+    // This ensures /ws/* matches before a catch-all for the same hostname.
+    enabled_routes.sort_by(|a, b| {
+        let a_has_path = a.path.is_some();
+        let b_has_path = b.path.is_some();
+        b_has_path.cmp(&a_has_path).then_with(|| a.hostname.cmp(&b.hostname))
+    });
 
     // Build route objects
     let routes: Vec<serde_json::Value> = enabled_routes
         .iter()
         .map(|route| {
+            let match_rule = if let Some(path) = &route.path {
+                serde_json::json!([{"host": [route.hostname.clone()]}, {"path": [path]}])
+            } else {
+                serde_json::json!([{"host": [route.hostname.clone()]}])
+            };
             serde_json::json!({
-                "match": [{"host": [route.hostname.clone()]}],
+                "match": match_rule,
                 "handle": [{
                     "handler": "reverse_proxy",
                     "upstreams": [{"dial": format!("{}:{}", route.container_name, route.port)}]

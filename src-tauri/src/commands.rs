@@ -3545,6 +3545,7 @@ pub async fn gateway_add_route(
     hostname: String,
     container_name: String,
     port: u16,
+    path: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     let resp = client()
@@ -3553,6 +3554,7 @@ pub async fn gateway_add_route(
             "hostname": hostname,
             "container_name": container_name,
             "port": port,
+            "path": path,
         }))
         .send()
         .await

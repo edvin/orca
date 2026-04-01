@@ -976,11 +976,13 @@ fn cmd_config_import(file: &str) -> anyhow::Result<()> {
                 let port = r.get("port").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
                 let enabled = r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
                 if !hostname.is_empty() {
+                    let path = r.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
                     new_routes.push(orca_core::config::GatewayRoute {
                         hostname,
                         container_name,
                         port,
                         enabled,
+                        path,
                     });
                 }
             }
