@@ -38,3 +38,4 @@ dirs.workspace = true
 base64.workspace = true
 rcgen = { version = "0.13", features = ["x509-parser"] }
 time = "0.3"
+serde_yaml = "0.9"

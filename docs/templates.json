@@ -641,6 +641,15 @@
     "gateway_routes": [
       { "hostname": "webmail", "service": "webmail", "port": 8095 },
       { "hostname": "mail-admin", "service": "stalwart", "port": 8080 }
+    ],
+    "links": [
+      {
+        "group": "Mail",
+        "links": [
+          { "name": "Webmail", "urls": { "local": "webmail" } },
+          { "name": "Admin Panel", "urls": { "local": "mail-admin" } }
+        ]
+      }
     ]
   }
 ]

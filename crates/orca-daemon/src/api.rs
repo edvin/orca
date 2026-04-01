@@ -303,6 +303,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         )
         .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
         .route("/gateway/port-check", get(gateway_port_check))
+        .route("/gateway/links", get(gateway_get_links))
         // CA
         .route("/ca/certificate", get(ca_certificate))
         .route("/ca/info", get(ca_info))
@@ -2381,6 +2382,11 @@ async fn compose_deploy_path(
         Vec::new()
     };
 
+    // Auto-register environment links from orca.yaml if present
+    if let Some(link_groups) = parse_orca_yaml_links(dir_path) {
+        auto_register_stack_links(&state, dir_path, &link_groups).await;
+    }
+
     Ok(Json(serde_json::json!({
         "stdout": output.stdout,
         "stderr": output.stderr,
@@ -3469,6 +3475,16 @@ fn stacks_base_dir() -> std::path::PathBuf {
         .join("stacks")
 }
 
+/// Parse the orca.yaml file in a directory into a serde_yaml::Value.
+fn parse_orca_yaml(dir: &std::path::Path) -> Option<serde_yaml::Value> {
+    let yaml_path = dir.join("orca.yaml");
+    if !yaml_path.exists() {
+        return None;
+    }
+    let content = std::fs::read_to_string(&yaml_path).ok()?;
+    serde_yaml::from_str(&content).ok()
+}
+
 /// Parse gateway routes from an orca.yaml file in the given directory.
 /// Expected format:
 /// ```yaml
@@ -3478,76 +3494,83 @@ fn stacks_base_dir() -> std::path::PathBuf {
 ///     port: 3000
 /// ```
 fn parse_orca_yaml_gateway_routes(dir: &std::path::Path) -> Option<Vec<orca_core::templates::GatewayRouteTemplate>> {
-    let yaml_path = dir.join("orca.yaml");
-    if !yaml_path.exists() {
-        return None;
-    }
-    let content = std::fs::read_to_string(&yaml_path).ok()?;
+    let yaml = parse_orca_yaml(dir)?;
+    let gateway = yaml.get("gateway")?;
+    let items = gateway.as_sequence()?;
 
     let mut routes = Vec::new();
-    let mut in_gateway = false;
-    let mut current_hostname: Option<String> = None;
-    let mut current_service: Option<String> = None;
-    let mut current_port: Option<u16> = None;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        // Top-level key
-        if !line.starts_with(' ') && !line.starts_with('\t') && !trimmed.starts_with('-') {
-            if trimmed.starts_with("gateway:") {
-                in_gateway = true;
-            } else if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                in_gateway = false;
-            }
-            continue;
+    for item in items {
+        let hostname = item.get("hostname").and_then(|v| v.as_str());
+        let service = item.get("service").and_then(|v| v.as_str());
+        let port = item.get("port").and_then(|v| v.as_u64()).map(|p| p as u16);
+        if let (Some(h), Some(s), Some(p)) = (hostname, service, port) {
+            routes.push(orca_core::templates::GatewayRouteTemplate {
+                hostname: h.to_string(),
+                service: s.to_string(),
+                port: p,
+            });
         }
-        if !in_gateway {
-            continue;
-        }
-        // New list item
-        if trimmed.starts_with("- ") {
-            // Flush previous entry
-            if let (Some(h), Some(s), Some(p)) = (current_hostname.take(), current_service.take(), current_port.take())
-            {
-                routes.push(orca_core::templates::GatewayRouteTemplate {
-                    hostname: h,
-                    service: s,
-                    port: p,
-                });
-            }
-            // Parse inline key on the "- " line
-            let after_dash = trimmed.trim_start_matches("- ");
-            if let Some((key, val)) = after_dash.split_once(':') {
-                let key = key.trim();
-                let val = val.trim();
-                match key {
-                    "hostname" => current_hostname = Some(val.to_string()),
-                    "service" => current_service = Some(val.to_string()),
-                    "port" => current_port = val.parse().ok(),
-                    _ => {}
-                }
-            }
-        } else if let Some((key, val)) = trimmed.split_once(':') {
-            let key = key.trim();
-            let val = val.trim();
-            match key {
-                "hostname" => current_hostname = Some(val.to_string()),
-                "service" => current_service = Some(val.to_string()),
-                "port" => current_port = val.parse().ok(),
-                _ => {}
-            }
-        }
-    }
-    // Flush last entry
-    if let (Some(h), Some(s), Some(p)) = (current_hostname.take(), current_service.take(), current_port.take()) {
-        routes.push(orca_core::templates::GatewayRouteTemplate {
-            hostname: h,
-            service: s,
-            port: p,
-        });
     }
 
     if routes.is_empty() { None } else { Some(routes) }
+}
+
+/// Parse environment links from an orca.yaml file in the given directory.
+/// Expected format:
+/// ```yaml
+/// links:
+///   Storefront:
+///     - name: Web App
+///       local: storefront
+///       staging: https://staging.example.com
+///   Admin:
+///     - name: Admin Panel
+///       local: admin
+///       production: https://admin.example.com
+/// ```
+fn parse_orca_yaml_links(dir: &std::path::Path) -> Option<Vec<orca_core::config::StackLinkGroup>> {
+    let yaml = parse_orca_yaml(dir)?;
+    let links = yaml.get("links")?;
+    let mapping = links.as_mapping()?;
+
+    let stack_name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let mut groups = Vec::new();
+    for (group_key, group_val) in mapping {
+        let group_name = group_key.as_str()?;
+        let items = group_val.as_sequence()?;
+        let mut env_links = Vec::new();
+        for item in items {
+            let item_map = item.as_mapping()?;
+            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let mut urls = std::collections::BTreeMap::new();
+            for (k, v) in item_map {
+                let key = k.as_str().unwrap_or("");
+                if key == "name" {
+                    continue;
+                }
+                if let Some(val) = v.as_str() {
+                    urls.insert(key.to_string(), val.to_string());
+                }
+            }
+            if !name.is_empty() && !urls.is_empty() {
+                env_links.push(orca_core::config::EnvironmentLink { name, urls });
+            }
+        }
+        if !env_links.is_empty() {
+            groups.push(orca_core::config::StackLinkGroup {
+                stack: stack_name.clone(),
+                group: group_name.to_string(),
+                links: env_links,
+            });
+        }
+    }
+
+    if groups.is_empty() { None } else { Some(groups) }
 }
 
 /// Auto-register gateway routes after a compose stack deploy.
@@ -3590,6 +3613,26 @@ async fn auto_register_gateway_routes(
         }
     }
     registered
+}
+
+/// Auto-register environment links after a compose stack deploy.
+/// Replaces any existing links for the same stack.
+async fn auto_register_stack_links(
+    state: &Arc<AppState>,
+    _dir: &std::path::Path,
+    groups: &[orca_core::config::StackLinkGroup],
+) {
+    if groups.is_empty() {
+        return;
+    }
+    let stack_name = groups.first().map(|g| g.stack.as_str()).unwrap_or("");
+    let mut config = state.config.lock().await;
+    // Remove existing links for this stack
+    config.gateway.stack_links.retain(|g| g.stack != stack_name);
+    config.gateway.stack_links.extend(groups.iter().cloned());
+    if let Err(e) = config.save() {
+        tracing::warn!("Failed to save config after registering stack links: {e}");
+    }
 }
 
 /// Generate a random alphanumeric password for compose template deployments.
@@ -3905,6 +3948,25 @@ async fn deploy_template(
         } else {
             Vec::new()
         };
+
+        // Auto-register environment links from template or orca.yaml
+        let link_groups = template
+            .links
+            .clone()
+            .map(|tpl_links| {
+                tpl_links
+                    .into_iter()
+                    .map(|tl| orca_core::config::StackLinkGroup {
+                        stack: stack_name.clone(),
+                        group: tl.group,
+                        links: tl.links,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .or_else(|| parse_orca_yaml_links(&stack_dir));
+        if let Some(groups) = link_groups {
+            auto_register_stack_links(&state, &stack_dir, &groups).await;
+        }
 
         return Ok((
             StatusCode::CREATED,
@@ -6161,6 +6223,7 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         "https_port": gw.https_port,
         "tls_mode": gw.tls_mode,
         "port_conflicts": port_conflicts,
+        "stack_links": gw.stack_links,
     })))
 }
 
@@ -6406,6 +6469,11 @@ async fn gateway_port_check(State(state): State<Arc<AppState>>) -> Result<impl I
     let config = state.config.lock().await;
     let conflicts = crate::gateway::check_port_availability(config.gateway.http_port, config.gateway.https_port);
     Ok(Json(serde_json::json!({ "conflicts": conflicts })))
+}
+
+async fn gateway_get_links(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    Ok(Json(serde_json::json!(config.gateway.stack_links)))
 }
 
 // --- CA Certificate ---

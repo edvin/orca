@@ -429,6 +429,12 @@ export interface AppTemplate {
   generated_files?: Record<string, GeneratedValue>;
   setup_guide?: SetupGuide;
   gateway_routes?: GatewayRouteTemplate[];
+  links?: TemplateLinkGroup[];
+}
+
+export interface TemplateLinkGroup {
+  group: string;
+  links: EnvironmentLink[];
 }
 
 export interface GatewayRouteTemplate {
@@ -542,6 +548,7 @@ export interface GatewayStatus {
   https_port: number;
   tls_mode: string;
   port_conflicts?: string[];
+  stack_links?: StackLinkGroup[];
 }
 
 export interface GatewayRoute {
@@ -561,6 +568,18 @@ export interface GatewayConfig {
   custom_cert?: string;
   custom_key?: string;
   routes: GatewayRoute[];
+  stack_links?: StackLinkGroup[];
+}
+
+export interface StackLinkGroup {
+  stack: string;
+  group: string;
+  links: EnvironmentLink[];
+}
+
+export interface EnvironmentLink {
+  name: string;
+  urls: Record<string, string>;
 }
 
 // --- Environment ---

@@ -221,9 +221,9 @@ orca version    # show CLI version and daemon version
 
 Orca is designed for teams where every developer runs the same stack locally.
 
-#### Shared gateway routes with `orca.yaml`
+#### `orca.yaml` — project-level config
 
-Add an `orca.yaml` to your project repo, next to `docker-compose.yml`:
+Add an `orca.yaml` to your project repo, next to `docker-compose.yml`. It declares gateway routes and environment links:
 
 ```yaml
 # orca.yaml — checked into git, shared with the team
@@ -234,44 +234,57 @@ gateway:
   - hostname: api
     service: backend
     port: 8080
+
+links:
+  Frontend:
+    - name: Web App
+      local: app
+      staging: https://staging.example.com
+      production: https://www.example.com
+
+  Backend:
+    - name: API
+      local: api
+      staging: https://staging-api.example.com
+      production: https://api.example.com
+    - name: API Docs
+      local: api/docs
 ```
 
-When any team member deploys this stack through Orca, the gateway routes are auto-registered. With the default domain, the app is available at `https://app.localhost` and `https://api.localhost`.
+When any team member deploys this stack through Orca:
+- Gateway routes auto-register (`https://app.localhost`, `https://api.localhost`)
+- Environment links appear in the Gateway dashboard with tabs for Local / Staging / Production
+- `local` values reference gateway hostnames — auto-resolved to full URLs
+- Other environments are direct links (not proxied)
 
-#### Custom team domain with wildcard cert
+#### Custom team domain
 
-If your team uses a shared domain (e.g., `*.dev.example.com` with DNS pointing to `127.0.0.1`), set it up once per developer:
+If your team uses a shared domain (e.g., `*.dev.example.com` with DNS pointing to `127.0.0.1`), set it up once:
 
 ```bash
-# One-time setup (can be scripted in your team's devproxy/setup repo)
 orca gateway config \
   --domain dev.example.com \
   --tls-mode custom \
   --cert-file wildcard.pem \
   --key-file wildcard-key.pem
-
 orca gateway start
 ```
 
-Now every project's `orca.yaml` routes use the team domain automatically:
-- `https://app.dev.example.com`
-- `https://api.dev.example.com`
+Every project's `orca.yaml` routes now use the team domain: `https://app.dev.example.com`.
 
-#### Sharing config across the team
+#### Team onboarding
 
-Export your Orca configuration and share it:
+Create a setup repo with the team's gateway config, wildcard cert, and a setup script:
 
 ```bash
-# Team lead exports config
-orca config export > team-orca-config.yaml
-
-# Each developer imports it
-orca config import team-orca-config.yaml
+#!/bin/bash
+# setup.sh — new dev runs this once
+orca config import team-config.yaml
+orca gateway start
+echo "Done! Deploy any project with orca.yaml to get started."
 ```
 
-The export excludes sensitive values (API keys, tokens, passwords) by default. Use `--include-secrets` if sharing within a trusted team.
-
-### Dashboard
+After that, every project they deploy auto-configures with the team domain, routes, and environment links.
 
 ### Dashboard
 

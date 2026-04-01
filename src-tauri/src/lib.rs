@@ -202,6 +202,7 @@ pub fn run() {
             commands::gateway_check_ports,
             commands::gateway_get_config,
             commands::gateway_update_config,
+            commands::gateway_get_links,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

@@ -3635,3 +3635,8 @@ pub async fn gateway_update_config(
         Err(body)
     }
 }
+
+#[tauri::command]
+pub async fn gateway_get_links() -> Result<serde_json::Value, String> {
+    get_json("/gateway/links").await
+}

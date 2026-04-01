@@ -1,7 +1,7 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import type { GatewayStatus, GatewayRoute, Container } from "../lib/types";
+import type { GatewayStatus, GatewayRoute, Container, StackLinkGroup } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
@@ -40,6 +40,11 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [addPort, setAddPort] = createSignal("80");
   const [containers, setContainers] = createSignal<Container[]>([]);
   const [adding, setAdding] = createSignal(false);
+
+  // Environment links
+  const [stackLinks, setStackLinks] = createSignal<StackLinkGroup[]>([]);
+  const [selectedEnv, setSelectedEnv] = createSignal("local");
+  const [collapsedGroups, setCollapsedGroups] = createSignal<Record<string, boolean>>({});
 
   // Configuration
   const [showConfig, setShowConfig] = createSignal(false);
@@ -116,6 +121,15 @@ export default function GatewayPage(props: GatewayPageProps) {
     }
   };
 
+  const fetchLinks = async () => {
+    try {
+      const links = (await invoke("gateway_get_links")) as StackLinkGroup[];
+      setStackLinks(links || []);
+    } catch {
+      // Links may not be available yet
+    }
+  };
+
   const fetchContainers = async () => {
     try {
       const c = (await invoke("list_containers")) as Container[];
@@ -126,6 +140,7 @@ export default function GatewayPage(props: GatewayPageProps) {
   const refresh = () => {
     fetchStatus();
     fetchRoutes();
+    fetchLinks();
   };
 
   useRefresh(refresh);
@@ -234,6 +249,39 @@ export default function GatewayPage(props: GatewayPageProps) {
     if (!s) return "";
     const port = s.https_port;
     return port === 443 ? `https://${s.domain}` : `https://${s.domain}:${port}`;
+  };
+
+  // Derive all unique environment names across all links
+  const allEnvNames = () => {
+    const envs = new Set<string>();
+    for (const group of stackLinks()) {
+      for (const link of group.links) {
+        for (const env of Object.keys(link.urls)) {
+          envs.add(env);
+        }
+      }
+    }
+    // Put "local" first, then sort the rest
+    const sorted = Array.from(envs).filter((e) => e !== "local").sort();
+    if (envs.has("local")) sorted.unshift("local");
+    return sorted;
+  };
+
+  // Resolve a link URL for display. "local" values that are plain hostnames
+  // get expanded to full gateway URLs.
+  const resolveUrl = (env: string, value: string) => {
+    if (env === "local" && !value.includes("://")) {
+      const s = status();
+      const domain = s?.domain || "localhost";
+      const port = s?.https_port || 443;
+      const hostname = value.includes(".") ? value : `${value}.${domain}`;
+      return port === 443 ? `https://${hostname}` : `https://${hostname}:${port}`;
+    }
+    return value;
+  };
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   let mouseDownOnOverlay = false;
@@ -623,6 +671,160 @@ export default function GatewayPage(props: GatewayPageProps) {
               </button>
             </span>
           </div>
+        </div>
+      </Show>
+
+      {/* Environment Links */}
+      <Show when={status()?.running && stackLinks().length > 0}>
+        <div style={{ "margin-top": "24px" }}>
+          <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", margin: "0 0 12px 0" }}>Environment Links</h3>
+
+          {/* Environment tabs */}
+          <Show when={allEnvNames().length > 1}>
+            <div style={{ display: "flex", gap: "4px", "margin-bottom": "16px" }}>
+              <For each={allEnvNames()}>
+                {(env) => (
+                  <button
+                    class="btn"
+                    style={{
+                      "font-size": "12px",
+                      "padding": "4px 12px",
+                      "text-transform": "capitalize",
+                      ...(selectedEnv() === env
+                        ? { background: "#1f6feb", color: "#fff", "border-color": "#1f6feb" }
+                        : {}),
+                    }}
+                    onClick={() => setSelectedEnv(env)}
+                  >
+                    {env}
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
+
+          {/* Link groups */}
+          <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+            <For each={stackLinks()}>
+              {(group) => {
+                const groupKey = `${group.stack}:${group.group}`;
+                const isCollapsed = () => collapsedGroups()[groupKey] ?? false;
+                return (
+                  <div class="card" style={{ padding: "0", overflow: "hidden" }}>
+                    {/* Group header */}
+                    <button
+                      onClick={() => toggleGroup(groupKey)}
+                      style={{
+                        display: "flex",
+                        "align-items": "center",
+                        gap: "8px",
+                        width: "100%",
+                        padding: "12px 16px",
+                        background: "none",
+                        border: "none",
+                        "border-bottom": isCollapsed() ? "none" : "1px solid rgba(255,255,255,0.06)",
+                        color: "#e6edf3",
+                        cursor: "pointer",
+                        "font-size": "13px",
+                        "font-weight": "600",
+                        "text-align": "left",
+                      }}
+                    >
+                      <svg
+                        width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        style={{ transform: isCollapsed() ? "none" : "rotate(90deg)", transition: "transform 0.15s", "flex-shrink": "0" }}
+                      >
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
+                      {group.group}
+                      <span style={{ color: "#6e7681", "font-weight": "400", "font-size": "12px", "margin-left": "4px" }}>
+                        {group.stack}
+                      </span>
+                    </button>
+                    {/* Links */}
+                    <Show when={!isCollapsed()}>
+                      <div style={{ padding: "0" }}>
+                        <For each={group.links}>
+                          {(link) => {
+                            const url = () => {
+                              const val = link.urls[selectedEnv()];
+                              return val ? resolveUrl(selectedEnv(), val) : null;
+                            };
+                            return (
+                              <div style={{
+                                display: "flex",
+                                "align-items": "center",
+                                padding: "10px 16px",
+                                "border-bottom": "1px solid rgba(255,255,255,0.04)",
+                                gap: "12px",
+                              }}>
+                                <span style={{ color: "#c9d1d9", "font-size": "13px", flex: "1", "min-width": "0" }}>
+                                  {link.name}
+                                </span>
+                                <Show
+                                  when={url()}
+                                  fallback={
+                                    <span style={{ color: "#484f58", "font-size": "12px", "font-style": "italic" }}>
+                                      --
+                                    </span>
+                                  }
+                                >
+                                  <span
+                                    class="mono"
+                                    style={{
+                                      color: "#58a6ff",
+                                      "font-size": "12px",
+                                      "white-space": "nowrap",
+                                      overflow: "hidden",
+                                      "text-overflow": "ellipsis",
+                                      "max-width": "320px",
+                                    }}
+                                    title={url()!}
+                                  >
+                                    {url()}
+                                  </span>
+                                  <button
+                                    class="action-icon"
+                                    title="Open in browser"
+                                    onClick={() => openUrl(url()!)}
+                                    style={{ "flex-shrink": "0" }}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                                      <polyline points="15 3 21 3 21 9" />
+                                      <line x1="10" y1="14" x2="21" y2="3" />
+                                    </svg>
+                                  </button>
+                                </Show>
+                              </div>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
+        </div>
+      </Show>
+
+      {/* Empty state for links when gateway is running but no links configured */}
+      <Show when={status()?.running && stackLinks().length === 0 && routes().length > 0}>
+        <div style={{
+          "margin-top": "24px",
+          background: "rgba(22, 27, 34, 0.4)",
+          "border-radius": "8px",
+          border: "1px dashed rgba(255, 255, 255, 0.08)",
+          padding: "20px",
+          "text-align": "center",
+          "font-size": "13px",
+          color: "#6e7681",
+        }}>
+          <div style={{ "margin-bottom": "4px", "font-weight": "500", color: "#8b949e" }}>Environment Links</div>
+          Add a <code style={{ background: "#161b22", padding: "2px 6px", "border-radius": "4px", "font-size": "12px" }}>links</code> section to your project's <code style={{ background: "#161b22", padding: "2px 6px", "border-radius": "4px", "font-size": "12px" }}>orca.yaml</code> to link local, staging, and production environments.
         </div>
       </Show>
 

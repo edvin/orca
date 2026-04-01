@@ -34,6 +34,16 @@ pub struct AppTemplate {
     /// Gateway routes to auto-register when deploying this template.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gateway_routes: Option<Vec<GatewayRouteTemplate>>,
+    /// Environment links to register when deploying this template.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub links: Option<Vec<TemplateLinkGroup>>,
+}
+
+/// A group of environment links declared in a template.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateLinkGroup {
+    pub group: String,
+    pub links: Vec<crate::config::EnvironmentLink>,
 }
 
 /// A gateway route declared in a template or orca.yaml.

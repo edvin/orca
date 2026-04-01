@@ -866,6 +866,7 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
   <div class="apps">
     {app_cards}{empty_state}
   </div>
+  {env_links_section}
   <div class="footer">
     Powered by <a href="https://orca-desktop.com">Orca Desktop</a>
   </div>
@@ -886,7 +887,149 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
         } else {
             ""
         },
+        env_links_section = generate_env_links_html(config, scheme, &port_suffix),
     )
+}
+
+/// Generate the environment links HTML section for the landing page.
+fn generate_env_links_html(config: &GatewayConfig, scheme: &str, port_suffix: &str) -> String {
+    if config.stack_links.is_empty() {
+        return String::new();
+    }
+
+    let domain = &config.domain;
+
+    // Collect all unique environment names
+    let mut env_names = std::collections::BTreeSet::new();
+    for group in &config.stack_links {
+        for link in &group.links {
+            for env in link.urls.keys() {
+                env_names.insert(env.clone());
+            }
+        }
+    }
+    if env_names.is_empty() {
+        return String::new();
+    }
+
+    // Put "local" first
+    let mut ordered_envs: Vec<String> = Vec::new();
+    if env_names.remove("local") {
+        ordered_envs.push("local".to_string());
+    }
+    ordered_envs.extend(env_names);
+
+    let default_env = ordered_envs.first().cloned().unwrap_or_default();
+
+    // Build tab buttons
+    let mut tab_buttons = String::new();
+    for env in &ordered_envs {
+        let active = if *env == default_env { " active" } else { "" };
+        let label = capitalize(env);
+        tab_buttons.push_str(&format!(
+            r#"<button class="env-tab{active}" onclick="switchEnvTab('{env}')">{label}</button>"#,
+            active = active,
+            env = env,
+            label = label,
+        ));
+    }
+
+    // Build link groups as divs per environment
+    let mut env_contents = String::new();
+    for env in &ordered_envs {
+        let display = if *env == default_env { "block" } else { "none" };
+        let mut group_html = String::new();
+        for group in &config.stack_links {
+            let mut links_html = String::new();
+            for link in &group.links {
+                if let Some(raw_url) = link.urls.get(env) {
+                    let url = if env == "local" && !raw_url.contains("://") {
+                        let hostname = if raw_url.contains('.') {
+                            raw_url.to_string()
+                        } else {
+                            format!("{raw_url}.{domain}")
+                        };
+                        format!("{scheme}://{hostname}{port_suffix}")
+                    } else {
+                        raw_url.clone()
+                    };
+                    links_html.push_str(&format!(
+                        r#"<a href="{url}" class="env-link"><span class="env-link-name">{name}</span><span class="env-link-url">{url}</span></a>"#,
+                        url = url,
+                        name = link.name,
+                    ));
+                } else {
+                    links_html.push_str(&format!(
+                        r#"<div class="env-link env-link-empty"><span class="env-link-name">{name}</span><span class="env-link-url" style="color:#484f58;font-style:italic">--</span></div>"#,
+                        name = link.name,
+                    ));
+                }
+            }
+            group_html.push_str(&format!(
+                r#"<div class="env-group"><div class="env-group-title">{group_name} <span style="color:#6e7681;font-weight:400;font-size:11px">{stack}</span></div>{links_html}</div>"#,
+                group_name = group.group,
+                stack = group.stack,
+                links_html = links_html,
+            ));
+        }
+        env_contents.push_str(&format!(
+            r#"<div class="env-panel" id="env-{env}" style="display:{display}">{group_html}</div>"#,
+            env = env,
+            display = display,
+            group_html = group_html,
+        ));
+    }
+
+    format!(
+        r##"
+  <div class="env-links-section" style="margin-top:32px">
+    <h2 style="font-size:16px;font-weight:600;color:#e6edf3;margin:0 0 12px 0">Environment Links</h2>
+    <div class="env-tabs">{tab_buttons}</div>
+    {env_contents}
+  </div>
+  <style>
+    .env-tabs {{ display:flex; gap:4px; margin-bottom:12px; }}
+    .env-tab {{
+      background:rgba(22,27,34,0.6); border:1px solid rgba(255,255,255,0.06);
+      border-radius:8px; padding:6px 14px; color:#8b949e; cursor:pointer;
+      font-size:13px; font-weight:500; text-transform:capitalize;
+      transition: all 0.15s;
+    }}
+    .env-tab:hover {{ border-color:rgba(88,166,255,0.3); color:#e6edf3; }}
+    .env-tab.active {{ background:#1f6feb; color:#fff; border-color:#1f6feb; }}
+    .env-group {{ margin-bottom:8px; background:rgba(22,27,34,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:14px; overflow:hidden; }}
+    .env-group-title {{ padding:12px 16px; font-size:13px; font-weight:600; color:#e6edf3; border-bottom:1px solid rgba(255,255,255,0.06); }}
+    .env-link {{
+      display:flex; align-items:center; padding:10px 16px; gap:12px;
+      text-decoration:none; color:inherit; border-bottom:1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }}
+    a.env-link:hover {{ background:rgba(88,166,255,0.06); }}
+    .env-link-name {{ flex:1; font-size:13px; color:#c9d1d9; }}
+    .env-link-url {{ font-size:12px; color:#58a6ff; font-family:"SF Mono","Fira Code",monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px; }}
+    .env-link-empty {{ cursor:default; }}
+  </style>
+  <script>
+    function switchEnvTab(env) {{
+      document.querySelectorAll('.env-tab').forEach(function(t) {{ t.classList.remove('active'); }});
+      document.querySelectorAll('.env-panel').forEach(function(p) {{ p.style.display='none'; }});
+      event.target.classList.add('active');
+      var panel = document.getElementById('env-' + env);
+      if (panel) panel.style.display='block';
+    }}
+  </script>"##,
+        tab_buttons = tab_buttons,
+        env_contents = env_contents,
+    )
+}
+
+/// Capitalize the first letter of a string.
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().to_string() + c.as_str(),
+    }
 }
 
 /// Write the landing page HTML to the certs volume (mounted in Caddy).

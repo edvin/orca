@@ -260,12 +260,14 @@ Templates can auto-register hostnames with the Orca Gateway on deploy:
 
 With the default domain `localhost`, these become `https://app.localhost` and `https://api.localhost`. Users can change the base domain in Settings > Gateway.
 
-### `orca.yaml` — Project-level gateway config
+### `orca.yaml` — Project-level config
 
-Any project with a `docker-compose.yml` can include an `orca.yaml` in the same directory to declare gateway routes:
+Any project with a `docker-compose.yml` can include an `orca.yaml` in the same directory. When the stack is deployed through Orca, gateway routes are auto-registered and environment links become available in the Gateway dashboard.
+
+#### Gateway routes
 
 ```yaml
-# orca.yaml — checked into your repo, shared with team
+# orca.yaml — checked into git, shared with the team
 gateway:
   - hostname: app
     service: frontend
@@ -273,9 +275,107 @@ gateway:
   - hostname: api
     service: backend
     port: 8080
+  - hostname: admin
+    service: admin-panel
+    port: 3001
 ```
 
-When the stack is deployed through Orca, these routes are auto-registered with the gateway. Hostnames are editable during deploy and overrides are saved per-user in Orca's config.
+Routes are auto-registered when the stack is deployed. Hostnames are editable during deploy and overrides are saved per-user in Orca's config.
+
+#### Environment links
+
+Add a `links` section to organize URLs by group and environment. This turns the Gateway dashboard into a developer portal for your project:
+
+```yaml
+links:
+  Storefront:
+    - name: Web App
+      local: app                              # references gateway hostname above
+      staging: https://staging.example.com
+      production: https://www.example.com
+    - name: Storybook
+      local: app/storybook
+      staging: https://staging.example.com/storybook
+
+  Admin:
+    - name: Admin Panel
+      local: admin
+      staging: https://staging-admin.example.com
+      production: https://admin.example.com
+    - name: API Docs
+      local: api/docs
+      staging: https://staging-api.example.com/docs
+      production: https://api.example.com/docs
+
+  Infrastructure:
+    - name: Grafana
+      staging: https://grafana.staging.example.com
+      production: https://grafana.example.com
+    - name: Sentry
+      production: https://sentry.example.com
+```
+
+**How it works:**
+- Top-level keys under `links:` are group names (shown as sections in the UI)
+- Each link has a `name` and one or more environment URLs
+- `local` values reference gateway hostnames — auto-resolved to `https://{hostname}.{domain}`
+- Other keys (`staging`, `production`, etc.) are full URLs — environment names are freeform
+- Links without a `local` value only show up in non-local environments
+- The Gateway landing page and Orca UI show environment tabs to switch between them
+
+#### Full `orca.yaml` example
+
+```yaml
+# orca.yaml — complete example
+gateway:
+  - hostname: app
+    service: frontend
+    port: 3000
+  - hostname: api
+    service: backend
+    port: 8080
+
+links:
+  Frontend:
+    - name: Web App
+      local: app
+      staging: https://staging.example.com
+      production: https://www.example.com
+
+  Backend:
+    - name: API
+      local: api
+      staging: https://staging-api.example.com
+      production: https://api.example.com
+    - name: API Docs
+      local: api/docs
+```
+
+### Team setup
+
+For teams using a shared domain (e.g., `*.dev.example.com`), create a setup repo with:
+
+```
+team-devtools/
+  wildcard.pem          # wildcard cert for *.dev.example.com
+  wildcard-key.pem      # private key
+  team-config.yaml      # orca config export
+  setup.sh              # one-liner for new devs
+```
+
+`setup.sh`:
+```bash
+#!/bin/bash
+orca gateway config \
+  --domain dev.example.com \
+  --tls-mode custom \
+  --cert-file wildcard.pem \
+  --key-file wildcard-key.pem
+orca gateway start
+echo "Done! Deploy any project with orca.yaml to get started."
+```
+
+New dev onboarding: clone the setup repo, run `./setup.sh`, then deploy projects normally. Every project's `orca.yaml` routes and links auto-register with the team domain.
 
 The catalog is fetched by the app every hour and cached locally. New templates appear automatically — no app update needed.
 

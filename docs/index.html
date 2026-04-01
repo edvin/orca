@@ -879,7 +879,7 @@
 </head>
 <body>
 
-<section class="hero">
+<section class="hero" id="top">
   <div class="hero-content">
     <div class="hero-pills">
       <span class="hero-pill"><span class="hero-pill-dot" style="background: #3fb950;"></span> Free &amp; Open Source</span>
@@ -964,7 +964,7 @@
   <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/01-dashboard.png" alt="Orca Desktop Dashboard" loading="lazy">
 </div>
 
-<section class="features">
+<section class="features" id="features">
   <div class="section-header">
     <h2>Why Orca Desktop</h2>
     <p>Free forever. Lightweight. Open source. Containers and Kubernetes.</p>
@@ -1163,14 +1163,14 @@
   </div>
 </section>
 
-<section class="highlights">
-  <div class="highlight-row">
+<section class="highlights" id="highlights">
+  <div class="highlight-row" id="gateway">
     <div class="highlight-text">
       <h3>Built-in Gateway</h3>
       <p>Orca Gateway is a managed Caddy reverse proxy that gives every container a clean hostname with automatic HTTPS. Deploy an app and access it at <code>myapp.localhost</code> — no port numbers, no config files.</p>
       <ul>
         <li><code>*.localhost</code> works in all browsers — zero DNS config needed</li>
-        <li>Custom domains for teams (e.g., <code>*.local.mycompany.dev</code>)</li>
+        <li>Custom domains for teams (e.g., <code>*.dev.example.com</code>)</li>
         <li>TLS certificates signed by the Orca CA — or bring your own wildcard cert</li>
         <li>One-click "Expose" from any container detail page</li>
         <li><code>orca.yaml</code> in project repos — gateway routes auto-register on deploy</li>
@@ -1191,7 +1191,36 @@
     </div>
   </div>
 
-  <div class="highlight-row">
+  <div class="highlight-row" style="direction: rtl;" id="environments">
+    <div class="highlight-text" style="direction: ltr;">
+      <h3>Environment links &amp; developer portal</h3>
+      <p>Turn the Gateway dashboard into a developer portal. Each project's <code>orca.yaml</code> can define links grouped by section and environment — local, staging, production, or any custom environment your team uses.</p>
+      <ul>
+        <li>Links organized by group (Storefront, Admin, Backend, Infrastructure)</li>
+        <li>Environment tabs — switch between Local, Staging, Production</li>
+        <li><code>local</code> values auto-resolve to gateway hostnames</li>
+        <li>Non-local environments are direct URL bookmarks — no proxying</li>
+        <li>Shared via git — every team member sees the same links</li>
+        <li>Gateway landing page shows all apps across all environments</li>
+      </ul>
+    </div>
+    <div class="highlight-visual">
+<span style="color:#6e7681"># orca.yaml — environment links</span>
+<span style="color:#ff7b72">links</span>:
+  <span style="color:#a5d6ff">Storefront</span>:
+    - <span style="color:#ff7b72">name</span>: <span style="color:#a5d6ff">Web App</span>
+      <span style="color:#ff7b72">local</span>: <span style="color:#a5d6ff">app</span>
+      <span style="color:#ff7b72">staging</span>: <span style="color:#a5d6ff">https://staging.example.com</span>
+      <span style="color:#ff7b72">production</span>: <span style="color:#a5d6ff">https://www.example.com</span>
+
+  <span style="color:#a5d6ff">Admin</span>:
+    - <span style="color:#ff7b72">name</span>: <span style="color:#a5d6ff">Admin Panel</span>
+      <span style="color:#ff7b72">local</span>: <span style="color:#a5d6ff">admin</span>
+      <span style="color:#ff7b72">staging</span>: <span style="color:#a5d6ff">https://staging-admin.example.com</span>
+    </div>
+  </div>
+
+  <div class="highlight-row" id="kubernetes">
     <div class="highlight-text">
       <h3>Full Kubernetes management</h3>
       <p>Orca Desktop gives you a complete Kubernetes dashboard without the complexity. Visualize your cluster topology, manage Helm releases, and edit any resource with a syntax-highlighted YAML editor — all from one window.</p>
@@ -1209,7 +1238,7 @@
     </div>
   </div>
 
-  <div class="highlight-row" style="direction: rtl;">
+  <div class="highlight-row" style="direction: rtl;" id="ai">
     <div class="highlight-text" style="direction: ltr;">
       <h3>AI assistant with local GPU power</h3>
       <p>Get AI-powered container diagnostics and management with your choice of provider. Run Ollama locally with GPU acceleration for private, zero-latency AI — or connect to Claude, GPT, or Gemini for cloud intelligence.</p>
@@ -1226,7 +1255,7 @@
     </div>
   </div>
 
-  <div class="highlight-row">
+  <div class="highlight-row" id="security">
     <div class="highlight-text">
       <h3>Security scanning with exportable reports</h3>
       <p>Scan any image for vulnerabilities with one click. Orca Desktop uses Trivy to find CVEs, displays results with distinct severity colors, and generates full HTML reports you can share with your team or open in any browser.</p>
@@ -1243,7 +1272,7 @@
     </div>
   </div>
 
-  <div class="highlight-row" style="direction: rtl;">
+  <div class="highlight-row" style="direction: rtl;" id="agents">
     <div class="highlight-text" style="direction: ltr;">
       <h3>Built for AI agents</h3>
       <p>Orca Desktop exposes a full container management API that any AI agent can use. Connect Claude Code, OpenAI agents, or any MCP-compatible client.</p>
@@ -1259,7 +1288,7 @@
     </div>
   </div>
 
-  <div class="highlight-row">
+  <div class="highlight-row" id="fleet">
     <div class="highlight-text">
       <h3>Fleet management</h3>
       <p>Install the Orca daemon on any Linux server and manage your entire fleet from one desktop. Tags, groups, bulk operations, health alerts — all built in.</p>
@@ -1655,7 +1684,7 @@ document.addEventListener('DOMContentLoaded', initGallery);
 </script>
 
 <!-- Privacy & Security -->
-<section style="max-width: 1100px; margin: 0 auto; padding: 40px 20px 80px;">
+<section style="max-width: 1100px; margin: 0 auto; padding: 40px 20px 80px;" id="privacy">
   <div class="section-header">
     <h2>Privacy & Security</h2>
     <p>Built for teams that take data security seriously.</p>
@@ -1787,7 +1816,7 @@ document.addEventListener('DOMContentLoaded', initGallery);
   </div>
 </section>
 
-<section class="cta">
+<section class="cta" id="download">
   <h2>Ready to try it?</h2>
   <p>Free, open source, and works with your existing Docker and Kubernetes setup.</p>
   <div class="hero-buttons" style="justify-content: center;">
@@ -1800,6 +1829,16 @@ document.addEventListener('DOMContentLoaded', initGallery);
 </section>
 
 <footer class="footer">
+  <p style="margin-bottom: 8px;">
+    <a href="#features">Features</a> ·
+    <a href="#gateway">Gateway</a> ·
+    <a href="#environments">Environments</a> ·
+    <a href="#kubernetes">Kubernetes</a> ·
+    <a href="#ai">AI</a> ·
+    <a href="#fleet">Fleet</a> ·
+    <a href="#privacy">Privacy</a> ·
+    <a href="#download">Download</a>
+  </p>
   <p>
     <a href="https://github.com/edvin/orca">GitHub</a> ·
     <a href="https://github.com/edvin/orca/releases">Releases</a> ·

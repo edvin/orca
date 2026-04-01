@@ -160,6 +160,9 @@ pub struct GatewayConfig {
     pub custom_key: Option<String>,
     #[serde(default)]
     pub routes: Vec<GatewayRoute>,
+    /// Environment links grouped by stack/group for multi-environment navigation.
+    #[serde(default)]
+    pub stack_links: Vec<StackLinkGroup>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,8 +193,29 @@ impl Default for GatewayConfig {
             custom_cert: None,
             custom_key: None,
             routes: Vec::new(),
+            stack_links: Vec::new(),
         }
     }
+}
+
+/// A group of environment links for a stack (e.g., "Storefront", "Admin").
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StackLinkGroup {
+    /// Which stack these links belong to.
+    pub stack: String,
+    /// Group name (e.g., "Storefront", "Admin").
+    pub group: String,
+    /// Links within this group.
+    pub links: Vec<EnvironmentLink>,
+}
+
+/// A single link with URLs per environment.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct EnvironmentLink {
+    /// Display name (e.g., "Web App", "Admin Panel").
+    pub name: String,
+    /// Map of environment name to URL. "local" values are gateway hostnames.
+    pub urls: std::collections::BTreeMap<String, String>,
 }
 
 fn default_gateway_domain() -> String {
