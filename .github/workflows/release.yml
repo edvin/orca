@@ -216,6 +216,21 @@ jobs:
             sleep 5
           done
 
+      - name: Re-sign for updater after Windows code signing
+        if: runner.os == 'Windows' && vars.WINDOWS_SIGNING_ENABLED == 'true'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        shell: bash
+        run: |
+          BUNDLE_BASE="target/${{ matrix.platform.target }}/release/bundle"
+          # Windows code signing modified the .exe, invalidating the Tauri updater .sig
+          # Re-generate updater signatures for the signed binaries
+          find "$BUNDLE_BASE" -type f -name "*-setup.exe" | while read -r file; do
+            echo "Re-signing for updater: $file"
+            cargo tauri signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" "$file"
+          done
+
       - name: Upload release artifacts
         shell: bash
         run: |
