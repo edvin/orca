@@ -1139,18 +1139,39 @@ impl K8sManager for K3sManager {
                 .status()
                 .await;
 
-            // Verify it stopped
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            let check = Command::new("wsl")
-                .args(["-u", "root", "--", "k3s", "kubectl", "get", "nodes"])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .await;
-            match check {
-                Ok(s) if s.success() => tracing::warn!("k3s may still be running after disable"),
-                _ => tracing::info!("k3s stopped successfully"),
+            // Wait for k3s to fully stop (up to 15 seconds)
+            for i in 0..15 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                let check = Command::new("wsl")
+                    .args(["-u", "root", "--", "k3s", "kubectl", "get", "nodes"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .await;
+                match check {
+                    Ok(s) if !s.success() => {
+                        tracing::info!("k3s stopped successfully (after {i}s)");
+                        return Ok(());
+                    }
+                    _ => {
+                        if i == 5 {
+                            // Try killall again
+                            let _ = Command::new("wsl")
+                                .args([
+                                    "-u",
+                                    "root",
+                                    "--",
+                                    "sh",
+                                    "-c",
+                                    "/usr/local/bin/k3s-killall.sh 2>/dev/null || true",
+                                ])
+                                .status()
+                                .await;
+                        }
+                    }
+                }
             }
+            tracing::warn!("k3s may still be running after 15s");
             return Ok(());
         }
 
@@ -1165,18 +1186,26 @@ impl K8sManager for K3sManager {
                 .status()
                 .await;
 
-            // Verify it stopped
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            // Wait for k3s to fully stop (up to 15 seconds)
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .timeout(std::time::Duration::from_secs(2))
                 .build()
                 .unwrap_or_default();
-            match client.get("https://127.0.0.1:6443/healthz").send().await {
-                Ok(_) => tracing::warn!("k3s may still be running after disable"),
-                Err(_) => tracing::info!("k3s stopped successfully"),
+            for i in 0..15 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                if client.get("https://127.0.0.1:6443/healthz").send().await.is_err() {
+                    tracing::info!("k3s stopped successfully (after {i}s)");
+                    return Ok(());
+                }
+                if i == 5 {
+                    let _ = Command::new("sh")
+                        .args(["-c", "/usr/local/bin/k3s-killall.sh 2>/dev/null || true"])
+                        .status()
+                        .await;
+                }
             }
-
+            tracing::warn!("k3s may still be running after 15s");
             Ok(())
         }
     }

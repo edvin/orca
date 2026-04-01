@@ -51,6 +51,7 @@ export default function KubernetesPage() {
   const [pvs, setPvs] = createSignal<PersistentVolume[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [enabling, setEnabling] = createSignal(false);
+  const [stopping, setStopping] = createSignal(false);
   const [portForwards, setPortForwards] = createSignal<Set<string>>(new Set());
   const [k8sMenuOpen, setK8sMenuOpen] = createSignal(false);
   const [scaleTarget, setScaleTarget] = createSignal<{ namespace: string; name: string; current: number } | null>(null);
@@ -472,6 +473,7 @@ export default function KubernetesPage() {
     portForwards().has(`${namespace}/${service}/${port}`);
 
   const handleStop = async () => {
+    setStopping(true);
     try {
       await invoke("k8s_disable");
       showToast("Kubernetes cluster stopped", "success");
@@ -480,6 +482,7 @@ export default function KubernetesPage() {
       logError(`Failed to stop Kubernetes: ${e}`);
       showToast(`Failed to stop: ${e}`, "error");
     }
+    setStopping(false);
   };
 
   const handleStart = async () => {
@@ -1117,8 +1120,8 @@ spec:
                   <button class="dropdown-item dropdown-item-danger" onClick={handleReset}>
                     {"\u26A0"} Reset Cluster
                   </button>
-                  <button class="dropdown-item dropdown-item-danger" onClick={handleStop}>
-                    {"\u25A0"} Stop Kubernetes
+                  <button class="dropdown-item dropdown-item-danger" onClick={handleStop} disabled={stopping()}>
+                    {stopping() ? "Stopping..." : "\u25A0 Stop Kubernetes"}
                   </button>
                 </div>
               </Show>
