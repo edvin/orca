@@ -428,7 +428,7 @@ export default function GatewayPage(props: GatewayPageProps) {
         when={status()?.running}
         fallback={
           <div>
-            {/* What is Orca Gateway? */}
+            {/* Orca Gateway */}
             <div class="card" style={{ "margin-bottom": "16px" }}>
               <div style={{ "margin-bottom": "16px" }}>
                 <div style={{ display: "flex", "align-items": "center", gap: "10px", "margin-bottom": "12px" }}>
@@ -437,7 +437,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                     <line x1="2" y1="12" x2="22" y2="12" />
                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                   </svg>
-                  <h2 style={{ color: "#e6edf3", "font-size": "16px", "font-weight": "600", margin: "0" }}>What is Orca Gateway?</h2>
+                  <h2 style={{ color: "#e6edf3", "font-size": "16px", "font-weight": "600", margin: "0" }}>Orca Gateway</h2>
                 </div>
                 <p style={{ color: "#8b949e", "font-size": "13px", "line-height": "1.6", margin: "0 0 16px 0" }}>
                   Orca Gateway is a managed reverse proxy that gives your containers clean hostnames with automatic TLS.
