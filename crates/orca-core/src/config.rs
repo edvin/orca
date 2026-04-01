@@ -616,4 +616,229 @@ mod tests {
         assert_eq!(token.len(), 32, "token should be 32 hex chars, got {}", token.len());
         assert!(token.chars().all(|c| c.is_ascii_hexdigit()), "token should be hex");
     }
+
+    // ---- Gateway config tests ----
+
+    #[test]
+    fn test_gateway_config_default() {
+        let config = GatewayConfig::default();
+        assert_eq!(config.domain, "localhost");
+        assert_eq!(config.http_port, 80);
+        assert_eq!(config.https_port, 443);
+        assert!(!config.enabled);
+        assert!(config.routes.is_empty());
+        assert!(config.stack_links.is_empty());
+        assert!(config.custom_cert.is_none());
+        assert!(config.custom_key.is_none());
+    }
+
+    #[test]
+    fn test_gateway_route_serialization_roundtrip() {
+        let route = GatewayRoute {
+            hostname: "myapp".to_string(),
+            container_name: "myapp-frontend-1".to_string(),
+            port: 3000,
+            enabled: true,
+            path: None,
+        };
+        let json = serde_json::to_string(&route).expect("serialize");
+        let restored: GatewayRoute = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.hostname, "myapp");
+        assert_eq!(restored.container_name, "myapp-frontend-1");
+        assert_eq!(restored.port, 3000);
+        assert!(restored.enabled);
+        assert!(restored.path.is_none());
+    }
+
+    #[test]
+    fn test_gateway_route_with_path_serialization() {
+        let route = GatewayRoute {
+            hostname: "myapp".to_string(),
+            container_name: "myapp-backend-1".to_string(),
+            port: 8080,
+            enabled: true,
+            path: Some("/api/*".to_string()),
+        };
+        let json = serde_json::to_string(&route).expect("serialize");
+        let restored: GatewayRoute = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.path, Some("/api/*".to_string()));
+    }
+
+    #[test]
+    fn test_gateway_route_without_path_omits_field() {
+        let route = GatewayRoute {
+            hostname: "myapp".to_string(),
+            container_name: "myapp-1".to_string(),
+            port: 3000,
+            enabled: true,
+            path: None,
+        };
+        let json = serde_json::to_string(&route).expect("serialize");
+        assert!(
+            !json.contains("\"path\""),
+            "JSON should not contain 'path' field when None, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    fn test_gateway_route_enabled_defaults_to_true() {
+        // Deserialize JSON without "enabled" field — should default to true
+        let json = r#"{"hostname":"app","container_name":"app-1","port":3000}"#;
+        let route: GatewayRoute = serde_json::from_str(json).expect("deserialize");
+        assert!(route.enabled, "enabled should default to true");
+    }
+
+    #[test]
+    fn test_gateway_config_backward_compatible() {
+        // Serialize a default config, remove the gateway field, then deserialize.
+        // This simulates upgrading from an older config that lacks the gateway key.
+        let original = OrcaConfig::default();
+        let mut val: serde_json::Value = serde_json::to_value(&original).expect("serialize to value");
+        val.as_object_mut().unwrap().remove("gateway");
+        let restored: OrcaConfig = serde_json::from_value(val).expect("deserialize without gateway");
+        assert_eq!(restored.gateway.domain, "localhost");
+        assert_eq!(restored.gateway.http_port, 80);
+        assert_eq!(restored.gateway.https_port, 443);
+        assert!(!restored.gateway.enabled);
+        assert!(restored.gateway.routes.is_empty());
+    }
+
+    #[test]
+    fn test_stack_link_group_serialization() {
+        let group = StackLinkGroup {
+            stack: "mystack".to_string(),
+            group: "Frontend".to_string(),
+            links: vec![EnvironmentLink {
+                name: "Web App".to_string(),
+                urls: {
+                    let mut m = std::collections::BTreeMap::new();
+                    m.insert("local".to_string(), "webapp".to_string());
+                    m.insert("staging".to_string(), "https://staging.example.com".to_string());
+                    m
+                },
+            }],
+        };
+        let json = serde_json::to_string(&group).expect("serialize");
+        let restored: StackLinkGroup = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.stack, "mystack");
+        assert_eq!(restored.group, "Frontend");
+        assert_eq!(restored.links.len(), 1);
+        assert_eq!(restored.links[0].name, "Web App");
+        assert_eq!(restored.links[0].urls.len(), 2);
+        assert_eq!(restored.links[0].urls["local"], "webapp");
+        assert_eq!(restored.links[0].urls["staging"], "https://staging.example.com");
+    }
+
+    #[test]
+    fn test_environment_link_empty_urls() {
+        let link = EnvironmentLink {
+            name: "Empty".to_string(),
+            urls: std::collections::BTreeMap::new(),
+        };
+        let json = serde_json::to_string(&link).expect("serialize");
+        let restored: EnvironmentLink = serde_json::from_str(&json).expect("deserialize");
+        assert!(restored.urls.is_empty());
+    }
+
+    #[test]
+    fn test_gateway_tls_mode_serialization() {
+        let orca_ca = GatewayTlsMode::OrcaCa;
+        let json = serde_json::to_string(&orca_ca).expect("serialize");
+        assert_eq!(json, r#""orca_ca""#);
+
+        let custom = GatewayTlsMode::Custom;
+        let json = serde_json::to_string(&custom).expect("serialize");
+        assert_eq!(json, r#""custom""#);
+
+        // Roundtrip
+        let restored: GatewayTlsMode = serde_json::from_str(r#""orca_ca""#).expect("deserialize");
+        assert!(matches!(restored, GatewayTlsMode::OrcaCa));
+        let restored: GatewayTlsMode = serde_json::from_str(r#""custom""#).expect("deserialize");
+        assert!(matches!(restored, GatewayTlsMode::Custom));
+    }
+
+    // ---- Deploy rules tests ----
+
+    #[test]
+    fn test_find_matching_rules_exact_image() {
+        let mut config = OrcaConfig::default();
+        config.deploy_rules.push(DeployRule {
+            id: "1".to_string(),
+            name: "Test".to_string(),
+            image_pattern: "ghcr.io/user/app".to_string(),
+            tag_filter: "*".to_string(),
+            container_names: vec![],
+            webhook_secret: None,
+            enabled: true,
+        });
+        let matches = config.find_matching_rules("ghcr.io/user/app", "latest");
+        assert_eq!(matches.len(), 1);
+    }
+
+    #[test]
+    fn test_find_matching_rules_tag_glob() {
+        let mut config = OrcaConfig::default();
+        config.deploy_rules.push(DeployRule {
+            id: "1".to_string(),
+            name: "Test".to_string(),
+            image_pattern: "ghcr.io/user/app".to_string(),
+            tag_filter: "v*".to_string(),
+            container_names: vec![],
+            webhook_secret: None,
+            enabled: true,
+        });
+        assert_eq!(config.find_matching_rules("ghcr.io/user/app", "v1.2.3").len(), 1);
+        assert_eq!(config.find_matching_rules("ghcr.io/user/app", "latest").len(), 0);
+    }
+
+    #[test]
+    fn test_find_matching_rules_disabled_excluded() {
+        let mut config = OrcaConfig::default();
+        config.deploy_rules.push(DeployRule {
+            id: "1".to_string(),
+            name: "Disabled".to_string(),
+            image_pattern: "ghcr.io/user/app".to_string(),
+            tag_filter: "*".to_string(),
+            container_names: vec![],
+            webhook_secret: None,
+            enabled: false,
+        });
+        assert!(config.find_matching_rules("ghcr.io/user/app", "latest").is_empty());
+    }
+
+    #[test]
+    fn test_find_matching_rules_empty_tag_filter_matches_all() {
+        let mut config = OrcaConfig::default();
+        config.deploy_rules.push(DeployRule {
+            id: "1".to_string(),
+            name: "Test".to_string(),
+            image_pattern: "myapp".to_string(),
+            tag_filter: "".to_string(),
+            container_names: vec![],
+            webhook_secret: None,
+            enabled: true,
+        });
+        assert_eq!(config.find_matching_rules("myapp", "anything").len(), 1);
+    }
+
+    #[test]
+    fn test_add_deploy_record_caps_at_100() {
+        let mut config = OrcaConfig::default();
+        for i in 0..110 {
+            config.add_deploy_record(DeployRecord {
+                id: format!("{i}"),
+                rule_name: "test".to_string(),
+                image: "img".to_string(),
+                tag: "latest".to_string(),
+                container_name: "c".to_string(),
+                status: DeployStatus::Success,
+                timestamp: "2024-01-01".to_string(),
+                error: None,
+            });
+        }
+        assert_eq!(config.deploy_history.len(), 100);
+        // Most recent should be first
+        assert_eq!(config.deploy_history[0].id, "109");
+    }
 }

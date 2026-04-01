@@ -55,6 +55,10 @@ jobs:
       - name: Check workspace (excluding Tauri GUI)
         run: cargo check --workspace --exclude orca-gui
 
+      - name: Test
+        if: runner.os == 'Linux'
+        run: cargo test --workspace --exclude orca-gui
+
       - name: Clippy
         if: runner.os == 'Linux'
         run: cargo clippy --workspace --exclude orca-gui -- -D warnings

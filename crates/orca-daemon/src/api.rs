@@ -6569,3 +6569,294 @@ fn uuid_v4() -> String {
         .as_nanos();
     format!("{:032x}", nanos)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- parse_orca_yaml_gateway_routes tests ----
+
+    #[test]
+    fn test_parse_orca_yaml_gateway_routes_basic() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+gateway:
+  - hostname: app
+    service: frontend
+    port: 3000
+  - hostname: api
+    service: backend
+    port: 8080
+"#,
+        )
+        .unwrap();
+
+        let routes = parse_orca_yaml_gateway_routes(dir.path()).unwrap();
+        assert_eq!(routes.len(), 2);
+        assert_eq!(routes[0].hostname, "app");
+        assert_eq!(routes[0].service, "frontend");
+        assert_eq!(routes[0].port, 3000);
+        assert!(routes[0].path.is_none());
+        assert_eq!(routes[1].hostname, "api");
+        assert_eq!(routes[1].service, "backend");
+        assert_eq!(routes[1].port, 8080);
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_gateway_routes_with_path() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+gateway:
+  - hostname: app
+    service: frontend
+    port: 3000
+  - hostname: app
+    path: /api/*
+    service: backend
+    port: 8080
+"#,
+        )
+        .unwrap();
+
+        let routes = parse_orca_yaml_gateway_routes(dir.path()).unwrap();
+        assert_eq!(routes.len(), 2);
+        assert!(routes[0].path.is_none());
+        assert_eq!(routes[1].path, Some("/api/*".to_string()));
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_gateway_routes_missing_required_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        // Missing "service" field — should be skipped
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+gateway:
+  - hostname: app
+    port: 3000
+"#,
+        )
+        .unwrap();
+
+        let result = parse_orca_yaml_gateway_routes(dir.path());
+        assert!(result.is_none(), "Should return None when required fields are missing");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_gateway_routes_empty_gateway() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+gateway: []
+"#,
+        )
+        .unwrap();
+
+        let result = parse_orca_yaml_gateway_routes(dir.path());
+        assert!(result.is_none(), "Empty gateway array should return None");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_gateway_routes_no_gateway_section() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+links:
+  Frontend:
+    - name: Web App
+      local: webapp
+"#,
+        )
+        .unwrap();
+
+        let result = parse_orca_yaml_gateway_routes(dir.path());
+        assert!(result.is_none(), "No gateway section should return None");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_gateway_routes_no_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = parse_orca_yaml_gateway_routes(dir.path());
+        assert!(result.is_none(), "No orca.yaml should return None");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_gateway_routes_malformed_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("orca.yaml"), "{{{{invalid yaml!!!!").unwrap();
+
+        let result = parse_orca_yaml_gateway_routes(dir.path());
+        assert!(result.is_none(), "Malformed YAML should return None, not panic");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_gateway_routes_partial_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        // One valid entry, one missing port
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+gateway:
+  - hostname: good
+    service: frontend
+    port: 3000
+  - hostname: bad
+    service: backend
+"#,
+        )
+        .unwrap();
+
+        let routes = parse_orca_yaml_gateway_routes(dir.path()).unwrap();
+        assert_eq!(routes.len(), 1, "Should only include valid entries");
+        assert_eq!(routes[0].hostname, "good");
+    }
+
+    // ---- parse_orca_yaml_links tests ----
+
+    #[test]
+    fn test_parse_orca_yaml_links_basic() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+links:
+  Storefront:
+    - name: Web App
+      local: storefront
+      staging: https://staging.example.com
+  Admin:
+    - name: Admin Panel
+      local: admin
+      production: https://admin.example.com
+"#,
+        )
+        .unwrap();
+
+        let groups = parse_orca_yaml_links(dir.path()).unwrap();
+        assert_eq!(groups.len(), 2);
+
+        // Stack name should be the directory name
+        let stack_name = dir.path().file_name().unwrap().to_str().unwrap().to_string();
+
+        let storefront = groups.iter().find(|g| g.group == "Storefront").unwrap();
+        assert_eq!(storefront.stack, stack_name);
+        assert_eq!(storefront.links.len(), 1);
+        assert_eq!(storefront.links[0].name, "Web App");
+        assert_eq!(storefront.links[0].urls["local"], "storefront");
+        assert_eq!(storefront.links[0].urls["staging"], "https://staging.example.com");
+
+        let admin = groups.iter().find(|g| g.group == "Admin").unwrap();
+        assert_eq!(admin.links[0].name, "Admin Panel");
+        assert_eq!(admin.links[0].urls["local"], "admin");
+        assert_eq!(admin.links[0].urls["production"], "https://admin.example.com");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_links_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+gateway:
+  - hostname: app
+    service: frontend
+    port: 3000
+"#,
+        )
+        .unwrap();
+
+        let result = parse_orca_yaml_links(dir.path());
+        assert!(result.is_none(), "No links section should return None");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_links_no_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = parse_orca_yaml_links(dir.path());
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_links_malformed() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("orca.yaml"), "not: [valid: {yaml").unwrap();
+        let result = parse_orca_yaml_links(dir.path());
+        assert!(result.is_none(), "Malformed YAML should return None");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_links_skips_empty_name() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+links:
+  Group:
+    - name: ""
+      local: something
+    - name: Valid
+      local: valid-host
+"#,
+        )
+        .unwrap();
+
+        let groups = parse_orca_yaml_links(dir.path()).unwrap();
+        assert_eq!(groups[0].links.len(), 1);
+        assert_eq!(groups[0].links[0].name, "Valid");
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_links_multiple_environments() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+links:
+  Services:
+    - name: API
+      local: api
+      staging: https://api.staging.example.com
+      production: https://api.example.com
+"#,
+        )
+        .unwrap();
+
+        let groups = parse_orca_yaml_links(dir.path()).unwrap();
+        assert_eq!(groups[0].links[0].urls.len(), 3);
+        assert!(groups[0].links[0].urls.contains_key("local"));
+        assert!(groups[0].links[0].urls.contains_key("staging"));
+        assert!(groups[0].links[0].urls.contains_key("production"));
+    }
+
+    // ---- parse_orca_yaml tests ----
+
+    #[test]
+    fn test_parse_orca_yaml_valid() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("orca.yaml"),
+            r#"
+key: value
+nested:
+  inner: 42
+"#,
+        )
+        .unwrap();
+
+        let yaml = parse_orca_yaml(dir.path()).unwrap();
+        assert_eq!(yaml["key"].as_str().unwrap(), "value");
+        assert_eq!(yaml["nested"]["inner"].as_u64().unwrap(), 42);
+    }
+
+    #[test]
+    fn test_parse_orca_yaml_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(parse_orca_yaml(dir.path()).is_none());
+    }
+}

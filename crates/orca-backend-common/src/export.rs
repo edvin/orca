@@ -183,6 +183,12 @@ mod tests {
             command: None,
             env: Some(vec!["FOO=bar".to_string()]),
             mounts: None,
+            memory_limit: None,
+            cpu_limit: None,
+            restart_policy: None,
+            health_status: None,
+            health_log: None,
+            restart_count: None,
         }
     }
 
@@ -224,6 +230,12 @@ mod tests {
             command: None,
             env: None,
             mounts: None,
+            memory_limit: None,
+            cpu_limit: None,
+            restart_policy: None,
+            health_status: None,
+            health_log: None,
+            restart_count: None,
         };
         let cmd = container_to_docker_run(&c);
         assert!(cmd.starts_with("docker run -d"), "should start with docker run -d");
@@ -250,6 +262,12 @@ mod tests {
             command: None,
             env: None,
             mounts: None,
+            memory_limit: None,
+            cpu_limit: None,
+            restart_policy: None,
+            health_status: None,
+            health_log: None,
+            restart_count: None,
         };
         let yaml = containers_to_compose(&[c], "test");
         // Dots and dashes should be replaced with underscores

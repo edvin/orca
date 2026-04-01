@@ -1284,6 +1284,372 @@ fn write_landing_page(config: &GatewayConfig) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use orca_core::config::*;
+
+    fn make_config(routes: Vec<GatewayRoute>) -> GatewayConfig {
+        GatewayConfig {
+            domain: "localhost".to_string(),
+            http_port: 80,
+            https_port: 443,
+            tls_mode: GatewayTlsMode::OrcaCa,
+            routes,
+            ..Default::default()
+        }
+    }
+
+    fn make_route(hostname: &str, container: &str, port: u16) -> GatewayRoute {
+        GatewayRoute {
+            hostname: hostname.to_string(),
+            container_name: container.to_string(),
+            port,
+            enabled: true,
+            path: None,
+        }
+    }
+
+    fn make_route_with_path(hostname: &str, container: &str, port: u16, path: &str) -> GatewayRoute {
+        GatewayRoute {
+            hostname: hostname.to_string(),
+            container_name: container.to_string(),
+            port,
+            enabled: true,
+            path: Some(path.to_string()),
+        }
+    }
+
+    // ---- build_caddy_config tests ----
+
+    #[test]
+    fn test_build_caddy_config_empty_routes() {
+        let config = make_config(vec![]);
+        let json_str = build_caddy_config(&config);
+        let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
+
+        // Admin config should be present
+        assert!(caddy["admin"]["listen"].as_str().unwrap().contains("2019"));
+
+        // Should have the gateway server with the landing page fallback
+        let gateway = &caddy["apps"]["http"]["servers"]["gateway"];
+        assert!(
+            gateway["listen"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!(":443"))
+        );
+        let routes = gateway["routes"].as_array().unwrap();
+        // Only the landing page fallback route (no reverse_proxy routes)
+        assert_eq!(routes.len(), 1);
+        let handler = &routes[0]["handle"][0]["handler"];
+        assert_eq!(handler, "file_server");
+
+        // HTTP redirect server should exist
+        let redirect = &caddy["apps"]["http"]["servers"]["http_redirect"];
+        assert!(
+            redirect["listen"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!(":80"))
+        );
+    }
+
+    #[test]
+    fn test_build_caddy_config_single_route() {
+        let config = make_config(vec![make_route("app", "frontend-1", 3000)]);
+        let json_str = build_caddy_config(&config);
+        let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
+
+        let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
+            .as_array()
+            .unwrap();
+        // One reverse_proxy route + one landing page fallback
+        assert_eq!(routes.len(), 2);
+
+        // First route should be the reverse_proxy
+        let first = &routes[0];
+        assert_eq!(first["handle"][0]["handler"], "reverse_proxy");
+        let dial = first["handle"][0]["upstreams"][0]["dial"].as_str().unwrap();
+        assert_eq!(dial, "frontend-1:3000");
+
+        // Host matcher
+        let host_match = &first["match"][0]["host"][0];
+        assert_eq!(host_match, "app");
+    }
+
+    #[test]
+    fn test_build_caddy_config_path_routes_sorted_before_catchall() {
+        let config = make_config(vec![
+            make_route("app", "frontend-1", 3000),
+            make_route_with_path("app", "backend-1", 8080, "/api/*"),
+        ]);
+        let json_str = build_caddy_config(&config);
+        let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
+
+        let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
+            .as_array()
+            .unwrap();
+        // 2 reverse_proxy routes + 1 landing page fallback
+        assert_eq!(routes.len(), 3);
+
+        // First route should be the path-specific one (sorted before hostname-only)
+        let first_match = &routes[0]["match"];
+        assert!(
+            first_match[1].get("path").is_some(),
+            "Path-specific route should come first"
+        );
+        assert_eq!(first_match[1]["path"][0], "/api/*");
+
+        // Second route should be hostname-only
+        let second_match = &routes[1]["match"];
+        assert!(
+            second_match.get(1).is_none() || second_match[1].is_null(),
+            "Hostname-only route should come second"
+        );
+    }
+
+    #[test]
+    fn test_build_caddy_config_custom_tls() {
+        let config = GatewayConfig {
+            domain: "example.com".to_string(),
+            http_port: 80,
+            https_port: 443,
+            tls_mode: GatewayTlsMode::Custom,
+            custom_cert: None,
+            custom_key: None,
+            routes: vec![make_route("app", "frontend-1", 3000)],
+            ..Default::default()
+        };
+        let json_str = build_caddy_config(&config);
+        let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
+
+        // Custom TLS without explicit cert/key should default to /certs/cert.pem and /certs/key.pem
+        let load_files = caddy["apps"]["tls"]["certificates"]["load_files"].as_array().unwrap();
+        let cert_entry = &load_files[0];
+        assert_eq!(cert_entry["certificate"], "/certs/cert.pem");
+        assert_eq!(cert_entry["key"], "/certs/key.pem");
+    }
+
+    #[test]
+    fn test_build_caddy_config_custom_tls_with_explicit_paths() {
+        let config = GatewayConfig {
+            domain: "example.com".to_string(),
+            http_port: 80,
+            https_port: 443,
+            tls_mode: GatewayTlsMode::Custom,
+            custom_cert: Some("/etc/ssl/my-cert.pem".to_string()),
+            custom_key: Some("/etc/ssl/my-key.pem".to_string()),
+            routes: vec![make_route("app", "frontend-1", 3000)],
+            ..Default::default()
+        };
+        let json_str = build_caddy_config(&config);
+        let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
+
+        let load_files = caddy["apps"]["tls"]["certificates"]["load_files"].as_array().unwrap();
+        let cert_entry = &load_files[0];
+        assert_eq!(cert_entry["certificate"], "/etc/ssl/my-cert.pem");
+        assert_eq!(cert_entry["key"], "/etc/ssl/my-key.pem");
+    }
+
+    #[test]
+    fn test_build_caddy_config_orca_ca_tls_uses_hostname_certs() {
+        let config = make_config(vec![make_route("myapp", "container-1", 8080)]);
+        let json_str = build_caddy_config(&config);
+        let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
+
+        let load_files = caddy["apps"]["tls"]["certificates"]["load_files"].as_array().unwrap();
+        // Should have cert for route hostname + cert for root domain
+        assert_eq!(load_files.len(), 2);
+        assert_eq!(load_files[0]["certificate"], "/certs/myapp.pem");
+        assert_eq!(load_files[0]["key"], "/certs/myapp-key.pem");
+        assert_eq!(load_files[1]["certificate"], "/certs/localhost.pem");
+        assert_eq!(load_files[1]["key"], "/certs/localhost-key.pem");
+    }
+
+    #[test]
+    fn test_build_caddy_config_disabled_routes_excluded() {
+        let mut disabled = make_route("secret", "secret-1", 9999);
+        disabled.enabled = false;
+
+        let config = make_config(vec![make_route("app", "frontend-1", 3000), disabled]);
+        let json_str = build_caddy_config(&config);
+        let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
+
+        let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
+            .as_array()
+            .unwrap();
+        // Only 1 reverse_proxy (app) + 1 landing page = 2 total
+        assert_eq!(routes.len(), 2);
+
+        // The disabled route's hostname should not appear anywhere in the config
+        assert!(!json_str.contains("secret-1:9999"));
+    }
+
+    #[test]
+    fn test_build_caddy_config_http_redirect() {
+        let config = make_config(vec![]);
+        let json_str = build_caddy_config(&config);
+        let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
+
+        let redirect = &caddy["apps"]["http"]["servers"]["http_redirect"];
+        let handler = &redirect["routes"][0]["handle"][0];
+        assert_eq!(handler["handler"], "static_response");
+        assert_eq!(handler["status_code"], 301);
+        let location = handler["headers"]["Location"][0].as_str().unwrap();
+        assert!(location.starts_with("https://"));
+    }
+
+    // ---- to_docker_mount_path tests ----
+
+    #[test]
+    fn test_to_docker_mount_path_unix() {
+        assert_eq!(
+            to_docker_mount_path(std::path::Path::new("/home/user/.config/orca")),
+            "/home/user/.config/orca"
+        );
+    }
+
+    #[test]
+    fn test_to_docker_mount_path_unix_root() {
+        assert_eq!(to_docker_mount_path(std::path::Path::new("/")), "/");
+    }
+
+    #[test]
+    fn test_to_docker_mount_path_unix_relative() {
+        assert_eq!(
+            to_docker_mount_path(std::path::Path::new("some/relative/path")),
+            "some/relative/path"
+        );
+    }
+
+    // ---- generate_landing_page tests ----
+
+    #[test]
+    fn test_generate_landing_page_contains_routes() {
+        let config = make_config(vec![
+            make_route("webapp", "webapp-container", 3000),
+            make_route("api-server", "api-container", 8080),
+        ]);
+        let html = generate_landing_page(&config);
+
+        assert!(html.contains("Orca Gateway"), "Should contain title");
+        assert!(html.contains("webapp"), "Should contain 'webapp' hostname");
+        assert!(html.contains("api-server"), "Should contain 'api-server' hostname");
+        assert!(html.contains("webapp-container"), "Should contain container name");
+        assert!(html.contains("api-container"), "Should contain container name");
+        assert!(html.contains(":3000"), "Should contain port 3000");
+        assert!(html.contains(":8080"), "Should contain port 8080");
+        // Route count
+        assert!(html.contains(">2<"), "Should show route count of 2");
+    }
+
+    #[test]
+    fn test_generate_landing_page_empty_routes() {
+        let config = make_config(vec![]);
+        let html = generate_landing_page(&config);
+
+        assert!(
+            html.contains("No services registered"),
+            "Should show empty state message"
+        );
+        assert!(html.contains("Orca Gateway"), "Should still contain title");
+    }
+
+    #[test]
+    fn test_generate_landing_page_disabled_routes_not_shown() {
+        let mut disabled = make_route("hidden", "hidden-container", 9999);
+        disabled.enabled = false;
+        let config = make_config(vec![disabled]);
+        let html = generate_landing_page(&config);
+
+        assert!(
+            !html.contains("hidden-container"),
+            "Disabled route container should not appear"
+        );
+        assert!(html.contains("No services registered"), "Should show empty state");
+    }
+
+    #[test]
+    fn test_generate_landing_page_custom_port_suffix() {
+        let config = GatewayConfig {
+            domain: "dev.local".to_string(),
+            http_port: 8080,
+            https_port: 8443,
+            tls_mode: GatewayTlsMode::OrcaCa,
+            routes: vec![make_route("app", "app-1", 3000)],
+            ..Default::default()
+        };
+        let html = generate_landing_page(&config);
+
+        assert!(html.contains(":8443"), "Should show custom HTTPS port suffix");
+        assert!(html.contains("dev.local"), "Should show custom domain");
+    }
+
+    #[test]
+    fn test_generate_landing_page_env_links() {
+        let config = GatewayConfig {
+            domain: "localhost".to_string(),
+            http_port: 80,
+            https_port: 443,
+            tls_mode: GatewayTlsMode::OrcaCa,
+            routes: vec![make_route("storefront", "storefront-1", 3000)],
+            stack_links: vec![StackLinkGroup {
+                stack: "mystack".to_string(),
+                group: "Storefront".to_string(),
+                links: vec![EnvironmentLink {
+                    name: "Web App".to_string(),
+                    urls: {
+                        let mut m = std::collections::BTreeMap::new();
+                        m.insert("local".to_string(), "storefront".to_string());
+                        m.insert("staging".to_string(), "https://staging.example.com".to_string());
+                        m
+                    },
+                }],
+            }],
+            ..Default::default()
+        };
+        let html = generate_landing_page(&config);
+
+        // Should have environment tabs
+        assert!(html.contains("env-tab"), "Should have environment tab buttons");
+        assert!(html.contains("Local"), "Should have Local tab");
+        assert!(html.contains("Staging"), "Should have Staging tab");
+        // Should have the group name
+        assert!(html.contains("Storefront"), "Should show group name");
+        // Should have the link name
+        assert!(html.contains("Web App"), "Should show link name");
+        // The staging URL
+        assert!(html.contains("staging.example.com"), "Should show staging URL");
+    }
+
+    #[test]
+    fn test_generate_landing_page_hostname_capitalization() {
+        let config = make_config(vec![make_route("my-cool-app", "container-1", 3000)]);
+        let html = generate_landing_page(&config);
+
+        // Hostname "my-cool-app" should be capitalized to "My Cool App"
+        assert!(html.contains("My Cool App"), "Should capitalize hyphenated hostname");
+    }
+
+    // ---- capitalize tests ----
+
+    #[test]
+    fn test_capitalize_empty() {
+        assert_eq!(capitalize(""), "");
+    }
+
+    #[test]
+    fn test_capitalize_lowercase() {
+        assert_eq!(capitalize("local"), "Local");
+    }
+
+    #[test]
+    fn test_capitalize_already_upper() {
+        assert_eq!(capitalize("Local"), "Local");
+    }
+}
+
 /// Pull an image if it's not already present.
 async fn pull_if_needed(state: &AppState, image: &str) -> Result<()> {
     let rt = state.rt().await;

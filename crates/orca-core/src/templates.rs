@@ -129,3 +129,248 @@ pub enum GeneratedValue {
     #[serde(rename = "self_signed_key")]
     SelfSignedKey,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_setup_step_type_defaults_to_info() {
+        let json = r#"{"title":"test","description":"desc"}"#;
+        let step: SetupStep = serde_json::from_str(json).unwrap();
+        assert_eq!(step.step_type, "info");
+        assert!(step.url.is_none());
+        assert!(step.action.is_none());
+    }
+
+    #[test]
+    fn test_setup_step_link_type() {
+        let json = r#"{"title":"Open","description":"desc","type":"link","url":"http://localhost:8080"}"#;
+        let step: SetupStep = serde_json::from_str(json).unwrap();
+        assert_eq!(step.step_type, "link");
+        assert_eq!(step.url.unwrap(), "http://localhost:8080");
+    }
+
+    #[test]
+    fn test_setup_step_action_type() {
+        let json =
+            r#"{"title":"Restart","description":"desc","type":"action","action":"restart_service","service":"web"}"#;
+        let step: SetupStep = serde_json::from_str(json).unwrap();
+        assert_eq!(step.step_type, "action");
+        assert_eq!(step.action.unwrap(), "restart_service");
+        assert_eq!(step.service.unwrap(), "web");
+    }
+
+    #[test]
+    fn test_setup_step_exec_with_command() {
+        let json = r#"{"title":"Run","description":"desc","type":"action","action":"exec","command":["sh","-c","echo hello"]}"#;
+        let step: SetupStep = serde_json::from_str(json).unwrap();
+        let cmd = step.command.unwrap();
+        assert_eq!(cmd, vec!["sh", "-c", "echo hello"]);
+    }
+
+    #[test]
+    fn test_setup_step_set_env_type() {
+        let json = r#"{"title":"API Key","description":"Enter key","type":"set_env","env_key":"API_KEY","label":"Your API key"}"#;
+        let step: SetupStep = serde_json::from_str(json).unwrap();
+        assert_eq!(step.step_type, "set_env");
+        assert_eq!(step.env_key.unwrap(), "API_KEY");
+        assert_eq!(step.label.unwrap(), "Your API key");
+    }
+
+    #[test]
+    fn test_gateway_route_template_basic() {
+        let json = r#"{"hostname":"app","service":"frontend","port":3000}"#;
+        let route: GatewayRouteTemplate = serde_json::from_str(json).unwrap();
+        assert_eq!(route.hostname, "app");
+        assert_eq!(route.service, "frontend");
+        assert_eq!(route.port, 3000);
+        assert!(route.path.is_none());
+    }
+
+    #[test]
+    fn test_gateway_route_template_with_path() {
+        let json = r#"{"hostname":"app","service":"frontend","port":3000,"path":"/api/*"}"#;
+        let route: GatewayRouteTemplate = serde_json::from_str(json).unwrap();
+        assert_eq!(route.path.unwrap(), "/api/*");
+    }
+
+    #[test]
+    fn test_gateway_route_template_without_path_omits_field() {
+        let route = GatewayRouteTemplate {
+            hostname: "app".to_string(),
+            service: "frontend".to_string(),
+            port: 3000,
+            path: None,
+        };
+        let json = serde_json::to_string(&route).unwrap();
+        assert!(!json.contains("path"), "path should be omitted when None");
+    }
+
+    #[test]
+    fn test_setup_guide_serialization_roundtrip() {
+        let guide = SetupGuide {
+            title: "Getting Started".to_string(),
+            steps: vec![
+                SetupStep {
+                    title: "Step 1".to_string(),
+                    description: "Do something".to_string(),
+                    step_type: "info".to_string(),
+                    url: None,
+                    action: None,
+                    service: None,
+                    command: None,
+                    env_key: None,
+                    label: None,
+                },
+                SetupStep {
+                    title: "Step 2".to_string(),
+                    description: "Open browser".to_string(),
+                    step_type: "link".to_string(),
+                    url: Some("http://localhost:8080".to_string()),
+                    action: None,
+                    service: None,
+                    command: None,
+                    env_key: None,
+                    label: None,
+                },
+            ],
+        };
+        let json = serde_json::to_string(&guide).unwrap();
+        let restored: SetupGuide = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.title, "Getting Started");
+        assert_eq!(restored.steps.len(), 2);
+        assert_eq!(restored.steps[0].step_type, "info");
+        assert_eq!(restored.steps[1].step_type, "link");
+        assert_eq!(restored.steps[1].url.as_deref(), Some("http://localhost:8080"));
+    }
+
+    #[test]
+    fn test_generated_value_random_hex() {
+        let json = r#"{"type":"random_hex","length":32}"#;
+        let val: GeneratedValue = serde_json::from_str(json).unwrap();
+        assert!(matches!(val, GeneratedValue::RandomHex { length: Some(32) }));
+    }
+
+    #[test]
+    fn test_generated_value_user_input() {
+        let json = r#"{"type":"user_input","label":"API Key","placeholder":"sk-...","required":true,"secret":true}"#;
+        let val: GeneratedValue = serde_json::from_str(json).unwrap();
+        match val {
+            GeneratedValue::UserInput {
+                label,
+                placeholder,
+                required,
+                secret,
+            } => {
+                assert_eq!(label, "API Key");
+                assert_eq!(placeholder.unwrap(), "sk-...");
+                assert!(required);
+                assert!(secret);
+            }
+            _ => panic!("Expected UserInput variant"),
+        }
+    }
+
+    #[test]
+    fn test_generated_value_lan_ip() {
+        let json = r#"{"type":"lan_ip"}"#;
+        let val: GeneratedValue = serde_json::from_str(json).unwrap();
+        assert!(matches!(val, GeneratedValue::LanIp));
+    }
+
+    #[test]
+    fn test_app_template_minimal_deserialization() {
+        let json = r#"{
+            "id": "test-app",
+            "name": "Test App",
+            "description": "A test application",
+            "icon": "<svg></svg>",
+            "category": "Development",
+            "image": "test:latest",
+            "default_ports": ["8080:8080"],
+            "default_env": ["FOO=bar"],
+            "default_volumes": [],
+            "restart_policy": "unless-stopped",
+            "notes": "Test notes"
+        }"#;
+        let template: AppTemplate = serde_json::from_str(json).unwrap();
+        assert_eq!(template.id, "test-app");
+        assert_eq!(template.name, "Test App");
+        assert_eq!(template.category, "Development");
+        assert!(!template.is_builtin);
+        assert!(template.compose_yaml.is_none());
+        assert!(template.setup_guide.is_none());
+        assert!(template.gateway_routes.is_none());
+        assert!(template.links.is_none());
+    }
+
+    #[test]
+    fn test_app_template_with_gateway_routes() {
+        let json = r#"{
+            "id": "test-app",
+            "name": "Test App",
+            "description": "desc",
+            "icon": "",
+            "category": "Web",
+            "image": "",
+            "default_ports": [],
+            "default_env": [],
+            "default_volumes": [],
+            "restart_policy": "always",
+            "notes": "",
+            "gateway_routes": [
+                {"hostname": "app", "service": "frontend", "port": 3000},
+                {"hostname": "app", "service": "backend", "port": 8080, "path": "/api/*"}
+            ]
+        }"#;
+        let template: AppTemplate = serde_json::from_str(json).unwrap();
+        let routes = template.gateway_routes.unwrap();
+        assert_eq!(routes.len(), 2);
+        assert_eq!(routes[0].service, "frontend");
+        assert!(routes[0].path.is_none());
+        assert_eq!(routes[1].path.as_deref(), Some("/api/*"));
+    }
+
+    #[test]
+    fn test_templates_json_is_valid() {
+        let content = include_str!("../../../docs/templates.json");
+        let templates: Vec<AppTemplate> = serde_json::from_str(content).unwrap();
+        assert!(
+            templates.len() > 10,
+            "Expected at least 10 templates, got {}",
+            templates.len()
+        );
+
+        // Every template should have a non-empty id and name
+        for t in &templates {
+            assert!(!t.id.is_empty(), "Template id should not be empty");
+            assert!(!t.name.is_empty(), "Template name should not be empty for id={}", t.id);
+        }
+
+        // Templates with compose_yaml should have non-empty content
+        for t in &templates {
+            if let Some(ref yaml) = t.compose_yaml {
+                assert!(!yaml.is_empty(), "Template {} has empty compose_yaml", t.id);
+            }
+        }
+    }
+
+    #[test]
+    fn test_template_link_group_deserialization() {
+        let json = r#"{
+            "group": "Frontend",
+            "links": [
+                {
+                    "name": "Web App",
+                    "urls": {"local": "webapp", "staging": "https://staging.example.com"}
+                }
+            ]
+        }"#;
+        let group: TemplateLinkGroup = serde_json::from_str(json).unwrap();
+        assert_eq!(group.group, "Frontend");
+        assert_eq!(group.links.len(), 1);
+        assert_eq!(group.links[0].name, "Web App");
+        assert_eq!(group.links[0].urls["local"], "webapp");
+    }
+}

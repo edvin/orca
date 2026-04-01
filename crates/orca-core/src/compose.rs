@@ -177,6 +177,12 @@ mod tests {
             command: None,
             env: None,
             mounts: None,
+            memory_limit: None,
+            cpu_limit: None,
+            restart_policy: None,
+            health_status: None,
+            health_log: None,
+            restart_count: None,
         }
     }
 
