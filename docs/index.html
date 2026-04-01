@@ -1314,6 +1314,40 @@
     </div>
   </div>
 
+  <div class="highlight-row" style="direction: rtl;" id="cli">
+    <div class="highlight-text" style="direction: ltr;">
+      <h3>Full CLI for scripting &amp; teams</h3>
+      <p>The <code>orca</code> command gives you complete control from the terminal. Script deployments, automate team onboarding, manage the gateway, and export config — all without opening the GUI.</p>
+      <ul>
+        <li>Manage containers, images, stacks, and Kubernetes from the terminal</li>
+        <li>Gateway management — add routes, configure domains, set up custom certs</li>
+        <li>Config export/import — share team setup as YAML, secrets excluded by default</li>
+        <li>CA management — export certificate, install to system trust store</li>
+        <li>Deploy stacks and templates from the command line</li>
+        <li>Bundled with the installer — available on PATH immediately</li>
+      </ul>
+    </div>
+    <div class="highlight-visual" style="direction: ltr; text-align: left;">
+<span style="color:#6e7681"># Team onboarding — one-time setup</span>
+$ <span style="color:#a5d6ff">orca config import team-config.yaml</span>
+$ <span style="color:#a5d6ff">orca gateway start</span>
+
+<span style="color:#6e7681"># Deploy a project (reads orca.yaml)</span>
+$ <span style="color:#a5d6ff">orca deploy ./my-project</span>
+<span style="color:#3fb950">Gateway: app.dev.example.com, api.dev.example.com</span>
+
+<span style="color:#6e7681"># Manage the gateway</span>
+$ <span style="color:#a5d6ff">orca gateway routes</span>
+<span style="color:#8b949e">HOSTNAME              CONTAINER          PORT</span>
+app.dev.example.com   frontend-1         3000
+api.dev.example.com   backend-1          8080
+
+<span style="color:#6e7681"># Install the CA cert</span>
+$ <span style="color:#a5d6ff">orca ca install</span>
+<span style="color:#3fb950">CA certificate installed to system trust store.</span>
+    </div>
+  </div>
+
   <!-- Install instructions -->
   <div style="max-width: 900px; margin: 20px auto 0; padding: 0 24px;">
     <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 20px 24px;">
@@ -1845,6 +1879,7 @@ document.addEventListener('DOMContentLoaded', initGallery);
     <a href="#kubernetes">Kubernetes</a> ·
     <a href="#ai">AI</a> ·
     <a href="#fleet">Fleet</a> ·
+    <a href="#cli">CLI</a> ·
     <a href="#privacy">Privacy</a> ·
     <a href="#download">Download</a>
   </p>
