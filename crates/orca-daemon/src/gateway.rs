@@ -193,6 +193,9 @@ pub async fn apply_config(config: &GatewayConfig) -> Result<()> {
                 generate_cert_for_hostname(&route.hostname)?;
             }
         }
+    } else if matches!(config.tls_mode, GatewayTlsMode::Custom) {
+        // Write user-provided cert/key PEM to files so Caddy can read them
+        write_custom_cert_files(config)?;
     }
     // Regenerate the landing page
     let _ = write_landing_page(config);
@@ -297,6 +300,32 @@ fn ca_dir() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("orca")
         .join("ca")
+}
+
+/// Write user-provided custom cert/key PEM content to files in the certs directory.
+fn write_custom_cert_files(config: &GatewayConfig) -> Result<()> {
+    let dir = certs_dir();
+    std::fs::create_dir_all(&dir)?;
+
+    if let Some(cert_pem) = &config.custom_cert {
+        if !cert_pem.trim().is_empty() {
+            std::fs::write(dir.join("cert.pem"), cert_pem)?;
+            tracing::info!("Wrote custom certificate to {}", dir.join("cert.pem").display());
+        }
+    }
+    if let Some(key_pem) = &config.custom_key {
+        if !key_pem.trim().is_empty() {
+            let key_path = dir.join("key.pem");
+            std::fs::write(&key_path, key_pem)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+            }
+            tracing::info!("Wrote custom private key to {}", key_path.display());
+        }
+    }
+    Ok(())
 }
 
 /// Generate a TLS certificate for a hostname, signed by the Orca CA.
