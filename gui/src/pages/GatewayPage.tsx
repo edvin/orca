@@ -537,9 +537,9 @@ export default function GatewayPage(props: GatewayPageProps) {
                     <button
                       class="btn-link"
                       style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "13px", padding: "0" }}
-                      onClick={() => props.onNavigate?.("settings:privacy")}
+                      onClick={() => props.onNavigate?.("settings:certificates")}
                     >
-                      Settings &rarr; Privacy &amp; Security &rarr; Download CA
+                      Settings &rarr; Certificates &rarr; Download CA
                     </button>
                   </span>
                 </div>
@@ -661,9 +661,9 @@ export default function GatewayPage(props: GatewayPageProps) {
               <button
                 class="btn-link"
                 style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "12px", padding: "0" }}
-                onClick={() => props.onNavigate?.("settings:privacy")}
+                onClick={() => props.onNavigate?.("settings:certificates")}
               >
-                Settings &rarr; Privacy &amp; Security
+                Settings &rarr; Certificates
               </button>
             </span>
           </div>
@@ -852,6 +852,9 @@ export default function GatewayPage(props: GatewayPageProps) {
             </div>
             <form onSubmit={handleAddRoute}>
               <div class="modal-body">
+                <p style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.6" }}>
+                  Map a hostname to a container's internal port. The Gateway serves it over HTTPS on ports {status()?.http_port || 80}/{status()?.https_port || 443}.
+                </p>
                 <div class="form-group">
                   <label class="form-label">
                     Hostname <span style={{ color: "#f85149" }}>*</span>
@@ -882,7 +885,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                     onInput={(e) => setAddPath(e.currentTarget.value)}
                   />
                   <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>
-                    Route specific paths to different containers on the same hostname
+                    Optional. Route a specific path to this container (e.g., /api/*, /ws/*)
                   </p>
                 </div>
 
@@ -900,7 +903,7 @@ export default function GatewayPage(props: GatewayPageProps) {
 
                 <div class="form-group">
                   <label class="form-label">
-                    Port <span style={{ color: "#f85149" }}>*</span>
+                    Container Port <span style={{ color: "#f85149" }}>*</span>
                   </label>
                   <input
                     class="form-input"
@@ -911,11 +914,19 @@ export default function GatewayPage(props: GatewayPageProps) {
                     min="1"
                     max="65535"
                   />
+                  <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>
+                    The port your app listens on inside the container (e.g., 8080, 3000)
+                  </p>
                 </div>
 
                 <Show when={previewUrl()}>
-                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "8px" }}>
-                    URL: <span class="mono" style={{ color: "#58a6ff" }}>{previewUrl()}</span>
+                  <div style={{ background: "#161b22", "border-radius": "6px", padding: "10px 14px", "margin-top": "12px", "font-size": "12px", "line-height": "1.6" }}>
+                    <span style={{ color: "#8b949e" }}>Routing: </span>
+                    <span class="mono" style={{ color: "#58a6ff" }}>{previewUrl()}</span>
+                    <Show when={addContainer() && addPort()}>
+                      <span style={{ color: "#6e7681" }}>{" \u2192 "}</span>
+                      <span class="mono" style={{ color: "#3fb950" }}>{addContainer()}:{addPort()}</span>
+                    </Show>
                   </div>
                 </Show>
               </div>
@@ -978,7 +989,7 @@ export default function GatewayPage(props: GatewayPageProps) {
               <Show when={cfgTlsMode() === "orca_ca"}>
                 <div style={{ background: "#161b22", "border-radius": "6px", padding: "10px 14px", "margin-bottom": "12px", display: "flex", "align-items": "center", gap: "8px", "font-size": "12px", color: "#8b949e" }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  Install the Orca CA certificate for trusted HTTPS. <a style={{ color: "#58a6ff", "margin-left": "4px", cursor: "pointer" }} onClick={() => props.onNavigate?.("settings:privacy")}>Go to Privacy & Security</a>
+                  Install the Orca CA certificate for trusted HTTPS. <a style={{ color: "#58a6ff", "margin-left": "4px", cursor: "pointer" }} onClick={() => props.onNavigate?.("settings:certificates")}>Go to Certificates</a>
                 </div>
               </Show>
 

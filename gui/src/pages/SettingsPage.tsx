@@ -8,7 +8,7 @@ import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, update
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 
-type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "privacy" | "about";
+type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "certificates" | "privacy" | "about";
 
 interface SettingsPageProps {
   initialTab?: string;
@@ -870,6 +870,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>Auto-Deploy</button>
         <button class={`tab-item ${tab() === "schedules" ? "active" : ""}`} onClick={() => setTab("schedules")}>Schedules</button>
         <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
+        <button class={`tab-item ${tab() === "certificates" ? "active" : ""}`} onClick={() => setTab("certificates")}>Certificates</button>
         <button class={`tab-item ${tab() === "privacy" ? "active" : ""}`} onClick={() => setTab("privacy")}>Privacy & Security</button>
         <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
       </div>
@@ -2269,6 +2270,16 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
           </div>
         </Show>
 
+        {/* === Certificates Tab === */}
+        <Show when={tab() === "certificates"}>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
+            <p style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6" }}>
+              Orca generates a local Certificate Authority to sign TLS certificates for the Gateway. Install the CA certificate to trust HTTPS connections.
+            </p>
+            <CertificateAuthoritySection />
+          </div>
+        </Show>
+
         {/* === Privacy & Security Tab === */}
         <Show when={tab() === "privacy"}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
@@ -2331,8 +2342,22 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               </div>
             </div>
 
-            {/* Certificate Authority */}
-            <CertificateAuthoritySection />
+            {/* Certificate Authority — moved to Certificates tab */}
+            <div class="settings-section">
+              <h2 class="settings-section-title">Certificate Authority</h2>
+              <div class="card">
+                <p style={{ "font-size": "12px", color: "#8b949e", "line-height": "1.6" }}>
+                  Certificate management has moved to the{" "}
+                  <button
+                    class="btn-link"
+                    style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "12px", padding: "0" }}
+                    onClick={() => setTab("certificates")}
+                  >
+                    Certificates tab
+                  </button>.
+                </p>
+              </div>
+            </div>
 
             {/* AI Privacy */}
             <div class="settings-section">
