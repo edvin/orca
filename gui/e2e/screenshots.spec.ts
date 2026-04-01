@@ -121,6 +121,51 @@ async function injectTauriBridge(page: Page) {
           get_daemon_log: () => Promise.resolve(""),
           // Version
           get_version: () => Promise.resolve("0.6.1"),
+          // Gateway
+          gateway_status: () => Promise.resolve({
+            running: true, container_id: "abc123", routes_active: 4,
+            domain: "localhost", http_port: 80, https_port: 443, tls_mode: "orca_ca",
+            port_conflicts: [],
+            stack_links: [
+              {
+                stack: "webmail-stalwart",
+                group: "Mail",
+                links: [
+                  { name: "Webmail", urls: { local: "webmail", staging: "https://mail.staging.example.com", production: "https://mail.example.com" } },
+                  { name: "Admin Panel", urls: { local: "mail-admin", staging: "https://admin.staging.example.com" } },
+                ],
+              },
+              {
+                stack: "my-project",
+                group: "Frontend",
+                links: [
+                  { name: "Web App", urls: { local: "app", staging: "https://staging.example.com", production: "https://www.example.com" } },
+                  { name: "Storybook", urls: { local: "app/storybook" } },
+                ],
+              },
+              {
+                stack: "my-project",
+                group: "Backend",
+                links: [
+                  { name: "API", urls: { local: "api", staging: "https://staging-api.example.com", production: "https://api.example.com" } },
+                  { name: "API Docs", urls: { local: "api/docs", staging: "https://staging-api.example.com/docs" } },
+                ],
+              },
+            ],
+          }),
+          gateway_list_routes: () => Promise.resolve([
+            { hostname: "webmail.localhost", container_name: "webmail-stalwart-webmail-1", port: 8095, enabled: true },
+            { hostname: "mail-admin.localhost", container_name: "webmail-stalwart-stalwart-1", port: 8080, enabled: true },
+            { hostname: "app.localhost", container_name: "my-project-frontend-1", port: 3000, enabled: true },
+            { hostname: "api.localhost", container_name: "my-project-backend-1", port: 8080, enabled: true },
+          ]),
+          gateway_get_config: () => Promise.resolve({
+            enabled: true, domain: "localhost", http_port: 80, https_port: 443,
+            tls_mode: "orca_ca", routes: [],
+            stack_links: [],
+          }),
+          gateway_get_links: () => Promise.resolve([]),
+          gateway_check_ports: () => Promise.resolve({ conflicts: [] }),
         };
 
         const handler = routes[cmd];
@@ -357,6 +402,12 @@ test.describe("Orca Desktop Screenshots", () => {
       await waitForPageLoad(page);
       await screenshot(page, "15-k8s-topology");
     }
+  });
+
+  test("25 - Gateway", async ({ page }) => {
+    await navigateTo(page, "Gateway");
+    await waitForPageLoad(page);
+    await screenshot(page, "25-gateway");
   });
 
   test("16 - App Catalog", async ({ page }) => {
