@@ -16,7 +16,7 @@ interface GatewayPageProps {
 function friendlyStartError(raw: string): string {
   if (raw.includes("port is already allocated")) {
     const port = raw.match(/port\s+(\d+)/i)?.[1] ?? "";
-    return `Port ${port} is already in use. Change the port in Settings > Gateway or stop the conflicting service.`;
+    return `Port ${port} is already in use. Change the port in the Configuration section below or stop the conflicting service.`;
   }
   if (raw.includes("No such image") || raw.includes("not found") || raw.includes("pull")) {
     return "Could not download caddy:2-alpine. Check your internet connection.";
@@ -56,7 +56,6 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [editingValue, setEditingValue] = createSignal("");
 
   // Configuration
-  const [showConfig, setShowConfig] = createSignal(false);
   const [cfgDomain, setCfgDomain] = createSignal("localhost");
   const [cfgHttpPort, setCfgHttpPort] = createSignal("80");
   const [cfgHttpsPort, setCfgHttpsPort] = createSignal("443");
@@ -507,14 +506,7 @@ export default function GatewayPage(props: GatewayPageProps) {
             </For>
             <div style={{ "margin-top": "4px", "font-size": "12px", color: "#8b949e" }}>
               Change the ports in{" "}
-              <button
-                class="btn-link"
-                style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "12px", padding: "0" }}
-                onClick={() => props.onNavigate?.("settings:gateway")}
-              >
-                Settings &rarr; Gateway
-              </button>{" "}
-              or stop the conflicting service.
+              Change the port in the Configuration section below or stop the conflicting service.
             </div>
           </div>
         </div>
@@ -665,9 +657,6 @@ export default function GatewayPage(props: GatewayPageProps) {
                 <div style={{ display: "flex", gap: "8px", "margin-top": "20px" }}>
                   <button class="btn btn-primary" onClick={handleStart} disabled={starting()}>
                     {starting() ? "Starting..." : "Start Gateway"}
-                  </button>
-                  <button class="btn" onClick={() => setShowConfig(true)}>
-                    Configure
                   </button>
                 </div>
               </div>
@@ -1372,29 +1361,18 @@ export default function GatewayPage(props: GatewayPageProps) {
         </div>
       </Show>
 
-      {/* Configuration Section (collapsible) */}
+      {/* Configuration Section */}
       <Show when={cfgLoaded()}>
         <div style={{ "margin-top": "24px" }}>
-          <button
-            onClick={() => setShowConfig(!showConfig())}
-            style={{
-              background: "none", border: "none", color: "#8b949e", cursor: "pointer",
-              "font-size": "13px", "font-weight": "500", display: "flex", "align-items": "center", gap: "6px",
-              padding: "0", "margin-bottom": showConfig() ? "16px" : "0",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ transform: showConfig() ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}><polyline points="9 18 15 12 9 6"/></svg>
-            Configuration
-          </button>
-          <Show when={showConfig()}>
-            <div class="card" style={{ padding: "20px" }}>
-              <div class="form-group">
-                <label class="form-label">Domain</label>
-                <input class="form-input" type="text" value={cfgDomain()} onInput={(e) => setCfgDomain(e.currentTarget.value)} placeholder="localhost" />
-                <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>Routes will be created as subdomains (e.g., myapp.{cfgDomain()})</p>
-              </div>
+          <h3 style={{ "font-size": "14px", "font-weight": "600", color: "#e6edf3", "margin-bottom": "16px" }}>Configuration</h3>
+          <div class="card" style={{ padding: "20px" }}>
+            <div class="form-group">
+              <label class="form-label">Domain</label>
+              <input class="form-input" type="text" value={cfgDomain()} onInput={(e) => setCfgDomain(e.currentTarget.value)} placeholder="localhost" />
+              <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>Routes will be created as subdomains (e.g., myapp.{cfgDomain()})</p>
+            </div>
 
-              <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
+            <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
                 <div class="form-group">
                   <label class="form-label">HTTP Port</label>
                   <input class="form-input" type="number" value={cfgHttpPort()} onInput={(e) => setCfgHttpPort(e.currentTarget.value)} min="1" max="65535" style={httpConflict() ? { "border-color": "#d29922" } : undefined} />
@@ -1407,7 +1385,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </div>
               </div>
 
-              <div style={{ "margin-bottom": "12px" }}>
+              <div style={{ "margin-top": "12px", "margin-bottom": "12px" }}>
                 <button class="btn" onClick={checkPorts} disabled={checkingPorts()} style={{ "font-size": "12px" }}>
                   {checkingPorts() ? "Checking..." : "Check Ports"}
                 </button>
@@ -1445,8 +1423,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </button>
                 <span style={{ "font-size": "11px", color: "#6e7681" }}>Changes may require restarting the gateway</span>
               </div>
-            </div>
-          </Show>
+          </div>
         </div>
       </Show>
     </div>
