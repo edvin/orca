@@ -475,8 +475,8 @@ export default function GatewayPage(props: GatewayPageProps) {
                   <button class="btn btn-primary" onClick={handleStart} disabled={starting()}>
                     {starting() ? "Starting..." : "Start Gateway"}
                   </button>
-                  <button class="btn" onClick={() => props.onNavigate?.("settings:gateway")}>
-                    Configure in Settings
+                  <button class="btn" onClick={() => setShowConfig(true)}>
+                    Configure
                   </button>
                 </div>
               </div>
