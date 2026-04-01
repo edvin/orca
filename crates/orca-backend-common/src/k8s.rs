@@ -372,6 +372,7 @@ impl K3sManager {
                 return Ok(ClusterStatus {
                     enabled: true,
                     running: ready,
+                    installed: true,
                     version: if version.is_empty() { None } else { Some(version) },
                     node_name: if node_name.is_empty() { None } else { Some(node_name) },
                     node_status: if ready {
@@ -390,6 +391,7 @@ impl K3sManager {
         Ok(ClusterStatus {
             enabled: true,
             running: false,
+            installed: true,
             version: None,
             node_name: None,
             node_status: None,
@@ -1119,16 +1121,95 @@ impl K8sManager for K3sManager {
     }
 
     async fn disable(&self) -> anyhow::Result<()> {
-        // Try systemd first
-        let _ = Command::new("systemctl").args(["stop", "k3s"]).status().await;
+        #[cfg(target_os = "windows")]
+        {
+            let _ = Command::new("wsl")
+                .args(["-u", "root", "--", "systemctl", "stop", "k3s"])
+                .status()
+                .await;
+            let _ = Command::new("wsl")
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "sh",
+                    "-c",
+                    "/usr/local/bin/k3s-killall.sh 2>/dev/null || true",
+                ])
+                .status()
+                .await;
 
-        // Also try k3s-killall.sh which k3s installs
-        let _ = Command::new("sh")
-            .args(["-c", "/usr/local/bin/k3s-killall.sh 2>/dev/null || true"])
-            .status()
-            .await;
+            // Verify it stopped
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let check = Command::new("wsl")
+                .args(["-u", "root", "--", "k3s", "kubectl", "get", "nodes"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+            match check {
+                Ok(s) if s.success() => tracing::warn!("k3s may still be running after disable"),
+                _ => tracing::info!("k3s stopped successfully"),
+            }
+            return Ok(());
+        }
 
-        Ok(())
+        #[cfg(not(target_os = "windows"))]
+        {
+            // Try systemd first
+            let _ = Command::new("systemctl").args(["stop", "k3s"]).status().await;
+
+            // Also try k3s-killall.sh which k3s installs
+            let _ = Command::new("sh")
+                .args(["-c", "/usr/local/bin/k3s-killall.sh 2>/dev/null || true"])
+                .status()
+                .await;
+
+            // Verify it stopped
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let client = reqwest::Client::builder()
+                .danger_accept_invalid_certs(true)
+                .timeout(std::time::Duration::from_secs(2))
+                .build()
+                .unwrap_or_default();
+            match client.get("https://127.0.0.1:6443/healthz").send().await {
+                Ok(_) => tracing::warn!("k3s may still be running after disable"),
+                Err(_) => tracing::info!("k3s stopped successfully"),
+            }
+
+            Ok(())
+        }
+    }
+
+    async fn start(&self) -> anyhow::Result<()> {
+        if !self.is_k3s_installed().await {
+            anyhow::bail!("k3s is not installed — use Enable to install it first");
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("wsl")
+                .args(["-u", "root", "--", "systemctl", "start", "k3s"])
+                .status()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to start k3s via WSL: {e}"))?;
+            return Ok(());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let systemd_result = Command::new("systemctl").args(["start", "k3s"]).status().await;
+            if systemd_result.is_err() || !systemd_result.as_ref().is_ok_and(|s| s.success()) {
+                // Fallback: start k3s directly in background
+                Command::new("k3s")
+                    .args(["server", "--write-kubeconfig-mode=644", "--disable=metrics-server"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .map_err(|e| anyhow::anyhow!("Failed to start k3s: {e}"))?;
+            }
+            Ok(())
+        }
     }
 
     async fn reset(&self) -> anyhow::Result<()> {
@@ -1158,6 +1239,7 @@ impl K8sManager for K3sManager {
                 return Ok(ClusterStatus {
                     enabled: false,
                     running: false,
+                    installed: false,
                     version: None,
                     node_name: None,
                     node_status: None,
@@ -1168,18 +1250,6 @@ impl K8sManager for K3sManager {
                 });
             }
             tracing::info!("K8s status: checking via WSL kubectl...");
-            // Ensure k3s is running
-            let _ = Command::new("wsl")
-                .args([
-                    "-u",
-                    "root",
-                    "--",
-                    "bash",
-                    "-c",
-                    "systemctl start k3s 2>/dev/null || service k3s start 2>/dev/null || true",
-                ])
-                .output()
-                .await;
 
             if let Ok(output) = Command::new("wsl")
                 .args(["-u", "root", "--", "k3s", "kubectl", "get", "nodes", "-o", "jsonpath={.items[0].metadata.name},{.items[0].status.conditions[?(@.type==\"Ready\")].status},{range .items[0].status.nodeInfo}{.kubeletVersion}{end}"])
@@ -1208,6 +1278,7 @@ impl K8sManager for K3sManager {
                     return Ok(ClusterStatus {
                         enabled: true,
                         running: wsl_ready,
+                        installed: true,
                         version: if wsl_version.is_empty() { None } else { Some(wsl_version) },
                         node_name: if wsl_node_name.is_empty() { None } else { Some(wsl_node_name) },
                         node_status: if wsl_ready { Some("Ready".to_string()) } else { Some("NotReady".to_string()) },
@@ -1218,17 +1289,18 @@ impl K8sManager for K3sManager {
                     });
                 }
             }
-            // WSL kubectl failed — k3s not installed or WSL not available
+            // WSL kubectl failed — k3s installed but not running
             return Ok(ClusterStatus {
-                enabled: self.is_k3s_installed().await,
+                enabled: true,
                 running: false,
+                installed: true,
                 version: None,
                 node_name: None,
                 node_status: None,
                 pods_running: 0,
                 pods_total: 0,
                 traefik_dashboard: None,
-                error: Some("Could not reach k3s via WSL".to_string()),
+                error: None,
             });
         }
 
@@ -1249,13 +1321,18 @@ impl K8sManager for K3sManager {
                 return Ok(ClusterStatus {
                     enabled: installed,
                     running: false,
+                    installed,
                     version: None,
                     node_name: None,
                     node_status: None,
                     pods_running: 0,
                     pods_total: 0,
                     traefik_dashboard: None,
-                    error: Some(format!("Kubeconfig not found at {}", kubeconfig_path.display())),
+                    error: if installed {
+                        None
+                    } else {
+                        Some(format!("Kubeconfig not found at {}", kubeconfig_path.display()))
+                    },
                 });
             }
 
@@ -1338,6 +1415,7 @@ impl K8sManager for K3sManager {
             Ok(ClusterStatus {
                 enabled: true,
                 running,
+                installed: true,
                 version,
                 node_name,
                 node_status,

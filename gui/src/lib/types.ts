@@ -92,6 +92,7 @@ export interface MachineInfo {
 export interface ClusterStatus {
   enabled: boolean;
   running: boolean;
+  installed: boolean;
   version: string | null;
   node_name: string | null;
   node_status: string | null;

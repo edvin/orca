@@ -1,7 +1,7 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import type { GatewayStatus, GatewayRoute, Container, StackLinkGroup, ComposeProject } from "../lib/types";
+import type { GatewayStatus, GatewayRoute, Container, StackLinkGroup } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
@@ -47,13 +47,6 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [selectedEnv, setSelectedEnv] = createSignal("local");
   const [collapsedGroups, setCollapsedGroups] = createSignal<Record<string, boolean>>({});
 
-  // Link editor state
-  const [showAddGroup, setShowAddGroup] = createSignal(false);
-  const [addGroupStack, setAddGroupStack] = createSignal("");
-  const [addGroupName, setAddGroupName] = createSignal("");
-  const [stacks, setStacks] = createSignal<string[]>([]);
-  const [editingField, setEditingField] = createSignal<string | null>(null);
-  const [editingValue, setEditingValue] = createSignal("");
 
   // Configuration
   const [cfgDomain, setCfgDomain] = createSignal("localhost");
@@ -101,7 +94,9 @@ export default function GatewayPage(props: GatewayPageProps) {
   const checkPorts = async () => {
     setCheckingPorts(true);
     try {
-      const result = (await invoke("gateway_check_ports")) as { conflicts: string[] };
+      const httpP = parseInt(cfgHttpPort(), 10) || 80;
+      const httpsP = parseInt(cfgHttpsPort(), 10) || 443;
+      const result = (await invoke("gateway_check_ports", { httpPort: httpP, httpsPort: httpsP })) as { conflicts: string[] };
       setPortConflicts(result.conflicts || []);
       if (result.conflicts.length === 0) showToast("Ports are available", "success");
     } catch {}
@@ -145,135 +140,6 @@ export default function GatewayPage(props: GatewayPageProps) {
     } catch {}
   };
 
-  const fetchStacks = async () => {
-    try {
-      const result = (await invoke("list_stacks")) as ComposeProject[];
-      setStacks(result.map((s) => s.name));
-    } catch {}
-  };
-
-  const saveLinks = async (links: StackLinkGroup[]) => {
-    setStackLinks(links);
-    try {
-      await invoke("gateway_update_links", { links });
-    } catch (e) {
-      showToast(`Failed to save links: ${e}`, "error");
-    }
-  };
-
-  const handleAddGroup = () => {
-    const stack = addGroupStack().trim();
-    const group = addGroupName().trim();
-    if (!stack || !group) return;
-    const existing = stackLinks();
-    if (existing.some((g) => g.stack === stack && g.group === group)) {
-      showToast("A group with this name already exists for this stack", "error");
-      return;
-    }
-    const updated = [...existing, { stack, group, links: [] }];
-    saveLinks(updated);
-    setShowAddGroup(false);
-    setAddGroupStack("");
-    setAddGroupName("");
-    showToast(`Group "${group}" added`, "success");
-  };
-
-  const handleDeleteGroup = async (gi: number) => {
-    const group = stackLinks()[gi];
-    if (!(await confirmDanger("Delete Link Group", `Delete group "${group.group}" and all its links?`))) return;
-    const updated = stackLinks().filter((_, i) => i !== gi);
-    saveLinks(updated);
-    showToast(`Group "${group.group}" deleted`, "success");
-  };
-
-  const handleAddLink = (gi: number) => {
-    const updated = stackLinks().map((g, i) => {
-      if (i !== gi) return g;
-      return { ...g, links: [...g.links, { name: "New Link", urls: {} }] };
-    });
-    saveLinks(updated);
-  };
-
-  const handleDeleteLink = async (gi: number, li: number) => {
-    const link = stackLinks()[gi].links[li];
-    if (!(await confirmDanger("Delete Link", `Delete link "${link.name}"?`))) return;
-    const updated = stackLinks().map((g, i) => {
-      if (i !== gi) return g;
-      return { ...g, links: g.links.filter((_, j) => j !== li) };
-    });
-    saveLinks(updated);
-    showToast(`Link "${link.name}" deleted`, "success");
-  };
-
-  const handleMoveGroup = (gi: number, dir: -1 | 1) => {
-    const arr = [...stackLinks()];
-    const ni = gi + dir;
-    if (ni < 0 || ni >= arr.length) return;
-    [arr[gi], arr[ni]] = [arr[ni], arr[gi]];
-    saveLinks(arr);
-  };
-
-  const handleMoveLink = (gi: number, li: number, dir: -1 | 1) => {
-    const updated = stackLinks().map((g, i) => {
-      if (i !== gi) return g;
-      const links = [...g.links];
-      const ni = li + dir;
-      if (ni < 0 || ni >= links.length) return g;
-      [links[li], links[ni]] = [links[ni], links[li]];
-      return { ...g, links };
-    });
-    saveLinks(updated);
-  };
-
-  const updateLinkField = (gi: number, li: number, field: "name" | "url", value: string) => {
-    const env = selectedEnv();
-    const updated = stackLinks().map((g, i) => {
-      if (i !== gi) return g;
-      return {
-        ...g,
-        links: g.links.map((link, j) => {
-          if (j !== li) return link;
-          if (field === "name") {
-            return { ...link, name: value };
-          }
-          // field === "url"
-          const urls = { ...link.urls };
-          if (value.trim()) {
-            urls[env] = value;
-          } else {
-            delete urls[env];
-          }
-          return { ...link, urls };
-        }),
-      };
-    });
-    saveLinks(updated);
-  };
-
-  const updateGroupName = (gi: number, newName: string) => {
-    const updated = stackLinks().map((g, i) => {
-      if (i !== gi) return g;
-      return { ...g, group: newName };
-    });
-    saveLinks(updated);
-  };
-
-  const startEditing = (key: string, currentValue: string) => {
-    setEditingField(key);
-    setEditingValue(currentValue);
-  };
-
-  const commitEdit = (gi: number, li: number, field: "name" | "url") => {
-    if (field === "name" || field === "url") {
-      updateLinkField(gi, li, field, editingValue());
-    }
-    setEditingField(null);
-  };
-
-  const commitGroupEdit = (gi: number) => {
-    updateGroupName(gi, editingValue());
-    setEditingField(null);
-  };
 
   const refresh = () => {
     fetchStatus();
@@ -547,43 +413,41 @@ export default function GatewayPage(props: GatewayPageProps) {
       <Show when={status()?.running ? status() : undefined}>
         {(s) => (
           <div class="card" style={{ "margin-bottom": "20px" }}>
-            <div class="card-grid" style={{ "grid-template-columns": "repeat(4, 1fr)" }}>
-              <div>
+            <div style={{ display: "grid", "grid-template-columns": "repeat(4, 1fr)", gap: "16px 24px", "font-size": "13px" }}>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                 <span class="card-label">Status</span>
-                <span class="card-value">
+                <span class="card-value" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
                   <span style={{
                     display: "inline-block",
                     width: "8px",
                     height: "8px",
                     "border-radius": "50%",
                     background: "#3fb950",
-                    "margin-right": "6px",
-                    "vertical-align": "middle",
                   }} />
                   Running
                 </span>
               </div>
-              <div>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                 <span class="card-label">Domain</span>
                 <span class="card-value">*.{s().domain}</span>
               </div>
-              <div>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                 <span class="card-label">TLS</span>
                 <span class="card-value">{s().tls_mode === "orca_ca" ? "Orca CA" : "Custom"}</span>
               </div>
-              <div>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                 <span class="card-label">Routes</span>
                 <span class="card-value">{s().routes_active} active</span>
               </div>
-              <div>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                 <span class="card-label">HTTP Port</span>
                 <span class="card-value mono">:{s().http_port}</span>
               </div>
-              <div>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                 <span class="card-label">HTTPS Port</span>
                 <span class="card-value mono">:{s().https_port}</span>
               </div>
-              <div>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                 <span class="card-label">Landing Page</span>
                 <span class="card-value">
                   <button
@@ -596,7 +460,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </span>
               </div>
               <Show when={s().container_id}>
-                <div>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <span class="card-label">Container ID</span>
                   <span class="card-value mono" style={{ "font-size": "11px" }}>{s().container_id?.substring(0, 12)}</span>
                 </div>
@@ -806,461 +670,173 @@ export default function GatewayPage(props: GatewayPageProps) {
         </div>
       </Show>
 
-      {/* Environment Links Editor */}
-      <Show when={status()?.running}>
+      {/* Environment Links (read-only) */}
+      <Show when={status()?.running && stackLinks().length > 0}>
         <div style={{ "margin-top": "24px" }}>
-          <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "12px" }}>
-            <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", margin: "0" }}>Environment Links</h3>
-            <button class="btn" style={{ "font-size": "12px", padding: "4px 12px" }} onClick={() => { fetchStacks(); setShowAddGroup(true); }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px", "vertical-align": "-1px" }}>
-                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add Group
-            </button>
-          </div>
+          <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", "margin-bottom": "12px" }}>Environment Links</h3>
 
           {/* Environment tabs */}
-          <div style={{ display: "flex", gap: "4px", "margin-bottom": "16px", "flex-wrap": "wrap" }}>
-            <For each={allEnvNames().length > 0 ? allEnvNames() : ["local"]}>
-              {(env) => (
-                <button
-                  class="btn"
-                  style={{
-                    "font-size": "12px",
-                    padding: "4px 12px",
-                    "text-transform": "capitalize",
-                    ...(selectedEnv() === env
-                      ? { background: "#1f6feb", color: "#fff", "border-color": "#1f6feb" }
-                      : {}),
-                  }}
-                  onClick={() => setSelectedEnv(env)}
-                >
-                  {env}
-                </button>
-              )}
-            </For>
-          </div>
-
-          {/* Link groups */}
-          <Show
-            when={stackLinks().length > 0}
-            fallback={
-              <div style={{
-                background: "rgba(22, 27, 34, 0.4)",
-                "border-radius": "8px",
-                border: "1px dashed rgba(255, 255, 255, 0.08)",
-                padding: "20px",
-                "text-align": "center",
-                "font-size": "13px",
-                color: "#6e7681",
-              }}>
-                <div style={{ "margin-bottom": "4px", "font-weight": "500", color: "#8b949e" }}>No link groups</div>
-                Add a group to organize environment links, or add a <code style={{ background: "#161b22", padding: "2px 6px", "border-radius": "4px", "font-size": "12px" }}>links</code> section to your <code style={{ background: "#161b22", padding: "2px 6px", "border-radius": "4px", "font-size": "12px" }}>orca.yaml</code>.
-              </div>
-            }
-          >
-            <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
-              <For each={stackLinks()}>
-                {(group, gi) => {
-                  const groupKey = () => `${group.stack}:${group.group}`;
-                  const isCollapsed = () => collapsedGroups()[groupKey()] ?? false;
-                  return (
-                    <div style={{
-                      background: "rgba(22, 27, 34, 0.6)",
-                      border: "1px solid rgba(255,255,255,0.06)",
-                      "border-radius": "12px",
-                      overflow: "hidden",
-                    }}>
-                      {/* Group header */}
-                      <div style={{
-                        display: "flex",
-                        "align-items": "center",
-                        gap: "8px",
-                        padding: "10px 16px",
-                        "border-bottom": isCollapsed() ? "none" : "1px solid rgba(255,255,255,0.06)",
-                      }}>
-                        <button
-                          onClick={() => toggleGroup(groupKey())}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            color: "#e6edf3",
-                            cursor: "pointer",
-                            padding: "0",
-                            display: "flex",
-                            "align-items": "center",
-                          }}
-                        >
-                          <svg
-                            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            style={{ transform: isCollapsed() ? "none" : "rotate(90deg)", transition: "transform 0.15s" }}
-                          >
-                            <polyline points="9 18 15 12 9 6" />
-                          </svg>
-                        </button>
-
-                        {/* Stack name */}
-                        <span style={{ color: "#6e7681", "font-size": "12px", "flex-shrink": "0" }}>{group.stack}</span>
-                        <span style={{ color: "#484f58" }}>/</span>
-
-                        {/* Editable group name */}
-                        <Show
-                          when={editingField() === `group-${gi()}`}
-                          fallback={
-                            <span
-                              style={{
-                                color: "#e6edf3",
-                                "font-size": "13px",
-                                "font-weight": "600",
-                                cursor: "pointer",
-                                flex: "1",
-                                "min-width": "0",
-                              }}
-                              onClick={() => startEditing(`group-${gi()}`, group.group)}
-                              title="Click to edit group name"
-                            >
-                              {group.group}
-                            </span>
-                          }
-                        >
-                          <input
-                            class="form-input"
-                            style={{
-                              flex: "1",
-                              "min-width": "0",
-                              "font-size": "13px",
-                              "font-weight": "600",
-                              padding: "2px 6px",
-                              height: "24px",
-                            }}
-                            value={editingValue()}
-                            onInput={(e) => setEditingValue(e.currentTarget.value)}
-                            onBlur={() => commitGroupEdit(gi())}
-                            onKeyDown={(e) => { if (e.key === "Enter") commitGroupEdit(gi()); if (e.key === "Escape") setEditingField(null); }}
-                            autofocus
-                          />
-                        </Show>
-
-                        {/* Group actions */}
-                        <div style={{ display: "flex", "align-items": "center", gap: "2px", "margin-left": "auto", "flex-shrink": "0" }}>
-                          <button
-                            class="action-icon"
-                            title="Move group up"
-                            onClick={() => handleMoveGroup(gi(), -1)}
-                            disabled={gi() === 0}
-                            style={{ opacity: gi() === 0 ? "0.3" : "1" }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-                          </button>
-                          <button
-                            class="action-icon"
-                            title="Move group down"
-                            onClick={() => handleMoveGroup(gi(), 1)}
-                            disabled={gi() === stackLinks().length - 1}
-                            style={{ opacity: gi() === stackLinks().length - 1 ? "0.3" : "1" }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                          </button>
-                          <button
-                            class="action-icon"
-                            title="Delete group"
-                            onClick={() => handleDeleteGroup(gi())}
-                            style={{ color: "#f85149" }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Links */}
-                      <Show when={!isCollapsed()}>
-                        <div>
-                          <For each={group.links}>
-                            {(link, li) => {
-                              const rawUrl = () => link.urls[selectedEnv()] || "";
-                              const resolved = () => rawUrl() ? resolveUrl(selectedEnv(), rawUrl()) : "";
-
-                              return (
-                                <div style={{
-                                  display: "flex",
-                                  "align-items": "center",
-                                  padding: "8px 16px",
-                                  "border-bottom": "1px solid rgba(255,255,255,0.04)",
-                                  gap: "8px",
-                                }}>
-                                  {/* Reorder buttons */}
-                                  <div style={{ display: "flex", "flex-direction": "column", gap: "0px", "flex-shrink": "0" }}>
-                                    <button
-                                      class="action-icon"
-                                      title="Move up"
-                                      onClick={() => handleMoveLink(gi(), li(), -1)}
-                                      disabled={li() === 0}
-                                      style={{ opacity: li() === 0 ? "0.3" : "1", padding: "0 2px" }}
-                                    >
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-                                    </button>
-                                    <button
-                                      class="action-icon"
-                                      title="Move down"
-                                      onClick={() => handleMoveLink(gi(), li(), 1)}
-                                      disabled={li() === group.links.length - 1}
-                                      style={{ opacity: li() === group.links.length - 1 ? "0.3" : "1", padding: "0 2px" }}
-                                    >
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                                    </button>
-                                  </div>
-
-                                  {/* Link name (editable) */}
-                                  <Show
-                                    when={editingField() === `name-${gi()}-${li()}`}
-                                    fallback={
-                                      <span
-                                        style={{
-                                          color: "#c9d1d9",
-                                          "font-size": "13px",
-                                          width: "160px",
-                                          "flex-shrink": "0",
-                                          cursor: "pointer",
-                                          overflow: "hidden",
-                                          "text-overflow": "ellipsis",
-                                          "white-space": "nowrap",
-                                        }}
-                                        onClick={() => startEditing(`name-${gi()}-${li()}`, link.name)}
-                                        title="Click to edit name"
-                                      >
-                                        {link.name}
-                                      </span>
-                                    }
-                                  >
-                                    <input
-                                      class="form-input"
-                                      style={{
-                                        width: "160px",
-                                        "flex-shrink": "0",
-                                        "font-size": "13px",
-                                        padding: "2px 6px",
-                                        height: "24px",
-                                      }}
-                                      value={editingValue()}
-                                      onInput={(e) => setEditingValue(e.currentTarget.value)}
-                                      onBlur={() => commitEdit(gi(), li(), "name")}
-                                      onKeyDown={(e) => { if (e.key === "Enter") commitEdit(gi(), li(), "name"); if (e.key === "Escape") setEditingField(null); }}
-                                      autofocus
-                                    />
-                                  </Show>
-
-                                  {/* URL for selected env (editable) */}
-                                  <Show
-                                    when={editingField() === `url-${gi()}-${li()}`}
-                                    fallback={
-                                      <span
-                                        class="mono"
-                                        style={{
-                                          color: rawUrl() ? "#58a6ff" : "#484f58",
-                                          "font-size": "12px",
-                                          flex: "1",
-                                          "min-width": "0",
-                                          overflow: "hidden",
-                                          "text-overflow": "ellipsis",
-                                          "white-space": "nowrap",
-                                          cursor: "pointer",
-                                          "font-style": rawUrl() ? "normal" : "italic",
-                                        }}
-                                        onClick={() => startEditing(`url-${gi()}-${li()}`, rawUrl())}
-                                        title={resolved() || "Click to set URL for this environment"}
-                                      >
-                                        {resolved() || `no ${selectedEnv()} URL`}
-                                      </span>
-                                    }
-                                  >
-                                    <input
-                                      class="form-input"
-                                      style={{
-                                        flex: "1",
-                                        "min-width": "0",
-                                        "font-size": "12px",
-                                        "font-family": "'SF Mono', 'Fira Code', monospace",
-                                        padding: "2px 6px",
-                                        height: "24px",
-                                      }}
-                                      value={editingValue()}
-                                      onInput={(e) => setEditingValue(e.currentTarget.value)}
-                                      onBlur={() => commitEdit(gi(), li(), "url")}
-                                      onKeyDown={(e) => { if (e.key === "Enter") commitEdit(gi(), li(), "url"); if (e.key === "Escape") setEditingField(null); }}
-                                      placeholder={`URL for ${selectedEnv()}`}
-                                      autofocus
-                                    />
-                                  </Show>
-
-                                  {/* Env badges */}
-                                  <div style={{ display: "flex", gap: "3px", "flex-shrink": "0" }}>
-                                    <For each={allEnvNames().length > 0 ? allEnvNames() : ["local"]}>
-                                      {(env) => {
-                                        const hasUrl = () => !!link.urls[env];
-                                        const label = () => env.charAt(0).toUpperCase();
-                                        return (
-                                          <span
-                                            title={`${env}: ${link.urls[env] || "not set"}`}
-                                            style={{
-                                              display: "inline-flex",
-                                              "align-items": "center",
-                                              "justify-content": "center",
-                                              width: "18px",
-                                              height: "18px",
-                                              "border-radius": "4px",
-                                              "font-size": "10px",
-                                              "font-weight": "600",
-                                              background: hasUrl() ? "rgba(88, 166, 255, 0.15)" : "rgba(255,255,255,0.04)",
-                                              color: hasUrl() ? "#58a6ff" : "#484f58",
-                                              border: `1px solid ${hasUrl() ? "rgba(88, 166, 255, 0.3)" : "rgba(255,255,255,0.06)"}`,
-                                              cursor: "pointer",
-                                            }}
-                                            onClick={() => {
-                                              setSelectedEnv(env);
-                                              startEditing(`url-${gi()}-${li()}`, link.urls[env] || "");
-                                            }}
-                                          >
-                                            {label()}
-                                          </span>
-                                        );
-                                      }}
-                                    </For>
-                                  </div>
-
-                                  {/* Open in browser */}
-                                  <Show when={resolved()}>
-                                    <button
-                                      class="action-icon"
-                                      title="Open in browser"
-                                      onClick={() => openUrl(resolved())}
-                                      style={{ "flex-shrink": "0" }}
-                                    >
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                                        <polyline points="15 3 21 3 21 9" />
-                                        <line x1="10" y1="14" x2="21" y2="3" />
-                                      </svg>
-                                    </button>
-                                  </Show>
-
-                                  {/* Delete link */}
-                                  <button
-                                    class="action-icon"
-                                    title="Delete link"
-                                    onClick={() => handleDeleteLink(gi(), li())}
-                                    style={{ color: "#f85149", "flex-shrink": "0" }}
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                                  </button>
-                                </div>
-                              );
-                            }}
-                          </For>
-
-                          {/* Add Link button */}
-                          <div style={{ padding: "8px 16px" }}>
-                            <button
-                              class="btn"
-                              style={{ "font-size": "11px", padding: "3px 10px" }}
-                              onClick={() => handleAddLink(gi())}
-                            >
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px", "vertical-align": "-1px" }}>
-                                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                              </svg>
-                              Add Link
-                            </button>
-                          </div>
-                        </div>
-                      </Show>
-                    </div>
-                  );
-                }}
+          <Show when={allEnvNames().length > 1}>
+            <div style={{ display: "flex", gap: "4px", "margin-bottom": "16px", "flex-wrap": "wrap" }}>
+              <For each={allEnvNames()}>
+                {(env) => (
+                  <button
+                    class="btn"
+                    style={{
+                      "font-size": "12px",
+                      padding: "4px 12px",
+                      "text-transform": "capitalize",
+                      ...(selectedEnv() === env
+                        ? { background: "#1f6feb", color: "#fff", "border-color": "#1f6feb" }
+                        : {}),
+                    }}
+                    onClick={() => setSelectedEnv(env)}
+                  >
+                    {env}
+                  </button>
+                )}
               </For>
             </div>
           </Show>
-        </div>
-      </Show>
 
-      {/* Add Group Dialog */}
-      <Show when={showAddGroup()}>
-        <div class="modal-overlay" onMouseDown={(e) => { if ((e.target as HTMLElement).classList.contains("modal-overlay")) setShowAddGroup(false); }} onClick={(e) => { if ((e.target as HTMLElement).classList.contains("modal-overlay")) setShowAddGroup(false); }}>
-          <div class="modal-dialog">
-            <div class="modal-header">
-              <h2 class="modal-title">Add Link Group</h2>
-              <button class="modal-close" onClick={() => setShowAddGroup(false)}>
-                {"\u00d7"}
-              </button>
-            </div>
-            <div class="modal-body">
-              <div class="form-group">
-                <label class="form-label">
-                  Stack <span style={{ color: "#f85149" }}>*</span>
-                </label>
-                <Show
-                  when={stacks().length > 0}
-                  fallback={
-                    <input
-                      class="form-input"
-                      type="text"
-                      placeholder="my-stack"
-                      value={addGroupStack()}
-                      onInput={(e) => setAddGroupStack(e.currentTarget.value)}
-                    />
-                  }
-                >
-                  <Dropdown
-                    value={addGroupStack()}
-                    options={[
-                      ...stacks().map((s) => ({ value: s, label: s })),
-                      { value: "__custom__", label: "Custom..." },
-                    ]}
-                    onChange={(v) => {
-                      if (v === "__custom__") {
-                        setAddGroupStack("");
-                      } else {
-                        setAddGroupStack(v);
-                      }
-                    }}
-                    placeholder="Select stack..."
-                  />
-                  <Show when={addGroupStack() === "" || !stacks().includes(addGroupStack())}>
-                    <input
-                      class="form-input"
-                      type="text"
-                      placeholder="Custom stack name"
-                      value={addGroupStack()}
-                      onInput={(e) => setAddGroupStack(e.currentTarget.value)}
-                      style={{ "margin-top": "8px" }}
-                    />
-                  </Show>
-                </Show>
-              </div>
-              <div class="form-group">
-                <label class="form-label">
-                  Group Name <span style={{ color: "#f85149" }}>*</span>
-                </label>
-                <input
-                  class="form-input"
-                  type="text"
-                  placeholder="e.g. Storefront, Admin, API"
-                  value={addGroupName()}
-                  onInput={(e) => setAddGroupName(e.currentTarget.value)}
-                />
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn" onClick={() => setShowAddGroup(false)}>Cancel</button>
-              <button
-                type="button"
-                class="btn btn-primary"
-                disabled={!addGroupStack().trim() || !addGroupName().trim()}
-                onClick={handleAddGroup}
-              >
-                Add Group
-              </button>
-            </div>
+          {/* Link groups */}
+          <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+            <For each={stackLinks()}>
+              {(group) => {
+                const groupKey = () => `${group.stack}:${group.group}`;
+                const isCollapsed = () => collapsedGroups()[groupKey()] ?? false;
+                return (
+                  <div style={{
+                    background: "rgba(22, 27, 34, 0.6)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    "border-radius": "12px",
+                    overflow: "hidden",
+                  }}>
+                    {/* Group header */}
+                    <div style={{
+                      display: "flex",
+                      "align-items": "center",
+                      gap: "8px",
+                      padding: "10px 16px",
+                      "border-bottom": isCollapsed() ? "none" : "1px solid rgba(255,255,255,0.06)",
+                    }}>
+                      <button
+                        onClick={() => toggleGroup(groupKey())}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#e6edf3",
+                          cursor: "pointer",
+                          padding: "0",
+                          display: "flex",
+                          "align-items": "center",
+                        }}
+                      >
+                        <svg
+                          width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                          style={{ transform: isCollapsed() ? "none" : "rotate(90deg)", transition: "transform 0.15s" }}
+                        >
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
+
+                      <span style={{ color: "#6e7681", "font-size": "12px", "flex-shrink": "0" }}>{group.stack}</span>
+                      <span style={{ color: "#484f58" }}>/</span>
+                      <span style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "600", flex: "1", "min-width": "0" }}>
+                        {group.group}
+                      </span>
+                    </div>
+
+                    {/* Links (read-only) */}
+                    <Show when={!isCollapsed()}>
+                      <div>
+                        <For each={group.links}>
+                          {(link) => {
+                            const rawUrl = () => link.urls[selectedEnv()] || "";
+                            const resolved = () => rawUrl() ? resolveUrl(selectedEnv(), rawUrl()) : "";
+
+                            return (
+                              <div style={{
+                                display: "flex",
+                                "align-items": "center",
+                                padding: "8px 16px",
+                                "border-bottom": "1px solid rgba(255,255,255,0.04)",
+                                gap: "8px",
+                              }}>
+                                <span style={{
+                                  color: "#c9d1d9",
+                                  "font-size": "13px",
+                                  width: "160px",
+                                  "flex-shrink": "0",
+                                  overflow: "hidden",
+                                  "text-overflow": "ellipsis",
+                                  "white-space": "nowrap",
+                                }}>
+                                  {link.name}
+                                </span>
+
+                                <Show
+                                  when={resolved()}
+                                  fallback={
+                                    <span class="mono" style={{ color: "#484f58", "font-size": "12px", flex: "1", "font-style": "italic" }}>
+                                      no {selectedEnv()} URL
+                                    </span>
+                                  }
+                                >
+                                  <button
+                                    class="btn-link mono"
+                                    style={{
+                                      color: "#58a6ff",
+                                      "font-size": "12px",
+                                      flex: "1",
+                                      "min-width": "0",
+                                      overflow: "hidden",
+                                      "text-overflow": "ellipsis",
+                                      "white-space": "nowrap",
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      padding: "0",
+                                      "text-align": "left",
+                                    }}
+                                    onClick={() => openUrl(resolved())}
+                                    title={resolved()}
+                                  >
+                                    {resolved()}
+                                  </button>
+                                </Show>
+
+                                {/* Open in browser */}
+                                <Show when={resolved()}>
+                                  <button
+                                    class="action-icon"
+                                    title="Open in browser"
+                                    onClick={() => openUrl(resolved())}
+                                    style={{ "flex-shrink": "0" }}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                                      <polyline points="15 3 21 3 21 9" />
+                                      <line x1="10" y1="14" x2="21" y2="3" />
+                                    </svg>
+                                  </button>
+                                </Show>
+                              </div>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+                );
+              }}
+            </For>
           </div>
+
+          <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "10px" }}>
+            Environment links are configured in your project's <code style={{ background: "#161b22", padding: "2px 6px", "border-radius": "4px", "font-size": "11px" }}>orca.yaml</code>
+          </p>
         </div>
       </Show>
 

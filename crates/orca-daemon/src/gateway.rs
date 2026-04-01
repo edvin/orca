@@ -543,40 +543,6 @@ fn build_caddy_config(config: &GatewayConfig) -> String {
     serde_json::to_string_pretty(&caddy).unwrap_or_default()
 }
 
-/// Write the Caddy config file into the container using exec.
-async fn write_caddy_config_to_container(state: &AppState, container_id: &str, config_json: &str) -> Result<()> {
-    let rt = state.rt().await;
-
-    // Create the config directory
-    rt.exec(orca_core::runtime::ExecOpts {
-        container: container_id.to_string(),
-        command: vec!["mkdir".to_string(), "-p".to_string(), "/etc/caddy".to_string()],
-        interactive: false,
-        tty: false,
-        env: HashMap::new(),
-        workdir: None,
-    })
-    .await?;
-
-    // Write config using sh -c and printf
-    let escaped = config_json.replace('\\', "\\\\").replace('\'', "'\\''");
-    rt.exec(orca_core::runtime::ExecOpts {
-        container: container_id.to_string(),
-        command: vec![
-            "sh".to_string(),
-            "-c".to_string(),
-            format!("printf '%s' '{escaped}' > /etc/caddy/caddy.json"),
-        ],
-        interactive: false,
-        tty: false,
-        env: HashMap::new(),
-        workdir: None,
-    })
-    .await?;
-
-    Ok(())
-}
-
 /// Wait for the Caddy admin API to be ready.
 async fn wait_for_caddy_ready() -> Result<()> {
     let client = reqwest::Client::builder()

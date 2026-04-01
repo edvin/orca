@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 pub struct ClusterStatus {
     pub enabled: bool,
     pub running: bool,
+    /// Whether k3s is installed (binary exists) regardless of running state.
+    #[serde(default)]
+    pub installed: bool,
     pub version: Option<String>,
     pub node_name: Option<String>,
     pub node_status: Option<String>,
@@ -297,6 +300,9 @@ pub trait K8sManager {
 
     /// Disable Kubernetes (stop k3s, optionally clean up).
     async fn disable(&self) -> anyhow::Result<()>;
+
+    /// Start Kubernetes (restart k3s without reinstalling).
+    async fn start(&self) -> anyhow::Result<()>;
 
     /// Reset the cluster (delete all workloads, start fresh).
     async fn reset(&self) -> anyhow::Result<()>;

@@ -471,19 +471,33 @@ export default function KubernetesPage() {
   const isForwarded = (namespace: string, service: string, port: number) =>
     portForwards().has(`${namespace}/${service}/${port}`);
 
-  const handleDisable = async () => {
+  const handleStop = async () => {
     try {
       await invoke("k8s_disable");
-      showToast("Kubernetes cluster disabled", "success");
+      showToast("Kubernetes cluster stopped", "success");
       await refreshStatus();
     } catch (e) {
-      logError(`Failed to disable Kubernetes: ${e}`);
-      showToast(`Failed to disable: ${e}`, "error");
+      logError(`Failed to stop Kubernetes: ${e}`);
+      showToast(`Failed to stop: ${e}`, "error");
+    }
+  };
+
+  const handleStart = async () => {
+    try {
+      setEnabling(true);
+      await invoke("k8s_start");
+      showToast("Kubernetes cluster started", "success");
+      await refreshStatus();
+    } catch (e) {
+      logError(`Failed to start Kubernetes: ${e}`);
+      showToast(`Failed to start: ${e}`, "error");
+    } finally {
+      setEnabling(false);
     }
   };
 
   const handleReset = async () => {
-    if (!await confirmDanger("Reset Cluster", "Reset Kubernetes cluster? This will delete ALL workloads and data.")) return;
+    if (!await confirmDanger("Reset Kubernetes", "This will uninstall k3s and delete ALL workloads, data, and configuration. A fresh k3s will be reinstalled.")) return;
     try {
       await invoke("k8s_reset");
       showToast("Kubernetes cluster reset", "success");
@@ -959,15 +973,19 @@ spec:
         <h1 class="page-title">Kubernetes</h1>
       </div>
 
-      {/* Hero Card: Not installed / Enabling */}
+      {/* Hero Card: Not installed / Installed but stopped / Enabling */}
       <Show when={status() && !status()!.running}>
         <div class="hero-card">
           <Show when={enabling()}>
             <div class="hero-spinner">
               <Spinner />
-              <div class="hero-title" style={{ "font-size": "20px" }}>Setting up cluster...</div>
+              <div class="hero-title" style={{ "font-size": "20px" }}>
+                {status()?.installed ? "Starting cluster..." : "Setting up cluster..."}
+              </div>
               <div class="hero-subtitle" style={{ "margin-bottom": "0" }}>
-                Installing k3s and configuring Traefik ingress. This may take a minute.
+                {status()?.installed
+                  ? "Starting k3s. This may take a moment."
+                  : "Installing k3s and configuring Traefik ingress. This may take a minute."}
               </div>
             </div>
           </Show>
@@ -975,17 +993,46 @@ spec:
             <div style={{ position: "relative" }}>
               <div style={{ "font-size": "48px", "margin-bottom": "16px", opacity: "0.6" }}>{"\u2638"}</div>
               <div class="hero-title">Kubernetes</div>
-              <div class="hero-subtitle">
-                Run a local Kubernetes cluster powered by k3s with Traefik ingress.
-                Deploy, scale, and manage containerized workloads with a production-grade orchestrator.
-              </div>
-              <button
-                class="btn btn-primary btn-hero"
-                onClick={handleEnable}
-              >
-                Enable Kubernetes
-              </button>
-              <Show when={status()?.error && !status()?.error?.includes("not found")}>
+              <Show when={status()?.installed} fallback={
+                <>
+                  <div class="hero-subtitle">
+                    Run a local Kubernetes cluster powered by k3s with Traefik ingress.
+                    Deploy, scale, and manage containerized workloads with a production-grade orchestrator.
+                  </div>
+                  <button
+                    class="btn btn-primary btn-hero"
+                    onClick={handleEnable}
+                  >
+                    Enable Kubernetes
+                  </button>
+                </>
+              }>
+                <div class="hero-subtitle">
+                  The Kubernetes cluster is installed but not running.
+                </div>
+                <div style={{ display: "flex", gap: "10px", "justify-content": "center", "margin-top": "8px" }}>
+                  <button
+                    class="btn btn-primary btn-hero"
+                    onClick={handleStart}
+                  >
+                    Start Kubernetes
+                  </button>
+                  <button
+                    class="btn btn-hero"
+                    style={{
+                      background: "rgba(248, 81, 73, 0.1)",
+                      color: "#f85149",
+                      border: "1px solid rgba(248, 81, 73, 0.3)",
+                      "font-size": "13px",
+                      padding: "8px 16px",
+                    }}
+                    onClick={handleReset}
+                  >
+                    Reset Kubernetes
+                  </button>
+                </div>
+              </Show>
+              <Show when={status()?.error && !status()?.error?.includes("not found") && !status()?.installed}>
                 <div style={{
                   "margin-top": "16px",
                   padding: "10px 14px",
@@ -1070,8 +1117,8 @@ spec:
                   <button class="dropdown-item dropdown-item-danger" onClick={handleReset}>
                     {"\u26A0"} Reset Cluster
                   </button>
-                  <button class="dropdown-item dropdown-item-danger" onClick={handleDisable}>
-                    {"\u2715"} Disable Kubernetes
+                  <button class="dropdown-item dropdown-item-danger" onClick={handleStop}>
+                    {"\u25A0"} Stop Kubernetes
                   </button>
                 </div>
               </Show>

@@ -66,6 +66,9 @@ pub struct ComposeService {
 pub struct ClusterStatus {
     pub enabled: bool,
     pub running: bool,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub installed: bool,
     pub version: Option<String>,
     pub node_name: Option<String>,
     pub node_status: Option<String>,

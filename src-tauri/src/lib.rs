@@ -80,6 +80,8 @@ pub fn run() {
             commands::k8s_status,
             commands::k8s_enable,
             commands::k8s_disable,
+            commands::k8s_start,
+            commands::k8s_reset,
             commands::k8s_namespaces,
             commands::k8s_pods,
             commands::k8s_deployments,

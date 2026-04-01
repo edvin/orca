@@ -32,6 +32,7 @@ function CertificateAuthoritySection() {
   const downloadCaCert = async () => {
     try {
       const pem = await invoke("get_ca_certificate") as string;
+      await invoke("write_temp_file", { name: "orca-ca.pem", content: pem });
       const blob = new Blob([pem], { type: "application/x-pem-file" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -41,7 +42,7 @@ function CertificateAuthoritySection() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast("CA certificate downloaded", "success");
+      showToast("CA Certificate saved. Check your Downloads folder for orca-ca.pem", "success");
     } catch (e) {
       showToast(`Failed to download CA certificate: ${e}`, "error");
     }
