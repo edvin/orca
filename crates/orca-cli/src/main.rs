@@ -1,4 +1,5 @@
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
+use serde::Serialize;
 
 mod client;
 
@@ -17,6 +18,9 @@ struct Cli {
 enum Commands {
     /// Show daemon health and runtime info
     Status,
+
+    /// Print CLI and daemon version
+    Version,
 
     /// Manage containers
     Containers {
@@ -46,6 +50,41 @@ enum Commands {
     Machine {
         #[command(subcommand)]
         action: MachineAction,
+    },
+
+    /// Manage the gateway reverse proxy
+    Gateway {
+        #[command(subcommand)]
+        action: GatewayAction,
+    },
+
+    /// Manage the Orca CA certificate
+    Ca {
+        #[command(subcommand)]
+        action: CaAction,
+    },
+
+    /// Browse and search application templates
+    Templates {
+        #[command(subcommand)]
+        action: TemplateAction,
+    },
+
+    /// Deploy a compose file or template
+    Deploy {
+        /// Path to a docker-compose file
+        #[arg(required_unless_present = "template")]
+        path: Option<String>,
+
+        /// Deploy a template by ID instead
+        #[arg(long)]
+        template: Option<String>,
+    },
+
+    /// Export, import, and manage Orca configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
     },
 }
 
@@ -143,6 +182,151 @@ enum MachineAction {
     },
 }
 
+#[derive(Subcommand)]
+enum GatewayAction {
+    /// Show gateway running state
+    Status,
+    /// Start the gateway
+    Start,
+    /// Stop the gateway
+    Stop,
+    /// List gateway routes
+    Routes,
+    /// Add a gateway route
+    Add {
+        /// Hostname (e.g. app.localhost)
+        host: String,
+        /// Container name
+        container: String,
+        /// Container port
+        port: u16,
+    },
+    /// Remove a gateway route
+    Remove {
+        /// Hostname to remove
+        host: String,
+    },
+    /// View or update gateway configuration
+    Config(GatewayConfigArgs),
+}
+
+#[derive(Args)]
+struct GatewayConfigArgs {
+    /// Show current config (default if no flags)
+    #[arg(long)]
+    show: bool,
+
+    /// Set the gateway domain
+    #[arg(long)]
+    domain: Option<String>,
+
+    /// Set the HTTP port
+    #[arg(long)]
+    http_port: Option<u16>,
+
+    /// Set the HTTPS port
+    #[arg(long)]
+    https_port: Option<u16>,
+
+    /// Set TLS mode (orca_ca or custom)
+    #[arg(long)]
+    tls_mode: Option<String>,
+
+    /// Path to PEM certificate file (for custom TLS)
+    #[arg(long)]
+    cert_file: Option<String>,
+
+    /// Path to PEM key file (for custom TLS)
+    #[arg(long)]
+    key_file: Option<String>,
+}
+
+impl GatewayConfigArgs {
+    fn has_updates(&self) -> bool {
+        self.domain.is_some()
+            || self.http_port.is_some()
+            || self.https_port.is_some()
+            || self.tls_mode.is_some()
+            || self.cert_file.is_some()
+            || self.key_file.is_some()
+    }
+}
+
+#[derive(Subcommand)]
+enum CaAction {
+    /// Export CA certificate PEM to stdout
+    Export,
+    /// Show CA certificate info
+    Info,
+    /// Install CA certificate to system trust store
+    Install,
+}
+
+#[derive(Subcommand)]
+enum TemplateAction {
+    /// List all templates
+    List,
+    /// Search templates by query
+    Search {
+        /// Search query (matches name, description, category)
+        query: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Export configuration as YAML
+    Export {
+        /// Include sensitive fields (certs, tokens, keys)
+        #[arg(long)]
+        include_secrets: bool,
+    },
+    /// Import configuration from a YAML file
+    Import {
+        /// Path to YAML config file
+        file: String,
+    },
+    /// Get a configuration value
+    Get {
+        /// Dot-path key (e.g. gateway.domain)
+        key: String,
+    },
+    /// Set a configuration value
+    Set {
+        /// Dot-path key (e.g. gateway.domain)
+        key: String,
+        /// Value to set
+        value: String,
+    },
+}
+
+/// YAML-friendly subset of OrcaConfig for export.
+#[derive(Serialize, serde::Deserialize)]
+struct ConfigExport {
+    gateway: GatewayExport,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct GatewayExport {
+    domain: String,
+    http_port: u16,
+    https_port: u16,
+    tls_mode: String,
+    routes: Vec<RouteExport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    custom_cert: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    custom_key: Option<String>,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct RouteExport {
+    hostname: String,
+    container_name: String,
+    port: u16,
+    enabled: bool,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -150,6 +334,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Status => cmd_status(&client).await?,
+        Commands::Version => cmd_version(&client).await?,
         Commands::Containers { action } => match action {
             ContainerAction::List => cmd_containers_list(&client).await?,
             ContainerAction::Start { id } => cmd_container_start(&client, &id).await?,
@@ -178,8 +363,44 @@ async fn main() -> anyhow::Result<()> {
             MachineAction::Start { name } => cmd_machine_start(&client, &name).await?,
             MachineAction::Stop { name } => cmd_machine_stop(&client, &name).await?,
         },
+        Commands::Gateway { action } => match action {
+            GatewayAction::Status => cmd_gateway_status(&client).await?,
+            GatewayAction::Start => cmd_gateway_start(&client).await?,
+            GatewayAction::Stop => cmd_gateway_stop(&client).await?,
+            GatewayAction::Routes => cmd_gateway_routes(&client).await?,
+            GatewayAction::Add { host, container, port } => cmd_gateway_add(&client, &host, &container, port).await?,
+            GatewayAction::Remove { host } => cmd_gateway_remove(&client, &host).await?,
+            GatewayAction::Config(args) => cmd_gateway_config(&client, args).await?,
+        },
+        Commands::Ca { action } => match action {
+            CaAction::Export => cmd_ca_export(&client).await?,
+            CaAction::Info => cmd_ca_info(&client).await?,
+            CaAction::Install => cmd_ca_install(&client).await?,
+        },
+        Commands::Templates { action } => match action {
+            TemplateAction::List => cmd_templates_list(&client).await?,
+            TemplateAction::Search { query } => cmd_templates_search(&client, &query).await?,
+        },
+        Commands::Deploy { path, template } => cmd_deploy(&client, path, template).await?,
+        Commands::Config { action } => match action {
+            ConfigAction::Export { include_secrets } => cmd_config_export(include_secrets)?,
+            ConfigAction::Import { file } => cmd_config_import(&file)?,
+            ConfigAction::Get { key } => cmd_config_get(&key)?,
+            ConfigAction::Set { key, value } => cmd_config_set(&key, &value)?,
+        },
     }
 
+    Ok(())
+}
+
+// --- Version ---
+
+async fn cmd_version(client: &client::DaemonClient) -> anyhow::Result<()> {
+    println!("cli: {}", env!("CARGO_PKG_VERSION"));
+    match client.health().await {
+        Ok(health) => println!("daemon: {}", health.version),
+        Err(_) => println!("daemon: not running"),
+    }
     Ok(())
 }
 
@@ -396,6 +617,431 @@ async fn cmd_machine_stop(client: &client::DaemonClient, name: &str) -> anyhow::
     println!("Stopping machine '{name}'...");
     client.stop_machine(name).await?;
     println!("Machine '{name}' stopped.");
+    Ok(())
+}
+
+// --- Gateway ---
+
+async fn cmd_gateway_status(client: &client::DaemonClient) -> anyhow::Result<()> {
+    let status = client.gateway_status().await?;
+    let running = status.get("running").and_then(|v| v.as_bool()).unwrap_or(false);
+    let domain = status.get("domain").and_then(|v| v.as_str()).unwrap_or("-");
+    let http_port = status.get("http_port").and_then(|v| v.as_u64()).unwrap_or(0);
+    let https_port = status.get("https_port").and_then(|v| v.as_u64()).unwrap_or(0);
+    let route_count = status.get("route_count").and_then(|v| v.as_u64()).unwrap_or(0);
+
+    println!("Gateway:");
+    println!("  Running:  {}", if running { "yes" } else { "no" });
+    println!("  Domain:   {domain}");
+    println!("  HTTP:     {http_port}");
+    println!("  HTTPS:    {https_port}");
+    println!("  Routes:   {route_count}");
+    Ok(())
+}
+
+async fn cmd_gateway_start(client: &client::DaemonClient) -> anyhow::Result<()> {
+    client.gateway_start().await?;
+    println!("Gateway started.");
+    Ok(())
+}
+
+async fn cmd_gateway_stop(client: &client::DaemonClient) -> anyhow::Result<()> {
+    client.gateway_stop().await?;
+    println!("Gateway stopped.");
+    Ok(())
+}
+
+async fn cmd_gateway_routes(client: &client::DaemonClient) -> anyhow::Result<()> {
+    let routes = client.gateway_routes().await?;
+    if routes.is_empty() {
+        println!("No gateway routes configured.");
+        return Ok(());
+    }
+
+    println!("{:<30} {:<20} {:<8} ENABLED", "HOSTNAME", "CONTAINER", "PORT");
+    for r in &routes {
+        let hostname = r.get("hostname").and_then(|v| v.as_str()).unwrap_or("-");
+        let container = r.get("container_name").and_then(|v| v.as_str()).unwrap_or("-");
+        let port = r.get("port").and_then(|v| v.as_u64()).unwrap_or(0);
+        let enabled = r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+        println!(
+            "{:<30} {:<20} {:<8} {}",
+            hostname,
+            container,
+            port,
+            if enabled { "yes" } else { "no" }
+        );
+    }
+    Ok(())
+}
+
+async fn cmd_gateway_add(client: &client::DaemonClient, host: &str, container: &str, port: u16) -> anyhow::Result<()> {
+    client.gateway_add_route(host, container, port).await?;
+    println!("Route added: {host} -> {container}:{port}");
+    Ok(())
+}
+
+async fn cmd_gateway_remove(client: &client::DaemonClient, host: &str) -> anyhow::Result<()> {
+    client.gateway_remove_route(host).await?;
+    println!("Route removed: {host}");
+    Ok(())
+}
+
+async fn cmd_gateway_config(client: &client::DaemonClient, args: GatewayConfigArgs) -> anyhow::Result<()> {
+    if !args.has_updates() {
+        // Show current config
+        let config = client.gateway_get_config().await?;
+        let yaml = serde_yaml::to_string(&config)?;
+        print!("{yaml}");
+        return Ok(());
+    }
+
+    // Merge updates into current config
+    let mut config = client.gateway_get_config().await?;
+    let obj = config
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("expected config to be a JSON object"))?;
+
+    if let Some(domain) = &args.domain {
+        obj.insert("domain".to_string(), serde_json::Value::String(domain.clone()));
+    }
+    if let Some(port) = args.http_port {
+        obj.insert("http_port".to_string(), serde_json::Value::Number(port.into()));
+    }
+    if let Some(port) = args.https_port {
+        obj.insert("https_port".to_string(), serde_json::Value::Number(port.into()));
+    }
+    if let Some(mode) = &args.tls_mode {
+        obj.insert("tls_mode".to_string(), serde_json::Value::String(mode.clone()));
+    }
+    if let Some(cert_path) = &args.cert_file {
+        let pem = std::fs::read_to_string(cert_path)
+            .map_err(|e| anyhow::anyhow!("failed to read cert file '{}': {}", cert_path, e))?;
+        obj.insert("custom_cert".to_string(), serde_json::Value::String(pem));
+    }
+    if let Some(key_path) = &args.key_file {
+        let pem = std::fs::read_to_string(key_path)
+            .map_err(|e| anyhow::anyhow!("failed to read key file '{}': {}", key_path, e))?;
+        obj.insert("custom_key".to_string(), serde_json::Value::String(pem));
+    }
+
+    client.gateway_update_config(&config).await?;
+    println!("Gateway configuration updated.");
+    Ok(())
+}
+
+// --- CA ---
+
+async fn cmd_ca_export(client: &client::DaemonClient) -> anyhow::Result<()> {
+    let pem = client.ca_certificate().await?;
+    print!("{pem}");
+    Ok(())
+}
+
+async fn cmd_ca_info(client: &client::DaemonClient) -> anyhow::Result<()> {
+    let info = client.ca_info().await?;
+    let subject = info.get("subject").and_then(|v| v.as_str()).unwrap_or("-");
+    let expiry = info.get("expiry").and_then(|v| v.as_str()).unwrap_or("-");
+    let fingerprint = info.get("fingerprint").and_then(|v| v.as_str()).unwrap_or("-");
+
+    println!("CA Certificate:");
+    println!("  Subject:      {subject}");
+    println!("  Expiry:       {expiry}");
+    println!("  Fingerprint:  {fingerprint}");
+    Ok(())
+}
+
+async fn cmd_ca_install(client: &client::DaemonClient) -> anyhow::Result<()> {
+    let pem = client.ca_certificate().await?;
+
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join("orca-ca.crt");
+    std::fs::write(&tmp_path, &pem)?;
+
+    let tmp_str = tmp_path.display().to_string();
+
+    let linux_sh_arg = format!(
+        "cp '{}' /usr/local/share/ca-certificates/orca-ca.crt && update-ca-certificates",
+        tmp_str
+    );
+
+    let (cmd, args, manual_instructions) = if cfg!(target_os = "linux") {
+        (
+            "sudo",
+            vec!["sh", "-c", linux_sh_arg.as_str()],
+            format!(
+                "sudo cp '{}' /usr/local/share/ca-certificates/orca-ca.crt && sudo update-ca-certificates",
+                tmp_str
+            ),
+        )
+    } else if cfg!(target_os = "macos") {
+        (
+            "sudo",
+            vec![
+                "security",
+                "add-trusted-cert",
+                "-d",
+                "-r",
+                "trustRoot",
+                "-k",
+                "/Library/Keychains/System.keychain",
+                tmp_str.as_str(),
+            ],
+            format!(
+                "sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '{}'",
+                tmp_str
+            ),
+        )
+    } else if cfg!(target_os = "windows") {
+        (
+            "certutil",
+            vec!["-addstore", "-f", "ROOT", tmp_str.as_str()],
+            format!("certutil -addstore -f \"ROOT\" \"{}\"", tmp_str),
+        )
+    } else {
+        anyhow::bail!("Unsupported platform. Certificate saved to: {}", tmp_str);
+    };
+
+    println!("Installing CA certificate to system trust store...");
+    let status = std::process::Command::new(cmd).args(&args).status();
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("CA certificate installed successfully.");
+            let _ = std::fs::remove_file(&tmp_path);
+        }
+        _ => {
+            eprintln!("Automatic installation failed. Install manually:");
+            eprintln!("  {manual_instructions}");
+            eprintln!("Certificate saved to: {tmp_str}");
+        }
+    }
+
+    Ok(())
+}
+
+// --- Templates ---
+
+async fn cmd_templates_list(client: &client::DaemonClient) -> anyhow::Result<()> {
+    let templates = client.list_templates().await?;
+    if templates.is_empty() {
+        println!("No templates available.");
+        return Ok(());
+    }
+
+    println!("{:<12} {:<20} {:<14} DESCRIPTION", "ID", "NAME", "CATEGORY");
+    for t in &templates {
+        let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+        let name = t.get("name").and_then(|v| v.as_str()).unwrap_or("-");
+        let category = t.get("category").and_then(|v| v.as_str()).unwrap_or("-");
+        let desc = t.get("description").and_then(|v| v.as_str()).unwrap_or("-");
+        println!("{:<12} {:<20} {:<14} {}", id, name, category, desc);
+    }
+    Ok(())
+}
+
+async fn cmd_templates_search(client: &client::DaemonClient, query: &str) -> anyhow::Result<()> {
+    let templates = client.list_templates().await?;
+    let query_lower = query.to_lowercase();
+
+    let matches: Vec<_> = templates
+        .iter()
+        .filter(|t| {
+            let name = t.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            let desc = t
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let category = t.get("category").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            name.contains(&query_lower) || desc.contains(&query_lower) || category.contains(&query_lower)
+        })
+        .collect();
+
+    if matches.is_empty() {
+        println!("No templates matching '{query}'.");
+        return Ok(());
+    }
+
+    println!("{:<12} {:<20} {:<14} DESCRIPTION", "ID", "NAME", "CATEGORY");
+    for t in &matches {
+        let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+        let name = t.get("name").and_then(|v| v.as_str()).unwrap_or("-");
+        let category = t.get("category").and_then(|v| v.as_str()).unwrap_or("-");
+        let desc = t.get("description").and_then(|v| v.as_str()).unwrap_or("-");
+        println!("{:<12} {:<20} {:<14} {}", id, name, category, desc);
+    }
+    Ok(())
+}
+
+// --- Deploy ---
+
+async fn cmd_deploy(
+    client: &client::DaemonClient,
+    path: Option<String>,
+    template: Option<String>,
+) -> anyhow::Result<()> {
+    if let Some(template_id) = template {
+        println!("Deploying template '{template_id}'...");
+        client.deploy_template(&template_id).await?;
+        println!("Template deployed.");
+    } else if let Some(path) = path {
+        println!("Deploying from '{path}'...");
+        client.deploy_stack(&path).await?;
+        println!("Stack deployed.");
+    } else {
+        anyhow::bail!("Either <path> or --template <id> is required.");
+    }
+    Ok(())
+}
+
+// --- Config ---
+
+fn cmd_config_export(include_secrets: bool) -> anyhow::Result<()> {
+    let config = orca_core::config::OrcaConfig::load()?;
+
+    let tls_mode = match config.gateway.tls_mode {
+        orca_core::config::GatewayTlsMode::OrcaCa => "orca_ca".to_string(),
+        orca_core::config::GatewayTlsMode::Custom => "custom".to_string(),
+    };
+
+    let routes: Vec<RouteExport> = config
+        .gateway
+        .routes
+        .iter()
+        .map(|r| RouteExport {
+            hostname: r.hostname.clone(),
+            container_name: r.container_name.clone(),
+            port: r.port,
+            enabled: r.enabled,
+        })
+        .collect();
+
+    let export = ConfigExport {
+        gateway: GatewayExport {
+            domain: config.gateway.domain.clone(),
+            http_port: config.gateway.http_port,
+            https_port: config.gateway.https_port,
+            tls_mode,
+            routes,
+            custom_cert: if include_secrets {
+                config.gateway.custom_cert.clone()
+            } else {
+                None
+            },
+            custom_key: if include_secrets {
+                config.gateway.custom_key.clone()
+            } else {
+                None
+            },
+        },
+    };
+
+    let yaml = serde_yaml::to_string(&export)?;
+    print!("{yaml}");
+    Ok(())
+}
+
+fn cmd_config_import(file: &str) -> anyhow::Result<()> {
+    let contents = std::fs::read_to_string(file).map_err(|e| anyhow::anyhow!("failed to read '{}': {}", file, e))?;
+    let import: serde_yaml::Value = serde_yaml::from_str(&contents)?;
+
+    let mut config = orca_core::config::OrcaConfig::load()?;
+
+    if let Some(gw) = import.get("gateway") {
+        if let Some(domain) = gw.get("domain").and_then(|v| v.as_str()) {
+            config.gateway.domain = domain.to_string();
+        }
+        if let Some(port) = gw.get("http_port").and_then(|v| v.as_u64()) {
+            config.gateway.http_port = port as u16;
+        }
+        if let Some(port) = gw.get("https_port").and_then(|v| v.as_u64()) {
+            config.gateway.https_port = port as u16;
+        }
+        if let Some(mode) = gw.get("tls_mode").and_then(|v| v.as_str()) {
+            config.gateway.tls_mode = match mode {
+                "custom" => orca_core::config::GatewayTlsMode::Custom,
+                _ => orca_core::config::GatewayTlsMode::OrcaCa,
+            };
+        }
+        if let Some(routes) = gw.get("routes").and_then(|v| v.as_sequence()) {
+            let mut new_routes = Vec::new();
+            for r in routes {
+                let hostname = r.get("hostname").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let container_name = r
+                    .get("container_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let port = r.get("port").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+                let enabled = r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                if !hostname.is_empty() {
+                    new_routes.push(orca_core::config::GatewayRoute {
+                        hostname,
+                        container_name,
+                        port,
+                        enabled,
+                    });
+                }
+            }
+            config.gateway.routes = new_routes;
+        }
+    }
+
+    config.save()?;
+    println!("Configuration imported from '{file}'.");
+    Ok(())
+}
+
+fn cmd_config_get(key: &str) -> anyhow::Result<()> {
+    let config = orca_core::config::OrcaConfig::load()?;
+
+    let value: String = match key {
+        "gateway.domain" => config.gateway.domain.clone(),
+        "gateway.http_port" => config.gateway.http_port.to_string(),
+        "gateway.https_port" => config.gateway.https_port.to_string(),
+        "gateway.tls_mode" => match config.gateway.tls_mode {
+            orca_core::config::GatewayTlsMode::OrcaCa => "orca_ca".to_string(),
+            orca_core::config::GatewayTlsMode::Custom => "custom".to_string(),
+        },
+        _ => {
+            eprintln!("Unknown key: {key}");
+            eprintln!("Valid keys: gateway.domain, gateway.http_port, gateway.https_port, gateway.tls_mode");
+            std::process::exit(1);
+        }
+    };
+
+    println!("{value}");
+    Ok(())
+}
+
+fn cmd_config_set(key: &str, value: &str) -> anyhow::Result<()> {
+    let mut config = orca_core::config::OrcaConfig::load()?;
+
+    match key {
+        "gateway.domain" => config.gateway.domain = value.to_string(),
+        "gateway.http_port" => {
+            config.gateway.http_port = value.parse().map_err(|_| anyhow::anyhow!("invalid port: {value}"))?;
+        }
+        "gateway.https_port" => {
+            config.gateway.https_port = value.parse().map_err(|_| anyhow::anyhow!("invalid port: {value}"))?;
+        }
+        "gateway.tls_mode" => {
+            config.gateway.tls_mode = match value {
+                "custom" => orca_core::config::GatewayTlsMode::Custom,
+                "orca_ca" => orca_core::config::GatewayTlsMode::OrcaCa,
+                _ => anyhow::bail!("invalid tls_mode: {value} (expected 'orca_ca' or 'custom')"),
+            };
+        }
+        _ => {
+            eprintln!("Unknown key: {key}");
+            eprintln!("Valid keys: gateway.domain, gateway.http_port, gateway.https_port, gateway.tls_mode");
+            std::process::exit(1);
+        }
+    }
+
+    config.save()?;
+    println!("{key} = {value}");
     Ok(())
 }
 

@@ -125,6 +125,62 @@
 - Direct tool execution endpoint for custom agents
 - Compound diagnostic tools (inspect + logs + stats in one call)
 
+### CLI (`orca`)
+
+A full-featured command-line interface for scripting, automation, and team workflows.
+
+```bash
+# Containers
+orca containers list
+orca containers start <id>
+orca containers logs <id> --tail 100
+orca containers exec <id> -- sh -c "ls -la"
+
+# Images
+orca images list
+orca images pull nginx:alpine
+orca images prune
+
+# Stacks
+orca stacks list
+orca stacks up my-stack
+orca stacks down my-stack
+
+# Gateway
+orca gateway status
+orca gateway start / stop
+orca gateway routes
+orca gateway add myapp my-container 8080
+orca gateway remove myapp
+orca gateway config --show
+orca gateway config --domain local.mycompany.dev --tls-mode custom \
+  --cert-file wildcard.pem --key-file wildcard-key.pem
+
+# Certificate Authority
+orca ca export > orca-ca.pem      # export CA cert
+orca ca info                       # show subject, expiry, fingerprint
+orca ca install                    # install to system trust store
+
+# Deploy
+orca deploy ./my-project           # deploy from directory (reads orca.yaml)
+orca deploy --template wordpress   # deploy a catalog template
+
+# Templates
+orca templates list
+orca templates search database
+
+# Config
+orca config export > team-config.yaml
+orca config import team-config.yaml
+orca config get gateway.domain
+orca config set gateway.domain local.mycompany.dev
+
+# Version
+orca version
+```
+
+The CLI talks to the Orca daemon API. Authenticate with `ORCA_TOKEN` env var or the token from `~/.config/orca/config.json`.
+
 ### Dashboard
 
 - **Resource history charts** — CPU and memory time-series with hover tooltips

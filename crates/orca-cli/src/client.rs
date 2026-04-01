@@ -296,6 +296,122 @@ impl DaemonClient {
         check_status(&resp)?;
         Ok(())
     }
+
+    // --- Gateway ---
+
+    pub async fn gateway_status(&self) -> anyhow::Result<serde_json::Value> {
+        let resp = self.http.get(self.url("/gateway/status")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn gateway_start(&self) -> anyhow::Result<serde_json::Value> {
+        let resp = self.http.post(self.url("/gateway/start")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn gateway_stop(&self) -> anyhow::Result<()> {
+        let resp = self.http.post(self.url("/gateway/stop")).send().await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    pub async fn gateway_routes(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        let resp = self.http.get(self.url("/gateway/routes")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn gateway_add_route(
+        &self,
+        hostname: &str,
+        container: &str,
+        port: u16,
+    ) -> anyhow::Result<serde_json::Value> {
+        let resp = self
+            .http
+            .post(self.url("/gateway/routes"))
+            .json(&serde_json::json!({
+                "hostname": hostname,
+                "container_name": container,
+                "port": port,
+            }))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn gateway_remove_route(&self, hostname: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .delete(self.url(&format!("/gateway/routes/{hostname}")))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    pub async fn gateway_get_config(&self) -> anyhow::Result<serde_json::Value> {
+        let resp = self.http.get(self.url("/gateway/config")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn gateway_update_config(&self, config: &serde_json::Value) -> anyhow::Result<()> {
+        let resp = self.http.put(self.url("/gateway/config")).json(config).send().await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
+    // --- CA ---
+
+    pub async fn ca_certificate(&self) -> anyhow::Result<String> {
+        // The /ca/certificate endpoint doesn't require auth and returns plain text PEM.
+        let url = format!("{}/api/v1/ca/certificate", self.base_url);
+        let resp = reqwest::Client::new().get(&url).send().await?;
+        check_status(&resp)?;
+        Ok(resp.text().await?)
+    }
+
+    pub async fn ca_info(&self) -> anyhow::Result<serde_json::Value> {
+        let resp = self.http.get(self.url("/ca/info")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    // --- Templates ---
+
+    pub async fn list_templates(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        let resp = self.http.get(self.url("/templates")).send().await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    // --- Deploy ---
+
+    pub async fn deploy_stack(&self, path: &str) -> anyhow::Result<serde_json::Value> {
+        let resp = self
+            .http
+            .post(self.url("/stacks/deploy"))
+            .json(&serde_json::json!({ "path": path }))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn deploy_template(&self, id: &str) -> anyhow::Result<serde_json::Value> {
+        let resp = self
+            .http
+            .post(self.url(&format!("/templates/{id}/deploy")))
+            .json(&serde_json::json!({}))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(resp.json().await?)
+    }
 }
 
 fn check_status(resp: &reqwest::Response) -> anyhow::Result<()> {
