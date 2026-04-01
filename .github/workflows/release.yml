@@ -91,17 +91,21 @@ jobs:
         working-directory: gui
         run: npx vite build
 
-      - name: Build daemon binary
-        run: cargo build --release --bin orca-daemon --target ${{ matrix.platform.target }}
+      - name: Build daemon and CLI binaries
+        run: |
+          cargo build --release --bin orca-daemon --target ${{ matrix.platform.target }}
+          cargo build --release --bin orca --target ${{ matrix.platform.target }}
 
-      - name: Copy daemon to sidecar location
+      - name: Copy binaries to sidecar location
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
           if [ "${{ runner.os }}" == "Windows" ]; then
             cp target/${{ matrix.platform.target }}/release/orca-daemon.exe "src-tauri/binaries/orca-daemon-${{ matrix.platform.target }}.exe"
+            cp target/${{ matrix.platform.target }}/release/orca.exe "src-tauri/binaries/orca-${{ matrix.platform.target }}.exe"
           else
             cp target/${{ matrix.platform.target }}/release/orca-daemon "src-tauri/binaries/orca-daemon-${{ matrix.platform.target }}"
+            cp target/${{ matrix.platform.target }}/release/orca "src-tauri/binaries/orca-${{ matrix.platform.target }}"
           fi
 
       - name: Install Tauri CLI

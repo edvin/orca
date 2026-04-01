@@ -7,8 +7,14 @@
   ; but we do it explicitly here as a safety net)
   nsExec::ExecToLog 'taskkill /f /im Orca.exe'
   nsExec::ExecToLog 'taskkill /f /im orca-daemon.exe'
+  nsExec::ExecToLog 'taskkill /f /im orca.exe'
   ; Give processes time to fully exit and release file handles
   Sleep 1000
+!macroend
+
+!macro NSIS_HOOK_POSTINSTALL
+  ; Add install directory to user PATH so 'orca' CLI is available from any terminal
+  nsExec::ExecToLog 'powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable(\"Path\", [Environment]::GetEnvironmentVariable(\"Path\", \"User\") + \";$INSTDIR\", \"User\")"'
 !macroend
 
 ; Clean up Orca Desktop data on uninstall (but NOT config — preserve user settings)
@@ -18,4 +24,6 @@
   ; Remove Docker TCP override from WSL (best effort)
   nsExec::ExecToLog 'wsl -u root -- rm -f /etc/systemd/system/docker.service.d/override.conf'
   nsExec::ExecToLog 'wsl -u root -- systemctl daemon-reload'
+  ; Remove from user PATH
+  nsExec::ExecToLog 'powershell -NoProfile -Command "$p = [Environment]::GetEnvironmentVariable(\"Path\", \"User\"); $p = ($p -split \";\" | Where-Object { $_ -ne \"$INSTDIR\" }) -join \";\"; [Environment]::SetEnvironmentVariable(\"Path\", $p, \"User\")"'
 !macroend

@@ -43,7 +43,7 @@ jobs:
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
             export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
           fi
-          cargo build --release --target ${{ matrix.target }} --bin orca-daemon
+          cargo build --release --target ${{ matrix.target }} --bin orca-daemon --bin orca
         env:
           CARGO_TERM_COLOR: always
 
@@ -118,9 +118,11 @@ jobs:
           EOF
           chmod 755 "$PKG_DIR/DEBIAN/prerm"
 
-          # Binary
+          # Binaries
           cp "target/${{ matrix.target }}/release/orca-daemon" "$PKG_DIR/usr/local/bin/"
+          cp "target/${{ matrix.target }}/release/orca" "$PKG_DIR/usr/local/bin/"
           chmod 755 "$PKG_DIR/usr/local/bin/orca-daemon"
+          chmod 755 "$PKG_DIR/usr/local/bin/orca"
 
           # Systemd service
           cp deploy/orca-daemon.service "$PKG_DIR/etc/systemd/system/"

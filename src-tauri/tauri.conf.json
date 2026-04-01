@@ -37,7 +37,8 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/orca-daemon"
+      "binaries/orca-daemon",
+      "binaries/orca"
     ],
     "windows": {
       "nsis": {
