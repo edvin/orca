@@ -127,59 +127,151 @@
 
 ### CLI (`orca`)
 
-A full-featured command-line interface for scripting, automation, and team workflows.
+A full-featured command-line interface for scripting, automation, and team workflows. The CLI talks to the Orca daemon API at `127.0.0.1:9477` and authenticates using the `ORCA_TOKEN` env var or the token from your config file.
+
+#### Containers
 
 ```bash
-# Containers
-orca containers list
-orca containers start <id>
-orca containers logs <id> --tail 100
-orca containers exec <id> -- sh -c "ls -la"
-
-# Images
-orca images list
-orca images pull nginx:alpine
-orca images prune
-
-# Stacks
-orca stacks list
-orca stacks up my-stack
-orca stacks down my-stack
-
-# Gateway
-orca gateway status
-orca gateway start / stop
-orca gateway routes
-orca gateway add myapp my-container 8080
-orca gateway remove myapp
-orca gateway config --show
-orca gateway config --domain local.mycompany.dev --tls-mode custom \
-  --cert-file wildcard.pem --key-file wildcard-key.pem
-
-# Certificate Authority
-orca ca export > orca-ca.pem      # export CA cert
-orca ca info                       # show subject, expiry, fingerprint
-orca ca install                    # install to system trust store
-
-# Deploy
-orca deploy ./my-project           # deploy from directory (reads orca.yaml)
-orca deploy --template wordpress   # deploy a catalog template
-
-# Templates
-orca templates list
-orca templates search database
-
-# Config
-orca config export > team-config.yaml
-orca config import team-config.yaml
-orca config get gateway.domain
-orca config set gateway.domain local.mycompany.dev
-
-# Version
-orca version
+orca containers list                          # list all containers
+orca containers start <id>                    # start a container
+orca containers stop <id>                     # stop a container
+orca containers logs <id> --tail 100          # view last 100 log lines
+orca containers exec <id> -- sh -c "ls -la"   # run command in container
 ```
 
-The CLI talks to the Orca daemon API. Authenticate with `ORCA_TOKEN` env var or the token from `~/.config/orca/config.json`.
+#### Images
+
+```bash
+orca images list              # list all images
+orca images pull nginx:alpine # pull an image
+orca images remove <id>       # remove an image
+orca images prune             # remove unused images
+```
+
+#### Stacks
+
+```bash
+orca stacks list              # list compose stacks
+orca stacks up my-stack       # start a stack
+orca stacks down my-stack     # stop a stack
+```
+
+#### Gateway
+
+```bash
+orca gateway status           # show running state, domain, ports, route count
+orca gateway start            # start the Caddy gateway container
+orca gateway stop             # stop the gateway
+orca gateway routes           # list all hostname → container mappings
+
+orca gateway add webmail webmail-container 8095    # add a route
+orca gateway remove webmail                        # remove a route
+
+orca gateway config --show    # display current gateway config as YAML
+orca gateway config --domain dev.example.com       # change the base domain
+orca gateway config --tls-mode custom \
+  --cert-file wildcard.pem --key-file wildcard-key.pem  # use a custom cert
+```
+
+#### Certificate Authority
+
+```bash
+orca ca info                  # show CA subject, expiry, SHA-256 fingerprint
+orca ca export > orca-ca.pem  # export CA certificate PEM to stdout
+orca ca install               # install CA to system trust store (needs sudo)
+```
+
+`ca install` runs the platform-specific command automatically:
+- **macOS**: `security add-trusted-cert` into System Keychain
+- **Windows**: `certutil -addstore` into ROOT store
+- **Linux**: copies to `/usr/local/share/ca-certificates/` and runs `update-ca-certificates`
+
+#### Deploy
+
+```bash
+orca deploy ./my-project           # deploy stack from a directory (reads orca.yaml)
+orca deploy --template wordpress   # deploy a template from the catalog
+```
+
+#### Templates
+
+```bash
+orca templates list                # list all available templates
+orca templates search database     # search by name, description, or category
+```
+
+#### Config
+
+```bash
+orca config export > team-config.yaml     # export config as YAML (excludes secrets)
+orca config export --include-secrets      # include API keys, tokens, cert PEM
+orca config import team-config.yaml       # import and merge config from YAML
+
+orca config get gateway.domain            # read a specific setting
+orca config set gateway.domain localhost  # update a specific setting
+```
+
+#### Version
+
+```bash
+orca version    # show CLI version and daemon version
+```
+
+### Team Workflows
+
+Orca is designed for teams where every developer runs the same stack locally.
+
+#### Shared gateway routes with `orca.yaml`
+
+Add an `orca.yaml` to your project repo, next to `docker-compose.yml`:
+
+```yaml
+# orca.yaml — checked into git, shared with the team
+gateway:
+  - hostname: app
+    service: frontend
+    port: 3000
+  - hostname: api
+    service: backend
+    port: 8080
+```
+
+When any team member deploys this stack through Orca, the gateway routes are auto-registered. With the default domain, the app is available at `https://app.localhost` and `https://api.localhost`.
+
+#### Custom team domain with wildcard cert
+
+If your team uses a shared domain (e.g., `*.dev.example.com` with DNS pointing to `127.0.0.1`), set it up once per developer:
+
+```bash
+# One-time setup (can be scripted in your team's devproxy/setup repo)
+orca gateway config \
+  --domain dev.example.com \
+  --tls-mode custom \
+  --cert-file wildcard.pem \
+  --key-file wildcard-key.pem
+
+orca gateway start
+```
+
+Now every project's `orca.yaml` routes use the team domain automatically:
+- `https://app.dev.example.com`
+- `https://api.dev.example.com`
+
+#### Sharing config across the team
+
+Export your Orca configuration and share it:
+
+```bash
+# Team lead exports config
+orca config export > team-orca-config.yaml
+
+# Each developer imports it
+orca config import team-orca-config.yaml
+```
+
+The export excludes sensitive values (API keys, tokens, passwords) by default. Use `--include-secrets` if sharing within a trusted team.
+
+### Dashboard
 
 ### Dashboard
 
