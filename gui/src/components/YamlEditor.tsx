@@ -1,96 +1,98 @@
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
-import * as monaco from "monaco-editor";
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, rectangularSelection } from "@codemirror/view";
+import { EditorState } from "@codemirror/state";
+import { yaml } from "@codemirror/lang-yaml";
+import { defaultKeymap, indentWithTab } from "@codemirror/commands";
+import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter, HighlightStyle } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 
-// Workers are configured by vite-plugin-monaco-editor
-
-// Register YAML language with monarch tokenizer for syntax highlighting
-let yamlRegistered = false;
-function registerYaml() {
-  if (yamlRegistered) return;
-  yamlRegistered = true;
-  monaco.languages.register({ id: "yaml" });
-  monaco.languages.setMonarchTokensProvider("yaml", {
-    tokenizer: {
-      root: [
-        [/#.*$/, "comment"],
-        [/^---\s*$/, "keyword"],
-        [/^\.\.\.\s*$/, "keyword"],
-        [/\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?/, "number.date"],
-        [/[^\s#:][^:]*(?=\s*:(\s|$))/, "type"],
-        [/\b(true|false|yes|no|on|off|null|~)\b/i, "keyword"],
-        [/[+-]?\d+(\.\d+)?([eE][+-]?\d+)?/, "number"],
-        [/0[xX][0-9a-fA-F]+/, "number.hex"],
-        [/"/, "string", "@doubleQuoteString"],
-        [/'/, "string", "@singleQuoteString"],
-        [/[&*][^\s]+/, "tag"],
-        [/![^\s]+/, "tag"],
-        [/[|>][+-]?\d*/, "operator"],
-        [/^\s*-\s/, "operator"],
-      ],
-      doubleQuoteString: [
-        [/[^\\"]+/, "string"],
-        [/\\./, "string.escape"],
-        [/"/, "string", "@pop"],
-      ],
-      singleQuoteString: [
-        [/[^\\']+/, "string"],
-        [/\\./, "string.escape"],
-        [/'/, "string", "@pop"],
-      ],
-    },
-  });
-}
-
-// Tokyo Night theme
-const TOKYO_NIGHT: monaco.editor.IStandaloneThemeData = {
-  base: "vs-dark",
-  inherit: true,
-  rules: [
-    { token: "", foreground: "a9b1d6" },
-    { token: "comment", foreground: "565f89", fontStyle: "italic" },
-    { token: "keyword", foreground: "bb9af7" },
-    { token: "string", foreground: "9ece6a" },
-    { token: "number", foreground: "ff9e64" },
-    { token: "number.date", foreground: "ff9e64" },
-    { token: "constant", foreground: "ff9e64" },
-    { token: "type", foreground: "2ac3de" },
-    { token: "tag", foreground: "f7768e" },
-    { token: "operator", foreground: "89ddff" },
-    { token: "string.escape", foreground: "89ddff" },
-    { token: "variable", foreground: "c0caf5" },
-    { token: "identifier", foreground: "a9b1d6" },
-    { token: "function", foreground: "7aa2f7" },
-    { token: "delimiter.bracket", foreground: "89ddff" },
-    { token: "attribute.name", foreground: "bb9af7" },
-    { token: "attribute.value", foreground: "9ece6a" },
-  ],
-  colors: {
-    "editor.background": "#1a1b26",
-    "editor.foreground": "#a9b1d6",
-    "editor.lineHighlightBackground": "#1e2030",
-    "editor.lineHighlightBorder": "#00000000",
-    "editor.selectionBackground": "#33467c",
-    "editor.selectionHighlightBackground": "#2f3549",
-    "editor.inactiveSelectionBackground": "#292e42",
-    "editorLineNumber.foreground": "#3b4261",
-    "editorLineNumber.activeForeground": "#737aa2",
-    "editorCursor.foreground": "#c0caf5",
-    "editorWidget.background": "#1a1b26",
-    "editorWidget.border": "#292e42",
-    "editorIndentGuide.background": "#292e42",
-    "editorIndentGuide.activeBackground": "#3b4261",
-    "editorBracketMatch.background": "#1a1b2600",
-    "editorBracketMatch.border": "#545c7e",
-    "input.background": "#1a1b26",
-    "input.border": "#3b4261",
-    "dropdown.background": "#1a1b26",
-    "scrollbarSlider.background": "#3b426180",
-    "scrollbarSlider.hoverBackground": "#3b4261b3",
-    "scrollbarSlider.activeBackground": "#3b4261",
+// Tokyo Night theme for CodeMirror 6
+const tokyoNightTheme = EditorView.theme({
+  "&": {
+    backgroundColor: "#1a1b26",
+    color: "#a9b1d6",
   },
-};
+  ".cm-content": {
+    caretColor: "#c0caf5",
+    fontFamily: "'JetBrains Mono NF', 'JetBrains Mono', monospace",
+    fontSize: "13px",
+    lineHeight: "20px",
+    padding: "8px 0",
+  },
+  ".cm-cursor, .cm-dropCursor": {
+    borderLeftColor: "#c0caf5",
+  },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+    backgroundColor: "#33467c",
+  },
+  ".cm-activeLine": {
+    backgroundColor: "#1e2030",
+  },
+  ".cm-gutters": {
+    backgroundColor: "#1a1b26",
+    color: "#3b4261",
+    borderRight: "1px solid #292e42",
+    minWidth: "3ch",
+  },
+  ".cm-activeLineGutter": {
+    backgroundColor: "#1e2030",
+    color: "#737aa2",
+  },
+  ".cm-lineNumbers .cm-gutterElement": {
+    padding: "0 8px 0 4px",
+  },
+  ".cm-foldGutter .cm-gutterElement": {
+    color: "#3b4261",
+  },
+  "&.cm-focused": {
+    outline: "none",
+  },
+  ".cm-scroller": {
+    overflow: "auto",
+    fontFamily: "'JetBrains Mono NF', 'JetBrains Mono', monospace",
+    fontSize: "13px",
+  },
+  ".cm-matchingBracket": {
+    backgroundColor: "transparent",
+    outline: "1px solid #545c7e",
+  },
+  // Scrollbar styling
+  ".cm-scroller::-webkit-scrollbar": {
+    width: "8px",
+    height: "8px",
+  },
+  ".cm-scroller::-webkit-scrollbar-track": {
+    background: "transparent",
+  },
+  ".cm-scroller::-webkit-scrollbar-thumb": {
+    background: "#3b426180",
+    borderRadius: "4px",
+  },
+  ".cm-scroller::-webkit-scrollbar-thumb:hover": {
+    background: "#3b4261b3",
+  },
+});
 
-let themeRegistered = false;
+// Tokyo Night syntax highlighting
+const tokyoNightHighlighting = HighlightStyle.define([
+  { tag: tags.comment, color: "#565f89", fontStyle: "italic" },
+  { tag: tags.keyword, color: "#bb9af7" },
+  { tag: tags.string, color: "#9ece6a" },
+  { tag: tags.number, color: "#ff9e64" },
+  { tag: tags.bool, color: "#ff9e64" },
+  { tag: tags.null, color: "#bb9af7" },
+  { tag: tags.propertyName, color: "#2ac3de" },
+  { tag: tags.variableName, color: "#c0caf5" },
+  { tag: tags.operator, color: "#89ddff" },
+  { tag: tags.punctuation, color: "#89ddff" },
+  { tag: tags.bracket, color: "#89ddff" },
+  { tag: tags.tagName, color: "#f7768e" },
+  { tag: tags.attributeName, color: "#bb9af7" },
+  { tag: tags.attributeValue, color: "#9ece6a" },
+  { tag: tags.definition(tags.variableName), color: "#7aa2f7" },
+  { tag: tags.meta, color: "#f7768e" },
+  { tag: tags.atom, color: "#bb9af7" },
+]);
 
 interface YamlEditorProps {
   value: string;
@@ -103,116 +105,83 @@ interface YamlEditorProps {
 
 export default function YamlEditor(props: YamlEditorProps) {
   let containerRef: HTMLDivElement | undefined;
-  let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
+  let editorView: EditorView | null = null;
   const [saving, setSaving] = createSignal(false);
   const [modified, setModified] = createSignal(false);
   const [loadError, setLoadError] = createSignal<string | null>(null);
 
-  onMount(async () => {
-    try {
-      // Wait for the custom font to load before creating the editor.
-      // Monaco measures character widths on creation — if the font isn't
-      // loaded yet, it uses system font metrics, causing jumbled text,
-      // wrong line heights, and scroll jumping.
-      try {
-        await document.fonts.load("13px 'JetBrains Mono NF'");
-      } catch {
-        // Font load failed or timed out — fall back to system monospace
-      }
-
-      registerYaml();
-
-      if (!themeRegistered) {
-        monaco.editor.defineTheme("tokyo-night", TOKYO_NIGHT);
-        themeRegistered = true;
-      }
-
-      // Use the font only if it actually loaded, otherwise fall back to system mono
-      const fontLoaded = document.fonts.check("13px 'JetBrains Mono NF'");
-      const fontFamily = fontLoaded
-        ? "'JetBrains Mono NF', monospace"
-        : "'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', monospace";
-
-      editorInstance = monaco.editor.create(containerRef!, {
-        value: props.value,
-        language: "yaml",
-        theme: "tokyo-night",
-        readOnly: props.readOnly ?? false,
-        minimap: { enabled: false },
-        fontSize: 13,
-        fontFamily,
-        fontLigatures: false,
-        lineNumbers: "on",
-        lineNumbersMinChars: 3,
-        glyphMargin: false,
-        folding: true,
-        scrollBeyondLastLine: false,
-        wordWrap: "on",
-        automaticLayout: true,
-        tabSize: 2,
-        renderLineHighlight: props.readOnly ? "none" : "line",
-        overviewRulerLanes: 0,
-        overviewRulerBorder: false,
-        hideCursorInOverviewRuler: true,
-        dragAndDrop: false,
-        contextmenu: false,
-        stickyScroll: { enabled: false },
-        scrollbar: {
-          verticalScrollbarSize: 8,
-          horizontalScrollbarSize: 8,
-          useShadows: false,
-        },
-        padding: { top: 8, bottom: 8 },
-        bracketPairColorization: { enabled: true },
-        // Fixes scroll jumping — ensure Monaco uses consistent line height
-        lineHeight: 20,
-      });
-
-      const initialValue = props.value;
-      editorInstance.onDidChangeModelContent(() => {
-        setModified(editorInstance!.getValue() !== initialValue);
-      });
-
-      // Ctrl+S to save
-      editorInstance.addCommand(
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-        () => {
-          handleSave();
-        }
-      );
-
-      // Force a layout + remeasure after the modal animation completes
-      const forceRemeasure = () => {
-        if (!editorInstance) return;
-        editorInstance.layout();
-        // Trigger font re-measurement
-        editorInstance.updateOptions({ fontFamily });
-      };
-
-      requestAnimationFrame(() => {
-        forceRemeasure();
-        setTimeout(forceRemeasure, 150);
-      });
-
-      onCleanup(() => {
-        editorInstance?.dispose();
-        editorInstance = null;
-      });
-    } catch (e) {
-      setLoadError(String(e));
-    }
-  });
-
   const handleSave = async () => {
-    if (!props.onSave || !editorInstance) return;
+    if (!props.onSave || !editorView) return;
     setSaving(true);
     try {
-      await props.onSave(editorInstance.getValue());
+      await props.onSave(editorView.state.doc.toString());
       setModified(false);
     } finally {
       setSaving(false);
     }
   };
+
+  onMount(() => {
+    try {
+      const initialValue = props.value;
+
+      const saveKeymap = keymap.of([
+        {
+          key: "Mod-s",
+          run: () => {
+            handleSave();
+            return true;
+          },
+        },
+      ]);
+
+      const updateListener = EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          setModified(update.state.doc.toString() !== initialValue);
+        }
+      });
+
+      const extensions = [
+        lineNumbers(),
+        highlightActiveLineGutter(),
+        foldGutter(),
+        drawSelection(),
+        rectangularSelection(),
+        bracketMatching(),
+        highlightActiveLine(),
+        yaml(),
+        tokyoNightTheme,
+        syntaxHighlighting(tokyoNightHighlighting),
+        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        keymap.of([...defaultKeymap, indentWithTab]),
+        saveKeymap,
+        updateListener,
+        EditorView.lineWrapping,
+        EditorState.tabSize.of(2),
+      ];
+
+      if (props.readOnly) {
+        extensions.push(EditorState.readOnly.of(true));
+      }
+
+      const state = EditorState.create({
+        doc: props.value,
+        extensions,
+      });
+
+      editorView = new EditorView({
+        state,
+        parent: containerRef!,
+      });
+
+      onCleanup(() => {
+        editorView?.destroy();
+        editorView = null;
+      });
+    } catch (e) {
+      setLoadError(String(e));
+    }
+  });
 
   return (
     <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>

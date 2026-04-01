@@ -1123,10 +1123,20 @@ impl K8sManager for K3sManager {
     async fn disable(&self) -> anyhow::Result<()> {
         #[cfg(target_os = "windows")]
         {
+            // Smart stop: use systemctl if available, otherwise pkill directly
             let _ = Command::new("wsl")
-                .args(["-u", "root", "--", "systemctl", "stop", "k3s"])
+                .args([
+                    "-u",
+                    "root",
+                    "--",
+                    "sh",
+                    "-c",
+                    "if command -v systemctl >/dev/null 2>&1 && systemctl is-active k3s >/dev/null 2>&1; then systemctl stop k3s; else pkill -f 'k3s server' || true; fi",
+                ])
                 .status()
                 .await;
+
+            // Also run k3s-killall.sh if available
             let _ = Command::new("wsl")
                 .args([
                     "-u",
@@ -1139,7 +1149,7 @@ impl K8sManager for K3sManager {
                 .status()
                 .await;
 
-            // Wait for k3s to fully stop (up to 15 seconds)
+            // Wait for k3s to fully stop with escalating force
             for i in 0..15 {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 let check = Command::new("wsl")
@@ -1154,8 +1164,9 @@ impl K8sManager for K3sManager {
                         return Ok(());
                     }
                     _ => {
-                        if i == 5 {
-                            // Try killall again
+                        if i == 3 {
+                            // Fallback: try k3s-killall.sh again
+                            tracing::info!("k3s still running after 3s, trying k3s-killall.sh");
                             let _ = Command::new("wsl")
                                 .args([
                                     "-u",
@@ -1164,6 +1175,27 @@ impl K8sManager for K3sManager {
                                     "sh",
                                     "-c",
                                     "/usr/local/bin/k3s-killall.sh 2>/dev/null || true",
+                                ])
+                                .status()
+                                .await;
+                        } else if i == 6 {
+                            // Fallback: pkill
+                            tracing::info!("k3s still running after 6s, trying pkill");
+                            let _ = Command::new("wsl")
+                                .args(["-u", "root", "--", "sh", "-c", "pkill -f 'k3s server' || true"])
+                                .status()
+                                .await;
+                        } else if i == 9 {
+                            // Last resort: kill -9
+                            tracing::info!("k3s still running after 9s, trying kill -9");
+                            let _ = Command::new("wsl")
+                                .args([
+                                    "-u",
+                                    "root",
+                                    "--",
+                                    "sh",
+                                    "-c",
+                                    "kill -9 $(pidof k3s) 2>/dev/null || true",
                                 ])
                                 .status()
                                 .await;

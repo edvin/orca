@@ -474,6 +474,7 @@ export default function KubernetesPage() {
 
   const handleStop = async () => {
     setStopping(true);
+    showToast("Stopping Kubernetes cluster...", "info");
     try {
       await invoke("k8s_disable");
       showToast("Kubernetes cluster stopped", "success");
@@ -1072,10 +1073,11 @@ spec:
           <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
             <span style={{
               width: "8px", height: "8px", "border-radius": "50%",
-              background: "#3fb950", "box-shadow": "0 0 6px #3fb95044",
+              background: stopping() ? "#d29922" : "#3fb950",
+              "box-shadow": stopping() ? "0 0 6px #d2992244" : "0 0 6px #3fb95044",
             }} />
             <span style={{ "font-weight": "600", "font-size": "13px" }}>
-              {status()?.version || "Kubernetes"}
+              {stopping() ? "Stopping..." : (status()?.version || "Kubernetes")}
             </span>
           </div>
           <span class="status-bar-separator" />
