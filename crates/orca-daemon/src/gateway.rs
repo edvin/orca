@@ -93,7 +93,7 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
             "caddy".to_string(),
             "run".to_string(),
             "--config".to_string(),
-            "/etc/caddy/caddy.json".to_string(),
+            "/certs/caddy.json".to_string(),
         ],
         entrypoint: None,
         env: HashMap::new(),
@@ -120,7 +120,7 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
         volumes: vec![VolumeMount {
             source: to_docker_mount_path(&certs_dir),
             target: "/certs".to_string(),
-            read_only: true,
+            read_only: false,
         }],
         labels: {
             let mut labels = HashMap::new();
@@ -144,14 +144,12 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
         .await
         .context("Failed to create gateway container")?;
 
-    // Generate the landing page
+    // Generate the landing page and write Caddy config to the mounted volume
+    // (writing to the volume works before the container starts, unlike docker exec)
     let _ = write_landing_page(config);
-
-    // Write the initial Caddy config file into the container
     let caddy_json = build_caddy_config(config);
-    write_caddy_config_to_container(state, &id, &caddy_json)
-        .await
-        .context("Failed to write Caddy config into container")?;
+    let config_path = certs_dir.join("caddy.json");
+    std::fs::write(&config_path, &caddy_json).context("Failed to write Caddy config to certs volume")?;
 
     rt.start_container(&id)
         .await
@@ -162,7 +160,8 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
         .await
         .context("Gateway container started but Caddy admin API is not responding. Check daemon logs")?;
 
-    // Push config via admin API
+    // Push config via admin API (overrides the file-based config with the same content,
+    // but ensures Caddy has loaded it properly)
     push_caddy_config(config)
         .await
         .context("Gateway started but failed to push Caddy configuration")?;

@@ -186,6 +186,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/enable", post(k8s_enable))
         .route("/k8s/enable-stream", get(k8s_enable_ws))
         .route("/k8s/disable", post(k8s_disable))
+        .route("/k8s/start", post(k8s_start))
         .route("/k8s/reset", post(k8s_reset))
         .route("/k8s/kubeconfig", get(k8s_kubeconfig))
         .route("/k8s/namespaces", get(k8s_namespaces))
@@ -2463,6 +2464,7 @@ async fn k8s_status(State(state): State<Arc<AppState>>) -> Result<impl IntoRespo
             Ok(Json(orca_core::kubernetes::ClusterStatus {
                 enabled: false,
                 running: false,
+                installed: false,
                 version: None,
                 node_name: None,
                 node_status: None,
@@ -2526,6 +2528,11 @@ async fn handle_k8s_enable(mut socket: WebSocket, state: Arc<AppState>) {
 
 async fn k8s_disable(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     state.k8s.disable().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_start(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    state.k8s.start().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -6487,9 +6494,21 @@ async fn gateway_update_config(
     Ok(Json(serde_json::json!({ "saved": true })))
 }
 
-async fn gateway_port_check(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+async fn gateway_port_check(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<impl IntoResponse, ApiError> {
     let config = state.config.lock().await;
-    let conflicts = crate::gateway::check_port_availability(config.gateway.http_port, config.gateway.https_port);
+    let http_port = params
+        .get("http_port")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(config.gateway.http_port);
+    let https_port = params
+        .get("https_port")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(config.gateway.https_port);
+    drop(config);
+    let conflicts = crate::gateway::check_port_availability(http_port, https_port);
     Ok(Json(serde_json::json!({ "conflicts": conflicts })))
 }
 

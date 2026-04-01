@@ -1253,6 +1253,16 @@ pub async fn k8s_disable() -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn k8s_start() -> Result<(), String> {
+    post_empty("/k8s/start").await
+}
+
+#[tauri::command]
+pub async fn k8s_reset() -> Result<(), String> {
+    post_empty("/k8s/reset").await
+}
+
+#[tauri::command]
 pub async fn k8s_namespaces() -> Result<serde_json::Value, String> {
     get_json("/k8s/namespaces").await
 }
@@ -3598,8 +3608,10 @@ pub async fn gateway_update_route(
 }
 
 #[tauri::command]
-pub async fn gateway_check_ports() -> Result<serde_json::Value, String> {
-    get_json("/gateway/port-check").await
+pub async fn gateway_check_ports(http_port: Option<u16>, https_port: Option<u16>) -> Result<serde_json::Value, String> {
+    let hp = http_port.unwrap_or(80);
+    let hp2 = https_port.unwrap_or(443);
+    get_json(&format!("/gateway/port-check?http_port={hp}&https_port={hp2}")).await
 }
 
 #[tauri::command]
