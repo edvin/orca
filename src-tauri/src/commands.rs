@@ -3642,3 +3642,20 @@ pub async fn gateway_update_config(
 pub async fn gateway_get_links() -> Result<serde_json::Value, String> {
     get_json("/gateway/links").await
 }
+
+#[tauri::command]
+pub async fn gateway_update_links(links: serde_json::Value) -> Result<(), String> {
+    let base = daemon_url();
+    let resp = client()
+        .put(format!("{base}/gateway/links"))
+        .json(&links)
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}

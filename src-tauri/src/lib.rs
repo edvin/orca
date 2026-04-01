@@ -203,6 +203,7 @@ pub fn run() {
             commands::gateway_get_config,
             commands::gateway_update_config,
             commands::gateway_get_links,
+            commands::gateway_update_links,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

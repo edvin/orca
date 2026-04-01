@@ -303,7 +303,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         )
         .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
         .route("/gateway/port-check", get(gateway_port_check))
-        .route("/gateway/links", get(gateway_get_links))
+        .route("/gateway/links", get(gateway_get_links).put(gateway_update_links))
         // CA
         .route("/ca/certificate", get(ca_certificate))
         .route("/ca/info", get(ca_info))
@@ -6496,6 +6496,18 @@ async fn gateway_port_check(State(state): State<Arc<AppState>>) -> Result<impl I
 async fn gateway_get_links(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let config = state.config.lock().await;
     Ok(Json(serde_json::json!(config.gateway.stack_links)))
+}
+
+async fn gateway_update_links(
+    State(state): State<Arc<AppState>>,
+    Json(links): Json<Vec<orca_core::config::StackLinkGroup>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.lock().await;
+    config.gateway.stack_links = links;
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    Ok(Json(serde_json::json!({ "saved": true })))
 }
 
 // --- CA Certificate ---

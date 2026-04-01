@@ -659,261 +659,9 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
         format!(":{}", config.https_port)
     };
 
-    let mut app_cards = String::new();
-    for route in &enabled_routes {
-        let url = format!("{scheme}://{}.{domain}{port_suffix}", route.hostname);
-        let initial = route.hostname.chars().next().unwrap_or('?').to_uppercase().to_string();
-        let display_name = route
-            .hostname
-            .replace('-', " ")
-            .split_whitespace()
-            .map(|w| {
-                let mut c = w.chars();
-                match c.next() {
-                    None => String::new(),
-                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
+    let accent_colors = ["#58a6ff", "#3fb950", "#a371f7", "#d29922", "#f85149", "#79c0ff"];
 
-        app_cards.push_str(&format!(
-            r#"
-      <a href="{url}" class="app-card">
-        <div class="app-icon">{initial}</div>
-        <div class="app-info">
-          <div class="app-name">{display_name}</div>
-          <div class="app-host">{hostname}.{domain}{port_suffix}</div>
-          <div class="app-target">{container} :{port}</div>
-        </div>
-        <div class="app-arrow">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-      </a>"#,
-            url = url,
-            initial = initial,
-            display_name = display_name,
-            hostname = route.hostname,
-            domain = domain,
-            port_suffix = port_suffix,
-            container = route.container_name,
-            port = route.port,
-        ));
-    }
-
-    let count = enabled_routes.len();
-    let count_label = if count == 1 { "service" } else { "services" };
-
-    format!(
-        r##"<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Orca Gateway</title>
-<style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-    background: #0a0e14;
-    color: #e6edf3;
-    min-height: 100vh;
-    overflow-x: hidden;
-    -webkit-font-smoothing: antialiased;
-  }}
-  .bg {{ position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; pointer-events: none; }}
-  .orb {{
-    position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.5;
-    animation: drift 20s ease-in-out infinite alternate;
-  }}
-  .orb-1 {{
-    width: 600px; height: 600px; top: -15%; left: 30%;
-    background: radial-gradient(circle, rgba(31, 111, 235, 0.2) 0%, transparent 70%);
-  }}
-  .orb-2 {{
-    width: 500px; height: 500px; bottom: -10%; right: 15%;
-    background: radial-gradient(circle, rgba(163, 113, 247, 0.15) 0%, transparent 70%);
-    animation-delay: -7s; animation-direction: alternate-reverse;
-  }}
-  .orb-3 {{
-    width: 400px; height: 400px; top: 40%; left: -5%;
-    background: radial-gradient(circle, rgba(63, 185, 80, 0.12) 0%, transparent 70%);
-    animation-delay: -3s;
-  }}
-  @keyframes drift {{
-    0% {{ transform: translate(0, 0) scale(1); }}
-    100% {{ transform: translate(40px, -30px) scale(1.15); }}
-  }}
-  .container {{
-    position: relative; z-index: 1;
-    max-width: 720px; margin: 0 auto; padding: 60px 24px 40px;
-  }}
-  .header {{
-    text-align: center; margin-bottom: 48px;
-  }}
-  .logo {{
-    width: 64px; height: 64px; margin: 0 auto 20px;
-    background: linear-gradient(135deg, rgba(88, 166, 255, 0.15), rgba(163, 113, 247, 0.15));
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 18px; display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-    animation: float 6s ease-in-out infinite;
-  }}
-  @keyframes float {{
-    0%, 100% {{ transform: translateY(0); }}
-    50% {{ transform: translateY(-6px); }}
-  }}
-  .logo svg {{ width: 32px; height: 32px; }}
-  h1 {{
-    font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px;
-    background: linear-gradient(135deg, #ffffff 0%, #58a6ff 60%, #a371f7 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  }}
-  .subtitle {{ color: #6e7681; font-size: 14px; }}
-  .stats {{
-    display: flex; justify-content: center; gap: 32px; margin-top: 20px;
-  }}
-  .stat {{ text-align: center; }}
-  .stat-value {{ font-size: 20px; font-weight: 700; color: #e6edf3; }}
-  .stat-label {{ font-size: 11px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }}
-  .apps {{ display: flex; flex-direction: column; gap: 8px; }}
-  .app-card {{
-    display: flex; align-items: center; gap: 16px;
-    padding: 16px 20px; border-radius: 14px;
-    background: rgba(22, 27, 34, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    text-decoration: none; color: inherit;
-    transition: all 0.2s ease;
-    backdrop-filter: blur(12px);
-  }}
-  .app-card:hover {{
-    border-color: rgba(88, 166, 255, 0.3);
-    background: rgba(22, 27, 34, 0.8);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(88, 166, 255, 0.1);
-  }}
-  .app-icon {{
-    width: 44px; height: 44px; border-radius: 12px;
-    background: linear-gradient(135deg, rgba(88, 166, 255, 0.12), rgba(163, 113, 247, 0.12));
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; font-weight: 700; color: #58a6ff; flex-shrink: 0;
-    transition: all 0.2s;
-  }}
-  .app-card:hover .app-icon {{
-    background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(163, 113, 247, 0.2));
-    border-color: rgba(88, 166, 255, 0.2);
-    transform: scale(1.05);
-  }}
-  .app-info {{ flex: 1; min-width: 0; }}
-  .app-name {{ font-size: 15px; font-weight: 600; color: #e6edf3; margin-bottom: 2px; }}
-  .app-host {{
-    font-size: 13px; color: #58a6ff; font-family: "SF Mono", "Fira Code", monospace;
-  }}
-  .app-target {{
-    font-size: 11px; color: #484f58; margin-top: 2px;
-    font-family: "SF Mono", "Fira Code", monospace;
-  }}
-  .app-arrow {{
-    color: #30363d; flex-shrink: 0; transition: all 0.2s;
-  }}
-  .app-card:hover .app-arrow {{
-    color: #58a6ff; transform: translateX(3px);
-  }}
-  .empty {{
-    text-align: center; padding: 48px 20px;
-    background: rgba(22, 27, 34, 0.4); border-radius: 14px;
-    border: 1px dashed rgba(255, 255, 255, 0.08);
-  }}
-  .empty-title {{ font-size: 16px; font-weight: 600; margin-bottom: 6px; }}
-  .empty-desc {{ font-size: 13px; color: #6e7681; line-height: 1.6; }}
-  .footer {{
-    text-align: center; margin-top: 48px; padding-top: 24px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-    color: #30363d; font-size: 12px;
-  }}
-  .footer a {{ color: #484f58; text-decoration: none; }}
-  .footer a:hover {{ color: #8b949e; }}
-  .tls-badge {{
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 10px; font-weight: 600; color: #3fb950; text-transform: uppercase;
-    letter-spacing: 0.5px; background: rgba(63, 185, 80, 0.1);
-    padding: 2px 8px; border-radius: 6px; margin-left: 8px;
-    border: 1px solid rgba(63, 185, 80, 0.15);
-  }}
-  @media (max-width: 500px) {{
-    .container {{ padding: 40px 16px 24px; }}
-    h1 {{ font-size: 22px; }}
-    .app-card {{ padding: 12px 14px; gap: 12px; }}
-    .app-icon {{ width: 36px; height: 36px; font-size: 15px; border-radius: 10px; }}
-  }}
-</style>
-</head>
-<body>
-<div class="bg">
-  <div class="orb orb-1"></div>
-  <div class="orb orb-2"></div>
-  <div class="orb orb-3"></div>
-</div>
-<div class="container">
-  <div class="header">
-    <div class="logo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="2" y1="12" x2="22" y2="12"/>
-        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-      </svg>
-    </div>
-    <h1>Orca Gateway</h1>
-    <div class="subtitle">*.{domain}{port_suffix}<span class="tls-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> TLS</span></div>
-    <div class="stats">
-      <div class="stat">
-        <div class="stat-value">{count}</div>
-        <div class="stat-label">{count_label}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-value">{domain}</div>
-        <div class="stat-label">Domain</div>
-      </div>
-    </div>
-  </div>
-  <div class="apps">
-    {app_cards}{empty_state}
-  </div>
-  {env_links_section}
-  <div class="footer">
-    Powered by <a href="https://orca-desktop.com">Orca Desktop</a>
-  </div>
-</div>
-</body>
-</html>"##,
-        domain = domain,
-        port_suffix = port_suffix,
-        count = count,
-        count_label = count_label,
-        app_cards = app_cards,
-        empty_state = if enabled_routes.is_empty() {
-            r#"
-    <div class="empty">
-      <div class="empty-title">No services registered</div>
-      <div class="empty-desc">Deploy an app template or click "Expose via Gateway" on any container in Orca Desktop.</div>
-    </div>"#
-        } else {
-            ""
-        },
-        env_links_section = generate_env_links_html(config, scheme, &port_suffix),
-    )
-}
-
-/// Generate the environment links HTML section for the landing page.
-fn generate_env_links_html(config: &GatewayConfig, scheme: &str, port_suffix: &str) -> String {
-    if config.stack_links.is_empty() {
-        return String::new();
-    }
-
-    let domain = &config.domain;
-
-    // Collect all unique environment names
+    // Collect all unique environment names from stack_links
     let mut env_names = std::collections::BTreeSet::new();
     for group in &config.stack_links {
         for link in &group.links {
@@ -922,18 +670,19 @@ fn generate_env_links_html(config: &GatewayConfig, scheme: &str, port_suffix: &s
             }
         }
     }
-    if env_names.is_empty() {
-        return String::new();
+    // Always include "local" if there are gateway routes
+    if !enabled_routes.is_empty() {
+        env_names.insert("local".to_string());
     }
 
-    // Put "local" first
     let mut ordered_envs: Vec<String> = Vec::new();
     if env_names.remove("local") {
         ordered_envs.push("local".to_string());
     }
     ordered_envs.extend(env_names);
 
-    let default_env = ordered_envs.first().cloned().unwrap_or_default();
+    let default_env = ordered_envs.first().cloned().unwrap_or_else(|| "local".to_string());
+    let has_envs = !ordered_envs.is_empty();
 
     // Build tab buttons
     let mut tab_buttons = String::new();
@@ -941,23 +690,42 @@ fn generate_env_links_html(config: &GatewayConfig, scheme: &str, port_suffix: &s
         let active = if *env == default_env { " active" } else { "" };
         let label = capitalize(env);
         tab_buttons.push_str(&format!(
-            r#"<button class="env-tab{active}" onclick="switchEnvTab('{env}')">{label}</button>"#,
-            active = active,
-            env = env,
-            label = label,
+            r#"<button class="env-tab{active}" data-env="{env}" onclick="switchEnv(this,'{env}')">{label}</button>"#,
         ));
     }
 
-    // Build link groups as divs per environment
-    let mut env_contents = String::new();
+    // Find which gateway routes are referenced in stack_links (for "local" env)
+    let mut referenced_hostnames = std::collections::HashSet::new();
+    for group in &config.stack_links {
+        for link in &group.links {
+            if let Some(raw_url) = link.urls.get("local") {
+                // The local URL might be just a hostname or hostname.domain
+                let hostname = raw_url.split('.').next().unwrap_or(raw_url);
+                referenced_hostnames.insert(hostname.to_string());
+                // Also store the full value in case it's already the hostname
+                referenced_hostnames.insert(raw_url.clone());
+            }
+        }
+    }
+
+    // Build environment-specific content panels
+    let mut env_panels = String::new();
+    let mut color_idx: usize = 0;
+
     for env in &ordered_envs {
         let display = if *env == default_env { "block" } else { "none" };
-        let mut group_html = String::new();
+        let is_local = env == "local";
+        let mut panel_content = String::new();
+        let mut has_content = false;
+
+        // Stack link groups
         for group in &config.stack_links {
-            let mut links_html = String::new();
+            let mut cards_html = String::new();
+            let mut group_has_cards = false;
+
             for link in &group.links {
-                if let Some(raw_url) = link.urls.get(env) {
-                    let url = if env == "local" && !raw_url.contains("://") {
+                let (url_opt, is_placeholder) = if let Some(raw_url) = link.urls.get(env) {
+                    let url = if is_local && !raw_url.contains("://") {
                         let hostname = if raw_url.contains('.') {
                             raw_url.to_string()
                         } else {
@@ -967,74 +735,535 @@ fn generate_env_links_html(config: &GatewayConfig, scheme: &str, port_suffix: &s
                     } else {
                         raw_url.clone()
                     };
-                    links_html.push_str(&format!(
-                        r#"<a href="{url}" class="env-link"><span class="env-link-name">{name}</span><span class="env-link-url">{url}</span></a>"#,
-                        url = url,
-                        name = link.name,
-                    ));
+                    (Some(url), false)
                 } else {
-                    links_html.push_str(&format!(
-                        r#"<div class="env-link env-link-empty"><span class="env-link-name">{name}</span><span class="env-link-url" style="color:#484f58;font-style:italic">--</span></div>"#,
+                    (None, true)
+                };
+
+                let color = accent_colors[color_idx % accent_colors.len()];
+                color_idx += 1;
+
+                let initial = link.name.chars().next().unwrap_or('?').to_uppercase().to_string();
+
+                // Find container info from gateway routes (for local env)
+                let container_info = if is_local {
+                    if let Some(raw_url) = link.urls.get("local") {
+                        let h = raw_url.split('.').next().unwrap_or(raw_url);
+                        enabled_routes
+                            .iter()
+                            .find(|r| r.hostname == h)
+                            .map(|r| format!("{} :{}", r.container_name, r.port))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let display_url = if let Some(ref url) = url_opt {
+                    // Show a shorter version for display
+                    url.replace("https://", "").replace("http://", "")
+                } else {
+                    "Not configured".to_string()
+                };
+
+                if is_placeholder {
+                    cards_html.push_str(&format!(
+                        r##"<div class="card card-disabled">
+                          <div class="card-icon" style="background:linear-gradient(135deg,{color}18,{color}08);color:{color}60">{initial}</div>
+                          <div class="card-body">
+                            <div class="card-name">{name}</div>
+                            <div class="card-url" style="color:#484f58;font-style:italic">{display_url}</div>
+                          </div>
+                        </div>"##,
+                        color = color,
+                        initial = initial,
                         name = link.name,
+                        display_url = display_url,
+                    ));
+                } else if let Some(ref url) = url_opt {
+                    let container_line = if let Some(ref info) = container_info {
+                        format!(r#"<div class="card-target">{info}</div>"#)
+                    } else {
+                        String::new()
+                    };
+                    cards_html.push_str(&format!(
+                        r##"<a href="{url}" target="_blank" rel="noopener" class="card">
+                          <div class="card-icon" style="background:linear-gradient(135deg,{color}22,{color}0a);color:{color}">{initial}</div>
+                          <div class="card-body">
+                            <div class="card-name">{name}</div>
+                            <div class="card-url">{display_url}</div>
+                            {container_line}
+                          </div>
+                          <div class="card-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </a>"##,
+                        url = url,
+                        color = color,
+                        initial = initial,
+                        name = link.name,
+                        display_url = display_url,
+                        container_line = container_line,
                     ));
                 }
+
+                group_has_cards = true;
             }
-            group_html.push_str(&format!(
-                r#"<div class="env-group"><div class="env-group-title">{group_name} <span style="color:#6e7681;font-weight:400;font-size:11px">{stack}</span></div>{links_html}</div>"#,
-                group_name = group.group,
-                stack = group.stack,
-                links_html = links_html,
+
+            if group_has_cards {
+                has_content = true;
+                let stack_label = if group.stack.is_empty() {
+                    String::new()
+                } else {
+                    format!(r#" <span class="group-stack">{}</span>"#, group.stack)
+                };
+                panel_content.push_str(&format!(
+                    r#"<div class="group-section">
+                      <div class="group-header"><span class="group-line"></span><span class="group-name">{group_name}{stack_label}</span><span class="group-line"></span></div>
+                      <div class="card-grid">{cards_html}</div>
+                    </div>"#,
+                    group_name = group.group,
+                    stack_label = stack_label,
+                    cards_html = cards_html,
+                ));
+            }
+        }
+
+        // Ungrouped gateway routes (only shown in "local" env)
+        if is_local {
+            let ungrouped_routes: Vec<_> = enabled_routes
+                .iter()
+                .filter(|r| !referenced_hostnames.contains(&r.hostname))
+                .collect();
+
+            if !ungrouped_routes.is_empty() {
+                has_content = true;
+                let mut cards_html = String::new();
+                for route in &ungrouped_routes {
+                    let url = format!("{scheme}://{}.{domain}{port_suffix}", route.hostname);
+                    let color = accent_colors[color_idx % accent_colors.len()];
+                    color_idx += 1;
+
+                    let initial = route.hostname.chars().next().unwrap_or('?').to_uppercase().to_string();
+                    let display_name = route
+                        .hostname
+                        .replace('-', " ")
+                        .split_whitespace()
+                        .map(|w| {
+                            let mut c = w.chars();
+                            match c.next() {
+                                None => String::new(),
+                                Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let display_url = format!("{}.{domain}{port_suffix}", route.hostname);
+
+                    cards_html.push_str(&format!(
+                        r##"<a href="{url}" target="_blank" rel="noopener" class="card">
+                          <div class="card-icon" style="background:linear-gradient(135deg,{color}22,{color}0a);color:{color}">{initial}</div>
+                          <div class="card-body">
+                            <div class="card-name">{display_name}</div>
+                            <div class="card-url">{display_url}</div>
+                            <div class="card-target">{container} :{port}</div>
+                          </div>
+                          <div class="card-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+                        </a>"##,
+                        url = url,
+                        color = color,
+                        initial = initial,
+                        display_name = display_name,
+                        display_url = display_url,
+                        container = route.container_name,
+                        port = route.port,
+                    ));
+                }
+
+                panel_content.push_str(&format!(
+                    r#"<div class="group-section">
+                      <div class="group-header"><span class="group-line"></span><span class="group-name">Services</span><span class="group-line"></span></div>
+                      <div class="card-grid">{cards_html}</div>
+                    </div>"#,
+                    cards_html = cards_html,
+                ));
+            }
+        }
+
+        // Empty state for this environment
+        if !has_content {
+            let env_label = capitalize(env);
+            panel_content.push_str(&format!(
+                r##"<div class="empty-state">
+                  <div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#30363d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+                  <div class="empty-title">No {env_label} links configured</div>
+                  <div class="empty-desc">Add them to your <code>orca.yaml</code> stack links.</div>
+                </div>"##,
+                env_label = env_label,
             ));
         }
-        env_contents.push_str(&format!(
-            r#"<div class="env-panel" id="env-{env}" style="display:{display}">{group_html}</div>"#,
+
+        env_panels.push_str(&format!(
+            r#"<div class="env-panel" data-env="{env}" style="display:{display}">{panel_content}</div>"#,
             env = env,
             display = display,
-            group_html = group_html,
+            panel_content = panel_content,
         ));
     }
 
+    // If there are no envs at all, show a simple empty state with gateway routes
+    let main_content = if !has_envs && enabled_routes.is_empty() {
+        r##"<div class="empty-state">
+          <div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#30363d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+          <div class="empty-title">No services registered</div>
+          <div class="empty-desc">Deploy an app template or click &ldquo;Expose via Gateway&rdquo; on any container.</div>
+        </div>"##
+            .to_string()
+    } else if !has_envs {
+        // Only gateway routes, no stack_links — build a simple card grid
+        let mut cards_html = String::new();
+        for (i, route) in enabled_routes.iter().enumerate() {
+            let url = format!("{scheme}://{}.{domain}{port_suffix}", route.hostname);
+            let color = accent_colors[i % accent_colors.len()];
+            let initial = route.hostname.chars().next().unwrap_or('?').to_uppercase().to_string();
+            let display_name = route
+                .hostname
+                .replace('-', " ")
+                .split_whitespace()
+                .map(|w| {
+                    let mut c = w.chars();
+                    match c.next() {
+                        None => String::new(),
+                        Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            let display_url = format!("{}.{domain}{port_suffix}", route.hostname);
+
+            cards_html.push_str(&format!(
+                r##"<a href="{url}" target="_blank" rel="noopener" class="card">
+                  <div class="card-icon" style="background:linear-gradient(135deg,{color}22,{color}0a);color:{color}">{initial}</div>
+                  <div class="card-body">
+                    <div class="card-name">{display_name}</div>
+                    <div class="card-url">{display_url}</div>
+                    <div class="card-target">{container} :{port}</div>
+                  </div>
+                  <div class="card-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+                </a>"##,
+                url = url,
+                color = color,
+                initial = initial,
+                display_name = display_name,
+                display_url = display_url,
+                container = route.container_name,
+                port = route.port,
+            ));
+        }
+        format!(
+            r#"<div class="group-section">
+              <div class="group-header"><span class="group-line"></span><span class="group-name">Services</span><span class="group-line"></span></div>
+              <div class="card-grid">{cards_html}</div>
+            </div>"#,
+            cards_html = cards_html,
+        )
+    } else {
+        format!(
+            r#"{tab_bar}{env_panels}"#,
+            tab_bar = if ordered_envs.len() > 1 {
+                format!(
+                    r#"<div class="env-tabs">{tab_buttons}</div>"#,
+                    tab_buttons = tab_buttons
+                )
+            } else {
+                String::new()
+            },
+            env_panels = env_panels,
+        )
+    };
+
+    let count = enabled_routes.len();
+    let count_label = if count == 1 { "route" } else { "routes" };
+
     format!(
-        r##"
-  <div class="env-links-section" style="margin-top:32px">
-    <h2 style="font-size:16px;font-weight:600;color:#e6edf3;margin:0 0 12px 0">Environment Links</h2>
-    <div class="env-tabs">{tab_buttons}</div>
-    {env_contents}
+        r##"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orca Gateway</title>
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box}}
+  body{{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:#0a0e14;color:#e6edf3;min-height:100vh;overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  }}
+
+  /* --- Animated background orbs --- */
+  .bg{{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}}
+  .orb{{position:absolute;border-radius:50%;filter:blur(100px);opacity:.45;will-change:transform}}
+  .orb-1{{
+    width:700px;height:700px;top:-18%;left:25%;
+    background:radial-gradient(circle,rgba(31,111,235,.22) 0%,transparent 70%);
+    animation:drift1 22s ease-in-out infinite alternate;
+  }}
+  .orb-2{{
+    width:550px;height:550px;bottom:-12%;right:10%;
+    background:radial-gradient(circle,rgba(163,113,247,.18) 0%,transparent 70%);
+    animation:drift2 26s ease-in-out infinite alternate;
+  }}
+  .orb-3{{
+    width:450px;height:450px;top:45%;left:-8%;
+    background:radial-gradient(circle,rgba(63,185,80,.14) 0%,transparent 70%);
+    animation:drift3 20s ease-in-out infinite alternate;
+  }}
+  .orb-4{{
+    width:350px;height:350px;top:10%;right:-5%;
+    background:radial-gradient(circle,rgba(210,153,34,.10) 0%,transparent 70%);
+    animation:drift4 24s ease-in-out infinite alternate;
+  }}
+  @keyframes drift1{{0%{{transform:translate(0,0) scale(1)}}100%{{transform:translate(50px,-40px) scale(1.15)}}}}
+  @keyframes drift2{{0%{{transform:translate(0,0) scale(1)}}100%{{transform:translate(-40px,35px) scale(1.1)}}}}
+  @keyframes drift3{{0%{{transform:translate(0,0) scale(1)}}100%{{transform:translate(30px,-25px) scale(1.2)}}}}
+  @keyframes drift4{{0%{{transform:translate(0,0) scale(1)}}100%{{transform:translate(-20px,30px) scale(1.12)}}}}
+
+  /* --- Layout --- */
+  .shell{{position:relative;z-index:1;max-width:880px;margin:0 auto;padding:56px 28px 48px}}
+
+  /* --- Header --- */
+  .hdr{{text-align:center;margin-bottom:44px}}
+  .logo{{
+    width:68px;height:68px;margin:0 auto 22px;
+    background:linear-gradient(135deg,rgba(88,166,255,.12),rgba(163,113,247,.12));
+    border:1px solid rgba(255,255,255,.07);border-radius:20px;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 8px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04);
+    animation:float 6s ease-in-out infinite;
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  }}
+  @keyframes float{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-7px)}}}}
+  .logo svg{{width:34px;height:34px;opacity:.9}}
+  h1{{
+    font-size:30px;font-weight:800;letter-spacing:-.6px;margin-bottom:10px;
+    background:linear-gradient(135deg,#fff 0%,#58a6ff 50%,#a371f7 100%);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  }}
+  .sub{{color:#6e7681;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}}
+  .tls-badge{{
+    display:inline-flex;align-items:center;gap:3px;
+    font-size:10px;font-weight:700;color:#3fb950;text-transform:uppercase;letter-spacing:.6px;
+    background:rgba(63,185,80,.08);padding:3px 8px;border-radius:6px;
+    border:1px solid rgba(63,185,80,.12);
+  }}
+
+  /* --- Stats bar --- */
+  .stats{{
+    display:flex;justify-content:center;gap:6px;margin-top:22px;flex-wrap:wrap;
+  }}
+  .stat{{
+    background:rgba(22,27,34,.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid rgba(255,255,255,.05);border-radius:10px;
+    padding:10px 20px;text-align:center;min-width:100px;
+    transition:border-color .2s;
+  }}
+  .stat:hover{{border-color:rgba(88,166,255,.15)}}
+  .stat-v{{font-size:18px;font-weight:700;color:#e6edf3}}
+  .stat-l{{font-size:10px;color:#484f58;text-transform:uppercase;letter-spacing:.6px;margin-top:3px}}
+
+  /* --- Environment tabs --- */
+  .env-tabs{{
+    display:flex;gap:4px;margin-bottom:20px;padding:3px;
+    background:rgba(22,27,34,.4);border-radius:12px;border:1px solid rgba(255,255,255,.04);
+    width:fit-content;
+  }}
+  .env-tab{{
+    background:transparent;border:1px solid transparent;border-radius:9px;
+    padding:7px 18px;color:#8b949e;cursor:pointer;
+    font-size:13px;font-weight:600;text-transform:capitalize;
+    transition:all .2s;font-family:inherit;
+  }}
+  .env-tab:hover{{color:#e6edf3}}
+  .env-tab.active{{
+    background:rgba(88,166,255,.12);color:#58a6ff;
+    border-color:rgba(88,166,255,.2);box-shadow:0 2px 8px rgba(88,166,255,.08);
+  }}
+
+  /* --- Group sections --- */
+  .group-section{{margin-bottom:28px}}
+  .group-header{{
+    display:flex;align-items:center;gap:12px;margin-bottom:14px;
+  }}
+  .group-line{{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent)}}
+  .group-name{{
+    font-size:11px;font-weight:700;color:#484f58;text-transform:uppercase;
+    letter-spacing:1px;white-space:nowrap;
+  }}
+  .group-stack{{
+    font-weight:400;color:#30363d;font-size:10px;letter-spacing:.5px;
+  }}
+
+  /* --- Card grid --- */
+  .card-grid{{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;
+  }}
+
+  /* --- Cards --- */
+  .card{{
+    display:flex;align-items:center;gap:14px;
+    padding:16px 18px;border-radius:14px;
+    background:rgba(22,27,34,.55);
+    border:1px solid rgba(255,255,255,.05);
+    text-decoration:none;color:inherit;
+    transition:transform .2s,box-shadow .2s,border-color .2s,background .2s;
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    position:relative;overflow:hidden;
+  }}
+  a.card:hover{{
+    border-color:rgba(88,166,255,.25);
+    background:rgba(22,27,34,.75);
+    transform:translateY(-3px);
+    box-shadow:0 12px 40px rgba(0,0,0,.35),0 0 0 1px rgba(88,166,255,.08);
+  }}
+  .card::after{{
+    content:'';position:absolute;inset:0;border-radius:14px;opacity:0;
+    background:linear-gradient(135deg,rgba(88,166,255,.04),transparent 60%);
+    transition:opacity .2s;pointer-events:none;
+  }}
+  a.card:hover::after{{opacity:1}}
+  .card-disabled{{opacity:.5;cursor:default}}
+
+  .card-icon{{
+    width:46px;height:46px;border-radius:13px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:19px;font-weight:800;
+    border:1px solid rgba(255,255,255,.04);
+    transition:transform .2s,border-color .2s;
+  }}
+  a.card:hover .card-icon{{transform:scale(1.08);border-color:rgba(255,255,255,.08)}}
+
+  .card-body{{flex:1;min-width:0}}
+  .card-name{{font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:3px}}
+  .card-url{{
+    font-size:12px;color:#58a6ff;
+    font-family:"SF Mono","Fira Code","Cascadia Code",monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }}
+  .card-target{{
+    font-size:10px;color:#3d4450;margin-top:3px;
+    font-family:"SF Mono","Fira Code","Cascadia Code",monospace;
+  }}
+  .card-arrow{{
+    color:#21262d;flex-shrink:0;transition:all .2s;
+  }}
+  a.card:hover .card-arrow{{color:#58a6ff;transform:translateX(3px)}}
+
+  /* --- Empty state --- */
+  .empty-state{{
+    text-align:center;padding:56px 24px;
+    background:rgba(22,27,34,.35);border-radius:16px;
+    border:1px dashed rgba(255,255,255,.06);
+  }}
+  .empty-icon{{margin-bottom:14px;opacity:.6}}
+  .empty-title{{font-size:15px;font-weight:600;margin-bottom:6px;color:#8b949e}}
+  .empty-desc{{font-size:13px;color:#484f58;line-height:1.6}}
+  .empty-desc code{{
+    background:rgba(88,166,255,.08);color:#58a6ff;padding:2px 6px;
+    border-radius:4px;font-size:12px;font-family:"SF Mono","Fira Code",monospace;
+  }}
+
+  /* --- Footer --- */
+  .ftr{{
+    text-align:center;margin-top:52px;padding-top:28px;
+    border-top:1px solid rgba(255,255,255,.03);
+    color:#21262d;font-size:12px;
+  }}
+  .ftr a{{color:#30363d;text-decoration:none;transition:color .2s}}
+  .ftr a:hover{{color:#8b949e}}
+
+  /* --- Transitions for env switching --- */
+  .env-panel{{transition:opacity .2s ease}}
+
+  /* --- Responsive --- */
+  @media(max-width:640px){{
+    .shell{{padding:36px 16px 28px}}
+    h1{{font-size:24px}}
+    .card-grid{{grid-template-columns:1fr}}
+    .card{{padding:14px 14px;gap:12px}}
+    .card-icon{{width:40px;height:40px;font-size:16px;border-radius:11px}}
+    .stats{{gap:4px}}
+    .stat{{padding:8px 14px;min-width:80px}}
+    .stat-v{{font-size:16px}}
+    .env-tabs{{flex-wrap:wrap}}
+  }}
+  @media(min-width:641px) and (max-width:900px){{
+    .card-grid{{grid-template-columns:repeat(2,1fr)}}
+  }}
+</style>
+</head>
+<body>
+<div class="bg">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="orb orb-4"></div>
+</div>
+<div class="shell">
+  <div class="hdr">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    </div>
+    <h1>Orca Gateway</h1>
+    <div class="sub">
+      <span>*.{domain}{port_suffix}</span>
+      <span class="tls-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>TLS</span>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-v">{count}</div>
+        <div class="stat-l">{count_label}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-v">{domain}</div>
+        <div class="stat-l">Domain</div>
+      </div>
+    </div>
   </div>
-  <style>
-    .env-tabs {{ display:flex; gap:4px; margin-bottom:12px; }}
-    .env-tab {{
-      background:rgba(22,27,34,0.6); border:1px solid rgba(255,255,255,0.06);
-      border-radius:8px; padding:6px 14px; color:#8b949e; cursor:pointer;
-      font-size:13px; font-weight:500; text-transform:capitalize;
-      transition: all 0.15s;
-    }}
-    .env-tab:hover {{ border-color:rgba(88,166,255,0.3); color:#e6edf3; }}
-    .env-tab.active {{ background:#1f6feb; color:#fff; border-color:#1f6feb; }}
-    .env-group {{ margin-bottom:8px; background:rgba(22,27,34,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:14px; overflow:hidden; }}
-    .env-group-title {{ padding:12px 16px; font-size:13px; font-weight:600; color:#e6edf3; border-bottom:1px solid rgba(255,255,255,0.06); }}
-    .env-link {{
-      display:flex; align-items:center; padding:10px 16px; gap:12px;
-      text-decoration:none; color:inherit; border-bottom:1px solid rgba(255,255,255,0.04);
-      transition: background 0.15s;
-    }}
-    a.env-link:hover {{ background:rgba(88,166,255,0.06); }}
-    .env-link-name {{ flex:1; font-size:13px; color:#c9d1d9; }}
-    .env-link-url {{ font-size:12px; color:#58a6ff; font-family:"SF Mono","Fira Code",monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px; }}
-    .env-link-empty {{ cursor:default; }}
-  </style>
-  <script>
-    function switchEnvTab(env) {{
-      document.querySelectorAll('.env-tab').forEach(function(t) {{ t.classList.remove('active'); }});
-      document.querySelectorAll('.env-panel').forEach(function(p) {{ p.style.display='none'; }});
-      event.target.classList.add('active');
-      var panel = document.getElementById('env-' + env);
-      if (panel) panel.style.display='block';
-    }}
-  </script>"##,
-        tab_buttons = tab_buttons,
-        env_contents = env_contents,
+  {main_content}
+  <div class="ftr">
+    Powered by <a href="https://orca-desktop.com">Orca Desktop</a>
+  </div>
+</div>
+<script>
+function switchEnv(btn,env){{
+  document.querySelectorAll('.env-tab').forEach(function(t){{t.classList.remove('active')}});
+  btn.classList.add('active');
+  document.querySelectorAll('.env-panel').forEach(function(p){{
+    if(p.getAttribute('data-env')===env){{p.style.display='block';p.style.opacity='0';setTimeout(function(){{p.style.opacity='1'}},10)}}
+    else{{p.style.display='none'}}
+  }});
+}}
+</script>
+</body>
+</html>"##,
+        domain = domain,
+        port_suffix = port_suffix,
+        count = count,
+        count_label = count_label,
+        main_content = main_content,
     )
+}
+
+/// Generate the environment links HTML section for the landing page.
+/// Kept for API compatibility — now integrated into generate_landing_page.
+#[allow(dead_code)]
+fn generate_env_links_html(_config: &GatewayConfig, _scheme: &str, _port_suffix: &str) -> String {
+    // Environment links are now integrated directly into generate_landing_page.
+    // This function is retained so callers outside this module don't break.
+    String::new()
 }
 
 /// Capitalize the first letter of a string.
