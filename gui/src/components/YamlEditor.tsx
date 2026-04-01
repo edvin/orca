@@ -108,14 +108,30 @@ export default function YamlEditor(props: YamlEditorProps) {
   const [modified, setModified] = createSignal(false);
   const [loadError, setLoadError] = createSignal<string | null>(null);
 
-  onMount(() => {
+  onMount(async () => {
     try {
+      // Wait for the custom font to load before creating the editor.
+      // Monaco measures character widths on creation — if the font isn't
+      // loaded yet, it uses system font metrics, causing jumbled text,
+      // wrong line heights, and scroll jumping.
+      try {
+        await document.fonts.load("13px 'JetBrains Mono NF'");
+      } catch {
+        // Font load failed or timed out — fall back to system monospace
+      }
+
       registerYaml();
 
       if (!themeRegistered) {
         monaco.editor.defineTheme("tokyo-night", TOKYO_NIGHT);
         themeRegistered = true;
       }
+
+      // Use the font only if it actually loaded, otherwise fall back to system mono
+      const fontLoaded = document.fonts.check("13px 'JetBrains Mono NF'");
+      const fontFamily = fontLoaded
+        ? "'JetBrains Mono NF', monospace"
+        : "'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', monospace";
 
       editorInstance = monaco.editor.create(containerRef!, {
         value: props.value,
@@ -124,14 +140,15 @@ export default function YamlEditor(props: YamlEditorProps) {
         readOnly: props.readOnly ?? false,
         minimap: { enabled: false },
         fontSize: 13,
-        fontFamily: "'JetBrains Mono NF', 'JetBrains Mono', monospace",
+        fontFamily,
+        fontLigatures: false,
         lineNumbers: "on",
         lineNumbersMinChars: 3,
         glyphMargin: false,
         folding: true,
         scrollBeyondLastLine: false,
         wordWrap: "on",
-        automaticLayout: false,
+        automaticLayout: true,
         tabSize: 2,
         renderLineHighlight: props.readOnly ? "none" : "line",
         overviewRulerLanes: 0,
@@ -139,14 +156,16 @@ export default function YamlEditor(props: YamlEditorProps) {
         hideCursorInOverviewRuler: true,
         dragAndDrop: false,
         contextmenu: false,
-        // Disable sticky scroll — causes rendering artifacts in modal dialogs
         stickyScroll: { enabled: false },
         scrollbar: {
           verticalScrollbarSize: 8,
           horizontalScrollbarSize: 8,
+          useShadows: false,
         },
         padding: { top: 8, bottom: 8 },
         bracketPairColorization: { enabled: true },
+        // Fixes scroll jumping — ensure Monaco uses consistent line height
+        lineHeight: 20,
       });
 
       const initialValue = props.value;
@@ -162,42 +181,20 @@ export default function YamlEditor(props: YamlEditorProps) {
         }
       );
 
-      // Manual layout — avoids the rendering artifacts from automaticLayout
-      // in modal dialogs. We do an initial layout after the modal animation,
-      // then observe container size changes.
-      const doLayout = () => {
-        if (editorInstance && containerRef) {
-          editorInstance.layout({
-            width: containerRef.clientWidth,
-            height: containerRef.clientHeight,
-          });
-        }
-      };
-
-      // Force Monaco to re-measure all text by clearing and re-setting the value.
-      // This fixes jumbled/overlapping text when the editor opens inside a modal
-      // whose container dimensions aren't yet final at creation time.
+      // Force a layout + remeasure after the modal animation completes
       const forceRemeasure = () => {
         if (!editorInstance) return;
-        doLayout();
-        const currentValue = editorInstance.getValue();
-        editorInstance.setValue("");
-        editorInstance.setValue(currentValue);
+        editorInstance.layout();
+        // Trigger font re-measurement
+        editorInstance.updateOptions({ fontFamily });
       };
 
-      // Initial layout: immediate + staggered timers to cover modal animations
       requestAnimationFrame(() => {
         forceRemeasure();
-        // Cover CSS transitions / modal animation completion
-        setTimeout(forceRemeasure, 100);
-        setTimeout(forceRemeasure, 300);
+        setTimeout(forceRemeasure, 150);
       });
 
-      const resizeObserver = new ResizeObserver(doLayout);
-      if (containerRef) resizeObserver.observe(containerRef);
-
       onCleanup(() => {
-        resizeObserver.disconnect();
         editorInstance?.dispose();
         editorInstance = null;
       });
