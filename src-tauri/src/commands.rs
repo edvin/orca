@@ -215,6 +215,22 @@ async fn delete(path: &str) -> Result<(), String> {
     }
 }
 
+async fn get_text(path: &str) -> Result<String, String> {
+    let base = daemon_url();
+    let resp = client()
+        .get(format!("{base}{path}"))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
+    }
+
+    resp.text().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
 // --- Status ---
 
 #[tauri::command]
@@ -861,6 +877,85 @@ pub async fn build_image(
         "success": !has_error,
         "logs": logs,
     }))
+}
+
+// --- Builds ---
+
+#[tauri::command]
+pub async fn list_builds() -> Result<serde_json::Value, String> {
+    get_json("/builds").await
+}
+
+#[tauri::command]
+pub async fn get_build(id: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/builds/{id}")).await
+}
+
+#[tauri::command]
+pub async fn get_build_logs(id: String) -> Result<String, String> {
+    get_text(&format!("/builds/{id}/logs")).await
+}
+
+#[tauri::command]
+pub async fn delete_build(id: String) -> Result<(), String> {
+    delete(&format!("/builds/{id}")).await
+}
+
+#[tauri::command]
+pub async fn get_build_stats() -> Result<serde_json::Value, String> {
+    get_json("/builds/stats").await
+}
+
+#[tauri::command]
+pub async fn build_from_url(source_url: String, tag: Option<String>) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .post(format!("{base}/builds/from-url"))
+        .json(&serde_json::json!({
+            "source_url": source_url,
+            "tag": tag,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Build from URL failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
+    }
+
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
+#[tauri::command]
+pub async fn compare_builds(id1: String, id2: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let body = serde_json::json!({ "id1": id1, "id2": id2 });
+    let resp = client()
+        .post(format!("{base}/builds/compare"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(body);
+    }
+
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
+// --- Build Targets ---
+
+#[tauri::command]
+pub async fn list_build_targets() -> Result<serde_json::Value, String> {
+    get_json("/builds/targets").await
+}
+
+#[tauri::command]
+pub async fn start_build_target(name: String) -> Result<serde_json::Value, String> {
+    post_json(&format!("/builds/targets/{name}")).await
 }
 
 // --- Volumes ---
@@ -3444,6 +3539,7 @@ pub async fn save_schedule(
     action: String,
     cron: String,
     enabled: Option<bool>,
+    build_target: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     let body = serde_json::json!({
@@ -3453,6 +3549,7 @@ pub async fn save_schedule(
         "action": action,
         "cron": cron,
         "enabled": enabled.unwrap_or(true),
+        "build_target": build_target,
     });
     let resp = client()
         .post(format!("{base}/schedules"))

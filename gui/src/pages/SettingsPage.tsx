@@ -191,25 +191,31 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   const [schedAction, setSchedAction] = createSignal("restart");
   const [schedCron, setSchedCron] = createSignal("");
   const [schedEnabled, setSchedEnabled] = createSignal(true);
+  const [schedBuildTarget, setSchedBuildTarget] = createSignal("");
+  const [schedBuildTargets, setSchedBuildTargets] = createSignal<any[]>([]);
 
   const refreshSchedules = async () => {
     try { setSchedules((await invoke("list_schedules")) as any[]); } catch {}
+    try { setSchedBuildTargets((await invoke("list_build_targets")) as any[]); } catch {}
   };
 
   const resetSchedForm = () => {
-    setEditingSchedule(null); setSchedName(""); setSchedContainer(""); setSchedAction("restart"); setSchedCron(""); setSchedEnabled(true);
+    setEditingSchedule(null); setSchedName(""); setSchedContainer(""); setSchedAction("restart"); setSchedCron(""); setSchedEnabled(true); setSchedBuildTarget("");
   };
 
   const saveSchedRule = async () => {
-    if (!schedName().trim() || !schedContainer().trim() || !schedCron().trim()) return;
+    if (!schedName().trim() || !schedCron().trim()) return;
+    if (schedAction() === "build" && !schedBuildTarget().trim()) return;
+    if (schedAction() !== "build" && !schedContainer().trim()) return;
     try {
       await invoke("save_schedule", {
         id: editingSchedule()?.id || null,
         name: schedName().trim(),
-        container: schedContainer().trim(),
+        container: schedAction() === "build" ? schedBuildTarget().trim() : schedContainer().trim(),
         action: schedAction(),
         cron: schedCron().trim(),
         enabled: schedEnabled(),
+        buildTarget: schedAction() === "build" ? schedBuildTarget().trim() : null,
       });
       showToast(editingSchedule() ? "Schedule updated" : "Schedule created", "success");
       setShowAddSchedule(false);
@@ -1920,12 +1926,12 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     {(sched) => (
                       <tr>
                         <td style={{ "font-weight": 500 }}>{sched.name}</td>
-                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{sched.container}</td>
+                        <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{sched.action === "build" ? (sched.build_target || sched.container) : sched.container}</td>
                         <td>
                           <span style={{
                             "font-size": "11px", padding: "2px 6px", "border-radius": "4px",
-                            background: sched.action === "restart" ? "rgba(210, 169, 34, 0.1)" : sched.action === "stop" ? "rgba(248, 81, 73, 0.1)" : "rgba(63, 185, 80, 0.1)",
-                            color: sched.action === "restart" ? "#d29922" : sched.action === "stop" ? "#f85149" : "#3fb950",
+                            background: sched.action === "restart" ? "rgba(210, 169, 34, 0.1)" : sched.action === "stop" ? "rgba(248, 81, 73, 0.1)" : sched.action === "build" ? "rgba(88, 166, 255, 0.1)" : "rgba(63, 185, 80, 0.1)",
+                            color: sched.action === "restart" ? "#d29922" : sched.action === "stop" ? "#f85149" : sched.action === "build" ? "#58a6ff" : "#3fb950",
                           }}>{sched.action}</span>
                         </td>
                         <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{sched.cron}</td>
@@ -1941,6 +1947,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                             <button class="btn btn-sm" onClick={() => {
                               setEditingSchedule(sched); setSchedName(sched.name); setSchedContainer(sched.container);
                               setSchedAction(sched.action); setSchedCron(sched.cron); setSchedEnabled(sched.enabled);
+                              setSchedBuildTarget(sched.build_target || "");
                               setShowAddSchedule(true);
                             }} title="Edit">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
@@ -1978,19 +1985,41 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       <input class="form-input" type="text" placeholder="Nightly restart" value={schedName()} onInput={(e) => setSchedName(e.currentTarget.value)} />
                     </div>
                     <div class="form-group" style={{ flex: 1 }}>
-                      <label class="form-label">Container</label>
-                      <input class="form-input" type="text" placeholder="Container name or ID" value={schedContainer()} onInput={(e) => setSchedContainer(e.currentTarget.value)} />
-                    </div>
-                  </div>
-                  <div class="form-row">
-                    <div class="form-group" style={{ flex: 1 }}>
                       <label class="form-label">Action</label>
                       <Dropdown value={schedAction()} options={[
                         { value: "restart", label: "Restart" },
                         { value: "stop", label: "Stop" },
                         { value: "start", label: "Start" },
+                        { value: "build", label: "Build" },
                       ]} onChange={(v) => setSchedAction(v)} />
                     </div>
+                  </div>
+                  <Show when={schedAction() !== "build"}>
+                    <div class="form-row">
+                      <div class="form-group" style={{ flex: 1 }}>
+                        <label class="form-label">Container</label>
+                        <input class="form-input" type="text" placeholder="Container name or ID" value={schedContainer()} onInput={(e) => setSchedContainer(e.currentTarget.value)} />
+                      </div>
+                    </div>
+                  </Show>
+                  <Show when={schedAction() === "build"}>
+                    <div class="form-row">
+                      <div class="form-group" style={{ flex: 1 }}>
+                        <label class="form-label">Build Target</label>
+                        <Show when={schedBuildTargets().length > 0} fallback={
+                          <input class="form-input" type="text" placeholder="Build target name from orca.yaml" value={schedBuildTarget()} onInput={(e) => setSchedBuildTarget(e.currentTarget.value)} />
+                        }>
+                          <Dropdown
+                            value={schedBuildTarget()}
+                            options={schedBuildTargets().map((t: any) => ({ value: t.name, label: `${t.name} (${t.tag})` }))}
+                            onChange={(v) => setSchedBuildTarget(v)}
+                          />
+                        </Show>
+                        <span class="form-hint">Select a build target defined in orca.yaml</span>
+                      </div>
+                    </div>
+                  </Show>
+                  <div class="form-row">
                     <div class="form-group" style={{ flex: 2 }}>
                       <label class="form-label">Cron Expression</label>
                       <input class="form-input mono" type="text" placeholder="0 3 * * 0" value={schedCron()} onInput={(e) => setSchedCron(e.currentTarget.value)} />
@@ -2010,7 +2039,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     </label>
                   </div>
                   <div style={{ display: "flex", gap: "8px" }}>
-                    <button class="btn btn-primary" onClick={saveSchedRule} disabled={!schedName().trim() || !schedContainer().trim() || !schedCron().trim()}>
+                    <button class="btn btn-primary" onClick={saveSchedRule} disabled={!schedName().trim() || !schedCron().trim() || (schedAction() === "build" ? !schedBuildTarget().trim() : !schedContainer().trim())}>
                       {editingSchedule() ? "Update" : "Save"}
                     </button>
                     <button class="btn" onClick={() => { setShowAddSchedule(false); resetSchedForm(); }}>Cancel</button>

@@ -11,6 +11,7 @@ use tracing_subscriber::EnvFilter;
 
 mod agent;
 mod api;
+mod build_manager;
 mod gateway;
 mod state;
 
@@ -559,24 +560,163 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                 schedule.container
             );
 
-            use orca_core::runtime::ContainerRuntime;
-            let rt = state.rt().await;
-            let result = match schedule.action.as_str() {
-                "start" => rt.as_ref().start_container(&schedule.container).await,
-                "stop" => rt.as_ref().stop_container(&schedule.container, 10).await,
-                "restart" => {
-                    let _ = rt.as_ref().stop_container(&schedule.container, 10).await;
-                    rt.as_ref().start_container(&schedule.container).await
+            if schedule.action == "build" {
+                // Handle build action: trigger a build target from orca.yaml
+                if let Some(ref target_name) = schedule.build_target {
+                    tracing::info!(
+                        "Scheduler: triggering build target '{target_name}' for '{}'",
+                        schedule.name
+                    );
+                    // Scan stack directories for build targets
+                    let base = dirs::config_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("."))
+                        .join("orca")
+                        .join("stacks");
+                    let mut found = None;
+                    if let Ok(entries) = std::fs::read_dir(&base) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.is_dir() {
+                                let yaml_path = path.join("orca.yaml");
+                                if yaml_path.exists()
+                                    && let Ok(content) = std::fs::read_to_string(&yaml_path)
+                                    && let Ok(yaml) = serde_yaml::from_str::<serde_yaml::Value>(&content)
+                                    && let Some(builds) = yaml.get("builds").and_then(|v| v.as_sequence())
+                                {
+                                    for item in builds {
+                                        if item.get("name").and_then(|v| v.as_str()) == Some(target_name) {
+                                            let ctx = item.get("context").and_then(|v| v.as_str()).unwrap_or(".");
+                                            let tag = item.get("tag").and_then(|v| v.as_str()).unwrap_or("");
+                                            let dockerfile =
+                                                item.get("dockerfile").and_then(|v| v.as_str()).unwrap_or("Dockerfile");
+                                            let mut args = std::collections::HashMap::new();
+                                            if let Some(args_map) = item.get("args").and_then(|v| v.as_mapping()) {
+                                                for (k, v) in args_map {
+                                                    if let (Some(key), Some(val)) = (k.as_str(), v.as_str()) {
+                                                        args.insert(key.to_string(), val.to_string());
+                                                    }
+                                                }
+                                            }
+                                            let context_path = if ctx.starts_with('/') {
+                                                std::path::PathBuf::from(ctx)
+                                            } else {
+                                                path.join(ctx)
+                                            };
+                                            found = Some((
+                                                context_path.to_string_lossy().to_string(),
+                                                tag.to_string(),
+                                                dockerfile.to_string(),
+                                                args,
+                                            ));
+                                            break;
+                                        }
+                                    }
+                                }
+                                if found.is_some() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if let Some((context_path, tag, dockerfile, args)) = found {
+                        let record = crate::build_manager::start_build(
+                            &tag,
+                            &context_path,
+                            &dockerfile,
+                            args,
+                            orca_core::build::BuildSource::Scheduled,
+                        );
+                        let build_id = record.id.clone();
+                        let rt = state.rt().await;
+                        let events_tx = state.events_tx.clone();
+                        tokio::spawn(async move {
+                            use orca_core::image::ImageManager;
+                            match ImageManager::build(
+                                rt.as_ref(),
+                                &context_path,
+                                Some(dockerfile.as_str()),
+                                Some(tag.as_str()),
+                                Some(std::collections::HashMap::new()),
+                            )
+                            .await
+                            {
+                                Ok(mut rx) => {
+                                    let mut had_error = false;
+                                    let mut error_msg: Option<String> = None;
+                                    let mut image_id: Option<String> = None;
+                                    while let Some(progress) = rx.recv().await {
+                                        let line = progress.stream.trim_end();
+                                        if !line.is_empty() {
+                                            crate::build_manager::append_log(&build_id, line);
+                                        }
+                                        if let Some(ref err) = progress.error {
+                                            had_error = true;
+                                            error_msg = Some(err.clone());
+                                        }
+                                        if let Some(id) = progress.stream.trim().strip_prefix("Successfully built ") {
+                                            image_id = Some(id.trim().to_string());
+                                        }
+                                    }
+                                    let status = if had_error {
+                                        orca_core::build::BuildStatus::Failed
+                                    } else {
+                                        orca_core::build::BuildStatus::Success
+                                    };
+                                    crate::build_manager::update_build(&build_id, status.clone(), image_id, error_msg);
+                                    let _ = events_tx.send(orca_core::event::Event {
+                                        timestamp: chrono::Utc::now().to_rfc3339(),
+                                        kind: orca_core::event::EventKind::BuildCompleted {
+                                            id: build_id,
+                                            tag,
+                                            success: status == orca_core::build::BuildStatus::Success,
+                                        },
+                                    });
+                                }
+                                Err(e) => {
+                                    crate::build_manager::update_build(
+                                        &build_id,
+                                        orca_core::build::BuildStatus::Failed,
+                                        None,
+                                        Some(e.to_string()),
+                                    );
+                                    let _ = events_tx.send(orca_core::event::Event {
+                                        timestamp: chrono::Utc::now().to_rfc3339(),
+                                        kind: orca_core::event::EventKind::BuildCompleted {
+                                            id: build_id,
+                                            tag,
+                                            success: false,
+                                        },
+                                    });
+                                }
+                            }
+                        });
+                        tracing::info!("Scheduler: build '{}' started", schedule.name);
+                    } else {
+                        tracing::warn!("Scheduler: build target '{target_name}' not found in any orca.yaml");
+                    }
+                } else {
+                    tracing::warn!("Scheduler: build action without build_target in '{}'", schedule.name);
                 }
-                _ => {
-                    tracing::warn!("Unknown schedule action: {}", schedule.action);
-                    continue;
-                }
-            };
+            } else {
+                use orca_core::runtime::ContainerRuntime;
+                let rt = state.rt().await;
+                let result = match schedule.action.as_str() {
+                    "start" => rt.as_ref().start_container(&schedule.container).await,
+                    "stop" => rt.as_ref().stop_container(&schedule.container, 10).await,
+                    "restart" => {
+                        let _ = rt.as_ref().stop_container(&schedule.container, 10).await;
+                        rt.as_ref().start_container(&schedule.container).await
+                    }
+                    _ => {
+                        tracing::warn!("Unknown schedule action: {}", schedule.action);
+                        continue;
+                    }
+                };
 
-            match result {
-                Ok(_) => tracing::info!("Scheduler: '{}' completed successfully", schedule.name),
-                Err(e) => tracing::error!("Scheduler: '{}' failed: {e}", schedule.name),
+                match result {
+                    Ok(_) => tracing::info!("Scheduler: '{}' completed successfully", schedule.name),
+                    Err(e) => tracing::error!("Scheduler: '{}' failed: {e}", schedule.name),
+                }
             }
 
             // Update last_run timestamp

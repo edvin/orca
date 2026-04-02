@@ -111,7 +111,24 @@ export default function AiWindow() {
           inputRef?.focus();
         }
       );
-      onCleanup(unlisten);
+
+      const unlistenBuild = await listen<{ tag: string; error: string; logTail: string }>(
+        "ai-ask-build",
+        (event) => {
+          const { tag, error, logTail } = event.payload;
+          const context: AiContext = {
+            container_name: `Build: ${tag}`,
+            error,
+            container_logs: logTail || undefined,
+          };
+          setPendingContext(context);
+          const prompt = `My Docker build for "${tag}" failed with this error:\n\n${error}\n\nHere are the last lines of the build log:\n\n${logTail}\n\nWhat went wrong and how can I fix it?`;
+          setInput(prompt);
+          inputRef?.focus();
+        }
+      );
+
+      onCleanup(() => { unlisten(); unlistenBuild(); });
     } catch {}
   });
 

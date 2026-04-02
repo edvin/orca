@@ -30,6 +30,10 @@ pub enum EventKind {
     // Volume events
     VolumeCreated { name: String },
     VolumeRemoved { name: String },
+
+    // Build events
+    BuildStarted { id: String, tag: String },
+    BuildCompleted { id: String, tag: String, success: bool },
 }
 
 #[cfg(test)]

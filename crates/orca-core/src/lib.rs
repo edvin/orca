@@ -1,5 +1,6 @@
 pub mod agent_tools;
 pub mod ai;
+pub mod build;
 pub mod compose;
 pub mod config;
 pub mod environment;

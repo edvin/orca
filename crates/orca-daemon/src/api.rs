@@ -156,6 +156,16 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/images/{id}/save", get(save_image_tar))
         .route("/images/{id}/scan", get(scan_image))
         .route("/images/{id}/history", get(image_history))
+        // Builds
+        .route("/builds", get(list_builds).post(start_build_endpoint))
+        .route("/builds/from-url", post(build_from_url_endpoint))
+        .route("/builds/stats", get(build_stats))
+        .route("/builds/compare", post(compare_builds))
+        .route("/builds/targets", get(list_build_targets))
+        .route("/builds/targets/{name}", post(start_build_from_target))
+        .route("/builds/{id}", get(get_build).delete(delete_build_endpoint))
+        .route("/builds/{id}/logs", get(get_build_logs))
+        .route("/builds/{id}/cancel", post(cancel_build))
         // Volumes
         .route("/volumes", get(list_volumes).post(create_volume_handler))
         .route("/volumes/{name}", get(inspect_volume))
@@ -360,6 +370,8 @@ fn event_type_name(kind: &orca_core::event::EventKind) -> &'static str {
         ImageRemoved { .. } => "image.removed",
         VolumeCreated { .. } => "volume.created",
         VolumeRemoved { .. } => "volume.removed",
+        BuildStarted { .. } => "build.started",
+        BuildCompleted { .. } => "build.completed",
     }
 }
 
@@ -946,6 +958,30 @@ async fn build_image(
     State(state): State<Arc<AppState>>,
     Json(body): Json<BuildRequest>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
+    let tag = body.tag.clone().unwrap_or_default();
+    let dockerfile = body.dockerfile.clone().unwrap_or_else(|| "Dockerfile".to_string());
+    let build_args_map = body.build_args.clone().unwrap_or_default();
+
+    // Create a build record
+    let record = crate::build_manager::start_build(
+        &tag,
+        &body.context_path,
+        &dockerfile,
+        build_args_map,
+        orca_core::build::BuildSource::Manual,
+    );
+    let build_id = record.id.clone();
+    let build_id2 = build_id.clone();
+
+    // Emit build started event
+    let _ = state.events_tx.send(orca_core::event::Event {
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        kind: orca_core::event::EventKind::BuildStarted {
+            id: build_id.clone(),
+            tag: tag.clone(),
+        },
+    });
+
     let mut rx = ImageManager::build(
         state.rt().await.as_ref(),
         &body.context_path,
@@ -955,16 +991,521 @@ async fn build_image(
     )
     .await?;
 
+    let events_tx = state.events_tx.clone();
+    let tag_clone = tag.clone();
+
     let stream = async_stream::stream! {
+        let mut had_error = false;
+        let mut error_msg: Option<String> = None;
+        let mut image_id: Option<String> = None;
+
         while let Some(progress) = rx.recv().await {
+            // Tee to log file
+            let line = progress.stream.trim_end();
+            if !line.is_empty() {
+                crate::build_manager::append_log(&build_id, line);
+            }
+            if let Some(ref err) = progress.error {
+                had_error = true;
+                error_msg = Some(err.clone());
+                crate::build_manager::append_log(&build_id, &format!("ERROR: {err}"));
+            }
+            // Try to extract image ID from stream output
+            if let Some(id) = progress.stream.trim().strip_prefix("Successfully built ") {
+                image_id = Some(id.trim().to_string());
+            }
             if let Ok(json) = serde_json::to_string(&progress) {
                 yield Ok(SseEvent::default().data(json));
             }
         }
-        yield Ok(SseEvent::default().event("done").data("{}"));
+
+        // Update build record
+        let status = if had_error {
+            orca_core::build::BuildStatus::Failed
+        } else {
+            orca_core::build::BuildStatus::Success
+        };
+        crate::build_manager::update_build(&build_id, status.clone(), image_id, error_msg);
+
+        // Emit build completed event
+        let _ = events_tx.send(orca_core::event::Event {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            kind: orca_core::event::EventKind::BuildCompleted {
+                id: build_id.clone(),
+                tag: tag_clone,
+                success: status == orca_core::build::BuildStatus::Success,
+            },
+        });
+
+        yield Ok(SseEvent::default().event("done").data(
+            serde_json::json!({ "build_id": build_id }).to_string()
+        ));
     };
 
-    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keepalive")))
+    // Include the build_id in the first SSE event so the frontend can track it
+    let init_stream = async_stream::stream! {
+        yield Ok(SseEvent::default().event("build_id").data(
+            serde_json::json!({ "build_id": build_id2 }).to_string()
+        ));
+    };
+
+    let combined = futures::stream::select(
+        Box::pin(init_stream) as std::pin::Pin<Box<dyn futures::Stream<Item = Result<SseEvent, Infallible>> + Send>>,
+        Box::pin(stream),
+    );
+
+    Ok(Sse::new(combined).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keepalive")))
+}
+
+// --- Build Dashboard ---
+
+#[derive(Deserialize)]
+struct BuildListQuery {
+    #[serde(default)]
+    status: Option<String>,
+}
+
+async fn list_builds(Query(params): Query<BuildListQuery>) -> Result<impl IntoResponse, ApiError> {
+    let mut history = crate::build_manager::load_history();
+    if let Some(status_filter) = &params.status {
+        history.retain(|r| {
+            let s = serde_json::to_value(&r.status)
+                .ok()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            &s == status_filter
+        });
+    }
+    // Return newest first
+    history.reverse();
+    Ok(Json(history))
+}
+
+#[derive(Deserialize)]
+struct StartBuildRequest {
+    context_path: String,
+    #[serde(default)]
+    dockerfile: Option<String>,
+    #[serde(default)]
+    tag: Option<String>,
+    #[serde(default)]
+    build_args: Option<HashMap<String, String>>,
+    #[serde(default)]
+    source: Option<String>,
+}
+
+async fn start_build_endpoint(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<StartBuildRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let tag = body.tag.clone().unwrap_or_default();
+    let dockerfile = body.dockerfile.clone().unwrap_or_else(|| "Dockerfile".to_string());
+    let build_args_map = body.build_args.clone().unwrap_or_default();
+    let source = match body.source.as_deref() {
+        Some("file_watch") => orca_core::build::BuildSource::FileWatch,
+        Some("scheduled") => orca_core::build::BuildSource::Scheduled,
+        Some("webhook") => orca_core::build::BuildSource::Webhook,
+        Some("url") => orca_core::build::BuildSource::Url,
+        _ => orca_core::build::BuildSource::Manual,
+    };
+
+    let record = crate::build_manager::start_build(&tag, &body.context_path, &dockerfile, build_args_map, source);
+    let build_id = record.id.clone();
+
+    // Emit build started event
+    let _ = state.events_tx.send(orca_core::event::Event {
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        kind: orca_core::event::EventKind::BuildStarted {
+            id: build_id.clone(),
+            tag: tag.clone(),
+        },
+    });
+
+    // Spawn the actual build in the background
+    let rt = state.rt().await;
+    let events_tx = state.events_tx.clone();
+    let context_path = body.context_path.clone();
+    let dockerfile_opt = body.dockerfile.clone();
+    let tag_opt = body.tag.clone();
+    let build_args_opt = body.build_args.clone();
+
+    tokio::spawn(async move {
+        match ImageManager::build(
+            rt.as_ref(),
+            &context_path,
+            dockerfile_opt.as_deref(),
+            tag_opt.as_deref(),
+            build_args_opt,
+        )
+        .await
+        {
+            Ok(mut rx) => {
+                let mut had_error = false;
+                let mut error_msg: Option<String> = None;
+                let mut image_id: Option<String> = None;
+
+                while let Some(progress) = rx.recv().await {
+                    let line = progress.stream.trim_end();
+                    if !line.is_empty() {
+                        crate::build_manager::append_log(&build_id, line);
+                    }
+                    if let Some(ref err) = progress.error {
+                        had_error = true;
+                        error_msg = Some(err.clone());
+                        crate::build_manager::append_log(&build_id, &format!("ERROR: {err}"));
+                    }
+                    if let Some(id) = progress.stream.trim().strip_prefix("Successfully built ") {
+                        image_id = Some(id.trim().to_string());
+                    }
+                }
+
+                let status = if had_error {
+                    orca_core::build::BuildStatus::Failed
+                } else {
+                    orca_core::build::BuildStatus::Success
+                };
+                crate::build_manager::update_build(&build_id, status.clone(), image_id, error_msg);
+
+                let _ = events_tx.send(orca_core::event::Event {
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    kind: orca_core::event::EventKind::BuildCompleted {
+                        id: build_id,
+                        tag,
+                        success: status == orca_core::build::BuildStatus::Success,
+                    },
+                });
+            }
+            Err(e) => {
+                crate::build_manager::update_build(
+                    &build_id,
+                    orca_core::build::BuildStatus::Failed,
+                    None,
+                    Some(e.to_string()),
+                );
+                let _ = events_tx.send(orca_core::event::Event {
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    kind: orca_core::event::EventKind::BuildCompleted {
+                        id: build_id,
+                        tag,
+                        success: false,
+                    },
+                });
+            }
+        }
+    });
+
+    Ok(Json(record))
+}
+
+async fn get_build(Path(id): Path<String>) -> Result<impl IntoResponse, ApiError> {
+    let history = crate::build_manager::load_history();
+    let record = history
+        .into_iter()
+        .find(|r| r.id == id)
+        .ok_or_else(|| ApiError(anyhow::anyhow!("Build {id} not found")))?;
+    let cache = crate::build_manager::analyze_cache(&record.id);
+    let mut value = serde_json::to_value(&record).unwrap_or_default();
+    if let (Some(cache), Some(obj)) = (cache, value.as_object_mut()) {
+        obj.insert(
+            "cache_analysis".to_string(),
+            serde_json::json!({
+                "total_steps": cache.total_steps,
+                "cached_steps": cache.cached_steps,
+            }),
+        );
+    }
+    Ok(Json(value))
+}
+
+async fn get_build_logs(Path(id): Path<String>) -> Result<impl IntoResponse, ApiError> {
+    let log = crate::build_manager::get_log(&id).unwrap_or_default();
+    Ok(([(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")], log))
+}
+
+async fn delete_build_endpoint(Path(id): Path<String>) -> Result<impl IntoResponse, ApiError> {
+    crate::build_manager::delete_build(&id);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn cancel_build() -> impl IntoResponse {
+    // Placeholder — build cancellation requires tracking spawned tasks
+    (StatusCode::NOT_IMPLEMENTED, "Build cancellation not yet implemented")
+}
+
+#[derive(Deserialize)]
+struct BuildFromUrlRequest {
+    source_url: String,
+    #[serde(default)]
+    tag: Option<String>,
+}
+
+async fn build_from_url_endpoint(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<BuildFromUrlRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let url = body.source_url.clone();
+    let tag = body.tag.clone().unwrap_or_default();
+
+    // Create a temp directory for the build context
+    let tmp_dir = tempfile::tempdir().map_err(|e| ApiError(anyhow::anyhow!("Failed to create temp directory: {e}")))?;
+    let tmp_path = tmp_dir.path().to_string_lossy().to_string();
+
+    let is_git = url.ends_with(".git")
+        || url.contains("github.com/")
+        || url.contains("gitlab.com/")
+        || url.contains("bitbucket.org/");
+
+    if is_git {
+        // Clone the git repo
+        let output = tokio::process::Command::new("git")
+            .args(["clone", "--depth", "1", &url, &tmp_path])
+            .output()
+            .await
+            .map_err(|e| ApiError(anyhow::anyhow!("Failed to run git clone. Is git installed? Error: {e}")))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ApiError(anyhow::anyhow!("git clone failed: {stderr}")));
+        }
+    } else {
+        // Download as a raw Dockerfile
+        let resp = reqwest::get(&url)
+            .await
+            .map_err(|e| ApiError(anyhow::anyhow!("Failed to download URL: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(ApiError(anyhow::anyhow!(
+                "Failed to download URL: HTTP {}",
+                resp.status()
+            )));
+        }
+        let content = resp
+            .text()
+            .await
+            .map_err(|e| ApiError(anyhow::anyhow!("Failed to read response: {e}")))?;
+        std::fs::write(tmp_dir.path().join("Dockerfile"), &content)
+            .map_err(|e| ApiError(anyhow::anyhow!("Failed to write Dockerfile: {e}")))?;
+    }
+
+    let record = crate::build_manager::start_build(
+        &tag,
+        &tmp_path,
+        "Dockerfile",
+        HashMap::new(),
+        orca_core::build::BuildSource::Url,
+    );
+    let build_id = record.id.clone();
+
+    // Emit build started event
+    let _ = state.events_tx.send(orca_core::event::Event {
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        kind: orca_core::event::EventKind::BuildStarted {
+            id: build_id.clone(),
+            tag: tag.clone(),
+        },
+    });
+
+    // Spawn the actual build in the background
+    let rt = state.rt().await;
+    let events_tx = state.events_tx.clone();
+
+    tokio::spawn(async move {
+        // Keep tmp_dir alive until build completes
+        let _tmp_guard = tmp_dir;
+        let context_path = tmp_path;
+
+        match ImageManager::build(
+            rt.as_ref(),
+            &context_path,
+            Some("Dockerfile"),
+            if tag.is_empty() { None } else { Some(tag.as_str()) },
+            None,
+        )
+        .await
+        {
+            Ok(mut rx) => {
+                let mut had_error = false;
+                let mut error_msg: Option<String> = None;
+                let mut image_id: Option<String> = None;
+
+                while let Some(progress) = rx.recv().await {
+                    let line = progress.stream.trim_end();
+                    if !line.is_empty() {
+                        crate::build_manager::append_log(&build_id, line);
+                    }
+                    if let Some(ref err) = progress.error {
+                        had_error = true;
+                        error_msg = Some(err.clone());
+                        crate::build_manager::append_log(&build_id, &format!("ERROR: {err}"));
+                    }
+                    if let Some(id) = progress.stream.trim().strip_prefix("Successfully built ") {
+                        image_id = Some(id.trim().to_string());
+                    }
+                }
+
+                let status = if had_error {
+                    orca_core::build::BuildStatus::Failed
+                } else {
+                    orca_core::build::BuildStatus::Success
+                };
+                crate::build_manager::update_build(&build_id, status.clone(), image_id, error_msg);
+
+                let _ = events_tx.send(orca_core::event::Event {
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    kind: orca_core::event::EventKind::BuildCompleted {
+                        id: build_id,
+                        tag,
+                        success: status == orca_core::build::BuildStatus::Success,
+                    },
+                });
+            }
+            Err(e) => {
+                crate::build_manager::update_build(
+                    &build_id,
+                    orca_core::build::BuildStatus::Failed,
+                    None,
+                    Some(e.to_string()),
+                );
+                let _ = events_tx.send(orca_core::event::Event {
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    kind: orca_core::event::EventKind::BuildCompleted {
+                        id: build_id,
+                        tag,
+                        success: false,
+                    },
+                });
+            }
+        }
+    });
+
+    Ok(Json(record))
+}
+
+async fn build_stats() -> Result<impl IntoResponse, ApiError> {
+    let history = crate::build_manager::load_history();
+    let total = history.len();
+    let success_count = history
+        .iter()
+        .filter(|r| r.status == orca_core::build::BuildStatus::Success)
+        .count();
+    let failure_count = history
+        .iter()
+        .filter(|r| r.status == orca_core::build::BuildStatus::Failed)
+        .count();
+
+    let durations: Vec<f64> = history.iter().filter_map(|r| r.duration_secs).collect();
+    let avg_duration = if durations.is_empty() {
+        0.0
+    } else {
+        durations.iter().sum::<f64>() / durations.len() as f64
+    };
+
+    // Most built tags
+    let mut tag_counts: HashMap<String, usize> = HashMap::new();
+    for r in &history {
+        if !r.tag.is_empty() {
+            *tag_counts.entry(r.tag.clone()).or_default() += 1;
+        }
+    }
+    let mut most_built: Vec<serde_json::Value> = tag_counts
+        .clone()
+        .into_iter()
+        .map(|(tag, count)| serde_json::json!({ "tag": tag, "count": count }))
+        .collect();
+    most_built.sort_by(|a, b| {
+        b.get("count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            .cmp(&a.get("count").and_then(|v| v.as_u64()).unwrap_or(0))
+    });
+    most_built.truncate(10);
+
+    // Builds per day (last 7 days)
+    let now = chrono::Utc::now().date_naive();
+    let mut builds_per_day: Vec<serde_json::Value> = Vec::new();
+    for i in (0..7).rev() {
+        let day = now - chrono::Duration::days(i);
+        let date_str = day.format("%Y-%m-%d").to_string();
+        let count = history
+            .iter()
+            .filter(|r| {
+                chrono::DateTime::parse_from_rfc3339(&r.started_at)
+                    .map(|dt| dt.date_naive() == day)
+                    .unwrap_or(false)
+            })
+            .count();
+        builds_per_day.push(serde_json::json!({ "date": date_str, "count": count }));
+    }
+
+    // Average duration by tag (top 5 tags by count)
+    let mut avg_duration_by_tag: Vec<serde_json::Value> = Vec::new();
+    let mut sorted_tags: Vec<(String, usize)> = tag_counts.into_iter().collect();
+    sorted_tags.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted_tags.truncate(5);
+    for (tag, _) in &sorted_tags {
+        let tag_durations: Vec<f64> = history
+            .iter()
+            .filter(|r| &r.tag == tag)
+            .filter_map(|r| r.duration_secs)
+            .collect();
+        if !tag_durations.is_empty() {
+            let avg = tag_durations.iter().sum::<f64>() / tag_durations.len() as f64;
+            avg_duration_by_tag.push(serde_json::json!({ "tag": tag, "avg_secs": avg }));
+        }
+    }
+
+    Ok(Json(serde_json::json!({
+        "total_builds": total,
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "avg_duration_secs": avg_duration,
+        "most_built": most_built,
+        "builds_per_day": builds_per_day,
+        "avg_duration_by_tag": avg_duration_by_tag,
+    })))
+}
+
+#[derive(Deserialize)]
+struct CompareBuildsRequest {
+    id1: String,
+    id2: String,
+}
+
+async fn compare_builds(Json(req): Json<CompareBuildsRequest>) -> Result<impl IntoResponse, ApiError> {
+    let history = crate::build_manager::load_history();
+    let build1 = history
+        .iter()
+        .find(|r| r.id == req.id1)
+        .ok_or_else(|| ApiError(anyhow::anyhow!("Build {} not found", req.id1)))?
+        .clone();
+    let build2 = history
+        .iter()
+        .find(|r| r.id == req.id2)
+        .ok_or_else(|| ApiError(anyhow::anyhow!("Build {} not found", req.id2)))?
+        .clone();
+
+    // Diff build args
+    let all_keys: std::collections::HashSet<&String> =
+        build1.build_args.keys().chain(build2.build_args.keys()).collect();
+    let mut args_diff: Vec<serde_json::Value> = Vec::new();
+    for key in all_keys {
+        let v1 = build1.build_args.get(key);
+        let v2 = build2.build_args.get(key);
+        if v1 != v2 {
+            args_diff.push(serde_json::json!({
+                "key": key,
+                "value1": v1,
+                "value2": v2,
+            }));
+        }
+    }
+
+    let dockerfile_changed = build1.dockerfile != build2.dockerfile;
+
+    Ok(Json(serde_json::json!({
+        "build1": build1,
+        "build2": build2,
+        "args_diff": args_diff,
+        "dockerfile_changed": dockerfile_changed,
+    })))
 }
 
 async fn prune_images(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
@@ -3582,6 +4123,188 @@ fn parse_orca_yaml_links(dir: &std::path::Path) -> Option<Vec<orca_core::config:
     if groups.is_empty() { None } else { Some(groups) }
 }
 
+/// Parse build targets from an orca.yaml file in the given directory.
+/// Expected format:
+/// ```yaml
+/// builds:
+///   - name: frontend
+///     context: ./frontend
+///     dockerfile: Dockerfile
+///     tag: myapp-frontend:dev
+///     args:
+///       NODE_ENV: development
+/// ```
+fn parse_orca_yaml_build_targets(dir: &std::path::Path) -> Option<Vec<orca_core::build::BuildTarget>> {
+    let yaml = parse_orca_yaml(dir)?;
+    let builds = yaml.get("builds")?;
+    let items = builds.as_sequence()?;
+
+    let dir_str = dir.to_string_lossy().to_string();
+
+    let mut targets = Vec::new();
+    for item in items {
+        let name = item.get("name").and_then(|v| v.as_str());
+        let context = item.get("context").and_then(|v| v.as_str());
+        let tag = item.get("tag").and_then(|v| v.as_str());
+        let dockerfile = item.get("dockerfile").and_then(|v| v.as_str()).unwrap_or("Dockerfile");
+
+        if let (Some(n), Some(ctx), Some(t)) = (name, context, tag) {
+            let mut args = std::collections::HashMap::new();
+            if let Some(args_map) = item.get("args").and_then(|v| v.as_mapping()) {
+                for (k, v) in args_map {
+                    if let (Some(key), Some(val)) = (k.as_str(), v.as_str()) {
+                        args.insert(key.to_string(), val.to_string());
+                    }
+                }
+            }
+            targets.push(orca_core::build::BuildTarget {
+                name: n.to_string(),
+                context: ctx.to_string(),
+                dockerfile: dockerfile.to_string(),
+                tag: t.to_string(),
+                args,
+                stack_dir: dir_str.clone(),
+            });
+        }
+    }
+
+    if targets.is_empty() { None } else { Some(targets) }
+}
+
+/// Scan all stack directories for orca.yaml build targets.
+fn scan_all_build_targets() -> Vec<orca_core::build::BuildTarget> {
+    let base = stacks_base_dir();
+    let mut all_targets = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&base) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir()
+                && let Some(targets) = parse_orca_yaml_build_targets(&path)
+            {
+                all_targets.extend(targets);
+            }
+        }
+    }
+    all_targets
+}
+
+/// GET /builds/targets — list all orca.yaml build targets from stack directories.
+async fn list_build_targets() -> Result<impl IntoResponse, ApiError> {
+    let targets = scan_all_build_targets();
+    Ok(Json(targets))
+}
+
+/// POST /builds/targets/{name} — start a build using a named orca.yaml build target.
+async fn start_build_from_target(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let targets = scan_all_build_targets();
+    let target = targets
+        .iter()
+        .find(|t| t.name == name)
+        .ok_or_else(|| anyhow::anyhow!("Build target '{name}' not found in any orca.yaml"))?;
+
+    // Resolve context path relative to the stack directory
+    let stack_dir = std::path::PathBuf::from(&target.stack_dir);
+    let context_path = if target.context.starts_with('/') {
+        std::path::PathBuf::from(&target.context)
+    } else {
+        stack_dir.join(&target.context)
+    };
+    let context_str = context_path.to_string_lossy().to_string();
+
+    let record = crate::build_manager::start_build(
+        &target.tag,
+        &context_str,
+        &target.dockerfile,
+        target.args.clone(),
+        orca_core::build::BuildSource::Manual,
+    );
+    let build_id = record.id.clone();
+    let tag = target.tag.clone();
+
+    let _ = state.events_tx.send(orca_core::event::Event {
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        kind: orca_core::event::EventKind::BuildStarted {
+            id: build_id.clone(),
+            tag: tag.clone(),
+        },
+    });
+
+    let rt = state.rt().await;
+    let events_tx = state.events_tx.clone();
+    let dockerfile = target.dockerfile.clone();
+    let build_args = target.args.clone();
+
+    tokio::spawn(async move {
+        match ImageManager::build(
+            rt.as_ref(),
+            &context_str,
+            Some(dockerfile.as_str()),
+            Some(tag.as_str()),
+            Some(build_args),
+        )
+        .await
+        {
+            Ok(mut rx) => {
+                let mut had_error = false;
+                let mut error_msg: Option<String> = None;
+                let mut image_id: Option<String> = None;
+
+                while let Some(progress) = rx.recv().await {
+                    let line = progress.stream.trim_end();
+                    if !line.is_empty() {
+                        crate::build_manager::append_log(&build_id, line);
+                    }
+                    if let Some(ref err) = progress.error {
+                        had_error = true;
+                        error_msg = Some(err.clone());
+                        crate::build_manager::append_log(&build_id, &format!("ERROR: {err}"));
+                    }
+                    if let Some(id) = progress.stream.trim().strip_prefix("Successfully built ") {
+                        image_id = Some(id.trim().to_string());
+                    }
+                }
+
+                let status = if had_error {
+                    orca_core::build::BuildStatus::Failed
+                } else {
+                    orca_core::build::BuildStatus::Success
+                };
+                crate::build_manager::update_build(&build_id, status.clone(), image_id, error_msg);
+
+                let _ = events_tx.send(orca_core::event::Event {
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    kind: orca_core::event::EventKind::BuildCompleted {
+                        id: build_id,
+                        tag,
+                        success: status == orca_core::build::BuildStatus::Success,
+                    },
+                });
+            }
+            Err(e) => {
+                crate::build_manager::update_build(
+                    &build_id,
+                    orca_core::build::BuildStatus::Failed,
+                    None,
+                    Some(e.to_string()),
+                );
+                let _ = events_tx.send(orca_core::event::Event {
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    kind: orca_core::event::EventKind::BuildCompleted {
+                        id: build_id,
+                        tag,
+                        success: false,
+                    },
+                });
+            }
+        }
+    });
+
+    Ok(Json(record))
+}
+
 /// Auto-register gateway routes after a compose stack deploy.
 /// Returns the list of newly registered routes.
 async fn auto_register_gateway_routes(
@@ -5063,6 +5786,8 @@ struct SaveScheduleRequest {
     cron: String,
     #[serde(default = "default_true_value")]
     enabled: bool,
+    #[serde(default)]
+    build_target: Option<String>,
 }
 
 async fn save_schedule(Json(body): Json<SaveScheduleRequest>) -> Result<impl IntoResponse, ApiError> {
@@ -5084,6 +5809,7 @@ async fn save_schedule(Json(body): Json<SaveScheduleRequest>) -> Result<impl Int
         existing.action = body.action;
         existing.cron = body.cron;
         existing.enabled = body.enabled;
+        existing.build_target = body.build_target;
     } else {
         config.schedules.push(orca_core::config::ScheduledAction {
             id: id.clone(),
@@ -5093,6 +5819,7 @@ async fn save_schedule(Json(body): Json<SaveScheduleRequest>) -> Result<impl Int
             cron: body.cron,
             enabled: body.enabled,
             last_run: None,
+            build_target: body.build_target,
         });
     }
 

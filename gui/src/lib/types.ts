@@ -601,3 +601,53 @@ export interface HealthCheck {
   fix_action: string | null;
   details: string | null;
 }
+
+// --- Builds ---
+
+export interface CacheAnalysis {
+  total_steps: number;
+  cached_steps: number;
+}
+
+export interface BuildRecord {
+  id: string;
+  status: "in_progress" | "success" | "failed" | "cancelled";
+  tag: string;
+  context_path: string;
+  dockerfile: string;
+  build_args: Record<string, string>;
+  started_at: string;
+  finished_at?: string;
+  duration_secs?: number;
+  image_id?: string;
+  error?: string;
+  log_lines: number;
+  source: "manual" | "file_watch" | "scheduled" | "webhook" | "url";
+  cache_analysis?: CacheAnalysis;
+}
+
+export interface BuildStats {
+  total_builds: number;
+  success_count: number;
+  failure_count: number;
+  avg_duration_secs: number;
+  most_built: Array<{ tag: string; count: number }>;
+  builds_per_day: Array<{ date: string; count: number }>;
+  avg_duration_by_tag: Array<{ tag: string; avg_secs: number }>;
+}
+
+export interface BuildTarget {
+  name: string;
+  context: string;
+  dockerfile: string;
+  tag: string;
+  args: Record<string, string>;
+  stack_dir: string;
+}
+
+export interface BuildComparison {
+  build1: BuildRecord;
+  build2: BuildRecord;
+  args_diff: Array<{ key: string; value1: string | null; value2: string | null }>;
+  dockerfile_changed: boolean;
+}

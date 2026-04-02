@@ -53,6 +53,10 @@ const icons: Record<string, () => JSX.Element> = {
       "m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65",
     ]} />
   ),
+  // Key (build/wrench)
+  builds: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"/><circle cx="16.5" cy="7.5" r=".5"/></svg>
+  ),
   // Database (cylinder)
   volumes: () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -126,6 +130,7 @@ const mainNavItems: { id: Page; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
   { id: "containers", label: "Containers" },
   { id: "images", label: "Images" },
+  { id: "builds", label: "Builds" },
   { id: "volumes", label: "Volumes" },
   { id: "networks", label: "Networks" },
   { id: "gateway", label: "Gateway" },

@@ -56,6 +56,18 @@
 - **Tag images** with custom repository and version
 - **Import from tar** — load images from tar archives
 - **Prune** unused images with confirmation dialog and space reclaimed reporting
+
+### Build Dashboard
+
+- **Build history** — persistent log storage, status tracking, duration timing
+- **Build from URL** — paste a git repo or Dockerfile URL to build remotely
+- **Build cache insights** — cache hit rate visualization per build
+- **Build analytics** — success rate, average duration, most-rebuilt images
+- **Build comparison** — side-by-side diff of two builds (args, config, duration)
+- **AI build debugging** — "Ask AI" on failed builds with error + Dockerfile context
+- **orca.yaml build targets** — define builds in your repo, trigger from Orca or on schedule
+- **Scheduled builds** — cron-based auto-builds via the existing scheduler
+- **Build notifications** — toast when background builds complete
 - **Registry authentication** for private registries (Docker Hub, GitHub, GitLab, AWS ECR)
 
 ### Compose Stacks

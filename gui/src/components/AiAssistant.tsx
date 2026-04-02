@@ -9,6 +9,7 @@ interface AiAssistantProps {
 
 export interface AiAssistantApi {
   askAboutContainer: (containerId: string, containerName: string, image: string) => void;
+  askAboutBuild: (tag: string, error: string, logTail: string) => void;
 }
 
 /** Opens the AI assistant in a separate window */
@@ -66,9 +67,21 @@ export default function AiAssistant(props: AiAssistantProps) {
     }, 500);
   };
 
+  const askAboutBuild = async (tag: string, error: string, logTail: string) => {
+    await openAiWindow();
+    setTimeout(async () => {
+      try {
+        const { emit } = await import("@tauri-apps/api/event");
+        await emit("ai-ask-build", { tag, error, logTail });
+      } catch (e) {
+        logError(`Failed to send build context to AI: ${e}`);
+      }
+    }, 500);
+  };
+
   // Pass API ref to parent via callback
   onMount(() => {
-    props.ref?.({ askAboutContainer });
+    props.ref?.({ askAboutContainer, askAboutBuild });
   });
 
   return null;

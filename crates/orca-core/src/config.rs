@@ -139,6 +139,9 @@ pub struct ScheduledAction {
     /// Timestamp of last execution (unix seconds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_run: Option<u64>,
+    /// For action="build": name of an orca.yaml build target to execute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_target: Option<String>,
 }
 
 /// Gateway (managed Caddy reverse proxy) configuration.

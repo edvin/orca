@@ -25,6 +25,7 @@ import ActivityPage from "./pages/ActivityPage";
 import DashboardPage from "./pages/DashboardPage";
 import FleetPage from "./pages/FleetPage";
 import TemplatesPage from "./pages/TemplatesPage";
+import BuildsPage from "./pages/BuildsPage";
 import ConnectionScreen from "./components/ConnectionScreen";
 import CommandPalette from "./components/CommandPalette";
 import AiAssistant from "./components/AiAssistant";
@@ -32,7 +33,7 @@ import type { AiAssistantApi } from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
 
-export type Page = "fleet" | "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "volumes" | "volume-detail" | "networks" | "gateway" | "kubernetes" | "environment" | "activity" | "settings";
+export type Page = "fleet" | "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "builds" | "volumes" | "volume-detail" | "networks" | "gateway" | "kubernetes" | "environment" | "activity" | "settings";
 
 export default function App() {
   const [page, setPage] = createSignal<Page>("dashboard");
@@ -419,6 +420,7 @@ export default function App() {
                 />
               )}
               {page() === "images" && <ImagesPage autoOpenPull={detailId() === "pull"} onPullOpened={() => setDetailId(null)} onNavigate={(p) => navigate(p)} />}
+              {page() === "builds" && <BuildsPage onNavigate={(p) => navigate(p)} onAskAi={(tag, error, logTail) => aiApi?.askAboutBuild(tag, error, logTail)} />}
               {page() === "volumes" && <VolumesPage onNavigate={(p) => navigate(p)} />}
               {page() === "volume-detail" && detailId() && (
                 <VolumeDetailPage
