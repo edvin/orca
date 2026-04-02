@@ -15,10 +15,16 @@
 !macro NSIS_HOOK_POSTINSTALL
   ; Add install directory to user PATH so 'orca' CLI is available from any terminal
   nsExec::ExecToLog 'powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable(\"Path\", [Environment]::GetEnvironmentVariable(\"Path\", \"User\") + \";$INSTDIR\", \"User\")"'
+  ; Register orca:// URL scheme
+  WriteRegStr HKCU "Software\Classes\orca" "" "URL:Orca Desktop"
+  WriteRegStr HKCU "Software\Classes\orca" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\orca\shell\open\command" "" '"$INSTDIR\Orca Desktop.exe" "%1"'
 !macroend
 
 ; Clean up Orca Desktop data on uninstall (but NOT config — preserve user settings)
 !macro NSIS_HOOK_POSTUNINSTALL
+  ; Remove orca:// URL scheme registration
+  DeleteRegKey HKCU "Software\Classes\orca"
   ; Remove cached/runtime data but keep config (API keys, settings, etc.)
   RMDir /r "$LOCALAPPDATA\orca"
   ; Remove Docker TCP override from WSL (best effort)

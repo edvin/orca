@@ -1,5 +1,6 @@
 import { createSignal, createEffect, onMount, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { startEventSubscription, onOrcaEvent } from "./lib/events";
 import { addEvent } from "./lib/activityStore";
 import { lazy } from "solid-js";
@@ -162,6 +163,75 @@ export default function App() {
     }
   };
 
+  const handleDeepLink = (url: string) => {
+    // Parse orca:// URLs and navigate accordingly
+    // URL format: orca://path or orca://path/subpath
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname; // e.g. "dashboard", "containers"
+      const pathParts = parsed.pathname.split("/").filter(Boolean); // subpath segments
+
+      switch (host) {
+        case "dashboard":
+          navigate("dashboard");
+          break;
+        case "containers":
+          navigate("containers");
+          break;
+        case "container":
+          if (pathParts.length > 0) {
+            navigate(`container:${pathParts.join("/")}`);
+          } else {
+            navigate("containers");
+          }
+          break;
+        case "build":
+          // orca://build/{context}/{id} -> navigate to images page
+          navigate("images");
+          break;
+        case "images":
+          navigate("images");
+          break;
+        case "volumes":
+          navigate("volumes");
+          break;
+        case "networks":
+          navigate("networks");
+          break;
+        case "gateway":
+          navigate("gateway");
+          break;
+        case "kubernetes":
+          navigate("kubernetes");
+          break;
+        case "settings":
+          if (pathParts.length > 0) {
+            navigate(`settings:${pathParts[0]}`);
+          } else {
+            navigate("settings");
+          }
+          break;
+        case "fleet":
+          navigate("fleet");
+          break;
+        case "templates":
+          navigate("templates");
+          break;
+        case "environment":
+          navigate("environment");
+          break;
+        case "activity":
+          navigate("activity");
+          break;
+        default:
+          console.warn("Unknown deep link path:", url);
+          break;
+      }
+    } catch (e) {
+      console.error("Failed to parse deep link URL:", url, e);
+    }
+  };
+
   const navigate = (target: string) => {
     if (target.startsWith("container:") && target.includes(",stack:")) {
       const [containerPart, stackPart] = target.split(",stack:");
@@ -209,6 +279,18 @@ export default function App() {
   });
 
   onMount(() => {
+    // Listen for deep link URLs (orca:// protocol)
+    let unsubDeepLink: (() => void) | undefined;
+    onOpenUrl((urls) => {
+      for (const url of urls) {
+        handleDeepLink(url);
+      }
+    }).then((unsub) => {
+      unsubDeepLink = unsub;
+    }).catch((e) => {
+      console.debug("Deep link listener not available:", e);
+    });
+
     const unsubEvents = onOrcaEvent((payload: any) => {
       const eventType = payload?.type || payload?.Action || "";
       const name = payload?.name || payload?.Actor?.Attributes?.name || "";
@@ -267,6 +349,7 @@ export default function App() {
       if (fleetPollInterval) clearInterval(fleetPollInterval);
       document.removeEventListener("keydown", handleGlobalKeyDown);
       unsubEvents();
+      unsubDeepLink?.();
     });
   });
 

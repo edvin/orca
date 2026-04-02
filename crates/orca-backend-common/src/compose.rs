@@ -58,8 +58,8 @@ async fn run_compose(
 
     let output = cmd.output().await?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let stdout = rewrite_docker_desktop_urls(&String::from_utf8_lossy(&output.stdout));
+    let stderr = rewrite_docker_desktop_urls(&String::from_utf8_lossy(&output.stderr));
     let exit_code = output.status.code().unwrap_or(-1);
 
     if !output.status.success() {
@@ -75,4 +75,10 @@ async fn run_compose(
         stderr,
         exit_code,
     })
+}
+
+/// Rewrite `docker-desktop://` URLs to `orca://` URLs in output text.
+fn rewrite_docker_desktop_urls(text: &str) -> String {
+    text.replace("docker-desktop://dashboard/build/", "orca://build/")
+        .replace("docker-desktop://", "orca://")
 }

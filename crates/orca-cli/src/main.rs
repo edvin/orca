@@ -424,6 +424,7 @@ async fn cmd_containers_list(client: &client::DaemonClient) -> anyhow::Result<()
     println!("{:<14} {:<18} {:<20} {:<10} PORTS", "ID", "NAME", "IMAGE", "STATE");
     for c in &containers {
         let short_id = if c.id.len() > 12 { &c.id[..12] } else { &c.id };
+        let linked_name = container_link(&c.id, &c.name);
         let ports = c
             .ports
             .iter()
@@ -432,7 +433,7 @@ async fn cmd_containers_list(client: &client::DaemonClient) -> anyhow::Result<()
             .join(", ");
         println!(
             "{:<14} {:<18} {:<20} {:<10} {}",
-            short_id, c.name, c.image, c.state, ports
+            short_id, linked_name, c.image, c.state, ports
         );
     }
     Ok(())
@@ -641,7 +642,7 @@ async fn cmd_gateway_status(client: &client::DaemonClient) -> anyhow::Result<()>
 
 async fn cmd_gateway_start(client: &client::DaemonClient) -> anyhow::Result<()> {
     client.gateway_start().await?;
-    println!("Gateway started.");
+    println!("Gateway started. {}", orca_link("gateway", "Open Gateway"));
     Ok(())
 }
 
@@ -664,9 +665,10 @@ async fn cmd_gateway_routes(client: &client::DaemonClient) -> anyhow::Result<()>
         let container = r.get("container_name").and_then(|v| v.as_str()).unwrap_or("-");
         let port = r.get("port").and_then(|v| v.as_u64()).unwrap_or(0);
         let enabled = r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+        let linked_host = orca_link(&format!("gateway/route/{hostname}"), hostname);
         println!(
             "{:<30} {:<20} {:<8} {}",
-            hostname,
+            linked_host,
             container,
             port,
             if enabled { "yes" } else { "no" }
@@ -1048,6 +1050,18 @@ fn cmd_config_set(key: &str, value: &str) -> anyhow::Result<()> {
 }
 
 // --- Helpers ---
+
+/// Create an OSC 8 terminal hyperlink (supported by iTerm2, Windows Terminal, GNOME Terminal, etc.)
+/// Falls back to plain text in terminals that don't support it.
+fn orca_link(path: &str, label: &str) -> String {
+    let url = format!("orca://{path}");
+    format!("\x1b]8;;{url}\x1b\\{label}\x1b]8;;\x1b\\")
+}
+
+/// Format a container ID as a clickable link to its detail page
+fn container_link(id: &str, name: &str) -> String {
+    orca_link(&format!("container/{id}"), name)
+}
 
 fn format_bytes(bytes: u64) -> String {
     const KB: u64 = 1024;

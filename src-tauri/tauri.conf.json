@@ -64,6 +64,11 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["orca"]
+      }
+    },
     "updater": {
       "endpoints": [
         "https://github.com/edvin/orca/releases/latest/download/latest.json"

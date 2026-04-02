@@ -29,6 +29,7 @@
     "updater:allow-download-and-install",
     "process:default",
     "process:allow-restart",
-    "process:allow-exit"
+    "process:allow-exit",
+    "deep-link:default"
   ]
 }

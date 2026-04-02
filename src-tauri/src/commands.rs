@@ -43,6 +43,12 @@ fn log_stream_map() -> &'static Mutex<HashMap<String, LogStreamHandle>> {
 
 const LOCAL_DAEMON_BASE: &str = "http://127.0.0.1:9477";
 
+/// Rewrite `docker-desktop://` URLs to `orca://` URLs in output text.
+fn rewrite_docker_desktop_urls(text: &str) -> String {
+    text.replace("docker-desktop://dashboard/build/", "orca://build/")
+        .replace("docker-desktop://", "orca://")
+}
+
 /// Override for the daemon URL when a remote host is selected.
 /// Contains (base_url, token, tls_verify) when a remote host is active, None for local.
 /// base_url is scheme://host:port — /api/v1 is always appended by daemon_url().
@@ -843,7 +849,9 @@ pub async fn build_image(
             if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
                 Some(format!("ERROR: {err}"))
             } else {
-                v.get("stream").and_then(|s| s.as_str()).map(|s| s.to_string())
+                v.get("stream")
+                    .and_then(|s| s.as_str())
+                    .map(|s| rewrite_docker_desktop_urls(s))
             }
         })
         .collect();
