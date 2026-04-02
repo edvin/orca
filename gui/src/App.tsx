@@ -164,16 +164,21 @@ export default function App() {
   };
 
   const handleDeepLink = (url: string) => {
-    // Parse orca:// URLs and navigate accordingly
-    // URL format: orca://path or orca://path/subpath
+    // Parse orca:// and docker-desktop:// URLs and navigate accordingly
     try {
-      const parsed = new URL(url);
-      const host = parsed.hostname; // e.g. "dashboard", "containers"
-      const pathParts = parsed.pathname.split("/").filter(Boolean); // subpath segments
+      const normalizedUrl = url.replace(/^docker-desktop:\/\//, "orca://");
+      const parsed = new URL(normalizedUrl);
+      const host = parsed.hostname;
+      const pathParts = parsed.pathname.split("/").filter(Boolean);
 
       switch (host) {
         case "dashboard":
-          navigate("dashboard");
+          // docker-desktop://dashboard/build/... → images page
+          if (pathParts[0] === "build") {
+            navigate("images");
+          } else {
+            navigate("dashboard");
+          }
           break;
         case "containers":
           navigate("containers");
