@@ -34,6 +34,7 @@ export default function Dropdown(props: DropdownProps) {
   return (
     <div ref={wrapperRef} class="custom-dropdown" style={props.style}>
       <button
+        type="button"
         class="custom-dropdown-trigger form-input"
         onClick={() => setOpen(!open())}
       >

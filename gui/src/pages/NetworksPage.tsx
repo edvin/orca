@@ -421,7 +421,7 @@ export default function NetworksPage() {
               </button>
             </div>
             <form onSubmit={handleCreate}>
-              <div class="modal-body">
+              <div class="modal-body" style={{ overflow: "visible", "min-height": "200px" }}>
                 <div class="form-group">
                   <label class="form-label">
                     Name <span style={{ color: "#f85149" }}>*</span>
