@@ -54,7 +54,7 @@ pub enum BuildStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum BuildSource {
     #[default]
@@ -63,6 +63,7 @@ pub enum BuildSource {
     Scheduled,
     Webhook,
     Url,
+    External,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

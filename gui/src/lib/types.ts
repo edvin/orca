@@ -622,7 +622,7 @@ export interface BuildRecord {
   image_id?: string;
   error?: string;
   log_lines: number;
-  source: "manual" | "file_watch" | "scheduled" | "webhook" | "url";
+  source: "manual" | "file_watch" | "scheduled" | "webhook" | "url" | "external";
   cache_analysis?: CacheAnalysis;
 }
 

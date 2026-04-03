@@ -1066,7 +1066,7 @@ struct BuildListQuery {
 }
 
 async fn list_builds(Query(params): Query<BuildListQuery>) -> Result<impl IntoResponse, ApiError> {
-    let mut history = crate::build_manager::load_history();
+    let mut history = crate::build_manager::load_merged_history().await;
     if let Some(status_filter) = &params.status {
         history.retain(|r| {
             let s = serde_json::to_value(&r.status)
@@ -1076,8 +1076,7 @@ async fn list_builds(Query(params): Query<BuildListQuery>) -> Result<impl IntoRe
             &s == status_filter
         });
     }
-    // Return newest first
-    history.reverse();
+    // Already sorted newest-first by load_merged_history
     Ok(Json(history))
 }
 
@@ -1106,6 +1105,7 @@ async fn start_build_endpoint(
         Some("scheduled") => orca_core::build::BuildSource::Scheduled,
         Some("webhook") => orca_core::build::BuildSource::Webhook,
         Some("url") => orca_core::build::BuildSource::Url,
+        Some("external") => orca_core::build::BuildSource::External,
         _ => orca_core::build::BuildSource::Manual,
     };
 
@@ -1218,7 +1218,14 @@ async fn get_build(Path(id): Path<String>) -> Result<impl IntoResponse, ApiError
 }
 
 async fn get_build_logs(Path(id): Path<String>) -> Result<impl IntoResponse, ApiError> {
-    let log = crate::build_manager::get_log(&id).unwrap_or_default();
+    // Try local log first, then fall back to BuildKit logs for external builds
+    let log = if let Some(local_log) = crate::build_manager::get_log(&id) {
+        local_log
+    } else if id.starts_with("bk-") {
+        crate::build_manager::fetch_buildkit_logs(&id).await.unwrap_or_default()
+    } else {
+        String::new()
+    };
     Ok(([(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")], log))
 }
 

@@ -1,8 +1,16 @@
 use orca_core::build::{BuildRecord, BuildSource, BuildStatus};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::Instant;
 
 const MAX_HISTORY: usize = 500;
+
+/// Cached BuildKit history to avoid shelling out on every request.
+static BUILDKIT_CACHE: Mutex<Option<(Instant, Vec<BuildRecord>)>> = Mutex::new(None);
+
+/// How long to cache BuildKit history results.
+const BUILDKIT_CACHE_TTL_SECS: u64 = 30;
 
 fn builds_dir() -> PathBuf {
     dirs::data_dir()
@@ -151,4 +159,262 @@ pub fn delete_build(id: &str) {
     history.retain(|r| r.id != id);
     save_history(history);
     let _ = std::fs::remove_file(log_path(id));
+}
+
+// --- BuildKit History Integration ---
+
+/// Intermediate struct for parsing `docker buildx history ls --format json` output.
+#[derive(serde::Deserialize)]
+struct BuildKitRecord {
+    #[serde(alias = "ref", alias = "Ref", default)]
+    build_ref: String,
+    #[serde(alias = "Status", default)]
+    status: String,
+    #[serde(alias = "Duration", alias = "duration", default)]
+    duration: Option<serde_json::Value>,
+    #[serde(alias = "CreatedAt", alias = "created_at", alias = "Created", default)]
+    created_at: Option<String>,
+    #[serde(alias = "Name", alias = "name", default)]
+    name: String,
+    #[serde(alias = "Error", alias = "error", default)]
+    error: Option<String>,
+}
+
+/// Build the docker command, using WSL prefix on Windows.
+fn docker_command() -> std::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("wsl");
+        cmd.arg("docker");
+        cmd
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new("docker")
+    }
+}
+
+/// Fetch build history from BuildKit via `docker buildx history ls`.
+/// Returns an empty list if buildx or the history subcommand is unavailable.
+pub async fn fetch_buildkit_history() -> Vec<BuildRecord> {
+    // Run in a blocking task since we're spawning processes
+    tokio::task::spawn_blocking(fetch_buildkit_history_sync)
+        .await
+        .unwrap_or_default()
+}
+
+fn fetch_buildkit_history_sync() -> Vec<BuildRecord> {
+    // First check that buildx history is available
+    let check = docker_command()
+        .args(["buildx", "history", "ls", "--format", "json"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output();
+
+    let output = match check {
+        Ok(o) if o.status.success() => o,
+        _ => return Vec::new(),
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if stdout.trim().is_empty() {
+        return Vec::new();
+    }
+
+    parse_buildkit_json(&stdout)
+}
+
+/// Parse JSON output from `docker buildx history ls --format json`.
+/// The output may be a JSON array or newline-delimited JSON objects.
+fn parse_buildkit_json(raw: &str) -> Vec<BuildRecord> {
+    let trimmed = raw.trim();
+
+    // Try parsing as a JSON array first
+    let records: Vec<BuildKitRecord> = if trimmed.starts_with('[') {
+        serde_json::from_str(trimmed).unwrap_or_default()
+    } else {
+        // Newline-delimited JSON objects
+        trimmed
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                if line.is_empty() {
+                    return None;
+                }
+                serde_json::from_str::<BuildKitRecord>(line).ok()
+            })
+            .collect()
+    };
+
+    records
+        .into_iter()
+        .filter(|r| !r.build_ref.is_empty())
+        .map(|r| {
+            let status = match r.status.to_lowercase().as_str() {
+                "completed" | "done" | "success" => BuildStatus::Success,
+                "error" | "failed" | "failure" => BuildStatus::Failed,
+                "canceled" | "cancelled" => BuildStatus::Cancelled,
+                "running" | "in_progress" | "building" => BuildStatus::InProgress,
+                _ => BuildStatus::Success,
+            };
+
+            let duration_secs = r.duration.as_ref().and_then(|v| match v {
+                serde_json::Value::Number(n) => n.as_f64(),
+                serde_json::Value::String(s) => parse_duration_string(s),
+                _ => None,
+            });
+
+            let started_at = r
+                .created_at
+                .as_deref()
+                .and_then(|s| {
+                    // Try RFC3339 first, then other common formats
+                    chrono::DateTime::parse_from_rfc3339(s)
+                        .map(|d| d.to_rfc3339())
+                        .ok()
+                        .or_else(|| {
+                            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+                                .ok()
+                                .map(|d| d.and_utc().to_rfc3339())
+                        })
+                })
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+
+            let finished_at = if status != BuildStatus::InProgress {
+                if let (Some(dur), Ok(start)) = (duration_secs, chrono::DateTime::parse_from_rfc3339(&started_at)) {
+                    Some((start + chrono::Duration::milliseconds((dur * 1000.0) as i64)).to_rfc3339())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Use the BuildKit ref as the ID, prefixed to avoid collisions
+            let id = format!("bk-{}", r.build_ref.replace('/', "-"));
+
+            // Use the name or ref as the tag
+            let tag = if r.name.is_empty() { r.build_ref.clone() } else { r.name };
+
+            BuildRecord {
+                id,
+                status,
+                tag,
+                context_path: String::new(),
+                dockerfile: String::from("Dockerfile"),
+                build_args: HashMap::new(),
+                started_at,
+                finished_at,
+                duration_secs,
+                image_id: None,
+                error: r.error.filter(|e| !e.is_empty()),
+                log_lines: 0,
+                source: BuildSource::External,
+            }
+        })
+        .collect()
+}
+
+/// Parse duration strings like "2m30s", "45s", "1h2m3s", or plain seconds.
+fn parse_duration_string(s: &str) -> Option<f64> {
+    // Try plain float first
+    if let Ok(secs) = s.parse::<f64>() {
+        return Some(secs);
+    }
+
+    let mut total = 0.0f64;
+    let mut num_buf = String::new();
+    for ch in s.chars() {
+        match ch {
+            '0'..='9' | '.' => num_buf.push(ch),
+            'h' | 'H' => {
+                total += num_buf.parse::<f64>().unwrap_or(0.0) * 3600.0;
+                num_buf.clear();
+            }
+            'm' | 'M' => {
+                // Check it's not "ms"
+                total += num_buf.parse::<f64>().unwrap_or(0.0) * 60.0;
+                num_buf.clear();
+            }
+            's' | 'S' => {
+                total += num_buf.parse::<f64>().unwrap_or(0.0);
+                num_buf.clear();
+            }
+            _ => {}
+        }
+    }
+
+    if total > 0.0 { Some(total) } else { None }
+}
+
+/// Fetch BuildKit history with caching (30-second TTL).
+pub async fn fetch_buildkit_history_cached() -> Vec<BuildRecord> {
+    // Check cache
+    if let Ok(guard) = BUILDKIT_CACHE.lock()
+        && let Some((ts, records)) = guard.as_ref()
+        && ts.elapsed().as_secs() < BUILDKIT_CACHE_TTL_SECS
+    {
+        return records.clone();
+    }
+
+    let records = fetch_buildkit_history().await;
+
+    if let Ok(mut guard) = BUILDKIT_CACHE.lock() {
+        *guard = Some((Instant::now(), records.clone()));
+    }
+
+    records
+}
+
+/// Merge Orca-tracked builds with BuildKit history.
+/// Orca builds take priority when IDs overlap. Result is sorted newest-first.
+pub async fn load_merged_history() -> Vec<BuildRecord> {
+    let mut orca_history = load_history();
+    let buildkit_history = fetch_buildkit_history_cached().await;
+
+    // Collect Orca build IDs for dedup
+    let orca_ids: std::collections::HashSet<String> = orca_history.iter().map(|r| r.id.clone()).collect();
+
+    // Add BuildKit records that don't overlap with Orca records
+    for bk_record in buildkit_history {
+        if !orca_ids.contains(&bk_record.id) {
+            orca_history.push(bk_record);
+        }
+    }
+
+    // Sort newest first by started_at
+    orca_history.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+
+    orca_history
+}
+
+/// Fetch logs for an external BuildKit build by its reference.
+/// The build ID should be prefixed with "bk-".
+pub async fn fetch_buildkit_logs(build_id: &str) -> Option<String> {
+    if !build_id.starts_with("bk-") {
+        return None;
+    }
+    // Recover the original ref from the sanitized ID
+    let build_ref = build_id.strip_prefix("bk-").unwrap_or(build_id);
+
+    tokio::task::spawn_blocking({
+        let build_ref = build_ref.to_string();
+        move || {
+            let output = docker_command()
+                .args(["buildx", "history", "logs", &build_ref])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .ok()?;
+
+            if output.status.success() {
+                Some(String::from_utf8_lossy(&output.stdout).to_string())
+            } else {
+                None
+            }
+        }
+    })
+    .await
+    .ok()
+    .flatten()
 }

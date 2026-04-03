@@ -62,6 +62,7 @@ function sourceLabel(source: BuildRecord["source"]): string {
     case "scheduled": return "Scheduled";
     case "webhook": return "Webhook";
     case "url": return "URL";
+    case "external": return "External";
     default: return source;
   }
 }
@@ -632,8 +633,21 @@ export default function BuildsPage(props: BuildsPageProps) {
               {statusIcon(detail.status)}
             </span>
             <div>
-              <div style={{ "font-weight": "600", "font-size": "16px" }}>
-                {detail.tag || "(untagged)"}
+              <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
+                <span style={{ "font-weight": "600", "font-size": "16px" }}>
+                  {detail.tag || "(untagged)"}
+                </span>
+                <Show when={detail.source === "external"}>
+                  <span style={{
+                    "font-size": "10px",
+                    padding: "1px 6px",
+                    "border-radius": "4px",
+                    background: "rgba(136, 132, 216, 0.15)",
+                    color: "#a78bfa",
+                    border: "1px solid rgba(136, 132, 216, 0.3)",
+                    "white-space": "nowrap",
+                  }}>External</span>
+                </Show>
               </div>
               <div style={{ color: "#8b949e", "font-size": "13px" }}>
                 Build {detail.id}
@@ -985,7 +999,20 @@ export default function BuildsPage(props: BuildsPageProps) {
                       </span>
                     </td>
                     <td>
-                      <div style={{ "font-weight": "500" }}>{build.tag || "(untagged)"}</div>
+                      <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+                        <span style={{ "font-weight": "500" }}>{build.tag || "(untagged)"}</span>
+                        <Show when={build.source === "external"}>
+                          <span style={{
+                            "font-size": "10px",
+                            padding: "1px 6px",
+                            "border-radius": "4px",
+                            background: "rgba(136, 132, 216, 0.15)",
+                            color: "#a78bfa",
+                            border: "1px solid rgba(136, 132, 216, 0.3)",
+                            "white-space": "nowrap",
+                          }}>External</span>
+                        </Show>
+                      </div>
                       <div style={{ color: "#8b949e", "font-size": "12px" }}>{build.context_path}</div>
                     </td>
                     <td style={{ color: "#8b949e" }}>{formatDuration(build.duration_secs)}</td>
