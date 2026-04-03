@@ -118,7 +118,7 @@ export default function NetworksPage() {
     return sortFn(networks(), (item, field) => {
       switch (field) {
         case "name": return item.name;
-        case "driver": return item.driver;
+        case "driver": return item.driver || "none";
         case "subnet": return item.subnet || "";
         default: return "";
       }
@@ -228,7 +228,7 @@ export default function NetworksPage() {
                       {n.name}
                     </td>
                     <td class="mono" style={{ color: "#8b949e" }}>{n.id.substring(0, 12)}</td>
-                    <td>{n.driver}</td>
+                    <td>{n.driver || "none"}</td>
                     <td class="mono">{n.subnet || "-"}</td>
                     <td class="mono">{n.gateway || "-"}</td>
                     <td style={{ "text-align": "right" }}>
@@ -260,7 +260,7 @@ export default function NetworksPage() {
                           </div>
                           <div>
                             <span style={{ color: "#8b949e" }}>Driver</span>
-                            <div style={{ "margin-top": "2px" }}>{n.driver}</div>
+                            <div style={{ "margin-top": "2px" }}>{n.driver || "none"}</div>
                           </div>
                           <div>
                             <span style={{ color: "#8b949e" }}>Scope</span>
@@ -329,7 +329,7 @@ export default function NetworksPage() {
                         fill="#161b22" stroke={color} stroke-width={2}
                         onMouseEnter={(e) => setHoveredNode({
                           type: "network", name: net.name,
-                          details: `Driver: ${net.driver}\nSubnet: ${net.subnet || "none"}\nGateway: ${net.gateway || "none"}\nContainers: ${containerCount}`,
+                          details: `Driver: ${net.driver || "none"}\nSubnet: ${net.subnet || "none"}\nGateway: ${net.gateway || "none"}\nContainers: ${containerCount}`,
                           x: e.clientX, y: e.clientY,
                         })}
                         onMouseLeave={() => setHoveredNode(null)}
@@ -341,7 +341,7 @@ export default function NetworksPage() {
                       </text>
                       {/* Network info */}
                       <text x={x} y={y + 8} text-anchor="middle" fill="#8b949e" font-size="11" style={{ "pointer-events": "none" }}>
-                        {net.driver}{net.subnet ? ` | ${net.subnet}` : ""}
+                        {net.driver || "none"}{net.subnet ? ` | ${net.subnet}` : ""}
                       </text>
 
                       {/* Connected containers */}
