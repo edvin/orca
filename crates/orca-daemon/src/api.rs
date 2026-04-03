@@ -277,6 +277,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/environment/status", get(env_status))
         .route("/environment/fix", post(env_fix))
         .route("/environment/fix-stream", post(env_fix_stream))
+        .route("/environment/docker-desktop-status", get(docker_desktop_status))
+        .route("/environment/switch-to-orca", post(switch_to_orca))
+        .route("/environment/stop-docker-desktop", post(stop_docker_desktop))
         // System health
         .route("/system/health", get(system_health))
         .route("/system/host-uid", get(host_uid))
@@ -3839,6 +3842,23 @@ async fn env_fix_stream(Json(body): Json<FixRequest>) -> impl IntoResponse {
     let stream = ReceiverStream::new(rx).map(|line| Ok::<_, std::convert::Infallible>(Event::default().data(line)));
 
     Sse::new(stream)
+}
+
+// --- Docker Desktop Migration ---
+
+async fn docker_desktop_status() -> Result<impl IntoResponse, ApiError> {
+    let status = orca_backend_common::environment::docker_desktop_status().await;
+    Ok(Json(serde_json::json!(status)))
+}
+
+async fn switch_to_orca() -> Result<impl IntoResponse, ApiError> {
+    let message = orca_backend_common::environment::switch_to_orca_runtime().await?;
+    Ok(Json(serde_json::json!({ "message": message })))
+}
+
+async fn stop_docker_desktop() -> Result<impl IntoResponse, ApiError> {
+    orca_backend_common::environment::stop_docker_desktop().await?;
+    Ok(Json(serde_json::json!({ "message": "Docker Desktop stopped" })))
 }
 
 // --- System Health ---

@@ -2227,6 +2227,23 @@ pub async fn env_fix_stream(app: tauri::AppHandle, action: String) -> Result<(),
     Ok(())
 }
 
+// --- Docker Desktop Migration ---
+
+#[tauri::command]
+pub async fn docker_desktop_status() -> Result<serde_json::Value, String> {
+    get_json("/environment/docker-desktop-status").await
+}
+
+#[tauri::command]
+pub async fn switch_to_orca_runtime() -> Result<serde_json::Value, String> {
+    post_json("/environment/switch-to-orca").await
+}
+
+#[tauri::command]
+pub async fn stop_docker_desktop() -> Result<serde_json::Value, String> {
+    post_json("/environment/stop-docker-desktop").await
+}
+
 // --- Templates ---
 
 #[tauri::command]

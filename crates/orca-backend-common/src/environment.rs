@@ -961,6 +961,133 @@ async fn check_docker_desktop() -> HealthCheck {
     }
 }
 
+// --- Docker Desktop migration (macOS only) ---
+
+/// Status of Docker Desktop relative to the Orca Lima runtime.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DockerDesktopStatus {
+    /// Docker Desktop is installed on this machine.
+    pub installed: bool,
+    /// Docker Desktop's context is the currently active Docker context.
+    pub active: bool,
+    /// The Orca Lima VM exists and could be used as the runtime.
+    pub orca_runtime_available: bool,
+}
+
+/// Check whether Docker Desktop is installed and whether its context is active.
+#[cfg(target_os = "macos")]
+pub async fn docker_desktop_status() -> DockerDesktopStatus {
+    let installed = std::path::Path::new("/Applications/Docker.app").exists();
+
+    // Check the active Docker context name
+    let active = match run_cmd("docker", &["context", "inspect", "--format", "{{.Name}}"]).await {
+        Ok(name) => {
+            let name = name.trim();
+            // "desktop-linux" is Docker Desktop's default context on macOS.
+            // "default" can also mean Docker Desktop if Docker Desktop is installed
+            // and no other context has been created.
+            name == "desktop-linux" || (name == "default" && installed)
+        }
+        Err(_) => false,
+    };
+
+    // Check whether the lima-orca context exists (or the Orca Lima VM is available)
+    let orca_runtime_available = if let Ok(home) = std::env::var("HOME") {
+        let socket = format!("{home}/.lima/orca/sock/docker.sock");
+        std::path::Path::new(&socket).exists()
+    } else {
+        false
+    };
+
+    DockerDesktopStatus {
+        installed,
+        active,
+        orca_runtime_available,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn docker_desktop_status() -> DockerDesktopStatus {
+    DockerDesktopStatus {
+        installed: false,
+        active: false,
+        orca_runtime_available: false,
+    }
+}
+
+/// Switch Docker CLI to use the Orca Lima runtime context.
+#[cfg(target_os = "macos")]
+pub async fn switch_to_orca_runtime() -> anyhow::Result<String> {
+    // 1. Check that the Orca Lima VM exists
+    let home = std::env::var("HOME").map_err(|_| anyhow::anyhow!("HOME not set"))?;
+    let socket = format!("{home}/.lima/orca/sock/docker.sock");
+
+    if !std::path::Path::new(&socket).exists() {
+        return Err(anyhow::anyhow!(
+            "Orca Lima VM not found. Please set up Docker via the System Health page first."
+        ));
+    }
+
+    // 2. Ensure the lima-orca Docker context exists, create it if missing
+    let context_exists = run_cmd("docker", &["context", "inspect", "lima-orca"]).await.is_ok();
+
+    if !context_exists {
+        let host = format!("unix://{socket}");
+        run_cmd(
+            "docker",
+            &[
+                "context",
+                "create",
+                "lima-orca",
+                "--docker",
+                &format!("host={host}"),
+                "--description",
+                "Orca Lima runtime",
+            ],
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create Docker context: {e}"))?;
+    }
+
+    // 3. Switch to the lima-orca context
+    run_cmd("docker", &["context", "use", "lima-orca"])
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to switch Docker context: {e}"))?;
+
+    // 4. Verify connectivity
+    match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
+        Ok(version) => Ok(format!(
+            "Switched to Orca runtime (Docker {}). The Docker CLI now uses the lightweight Lima VM.",
+            version.trim()
+        )),
+        Err(_) => Ok("Switched Docker context to lima-orca. The runtime may still be starting up.".to_string()),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn switch_to_orca_runtime() -> anyhow::Result<String> {
+    Err(anyhow::anyhow!("Runtime switching is only supported on macOS"))
+}
+
+/// Stop Docker Desktop application (macOS only).
+#[cfg(target_os = "macos")]
+pub async fn stop_docker_desktop() -> anyhow::Result<()> {
+    // Try osascript first (graceful quit)
+    let result = run_cmd("osascript", &["-e", "quit app \"Docker\""]).await;
+    if result.is_ok() {
+        return Ok(());
+    }
+
+    // Fallback: killall
+    let _ = run_cmd("killall", &["Docker Desktop"]).await;
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn stop_docker_desktop() -> anyhow::Result<()> {
+    Err(anyhow::anyhow!("Stopping Docker Desktop is only supported on macOS"))
+}
+
 async fn check_podman_socket() -> HealthCheck {
     // Check rootless socket first, then root socket
     let uid = std::env::var("UID")

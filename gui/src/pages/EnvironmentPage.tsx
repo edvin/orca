@@ -1,7 +1,7 @@
 import { createSignal, createEffect, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth } from "../lib/types";
+import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth, DockerDesktopStatus } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
@@ -12,6 +12,14 @@ export default function EnvironmentPage() {
   const [loading, setLoading] = createSignal(true);
   const [machine, setMachine] = createSignal<MachineInfo | null>(null);
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
+
+  // Docker Desktop migration state
+  const [ddStatus, setDdStatus] = createSignal<DockerDesktopStatus | null>(null);
+  const [migrating, setMigrating] = createSignal(false);
+  const [stopDdChecked, setStopDdChecked] = createSignal(false);
+  const [migrationDismissed, setMigrationDismissed] = createSignal(false);
+
+  const isMacOS = () => navigator.platform.includes("Mac");
 
   // Action dialog state
   const [actionDialogOpen, setActionDialogOpen] = createSignal(false);
@@ -30,14 +38,16 @@ export default function EnvironmentPage() {
   const refresh = async () => {
     setLoading(true);
     try {
-      const [envRes, machineRes, healthRes] = await Promise.allSettled([
+      const [envRes, machineRes, healthRes, ddRes] = await Promise.allSettled([
         invoke("env_status"),
         invoke("get_machine_info"),
         invoke("system_health"),
+        isMacOS() ? invoke("docker_desktop_status") : Promise.resolve(null),
       ]);
       if (envRes.status === "fulfilled") setStatus(envRes.value as EnvironmentStatus);
       if (machineRes.status === "fulfilled") setMachine(machineRes.value as MachineInfo);
       if (healthRes.status === "fulfilled") setHealth(healthRes.value as SystemHealth);
+      if (ddRes.status === "fulfilled" && ddRes.value) setDdStatus(ddRes.value as DockerDesktopStatus);
       // If all three failed, show a fallback state so the page isn't stuck on loading
       if (envRes.status === "rejected" && machineRes.status === "rejected" && healthRes.status === "rejected") {
         setHealth({ docker_connected: false, docker_version: null, disk_usage: null, system_resources: null, warnings: ["Could not reach Docker. The setup wizard below will help you get started."] } as SystemHealth);
@@ -221,6 +231,52 @@ export default function EnvironmentPage() {
     }
   };
 
+  const runMigration = async () => {
+    setMigrating(true);
+    try {
+      // Step 1: If Orca runtime isn't available, the user needs to set up Docker first
+      const dd = ddStatus();
+      if (dd && !dd.orca_runtime_available) {
+        showToast("Setting up Orca runtime first...", "info");
+        runFix("setup_docker_macos", "Docker Setup");
+        return;
+      }
+
+      // Step 2: Switch Docker context to lima-orca
+      showToast("Switching to Orca runtime...", "info");
+      const result = await invoke("switch_to_orca_runtime") as { message: string };
+
+      // Step 3: Optionally stop Docker Desktop
+      if (stopDdChecked()) {
+        showToast("Stopping Docker Desktop...", "info");
+        try {
+          await invoke("stop_docker_desktop");
+        } catch (e) {
+          logError(`Failed to stop Docker Desktop: ${e}`);
+        }
+      }
+
+      // Step 4: Restart daemon to pick up new context
+      showToast("Restarting Orca daemon...", "info");
+      try {
+        await invoke("stop_daemon");
+        await new Promise(r => setTimeout(r, 2000));
+        await invoke("start_daemon");
+        await new Promise(r => setTimeout(r, 3000));
+      } catch {
+        // Daemon restart can fail if already stopped
+      }
+
+      showToast(result.message, "success");
+      await refresh();
+    } catch (e) {
+      logError(`Migration failed: ${e}`);
+      showToast(`Migration failed: ${e}`, "error");
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   const runDiagnose = async () => {
     setDiagnoseLog("Testing connection methods...\n\n");
     setDiagnoseRunning(true);
@@ -319,23 +375,105 @@ export default function EnvironmentPage() {
                     All Systems Operational
                   </div>
                   <div style={{ "font-size": "14px", color: "#8b949e", "line-height": "1.5" }}>
-                    {platformLabel(s().platform)} {"\u2022"} Runtime: {s().suggested_runtime} {"\u2022"} {passCount()}/{totalCount()} checks passed
+                    {platformLabel(s().platform)} {"\u2022"} Runtime: {
+                      isMacOS() && ddStatus()?.active
+                        ? "Docker Desktop"
+                        : isMacOS() && !ddStatus()?.active && ddStatus()?.orca_runtime_available
+                        ? "Orca (Lima)"
+                        : s().platform === "linux"
+                        ? "Native Docker"
+                        : s().suggested_runtime
+                    } {isMacOS() && !ddStatus()?.active && ddStatus()?.orca_runtime_available ? " \u2713" : ""} {"\u2022"} {passCount()}/{totalCount()} checks passed
                   </div>
                 </div>
               </div>
 
-              {/* Docker Desktop note */}
-              <Show when={hasDockerDesktop()}>
+              {/* Docker Desktop migration card (macOS only) */}
+              <Show when={isMacOS() && ddStatus()?.installed && ddStatus()?.active && !migrationDismissed()}>
+                <div style={{
+                  "margin-bottom": "24px",
+                  background: "linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(139, 92, 246, 0.06) 100%)",
+                  border: "1px solid rgba(88, 166, 255, 0.2)",
+                  "border-radius": "12px",
+                  padding: "28px 32px",
+                }}>
+                  <div style={{ "font-size": "16px", "font-weight": "700", color: "#e6edf3", "margin-bottom": "8px" }}>
+                    Switch to Orca Runtime
+                  </div>
+                  <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6", "margin-bottom": "20px" }}>
+                    You're currently using Docker Desktop's daemon. Orca can run Docker with its own lightweight runtime — less memory, no license required, zero telemetry.
+                  </div>
+
+                  {/* Comparison columns */}
+                  <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px", "margin-bottom": "20px", "max-width": "420px" }}>
+                    <div style={{
+                      background: "rgba(248, 81, 73, 0.06)",
+                      border: "1px solid rgba(248, 81, 73, 0.15)",
+                      "border-radius": "8px", padding: "14px 16px",
+                    }}>
+                      <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3", "margin-bottom": "10px" }}>Docker Desktop</div>
+                      <div style={{ "font-size": "12px", color: "#8b949e", "line-height": "1.8" }}>
+                        ~2 GB RAM<br/>License required<br/>Closed source<br/>Telemetry
+                      </div>
+                    </div>
+                    <div style={{
+                      background: "rgba(63, 185, 80, 0.06)",
+                      border: "1px solid rgba(63, 185, 80, 0.15)",
+                      "border-radius": "8px", padding: "14px 16px",
+                    }}>
+                      <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3", "margin-bottom": "10px" }}>Orca Runtime</div>
+                      <div style={{ "font-size": "12px", color: "#3fb950", "line-height": "1.8" }}>
+                        ~200 MB RAM<br/>Free forever<br/>Open source<br/>Zero telemetry
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "16px" }}>
+                    Your containers and images will still be available.
+                  </div>
+
+                  {/* Stop Docker Desktop checkbox */}
+                  <label style={{
+                    display: "flex", "align-items": "center", gap: "8px",
+                    "font-size": "13px", color: "#8b949e", cursor: "pointer",
+                    "margin-bottom": "16px",
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={stopDdChecked()}
+                      onChange={(e) => setStopDdChecked(e.currentTarget.checked)}
+                      style={{ "accent-color": "#58a6ff" }}
+                    />
+                    Also stop Docker Desktop to free resources
+                  </label>
+
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button
+                      class="btn btn-primary"
+                      disabled={migrating()}
+                      onClick={runMigration}
+                    >
+                      {migrating() ? "Switching..." : "Switch to Orca Runtime"}
+                    </button>
+                    <button class="btn" onClick={() => setMigrationDismissed(true)}>
+                      Maybe Later
+                    </button>
+                  </div>
+                </div>
+              </Show>
+
+              {/* Docker Desktop note — show only when DD is installed but NOT active (already on Orca) */}
+              <Show when={hasDockerDesktop() && !(isMacOS() && ddStatus()?.active)}>
                 <div style={{
                   padding: "12px 16px", "margin-bottom": "20px",
-                  background: "rgba(88, 166, 255, 0.06)",
-                  border: "1px solid rgba(88, 166, 255, 0.12)",
+                  background: "rgba(63, 185, 80, 0.06)",
+                  border: "1px solid rgba(63, 185, 80, 0.12)",
                   "border-radius": "8px",
                   "font-size": "13px", color: "#8b949e",
                   display: "flex", "align-items": "center", gap: "8px",
                 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  Existing Docker installation detected — Orca Desktop shares the same daemon.
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Using Orca runtime — Docker Desktop is installed but not the active context.
                 </div>
               </Show>
 
