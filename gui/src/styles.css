@@ -3608,7 +3608,7 @@ select option {
   position: absolute;
   top: 100%;
   right: 0;
-  min-width: 160px;
+  min-width: 200px;
   background: rgba(22, 27, 34, 0.95);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
@@ -3635,6 +3635,7 @@ select option {
   color: #c9d1d9;
   font-size: 13px;
   cursor: pointer;
+  white-space: nowrap;
   border-radius: 6px;
   transition: background 0.1s;
   font-family: inherit;
