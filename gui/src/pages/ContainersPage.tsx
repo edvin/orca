@@ -1291,7 +1291,32 @@ export default function ContainersPage(props: ContainersPageProps) {
                     </div>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Port <span style={{ color: "#f85149" }}>*</span></label>
+                    <label class="form-label">Container Port <span style={{ color: "#f85149" }}>*</span></label>
+                    <Show when={exposeContainer()!.ports.length > 0}>
+                      <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "margin-bottom": "8px" }}>
+                        <For each={[...new Set(exposeContainer()!.ports.map((p) => p.container_port))]}>
+                          {(port) => (
+                            <button
+                              type="button"
+                              onClick={() => setExposePort(String(port))}
+                              style={{
+                                padding: "4px 12px",
+                                "border-radius": "12px",
+                                border: `1px solid ${exposePort() === String(port) ? "#58a6ff" : "rgba(255,255,255,0.1)"}`,
+                                background: exposePort() === String(port) ? "rgba(88,166,255,0.15)" : "rgba(255,255,255,0.04)",
+                                color: exposePort() === String(port) ? "#58a6ff" : "#8b949e",
+                                "font-size": "12px",
+                                "font-family": "monospace",
+                                cursor: "pointer",
+                                transition: "all 0.15s",
+                              }}
+                            >
+                              :{port}
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
                     <input
                       class="form-input"
                       type="number"
@@ -1299,7 +1324,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                       onInput={(e) => setExposePort(e.currentTarget.value)}
                       min="1"
                       max="65535"
+                      placeholder="8080"
                     />
+                    <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>The port your app listens on inside the container</p>
                   </div>
                   <Show when={exposeHostname().trim()}>
                     <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "8px" }}>
