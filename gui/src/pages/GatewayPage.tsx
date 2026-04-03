@@ -135,6 +135,25 @@ export default function GatewayPage(props: GatewayPageProps) {
     }
   };
 
+  const suggestHostname = (name: string) => {
+    let h = name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    const parts = h.split("-");
+    if (parts.length >= 3 && /^\d+$/.test(parts[parts.length - 1])) {
+      h = parts.slice(1, -1).join("-");
+    }
+    return h;
+  };
+
+  // Suggested routes: running containers with exposed ports not yet in the gateway
+  const suggestions = () => {
+    const s = status();
+    if (!s?.running) return [];
+    const routedNames = new Set(routes().map((r) => r.container_name));
+    return containers().filter(
+      (c) => c.state === "Running" && c.ports.length > 0 && !routedNames.has(c.name)
+    );
+  };
+
   const fetchContainers = async () => {
     try {
       const [c, s] = await Promise.all([
@@ -146,11 +165,22 @@ export default function GatewayPage(props: GatewayPageProps) {
     } catch {}
   };
 
+  const quickAdd = async (c: Container) => {
+    const hostname = suggestHostname(c.name);
+    const port = c.ports[0]?.container_port || 80;
+    const domain = status()?.domain || "localhost";
+    try {
+      await invoke("gateway_add_route", { hostname: `${hostname}.${domain}`, containerName: c.name, port });
+      showToast(`Added ${hostname}.${domain}`, "success");
+      refresh();
+    } catch (e) { showToast(`Failed: ${e}`, "error"); }
+  };
 
   const refresh = () => {
     fetchStatus();
     fetchRoutes();
     fetchLinks();
+    fetchContainers();
   };
 
   useRefresh(refresh);
@@ -721,6 +751,41 @@ export default function GatewayPage(props: GatewayPageProps) {
             </tbody>
           </table>
         </Show>
+      </Show>
+
+      {/* Suggested Routes */}
+      <Show when={status()?.running && suggestions().length > 0}>
+        <div style={{ "margin-top": "20px" }}>
+          <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", "margin-bottom": "4px" }}>Suggested Routes</h3>
+          <p style={{ color: "#6e7681", "font-size": "12px", "margin-bottom": "12px" }}>Containers with exposed ports not yet in the gateway</p>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
+            <For each={suggestions()}>
+              {(container) => (
+                <div class="card" style={{ display: "flex", "align-items": "center", gap: "12px", padding: "10px 14px" }}>
+                  <div style={{ flex: "1", "min-width": "0", display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
+                    <span style={{ "font-weight": "600", color: "#e6edf3", "font-size": "13px" }}>{container.name}</span>
+                    <span style={{ color: "#6e7681", "font-size": "12px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{container.image}</span>
+                    <For each={[...new Set(container.ports.map((p) => p.container_port))]}>
+                      {(port) => (
+                        <span class="mono" style={{
+                          color: "#8b949e",
+                          "font-size": "11px",
+                          background: "#161b22",
+                          padding: "1px 6px",
+                          "border-radius": "4px",
+                          "border": "1px solid #30363d",
+                        }}>:{port}</span>
+                      )}
+                    </For>
+                  </div>
+                  <button class="btn btn-sm btn-primary" onClick={() => quickAdd(container)} style={{ "flex-shrink": "0", "font-size": "12px", padding: "4px 12px" }}>
+                    Add to Gateway
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
       </Show>
 
       {/* CA Trust Note */}

@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { Container, ContainerStats, Image, ComposeProject, SystemHealth, GatewayStatus } from "../lib/types";
+import type { Container, ContainerStats, Image, ComposeProject, SystemHealth, GatewayStatus, GatewayRoute } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import { recordMetrics } from "../lib/metricsStore";
@@ -39,6 +39,7 @@ export default function DashboardPage(props: DashboardPageProps) {
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
 
   const [gatewayStatus, setGatewayStatus] = createSignal<GatewayStatus | null>(null);
+  const [gatewayRoutes, setGatewayRoutes] = createSignal<GatewayRoute[]>([]);
 
   const [containersState, setContainersState] = createSignal<CardState>("loading");
   const [imagesState, setImagesState] = createSignal<CardState>("loading");
@@ -88,8 +89,17 @@ export default function DashboardPage(props: DashboardPageProps) {
       .catch((e) => { setHealthError(friendlyError(String(e))); setHealthState("error"); });
 
     invokeWithTimeout<GatewayStatus>("gateway_status")
-      .then((v) => setGatewayStatus(v))
-      .catch(() => setGatewayStatus(null));
+      .then((v) => {
+        setGatewayStatus(v);
+        if (v?.running) {
+          invokeWithTimeout<GatewayRoute[]>("gateway_list_routes")
+            .then((r) => setGatewayRoutes(r || []))
+            .catch(() => setGatewayRoutes([]));
+        } else {
+          setGatewayRoutes([]);
+        }
+      })
+      .catch(() => { setGatewayStatus(null); setGatewayRoutes([]); });
   };
 
   useRefresh(fetchAll);
@@ -176,6 +186,16 @@ export default function DashboardPage(props: DashboardPageProps) {
   const runningCount = () => containers().filter((c) => c.state === "Running").length;
   const totalImageSize = () => images().reduce((sum, img) => sum + img.size_bytes, 0);
   const runningStacks = () => stacks().filter((s) => s.status === "Running").length;
+
+  // Count containers with ports that could be exposed via gateway but aren't yet
+  const suggestableCount = () => {
+    const gw = gatewayStatus();
+    if (!gw?.running) return 0;
+    const routedNames = new Set(gatewayRoutes().map((r) => r.container_name));
+    return containers().filter(
+      (c) => c.state === "Running" && c.ports.length > 0 && c.name !== "orca-gateway" && !routedNames.has(c.name)
+    ).length;
+  };
 
   const totalCpu = () => {
     const stats = containerStats();
@@ -366,12 +386,17 @@ export default function DashboardPage(props: DashboardPageProps) {
                 </div>
                 <div class="dashboard-stat-sub">
                   <Show when={gw().running} fallback={
-                    <span style={{ color: "#8b949e" }}>Click to configure</span>
+                    <span style={{ color: "#8b949e" }}>Enable for clean hostnames</span>
                   }>
                     <span style={{ color: "#3fb950" }}>{gw().routes_active} route{gw().routes_active !== 1 ? "s" : ""}</span>
                     <span style={{ color: "#8b949e" }}> on *.{gw().domain}</span>
                   </Show>
                 </div>
+                <Show when={gw().running && suggestableCount() > 0}>
+                  <div style={{ "font-size": "11px", color: "#58a6ff", "margin-top": "4px" }}>
+                    {suggestableCount()} container{suggestableCount() !== 1 ? "s" : ""} could be exposed
+                  </div>
+                </Show>
               </>
             )}
           </Show>

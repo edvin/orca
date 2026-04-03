@@ -402,6 +402,18 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               showToast(`Gateway routes registered: ${urls}`, "info");
             }
           }
+          // Suggest gateway if running but no routes were auto-registered
+          if (!gwRoutes?.length) {
+            try {
+              const gwStatus = (await invoke("gateway_status")) as any;
+              if (gwStatus?.running) {
+                showToast("Expose this stack via the Gateway?", "info", {
+                  label: "Open Gateway",
+                  onClick: () => props.onNavigate?.("gateway"),
+                });
+              }
+            } catch { /* gateway not available, skip */ }
+          }
           logInfo("Compose stack deployed", `${template.name} → stack ${stackName}${hostSuffix}`);
           if (guide && !switchedHost) {
             setSetupGuide(guide);
