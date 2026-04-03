@@ -121,6 +121,9 @@ pub struct OrcaConfig {
     /// Gateway (managed Caddy reverse proxy) configuration.
     #[serde(default)]
     pub gateway: GatewayConfig,
+    /// Whether to intercept docker-desktop:// URLs and handle them in Orca.
+    #[serde(default = "default_true")]
+    pub intercept_docker_desktop_urls: bool,
 }
 
 /// A scheduled container action (e.g., restart every Sunday).
@@ -378,6 +381,7 @@ impl Default for OrcaConfig {
             deploy_history: Vec::new(),
             schedules: Vec::new(),
             gateway: GatewayConfig::default(),
+            intercept_docker_desktop_urls: true,
         }
     }
 }

@@ -240,6 +240,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   const [startOnLogin, setStartOnLogin] = createSignal(false);
   const [showTrayIcon, setShowTrayIcon] = createSignal(true);
   const [telemetry, setTelemetry] = createSignal(false);
+  const [interceptDockerUrls, setInterceptDockerUrls] = createSignal(true);
 
   // AI settings
   type AiProviderType = "anthropic" | "openai" | "gemini" | "ollama" | "custom";
@@ -525,35 +526,40 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         start_on_login: boolean;
         show_tray_icon: boolean;
         telemetry: boolean;
+        intercept_docker_desktop_urls: boolean;
       };
       setStartOnLogin(settings.start_on_login);
       setShowTrayIcon(settings.show_tray_icon);
       setTelemetry(settings.telemetry);
+      setInterceptDockerUrls(settings.intercept_docker_desktop_urls);
       setDaemonConnected(true);
     } catch {
     }
   };
 
   const saveGeneralSetting = async (
-    field: "start_on_login" | "show_tray_icon" | "telemetry",
+    field: "start_on_login" | "show_tray_icon" | "telemetry" | "intercept_docker_desktop_urls",
     value: boolean,
   ) => {
-    const prev = { start_on_login: startOnLogin(), show_tray_icon: showTrayIcon(), telemetry: telemetry() };
+    const prev = { start_on_login: startOnLogin(), show_tray_icon: showTrayIcon(), telemetry: telemetry(), intercept_docker_desktop_urls: interceptDockerUrls() };
     if (field === "start_on_login") setStartOnLogin(value);
     else if (field === "show_tray_icon") setShowTrayIcon(value);
     else if (field === "telemetry") setTelemetry(value);
+    else if (field === "intercept_docker_desktop_urls") setInterceptDockerUrls(value);
 
     try {
       await invoke("save_general_settings", {
         startOnLogin: field === "start_on_login" ? value : startOnLogin(),
         showTrayIcon: field === "show_tray_icon" ? value : showTrayIcon(),
         telemetry: field === "telemetry" ? value : telemetry(),
+        interceptDockerDesktopUrls: field === "intercept_docker_desktop_urls" ? value : interceptDockerUrls(),
       });
       showToast("Settings saved", "success");
     } catch (e) {
       setStartOnLogin(prev.start_on_login);
       setShowTrayIcon(prev.show_tray_icon);
       setTelemetry(prev.telemetry);
+      setInterceptDockerUrls(prev.intercept_docker_desktop_urls);
       logError(`Failed to save general settings: ${e}`, `Field "${field}"`);
       showToast(`Failed to save settings: ${e}`, "error");
     }
@@ -925,6 +931,22 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     style={{ cursor: daemonConnected() ? "pointer" : "not-allowed" }}
                   >
                     <div class={`toggle-track${showTrayIcon() ? " toggle-on" : ""}`}>
+                      <div class="toggle-thumb" />
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-divider" />
+                <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
+                  <div class="settings-row-left">
+                    <span class="settings-label">Intercept Docker Desktop URLs</span>
+                    <span class="settings-description">When enabled, docker-desktop:// links open in Orca instead of Docker Desktop</span>
+                  </div>
+                  <div
+                    class="settings-toggle"
+                    onClick={() => daemonConnected() && saveGeneralSetting("intercept_docker_desktop_urls", !interceptDockerUrls())}
+                    style={{ cursor: daemonConnected() ? "pointer" : "not-allowed" }}
+                  >
+                    <div class={`toggle-track${interceptDockerUrls() ? " toggle-on" : ""}`}>
                       <div class="toggle-thumb" />
                     </div>
                   </div>

@@ -158,6 +158,7 @@ pub fn run() {
             commands::save_user_template,
             commands::delete_user_template,
             commands::ai_ask,
+            commands::get_intercept_docker_urls,
             commands::get_general_settings,
             commands::save_general_settings,
             commands::save_ai_settings,

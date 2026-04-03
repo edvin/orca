@@ -5092,6 +5092,12 @@ struct GeneralSettingsRequest {
     start_on_login: bool,
     show_tray_icon: bool,
     telemetry: bool,
+    #[serde(default = "default_true_fn")]
+    intercept_docker_desktop_urls: bool,
+}
+
+fn default_true_fn() -> bool {
+    true
 }
 
 async fn get_general_settings(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
@@ -5100,6 +5106,7 @@ async fn get_general_settings(State(state): State<Arc<AppState>>) -> Result<impl
         "start_on_login": config.start_on_login,
         "show_tray_icon": config.show_tray_icon,
         "telemetry": config.telemetry,
+        "intercept_docker_desktop_urls": config.intercept_docker_desktop_urls,
     })))
 }
 
@@ -5111,6 +5118,7 @@ async fn save_general_settings(
     config.start_on_login = body.start_on_login;
     config.show_tray_icon = body.show_tray_icon;
     config.telemetry = body.telemetry;
+    config.intercept_docker_desktop_urls = body.intercept_docker_desktop_urls;
     config
         .save()
         .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;

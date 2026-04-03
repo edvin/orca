@@ -164,8 +164,16 @@ export default function App() {
     }
   };
 
-  const handleDeepLink = (url: string) => {
+  const handleDeepLink = async (url: string) => {
     // Parse orca:// and docker-desktop:// URLs and navigate accordingly
+    if (url.startsWith("docker-desktop://")) {
+      try {
+        const intercept = await invoke("get_intercept_docker_urls") as boolean;
+        if (!intercept) return;
+      } catch {
+        return;
+      }
+    }
     try {
       const normalizedUrl = url.replace(/^docker-desktop:\/\//, "orca://");
       const parsed = new URL(normalizedUrl);

@@ -2655,13 +2655,26 @@ pub async fn save_wsl_config(memory: String, processors: String, swap: String) -
 
 // --- General Settings ---
 
+/// Read intercept_docker_desktop_urls directly from config file (no daemon needed).
+/// Used by the deep link handler which may fire before the daemon is connected.
+#[tauri::command]
+pub async fn get_intercept_docker_urls() -> Result<bool, String> {
+    let config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    Ok(config.intercept_docker_desktop_urls)
+}
+
 #[tauri::command]
 pub async fn get_general_settings() -> Result<serde_json::Value, String> {
     get_json("/settings/general").await
 }
 
 #[tauri::command]
-pub async fn save_general_settings(start_on_login: bool, show_tray_icon: bool, telemetry: bool) -> Result<(), String> {
+pub async fn save_general_settings(
+    start_on_login: bool,
+    show_tray_icon: bool,
+    telemetry: bool,
+    intercept_docker_desktop_urls: bool,
+) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
         .post(format!("{base}/settings/general"))
@@ -2669,6 +2682,7 @@ pub async fn save_general_settings(start_on_login: bool, show_tray_icon: bool, t
             "start_on_login": start_on_login,
             "show_tray_icon": show_tray_icon,
             "telemetry": telemetry,
+            "intercept_docker_desktop_urls": intercept_docker_desktop_urls,
         }))
         .send()
         .await
