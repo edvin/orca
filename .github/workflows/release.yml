@@ -241,7 +241,7 @@ jobs:
           if [ -d "$TARGET/bundle" ]; then
             while IFS= read -r f; do
               UPLOAD_FILES="$UPLOAD_FILES \"$f\""
-            done < <(find "$TARGET/bundle" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" -o -name "*-setup.exe" \) 2>/dev/null)
+            done < <(find "$TARGET/bundle" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" -o -name "*-setup.exe" -o -name "*.tar.gz" \) 2>/dev/null)
           fi
 
           # Standalone daemon binaries are uploaded by the daemon-package workflow
