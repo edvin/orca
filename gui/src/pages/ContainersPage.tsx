@@ -48,6 +48,13 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [composeValidating, setComposeValidating] = createSignal(false);
   const [composeError, setComposeError] = createSignal("");
 
+  // Gateway expose state
+  const [exposeContainer, setExposeContainer] = createSignal<Container | null>(null);
+  const [exposeHostname, setExposeHostname] = createSignal("");
+  const [exposePort, setExposePort] = createSignal("80");
+  const [exposing, setExposing] = createSignal(false);
+  const [exposeExisting, setExposeExisting] = createSignal<{ hostname: string; url: string } | null>(null);
+
   const refresh = async () => {
     try {
       const [containerResult, stackResult] = await Promise.all([
@@ -108,6 +115,74 @@ export default function ContainersPage(props: ContainersPageProps) {
       }
     });
     setInlineStats(newStats);
+  };
+
+  const suggestHostname = (name: string) => {
+    let h = name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    const parts = h.split("-");
+    if (parts.length >= 3 && /^\d+$/.test(parts[parts.length - 1])) {
+      h = parts.slice(1, -1).join("-");
+    }
+    return h;
+  };
+
+  const openExposeDialog = async (c: Container) => {
+    try {
+      const routes = (await invoke("gateway_list_routes")) as Array<{ hostname: string; container_name: string; url: string }>;
+      const existing = routes.find((r) => r.container_name === c.name);
+      if (existing) {
+        setExposeExisting({ hostname: existing.hostname, url: existing.url });
+        setExposeContainer(c);
+        return;
+      }
+    } catch {}
+    setExposeExisting(null);
+    setExposeHostname(suggestHostname(c.name));
+    if (c.ports && c.ports.length > 0) {
+      setExposePort(String(c.ports[0].container_port));
+    } else {
+      setExposePort("80");
+    }
+    setExposeContainer(c);
+  };
+
+  const handleExpose = async (e: Event) => {
+    e.preventDefault();
+    const c = exposeContainer();
+    if (!c) return;
+    const hostname = exposeHostname().trim();
+    const port = parseInt(exposePort(), 10);
+    if (!hostname || isNaN(port)) return;
+
+    const fullHostname = hostname.includes(".") ? hostname : `${hostname}.localhost`;
+    setExposing(true);
+    try {
+      await invoke("gateway_add_route", {
+        hostname: fullHostname,
+        containerName: c.name,
+        port,
+      });
+      showToast(`Exposed ${c.name} at ${fullHostname}`, "success");
+      setExposeContainer(null);
+    } catch (err) {
+      logError(`Failed to expose container: ${err}`);
+      showToast(`Failed to expose: ${err}`, "error");
+    }
+    setExposing(false);
+  };
+
+  const handleUnexpose = async () => {
+    const route = exposeExisting();
+    if (!route) return;
+    try {
+      await invoke("gateway_remove_route", { hostname: route.hostname });
+      showToast(`Route ${route.hostname} removed`, "success");
+      setExposeContainer(null);
+      setExposeExisting(null);
+    } catch (err) {
+      logError(`Failed to remove route: ${err}`);
+      showToast(`Failed to remove: ${err}`, "error");
+    }
   };
 
   // Close dropdown menus when clicking outside
@@ -624,7 +699,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 disabled={loading()}
                 title="Stop"
               >
-                &#9632;
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
               </button>
             </Show>
             <Show when={c.state !== "Running"}>
@@ -634,7 +709,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 disabled={loading()}
                 title="Start"
               >
-                &#9654;
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               </button>
             </Show>
             <Show when={props.onAskAi}>
@@ -666,7 +741,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                     onClick={() => { doRestart(c.id, new MouseEvent("click")); setContainerMenuOpen(null); }}
                     disabled={loading() || c.state !== "Running"}
                   >
-                    &#10227; Restart
+                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Restart</span>
                   </button>
                   <button
                     class="dropdown-item"
@@ -679,7 +754,14 @@ export default function ContainersPage(props: ContainersPageProps) {
                       setContainerMenuOpen(null);
                     }}
                   >
-                    &#128203; Logs
+                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Logs</span>
+                  </button>
+                  <button
+                    class="dropdown-item"
+                    onClick={() => { openExposeDialog(c); setContainerMenuOpen(null); }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle", "margin-right": "4px" }}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    {" "}Expose via Gateway
                   </button>
                   <div class="dropdown-divider" />
                   <button
@@ -692,7 +774,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                     }}
                     disabled={loading() || c.state === "Running"}
                   >
-                    &#128465; Delete
+                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete</span>
                   </button>
                 </div>
               </Show>
@@ -822,7 +904,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                   <div class="stack-header" onClick={() => toggleExpand(group.name)}>
                     <div class="stack-header-left">
                       <span class={`expand-arrow ${isExpanded() ? "expanded" : ""}`}>
-                        &#9654;
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                       </span>
                       <CheckboxIndicator
                         state={groupCheckState(filteredContainers())}
@@ -876,7 +958,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                             disabled={isLoading()}
                             title="Stop stack"
                           >
-                            &#9632;
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
                           </button>
                         </Show>
                         <Show when={!allRunning()}>
@@ -889,7 +971,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                             disabled={isLoading()}
                             title="Start stack"
                           >
-                            &#9654;
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                           </button>
                         </Show>
                         <div class="dropdown-wrapper">
@@ -906,10 +988,10 @@ export default function ContainersPage(props: ContainersPageProps) {
                           </button>
                           <Show when={menuOpen() === group.name}>
                             <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                              <button class="dropdown-item" onClick={() => { restartStack(group.name); setMenuOpen(null); }}>&#10227; Restart</button>
-                              <button class="dropdown-item" onClick={() => { pullStack(group.name); setMenuOpen(null); }}>&#8595; Pull Images</button>
+                              <button class="dropdown-item" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { restartStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Restart</button>
+                              <button class="dropdown-item" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { pullStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Pull Images</button>
                               <div class="dropdown-divider" />
-                              <button class="dropdown-item dropdown-item-danger" onClick={() => { deleteStack(group.name); setMenuOpen(null); }}>&#128465; Delete Stack</button>
+                              <button class="dropdown-item dropdown-item-danger" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { deleteStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete Stack</button>
                             </div>
                           </Show>
                         </div>
@@ -957,7 +1039,7 @@ export default function ContainersPage(props: ContainersPageProps) {
               <div class="stack-header" onClick={() => toggleExpand("__standalone__")}>
                 <div class="stack-header-left">
                   <span class={`expand-arrow ${expanded().has("__standalone__") ? "expanded" : ""}`}>
-                    &#9654;
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   </span>
                   <CheckboxIndicator
                     state={groupCheckState(filteredGroups().standalone)}
@@ -1047,11 +1129,11 @@ export default function ContainersPage(props: ContainersPageProps) {
           <span style={{ "font-size": "13px", color: "#e6edf3" }}>
             {selected().size} container{selected().size !== 1 ? "s" : ""} selected
           </span>
-          <button class="btn btn-sm" onClick={batchStart}>
-            &#9654; Start Selected
+          <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStart}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Selected
           </button>
-          <button class="btn btn-sm" onClick={batchStop}>
-            &#9632; Stop Selected
+          <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStop}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> Stop Selected
           </button>
           <button class="btn btn-sm btn-danger" onClick={batchDelete}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
@@ -1178,6 +1260,83 @@ export default function ContainersPage(props: ContainersPageProps) {
                 {composeDeploying() ? (<><Spinner size={12} />{" Deploying..."}</>) : "Deploy"}
               </button>
             </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Expose via Gateway Dialog */}
+      <Show when={exposeContainer()}>
+        <div class="modal-overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("modal-overlay")) setExposeContainer(null); }}>
+          <div class="modal-dialog">
+            <div class="modal-header">
+              <h2 class="modal-title">{exposeExisting() ? "Gateway Route" : "Expose via Gateway"}</h2>
+              <button class="modal-close" onClick={() => setExposeContainer(null)}>{"\u00d7"}</button>
+            </div>
+            <Show when={exposeExisting()} fallback={
+              <form onSubmit={handleExpose}>
+                <div class="modal-body">
+                  <div class="form-group">
+                    <label class="form-label">Hostname <span style={{ color: "#f85149" }}>*</span></label>
+                    <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+                      <input
+                        class="form-input"
+                        type="text"
+                        placeholder="myapp"
+                        value={exposeHostname()}
+                        onInput={(e) => setExposeHostname(e.currentTarget.value)}
+                        autofocus
+                        style={{ flex: "1" }}
+                      />
+                      <span style={{ color: "#8b949e", "font-size": "13px" }}>.localhost</span>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Port <span style={{ color: "#f85149" }}>*</span></label>
+                    <input
+                      class="form-input"
+                      type="number"
+                      value={exposePort()}
+                      onInput={(e) => setExposePort(e.currentTarget.value)}
+                      min="1"
+                      max="65535"
+                    />
+                  </div>
+                  <Show when={exposeHostname().trim()}>
+                    <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "8px" }}>
+                      URL: <span class="mono" style={{ color: "#58a6ff" }}>https://{exposeHostname().includes(".") ? exposeHostname() : `${exposeHostname()}.localhost`}</span>
+                    </div>
+                  </Show>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn" onClick={() => setExposeContainer(null)} disabled={exposing()}>Cancel</button>
+                  <button type="submit" class="btn btn-primary" disabled={exposing() || !exposeHostname().trim()}>
+                    {exposing() ? "Exposing..." : "Expose"}
+                  </button>
+                </div>
+              </form>
+            }>
+              {(route) => (
+                <div class="modal-body">
+                  <p style={{ color: "#c9d1d9", "font-size": "13px", "margin-bottom": "12px" }}>
+                    This container is already exposed via the gateway.
+                  </p>
+                  <div class="card" style={{ "margin-bottom": "16px" }}>
+                    <div class="card-grid">
+                      <span class="card-label">Hostname</span>
+                      <span class="card-value mono">{route().hostname}</span>
+                      <span class="card-label">URL</span>
+                      <span class="card-value mono" style={{ color: "#58a6ff" }}>{route().url}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
+                    <button class="btn" onClick={() => setExposeContainer(null)}>Close</button>
+                    <button class="btn" style={{ color: "#f85149", "border-color": "#f85149" }} onClick={handleUnexpose}>
+                      Remove Route
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Show>
           </div>
         </div>
       </Show>

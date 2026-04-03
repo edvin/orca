@@ -1,12 +1,11 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import type { GatewayStatus, GatewayRoute, Container, StackLinkGroup } from "../lib/types";
+import type { GatewayStatus, GatewayRoute, Container, ComposeProject, StackLinkGroup } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
-import Dropdown from "../components/Dropdown";
 
 interface GatewayPageProps {
   onNavigate?: (target: string) => void;
@@ -41,6 +40,9 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [addPort, setAddPort] = createSignal("80");
   const [containers, setContainers] = createSignal<Container[]>([]);
   const [adding, setAdding] = createSignal(false);
+  const [showContainerPicker, setShowContainerPicker] = createSignal(false);
+  const [pickerSearch, setPickerSearch] = createSignal("");
+  const [pickerStacks, setPickerStacks] = createSignal<ComposeProject[]>([]);
 
   // Environment links
   const [stackLinks, setStackLinks] = createSignal<StackLinkGroup[]>([]);
@@ -135,8 +137,12 @@ export default function GatewayPage(props: GatewayPageProps) {
 
   const fetchContainers = async () => {
     try {
-      const c = (await invoke("list_containers")) as Container[];
-      setContainers(c.filter((x) => x.name !== "orca-gateway"));
+      const [c, s] = await Promise.all([
+        invoke("list_containers") as Promise<Container[]>,
+        invoke("list_stacks") as Promise<ComposeProject[]>,
+      ]);
+      setContainers((c || []).filter((x) => x.name !== "orca-gateway"));
+      setPickerStacks(s || []);
     } catch {}
   };
 
@@ -311,6 +317,74 @@ export default function GatewayPage(props: GatewayPageProps) {
     const pathPart = addPath().trim();
     const base = port === 443 ? `https://${full}` : `https://${full}:${port}`;
     return pathPart ? `${base}${pathPart}` : base;
+  };
+
+  const pickerGrouped = (): { stacks: { name: string; containers: Container[] }[]; standalone: Container[] } => {
+    const allContainers = containers();
+    const search = pickerSearch().toLowerCase();
+    const filtered = search
+      ? allContainers.filter((c) => c.name.toLowerCase().includes(search) || c.image.toLowerCase().includes(search))
+      : allContainers;
+
+    const stackNames = new Set(pickerStacks().map((s) => s.name));
+    const projectContainers = new Map<string, Container[]>();
+    const standaloneList: Container[] = [];
+
+    for (const c of filtered) {
+      const projectName = c.labels?.["com.docker.compose.project"];
+      if (projectName && stackNames.has(projectName)) {
+        if (!projectContainers.has(projectName)) {
+          projectContainers.set(projectName, []);
+        }
+        projectContainers.get(projectName)!.push(c);
+      } else {
+        standaloneList.push(c);
+      }
+    }
+
+    const groups: { name: string; containers: Container[] }[] = [];
+    for (const [name, ctrs] of projectContainers) {
+      groups.push({ name, containers: ctrs });
+    }
+    groups.sort((a, b) => a.name.localeCompare(b.name));
+
+    return { stacks: groups, standalone: standaloneList };
+  };
+
+  const selectContainer = (container: Container) => {
+    setAddContainer(container.name);
+    // Auto-fill port from container's first exposed port
+    if (container.ports.length > 0) {
+      setAddPort(String(container.ports[0].container_port));
+    }
+    // Suggest hostname from container name
+    if (!addHostname().trim()) {
+      let suggested = container.name
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+      // Strip common stack prefixes (e.g., "mystack-frontend-1" -> "frontend")
+      const parts = suggested.split("-");
+      if (parts.length >= 3 && parts[parts.length - 1].match(/^\d+$/)) {
+        suggested = parts.slice(1, -1).join("-");
+      }
+      setAddHostname(suggested);
+    }
+    setShowContainerPicker(false);
+  };
+
+  const formatPortsList = (ports: Container["ports"]): string => {
+    if (!ports.length) return "";
+    const seen = new Set<number>();
+    const result: string[] = [];
+    for (const p of ports) {
+      if (!seen.has(p.container_port)) {
+        seen.add(p.container_port);
+        result.push(`:${p.container_port}`);
+      }
+    }
+    return result.join(" ");
   };
 
   return (
@@ -893,12 +967,24 @@ export default function GatewayPage(props: GatewayPageProps) {
                   <label class="form-label">
                     Container <span style={{ color: "#f85149" }}>*</span>
                   </label>
-                  <Dropdown
-                    value={addContainer()}
-                    options={containers().map((c) => ({ value: c.name, label: `${c.name} (${c.state})` }))}
-                    onChange={(v) => setAddContainer(v)}
-                    placeholder="Select container..."
-                  />
+                  <button
+                    type="button"
+                    class="form-input"
+                    style={{
+                      "text-align": "left",
+                      cursor: "pointer",
+                      display: "flex",
+                      "align-items": "center",
+                      "justify-content": "space-between",
+                      color: addContainer() ? "#e6edf3" : "#6e7681",
+                    }}
+                    onClick={() => { setPickerSearch(""); setShowContainerPicker(true); }}
+                  >
+                    <span>{addContainer() || "Select container..."}</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
                 </div>
 
                 <div class="form-group">
@@ -944,6 +1030,113 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      </Show>
+
+      {/* Container Picker Modal */}
+      <Show when={showContainerPicker()}>
+        <div class="modal-overlay" onMouseDown={(e) => { mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }} onClick={(e) => { if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowContainerPicker(false); mouseDownOnOverlay = false; }}>
+          <div class="modal-dialog" style={{ "max-width": "620px", "max-height": "70vh", display: "flex", "flex-direction": "column" }}>
+            <div class="modal-header">
+              <h2 class="modal-title">Select Container</h2>
+              <button class="modal-close" onClick={() => setShowContainerPicker(false)}>{"\u00d7"}</button>
+            </div>
+            <div style={{ padding: "16px 20px 8px" }}>
+              <input
+                class="form-input"
+                type="text"
+                placeholder="Search containers..."
+                value={pickerSearch()}
+                onInput={(e) => setPickerSearch(e.currentTarget.value)}
+                autofocus
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div style={{ padding: "0 20px 16px", "overflow-y": "auto", flex: "1" }}>
+              <For each={pickerGrouped().stacks}>
+                {(group) => (
+                  <div style={{ "margin-top": "12px" }}>
+                    <div style={{ "font-size": "11px", "font-weight": "600", color: "#8b949e", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "6px", "padding-bottom": "4px", "border-bottom": "1px solid #21262d" }}>
+                      {group.name} <span style={{ "font-weight": "400", "text-transform": "none" }}>(stack)</span>
+                    </div>
+                    <div style={{ border: "1px solid #21262d", "border-radius": "6px", overflow: "hidden" }}>
+                      <For each={group.containers}>
+                        {(c, i) => (
+                          <div
+                            onClick={() => selectContainer(c)}
+                            style={{
+                              display: "flex",
+                              "align-items": "center",
+                              gap: "10px",
+                              padding: "8px 12px",
+                              cursor: "pointer",
+                              "font-size": "13px",
+                              "border-top": i() > 0 ? "1px solid #21262d" : "none",
+                              background: c.name === addContainer() ? "#1a2233" : "transparent",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = "#161b22"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = c.name === addContainer() ? "#1a2233" : "transparent"; }}
+                          >
+                            <span style={{ width: "8px", height: "8px", "border-radius": "50%", background: c.state === "Running" ? "#3fb950" : "#484f58", "flex-shrink": "0" }} />
+                            <span style={{ "font-weight": "600", color: "#e6edf3", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{c.name}</span>
+                            <span class="mono" style={{ color: "#6e7681", "font-size": "12px", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: "1" }}>{c.image}</span>
+                            <Show when={c.ports.length > 0}>
+                              <span class="mono" style={{ color: "#6e7681", "font-size": "11px", "white-space": "nowrap", "flex-shrink": "0" }}>{formatPortsList(c.ports)}</span>
+                            </Show>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                )}
+              </For>
+
+              <Show when={pickerGrouped().standalone.length > 0}>
+                <div style={{ "margin-top": "12px" }}>
+                  <div style={{ "font-size": "11px", "font-weight": "600", color: "#8b949e", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "6px", "padding-bottom": "4px", "border-bottom": "1px solid #21262d" }}>
+                    Standalone
+                  </div>
+                  <div style={{ border: "1px solid #21262d", "border-radius": "6px", overflow: "hidden" }}>
+                    <For each={pickerGrouped().standalone}>
+                      {(c, i) => (
+                        <div
+                          onClick={() => selectContainer(c)}
+                          style={{
+                            display: "flex",
+                            "align-items": "center",
+                            gap: "10px",
+                            padding: "8px 12px",
+                            cursor: "pointer",
+                            "font-size": "13px",
+                            "border-top": i() > 0 ? "1px solid #21262d" : "none",
+                            background: c.name === addContainer() ? "#1a2233" : "transparent",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#161b22"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = c.name === addContainer() ? "#1a2233" : "transparent"; }}
+                        >
+                          <span style={{ width: "8px", height: "8px", "border-radius": "50%", background: c.state === "Running" ? "#3fb950" : "#484f58", "flex-shrink": "0" }} />
+                          <span style={{ "font-weight": "600", color: "#e6edf3", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{c.name}</span>
+                          <span class="mono" style={{ color: "#6e7681", "font-size": "12px", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", flex: "1" }}>{c.image}</span>
+                          <Show when={c.ports.length > 0}>
+                            <span class="mono" style={{ color: "#6e7681", "font-size": "11px", "white-space": "nowrap", "flex-shrink": "0" }}>{formatPortsList(c.ports)}</span>
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+
+              <Show when={pickerGrouped().stacks.length === 0 && pickerGrouped().standalone.length === 0}>
+                <div style={{ "text-align": "center", padding: "24px", color: "#6e7681", "font-size": "13px" }}>
+                  {pickerSearch() ? "No containers match your search" : "No containers found"}
+                </div>
+              </Show>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn" onClick={() => setShowContainerPicker(false)}>Cancel</button>
+            </div>
           </div>
         </div>
       </Show>
