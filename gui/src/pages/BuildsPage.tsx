@@ -271,19 +271,21 @@ export default function BuildsPage(props: BuildsPageProps) {
     const maxMostBuilt = Math.max(...(s.most_built || []).map((m) => m.count), 1);
 
     return (
-      <div class="card" style={{ padding: "16px", "margin-bottom": "16px" }}>
+      <div style={{ "margin-bottom": "16px" }}>
         <button
-          class="btn btn-ghost"
           onClick={() => setAnalyticsOpen(!analyticsOpen())}
           style={{
             display: "flex",
             "align-items": "center",
             gap: "8px",
-            width: "100%",
-            "justify-content": "flex-start",
-            padding: "4px 0",
-            "font-weight": "600",
-            "font-size": "14px",
+            background: "none",
+            border: "none",
+            color: "#8b949e",
+            cursor: "pointer",
+            padding: "0",
+            "font-weight": "500",
+            "font-size": "13px",
+            "margin-bottom": analyticsOpen() ? "12px" : "0",
           }}
         >
           <svg
@@ -297,7 +299,7 @@ export default function BuildsPage(props: BuildsPageProps) {
         </button>
 
         <Show when={analyticsOpen()}>
-          <div style={{ "margin-top": "16px", display: "grid", "grid-template-columns": "1fr 1fr", gap: "20px" }}>
+          <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "16px" }}>
             {/* Builds per day */}
             <div>
               <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "10px", "font-weight": "500" }}>
