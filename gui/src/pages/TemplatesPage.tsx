@@ -1103,8 +1103,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       </Show>
       {/* === Setup Guide Dialog === */}
       <Show when={showSetupGuide() && setupGuide()}>
-        <div class="modal-overlay" onClick={() => setShowSetupGuide(false)}>
-          <div class="modal-content" style={{ "max-width": "600px", "max-height": "85vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowSetupGuide(false); }}>
+          <div class="modal-content" style={{ "max-width": "600px", "max-height": "85vh", overflow: "auto" }}>
             <div class="modal-header">
               <h2>{setupGuide()!.title}</h2>
               <button class="modal-close" onClick={() => { setShowSetupGuide(false); props.onNavigate?.(`stack:${setupGuideStackName()}`); }}>

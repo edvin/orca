@@ -324,7 +324,9 @@ export default function ComposeWizard(props: ComposeWizardProps) {
   ];
 
   return (
-    <div class="modal-overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("modal-overlay") && !deploying() && !saving()) props.onClose(); }}>
+    <div class="modal-overlay"
+      onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+      onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay") && !deploying() && !saving()) props.onClose(); }}>
       <div class="modal-dialog" style={{ "max-width": "900px", height: "85vh", display: "flex", "flex-direction": "column" }}>
         <div class="modal-header">
           <h2 class="modal-title">

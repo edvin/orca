@@ -1706,7 +1706,9 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
 
       {/* Expose via Gateway Dialog */}
       <Show when={showExposeDialog()}>
-        <div class="modal-overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("modal-overlay")) setShowExposeDialog(false); }}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowExposeDialog(false); }}>
           <div class="modal-dialog">
             <div class="modal-header">
               <h2 class="modal-title">{existingRoute() ? "Gateway Route" : "Expose via Gateway"}</h2>

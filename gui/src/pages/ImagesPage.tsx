@@ -1826,8 +1826,10 @@ export default function ImagesPage(props: ImagesPageProps) {
 
       {/* Report exported dialog */}
       <Show when={reportPath()}>
-        <div class="modal-overlay" onClick={() => setReportPath(null)}>
-          <div class="modal-dialog" style={{ "max-width": "600px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setReportPath(null); }}>
+          <div class="modal-dialog" style={{ "max-width": "600px" }}>
             <div class="modal-header">
               <span class="modal-title">Report Ready</span>
               <button class="modal-close" onClick={() => setReportPath(null)}>{"\u00d7"}</button>
@@ -1880,8 +1882,10 @@ export default function ImagesPage(props: ImagesPageProps) {
       </Show>
       {/* Layers Dialog */}
       <Show when={layersDialogImage()}>
-        <div class="modal-overlay" onClick={() => setLayersDialogImage(null)}>
-          <div class="modal-dialog" style={{ "max-width": "800px", "max-height": "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setLayersDialogImage(null); }}>
+          <div class="modal-dialog" style={{ "max-width": "800px", "max-height": "80vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
               <span class="modal-title">Image Layers — {layersDialogImage()?.repo_tags?.[0] || shortId(layersDialogImage()?.id)}</span>
               <button class="modal-close" onClick={() => setLayersDialogImage(null)}>&times;</button>

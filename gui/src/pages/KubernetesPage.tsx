@@ -3193,8 +3193,10 @@ spec:
 
       {/* Helm Install Modal */}
       <Show when={helmInstallOpen()}>
-        <div class="modal-overlay" onClick={() => setHelmInstallOpen(false)}>
-          <div class="modal-dialog" style={{ "max-width": "520px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setHelmInstallOpen(false); }}>
+          <div class="modal-dialog" style={{ "max-width": "520px" }}>
             <div class="modal-header">
               <span class="modal-title">Install Helm Chart</span>
               <button class="modal-close" onClick={() => setHelmInstallOpen(false)}>{"\u00d7"}</button>
@@ -3304,8 +3306,10 @@ spec:
 
       {/* Rollback History Modal */}
       <Show when={rollbackDep()}>
-        <div class="modal-overlay" onClick={() => setRollbackDep(null)}>
-          <div class="modal-dialog" style={{ "max-width": "500px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setRollbackDep(null); }}>
+          <div class="modal-dialog" style={{ "max-width": "500px" }}>
             <div class="modal-header">
               <span class="modal-title">Rollout History: {rollbackDep()!.name}</span>
               <button class="modal-close" onClick={() => setRollbackDep(null)}>{"\u00d7"}</button>
@@ -3360,8 +3364,10 @@ spec:
 
       {/* Multi-Port Forward Dialog */}
       <Show when={portDialogSvc()}>
-        <div class="modal-overlay" onClick={() => setPortDialogSvc(null)}>
-          <div class="modal-dialog" style={{ "max-width": "420px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setPortDialogSvc(null); }}>
+          <div class="modal-dialog" style={{ "max-width": "420px" }}>
             <div class="modal-header">
               <span class="modal-title">Port Forward: {portDialogSvc()!.name}</span>
               <button class="modal-close" onClick={() => setPortDialogSvc(null)}>{"\u00d7"}</button>
@@ -3520,8 +3526,10 @@ spec:
 
       {/* Scale Dialog */}
       <Show when={scaleTarget()}>
-        <div class="modal-overlay" onClick={() => setScaleTarget(null)}>
-          <div class="modal-dialog" style={{ "max-width": "340px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setScaleTarget(null); }}>
+          <div class="modal-dialog" style={{ "max-width": "340px" }}>
             <div class="modal-header">
               <span class="modal-title">Scale: {scaleTarget()!.name}</span>
               <button class="modal-close" onClick={() => setScaleTarget(null)}>{"\u00d7"}</button>
@@ -3583,8 +3591,10 @@ spec:
 
       {/* YAML Editor Modal */}
       <Show when={yamlResource()}>
-        <div class="modal-overlay" onClick={() => setYamlResource(null)}>
-          <div class="modal-dialog" style={{ width: "1000px", "max-width": "92vw", height: "85vh", display: "flex", "flex-direction": "column", background: "#1a1b26" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setYamlResource(null); }}>
+          <div class="modal-dialog" style={{ width: "1000px", "max-width": "92vw", height: "85vh", display: "flex", "flex-direction": "column", background: "#1a1b26" }}>
             <YamlEditor
               value={yamlResource()!.yaml}
               title={`${yamlResource()!.kind}/${yamlResource()!.name}`}
@@ -3650,8 +3660,10 @@ spec:
 
       {/* Deploy from YAML Modal */}
       <Show when={deployYamlOpen()}>
-        <div class="modal-overlay" onClick={() => setDeployYamlOpen(false)}>
-          <div class="modal-dialog" style={{ width: "1000px", "max-width": "92vw", height: "85vh", display: "flex", "flex-direction": "column", background: "#1a1b26" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setDeployYamlOpen(false); }}>
+          <div class="modal-dialog" style={{ width: "1000px", "max-width": "92vw", height: "85vh", display: "flex", "flex-direction": "column", background: "#1a1b26" }}>
             <YamlEditor
               value={"# Enter your Kubernetes YAML here\n# Example:\n# apiVersion: v1\n# kind: Pod\n# metadata:\n#   name: my-pod\n# spec:\n#   containers:\n#   - name: my-container\n#     image: nginx\n"}
               title="Deploy from YAML"
@@ -3664,8 +3676,10 @@ spec:
 
       {/* Create Namespace Modal */}
       <Show when={createNsOpen()}>
-        <div class="modal-overlay" onClick={() => setCreateNsOpen(false)}>
-          <div class="modal-dialog" style={{ "max-width": "400px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setCreateNsOpen(false); }}>
+          <div class="modal-dialog" style={{ "max-width": "400px" }}>
             <div class="modal-header">
               <span class="modal-title">Create Namespace</span>
               <button class="modal-close" onClick={() => setCreateNsOpen(false)}>{"\u00d7"}</button>
@@ -3699,8 +3713,10 @@ spec:
 
       {/* Pod Shell Terminal Modal */}
       <Show when={shellPod()}>
-        <div class="modal-overlay" onClick={() => setShellPod(null)}>
-          <div class="modal-dialog" style={{ width: "800px", height: "600px", "max-width": "90vw", "max-height": "85vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setShellPod(null); }}>
+          <div class="modal-dialog" style={{ width: "800px", height: "600px", "max-width": "90vw", "max-height": "85vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
               <span class="modal-title">Terminal: {shellPod()!.name}</span>
               <button class="modal-close" onClick={() => setShellPod(null)}>{"\u00d7"}</button>
@@ -3714,8 +3730,10 @@ spec:
 
       {/* ConfigMap Viewer Modal */}
       <Show when={viewConfigMap()}>
-        <div class="modal-overlay" onClick={() => setViewConfigMap(null)}>
-          <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "max-height": "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setViewConfigMap(null); }}>
+          <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "max-height": "80vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
               <span class="modal-title">ConfigMap: {viewConfigMap()!.name}</span>
               <button class="modal-close" onClick={() => setViewConfigMap(null)}>{"\u00d7"}</button>
@@ -3755,8 +3773,10 @@ spec:
 
       {/* Secret Viewer Modal */}
       <Show when={viewSecret()}>
-        <div class="modal-overlay" onClick={() => setViewSecret(null)}>
-          <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "max-height": "80vh", display: "flex", "flex-direction": "column" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setViewSecret(null); }}>
+          <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "max-height": "80vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
               <span class="modal-title">Secret: {viewSecret()!.name}</span>
               <button class="modal-close" onClick={() => setViewSecret(null)}>{"\u00d7"}</button>
@@ -3818,8 +3838,10 @@ spec:
 
       {/* Create Ingress Dialog */}
       <Show when={createIngressOpen()}>
-        <div class="modal-overlay" onClick={() => setCreateIngressOpen(false)}>
-          <div class="modal-dialog" style={{ "max-width": "520px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setCreateIngressOpen(false); }}>
+          <div class="modal-dialog" style={{ "max-width": "520px" }}>
             <div class="modal-header">
               <span class="modal-title">Create Ingress</span>
               <button class="modal-close" onClick={() => setCreateIngressOpen(false)}>{"\u00d7"}</button>
@@ -3945,8 +3967,10 @@ spec:
 
       {/* Secret Create/Edit Dialog */}
       <Show when={secretDialogOpen()}>
-        <div class="modal-overlay" onClick={() => setSecretDialogOpen(false)}>
-          <div class="modal-dialog" style={{ "max-width": "600px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setSecretDialogOpen(false); }}>
+          <div class="modal-dialog" style={{ "max-width": "600px" }}>
             <div class="modal-header">
               <span class="modal-title">{secretDialogMode() === "create" ? "Create Secret" : `Edit Secret: ${secretDialogName()}`}</span>
               <button class="modal-close" onClick={() => setSecretDialogOpen(false)}>{"\u00d7"}</button>
@@ -4088,8 +4112,10 @@ spec:
 
       {/* Create PVC Dialog */}
       <Show when={pvcDialogOpen()}>
-        <div class="modal-overlay" onClick={() => setPvcDialogOpen(false)}>
-          <div class="modal-dialog" style={{ "max-width": "480px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setPvcDialogOpen(false); }}>
+          <div class="modal-dialog" style={{ "max-width": "480px" }}>
             <div class="modal-header">
               <span class="modal-title">Create Persistent Volume Claim</span>
               <button class="modal-close" onClick={() => setPvcDialogOpen(false)}>{"\u00d7"}</button>
@@ -4178,8 +4204,10 @@ spec:
 
       {/* Create HPA Dialog */}
       <Show when={hpaDialogOpen()}>
-        <div class="modal-overlay" onClick={() => setHpaDialogOpen(false)}>
-          <div class="modal-dialog" style={{ "max-width": "480px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setHpaDialogOpen(false); }}>
+          <div class="modal-dialog" style={{ "max-width": "480px" }}>
             <div class="modal-header">
               <span class="modal-title">Create Horizontal Pod Autoscaler</span>
               <button class="modal-close" onClick={() => setHpaDialogOpen(false)}>{"\u00d7"}</button>
@@ -4282,8 +4310,10 @@ spec:
 
       {/* Traefik Info Panel */}
       <Show when={traefikInfoOpen() && traefikService()}>
-        <div class="modal-overlay" onClick={() => setTraefikInfoOpen(false)}>
-          <div class="modal-dialog" style={{ "max-width": "480px" }} onClick={(e) => e.stopPropagation()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setTraefikInfoOpen(false); }}>
+          <div class="modal-dialog" style={{ "max-width": "480px" }}>
             <div class="modal-header">
               <span class="modal-title">Traefik Ingress Controller</span>
               <button class="modal-close" onClick={() => setTraefikInfoOpen(false)}>{"\u00d7"}</button>
