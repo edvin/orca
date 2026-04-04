@@ -55,6 +55,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [exposePort, setExposePort] = createSignal("80");
   const [exposing, setExposing] = createSignal(false);
   const [exposeExistingRoutes, setExposeExistingRoutes] = createSignal<Array<{ hostname: string; url: string; port: number }>>([]);
+  const [gatewayRoutes, setGatewayRoutes] = createSignal<Array<{ hostname: string; container_name: string; port: number }>>([]);
 
   const refresh = async () => {
     try {
@@ -65,6 +66,8 @@ export default function ContainersPage(props: ContainersPageProps) {
       setContainers(containerResult || []);
       setStacks(stackResult || []);
       setLastUpdated(new Date());
+      // Fetch gateway routes for hostname badges (non-blocking)
+      invoke("gateway_list_routes").then((r) => setGatewayRoutes((r as any[]) || [])).catch(() => {});
 
       // Auto-expand stacks with running containers (only on first load)
       if (!hasAutoExpanded) {
@@ -578,6 +581,26 @@ export default function ContainersPage(props: ContainersPageProps) {
             {c.state === "Running" ? "\u25B6" : "\u25B7"}
           </span>
           <span style={{ "font-weight": "500", "margin-left": "6px" }}>{c.name}</span>
+          <For each={gatewayRoutes().filter((r) => r.container_name === c.name)}>
+            {(route) => (
+              <span
+                style={{
+                  "margin-left": "6px",
+                  "font-size": "10px",
+                  color: "#58a6ff",
+                  background: "rgba(88,166,255,0.1)",
+                  border: "1px solid rgba(88,166,255,0.2)",
+                  padding: "1px 6px",
+                  "border-radius": "8px",
+                  "font-family": "monospace",
+                  "white-space": "nowrap",
+                }}
+                title={`Gateway: https://${route.hostname}`}
+              >
+                {route.hostname}
+              </span>
+            )}
+          </For>
         </td>
         <td class="mono" style={{ color: "#8b949e", "max-width": "280px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }} title={c.image}>
           {c.image.startsWith("sha256:") ? c.image.slice(0, 19) + "..." : c.image}
