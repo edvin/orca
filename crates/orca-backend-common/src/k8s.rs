@@ -1089,8 +1089,11 @@ impl K8sManager for K3sManager {
             self.install_k3s().await?;
         }
 
-        // Start k3s via systemd if available, otherwise direct
-        let systemd_result = Command::new("systemctl").args(["start", "k3s"]).status().await;
+        // Enable + start k3s via systemd if available, otherwise direct
+        let systemd_result = Command::new("systemctl")
+            .args(["enable", "--now", "k3s"])
+            .status()
+            .await;
 
         if systemd_result.is_err() || !systemd_result.as_ref().is_ok_and(|s| s.success()) {
             // Fallback: start k3s directly in background
@@ -1131,7 +1134,7 @@ impl K8sManager for K3sManager {
                     "--",
                     "sh",
                     "-c",
-                    "if command -v systemctl >/dev/null 2>&1 && systemctl is-active k3s >/dev/null 2>&1; then systemctl stop k3s; else pkill -f 'k3s server' || true; fi",
+                    "if command -v systemctl >/dev/null 2>&1 && systemctl is-active k3s >/dev/null 2>&1; then systemctl disable --now k3s; else pkill -f 'k3s server' || true; fi",
                 ])
                 .status()
                 .await;
@@ -1209,8 +1212,11 @@ impl K8sManager for K3sManager {
 
         #[cfg(not(target_os = "windows"))]
         {
-            // Try systemd first
-            let _ = Command::new("systemctl").args(["stop", "k3s"]).status().await;
+            // Disable prevents systemd from restarting and from starting on boot
+            let _ = Command::new("systemctl")
+                .args(["disable", "--now", "k3s"])
+                .status()
+                .await;
 
             // Also try k3s-killall.sh which k3s installs
             let _ = Command::new("sh")
@@ -1250,7 +1256,7 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             Command::new("wsl")
-                .args(["-u", "root", "--", "systemctl", "start", "k3s"])
+                .args(["-u", "root", "--", "systemctl", "enable", "--now", "k3s"])
                 .status()
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to start k3s via WSL: {e}"))?;
@@ -1259,7 +1265,10 @@ impl K8sManager for K3sManager {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let systemd_result = Command::new("systemctl").args(["start", "k3s"]).status().await;
+            let systemd_result = Command::new("systemctl")
+                .args(["enable", "--now", "k3s"])
+                .status()
+                .await;
             if systemd_result.is_err() || !systemd_result.as_ref().is_ok_and(|s| s.success()) {
                 // Fallback: start k3s directly in background
                 Command::new("k3s")

@@ -705,14 +705,14 @@ export default function GatewayPage(props: GatewayPageProps) {
                     <td>
                       <button
                         class="btn-link"
-                        style={{ color: "#58a6ff", cursor: "pointer", background: "none", border: "none", "font-size": "13px", padding: "0" }}
+                        style={{ color: "#58a6ff", cursor: "pointer", background: "none", border: "none", "font-size": "13px", padding: "0", "word-break": "break-all" }}
                         onClick={() => route.url && openUrl(route.url)}
                         title={route.url}
                       >
                         {route.hostname}{route.path || ""}
                       </button>
                     </td>
-                    <td class="mono" style={{ color: "#c9d1d9" }}>{route.container_name}</td>
+                    <td class="mono" style={{ color: "#c9d1d9", "word-break": "break-all" }}>{route.container_name}</td>
                     <td class="mono">{route.port}</td>
                     <td>
                       <span style={{
@@ -770,10 +770,21 @@ export default function GatewayPage(props: GatewayPageProps) {
           <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
             <For each={suggestions()}>
               {(container) => (
-                <div class="card" style={{ display: "flex", "align-items": "center", gap: "12px", padding: "10px 14px" }}>
-                  <div style={{ flex: "1", "min-width": "0", display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
-                    <span style={{ "font-weight": "600", color: "#e6edf3", "font-size": "13px" }}>{container.name}</span>
-                    <span style={{ color: "#6e7681", "font-size": "12px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{container.image}</span>
+                <div style={{
+                  padding: "12px 16px",
+                  background: "rgba(22,27,34,0.5)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  "border-radius": "10px",
+                  display: "flex",
+                  "align-items": "center",
+                  gap: "12px",
+                  "min-height": "48px",
+                }}>
+                  <div style={{ flex: "1", "min-width": "0" }}>
+                    <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{container.name}</div>
+                    <div style={{ "font-size": "12px", color: "#8b949e", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{container.image}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: "4px", "flex-wrap": "wrap", "flex-shrink": "0" }}>
                     <For each={[...new Set(container.ports.map((p) => p.container_port))]}>
                       {(port) => (
                         <span class="mono" style={{
@@ -787,7 +798,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                       )}
                     </For>
                   </div>
-                  <button class="btn btn-sm btn-primary" onClick={() => quickAdd(container)} style={{ "flex-shrink": "0", "font-size": "12px", padding: "4px 12px" }}>
+                  <button class="btn btn-sm btn-primary" onClick={() => quickAdd(container)} style={{ "flex-shrink": "0", "white-space": "nowrap", "font-size": "12px", padding: "4px 12px" }}>
                     Add to Gateway
                   </button>
                 </div>

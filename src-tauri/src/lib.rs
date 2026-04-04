@@ -300,7 +300,10 @@ pub fn run() {
         .expect("error while building orca")
         .run(|_app, _event| {
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { has_visible_windows, .. } = _event {
+            if let tauri::RunEvent::Reopen {
+                has_visible_windows, ..
+            } = _event
+            {
                 if !has_visible_windows {
                     if let Some(window) = _app.get_webview_window("main") {
                         let _ = window.show();

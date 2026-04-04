@@ -6986,7 +6986,7 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
     let cid = crate::gateway::container_id(&state).await.unwrap_or(None);
     let routes_active = gw.routes.iter().filter(|r| r.enabled).count();
     let port_conflicts = if !running {
-        crate::gateway::check_port_availability(gw.http_port, gw.https_port)
+        crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None)
     } else {
         vec![]
     };
@@ -7009,7 +7009,7 @@ async fn gateway_start(State(state): State<Arc<AppState>>) -> Result<impl IntoRe
     let gw = &config.gateway;
 
     // Check port availability before starting (warning, not blocking)
-    let port_conflicts = crate::gateway::check_port_availability(gw.http_port, gw.https_port);
+    let port_conflicts = crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None);
     if !port_conflicts.is_empty() {
         tracing::warn!("Port conflicts before gateway start: {}", port_conflicts.join(", "));
     }
@@ -7269,8 +7269,18 @@ async fn gateway_port_check(
         .get("https_port")
         .and_then(|v| v.parse().ok())
         .unwrap_or(config.gateway.https_port);
+    let current_http = if config.gateway.enabled {
+        Some(config.gateway.http_port)
+    } else {
+        None
+    };
+    let current_https = if config.gateway.enabled {
+        Some(config.gateway.https_port)
+    } else {
+        None
+    };
     drop(config);
-    let conflicts = crate::gateway::check_port_availability(http_port, https_port);
+    let conflicts = crate::gateway::check_port_availability(http_port, https_port, current_http, current_https);
     Ok(Json(serde_json::json!({ "conflicts": conflicts })))
 }
 

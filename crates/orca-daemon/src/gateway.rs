@@ -14,13 +14,25 @@ const CADDY_CONTAINER: &str = "orca-gateway";
 const CADDY_ADMIN_PORT: u16 = 2019;
 
 /// Check if the gateway ports are available.
-pub fn check_port_availability(http_port: u16, https_port: u16) -> Vec<String> {
+/// Pass the current gateway config ports to exclude them from conflict detection
+/// (the gateway itself holds those ports when running).
+pub fn check_port_availability(
+    http_port: u16,
+    https_port: u16,
+    current_http: Option<u16>,
+    current_https: Option<u16>,
+) -> Vec<String> {
     let mut conflicts = Vec::new();
-    if std::net::TcpListener::bind(("0.0.0.0", http_port)).is_err() {
-        conflicts.push(format!("Port {} (HTTP) is already in use", http_port));
+    // Skip check if the gateway itself is using this port
+    if Some(http_port) != current_http {
+        if std::net::TcpListener::bind(("0.0.0.0", http_port)).is_err() {
+            conflicts.push(format!("Port {} (HTTP) is already in use", http_port));
+        }
     }
-    if std::net::TcpListener::bind(("0.0.0.0", https_port)).is_err() {
-        conflicts.push(format!("Port {} (HTTPS) is already in use", https_port));
+    if Some(https_port) != current_https {
+        if std::net::TcpListener::bind(("0.0.0.0", https_port)).is_err() {
+            conflicts.push(format!("Port {} (HTTPS) is already in use", https_port));
+        }
     }
     conflicts
 }
@@ -62,7 +74,7 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
     }
 
     // Check port availability (warn, don't block — Docker may handle it on some platforms)
-    let conflicts = check_port_availability(config.http_port, config.https_port);
+    let conflicts = check_port_availability(config.http_port, config.https_port, None, None);
     if !conflicts.is_empty() {
         tracing::warn!("Port conflicts detected: {}", conflicts.join(", "));
     }
