@@ -318,6 +318,11 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
         .route("/gateway/port-check", get(gateway_port_check))
         .route("/gateway/links", get(gateway_get_links).put(gateway_update_links))
+        .route("/gateway/traefik-status", get(gateway_traefik_status))
+        .route("/gateway/traefik-mode", put(gateway_set_traefik_mode))
+        .route("/gateway/dismiss-suggestion", post(gateway_dismiss_suggestion))
+        .route("/gateway/clear-dismissed", post(gateway_clear_dismissed))
+        .route("/gateway/dismissed-suggestions", get(gateway_get_dismissed))
         // CA
         .route("/ca/certificate", get(ca_certificate))
         .route("/ca/info", get(ca_info))
@@ -612,6 +617,7 @@ async fn create_container(
         memory_swap: None,
         gpu: false,
         user: body.user,
+        extra_hosts: vec![],
     };
 
     let id = state.rt().await.create_container(opts).await?;
@@ -1770,6 +1776,7 @@ async fn volume_list_files(
         memory_swap: None,
         gpu: false,
         user: None,
+        extra_hosts: vec![],
     };
 
     let id = state.rt().await.create_container(opts).await?;
@@ -1891,6 +1898,7 @@ async fn volume_read_file(
         memory_swap: None,
         gpu: false,
         user: None,
+        extra_hosts: vec![],
     };
 
     let id = state.rt().await.create_container(opts).await?;
@@ -4820,6 +4828,7 @@ async fn deploy_template(
         memory_swap: None,
         gpu: false,
         user: None,
+        extra_hosts: vec![],
     };
 
     // Pull the image if not already available
@@ -7001,6 +7010,7 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         "tls_mode": gw.tls_mode,
         "port_conflicts": port_conflicts,
         "stack_links": gw.stack_links,
+        "traefik_mode": gw.traefik_mode,
     })))
 }
 
@@ -7299,6 +7309,158 @@ async fn gateway_update_links(
         .save()
         .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
     Ok(Json(serde_json::json!({ "saved": true })))
+}
+
+// --- Gateway Traefik integration ---
+
+async fn gateway_traefik_status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    let mode = &config.gateway.traefik_mode;
+
+    let k8s = &state.k8s;
+    let traefik_info = k8s.get_traefik_service_info().await.ok().flatten();
+    let traefik_detected = traefik_info.is_some();
+
+    // Check if Traefik is reachable (try hitting it)
+    let traefik_reachable = if traefik_detected {
+        let port = config.gateway.traefik_http_port;
+        tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
+            .await
+            .is_ok()
+    } else {
+        false
+    };
+
+    let traefik_ports = traefik_info.as_ref().map(|info| {
+        serde_json::json!({
+            "http": info.http_port,
+            "https": info.https_port,
+            "type": info.service_type,
+            "node_ports": info.node_ports,
+        })
+    });
+
+    let ingress_hostnames: Vec<_> = k8s.list_all_ingress_hostnames().await.unwrap_or_default();
+
+    Ok(Json(serde_json::json!({
+        "mode": mode,
+        "traefik_detected": traefik_detected,
+        "traefik_reachable": traefik_reachable,
+        "traefik_ports": traefik_ports,
+        "k8s_ingress_hostnames": ingress_hostnames,
+        "traefik_http_port": config.gateway.traefik_http_port,
+        "traefik_https_port": config.gateway.traefik_https_port,
+    })))
+}
+
+#[derive(Deserialize)]
+struct SetTraefikModeRequest {
+    mode: String,
+    #[serde(default)]
+    traefik_http_port: Option<u16>,
+    #[serde(default)]
+    traefik_https_port: Option<u16>,
+}
+
+async fn gateway_set_traefik_mode(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SetTraefikModeRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    use orca_core::config::TraefikIntegrationMode;
+
+    let new_mode = match req.mode.as_str() {
+        "separate_ports" => TraefikIntegrationMode::SeparatePorts,
+        "gateway_proxies_traefik" => TraefikIntegrationMode::GatewayProxiesTraefik,
+        _ => TraefikIntegrationMode::GatewayOnly,
+    };
+
+    let http_port = req.traefik_http_port.unwrap_or(30080);
+    let https_port = req.traefik_https_port.unwrap_or(30443);
+
+    // Save to config
+    {
+        let mut config = state.config.lock().await;
+        config.gateway.traefik_mode = new_mode.clone();
+        config.gateway.traefik_http_port = http_port;
+        config.gateway.traefik_https_port = https_port;
+        config
+            .save()
+            .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    }
+
+    // Patch Traefik service if K8s is running
+    let k8s = &state.k8s;
+    let k8s_running = k8s.status().await.map(|s| s.running).unwrap_or(false);
+    if k8s_running && let Err(e) = k8s.patch_traefik_ports(&req.mode, http_port, https_port).await {
+        tracing::warn!("Failed to patch Traefik service: {e}");
+    }
+
+    // Rebuild Caddy config if gateway is running
+    let running = crate::gateway::is_running(&state).await.unwrap_or(false);
+    if running {
+        let config = state.config.lock().await;
+        let k8s_routes = if new_mode == TraefikIntegrationMode::GatewayProxiesTraefik {
+            build_k8s_proxy_routes(k8s, http_port).await
+        } else {
+            vec![]
+        };
+        if let Err(e) = crate::gateway::push_caddy_config_with_k8s(&config.gateway, &k8s_routes).await {
+            tracing::warn!("Failed to rebuild Caddy config: {e}");
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "mode": req.mode })))
+}
+
+/// Build K8s proxy route entries for Caddy when in gateway_proxies_traefik mode.
+async fn build_k8s_proxy_routes(
+    k8s: &orca_backend_common::k8s::K3sManager,
+    traefik_http_port: u16,
+) -> Vec<(String, String)> {
+    let upstream = format!("{}:{}", crate::gateway::traefik_upstream_host(), traefik_http_port);
+    k8s.list_all_ingress_hostnames()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|entry| (entry.hostname, upstream.clone()))
+        .collect()
+}
+
+// --- Gateway dismissed suggestions ---
+
+#[derive(Deserialize)]
+struct DismissSuggestionRequest {
+    key: String,
+}
+
+async fn gateway_dismiss_suggestion(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<DismissSuggestionRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.lock().await;
+    if !config.gateway.dismissed_suggestions.contains(&req.key) {
+        config.gateway.dismissed_suggestions.push(req.key);
+    }
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    Ok(Json(serde_json::json!({ "dismissed": true })))
+}
+
+async fn gateway_clear_dismissed(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.lock().await;
+    config.gateway.dismissed_suggestions.clear();
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    Ok(Json(serde_json::json!({ "cleared": true })))
+}
+
+async fn gateway_get_dismissed(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    Ok(Json(
+        serde_json::json!({ "dismissed": config.gateway.dismissed_suggestions }),
+    ))
 }
 
 // --- CA Certificate ---

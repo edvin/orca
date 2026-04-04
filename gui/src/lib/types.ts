@@ -551,6 +551,20 @@ export interface GatewayStatus {
   tls_mode: string;
   port_conflicts?: string[];
   stack_links?: StackLinkGroup[];
+  traefik_mode?: "gateway_only" | "separate_ports" | "gateway_proxies_traefik";
+  traefik_detected?: boolean;
+  traefik_reachable?: boolean;
+  k8s_ingress_routes?: Array<{ hostname: string; namespace: string; ingress_name: string }>;
+}
+
+export interface TraefikStatus {
+  mode: string;
+  traefik_detected: boolean;
+  traefik_reachable: boolean;
+  traefik_ports?: { http: number | null; https: number | null; type: string; node_ports: number[] };
+  k8s_ingress_hostnames: Array<{ hostname: string; namespace: string; ingress_name: string }>;
+  traefik_http_port: number;
+  traefik_https_port: number;
 }
 
 export interface GatewayRoute {

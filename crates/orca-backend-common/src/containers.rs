@@ -82,6 +82,11 @@ impl ContainerRuntime for BollardRuntime {
                 } else {
                     None
                 },
+                extra_hosts: if opts.extra_hosts.is_empty() {
+                    None
+                } else {
+                    Some(opts.extra_hosts.clone())
+                },
                 ..Default::default()
             }),
             ..Default::default()

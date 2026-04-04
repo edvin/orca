@@ -3807,3 +3807,60 @@ pub async fn gateway_update_links(links: serde_json::Value) -> Result<(), String
         Err(body)
     }
 }
+
+#[tauri::command]
+pub async fn gateway_dismiss_suggestion(key: String) -> Result<(), String> {
+    let base = daemon_url();
+    let resp = client()
+        .post(format!("{base}/gateway/dismiss-suggestion"))
+        .json(&serde_json::json!({ "key": key }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}
+
+#[tauri::command]
+pub async fn gateway_clear_dismissed() -> Result<(), String> {
+    post_empty("/gateway/clear-dismissed").await
+}
+
+#[tauri::command]
+pub async fn gateway_get_dismissed() -> Result<serde_json::Value, String> {
+    get_json("/gateway/dismissed-suggestions").await
+}
+
+#[tauri::command]
+pub async fn gateway_traefik_status() -> Result<serde_json::Value, String> {
+    get_json("/gateway/traefik-status").await
+}
+
+#[tauri::command]
+pub async fn gateway_set_traefik_mode(
+    mode: String,
+    traefik_http_port: Option<u16>,
+    traefik_https_port: Option<u16>,
+) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .put(format!("{base}/gateway/traefik-mode"))
+        .json(&serde_json::json!({
+            "mode": mode,
+            "traefik_http_port": traefik_http_port,
+            "traefik_https_port": traefik_https_port,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    if resp.status().is_success() {
+        resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        Err(body)
+    }
+}

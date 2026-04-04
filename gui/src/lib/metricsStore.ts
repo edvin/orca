@@ -132,3 +132,74 @@ export function getAggregatedMemoryHistory(): number[] {
   }
   return result;
 }
+
+// --- Dashboard chart helpers (return {time, value}[] for TimeChart) ---
+
+export function getDashboardCpuHistory(): Array<{ time: number; value: number }> {
+  const history = metricsHistory();
+  const ids = Object.keys(history);
+  if (ids.length === 0) return [];
+
+  const maxLen = Math.max(...ids.map((id) => history[id].length));
+  // Use timestamps from the longest array as reference
+  const longestId = ids.reduce((a, b) => (history[a].length >= history[b].length ? a : b));
+  const refArr = history[longestId];
+  const result: Array<{ time: number; value: number }> = [];
+  for (let i = 0; i < maxLen; i++) {
+    let sum = 0;
+    for (const id of ids) {
+      const arr = history[id];
+      const idx = arr.length - maxLen + i;
+      if (idx >= 0) sum += arr[idx].cpu;
+    }
+    const refIdx = refArr.length - maxLen + i;
+    const time = refIdx >= 0 ? refArr[refIdx].timestamp : Date.now();
+    result.push({ time, value: sum });
+  }
+  return result;
+}
+
+export function getDashboardMemHistory(): Array<{ time: number; value: number }> {
+  const history = metricsHistory();
+  const ids = Object.keys(history);
+  if (ids.length === 0) return [];
+
+  const maxLen = Math.max(...ids.map((id) => history[id].length));
+  const longestId = ids.reduce((a, b) => (history[a].length >= history[b].length ? a : b));
+  const refArr = history[longestId];
+  const result: Array<{ time: number; value: number }> = [];
+  for (let i = 0; i < maxLen; i++) {
+    let sum = 0;
+    for (const id of ids) {
+      const arr = history[id];
+      const idx = arr.length - maxLen + i;
+      if (idx >= 0) sum += arr[idx].memory;
+    }
+    const refIdx = refArr.length - maxLen + i;
+    const time = refIdx >= 0 ? refArr[refIdx].timestamp : Date.now();
+    result.push({ time, value: sum });
+  }
+  return result;
+}
+
+export function getPerContainerCpuChartHistory(): Record<string, Array<{ time: number; value: number }>> {
+  const history = metricsHistory();
+  const result: Record<string, Array<{ time: number; value: number }>> = {};
+  for (const [id, snapshots] of Object.entries(history)) {
+    result[id] = snapshots.map((s) => ({ time: s.timestamp, value: s.cpu }));
+  }
+  return result;
+}
+
+export function getPerContainerMemChartHistory(): Record<string, Array<{ time: number; value: number }>> {
+  const history = metricsHistory();
+  const result: Record<string, Array<{ time: number; value: number }>> = {};
+  for (const [id, snapshots] of Object.entries(history)) {
+    result[id] = snapshots.map((s) => ({ time: s.timestamp, value: s.memory }));
+  }
+  return result;
+}
+
+export function clearAllMetrics() {
+  setMetricsHistory({});
+}

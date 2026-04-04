@@ -169,6 +169,18 @@ pub struct GatewayConfig {
     /// Environment links grouped by stack/group for multi-environment navigation.
     #[serde(default)]
     pub stack_links: Vec<StackLinkGroup>,
+    /// How the gateway and Traefik coexist.
+    #[serde(default)]
+    pub traefik_mode: TraefikIntegrationMode,
+    /// Traefik HTTP port (for separate_ports / gateway_proxies_traefik modes).
+    #[serde(default = "default_traefik_http")]
+    pub traefik_http_port: u16,
+    /// Traefik HTTPS port (for separate_ports / gateway_proxies_traefik modes).
+    #[serde(default = "default_traefik_https")]
+    pub traefik_https_port: u16,
+    /// Dismissed route suggestions (container_name:port combos).
+    #[serde(default)]
+    pub dismissed_suggestions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,6 +202,15 @@ pub enum GatewayTlsMode {
     Custom,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TraefikIntegrationMode {
+    #[default]
+    GatewayOnly,
+    SeparatePorts,
+    GatewayProxiesTraefik,
+}
+
 impl Default for GatewayConfig {
     fn default() -> Self {
         Self {
@@ -202,6 +223,10 @@ impl Default for GatewayConfig {
             custom_key: None,
             routes: Vec::new(),
             stack_links: Vec::new(),
+            traefik_mode: TraefikIntegrationMode::default(),
+            traefik_http_port: default_traefik_http(),
+            traefik_https_port: default_traefik_https(),
+            dismissed_suggestions: Vec::new(),
         }
     }
 }
@@ -224,6 +249,13 @@ pub struct EnvironmentLink {
     pub name: String,
     /// Map of environment name to URL. "local" values are gateway hostnames.
     pub urls: std::collections::BTreeMap<String, String>,
+}
+
+fn default_traefik_http() -> u16 {
+    30080
+}
+fn default_traefik_https() -> u16 {
+    30443
 }
 
 fn default_gateway_domain() -> String {

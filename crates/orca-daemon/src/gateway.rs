@@ -24,15 +24,11 @@ pub fn check_port_availability(
 ) -> Vec<String> {
     let mut conflicts = Vec::new();
     // Skip check if the gateway itself is using this port
-    if Some(http_port) != current_http {
-        if std::net::TcpListener::bind(("0.0.0.0", http_port)).is_err() {
-            conflicts.push(format!("Port {} (HTTP) is already in use", http_port));
-        }
+    if Some(http_port) != current_http && std::net::TcpListener::bind(("0.0.0.0", http_port)).is_err() {
+        conflicts.push(format!("Port {} (HTTP) is already in use", http_port));
     }
-    if Some(https_port) != current_https {
-        if std::net::TcpListener::bind(("0.0.0.0", https_port)).is_err() {
-            conflicts.push(format!("Port {} (HTTPS) is already in use", https_port));
-        }
+    if Some(https_port) != current_https && std::net::TcpListener::bind(("0.0.0.0", https_port)).is_err() {
+        conflicts.push(format!("Port {} (HTTPS) is already in use", https_port));
     }
     conflicts
 }
@@ -149,6 +145,11 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
         memory_swap: None,
         gpu: false,
         user: None,
+        extra_hosts: if cfg!(target_os = "linux") {
+            vec!["host.docker.internal:host-gateway".to_string()]
+        } else {
+            vec![]
+        },
     };
 
     let id = rt
@@ -159,7 +160,7 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
     // Generate the landing page and write Caddy config to the mounted volume
     // (writing to the volume works before the container starts, unlike docker exec)
     let _ = write_landing_page(config);
-    let caddy_json = build_caddy_config(config);
+    let caddy_json = build_caddy_config(config, &[]);
     let config_path = certs_dir.join("caddy.json");
     std::fs::write(&config_path, &caddy_json).context("Failed to write Caddy config to certs volume")?;
 
@@ -443,8 +444,18 @@ fn generate_cert_for_hostname(hostname: &str) -> Result<()> {
     Ok(())
 }
 
+/// Get the upstream host address for reaching Traefik from the Caddy container.
+pub fn traefik_upstream_host() -> &'static str {
+    if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+        "host.docker.internal"
+    } else {
+        "172.17.0.1" // Docker bridge gateway on Linux
+    }
+}
+
 /// Build the Caddy JSON configuration from gateway config.
-fn build_caddy_config(config: &GatewayConfig) -> String {
+/// `k8s_routes` is an optional list of (hostname, upstream) pairs for K8s ingress proxying.
+fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -> String {
     let mut enabled_routes: Vec<&orca_core::config::GatewayRoute> =
         config.routes.iter().filter(|r| r.enabled).collect();
 
@@ -457,7 +468,7 @@ fn build_caddy_config(config: &GatewayConfig) -> String {
     });
 
     // Build route objects
-    let routes: Vec<serde_json::Value> = enabled_routes
+    let mut routes: Vec<serde_json::Value> = enabled_routes
         .iter()
         .map(|route| {
             let match_rule = if let Some(path) = &route.path {
@@ -474,6 +485,17 @@ fn build_caddy_config(config: &GatewayConfig) -> String {
             })
         })
         .collect();
+
+    // Add K8s ingress routes (when in gateway_proxies_traefik mode)
+    for (hostname, upstream) in k8s_routes {
+        routes.push(serde_json::json!({
+            "match": [{"host": [hostname.clone()]}],
+            "handle": [{
+                "handler": "reverse_proxy",
+                "upstreams": [{"dial": upstream.clone()}]
+            }]
+        }));
+    }
 
     // Build TLS certificates list
     let mut load_files: Vec<serde_json::Value> = enabled_routes
@@ -585,9 +607,14 @@ async fn wait_for_caddy_ready() -> Result<()> {
     anyhow::bail!("Caddy admin API did not become ready within 10 seconds")
 }
 
-/// Push Caddy config via the admin API.
+/// Push Caddy config via the admin API, optionally with K8s routes.
 async fn push_caddy_config(config: &GatewayConfig) -> Result<()> {
-    let caddy_json = build_caddy_config(config);
+    push_caddy_config_with_k8s(config, &[]).await
+}
+
+/// Push Caddy config via the admin API, with optional K8s routes.
+pub async fn push_caddy_config_with_k8s(config: &GatewayConfig, k8s_routes: &[(String, String)]) -> Result<()> {
+    let caddy_json = build_caddy_config(config, k8s_routes);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
@@ -1302,7 +1329,7 @@ mod tests {
     #[test]
     fn test_build_caddy_config_empty_routes() {
         let config = make_config(vec![]);
-        let json_str = build_caddy_config(&config);
+        let json_str = build_caddy_config(&config, &[]);
         let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
 
         // Admin config should be present
@@ -1335,7 +1362,7 @@ mod tests {
     #[test]
     fn test_build_caddy_config_single_route() {
         let config = make_config(vec![make_route("app", "frontend-1", 3000)]);
-        let json_str = build_caddy_config(&config);
+        let json_str = build_caddy_config(&config, &[]);
         let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
 
         let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
@@ -1361,7 +1388,7 @@ mod tests {
             make_route("app", "frontend-1", 3000),
             make_route_with_path("app", "backend-1", 8080, "/api/*"),
         ]);
-        let json_str = build_caddy_config(&config);
+        let json_str = build_caddy_config(&config, &[]);
         let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
 
         let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
@@ -1398,7 +1425,7 @@ mod tests {
             routes: vec![make_route("app", "frontend-1", 3000)],
             ..Default::default()
         };
-        let json_str = build_caddy_config(&config);
+        let json_str = build_caddy_config(&config, &[]);
         let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
 
         // Custom TLS without explicit cert/key should default to /certs/cert.pem and /certs/key.pem
@@ -1420,7 +1447,7 @@ mod tests {
             routes: vec![make_route("app", "frontend-1", 3000)],
             ..Default::default()
         };
-        let json_str = build_caddy_config(&config);
+        let json_str = build_caddy_config(&config, &[]);
         let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
 
         let load_files = caddy["apps"]["tls"]["certificates"]["load_files"].as_array().unwrap();
@@ -1432,7 +1459,7 @@ mod tests {
     #[test]
     fn test_build_caddy_config_orca_ca_tls_uses_hostname_certs() {
         let config = make_config(vec![make_route("myapp", "container-1", 8080)]);
-        let json_str = build_caddy_config(&config);
+        let json_str = build_caddy_config(&config, &[]);
         let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
 
         let load_files = caddy["apps"]["tls"]["certificates"]["load_files"].as_array().unwrap();
@@ -1450,7 +1477,7 @@ mod tests {
         disabled.enabled = false;
 
         let config = make_config(vec![make_route("app", "frontend-1", 3000), disabled]);
-        let json_str = build_caddy_config(&config);
+        let json_str = build_caddy_config(&config, &[]);
         let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
 
         let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
@@ -1466,7 +1493,7 @@ mod tests {
     #[test]
     fn test_build_caddy_config_http_redirect() {
         let config = make_config(vec![]);
-        let json_str = build_caddy_config(&config);
+        let json_str = build_caddy_config(&config, &[]);
         let caddy: serde_json::Value = serde_json::from_str(&json_str).expect("valid JSON");
 
         let redirect = &caddy["apps"]["http"]["servers"]["http_redirect"];

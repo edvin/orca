@@ -12,7 +12,27 @@ use kube::Client;
 use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams};
 use tokio::process::Command;
 
+use serde::Serialize;
+
 use orca_core::kubernetes::*;
+
+/// Information about the Traefik Kubernetes service.
+#[derive(Debug, Clone, Serialize)]
+pub struct TraefikServiceInfo {
+    pub service_type: String,
+    pub http_port: Option<u16>,
+    pub https_port: Option<u16>,
+    pub cluster_ip: String,
+    pub node_ports: Vec<u16>,
+}
+
+/// A hostname discovered from a Kubernetes Ingress resource.
+#[derive(Debug, Clone, Serialize)]
+pub struct IngressHostEntry {
+    pub hostname: String,
+    pub namespace: String,
+    pub ingress_name: String,
+}
 
 /// Validate that a string is a safe Kubernetes resource name
 /// (alphanumeric, hyphens, dots; 1-253 chars).
@@ -4296,6 +4316,173 @@ impl K3sManager {
             anyhow::bail!("kubectl failed: {stderr}");
         }
         Ok(serde_json::from_slice(&output.stdout)?)
+    }
+
+    /// Get information about the Traefik service in kube-system.
+    pub async fn get_traefik_service_info(&self) -> anyhow::Result<Option<TraefikServiceInfo>> {
+        let output = self
+            .kubectl_command()
+            .args(["get", "svc", "traefik", "-n", "kube-system", "-o", "json"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("NotFound") || stderr.contains("not found") {
+                return Ok(None);
+            }
+            anyhow::bail!("kubectl get svc traefik failed: {stderr}");
+        }
+
+        let svc: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let spec = svc.get("spec").cloned().unwrap_or_default();
+
+        let service_type = spec
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("ClusterIP")
+            .to_string();
+
+        let cluster_ip = spec.get("clusterIP").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        let ports = spec.get("ports").and_then(|v| v.as_array());
+        let mut http_port = None;
+        let mut https_port = None;
+        let mut node_ports = Vec::new();
+
+        if let Some(ports) = ports {
+            for p in ports {
+                let port = p.get("port").and_then(|v| v.as_u64()).map(|v| v as u16);
+                let node_port = p.get("nodePort").and_then(|v| v.as_u64()).map(|v| v as u16);
+                let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
+
+                if name == "web" || port == Some(80) {
+                    http_port = port;
+                } else if name == "websecure" || port == Some(443) {
+                    https_port = port;
+                }
+
+                if let Some(np) = node_port {
+                    node_ports.push(np);
+                }
+            }
+        }
+
+        Ok(Some(TraefikServiceInfo {
+            service_type,
+            http_port,
+            https_port,
+            cluster_ip,
+            node_ports,
+        }))
+    }
+
+    /// Patch the Traefik service ports based on the integration mode.
+    pub async fn patch_traefik_ports(&self, mode: &str, http_port: u16, https_port: u16) -> anyhow::Result<()> {
+        let patch = match mode {
+            "separate_ports" => {
+                // Change to NodePort with specific nodePort values
+                format!(
+                    r#"[
+                        {{"op":"replace","path":"/spec/type","value":"NodePort"}},
+                        {{"op":"replace","path":"/spec/ports/0/nodePort","value":{http_port}}},
+                        {{"op":"replace","path":"/spec/ports/1/nodePort","value":{https_port}}}
+                    ]"#
+                )
+            }
+            "gateway_proxies_traefik" => {
+                // Change to NodePort with internal ports for gateway to proxy
+                format!(
+                    r#"[
+                        {{"op":"replace","path":"/spec/type","value":"NodePort"}},
+                        {{"op":"replace","path":"/spec/ports/0/nodePort","value":{http_port}}},
+                        {{"op":"replace","path":"/spec/ports/1/nodePort","value":{https_port}}}
+                    ]"#
+                )
+            }
+            _ => {
+                // gateway_only: restore LoadBalancer
+                r#"[{"op":"replace","path":"/spec/type","value":"LoadBalancer"}]"#.to_string()
+            }
+        };
+
+        let output = self
+            .kubectl_command()
+            .args([
+                "patch",
+                "svc",
+                "traefik",
+                "-n",
+                "kube-system",
+                "--type=json",
+                "-p",
+                &patch,
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to patch Traefik service: {stderr}");
+        }
+
+        Ok(())
+    }
+
+    /// List all hostnames from Ingress resources across all namespaces.
+    pub async fn list_all_ingress_hostnames(&self) -> anyhow::Result<Vec<IngressHostEntry>> {
+        let output = self
+            .kubectl_command()
+            .args(["get", "ingress", "-A", "-o", "json"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // No ingresses is not an error
+            if stderr.contains("No resources found") {
+                return Ok(Vec::new());
+            }
+            anyhow::bail!("Failed to list ingresses: {stderr}");
+        }
+
+        let list: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let items = list.get("items").and_then(|v| v.as_array());
+
+        let mut entries = Vec::new();
+        if let Some(items) = items {
+            for item in items {
+                let metadata = item.get("metadata").cloned().unwrap_or_default();
+                let namespace = metadata
+                    .get("namespace")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("default")
+                    .to_string();
+                let ingress_name = metadata.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+                let rules = item.get("spec").and_then(|s| s.get("rules")).and_then(|r| r.as_array());
+
+                if let Some(rules) = rules {
+                    for rule in rules {
+                        if let Some(host) = rule.get("host").and_then(|h| h.as_str()) {
+                            entries.push(IngressHostEntry {
+                                hostname: host.to_string(),
+                                namespace: namespace.clone(),
+                                ingress_name: ingress_name.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(entries)
     }
 
     /// Enable the Traefik dashboard by patching the Traefik deployment.

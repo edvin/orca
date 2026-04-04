@@ -169,6 +169,7 @@ export default function KubernetesPage() {
   const [traefikInfoOpen, setTraefikInfoOpen] = createSignal(false);
   const [traefikService, setTraefikService] = createSignal<K8sService | null>(null);
   const [traefikForwarding, setTraefikForwarding] = createSignal(false);
+  const [traefikIntegrationMode, setTraefikIntegrationMode] = createSignal<string | null>(null);
 
   let mouseDownOnOverlay = false;
   let setupLogRef: HTMLPreElement | undefined;
@@ -209,6 +210,13 @@ export default function KubernetesPage() {
           setTraefikService(traefik || null);
         } catch {
           setTraefikService(null);
+        }
+        // Fetch Traefik integration mode
+        try {
+          const ts = (await invoke("gateway_traefik_status")) as { mode: string };
+          setTraefikIntegrationMode(ts.mode);
+        } catch {
+          setTraefikIntegrationMode(null);
         }
       }
     } catch {
@@ -1088,6 +1096,16 @@ spec:
           <span style={{ "font-size": "12px", color: "#3fb950" }}>
             {status()?.pods_running}/{status()?.pods_total} pods
           </span>
+          <Show when={traefikIntegrationMode() && traefikService()}>
+            <span class="status-bar-separator" />
+            <span style={{ "font-size": "11px", color: "#8b949e" }} title="Configured in Gateway page">
+              {traefikIntegrationMode() === "separate_ports"
+                ? "Traefik: Separate ports"
+                : traefikIntegrationMode() === "gateway_proxies_traefik"
+                ? "Traefik: Proxied via Gateway"
+                : "Traefik: Default"}
+            </span>
+          </Show>
           <div style={{ "margin-left": "auto", display: "flex", gap: "6px" }}>
             <Show when={status()?.traefik_dashboard || traefikService()}>
               <button

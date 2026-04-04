@@ -220,6 +220,11 @@ pub fn run() {
             commands::gateway_update_config,
             commands::gateway_get_links,
             commands::gateway_update_links,
+            commands::gateway_dismiss_suggestion,
+            commands::gateway_clear_dismissed,
+            commands::gateway_get_dismissed,
+            commands::gateway_traefik_status,
+            commands::gateway_set_traefik_mode,
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;

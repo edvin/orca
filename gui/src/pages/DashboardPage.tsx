@@ -3,16 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, Image, ComposeProject, SystemHealth, GatewayStatus, GatewayRoute } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
-import { recordMetrics } from "../lib/metricsStore";
+import { recordMetrics, getDashboardCpuHistory, getDashboardMemHistory, getPerContainerCpuChartHistory, getPerContainerMemChartHistory, clearAllMetrics } from "../lib/metricsStore";
 
 import TimeChart from "../components/TimeChart";
 import LastUpdated from "../components/LastUpdated";
-
-// Persist metrics history across navigations (module-level, not component-level)
-const [cpuHistory, setCpuHistory] = createSignal<Array<{time: number, value: number}>>([]);
-const [memHistory, setMemHistory] = createSignal<Array<{time: number, value: number}>>([]);
-const [perContainerCpuHistory, setPerContainerCpuHistory] = createSignal<Record<string, Array<{time: number, value: number}>>>({});
-const [perContainerMemHistory, setPerContainerMemHistory] = createSignal<Record<string, Array<{time: number, value: number}>>>({});
 
 /** Wrap an invoke call with a timeout (ms). Rejects on timeout. */
 function invokeWithTimeout<T>(cmd: string, args?: Record<string, unknown>, timeoutMs = 10_000): Promise<T> {
@@ -106,10 +100,7 @@ export default function DashboardPage(props: DashboardPageProps) {
 
   // Reset chart history when switching hosts
   const handleHostSwitch = () => {
-    setCpuHistory([]);
-    setMemHistory([]);
-    setPerContainerCpuHistory({});
-    setPerContainerMemHistory({});
+    clearAllMetrics();
     setContainerStats({});
     setContainersState("loading");
     setImagesState("loading");
@@ -144,32 +135,6 @@ export default function DashboardPage(props: DashboardPageProps) {
       }
     });
     setContainerStats(newStats);
-
-    // Update time-series history
-    const now = Date.now();
-    const aggCpu = Object.values(newStats).reduce((sum, s) => sum + s.cpu_percent, 0);
-    const aggMem = Object.values(newStats).reduce((sum, s) => sum + s.memory_usage_bytes, 0);
-
-    setCpuHistory(prev => [...prev, { time: now, value: aggCpu }].slice(-60));
-    setMemHistory(prev => [...prev, { time: now, value: aggMem }].slice(-60));
-
-    // Per-container history
-    setPerContainerCpuHistory(prev => {
-      const next = { ...prev };
-      for (const [id, s] of Object.entries(newStats)) {
-        const existing = next[id] || [];
-        next[id] = [...existing, { time: now, value: s.cpu_percent }].slice(-60);
-      }
-      return next;
-    });
-    setPerContainerMemHistory(prev => {
-      const next = { ...prev };
-      for (const [id, s] of Object.entries(newStats)) {
-        const existing = next[id] || [];
-        next[id] = [...existing, { time: now, value: s.memory_usage_bytes }].slice(-60);
-      }
-      return next;
-    });
   };
 
   onMount(() => {
@@ -231,7 +196,7 @@ export default function DashboardPage(props: DashboardPageProps) {
   const memoryMax = () => {
     const h = health();
     if (h?.system_resources) return h.system_resources.memory_total_bytes;
-    const hist = memHistory();
+    const hist = getDashboardMemHistory();
     if (hist.length === 0) return 1;
     return Math.max(...hist.map(d => d.value)) * 1.5;
   };
@@ -412,7 +377,7 @@ export default function DashboardPage(props: DashboardPageProps) {
               <span style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>{totalCpu().toFixed(1)}%</span>
             </div>
             <TimeChart
-              data={cpuHistory()}
+              data={getDashboardCpuHistory()}
               height={120}
               color="#58a6ff"
               fillColor="#58a6ff"
@@ -430,7 +395,7 @@ export default function DashboardPage(props: DashboardPageProps) {
               <span style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>{formatBytes(totalMemory())}</span>
             </div>
             <TimeChart
-              data={memHistory()}
+              data={getDashboardMemHistory()}
               height={120}
               color="#3fb950"
               fillColor="#3fb950"
@@ -472,7 +437,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                       </td>
                       <td>
                         <TimeChart
-                          data={perContainerCpuHistory()[item.container.id] || []}
+                          data={getPerContainerCpuChartHistory()[item.container.id] || []}
                           height={40}
                           color="#58a6ff"
                           fillColor="#58a6ff"
@@ -519,7 +484,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                       </td>
                       <td>
                         <TimeChart
-                          data={perContainerMemHistory()[item.container.id] || []}
+                          data={getPerContainerMemChartHistory()[item.container.id] || []}
                           height={40}
                           color="#3fb950"
                           fillColor="#3fb950"

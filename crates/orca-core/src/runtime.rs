@@ -123,6 +123,9 @@ pub struct ContainerCreateOpts {
     /// Run as specific user (e.g., "1000:1000"). Maps to Docker's --user flag.
     #[serde(default)]
     pub user: Option<String>,
+    /// Extra /etc/hosts entries (e.g., "host.docker.internal:host-gateway").
+    #[serde(default)]
+    pub extra_hosts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

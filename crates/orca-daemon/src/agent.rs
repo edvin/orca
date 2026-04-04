@@ -198,6 +198,7 @@ pub async fn execute_tool(
                 memory_swap: None,
                 gpu: false,
                 user: None,
+                extra_hosts: vec![],
             };
 
             let container_id = state
@@ -475,6 +476,7 @@ pub async fn execute_tool(
                 memory_swap: None,
                 gpu: false,
                 user: None,
+                extra_hosts: vec![],
             };
 
             let container_id = state
