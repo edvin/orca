@@ -594,8 +594,10 @@ export default function ContainersPage(props: ContainersPageProps) {
                   "border-radius": "8px",
                   "font-family": "monospace",
                   "white-space": "nowrap",
+                  cursor: "pointer",
                 }}
-                title={`Gateway: https://${route.hostname}`}
+                title={`Gateway: https://${route.hostname} — click to manage`}
+                onClick={(ev) => { ev.stopPropagation(); openExposeDialog(c); }}
               >
                 {route.hostname}
               </span>

@@ -45,6 +45,14 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [pickerSearch, setPickerSearch] = createSignal("");
   const [pickerStacks, setPickerStacks] = createSignal<ComposeProject[]>([]);
 
+  // Edit route
+  const [editRoute, setEditRoute] = createSignal<GatewayRoute | null>(null);
+  const [editHostname, setEditHostname] = createSignal("");
+  const [editContainer, setEditContainer] = createSignal("");
+  const [editPort, setEditPort] = createSignal("80");
+  const [editPath, setEditPath] = createSignal("");
+  const [editSaving, setEditSaving] = createSignal(false);
+
   // Environment links
   const [stackLinks, setStackLinks] = createSignal<StackLinkGroup[]>([]);
   const [selectedEnv, setSelectedEnv] = createSignal("local");
@@ -266,6 +274,38 @@ export default function GatewayPage(props: GatewayPageProps) {
       logError(`Failed to remove route: ${e}`);
       showToast(`Failed to remove route: ${e}`, "error");
     }
+  };
+
+  const openEditRoute = (route: GatewayRoute) => {
+    setEditRoute(route);
+    setEditHostname(route.hostname);
+    setEditContainer(route.container_name);
+    setEditPort(String(route.port));
+    setEditPath(route.path || "");
+  };
+
+  const handleSaveEdit = async () => {
+    const original = editRoute();
+    if (!original) return;
+    setEditSaving(true);
+    try {
+      // Remove old route, add new one (hostname may have changed)
+      await invoke("gateway_remove_route", { hostname: original.hostname });
+      const domain = status()?.domain || "localhost";
+      const newHostname = editHostname().includes(".") ? editHostname() : `${editHostname()}.${domain}`;
+      await invoke("gateway_add_route", {
+        hostname: newHostname,
+        containerName: editContainer(),
+        port: parseInt(editPort(), 10),
+        path: editPath().trim() || null,
+      });
+      showToast("Route updated", "success");
+      setEditRoute(null);
+      await refresh();
+    } catch (e) {
+      showToast(`Failed to update: ${e}`, "error");
+    }
+    setEditSaving(false);
   };
 
   const handleToggleRoute = async (route: GatewayRoute) => {
@@ -733,18 +773,25 @@ export default function GatewayPage(props: GatewayPageProps) {
                       </span>
                     </td>
                     <td style={{ "text-align": "right" }}>
+                      {/* Toggle on/off */}
                       <button
                         class="action-icon"
-                        title={route.enabled ? "Disable" : "Enable"}
+                        title={route.enabled ? "Pause route" : "Resume route"}
                         onClick={() => handleToggleRoute(route)}
+                        style={{ "margin-right": "4px", color: route.enabled ? "#3fb950" : "#484f58" }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                      </button>
+                      {/* Edit route */}
+                      <button
+                        class="action-icon"
+                        title="Edit route"
+                        onClick={() => openEditRoute(route)}
                         style={{ "margin-right": "4px" }}
                       >
-                        <Show when={route.enabled} fallback={
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        }>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                        </Show>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </button>
+                      {/* Delete */}
                       <button
                         class="action-icon action-icon-delete"
                         title="Remove route"
@@ -1288,6 +1335,48 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </button>
                 <span style={{ "font-size": "11px", color: "#6e7681" }}>Changes may require restarting the gateway</span>
               </div>
+          </div>
+        </div>
+      </Show>
+      {/* Edit Route Dialog */}
+      <Show when={editRoute()}>
+        <div class="modal-overlay"
+          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
+          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setEditRoute(null); }}>
+          <div class="modal-content" style={{ "max-width": "480px" }}>
+            <div class="modal-header">
+              <h2>Edit Route</h2>
+              <button class="modal-close" onClick={() => setEditRoute(null)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="modal-body" style={{ overflow: "visible" }}>
+              <div class="form-group">
+                <label class="form-label">Hostname</label>
+                <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
+                  <input class="form-input" type="text" value={editHostname()} onInput={(e) => setEditHostname(e.currentTarget.value)} style={{ flex: "1" }} />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Container</label>
+                <input class="form-input" type="text" value={editContainer()} onInput={(e) => setEditContainer(e.currentTarget.value)} />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Container Port</label>
+                <input class="form-input" type="number" value={editPort()} onInput={(e) => setEditPort(e.currentTarget.value)} min="1" max="65535" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Path (optional)</label>
+                <input class="form-input" type="text" value={editPath()} onInput={(e) => setEditPath(e.currentTarget.value)} placeholder="/api/*" />
+                <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>Route a specific path to this container</p>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onClick={() => setEditRoute(null)} disabled={editSaving()}>Cancel</button>
+              <button class="btn btn-primary" onClick={handleSaveEdit} disabled={editSaving() || !editHostname().trim()}>
+                {editSaving() ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
           </div>
         </div>
       </Show>
