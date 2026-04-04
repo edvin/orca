@@ -9,6 +9,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import RunContainerDialog from "../components/RunContainerDialog";
 import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
+import { SkeletonRow } from "../components/Skeleton";
 import LastUpdated from "../components/LastUpdated";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
@@ -977,10 +978,28 @@ export default function ImagesPage(props: ImagesPageProps) {
       <Show
         when={filtered().length > 0}
         fallback={
-          <div class="empty">
-            <p class="empty-title">No images found</p>
-            <p>Search Docker Hub using the Pull button above, or deploy from the App Catalog.</p>
-          </div>
+          <Show when={lastUpdated() !== null} fallback={
+            <table class="table">
+              <thead>
+                <tr><th /><th>Repository / Tag</th><th>ID</th><th>Size</th><th>Created</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                <SkeletonRow columns={6} />
+                <SkeletonRow columns={6} />
+                <SkeletonRow columns={6} />
+                <SkeletonRow columns={6} />
+                <SkeletonRow columns={6} />
+              </tbody>
+            </table>
+          }>
+            <div class="empty">
+              <p class="empty-title">No images found</p>
+              <p>Pull an image from Docker Hub using the Pull button above.</p>
+              <div class="empty-actions">
+                <button class="btn btn-primary" onClick={() => setShowPull(true)}>Pull Image</button>
+              </div>
+            </div>
+          </Show>
         }
       >
         <table class="table">

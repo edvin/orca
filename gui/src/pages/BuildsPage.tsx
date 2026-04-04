@@ -4,6 +4,7 @@ import type { BuildRecord, BuildStats, BuildTarget, BuildComparison, CacheAnalys
 import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
+import { SkeletonRow } from "../components/Skeleton";
 
 interface BuildsPageProps {
   onNavigate?: (target: string) => void;
@@ -96,6 +97,7 @@ export default function BuildsPage(props: BuildsPageProps) {
   const [compareLoading, setCompareLoading] = createSignal(false);
   const [compareLogs, setCompareLogs] = createSignal<{ log1: string; log2: string } | null>(null);
   const [compareLogsLoading, setCompareLogsLoading] = createSignal(false);
+  const [loaded, setLoaded] = createSignal(false);
 
   const refresh = async () => {
     try {
@@ -110,6 +112,7 @@ export default function BuildsPage(props: BuildsPageProps) {
     } catch {
       // ignore
     }
+    setLoaded(true);
   };
 
   useRefresh(refresh);
@@ -942,10 +945,26 @@ export default function BuildsPage(props: BuildsPageProps) {
 
       {/* Table */}
       <Show when={filtered().length > 0} fallback={
-        <div class="card" style={{ padding: "40px", "text-align": "center", color: "#8b949e" }}>
-          <div style={{ "font-size": "16px", "margin-bottom": "8px" }}>No builds found</div>
-          <div style={{ "font-size": "13px" }}>Build an image from the Images page to see it here.</div>
-        </div>
+        <Show when={loaded()} fallback={
+          <div class="card" style={{ overflow: "hidden" }}>
+            <table class="data-table" style={{ width: "100%", "border-collapse": "collapse" }}>
+              <thead>
+                <tr><th>Status</th><th>Tag</th><th>Duration</th><th>Started</th><th>Source</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                <SkeletonRow columns={6} />
+                <SkeletonRow columns={6} />
+                <SkeletonRow columns={6} />
+                <SkeletonRow columns={6} />
+              </tbody>
+            </table>
+          </div>
+        }>
+          <div class="card" style={{ padding: "40px", "text-align": "center", color: "#8b949e" }}>
+            <div style={{ "font-size": "16px", "margin-bottom": "8px" }}>No builds yet</div>
+            <div style={{ "font-size": "13px" }}>Build an image from the Images page or use the CLI.</div>
+          </div>
+        </Show>
       }>
         <div class="card" style={{ overflow: "hidden" }}>
           <table class="data-table" style={{ width: "100%", "border-collapse": "collapse" }}>

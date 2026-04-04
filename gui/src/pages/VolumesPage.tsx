@@ -8,6 +8,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 import { logError } from "../lib/activityStore";
+import { SkeletonRow } from "../components/Skeleton";
 
 interface VolumesPageProps {
   onNavigate?: (target: string) => void;
@@ -21,6 +22,7 @@ export default function VolumesPage(props: VolumesPageProps) {
   const [createDriver, setCreateDriver] = createSignal("local");
   const [createLabels, setCreateLabels] = createSignal("");
   const [creating, setCreating] = createSignal(false);
+  const [loaded, setLoaded] = createSignal(false);
   const { sortField, sortDir, toggleSort, sortFn } = useSort<Volume>("name");
 
   const refresh = async () => {
@@ -33,6 +35,7 @@ export default function VolumesPage(props: VolumesPageProps) {
       setVolumeSizes(sizesResult?.sizes || {});
     } catch {
     }
+    setLoaded(true);
   };
 
   useRefresh(refresh);
@@ -99,11 +102,25 @@ export default function VolumesPage(props: VolumesPageProps) {
       </div>
 
       <Show when={volumes().length > 0} fallback={
-        <div class="empty">
-          <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
-          <p class="empty-title">No volumes</p>
-          <p>Create a volume to persist data across container restarts, or run a container that creates volumes automatically.</p>
-        </div>
+        <Show when={loaded()} fallback={
+          <table class="table">
+            <thead>
+              <tr><th>Name</th><th>Driver</th><th>Size</th><th>Created</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              <SkeletonRow columns={5} />
+              <SkeletonRow columns={5} />
+              <SkeletonRow columns={5} />
+              <SkeletonRow columns={5} />
+            </tbody>
+          </table>
+        }>
+          <div class="empty">
+            <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
+            <p class="empty-title">No volumes</p>
+            <p>Volumes are created automatically when containers need persistent storage, or create one manually above.</p>
+          </div>
+        </Show>
       }>
         <table class="table">
           <thead>

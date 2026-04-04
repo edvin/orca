@@ -6,6 +6,7 @@ import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
+import { SkeletonCard } from "../components/Skeleton";
 
 interface GatewayPageProps {
   onNavigate?: (target: string) => void;
@@ -61,6 +62,7 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [cfgLoaded, setCfgLoaded] = createSignal(false);
   const [portConflicts, setPortConflicts] = createSignal<string[]>([]);
   const [checkingPorts, setCheckingPorts] = createSignal(false);
+  const [statusLoaded, setStatusLoaded] = createSignal(false);
 
   const loadConfig = async () => {
     try {
@@ -115,6 +117,7 @@ export default function GatewayPage(props: GatewayPageProps) {
     } catch (e) {
       logError(`Failed to fetch gateway status: ${e}`);
     }
+    setStatusLoaded(true);
   };
 
   const fetchRoutes = async () => {
@@ -511,6 +514,12 @@ export default function GatewayPage(props: GatewayPageProps) {
             {"\u00d7"}
           </button>
         </div>
+      </Show>
+
+      {/* Skeleton while status is loading */}
+      <Show when={!statusLoaded() && status() === null}>
+        <SkeletonCard height="100px" />
+        <div style={{ height: "16px" }} />
       </Show>
 
       {/* Status Card (when running) */}

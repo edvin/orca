@@ -27,7 +27,9 @@ import FleetPage from "./pages/FleetPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import BuildsPage from "./pages/BuildsPage";
 import ConnectionScreen from "./components/ConnectionScreen";
+import ConnectionBanner from "./components/ConnectionBanner";
 import CommandPalette from "./components/CommandPalette";
+import ComposeWizard from "./components/ComposeWizard";
 import AiAssistant from "./components/AiAssistant";
 import type { AiAssistantApi } from "./components/AiAssistant";
 import type { EnvironmentStatus } from "./lib/types";
@@ -42,6 +44,7 @@ export default function App() {
   const [breadcrumbStack, setBreadcrumbStack] = createSignal<string | null>(null);
   const [showCommandPalette, setShowCommandPalette] = createSignal(false);
   const [showShortcuts, setShowShortcuts] = createSignal(false);
+  const [showComposeWizard, setShowComposeWizard] = createSignal(false);
   const [environmentChecked, setEnvironmentChecked] = createSignal(false);
   const [startupStep, setStartupStep] = createSignal("Starting Orca...");
   let aiApi: AiAssistantApi | undefined;
@@ -267,6 +270,8 @@ export default function App() {
     } else if (target === "images:pull") {
       setDetailId("pull"); // Signal to ImagesPage to open pull dialog
       setPage("images");
+    } else if (target === "compose:wizard") {
+      setShowComposeWizard(true);
     } else if (target.startsWith("settings:")) {
       setDetailId(target.split(":")[1]); // Signal to SettingsPage which tab to open
       setPage("settings");
@@ -408,6 +413,7 @@ export default function App() {
               daemonStatus={daemonStatus()}
             />
             <main class="app-main">
+              <ConnectionBanner status={daemonStatus()} />
               {page() === "fleet" && <FleetPage onNavigate={(p) => navigate(p)} />}
               {page() === "dashboard" && <DashboardPage onNavigate={(p) => navigate(p)} />}
               {page() === "templates" && <TemplatesPage onNavigate={(p) => navigate(p)} />}
@@ -450,8 +456,15 @@ export default function App() {
             <CommandPalette
               onClose={() => setShowCommandPalette(false)}
               onNavigate={(p) => navigate(p)}
+              onOpenComposeWizard={() => setShowComposeWizard(true)}
             />
           )}
+          <Show when={showComposeWizard()}>
+            <ComposeWizard
+              onClose={() => setShowComposeWizard(false)}
+              onDeployed={() => { if (page() === "containers") navigate("containers"); }}
+            />
+          </Show>
           <AiAssistant onNavigate={(p: string) => navigate(p)} ref={(api) => { aiApi = api; }} />
         </>
       )}

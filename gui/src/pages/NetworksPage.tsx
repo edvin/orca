@@ -8,6 +8,7 @@ import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 import { logError } from "../lib/activityStore";
 import Dropdown from "../components/Dropdown";
+import { SkeletonRow } from "../components/Skeleton";
 
 const DEFAULT_NETWORKS = ["bridge", "host", "none"];
 const NETWORK_COLORS = ["#58a6ff", "#3fb950", "#d29922", "#f85149", "#bc8cff", "#79c0ff"];
@@ -31,6 +32,7 @@ export default function NetworksPage() {
   const [topologyView, setTopologyView] = createSignal(false);
   const [topology, setTopology] = createSignal<TopologyNetwork[]>([]);
   const [hoveredNode, setHoveredNode] = createSignal<{ type: "network" | "container"; name: string; details: string; x: number; y: number } | null>(null);
+  const [loaded, setLoaded] = createSignal(false);
   const { sortField, sortDir, toggleSort, sortFn } = useSort<Network>("name");
 
   const refresh = async () => {
@@ -40,6 +42,7 @@ export default function NetworksPage() {
     } catch (e) {
       logError(`Failed to list networks: ${e}`);
     }
+    setLoaded(true);
   };
 
   const refreshTopology = async () => {
@@ -196,11 +199,28 @@ export default function NetworksPage() {
         <Show
           when={networks().length > 0}
           fallback={
-            <div class="empty">
-              <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="12" y2="12"/><path d="M12 12L5 17"/><path d="M12 12l7 5"/></svg></div>
-              <p class="empty-title">No custom networks</p>
-              <p>Create a network to connect containers that need to communicate. The default bridge, host, and none networks are managed by Docker.</p>
-            </div>
+            <Show when={loaded()} fallback={
+              <table class="table">
+                <thead>
+                  <tr><th>Name</th><th>ID</th><th>Driver</th><th>Subnet</th><th>Gateway</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  <SkeletonRow columns={6} />
+                  <SkeletonRow columns={6} />
+                  <SkeletonRow columns={6} />
+                  <SkeletonRow columns={6} />
+                </tbody>
+              </table>
+            }>
+              <div class="empty">
+                <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="12" y2="12"/><path d="M12 12L5 17"/><path d="M12 12l7 5"/></svg></div>
+                <p class="empty-title">No custom networks</p>
+                <p>Default networks are managed by Docker. Create a custom network for container isolation.</p>
+                <div class="empty-actions">
+                  <button class="btn btn-primary" onClick={() => setShowCreate(true)}>Create Network</button>
+                </div>
+              </div>
+            </Show>
           }
         >
           <table class="table">

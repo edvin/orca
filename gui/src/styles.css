@@ -2653,6 +2653,20 @@ select option {
   padding: 8px;
 }
 
+.command-group-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6e7681;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 8px 14px 4px;
+  margin-top: 4px;
+}
+
+.command-group-header:first-child {
+  margin-top: 0;
+}
+
 .command-item {
   display: flex;
   align-items: center;
