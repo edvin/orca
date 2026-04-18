@@ -202,4 +202,29 @@ export function getPerContainerMemChartHistory(): Record<string, Array<{ time: n
 
 export function clearAllMetrics() {
   setMetricsHistory({});
+  for (const k of Object.keys(lastAlertTime)) delete lastAlertTime[k];
+  for (const k of Object.keys(highCpuStreak)) delete highCpuStreak[k];
+}
+
+/**
+ * Drop metrics for containers that are no longer present. Call this from a
+ * single place (e.g. the Dashboard after it reconciles the container list)
+ * so dead IDs don't leak memory across a long session.
+ */
+export function pruneMetricsExcept(liveIds: Iterable<string>) {
+  const keep = new Set(liveIds);
+  setMetricsHistory((prev) => {
+    const next: Record<string, MetricSnapshot[]> = {};
+    for (const [id, hist] of Object.entries(prev)) {
+      if (keep.has(id)) next[id] = hist;
+    }
+    return next;
+  });
+  for (const k of Object.keys(lastAlertTime)) {
+    const id = k.split(":")[0];
+    if (!keep.has(id)) delete lastAlertTime[k];
+  }
+  for (const k of Object.keys(highCpuStreak)) {
+    if (!keep.has(k)) delete highCpuStreak[k];
+  }
 }

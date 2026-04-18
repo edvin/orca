@@ -230,7 +230,11 @@ export default function Titlebar(props: TitlebarProps) {
       <button
         class="titlebar-search"
         onClick={() => {
-          document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+          // Dispatch a plain custom event — synthetic KeyboardEvents are
+          // unreliable on macOS WebKit (Cmd vs Ctrl), and some listeners
+          // ignore untrusted events. The App-level keydown handler listens
+          // for `orca-open-command-palette` as well.
+          document.dispatchEvent(new CustomEvent("orca-open-command-palette"));
         }}
         data-tauri-drag-region-exclude
       >

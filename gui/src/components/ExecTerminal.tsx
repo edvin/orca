@@ -152,36 +152,15 @@ export default function ExecTerminal(props: ExecTerminalProps) {
   );
 }
 
-/** Simple command parser that splits on spaces but respects quotes. */
+/**
+ * Always run user-entered commands through `sh -c` inside the container.
+ * The previous parser attempted to detect shell metacharacters and split
+ * on spaces, but that only handled a narrow set of inputs correctly —
+ * pipes, redirects, `&&`, backticks, `$(...)`, and quoted strings with
+ * embedded whitespace all produced surprising behavior. Letting the
+ * container's shell do the parsing is both safer (no broken splits) and
+ * more useful (supports the full shell vocabulary users expect).
+ */
 function parseCommand(cmd: string): string[] {
-  const parts: string[] = [];
-  let current = "";
-  let inQuote: string | null = null;
-
-  for (const ch of cmd) {
-    if (inQuote) {
-      if (ch === inQuote) {
-        inQuote = null;
-      } else {
-        current += ch;
-      }
-    } else if (ch === '"' || ch === "'") {
-      inQuote = ch;
-    } else if (ch === " ") {
-      if (current) {
-        parts.push(current);
-        current = "";
-      }
-    } else {
-      current += ch;
-    }
-  }
-  if (current) parts.push(current);
-
-  // If single word, wrap in sh -c for shell features (pipes, etc.)
-  if (parts.length === 1 && (cmd.includes("|") || cmd.includes(">"))) {
-    return ["sh", "-c", cmd];
-  }
-
-  return parts;
+  return ["sh", "-c", cmd];
 }

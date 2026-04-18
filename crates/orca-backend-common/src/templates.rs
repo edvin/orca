@@ -96,23 +96,13 @@ pub fn save_user_templates(templates: &[AppTemplate]) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Generate a random alphanumeric token for services that need one.
+/// Generate a 32-character random alphanumeric token using the OS CSPRNG.
+/// Used to fill in placeholder passwords for templated services, so this
+/// must be cryptographically secure.
 pub fn generate_token() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let mut state = seed as u64 | 1;
-    let chars: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    (0..32)
-        .map(|_| {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            chars[(state as usize) % chars.len()] as char
-        })
-        .collect()
+    use rand::Rng;
+    use rand::distributions::Alphanumeric;
+    rand::rngs::OsRng.sample_iter(&Alphanumeric).take(32).map(char::from).collect()
 }
 
 /// Get all templates (community catalog + user-defined).

@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, For, Show, createEffect, untrack } from "solid-js";
+import { createSignal, onMount, onCleanup, For, Show, createEffect, createMemo, untrack } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { copyToClipboard } from "../lib/clipboard";
 
@@ -31,23 +31,31 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function highlightLine(line: string, filter: string, isRegex: boolean, caseSensitive: boolean): string {
-  if (!filter) return escapeHtml(line);
+function compileHighlight(filter: string, isRegex: boolean, caseSensitive: boolean): RegExp | null {
+  if (!filter) return null;
+  const flags = caseSensitive ? "g" : "gi";
+  const source = isRegex ? filter : escapeRegex(filter);
   try {
-    const flags = caseSensitive ? "g" : "gi";
-    const regex = isRegex ? new RegExp(`(${filter})`, flags) : new RegExp(`(${escapeRegex(filter)})`, flags);
-    const parts = line.split(regex);
-    return parts
-      .map((part, i) => {
-        const escaped = escapeHtml(part);
-        return i % 2 === 1
-          ? `<mark style="background:#d29922;color:#0d1117;border-radius:2px;padding:0 1px">${escaped}</mark>`
-          : escaped;
-      })
-      .join("");
+    return new RegExp(source, flags);
   } catch {
-    return escapeHtml(line);
+    return null;
   }
+}
+
+function highlightLine(line: string, regex: RegExp | null): string {
+  if (!regex) return escapeHtml(line);
+  let out = "";
+  let last = 0;
+  regex.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(line)) !== null) {
+    if (m.index > last) out += escapeHtml(line.slice(last, m.index));
+    out += `<mark style="background:#d29922;color:#0d1117;border-radius:2px;padding:0 1px">${escapeHtml(m[0])}</mark>`;
+    last = m.index + m[0].length;
+    if (m[0].length === 0) regex.lastIndex++;
+  }
+  if (last < line.length) out += escapeHtml(line.slice(last));
+  return out;
 }
 
 interface LogEntry {
@@ -153,6 +161,10 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
     }
     return result;
   };
+
+  const highlightRegex = createMemo(() =>
+    compileHighlight(filter(), useRegex(), caseSensitive()),
+  );
 
   const handleScroll = () => {
     if (!logContainer) return;
@@ -369,7 +381,6 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
             }>
               <For each={filteredEntries()}>
                 {(entry) => {
-                  const f = filter();
                   return (
                     <div
                       style={{
@@ -405,8 +416,8 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
                           "word-break": "break-all",
                           flex: "1",
                         }}
-                        {...(f
-                          ? { innerHTML: highlightLine(entry.line, f, useRegex(), caseSensitive()) }
+                        {...(highlightRegex()
+                          ? { innerHTML: highlightLine(entry.line, highlightRegex()) }
                           : { textContent: entry.line }
                         )}
                       />

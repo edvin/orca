@@ -124,7 +124,10 @@ impl DaemonManager {
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = std::process::Command::new("pkill").args(["-f", "orca-daemon"]).output();
+            // Match the process name exactly, NOT the command line. Using
+            // `-f` would also kill `cargo run --bin orca-daemon`, editor
+            // sessions viewing the code, log tails, etc.
+            let _ = std::process::Command::new("pkill").args(["-x", "orca-daemon"]).output();
         }
 
         // Wait for the process to fully exit and release the port
@@ -151,12 +154,22 @@ impl DaemonManager {
     }
 
     async fn health_check(&self) -> bool {
-        reqwest::Client::new()
+        // Be strict: verify the endpoint returned 2xx AND a valid JSON body
+        // with a "status" field of "ok". This prevents false-positives when
+        // an unrelated process binds port 9477.
+        let resp = match reqwest::Client::new()
             .get("http://127.0.0.1:9477/api/v1/health")
             .timeout(std::time::Duration::from_secs(2))
             .send()
             .await
-            .is_ok()
+        {
+            Ok(r) if r.status().is_success() => r,
+            _ => return false,
+        };
+        match resp.json::<serde_json::Value>().await {
+            Ok(json) => json.get("status").and_then(|v| v.as_str()) == Some("ok"),
+            Err(_) => false,
+        }
     }
 }
 

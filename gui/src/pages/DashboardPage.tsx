@@ -110,7 +110,18 @@ export default function DashboardPage(props: DashboardPageProps) {
   };
   onMount(() => {
     document.addEventListener("orca-host-switch", handleHostSwitch);
-    onCleanup(() => document.removeEventListener("orca-host-switch", handleHostSwitch));
+    // Keep the metrics store bounded: prune any container ids we no longer
+    // see as alive. Without this, short-lived containers accumulate in
+    // `metricsHistory` / `highCpuStreak` over a long session.
+    const pruneTimer = setInterval(() => {
+      import("../lib/metricsStore").then(({ pruneMetricsExcept }) =>
+        pruneMetricsExcept(containers().map((c) => c.id)),
+      );
+    }, 30000);
+    onCleanup(() => {
+      document.removeEventListener("orca-host-switch", handleHostSwitch);
+      clearInterval(pruneTimer);
+    });
   });
 
   const fetchStats = async () => {
@@ -138,14 +149,27 @@ export default function DashboardPage(props: DashboardPageProps) {
   };
 
   onMount(() => {
+    let disposed = false;
     fetchAll();
-    // Stats depend on containers being loaded; kick off after a short delay
-    setTimeout(fetchStats, 2000);
+    // Stats depend on containers being loaded; kick off after a short delay.
+    const initialStatsTimer = setTimeout(() => {
+      if (!disposed) fetchStats();
+    }, 2000);
+    // NOTE: Dashboard is authoritative for the 5-second refresh here. We
+    // intentionally do NOT also subscribe via useRefresh — the `useRefresh`
+    // call above would otherwise fire a second round of the same requests
+    // on every global refresh event. If you want a manual refresh button,
+    // dispatch `orca-refresh` and let this interval tick pick it up.
     const interval = setInterval(() => {
+      if (disposed) return;
       fetchAll();
       fetchStats();
     }, 5000);
-    onCleanup(() => clearInterval(interval));
+    onCleanup(() => {
+      disposed = true;
+      clearTimeout(initialStatsTimer);
+      clearInterval(interval);
+    });
   });
 
   const runningCount = () => containers().filter((c) => c.state === "Running").length;

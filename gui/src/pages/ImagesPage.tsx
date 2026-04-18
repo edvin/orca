@@ -13,6 +13,7 @@ import { SkeletonRow } from "../components/Skeleton";
 import LastUpdated from "../components/LastUpdated";
 import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
+import { escapeHtml, safeHref } from "../lib/sanitize";
 import { logError } from "../lib/activityStore";
 
 interface ImagesPageProps {
@@ -128,7 +129,17 @@ export default function ImagesPage(props: ImagesPageProps) {
       props.onPullOpened?.();
     }
   });
-  onCleanup(() => { if (searchTimer) clearTimeout(searchTimer); });
+  // Shared handle for the pull-progress listener so that closing the dialog
+  // (or unmounting the page) while a pull is in flight reliably detaches the
+  // listener — the previous flow only cleared it inside the "done"/"error"
+  // branches of the handler itself.
+  let pullUnlisten: (() => void) | null = null;
+
+  onCleanup(() => {
+    if (searchTimer) clearTimeout(searchTimer);
+    try { pullUnlisten?.(); } catch {}
+    pullUnlisten = null;
+  });
 
   const doSearch = async (q: string) => {
     if (q.length < 2) {
@@ -287,10 +298,13 @@ export default function ImagesPage(props: ImagesPageProps) {
     setPullStatus(`Pulling ${ref_}...`);
     setPullLayers({});
 
-    // Listen for streaming progress events
-    let unlisten: (() => void) | null = null;
+    // Tear down any previous pull listener before registering a new one —
+    // this guards against a user starting a second pull while a first is
+    // still running and both listeners firing on every event.
+    try { pullUnlisten?.(); } catch {}
+    pullUnlisten = null;
     try {
-      unlisten = await listen<any>("pull-progress", (event) => {
+      pullUnlisten = await listen<any>("pull-progress", (event) => {
         const data = event.payload;
         if (data.event === "progress" && data.layer) {
           setPullLayers((prev) => {
@@ -315,16 +329,16 @@ export default function ImagesPage(props: ImagesPageProps) {
           setPulling(false);
           showToast(`Pulled ${ref_}`, "success");
           refresh();
-          unlisten?.();
-          unlisten = null;
+          try { pullUnlisten?.(); } catch {}
+          pullUnlisten = null;
         } else if (data.event === "error") {
           setPullStatus("");
           setPullLayers({});
           setPulling(false);
           logError(`Failed to pull image: ${data.error}`, `Image "${ref_}"`);
           showToast(`Pull failed: ${data.error}`, "error");
-          unlisten?.();
-          unlisten = null;
+          try { pullUnlisten?.(); } catch {}
+          pullUnlisten = null;
         }
       });
 
@@ -341,7 +355,8 @@ export default function ImagesPage(props: ImagesPageProps) {
       showToast(`Pull failed: ${e}`, "error");
       setPulling(false);
     }
-    unlisten?.();
+    try { pullUnlisten?.(); } catch {}
+    pullUnlisten = null;
   };
 
   let buildOutputRef: HTMLDivElement | undefined;
@@ -614,15 +629,23 @@ export default function ImagesPage(props: ImagesPageProps) {
       }
     };
 
+    // Every value interpolated into the report comes from the Trivy
+    // database or Docker metadata and must be HTML-escaped. URLs must
+    // additionally be allow-listed to an http(s) scheme before becoming
+    // an `href`.
     const vulnRows = vulns.map((v) => {
       const c = severityColor(v.Severity);
+      const url = safeHref(v.PrimaryURL);
+      const idCell = url
+        ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(v.VulnerabilityID)}</a>`
+        : escapeHtml(v.VulnerabilityID);
       return `<tr>
-        <td><span class="badge" style="background:${c.bg};color:${c.fg}">${v.Severity}</span></td>
-        <td>${v.PrimaryURL ? `<a href="${v.PrimaryURL}" target="_blank">${v.VulnerabilityID}</a>` : v.VulnerabilityID}</td>
-        <td class="mono">${v.PkgName}</td>
-        <td class="mono">${v.InstalledVersion}</td>
-        <td class="mono ${v.FixedVersion ? "fixed" : "no-fix"}">${v.FixedVersion || "\u2014"}</td>
-        <td class="desc">${v.Title || "\u2014"}</td>
+        <td><span class="badge" style="background:${c.bg};color:${c.fg}">${escapeHtml(v.Severity)}</span></td>
+        <td>${idCell}</td>
+        <td class="mono">${escapeHtml(v.PkgName)}</td>
+        <td class="mono">${escapeHtml(v.InstalledVersion)}</td>
+        <td class="mono ${v.FixedVersion ? "fixed" : "no-fix"}">${escapeHtml(v.FixedVersion || "\u2014")}</td>
+        <td class="desc">${escapeHtml(v.Title || "\u2014")}</td>
       </tr>`;
     }).join("\n");
 
@@ -631,7 +654,7 @@ export default function ImagesPage(props: ImagesPageProps) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vulnerability Report — ${imageName}</title>
+<title>Vulnerability Report — ${escapeHtml(imageName)}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -672,9 +695,9 @@ export default function ImagesPage(props: ImagesPageProps) {
 <body>
 <div class="container">
   <div class="header">
-    <h1>Vulnerability Report — <span>${imageName}</span></h1>
+    <h1>Vulnerability Report — <span>${escapeHtml(imageName)}</span></h1>
     <div class="meta">
-      <span>Scanned: ${timestamp}</span>
+      <span>Scanned: ${escapeHtml(timestamp)}</span>
       <span>Scanner: Trivy (via Orca Desktop)</span>
       <span>${vulns.length} vulnerabilities found</span>
     </div>

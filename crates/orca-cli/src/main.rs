@@ -330,7 +330,7 @@ struct RouteExport {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let client = client::DaemonClient::new("http://127.0.0.1:9477", cli.token);
+    let client = client::DaemonClient::new("http://127.0.0.1:9477", cli.token)?;
 
     match cli.command {
         Commands::Status => cmd_status(&client).await?,
@@ -465,7 +465,11 @@ async fn cmd_container_exec(client: &client::DaemonClient, id: &str, cmd: Vec<St
         print!("{}", result.output);
     }
     if result.exit_code != 0 {
-        std::process::exit(result.exit_code);
+        // POSIX exit codes are unsigned bytes; clamp to avoid wrap-around
+        // from negative values (which would produce confusing codes like
+        // 255 — colliding with "command not found" semantics).
+        let code = result.exit_code.clamp(0, 255);
+        std::process::exit(code);
     }
     Ok(())
 }
@@ -756,21 +760,38 @@ async fn cmd_ca_info(client: &client::DaemonClient) -> anyhow::Result<()> {
 async fn cmd_ca_install(client: &client::DaemonClient) -> anyhow::Result<()> {
     let pem = client.ca_certificate().await?;
 
-    let tmp_dir = std::env::temp_dir();
-    let tmp_path = tmp_dir.join("orca-ca.crt");
-    std::fs::write(&tmp_path, &pem)?;
+    // Write to a secure, unguessable temp file via tempfile::Builder so a
+    // local attacker can't pre-create a symlink at a predictable path and
+    // swap the contents between write and `sudo security add-trusted-cert`
+    // (a swap that would install an attacker-controlled root CA).
+    let tmpfile = tempfile::Builder::new()
+        .prefix("orca-ca-")
+        .suffix(".crt")
+        .tempfile()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(tmpfile.path(), std::fs::Permissions::from_mode(0o600));
+    }
+    std::fs::write(tmpfile.path(), &pem)?;
+    let tmp_path = tmpfile.path().to_path_buf();
+    // Keep the file alive until we're done — calling `.keep()` returns
+    // (File, PathBuf), we just want the PathBuf to outlive the scope.
+    let _tmp_guard = tmpfile; // intentionally keep named so Drop removes on function exit
 
     let tmp_str = tmp_path.display().to_string();
 
-    let linux_sh_arg = format!(
-        "cp '{}' /usr/local/share/ca-certificates/orca-ca.crt && update-ca-certificates",
-        tmp_str
-    );
-
     let (cmd, args, manual_instructions) = if cfg!(target_os = "linux") {
+        // Run cp and update-ca-certificates as two separate sudo
+        // invocations, passing argv directly — avoids shell quoting issues
+        // if TMPDIR contains unusual characters.
         (
             "sudo",
-            vec!["sh", "-c", linux_sh_arg.as_str()],
+            vec![
+                "cp",
+                tmp_str.as_str(),
+                "/usr/local/share/ca-certificates/orca-ca.crt",
+            ],
             format!(
                 "sudo cp '{}' /usr/local/share/ca-certificates/orca-ca.crt && sudo update-ca-certificates",
                 tmp_str
@@ -807,15 +828,32 @@ async fn cmd_ca_install(client: &client::DaemonClient) -> anyhow::Result<()> {
     println!("Installing CA certificate to system trust store...");
     let status = std::process::Command::new(cmd).args(&args).status();
 
-    match status {
-        Ok(s) if s.success() => {
-            println!("CA certificate installed successfully.");
-            let _ = std::fs::remove_file(&tmp_path);
-        }
-        _ => {
-            eprintln!("Automatic installation failed. Install manually:");
-            eprintln!("  {manual_instructions}");
-            eprintln!("Certificate saved to: {tmp_str}");
+    // On Linux, run `update-ca-certificates` as a second step so we can
+    // surface per-step errors clearly.
+    let linux_step2_status = if cfg!(target_os = "linux") && status.as_ref().map(|s| s.success()).unwrap_or(false) {
+        Some(std::process::Command::new("sudo").arg("update-ca-certificates").status())
+    } else {
+        None
+    };
+
+    let overall_ok = match (&status, &linux_step2_status) {
+        (Ok(s), None) => s.success(),
+        (Ok(s1), Some(Ok(s2))) => s1.success() && s2.success(),
+        _ => false,
+    };
+
+    if overall_ok {
+        println!("CA certificate installed successfully.");
+        // tempfile Drop will remove the file.
+    } else {
+        eprintln!("Automatic installation failed. Install manually:");
+        eprintln!("  {manual_instructions}");
+        eprintln!("Certificate saved to: {tmp_str}");
+        // Move the temp file to a stable location so the user can still
+        // finish manually; otherwise the tempfile Drop would delete it.
+        let stable_path = std::env::temp_dir().join("orca-ca.crt");
+        if std::fs::copy(&tmp_path, &stable_path).is_ok() {
+            eprintln!("  (copied to {})", stable_path.display());
         }
     }
 

@@ -338,6 +338,24 @@ fn write_custom_cert_files(config: &GatewayConfig) -> Result<()> {
 
 /// Generate a TLS certificate for a hostname, signed by the Orca CA.
 fn generate_cert_for_hostname(hostname: &str) -> Result<()> {
+    // Defense in depth: the API layer validates gateway hostnames before
+    // they reach this function, but we re-check here so an internal caller
+    // can't accidentally reach the filesystem join with `../`.
+    if hostname.is_empty() || hostname.len() > 253 {
+        anyhow::bail!("invalid hostname length");
+    }
+    for label in hostname.split('.') {
+        if label.is_empty() || label.len() > 63 {
+            anyhow::bail!("invalid hostname label length");
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            anyhow::bail!("hostname label must not start or end with '-'");
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            anyhow::bail!("hostname contains invalid characters");
+        }
+    }
+
     let certs = certs_dir();
     std::fs::create_dir_all(&certs)?;
 

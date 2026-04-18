@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, Show, createEffect, For } from "solid-js";
+import { createSignal, onMount, onCleanup, Show, createEffect, For, createMemo } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { copyToClipboard } from "../lib/clipboard";
@@ -23,23 +23,42 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function highlightLine(line: string, filter: string, isRegex: boolean, caseSensitive: boolean): string {
-  if (!filter) return escapeHtml(line);
+/**
+ * Compile a case-/regex-config'd highlight pattern once. Returns null when
+ * the filter is empty or the user-supplied regex fails to compile.
+ *
+ * The pattern uses a non-capturing-but-anchored alternation so user
+ * capturing groups can't shift the parity of `split()` results — the
+ * previous implementation relied on odd-indexed chunks being matches,
+ * which a pattern like `(foo|bar)` could break.
+ */
+function compileHighlight(filter: string, isRegex: boolean, caseSensitive: boolean): RegExp | null {
+  if (!filter) return null;
+  const flags = caseSensitive ? "g" : "gi";
+  const source = isRegex ? filter : escapeRegex(filter);
   try {
-    const flags = caseSensitive ? "g" : "gi";
-    const regex = isRegex ? new RegExp(`(${filter})`, flags) : new RegExp(`(${escapeRegex(filter)})`, flags);
-    const parts = line.split(regex);
-    return parts
-      .map((part, i) => {
-        const escaped = escapeHtml(part);
-        return i % 2 === 1
-          ? `<mark style="background:#d29922;color:#0d1117;border-radius:2px;padding:0 1px">${escaped}</mark>`
-          : escaped;
-      })
-      .join("");
+    return new RegExp(source, flags);
   } catch {
-    return escapeHtml(line);
+    return null;
   }
+}
+
+function highlightLine(line: string, regex: RegExp | null): string {
+  if (!regex) return escapeHtml(line);
+  let out = "";
+  let last = 0;
+  // Reset lastIndex — regex is reused across many calls.
+  regex.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(line)) !== null) {
+    if (m.index > last) out += escapeHtml(line.slice(last, m.index));
+    out += `<mark style="background:#d29922;color:#0d1117;border-radius:2px;padding:0 1px">${escapeHtml(m[0])}</mark>`;
+    last = m.index + m[0].length;
+    // Guard against zero-length matches spinning forever.
+    if (m[0].length === 0) regex.lastIndex++;
+  }
+  if (last < line.length) out += escapeHtml(line.slice(last));
+  return out;
 }
 
 function countMatches(lines: string[], filter: string, isRegex: boolean, caseSensitive: boolean): number {
@@ -98,23 +117,37 @@ export default function LogViewer(props: LogViewerProps) {
     setLoading(false);
   };
 
+  // Only intercept Ctrl/Cmd+F when the keydown target is inside our own
+  // log container — otherwise we hijack find from every other pane,
+  // including xterm and the YAML editor.
   const handleKeyDown = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-      e.preventDefault();
-      filterRef?.focus();
-    }
+    if (!((e.ctrlKey || e.metaKey) && e.key === "f")) return;
+    const target = e.target as Node | null;
+    if (!logContainer || !target || !logContainer.contains(target)) return;
+    e.preventDefault();
+    filterRef?.focus();
   };
 
   onMount(() => {
     let unlisten: UnlistenFn | null = null;
+    let disposed = false;
     const containerId = props.containerId;
 
-    // Fetch initial batch of logs, then start streaming
+    // Register cleanup synchronously so the onCleanup survives the async
+    // fetchLogs().then(...) chain.
+    onCleanup(() => {
+      disposed = true;
+      try { unlisten?.(); } catch {}
+      invoke("unsubscribe_container_logs", { id: props.containerId }).catch(() => {});
+      document.removeEventListener("keydown", handleKeyDown);
+    });
+
     fetchLogs().then(async () => {
-      // Listen for streamed log lines
+      if (disposed) return;
       unlisten = await listen<{ containerId: string; line: string }>(
         "container-log-line",
         (event) => {
+          if (disposed) return;
           if (event.payload.containerId === containerId) {
             const newLines = processLines([event.payload.line]);
             if (newLines.length > 0) {
@@ -123,8 +156,12 @@ export default function LogViewer(props: LogViewerProps) {
           }
         }
       );
+      if (disposed) {
+        try { unlisten(); } catch {}
+        unlisten = null;
+        return;
+      }
 
-      // Start streaming subscription
       invoke("subscribe_container_logs", {
         id: containerId,
         tail: 0,
@@ -134,12 +171,6 @@ export default function LogViewer(props: LogViewerProps) {
     });
 
     document.addEventListener("keydown", handleKeyDown);
-
-    onCleanup(() => {
-      unlisten?.();
-      invoke("unsubscribe_container_logs", { id: props.containerId }).catch(() => {});
-      document.removeEventListener("keydown", handleKeyDown);
-    });
   });
 
   createEffect(() => {
@@ -179,6 +210,12 @@ export default function LogViewer(props: LogViewerProps) {
     if (!filter()) return 0;
     return countMatches(filtered(), filter(), useRegex(), caseSensitive());
   };
+
+  // Memoize the compiled highlight regex so we don't rebuild it per rendered
+  // line — the previous version called `new RegExp` on every `<For>` row.
+  const highlightRegex = createMemo(() =>
+    compileHighlight(filter(), useRegex(), caseSensitive()),
+  );
 
   const handleScroll = () => {
     if (!logContainer) return;
@@ -350,8 +387,8 @@ export default function LogViewer(props: LogViewerProps) {
           }>
             <For each={filtered()}>
               {(line) => {
-                const f = filter();
-                if (f) {
+                const regex = highlightRegex();
+                if (regex) {
                   return (
                     <div
                       style={{
@@ -362,7 +399,7 @@ export default function LogViewer(props: LogViewerProps) {
                         "line-height": "1.4",
                       }}
                       // eslint-disable-next-line solid/no-innerhtml -- highlightLine produces pre-escaped HTML with safe <mark> tags
-                      innerHTML={highlightLine(line, f, useRegex(), caseSensitive())}
+                      innerHTML={highlightLine(line, regex)}
                     />
                   );
                 }

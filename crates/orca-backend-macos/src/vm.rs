@@ -13,8 +13,35 @@ use orca_core::runtime::RuntimeKind;
 
 use crate::MacOSBackend;
 
+/// Validate a machine/VM name. Must be safe to use as a filename fragment
+/// and as an argv to limactl/wsl.
+fn validate_vm_name(name: &str) -> anyhow::Result<()> {
+    if name.is_empty() || name.len() > 64 {
+        anyhow::bail!("VM name must be 1..=64 characters");
+    }
+    if name.starts_with('-') || name.starts_with('.') {
+        anyhow::bail!("VM name must not start with '-' or '.'");
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) {
+        anyhow::bail!("VM name must contain only ASCII alphanumerics, '-', and '_'");
+    }
+    Ok(())
+}
+
 impl MachineManager for MacOSBackend {
     async fn create(&self, config: MachineConfig) -> anyhow::Result<MachineInfo> {
+        validate_vm_name(&config.name)?;
+        // Reject nonsensical resource values before templating so limactl
+        // doesn't bail with a cryptic error.
+        if config.cpus == 0 {
+            anyhow::bail!("cpus must be >= 1");
+        }
+        if config.memory_mb < 1024 {
+            anyhow::bail!("memory_mb must be >= 1024");
+        }
+        if config.disk_gb < 10 {
+            anyhow::bail!("disk_gb must be >= 10");
+        }
         let runtime_pkg = match config.runtime {
             RuntimeKind::Podman => "podman",
             RuntimeKind::Docker => "docker",
@@ -89,8 +116,15 @@ propagateProxyEnv: true
             runtime_pkg = runtime_pkg,
         );
 
-        let config_path = std::env::temp_dir().join(format!("orca-{}.yaml", config.name));
-        tokio::fs::write(&config_path, &lima_config).await?;
+        // Use a unique, locally-created temp file so a local attacker can't
+        // pre-create a symlink at a predictable `/tmp/orca-<name>.yaml`
+        // path and have the Lima config written through the symlink.
+        let tmp = tempfile::Builder::new()
+            .prefix("orca-lima-")
+            .suffix(".yaml")
+            .tempfile()?;
+        tokio::fs::write(tmp.path(), &lima_config).await?;
+        let config_path = tmp.path().to_path_buf();
 
         let output = Command::new("limactl")
             .args([

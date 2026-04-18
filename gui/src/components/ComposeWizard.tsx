@@ -36,6 +36,30 @@ interface ComposeWizardProps {
   onDeployed?: () => void;
 }
 
+/**
+ * Quote a scalar value for safe emission into YAML. Values that contain any
+ * of the characters that YAML interprets specially (`:`, `#`, `-`, `!`,
+ * `&`, `*`, `{`, `}`, `[`, `]`, `"`, `'`, newlines, leading/trailing
+ * whitespace) are wrapped in double quotes with `\`, `"`, and control
+ * characters escaped. Otherwise the value is emitted bare.
+ */
+function yamlQuote(value: string): string {
+  if (value === "") return '""';
+  const needsQuoting =
+    /^(~|null|true|false|on|off|yes|no)$/i.test(value.trim()) ||
+    /^[\s-]/.test(value) ||
+    /[:#&*!|<>%@`\\'"\r\n\t]/.test(value) ||
+    /^[-+]?\d/.test(value);
+  if (!needsQuoting) return value;
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
+  return `"${escaped}"`;
+}
+
 function createEmptyService(): ServiceDef {
   return {
     id: crypto.randomUUID(),
@@ -75,7 +99,7 @@ function generateYaml(stackName: string, services: ServiceDef[]): string {
       if (validEnv.length > 0) {
         lines.push("    environment:");
         for (const e of validEnv) {
-          lines.push(`      ${e.key}: ${e.value}`);
+          lines.push(`      ${e.key}: ${yamlQuote(e.value)}`);
         }
       }
     }
@@ -165,9 +189,12 @@ export default function ComposeWizard(props: ComposeWizardProps) {
   };
 
   const addService = () => {
-    setServices((prev) => [...prev, createEmptyService()]);
-    const newSvc = services()[services().length - 1];
-    if (newSvc) setEditingServiceId(newSvc.id);
+    // Generate the new service BEFORE enqueuing the update so we can read
+    // its id synchronously — `services()` after `setServices(...)` may not
+    // reflect the update yet due to Solid's batching.
+    const newSvc = createEmptyService();
+    setServices((prev) => [...prev, newSvc]);
+    setEditingServiceId(newSvc.id);
   };
 
   const removeService = (id: string) => {
@@ -712,9 +739,12 @@ export default function ComposeWizard(props: ComposeWizardProps) {
                 if (step() === 2) {
                   goToReview();
                 } else {
+                  // Capture the previous step before advancing — checking
+                  // `step() === 1` AFTER setStep is always false and the
+                  // auto-expand branch never fires.
+                  const wasStep1 = step() === 1;
                   setStep((s) => (s + 1) as 1 | 2 | 3);
-                  // Auto-expand the first service for editing in step 2
-                  if (step() === 1 && services().length > 0) {
+                  if (wasStep1 && services().length > 0) {
                     setEditingServiceId(services()[0].id);
                   }
                 }

@@ -23,7 +23,13 @@
     "core:app:default",
     "core:app:allow-version",
     "shell:default",
-    "shell:allow-open",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        { "url": "^https?://" },
+        { "url": "^mailto:" }
+      ]
+    },
     "updater:default",
     "updater:allow-check",
     "updater:allow-download-and-install",

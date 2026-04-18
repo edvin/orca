@@ -307,8 +307,37 @@ pub enum DeployStatus {
     Failed,
 }
 
+/// Extract the registry host from an image reference.
+/// `ghcr.io/user/repo:tag` -> `ghcr.io`
+/// `registry:5000/foo/bar` -> `registry:5000`
+/// `nginx:latest` -> `docker.io`
+/// `localhost/foo` -> `localhost`
+fn extract_registry_host(image_ref: &str) -> String {
+    let first = image_ref.split('/').next().unwrap_or(image_ref);
+    // A registry host must contain `.`, `:` (port), or be literally `localhost`.
+    // Bare `nginx` or `library/nginx` means Docker Hub.
+    if image_ref.contains('/')
+        && (first.contains('.') || first.contains(':') || first == "localhost")
+    {
+        first.to_string()
+    } else {
+        "docker.io".to_string()
+    }
+}
+
 impl OrcaConfig {
     /// Find deploy rules matching an image and tag.
+    ///
+    /// Image matching is strict to avoid silent cross-rule triggering:
+    /// * Exact match: pattern `ghcr.io/user/app` matches only
+    ///   `ghcr.io/user/app`.
+    /// * Registry-stripped match: pattern `user/app` matches `ghcr.io/user/app`
+    ///   only when the stripped prefix is a valid registry host (contains
+    ///   `.`, `:`, or is literally `localhost`). This prevents
+    ///   `pattern="user/app"` from matching `image="evil/user/app"` where
+    ///   `evil` is a Docker Hub namespace, not a registry host.
+    ///
+    /// No substring matching — that was a silent cross-image footgun.
     pub fn find_matching_rules(&self, image: &str, tag: &str) -> Vec<&DeployRule> {
         self.deploy_rules
             .iter()
@@ -316,18 +345,36 @@ impl OrcaConfig {
                 if !r.enabled {
                     return false;
                 }
-                // Match image pattern (substring or exact)
-                if !image.contains(&r.image_pattern) && r.image_pattern != image {
+                let pattern = r.image_pattern.trim();
+                if pattern.is_empty() {
                     return false;
                 }
-                // Match tag filter
+
+                let image_matches = if image == pattern {
+                    true
+                } else {
+                    // Strip leading registry host if present, then compare
+                    // the rest exactly. The prefix MUST look like a
+                    // registry host for the strip to happen.
+                    match image.split_once('/') {
+                        Some((first, rest)) => {
+                            let is_registry_host =
+                                first.contains('.') || first.contains(':') || first == "localhost";
+                            is_registry_host && rest == pattern
+                        }
+                        None => false,
+                    }
+                };
+                if !image_matches {
+                    return false;
+                }
+
+                // Tag filter: empty or "*" matches any, "prefix*" glob, else exact.
                 let filter = r.tag_filter.trim();
                 if filter.is_empty() || filter == "*" {
                     return true;
                 }
-                if filter.contains('*') {
-                    // Simple glob: "v*" matches "v1.2.3"
-                    let prefix = filter.trim_end_matches('*');
+                if let Some(prefix) = filter.strip_suffix('*') {
                     tag.starts_with(prefix)
                 } else {
                     tag == filter
@@ -356,34 +403,11 @@ fn default_anthropic_model() -> String {
     "claude-sonnet-4-20250514".into()
 }
 
-/// Generate a 32-character hex token using platform-appropriate randomness.
+/// Generate a 32-character hex token using the OS cryptographic RNG.
+/// Uses `/dev/urandom` on Unix, `BCryptGenRandom` on Windows (via `getrandom`).
 pub(crate) fn generate_random_token() -> anyhow::Result<String> {
     let mut bytes = [0u8; 16];
-
-    // Try /dev/urandom (Linux/macOS)
-    #[cfg(unix)]
-    {
-        let mut f = std::fs::File::open("/dev/urandom")?;
-        std::io::Read::read_exact(&mut f, &mut bytes)?;
-    }
-
-    // Windows: use the system RNG via std
-    #[cfg(windows)]
-    {
-        use std::collections::hash_map::RandomState;
-        use std::hash::{BuildHasher, Hasher};
-        // Use multiple random hashers to gather entropy
-        for chunk in bytes.chunks_mut(8) {
-            let s = RandomState::new();
-            let val = s.build_hasher().finish().to_le_bytes();
-            for (i, b) in chunk.iter_mut().enumerate() {
-                if i < val.len() {
-                    *b = val[i];
-                }
-            }
-        }
-    }
-
+    getrandom::getrandom(&mut bytes).map_err(|e| anyhow::anyhow!("failed to read OS RNG: {e}"))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
@@ -435,29 +459,57 @@ impl OrcaConfig {
             .join("config.json")
     }
 
+    /// Load config from disk. Returns an error on parse failure so callers
+    /// cannot accidentally overwrite a corrupt-but-recoverable file with
+    /// defaults. Use [`load_or_default`] for callers that explicitly want
+    /// defaults on missing-or-broken.
     pub fn load() -> anyhow::Result<Self> {
         let path = Self::config_path();
-        if path.exists() {
-            let contents = std::fs::read_to_string(&path)?;
-            match serde_json::from_str(&contents) {
-                Ok(config) => Ok(config),
-                Err(e) => {
-                    // Config file failed to parse — could be a partial write from
-                    // another process. Do NOT overwrite it — just return defaults
-                    // in memory. The file will be fixed on the next successful save.
-                    tracing::warn!(
-                        "Config file at {} could not be parsed ({}), using in-memory defaults. \
-                         File NOT overwritten — may recover on next load.",
-                        path.display(),
-                        e
-                    );
-                    Ok(Self::default())
-                }
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let contents = std::fs::read_to_string(&path)?;
+        serde_json::from_str(&contents)
+            .map_err(|e| anyhow::anyhow!("config at {} is not valid JSON: {e}", path.display()))
+            .map(|c: Self| {
+                Self::warn_insecure_perms(&path);
+                c
+            })
+    }
+
+    /// Like [`load`] but returns defaults on missing or unparseable file.
+    /// Used in contexts where we must not fail startup, logging warnings.
+    pub fn load_or_default() -> Self {
+        match Self::load() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("falling back to in-memory default config: {e}");
+                Self::default()
             }
-        } else {
-            Ok(Self::default())
         }
     }
+
+    /// Warn if the config file on disk has overly-permissive permissions or
+    /// ownership on Unix. The file contains the API token and other secrets.
+    #[cfg(unix)]
+    fn warn_insecure_perms(path: &std::path::Path) {
+        use std::os::unix::fs::MetadataExt;
+        if let Ok(md) = std::fs::metadata(path) {
+            let mode = md.mode() & 0o777;
+            if mode & 0o077 != 0 {
+                tracing::warn!(
+                    "config file {} has insecure permissions {:o}. Expected 0600. \
+                     Run: chmod 600 {}",
+                    path.display(),
+                    mode,
+                    path.display()
+                );
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn warn_insecure_perms(_path: &std::path::Path) {}
 
     /// Ensure an API token exists. Generates a cryptographically random
     /// 32-character hex token if none is set, saves the config, and returns
@@ -468,7 +520,9 @@ impl OrcaConfig {
             self.api_token = Some(token);
             self.save()?;
         }
-        Ok(self.api_token.as_ref().expect("token was just set"))
+        self.api_token
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("api_token not set after ensure_token"))
     }
 
     pub fn add_registry(&mut self, cred: RegistryCredential) -> anyhow::Result<()> {
@@ -486,36 +540,88 @@ impl OrcaConfig {
     /// Find credentials matching an image reference.
     /// "ghcr.io/user/repo:tag" -> look for "ghcr.io" or "https://ghcr.io"
     /// "nginx:latest" -> look for "docker.io" or "https://index.docker.io/v1/"
+    /// "registry:5000/img" -> look for "registry:5000"
+    ///
+    /// Matching is host-exact (after scheme/path normalization). We never
+    /// substring-match — `example.com` must never match
+    /// `evil.example.com.typosquat.io`.
     pub fn find_credentials(&self, image_ref: &str) -> Option<&RegistryCredential> {
-        let registry =
-            if image_ref.contains('/') && image_ref.split('/').next().map(|s| s.contains('.')).unwrap_or(false) {
-                image_ref.split('/').next().unwrap_or("")
-            } else {
-                "docker.io"
-            };
+        let registry = extract_registry_host(image_ref);
 
         self.registries.iter().find(|r| {
             let normalized = r
                 .server
-                .replace("https://", "")
-                .replace("http://", "")
+                .split("://")
+                .nth(1)
+                .unwrap_or(&r.server)
                 .trim_end_matches('/')
-                .to_string();
-            normalized.contains(registry) || registry.contains(&normalized)
+                .split('/')
+                .next()
+                .unwrap_or("");
+            if normalized.eq_ignore_ascii_case(&registry) {
+                return true;
+            }
+            // Docker Hub has several canonical names.
+            let docker_hub_aliases = ["docker.io", "index.docker.io", "registry-1.docker.io"];
+            if docker_hub_aliases.iter().any(|a| a.eq_ignore_ascii_case(&registry))
+                && docker_hub_aliases.iter().any(|a| a.eq_ignore_ascii_case(normalized))
+            {
+                return true;
+            }
+            false
         })
     }
 
+    /// Persist the config atomically: write to a temp file alongside the target,
+    /// fsync it, set 0600 perms on Unix, then rename over the destination.
+    /// This prevents truncation/corruption if the process is killed mid-write
+    /// and reduces the window for concurrent-writer lost updates.
     pub fn save(&self) -> anyhow::Result<()> {
         let path = Self::config_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
         let contents = serde_json::to_string_pretty(self)?;
-        std::fs::write(&path, contents)?;
+
+        // Write to a unique temp file in the same directory so rename is atomic.
+        let parent = path.parent().ok_or_else(|| anyhow::anyhow!("invalid config path: no parent"))?;
+        let mut rng_bytes = [0u8; 8];
+        getrandom::getrandom(&mut rng_bytes)
+            .map_err(|e| anyhow::anyhow!("failed to read OS RNG for temp suffix: {e}"))?;
+        let suffix: String = rng_bytes.iter().map(|b| format!("{b:02x}")).collect();
+        let tmp_path = parent.join(format!(
+            ".{}.tmp.{}",
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("config.json"),
+            suffix
+        ));
+
+        // Open with create_new (O_EXCL) so we never follow symlinks.
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let mut f = opts.open(&tmp_path)?;
+        use std::io::Write;
+        f.write_all(contents.as_bytes())?;
+        f.sync_all()?;
+        drop(f);
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            if let Err(e) =
+                std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600))
+            {
+                tracing::warn!("failed to set 0600 on {}: {}", tmp_path.display(), e);
+            }
+        }
+
+        if let Err(e) = std::fs::rename(&tmp_path, &path) {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(e.into());
         }
         Ok(())
     }

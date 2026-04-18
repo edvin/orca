@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.44.0"
+version = "0.45.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/edvin/orca"
@@ -36,6 +36,8 @@ trait-variant = "0.1"
 base64 = "0.22"
 reqwest = { version = "0.12", features = ["json"] }
 urlencoding = "2"
+getrandom = "0.2"
+rand = "0.8"
 
 [workspace.lints.clippy]
 needless_return = "warn"

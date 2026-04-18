@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show, createMemo } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
+import { confirmDanger } from "./ConfirmDialog";
 
 interface Command {
   id: string;
@@ -49,6 +50,12 @@ export default function CommandPalette(props: CommandPaletteProps) {
     }},
     { id: "gw-stop", name: "Gateway: Stop", icon: "\u25A0", category: "Gateway", action: async () => {
       props.onClose();
+      const ok = await confirmDanger({
+        title: "Stop gateway?",
+        message: "All routed traffic will be interrupted until the gateway is started again.",
+        confirmLabel: "Stop gateway",
+      });
+      if (!ok) return;
       try {
         await invoke("gateway_stop");
         showToast("Gateway stopped", "success");
@@ -62,26 +69,35 @@ export default function CommandPalette(props: CommandPaletteProps) {
     { id: "ct-run", name: "Container: Run", icon: "\u25B6", category: "Containers", action: () => { props.onNavigate("containers"); props.onClose(); } },
     { id: "ct-stop-all", name: "Container: Stop All", icon: "\u25A0", category: "Containers", action: async () => {
       props.onClose();
+      let running: Array<{ id: string; state: string; name: string }> = [];
       try {
         const containers = await invoke("list_containers") as Array<{ id: string; state: string; name: string }>;
-        const running = containers.filter((c) => c.state === "Running");
-        if (running.length === 0) {
-          showToast("No running containers", "info");
-          return;
-        }
-        let stopped = 0;
-        for (const c of running) {
-          try {
-            await invoke("stop_container", { id: c.id });
-            stopped++;
-          } catch {
-            // continue stopping others
-          }
-        }
-        showToast(`Stopped ${stopped} container${stopped !== 1 ? "s" : ""}`, "success");
+        running = containers.filter((c) => c.state === "Running");
       } catch (e) {
-        showToast(`Failed to stop containers: ${e}`, "error");
+        showToast(`Failed to list containers: ${e}`, "error");
+        return;
       }
+      if (running.length === 0) {
+        showToast("No running containers", "info");
+        return;
+      }
+      const ok = await confirmDanger({
+        title: `Stop ${running.length} running container${running.length !== 1 ? "s" : ""}?`,
+        message:
+          "This will signal every running container on the active host to stop. Work in progress may be lost.",
+        confirmLabel: "Stop all",
+      });
+      if (!ok) return;
+      let stopped = 0;
+      for (const c of running) {
+        try {
+          await invoke("stop_container", { id: c.id });
+          stopped++;
+        } catch {
+          // continue stopping others
+        }
+      }
+      showToast(`Stopped ${stopped} container${stopped !== 1 ? "s" : ""}`, "success");
     }},
 
     // Images

@@ -7,6 +7,7 @@ import type { AppTemplate, SetupGuide, ImageSearchResult, RemoteHost, ActiveHost
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "../components/Toast";
 import { logError, logInfo } from "../lib/activityStore";
+import { sanitizeSvg } from "../lib/sanitize";
 
 // Categories are derived dynamically from loaded templates
 
@@ -688,10 +689,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
   const TemplateCard = (props: { template: AppTemplate }) => {
     const colors = () => categoryColors[props.template.category] || categoryColors["Tools"];
+    const safeIcon = createMemo(() => sanitizeSvg(props.template.icon ?? ""));
     return (
     <div class="template-card" onClick={() => openDeploy(props.template)} style={{ position: "relative" }}>
-      {/* eslint-disable-next-line solid/no-innerhtml -- template icons are trusted inline SVG strings */}
-      <div class="template-icon" style={{ background: colors().bg, color: colors().color, "border-color": colors().border }} innerHTML={props.template.icon} />
+      {/* Icons are SVG strings from remote / user-authored sources, sanitised before render. */}
+      {/* eslint-disable-next-line solid/no-innerhtml */}
+      <div class="template-icon" style={{ background: colors().bg, color: colors().color, "border-color": colors().border }} innerHTML={safeIcon()} />
       <div class="template-name">{props.template.name}</div>
       <div class="template-desc">{props.template.description}</div>
       <Show when={!props.template.is_builtin}>

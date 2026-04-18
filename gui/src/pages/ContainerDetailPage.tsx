@@ -125,32 +125,41 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     }
   };
 
-  onMount(async () => {
-    setLoading(true);
-    await Promise.all([fetchContainer(), fetchInspect()]);
-    setLoading(false);
+  onMount(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    let disposed = false;
 
-    // Start stats refresh if running
-    const c = container();
-    if (c?.state === "Running") {
-      startStatsRefresh();
-    }
-
-    // Poll container state
-    const interval = setInterval(async () => {
-      await fetchContainer();
-      const cur = container();
-      if (cur?.state === "Running" && !statsInterval) {
-        startStatsRefresh();
-      } else if (cur?.state !== "Running" && statsInterval) {
-        stopStatsRefresh();
-      }
-    }, 3000);
-
+    // Register cleanup SYNCHRONOUSLY so the await-chain below can't
+    // detach us from Solid's reactive owner. Previously this was placed
+    // after `await Promise.all(...)` and would register against the
+    // wrong owner on fast unmounts, leaking intervals forever.
     onCleanup(() => {
-      clearInterval(interval);
+      disposed = true;
+      if (interval) clearInterval(interval);
       stopStatsRefresh();
     });
+
+    (async () => {
+      setLoading(true);
+      await Promise.all([fetchContainer(), fetchInspect()]);
+      if (disposed) return;
+      setLoading(false);
+
+      if (container()?.state === "Running") {
+        startStatsRefresh();
+      }
+
+      interval = setInterval(async () => {
+        if (disposed) return;
+        await fetchContainer();
+        const cur = container();
+        if (cur?.state === "Running" && !statsInterval) {
+          startStatsRefresh();
+        } else if (cur?.state !== "Running" && statsInterval) {
+          stopStatsRefresh();
+        }
+      }, 3000);
+    })();
   });
 
   const switchTab = (tab: DetailTab) => {

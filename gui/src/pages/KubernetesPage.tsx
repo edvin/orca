@@ -355,6 +355,12 @@ export default function KubernetesPage() {
     onCleanup(() => {
       clearInterval(interval);
       document.removeEventListener("click", handleDocClick);
+      // Ensure the log-follow poll loop stops if the user navigates away
+      // while it's active — previously this interval kept polling forever.
+      if (logFollowInterval) {
+        clearInterval(logFollowInterval);
+        logFollowInterval = null;
+      }
     });
   });
 
@@ -794,11 +800,49 @@ export default function KubernetesPage() {
       return;
     }
 
+    // Validate every interpolated field. The YAML is built by template
+    // literal, so any unescaped newline in a user-supplied field would
+    // inject arbitrary YAML — a hostname like `foo\n    secretName: evil`
+    // could attach additional TLS rules, for example.
+    const dns1123 = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
+    const dns1123Label = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+    if (!dns1123Label.test(name)) {
+      showToast("Ingress name must be a DNS-1123 label (lowercase letters, digits, hyphens)", "error");
+      return;
+    }
+    if (!dns1123.test(hostname)) {
+      showToast("Hostname must be a DNS-1123 subdomain", "error");
+      return;
+    }
+    if (!dns1123Label.test(svcName)) {
+      showToast("Service name must be a DNS-1123 label", "error");
+      return;
+    }
+    const ns = selectedNs();
+    if (!dns1123Label.test(ns)) {
+      showToast(`Invalid namespace: ${ns}`, "error");
+      return;
+    }
+    if (!Number.isInteger(svcPort) || svcPort < 1 || svcPort > 65535) {
+      showToast("Service port must be 1-65535", "error");
+      return;
+    }
+    if (pathType !== "Prefix" && pathType !== "Exact" && pathType !== "ImplementationSpecific") {
+      showToast(`Invalid pathType: ${pathType}`, "error");
+      return;
+    }
+    // URL paths: allow a reasonable set of characters. Reject anything
+    // containing whitespace (which could break YAML) or control bytes.
+    if (!/^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/]*$/.test(path)) {
+      showToast("Path must start with / and contain only URL-safe characters", "error");
+      return;
+    }
+
     let yaml = `apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: ${name}
-  namespace: ${selectedNs()}
+  namespace: ${ns}
 spec:
   rules:
   - host: ${hostname}

@@ -40,5 +40,6 @@ rcgen = { version = "0.13", features = ["x509-parser"] }
 time = "0.3"
 serde_yaml = "0.9"
 tempfile = "3"
+rand = { workspace = true }
 
 [dev-dependencies]

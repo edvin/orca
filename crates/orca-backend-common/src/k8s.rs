@@ -40,28 +40,89 @@ fn validate_k8s_name(name: &str) -> anyhow::Result<()> {
     if name.is_empty() || name.len() > 253 {
         anyhow::bail!("Invalid Kubernetes name: length");
     }
+    if name == "." || name == ".." {
+        anyhow::bail!("Invalid Kubernetes name: reserved");
+    }
+    if name.starts_with('-') || name.starts_with('.') || name.ends_with('-') || name.ends_with('.') {
+        anyhow::bail!("Kubernetes name must not begin or end with '-' or '.'");
+    }
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.') {
         anyhow::bail!("Invalid Kubernetes name: {name}");
     }
     Ok(())
 }
 
-/// Extract the `kind` field from a YAML string without a full parser.
-fn extract_yaml_kind(yaml: &str) -> Option<String> {
-    for line in yaml.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("kind:") {
-            return Some(
-                trimmed
-                    .trim_start_matches("kind:")
-                    .trim()
-                    .trim_matches('"')
-                    .trim_matches('\'')
-                    .to_string(),
-            );
+/// Extract the `kind` of every YAML document in a multi-document string.
+/// Returns one entry per document. Any document that is empty or missing a
+/// `kind` field yields `None` for that slot; callers must reject such
+/// documents rather than skip them, to prevent bypass tricks that hide an
+/// unlisted `kind` inside a second document.
+/// Parse the k3s-provided kubeconfig and rename its "default" context/user
+/// /cluster to "orca" so merging into the user's `~/.kube/config` never
+/// clashes with a pre-existing "default" context.
+fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
+    use serde_yaml::{Mapping, Value};
+    let mut cfg: Value = serde_yaml::from_str(yaml)
+        .map_err(|e| anyhow::anyhow!("kubeconfig is not valid YAML: {e}"))?;
+
+    fn rename_context_refs(ctx: &mut Mapping) {
+        for key in ["cluster", "user"] {
+            if let Some(v) = ctx.get_mut(&Value::from(key))
+                && v.as_str() == Some("default")
+            {
+                *v = Value::from("orca");
+            }
         }
     }
-    None
+
+    if let Some(mapping) = cfg.as_mapping_mut() {
+        for key in ["clusters", "users", "contexts"] {
+            if let Some(list) = mapping.get_mut(&Value::from(key)).and_then(|v| v.as_sequence_mut()) {
+                for item in list {
+                    if let Some(m) = item.as_mapping_mut()
+                        && let Some(v) = m.get_mut(&Value::from("name"))
+                        && v.as_str() == Some("default")
+                    {
+                        *v = Value::from("orca");
+                    }
+
+                    // For contexts, also rewrite the `context: { cluster, user }` refs.
+                    if key == "contexts"
+                        && let Some(Value::Mapping(ctx)) = item.as_mapping_mut().and_then(|m| m.get_mut(&Value::from("context")))
+                    {
+                        rename_context_refs(ctx);
+                    }
+                }
+            }
+        }
+
+        if let Some(v) = mapping.get_mut(&Value::from("current-context"))
+            && v.as_str() == Some("default")
+        {
+            *v = Value::from("orca");
+        }
+    }
+
+    serde_yaml::to_string(&cfg).map_err(|e| anyhow::anyhow!("failed to serialize kubeconfig: {e}"))
+}
+
+fn extract_all_yaml_kinds(yaml: &str) -> anyhow::Result<Vec<Option<String>>> {
+    use serde::Deserialize;
+    use serde_yaml::{Deserializer, Value};
+    let mut kinds = Vec::new();
+    for doc in Deserializer::from_str(yaml) {
+        let value = Value::deserialize(doc)
+            .map_err(|e| anyhow::anyhow!("invalid YAML document: {e}"))?;
+        if value.is_null() {
+            continue;
+        }
+        let kind = value
+            .get("kind")
+            .and_then(|k| k.as_str())
+            .map(|s| s.trim().to_string());
+        kinds.push(kind);
+    }
+    Ok(kinds)
 }
 
 /// k3s-based Kubernetes manager.
@@ -1535,39 +1596,108 @@ impl K8sManager for K3sManager {
 
     async fn install_kubeconfig(&self) -> anyhow::Result<PathBuf> {
         let source = self.kubeconfig().await?;
-        // Replace 127.0.0.1:6443 server address if needed
-        let kubeconfig = source;
 
-        let dest = dirs::home_dir().unwrap_or_default().join(".kube");
+        let dest = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("cannot resolve home directory"))?
+            .join(".kube");
         tokio::fs::create_dir_all(&dest).await?;
 
         let dest_file = dest.join("config");
 
-        // Merge into ~/.kube/config as "orca" context
-        let tmp_file = dest.join(".orca-k3s-temp");
-        tokio::fs::write(&tmp_file, &kubeconfig).await?;
+        // Rewrite the source so its default context is renamed to "orca"
+        // BEFORE we merge. Previously we merged then called
+        // `kubectl config rename-context default orca` against the user's
+        // main kubeconfig, silently clobbering any pre-existing "default"
+        // context (e.g. minikube, docker-desktop).
+        let renamed = rename_kubeconfig_default_to_orca(&source)
+            .map_err(|e| anyhow::anyhow!("failed to rewrite k3s kubeconfig: {e}"))?;
+
+        // Write the renamed kubeconfig to a secure temp file in the same
+        // directory, then merge and atomically rename over the dest file.
+        let tmp_file = {
+            let tmp = tempfile::Builder::new()
+                .prefix(".orca-k3s-")
+                .suffix(".yaml")
+                .tempfile_in(&dest)?;
+            let (file, path) = tmp.keep()?; // we'll clean up ourselves
+            drop(file);
+            // Set 0600 before writing so a narrow race can't leak keys.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            }
+            tokio::fs::write(&path, &renamed).await?;
+            path
+        };
         let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
         let merge_env = if dest_file.exists() {
             format!("{}{sep}{}", tmp_file.display(), dest_file.display())
         } else {
             tmp_file.display().to_string()
         };
-        let _ = std::process::Command::new("kubectl")
+
+        let merge_output = std::process::Command::new("kubectl")
             .env("PATH", Self::extended_path())
             .env("KUBECONFIG", &merge_env)
             .args(["config", "view", "--flatten"])
-            .output()
-            .and_then(|o| {
-                if o.status.success() {
-                    std::fs::write(&dest_file, &o.stdout)?;
-                }
-                Ok(o)
-            });
-        let _ = std::process::Command::new("kubectl")
-            .env("PATH", Self::extended_path())
-            .args(["config", "rename-context", "default", "orca"])
             .output();
-        let _ = tokio::fs::remove_file(&tmp_file).await;
+
+        // Clean up the temp file no matter what follows.
+        let cleanup = |path: &PathBuf| {
+            let path = path.clone();
+            tokio::spawn(async move {
+                let _ = tokio::fs::remove_file(&path).await;
+            });
+        };
+
+        let merge_output = match merge_output {
+            Ok(o) if o.status.success() => o,
+            Ok(o) => {
+                cleanup(&tmp_file);
+                anyhow::bail!(
+                    "kubectl config view failed: {}",
+                    String::from_utf8_lossy(&o.stderr)
+                );
+            }
+            Err(e) => {
+                cleanup(&tmp_file);
+                return Err(anyhow::anyhow!("failed to run kubectl: {e}"));
+            }
+        };
+
+        // Refuse to write an empty or nonsensically small output — that
+        // would silently wipe the user's existing ~/.kube/config. We expect
+        // at least an `apiVersion:` line plus contexts.
+        if merge_output.stdout.len() < 32 {
+            cleanup(&tmp_file);
+            anyhow::bail!(
+                "kubectl produced suspiciously short output ({} bytes); refusing to overwrite {}",
+                merge_output.stdout.len(),
+                dest_file.display()
+            );
+        }
+
+        // Write atomically: write to `.config.orca-new` in the same dir,
+        // then rename over the real config. If anything goes wrong between
+        // the stdout check and the rename, the user's original file is
+        // untouched.
+        let new_file = dest.join(".config.orca-new");
+        tokio::fs::write(&new_file, &merge_output.stdout).await?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&new_file, std::fs::Permissions::from_mode(0o600));
+        }
+        if let Err(e) = tokio::fs::rename(&new_file, &dest_file).await {
+            let _ = tokio::fs::remove_file(&new_file).await;
+            cleanup(&tmp_file);
+            return Err(anyhow::anyhow!(
+                "failed to rename merged kubeconfig into place: {e}"
+            ));
+        }
+
+        cleanup(&tmp_file);
         tracing::info!("Merged k3s kubeconfig as 'orca' context in {}", dest_file.display());
 
         Ok(dest_file)
@@ -2109,6 +2239,8 @@ impl K8sManager for K3sManager {
     }
 
     async fn scale_deployment(&self, namespace: &str, name: &str, replicas: u32) -> anyhow::Result<()> {
+        validate_k8s_name(namespace)?;
+        validate_k8s_name(name)?;
         #[cfg(target_os = "windows")]
         {
             let replicas_arg = format!("--replicas={replicas}");
@@ -2280,32 +2412,41 @@ impl K8sManager for K3sManager {
             anyhow::bail!("YAML too large (max 1MB)");
         }
 
-        // Validate resource kind against allowlist
-        if let Some(kind) = extract_yaml_kind(yaml) {
-            const ALLOWED_KINDS: &[&str] = &[
-                "Pod",
-                "Service",
-                "ConfigMap",
-                "Secret",
-                "Deployment",
-                "DaemonSet",
-                "StatefulSet",
-                "ReplicaSet",
-                "Job",
-                "CronJob",
-                "Ingress",
-                "PersistentVolumeClaim",
-                "Namespace",
-                "HorizontalPodAutoscaler",
-                "ServiceAccount",
-                "Role",
-                "RoleBinding",
-                "NetworkPolicy",
-                "IngressRoute",
-                "Middleware",
-                "HelmChartConfig",
-            ];
-            if !ALLOWED_KINDS.contains(&kind.as_str()) {
+        // Validate EVERY document's kind against the allowlist. Previously we
+        // only checked the first document, allowing multi-doc payloads to
+        // sneak a privileged resource past the check.
+        const ALLOWED_KINDS: &[&str] = &[
+            "Pod",
+            "Service",
+            "ConfigMap",
+            "Secret",
+            "Deployment",
+            "DaemonSet",
+            "StatefulSet",
+            "ReplicaSet",
+            "Job",
+            "CronJob",
+            "Ingress",
+            "PersistentVolumeClaim",
+            "Namespace",
+            "HorizontalPodAutoscaler",
+            "ServiceAccount",
+            "Role",
+            "RoleBinding",
+            "NetworkPolicy",
+            "IngressRoute",
+            "Middleware",
+            "HelmChartConfig",
+        ];
+        let kinds = extract_all_yaml_kinds(yaml)?;
+        if kinds.is_empty() {
+            anyhow::bail!("YAML contains no resources");
+        }
+        for kind in &kinds {
+            let kind = kind
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("YAML document is missing a 'kind' field"))?;
+            if !ALLOWED_KINDS.contains(&kind) {
                 anyhow::bail!(
                     "Resource kind '{}' is not allowed. Allowed kinds: {}",
                     kind,
@@ -2368,6 +2509,52 @@ impl K8sManager for K3sManager {
     }
 
     async fn delete_yaml(&self, yaml: &str) -> anyhow::Result<String> {
+        // Same allowlist as apply_yaml — deletes must be as constrained as
+        // creates. Without this, any authenticated caller could delete any
+        // resource kind (ClusterRoleBinding, Node, CRD, ...).
+        if yaml.len() > 1_000_000 {
+            anyhow::bail!("YAML too large (max 1MB)");
+        }
+        const ALLOWED_KINDS: &[&str] = &[
+            "Pod",
+            "Service",
+            "ConfigMap",
+            "Secret",
+            "Deployment",
+            "DaemonSet",
+            "StatefulSet",
+            "ReplicaSet",
+            "Job",
+            "CronJob",
+            "Ingress",
+            "PersistentVolumeClaim",
+            "Namespace",
+            "HorizontalPodAutoscaler",
+            "ServiceAccount",
+            "Role",
+            "RoleBinding",
+            "NetworkPolicy",
+            "IngressRoute",
+            "Middleware",
+            "HelmChartConfig",
+        ];
+        let kinds = extract_all_yaml_kinds(yaml)?;
+        if kinds.is_empty() {
+            anyhow::bail!("YAML contains no resources");
+        }
+        for kind in &kinds {
+            let kind = kind
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("YAML document is missing a 'kind' field"))?;
+            if !ALLOWED_KINDS.contains(&kind) {
+                anyhow::bail!(
+                    "Resource kind '{}' is not allowed for delete. Allowed kinds: {}",
+                    kind,
+                    ALLOWED_KINDS.join(", ")
+                );
+            }
+        }
+
         #[cfg(target_os = "windows")]
         {
             let mut child = Command::new("wsl")
@@ -2643,6 +2830,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_pod_metrics(&self, namespace: &str) -> anyhow::Result<Vec<PodMetrics>> {
+        validate_k8s_name(namespace)?;
         // kubectl top does NOT support -o json, so we parse text output
         #[cfg(target_os = "windows")]
         let output = {
@@ -2706,6 +2894,8 @@ impl K8sManager for K3sManager {
     }
 
     async fn rollout_history(&self, namespace: &str, name: &str) -> anyhow::Result<Vec<RolloutRevision>> {
+        validate_k8s_name(namespace)?;
+        validate_k8s_name(name)?;
         let dep_arg = format!("deployment/{name}");
 
         #[cfg(target_os = "windows")]
@@ -2758,6 +2948,8 @@ impl K8sManager for K3sManager {
     }
 
     async fn rollout_undo(&self, namespace: &str, name: &str, revision: Option<u32>) -> anyhow::Result<String> {
+        validate_k8s_name(namespace)?;
+        validate_k8s_name(name)?;
         let dep_arg = format!("deployment/{name}");
 
         #[cfg(target_os = "windows")]
@@ -3179,6 +3371,8 @@ impl K8sManager for K3sManager {
     }
 
     async fn scale_statefulset(&self, namespace: &str, name: &str, replicas: u32) -> anyhow::Result<()> {
+        validate_k8s_name(namespace)?;
+        validate_k8s_name(name)?;
         #[cfg(target_os = "windows")]
         {
             let replicas_arg = format!("--replicas={replicas}");
@@ -4193,6 +4387,8 @@ impl K3sManager {
 
     /// Uninstall a Helm release.
     pub async fn helm_uninstall(&self, name: &str, namespace: &str) -> anyhow::Result<String> {
+        validate_k8s_name(name)?;
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         let output = {
             Command::new("wsl")
@@ -4228,6 +4424,21 @@ impl K3sManager {
         namespace: &str,
         set_values: Option<&[String]>,
     ) -> anyhow::Result<String> {
+        validate_k8s_name(release_name)?;
+        validate_k8s_name(namespace)?;
+        // Chart references can be a path, URL, or repo/chart spec. Reject
+        // anything starting with `-` so it cannot be interpreted as a helm
+        // flag.
+        if chart.is_empty() || chart.starts_with('-') || chart.contains('\n') || chart.contains('\0') {
+            anyhow::bail!("invalid chart reference: {chart}");
+        }
+        if let Some(vals) = set_values {
+            for v in vals {
+                if v.starts_with('-') || v.contains('\n') || v.contains('\0') {
+                    anyhow::bail!("--set value must not start with '-' or contain newlines/nulls");
+                }
+            }
+        }
         #[cfg(target_os = "windows")]
         let output = {
             let mut args = vec![
@@ -4620,6 +4831,18 @@ fn format_duration_between(start: &str, end: &str) -> String {
 
 impl K3sManager {
     pub async fn get_resource_yaml(&self, kind: &str, name: &str, namespace: &str) -> anyhow::Result<String> {
+        // `kind` is a kubectl resource type identifier. Accept only
+        // ASCII-alphanumeric + `.` + `-` so it cannot be mistaken for a
+        // flag or flow into path traversal.
+        if kind.is_empty()
+            || kind.len() > 63
+            || kind.starts_with('-')
+            || !kind.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+        {
+            anyhow::bail!("invalid resource kind: {kind}");
+        }
+        validate_k8s_name(name)?;
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")

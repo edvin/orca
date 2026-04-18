@@ -2,6 +2,13 @@
 
 use serde::Deserialize;
 
+/// Percent-encode a single URL path segment. Use this instead of
+/// interpolating user-supplied names directly into request paths so names
+/// containing `/`, `?`, `#`, spaces, etc. can't fabricate unrelated paths.
+fn encode_segment(s: &str) -> String {
+    urlencoding::encode(s).into_owned()
+}
+
 pub struct DaemonClient {
     base_url: String,
     http: reqwest::Client,
@@ -104,25 +111,32 @@ pub struct ExecResult {
 impl DaemonClient {
     /// Create a new client. If `token` is provided it will be used for auth;
     /// otherwise the token is read from the Orca config file.
-    pub fn new(base_url: &str, token: Option<String>) -> Self {
+    pub fn new(base_url: &str, token: Option<String>) -> anyhow::Result<Self> {
         let token = token.or_else(|| orca_core::config::OrcaConfig::load().ok().and_then(|c| c.api_token));
 
         let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(t) = token
-            && let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {t}"))
-        {
-            headers.insert(reqwest::header::AUTHORIZATION, val);
+        match token {
+            Some(t) => {
+                let val = reqwest::header::HeaderValue::from_str(&format!("Bearer {t}"))
+                    .map_err(|e| anyhow::anyhow!("API token contains invalid header characters: {e}"))?;
+                headers.insert(reqwest::header::AUTHORIZATION, val);
+            }
+            None => {
+                eprintln!(
+                    "warning: no API token found in config or ORCA_TOKEN env. Requests will be unauthenticated."
+                );
+            }
         }
 
         let http = reqwest::Client::builder()
             .default_headers(headers)
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .map_err(|e| anyhow::anyhow!("failed to build HTTP client: {e}"))?;
 
-        Self {
+        Ok(Self {
             base_url: base_url.to_string(),
             http,
-        }
+        })
     }
 
     fn url(&self, path: &str) -> String {
@@ -148,7 +162,7 @@ impl DaemonClient {
     pub async fn start_container(&self, id: &str) -> anyhow::Result<()> {
         let resp = self
             .http
-            .post(self.url(&format!("/containers/{id}/start")))
+            .post(self.url(&format!("/containers/{}/start", encode_segment(id))))
             .send()
             .await?;
         check_status(&resp)?;
@@ -158,7 +172,7 @@ impl DaemonClient {
     pub async fn stop_container(&self, id: &str) -> anyhow::Result<()> {
         let resp = self
             .http
-            .post(self.url(&format!("/containers/{id}/stop")))
+            .post(self.url(&format!("/containers/{}/stop", encode_segment(id))))
             .send()
             .await?;
         check_status(&resp)?;
@@ -167,7 +181,7 @@ impl DaemonClient {
 
     #[allow(dead_code)]
     pub async fn remove_container(&self, id: &str) -> anyhow::Result<()> {
-        let resp = self.http.delete(self.url(&format!("/containers/{id}"))).send().await?;
+        let resp = self.http.delete(self.url(&format!("/containers/{}", encode_segment(id)))).send().await?;
         check_status(&resp)?;
         Ok(())
     }
@@ -192,7 +206,7 @@ impl DaemonClient {
     pub async fn exec_container(&self, id: &str, command: Vec<String>) -> anyhow::Result<ExecResult> {
         let resp = self
             .http
-            .post(self.url(&format!("/containers/{id}/exec")))
+            .post(self.url(&format!("/containers/{}/exec", encode_segment(id))))
             .json(&serde_json::json!({ "command": command }))
             .send()
             .await?;
@@ -221,7 +235,7 @@ impl DaemonClient {
     }
 
     pub async fn remove_image(&self, id: &str) -> anyhow::Result<()> {
-        let resp = self.http.delete(self.url(&format!("/images/{id}"))).send().await?;
+        let resp = self.http.delete(self.url(&format!("/images/{}", encode_segment(id)))).send().await?;
         check_status(&resp)?;
         Ok(())
     }
@@ -241,13 +255,13 @@ impl DaemonClient {
     }
 
     pub async fn stack_up(&self, name: &str) -> anyhow::Result<()> {
-        let resp = self.http.post(self.url(&format!("/stacks/{name}/up"))).send().await?;
+        let resp = self.http.post(self.url(&format!("/stacks/{}/up", encode_segment(name)))).send().await?;
         check_status(&resp)?;
         Ok(())
     }
 
     pub async fn stack_down(&self, name: &str) -> anyhow::Result<()> {
-        let resp = self.http.post(self.url(&format!("/stacks/{name}/down"))).send().await?;
+        let resp = self.http.post(self.url(&format!("/stacks/{}/down", encode_segment(name)))).send().await?;
         check_status(&resp)?;
         Ok(())
     }
@@ -283,7 +297,7 @@ impl DaemonClient {
     pub async fn start_machine(&self, name: &str) -> anyhow::Result<()> {
         let resp = self
             .http
-            .post(self.url(&format!("/machines/{name}/start")))
+            .post(self.url(&format!("/machines/{}/start", encode_segment(name))))
             .send()
             .await?;
         check_status(&resp)?;
@@ -293,7 +307,7 @@ impl DaemonClient {
     pub async fn stop_machine(&self, name: &str) -> anyhow::Result<()> {
         let resp = self
             .http
-            .post(self.url(&format!("/machines/{name}/stop")))
+            .post(self.url(&format!("/machines/{}/stop", encode_segment(name))))
             .send()
             .await?;
         check_status(&resp)?;
@@ -349,7 +363,7 @@ impl DaemonClient {
     pub async fn gateway_remove_route(&self, hostname: &str) -> anyhow::Result<()> {
         let resp = self
             .http
-            .delete(self.url(&format!("/gateway/routes/{hostname}")))
+            .delete(self.url(&format!("/gateway/routes/{}", encode_segment(hostname))))
             .send()
             .await?;
         check_status(&resp)?;
@@ -408,7 +422,7 @@ impl DaemonClient {
     pub async fn deploy_template(&self, id: &str) -> anyhow::Result<serde_json::Value> {
         let resp = self
             .http
-            .post(self.url(&format!("/templates/{id}/deploy")))
+            .post(self.url(&format!("/templates/{}/deploy", encode_segment(id))))
             .json(&serde_json::json!({}))
             .send()
             .await?;
@@ -418,7 +432,10 @@ impl DaemonClient {
 }
 
 fn check_status(resp: &reqwest::Response) -> anyhow::Result<()> {
-    if !resp.status().is_success() && !resp.status().is_informational() {
+    // Only accept 2xx. 1xx informational responses don't mean "success"
+    // (e.g., 101 Switching Protocols leaves no usable body for us) — and
+    // reqwest normally absorbs 100 Continue before we see it anyway.
+    if !resp.status().is_success() {
         anyhow::bail!(
             "API request failed: {} {}",
             resp.status().as_u16(),

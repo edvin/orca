@@ -512,6 +512,13 @@ async fn run_scheduler(state: Arc<state::AppState>) {
 
     tracing::info!("Scheduler started");
 
+    // Track schedules whose build tasks are still running so we don't spawn
+    // a second build for the same schedule while the first is in-flight.
+    // Without this guard, a build taking longer than the 60-second poll
+    // interval would pile up on each tick.
+    let in_flight_builds: Arc<tokio::sync::Mutex<std::collections::HashSet<String>>> =
+        Arc::new(tokio::sync::Mutex::new(std::collections::HashSet::new()));
+
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(60)).await;
 
@@ -561,6 +568,18 @@ async fn run_scheduler(state: Arc<state::AppState>) {
             );
 
             if schedule.action == "build" {
+                // Skip if a previous build for this schedule is still
+                // running. This is cheap — we re-check on every tick.
+                {
+                    let in_flight = in_flight_builds.lock().await;
+                    if in_flight.contains(&schedule.id) {
+                        tracing::info!(
+                            "Scheduler: skipping '{}' — previous build still running",
+                            schedule.name
+                        );
+                        continue;
+                    }
+                }
                 // Handle build action: trigger a build target from orca.yaml
                 if let Some(ref target_name) = schedule.build_target {
                     tracing::info!(
@@ -629,6 +648,11 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                         let build_id = record.id.clone();
                         let rt = state.rt().await;
                         let events_tx = state.events_tx.clone();
+                        // Mark this schedule as in-flight BEFORE spawning so
+                        // the next scheduler tick sees it immediately.
+                        in_flight_builds.lock().await.insert(schedule.id.clone());
+                        let schedule_id = schedule.id.clone();
+                        let in_flight_clone = in_flight_builds.clone();
                         tokio::spawn(async move {
                             use orca_core::image::ImageManager;
                             match ImageManager::build(
@@ -689,6 +713,9 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                                     });
                                 }
                             }
+                            // Always clear the in-flight marker so the next
+                            // scheduler tick will spawn another build.
+                            in_flight_clone.lock().await.remove(&schedule_id);
                         });
                         tracing::info!("Scheduler: build '{}' started", schedule.name);
                     } else {

@@ -394,14 +394,30 @@ pub async fn fetch_buildkit_logs(build_id: &str) -> Option<String> {
     if !build_id.starts_with("bk-") {
         return None;
     }
-    // Recover the original ref from the sanitized ID
+    // Recover the original ref from the sanitized ID.
     let build_ref = build_id.strip_prefix("bk-").unwrap_or(build_id);
+
+    // Guard against flag-injection: a ref of `--help` or `-v` becomes a
+    // docker-buildx option. Require a restricted identifier character set
+    // with no leading `-`.
+    if build_ref.is_empty()
+        || build_ref.len() > 256
+        || build_ref.starts_with('-')
+        || !build_ref
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':'))
+    {
+        tracing::warn!("fetch_buildkit_logs: rejecting suspicious build ref '{build_ref}'");
+        return None;
+    }
 
     tokio::task::spawn_blocking({
         let build_ref = build_ref.to_string();
         move || {
+            // Insert `--` so the ref can never be interpreted as a flag
+            // even if the allowlist above is bypassed via future refactor.
             let output = docker_command()
-                .args(["buildx", "history", "logs", &build_ref])
+                .args(["buildx", "history", "logs", "--", &build_ref])
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .output()

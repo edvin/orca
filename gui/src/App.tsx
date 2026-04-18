@@ -1,7 +1,7 @@
 import { createSignal, createEffect, onMount, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { startEventSubscription, onOrcaEvent } from "./lib/events";
+import { onOrcaEvent } from "./lib/events";
 import { addEvent } from "./lib/activityStore";
 import { lazy } from "solid-js";
 const AiWindow = lazy(() => import("./components/AiWindow"));
@@ -99,6 +99,17 @@ export default function App() {
     }
   };
 
+  const isInEditableTarget = (e: KeyboardEvent): boolean => {
+    const el = e.target as HTMLElement | null;
+    if (!el) return false;
+    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return true;
+    if (el.isContentEditable) return true;
+    // xterm.js terminals absorb keyboard input inside `.xterm` — treat as
+    // editable so our shortcuts don't fight with the shell.
+    if (el.closest?.(".xterm, .cm-editor")) return true;
+    return false;
+  };
+
   const handleGlobalKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
       const overlay = document.querySelector(".modal-overlay") as HTMLElement | null;
@@ -112,16 +123,14 @@ export default function App() {
       setShowCommandPalette((v) => !v);
     }
     if ((e.ctrlKey || e.metaKey) && e.key === "r") {
+      if (isInEditableTarget(e)) return;
       e.preventDefault();
       document.dispatchEvent(new CustomEvent("orca-refresh"));
     }
     if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const tag = (e.target as HTMLElement)?.tagName;
-      const editable = (e.target as HTMLElement)?.getAttribute("contenteditable");
-      if (tag !== "INPUT" && tag !== "TEXTAREA" && editable !== "true") {
-        e.preventDefault();
-        setShowShortcuts((v) => !v);
-      }
+      if (isInEditableTarget(e)) return;
+      e.preventDefault();
+      setShowShortcuts((v) => !v);
     }
   };
 
@@ -282,30 +291,49 @@ export default function App() {
     }
   };
 
-  // React to daemon status changes — when it becomes "running",
-  // immediately check the environment and start fleet polling
+  // React to daemon status changes. On every rising edge from not-running
+  // to running, (re)start the event subscription so the UI doesn't go
+  // silent after a daemon restart.
+  let prevDaemonStatus: string | null = null;
   createEffect(() => {
-    if (daemonStatus() === "running" && !environmentChecked()) {
-      checkEnvironment();
-      startEventSubscription();
+    const status = daemonStatus();
+    const wasRunning = prevDaemonStatus === "running";
+    prevDaemonStatus = status;
 
-      // Start fleet health polling (initial after 10s, then every 60s)
+    if (status !== "running") return;
+
+    // First-time startup side-effects
+    if (!environmentChecked()) {
+      checkEnvironment();
       if (!fleetPollInterval) {
         setTimeout(pollFleetHealth, 10000);
         fleetPollInterval = setInterval(pollFleetHealth, 60000);
       }
     }
+
+    // Always (re)subscribe on a rising edge — fresh startup or reconnect
+    if (!wasRunning) {
+      import("./lib/events").then(({ restartEventSubscription }) => restartEventSubscription());
+    }
   });
 
   onMount(() => {
-    // Listen for deep link URLs (orca:// protocol)
+    // Listen for deep link URLs (orca:// protocol). Guard against the
+    // unmount-before-subscribe race: if the component has been cleaned up
+    // before onOpenUrl resolves, we immediately unsubscribe and drop the
+    // handle instead of leaking a listener.
     let unsubDeepLink: (() => void) | undefined;
+    let unmounted = false;
     onOpenUrl((urls) => {
       for (const url of urls) {
         handleDeepLink(url);
       }
     }).then((unsub) => {
-      unsubDeepLink = unsub;
+      if (unmounted) {
+        try { unsub(); } catch {}
+      } else {
+        unsubDeepLink = unsub;
+      }
     }).catch((e) => {
       console.debug("Deep link listener not available:", e);
     });
@@ -363,12 +391,17 @@ export default function App() {
     }, 3000);
 
     document.addEventListener("keydown", handleGlobalKeyDown);
+    const openCmdPalette = () => setShowCommandPalette((v) => !v);
+    document.addEventListener("orca-open-command-palette", openCmdPalette);
     onCleanup(() => {
+      unmounted = true;
       clearInterval(interval);
       if (fleetPollInterval) clearInterval(fleetPollInterval);
       document.removeEventListener("keydown", handleGlobalKeyDown);
+      document.removeEventListener("orca-open-command-palette", openCmdPalette);
       unsubEvents();
       unsubDeepLink?.();
+      import("./lib/events").then(({ stopEventSubscription }) => stopEventSubscription());
     });
   });
 

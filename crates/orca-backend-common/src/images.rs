@@ -26,35 +26,49 @@ impl ImageManager for BollardRuntime {
 
     async fn pull(&self, reference: &str) -> anyhow::Result<tokio::sync::mpsc::Receiver<PullProgress>> {
         let reference = reference.to_string();
-        let options = CreateImageOptions {
-            from_image: reference.as_str(),
-            ..Default::default()
-        };
-        let stream = self.docker.create_image(Some(options), None, None);
-        let items: Vec<_> = stream.collect().await;
-        let items: Vec<_> = items.into_iter().filter_map(|r| r.ok()).collect();
         let (tx, rx) = tokio::sync::mpsc::channel(64);
+        let docker = self.docker.clone();
 
         tokio::spawn(async move {
-            for info in items {
-                let progress = PullProgress {
-                    layer: info.id.unwrap_or_default(),
-                    status: info.status.unwrap_or_default(),
-                    current: info
-                        .progress_detail
-                        .as_ref()
-                        .and_then(|d| d.current)
-                        .map(|c| c as u64)
-                        .unwrap_or(0),
-                    total: info
-                        .progress_detail
-                        .as_ref()
-                        .and_then(|d| d.total)
-                        .map(|t| t as u64)
-                        .unwrap_or(0),
-                };
-                if tx.send(progress).await.is_err() {
-                    break;
+            let options = CreateImageOptions {
+                from_image: reference.as_str(),
+                ..Default::default()
+            };
+            let mut stream = docker.create_image(Some(options), None, None);
+            while let Some(result) = stream.next().await {
+                match result {
+                    Ok(info) => {
+                        let progress = PullProgress {
+                            layer: info.id.unwrap_or_default(),
+                            status: info.status.unwrap_or_default(),
+                            current: info
+                                .progress_detail
+                                .as_ref()
+                                .and_then(|d| d.current)
+                                .map(|c| c as u64)
+                                .unwrap_or(0),
+                            total: info
+                                .progress_detail
+                                .as_ref()
+                                .and_then(|d| d.total)
+                                .map(|t| t as u64)
+                                .unwrap_or(0),
+                        };
+                        if tx.send(progress).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx
+                            .send(PullProgress {
+                                layer: String::new(),
+                                status: format!("error: {e}"),
+                                current: 0,
+                                total: 0,
+                            })
+                            .await;
+                        break;
+                    }
                 }
             }
         });
@@ -127,21 +141,31 @@ impl ImageManager for BollardRuntime {
             ..Default::default()
         };
 
-        // Collect stream to avoid lifetime issues with the spawned task
-        let stream = self.docker.build_image(options, None, Some(tar_bytes.into()));
-        let items: Vec<_> = stream.collect().await;
-        let items: Vec<_> = items.into_iter().filter_map(|r| r.ok()).collect();
-
         let (tx, rx) = tokio::sync::mpsc::channel(256);
+        let docker = self.docker.clone();
 
         tokio::spawn(async move {
-            for output in items {
-                let progress = BuildProgress {
-                    stream: output.stream.unwrap_or_default(),
-                    error: output.error,
-                };
-                if tx.send(progress).await.is_err() {
-                    break;
+            let mut stream = docker.build_image(options, None, Some(tar_bytes.into()));
+            while let Some(result) = stream.next().await {
+                match result {
+                    Ok(output) => {
+                        let progress = BuildProgress {
+                            stream: output.stream.unwrap_or_default(),
+                            error: output.error,
+                        };
+                        if tx.send(progress).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx
+                            .send(BuildProgress {
+                                stream: String::new(),
+                                error: Some(format!("{e}")),
+                            })
+                            .await;
+                        break;
+                    }
                 }
             }
         });
@@ -158,41 +182,55 @@ impl BollardRuntime {
         auth: &orca_core::image::RegistryAuth,
     ) -> anyhow::Result<tokio::sync::mpsc::Receiver<PullProgress>> {
         let reference = reference.to_string();
-        let options = CreateImageOptions {
-            from_image: reference.as_str(),
-            ..Default::default()
-        };
         let credentials = bollard::auth::DockerCredentials {
             username: Some(auth.username.clone()),
             password: Some(auth.password.clone()),
             serveraddress: auth.server.clone(),
             ..Default::default()
         };
-        let stream = self.docker.create_image(Some(options), None, Some(credentials));
-        let items: Vec<_> = stream.collect().await;
-        let items: Vec<_> = items.into_iter().filter_map(|r| r.ok()).collect();
         let (tx, rx) = tokio::sync::mpsc::channel(64);
+        let docker = self.docker.clone();
 
         tokio::spawn(async move {
-            for info in items {
-                let progress = PullProgress {
-                    layer: info.id.unwrap_or_default(),
-                    status: info.status.unwrap_or_default(),
-                    current: info
-                        .progress_detail
-                        .as_ref()
-                        .and_then(|d| d.current)
-                        .map(|c| c as u64)
-                        .unwrap_or(0),
-                    total: info
-                        .progress_detail
-                        .as_ref()
-                        .and_then(|d| d.total)
-                        .map(|t| t as u64)
-                        .unwrap_or(0),
-                };
-                if tx.send(progress).await.is_err() {
-                    break;
+            let options = CreateImageOptions {
+                from_image: reference.as_str(),
+                ..Default::default()
+            };
+            let mut stream = docker.create_image(Some(options), None, Some(credentials));
+            while let Some(result) = stream.next().await {
+                match result {
+                    Ok(info) => {
+                        let progress = PullProgress {
+                            layer: info.id.unwrap_or_default(),
+                            status: info.status.unwrap_or_default(),
+                            current: info
+                                .progress_detail
+                                .as_ref()
+                                .and_then(|d| d.current)
+                                .map(|c| c as u64)
+                                .unwrap_or(0),
+                            total: info
+                                .progress_detail
+                                .as_ref()
+                                .and_then(|d| d.total)
+                                .map(|t| t as u64)
+                                .unwrap_or(0),
+                        };
+                        if tx.send(progress).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx
+                            .send(PullProgress {
+                                layer: String::new(),
+                                status: format!("error: {e}"),
+                                current: 0,
+                                total: 0,
+                            })
+                            .await;
+                        break;
+                    }
                 }
             }
         });

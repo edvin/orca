@@ -82,54 +82,73 @@ export default function AiWindow() {
     }
   };
 
-  // Listen for context from the main window
-  onMount(async () => {
+  // Listen for context from the main window. Register cleanup
+  // synchronously so a fast unmount during the async setup doesn't leak
+  // the Tauri listeners.
+  onMount(() => {
+    let unlisten: (() => void) | null = null;
+    let unlistenBuild: (() => void) | null = null;
+    let disposed = false;
+
+    onCleanup(() => {
+      disposed = true;
+      try { unlisten?.(); } catch {}
+      try { unlistenBuild?.(); } catch {}
+      unlisten = null;
+      unlistenBuild = null;
+    });
+
     checkCredentials();
     inputRef?.focus();
 
-    try {
-      const { listen } = await import("@tauri-apps/api/event");
-      const unlisten = await listen<{ containerId: string; containerName: string; image: string }>(
-        "ai-ask-container",
-        async (event) => {
-          const { containerId, containerName, image } = event.payload;
-          // Fetch logs
-          let logs = "";
-          try {
-            const logResult = (await invoke("container_logs", { id: containerId, tail: 50 })) as string[];
-            logs = logResult.map((l: string) => l.replace(/\n$/, "")).join("\n");
-          } catch {}
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const u1 = await listen<{ containerId: string; containerName: string; image: string }>(
+          "ai-ask-container",
+          async (event) => {
+            if (disposed) return;
+            const { containerId, containerName, image } = event.payload;
+            let logs = "";
+            try {
+              const logResult = (await invoke("container_logs", { id: containerId, tail: 50 })) as string[];
+              logs = logResult.map((l: string) => l.replace(/\n$/, "")).join("\n");
+            } catch {}
+            if (disposed) return;
+            const context: AiContext = {
+              container_id: containerId,
+              container_name: containerName,
+              image,
+              container_logs: logs || undefined,
+            };
+            setPendingContext(context);
+            setInput("");
+            inputRef?.focus();
+          },
+        );
+        if (disposed) { try { u1(); } catch {} return; }
+        unlisten = u1;
 
-          const context: AiContext = {
-            container_id: containerId,
-            container_name: containerName,
-            image,
-            container_logs: logs || undefined,
-          };
-          setPendingContext(context);
-          setInput("");
-          inputRef?.focus();
-        }
-      );
-
-      const unlistenBuild = await listen<{ tag: string; error: string; logTail: string }>(
-        "ai-ask-build",
-        (event) => {
-          const { tag, error, logTail } = event.payload;
-          const context: AiContext = {
-            container_name: `Build: ${tag}`,
-            error,
-            container_logs: logTail || undefined,
-          };
-          setPendingContext(context);
-          const prompt = `My Docker build for "${tag}" failed with this error:\n\n${error}\n\nHere are the last lines of the build log:\n\n${logTail}\n\nWhat went wrong and how can I fix it?`;
-          setInput(prompt);
-          inputRef?.focus();
-        }
-      );
-
-      onCleanup(() => { unlisten(); unlistenBuild(); });
-    } catch {}
+        const u2 = await listen<{ tag: string; error: string; logTail: string }>(
+          "ai-ask-build",
+          (event) => {
+            if (disposed) return;
+            const { tag, error, logTail } = event.payload;
+            const context: AiContext = {
+              container_name: `Build: ${tag}`,
+              error,
+              container_logs: logTail || undefined,
+            };
+            setPendingContext(context);
+            const prompt = `My Docker build for "${tag}" failed with this error:\n\n${error}\n\nHere are the last lines of the build log:\n\n${logTail}\n\nWhat went wrong and how can I fix it?`;
+            setInput(prompt);
+            inputRef?.focus();
+          },
+        );
+        if (disposed) { try { u2(); } catch {} return; }
+        unlistenBuild = u2;
+      } catch {}
+    })();
   });
 
   const compactHistory = async () => {

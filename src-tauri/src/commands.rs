@@ -9,6 +9,61 @@ use tauri::Manager;
 
 use crate::daemon;
 
+/// A rustls certificate verifier that accepts any certificate. Used ONLY
+/// when the user has explicitly opted a remote host into "skip TLS verify"
+/// (e.g. self-signed-cert lab setups).
+#[derive(Debug)]
+struct DangerousNoopCertVerifier {
+    supported: rustls::crypto::WebPkiSupportedAlgorithms,
+}
+
+impl DangerousNoopCertVerifier {
+    fn new() -> Self {
+        // Use the ring provider's algorithm list; installing a process-wide
+        // CryptoProvider is not required as long as we build a ClientConfig
+        // that carries its own provider via `builder_with_provider`.
+        let provider = rustls::crypto::ring::default_provider();
+        Self {
+            supported: provider.signature_verification_algorithms,
+        }
+    }
+}
+
+impl rustls::client::danger::ServerCertVerifier for DangerousNoopCertVerifier {
+    fn verify_server_cert(
+        &self,
+        _end: &rustls::pki_types::CertificateDer<'_>,
+        _ints: &[rustls::pki_types::CertificateDer<'_>],
+        _sn: &rustls::pki_types::ServerName<'_>,
+        _ocsp: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        m: &[u8],
+        c: &rustls::pki_types::CertificateDer<'_>,
+        s: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(m, c, s, &self.supported)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        m: &[u8],
+        c: &rustls::pki_types::CertificateDer<'_>,
+        s: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(m, c, s, &self.supported)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.supported.supported_schemes()
+    }
+}
+
 /// Active port-forward tunnels, keyed by "namespace/service/port".
 /// Each entry holds a tokio task handle that is aborted on drop.
 struct TunnelHandle(tokio::task::JoinHandle<()>);
@@ -1282,20 +1337,36 @@ pub async fn update_stack_env(name: String, key: String, value: String) -> Resul
 
 // --- Events ---
 
-/// Subscribe to daemon events. Returns recent events and triggers
-/// Tauri event emissions for real-time updates.
+static EVENT_SUBSCRIPTION: OnceLock<Mutex<Option<tokio::task::JoinHandle<()>>>> = OnceLock::new();
+
+fn event_subscription_slot() -> &'static Mutex<Option<tokio::task::JoinHandle<()>>> {
+    EVENT_SUBSCRIPTION.get_or_init(|| Mutex::new(None))
+}
+
+/// Subscribe to daemon events. Idempotent: repeated calls cancel the
+/// previous streaming task before starting a new one, and the SSE stream
+/// uses a zero-timeout client so it isn't killed after 30 s.
 #[tauri::command]
 pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
     let base = daemon_url();
     use tauri::Emitter;
 
-    let resp = client()
+    // Cancel any previous subscription task.
+    if let Ok(mut slot) = event_subscription_slot().lock()
+        && let Some(prev) = slot.take()
+    {
+        prev.abort();
+    }
+
+    // SSE streams must not be time-limited — the default 30 s client would
+    // abort the stream mid-session.
+    let resp = authed_client_with_timeout(0)
         .get(format!("{base}/events"))
         .send()
         .await
         .map_err(|e| format!("Failed to connect to event stream: {e}"))?;
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
         use tokio_stream::StreamExt;
 
@@ -1305,13 +1376,19 @@ pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
         let mut lines = reader.lines();
 
         while let Ok(Some(line)) = lines.next_line().await {
-            if let Some(data) = line.strip_prefix("data:") {
-                if let Ok(event) = serde_json::from_str::<serde_json::Value>(data) {
-                    let _ = app.emit("orca-event", &event);
-                }
+            if let Some(data) = line.strip_prefix("data:")
+                && let Ok(event) = serde_json::from_str::<serde_json::Value>(data)
+            {
+                let _ = app.emit("orca-event", &event);
             }
         }
+        // Stream ended — signal so the frontend can reconnect.
+        let _ = app.emit("orca-event-stream-closed", ());
     });
+
+    if let Ok(mut slot) = event_subscription_slot().lock() {
+        *slot = Some(handle);
+    }
 
     Ok(())
 }
@@ -1372,27 +1449,32 @@ pub async fn k8s_namespaces() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn k8s_pods(namespace: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/pods/{namespace}")).await
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/pods/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_deployments(namespace: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/deployments/{namespace}")).await
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/deployments/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_services(namespace: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/services/{namespace}")).await
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/services/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_ingresses(namespace: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/ingresses/{namespace}")).await
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/ingresses/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_pvcs(namespace: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/pvcs/{namespace}")).await
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/pvcs/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
@@ -1402,19 +1484,29 @@ pub async fn k8s_pvs() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn k8s_delete_pod(namespace: String, name: String) -> Result<(), String> {
-    delete(&format!("/k8s/pods/{namespace}/{name}")).await
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/pods/{}/{}", urlencoding::encode(&namespace), urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn k8s_delete_pvc(namespace: String, name: String) -> Result<(), String> {
-    delete(&format!("/k8s/pvcs/{namespace}/{name}")).await
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    delete(&format!("/k8s/pvcs/{}/{}", urlencoding::encode(&namespace), urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn k8s_scale_deployment(namespace: String, name: String, replicas: u32) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
     let base = daemon_url();
     let resp = client()
-        .post(format!("{base}/k8s/deployments/{namespace}/{name}/scale"))
+        .post(format!(
+            "{base}/k8s/deployments/{}/{}/scale",
+            urlencoding::encode(&namespace),
+            urlencoding::encode(&name)
+        ))
         .json(&serde_json::json!({ "replicas": replicas }))
         .send()
         .await
@@ -1430,7 +1522,14 @@ pub async fn k8s_scale_deployment(namespace: String, name: String, replicas: u32
 
 #[tauri::command]
 pub async fn k8s_restart_deployment(namespace: String, name: String) -> Result<(), String> {
-    post_empty(&format!("/k8s/deployments/{namespace}/{name}/restart")).await
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    post_empty(&format!(
+        "/k8s/deployments/{}/{}/restart",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
@@ -1440,21 +1539,29 @@ pub async fn k8s_pod_logs(
     container: Option<String>,
     tail: Option<u32>,
 ) -> Result<Vec<String>, String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
     let mut query_parts = Vec::new();
     if let Some(c) = &container {
-        query_parts.push(format!("container={c}"));
+        // Encode the container name — it becomes a query-string value and
+        // could otherwise splice extra parameters.
+        query_parts.push(format!("container={}", urlencoding::encode(c)));
     }
     if let Some(t) = tail {
         query_parts.push(format!("tail={t}"));
     }
     let query = if query_parts.is_empty() {
-        let _base = daemon_url();
         String::new()
     } else {
         format!("?{}", query_parts.join("&"))
     };
 
-    get_json(&format!("/k8s/pods/{namespace}/{name}/logs{query}")).await
+    get_json(&format!(
+        "/k8s/pods/{}/{}/logs{query}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
@@ -1474,6 +1581,12 @@ pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
 fn validate_k8s_name(name: &str) -> Result<(), String> {
     if name.is_empty() || name.len() > 253 {
         return Err("Invalid Kubernetes name: length".into());
+    }
+    if name == "." || name == ".." {
+        return Err("Invalid Kubernetes name: reserved".into());
+    }
+    if name.starts_with('-') || name.starts_with('.') || name.ends_with('-') || name.ends_with('.') {
+        return Err("Kubernetes name must not begin or end with '-' or '.'".into());
     }
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.') {
         return Err(format!("Invalid Kubernetes name: {name}"));
@@ -2045,14 +2158,41 @@ pub async fn k8s_port_forward(
 }
 
 /// Proxy a single TCP connection bidirectionally through a WebSocket tunnel.
-async fn proxy_tcp_to_ws(tcp_stream: tokio::net::TcpStream, ws_url: &str, _tls_verify: bool) -> Result<(), String> {
+async fn proxy_tcp_to_ws(tcp_stream: tokio::net::TcpStream, ws_url: &str, tls_verify: bool) -> Result<(), String> {
     use futures_util::{SinkExt as _, StreamExt as _};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio_tungstenite::tungstenite::Message as WsMessage;
 
-    let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url)
+    // Honor the per-host tls_verify flag. When disabled (user opted in to
+    // self-signed), pass a rustls config that accepts invalid certs; when
+    // enabled, use the normal verifier.
+    let (ws_stream, _) = if tls_verify {
+        tokio_tungstenite::connect_async(ws_url)
+            .await
+            .map_err(|e| format!("WebSocket connect failed: {e}"))?
+    } else {
+        use tokio_tungstenite::Connector;
+        let config = std::sync::Arc::new(
+            rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .map_err(|e| format!("rustls builder failed: {e}"))?
+            .dangerous()
+            .with_custom_certificate_verifier(std::sync::Arc::new(
+                DangerousNoopCertVerifier::new(),
+            ))
+            .with_no_client_auth(),
+        );
+        tokio_tungstenite::connect_async_tls_with_config(
+            ws_url,
+            None,
+            false,
+            Some(Connector::Rustls(config)),
+        )
         .await
-        .map_err(|e| format!("WebSocket connect failed: {e}"))?;
+        .map_err(|e| format!("WebSocket connect failed: {e}"))?
+    };
 
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let (mut tcp_read, mut tcp_write) = tcp_stream.into_split();
@@ -2863,35 +3003,78 @@ pub async fn get_ca_info() -> Result<serde_json::Value, String> {
     get_json("/ca/info").await
 }
 
+/// Bound on content that any frontend can write via `write_temp_file`.
+const MAX_TEMP_FILE_BYTES: usize = 16 * 1024 * 1024;
+
 #[tauri::command]
 pub async fn write_temp_file(name: String, content: String) -> Result<String, String> {
-    let dir = std::env::temp_dir();
-    // Sanitize: use only the filename component, reject path traversal
+    if content.len() > MAX_TEMP_FILE_BYTES {
+        return Err(format!("File too large ({} > {MAX_TEMP_FILE_BYTES} bytes)", content.len()));
+    }
+    let orca_tmp = orca_temp_dir();
+    std::fs::create_dir_all(&orca_tmp).map_err(|e| format!("Failed to create temp dir: {e}"))?;
+    // Sanitize: use only the filename component, reject path traversal.
     let safe_name = std::path::Path::new(&name)
         .file_name()
         .ok_or("Invalid filename")?
         .to_str()
         .ok_or("Invalid filename encoding")?;
-    let path = dir.join(safe_name);
-    std::fs::write(&path, &content).map_err(|e| format!("Failed to write temp file: {e}"))?;
+    if safe_name.starts_with('.') || safe_name.is_empty() || safe_name.len() > 255 {
+        return Err("Invalid filename".into());
+    }
+    let path = orca_tmp.join(safe_name);
+    // Open with create_new so we never follow a symlink or clobber a file
+    // already in the temp dir.
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = match opts.open(&path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            // Overwrite existing file we own: remove first, then create_new.
+            let _ = std::fs::remove_file(&path);
+            opts.open(&path).map_err(|e| format!("Failed to open temp file: {e}"))?
+        }
+        Err(e) => return Err(format!("Failed to open temp file: {e}")),
+    };
+    use std::io::Write;
+    f.write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write temp file: {e}"))?;
     Ok(path.to_string_lossy().to_string())
+}
+
+/// A per-app namespaced subdirectory of the system temp dir. Isolates our
+/// files from anything else so `write_temp_file` can never clobber
+/// unrelated files (e.g., files a user or another application placed in
+/// `/tmp`).
+fn orca_temp_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join("orca-desktop")
 }
 
 #[tauri::command]
 pub async fn open_file_in_browser(path: String) -> Result<(), String> {
-    // Allow URLs
+    // Allow URLs only with http/https schemes. Reject anything else so
+    // malicious content can't trigger `file://` / custom-handler opens.
     if path.starts_with("http://") || path.starts_with("https://") {
         return open::that(&path).map_err(|e| format!("Failed to open URL: {e}"));
     }
-    // For file paths, only allow temp directory.
-    // Canonicalize both paths to handle Windows UNC prefixes (\\?\)
+    // For file paths, restrict to OUR per-app temp subdirectory — the
+    // previous check of just the system temp dir was too permissive because
+    // any other process can drop files there.
     let canonical = std::fs::canonicalize(&path).map_err(|e| format!("Invalid path: {e}"))?;
-    let temp_dir = std::fs::canonicalize(std::env::temp_dir()).unwrap_or_else(|_| std::env::temp_dir());
-    if !canonical.starts_with(&temp_dir) {
+    let orca_tmp = match std::fs::canonicalize(orca_temp_dir()) {
+        Ok(p) => p,
+        Err(_) => return Err("Orca temp dir not initialised".to_string()),
+    };
+    if !canonical.starts_with(&orca_tmp) {
         return Err(format!(
-            "Access denied: only temp directory files can be opened (got: {}, temp: {})",
+            "Access denied: only Orca temp files can be opened (got: {}, expected under: {})",
             canonical.display(),
-            temp_dir.display()
+            orca_tmp.display()
         ));
     }
     open::that(&path).map_err(|e| format!("Failed to open file: {e}"))
@@ -2928,34 +3111,160 @@ pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Invalid response: {e}"))
 }
 
-#[tauri::command]
-pub async fn read_file(path: String) -> Result<String, String> {
-    // Only allow reading YAML files (compose files, etc.)
-    let p = std::path::Path::new(&path);
+/// The only directory the frontend is allowed to read from / write to via
+/// `read_file` / `save_compose_file`. Without this confinement, any
+/// JS-reachable call could read or write arbitrary YAML-extensioned files
+/// anywhere on disk — a symlink or well-crafted path could then target
+/// cron files, SSH configs, etc.
+fn stacks_base_dir() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("orca")
+        .join("stacks")
+}
+
+fn validate_compose_path(path: &str) -> Result<std::path::PathBuf, String> {
+    let p = std::path::Path::new(path);
     let fname = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
     if !(fname.ends_with(".yml") || fname.ends_with(".yaml")) {
-        return Err("Only .yml/.yaml files can be read".to_string());
+        return Err("Only .yml/.yaml files can be read or written".to_string());
     }
-    tokio::fs::read_to_string(&path)
-        .await
-        .map_err(|e| format!("Failed to read file: {e}"))
+    if path.contains("..") {
+        return Err("Path must not contain '..'".to_string());
+    }
+    // Require an absolute path; relative paths depend on CWD and are easy
+    // to abuse.
+    if !p.is_absolute() {
+        return Err("Path must be absolute".into());
+    }
+
+    // Canonicalize the base FIRST without modifying the filesystem.
+    let base = stacks_base_dir();
+    let base_canonical = match std::fs::canonicalize(&base) {
+        Ok(c) => c,
+        Err(_) => {
+            std::fs::create_dir_all(&base)
+                .map_err(|e| format!("Failed to create stacks dir: {e}"))?;
+            std::fs::canonicalize(&base)
+                .map_err(|e| format!("Failed to canonicalize stacks dir: {e}"))?
+        }
+    };
+
+    // Containment check BEFORE any mkdir on the user-supplied path. We
+    // canonicalize the nearest existing ancestor (not the user path's
+    // parent), then join the remaining unresolved tail, and check the
+    // lexical prefix. Only once that passes do we ensure the parent
+    // directory exists for save operations.
+    let mut existing = p.to_path_buf();
+    let mut tail = std::path::PathBuf::new();
+    loop {
+        if existing.exists() {
+            break;
+        }
+        match existing.file_name() {
+            Some(f) => {
+                let mut new_tail = std::path::PathBuf::from(f);
+                new_tail.push(&tail);
+                tail = new_tail;
+            }
+            None => return Err("Invalid path".into()),
+        }
+        if !existing.pop() {
+            return Err("Invalid path".into());
+        }
+    }
+    let existing_canonical =
+        std::fs::canonicalize(&existing).map_err(|e| format!("Invalid path: {e}"))?;
+    let pb = existing_canonical.join(&tail);
+    if !pb.starts_with(&base_canonical) {
+        return Err(format!(
+            "Access denied: path must be inside {}",
+            base_canonical.display()
+        ));
+    }
+
+    // Safe to create missing parent dirs now.
+    if let Some(parent) = pb.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to ensure parent dir: {e}"))?;
+    }
+    Ok(pb)
+}
+
+/// Open a file without following symlinks (Unix). On non-Unix, fall back
+/// to a regular open — which follows symlinks, but the only current
+/// non-Unix Orca target is Windows + WSL, where the stacks dir is under
+/// `$APPDATA` and symlink attacks are less practical.
+fn open_no_follow_read(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::OpenOptions::new().read(true).open(path)
+    }
+}
+
+fn open_no_follow_write(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)
+    }
+}
+
+#[tauri::command]
+pub async fn read_file(path: String) -> Result<String, String> {
+    let pb = validate_compose_path(&path)?;
+    tokio::task::spawn_blocking(move || {
+        use std::io::Read;
+        let mut f = open_no_follow_read(&pb).map_err(|e| format!("Failed to open file: {e}"))?;
+        let mut buf = String::new();
+        f.read_to_string(&mut buf)
+            .map_err(|e| format!("Failed to read file: {e}"))?;
+        Ok::<_, String>(buf)
+    })
+    .await
+    .map_err(|e| format!("read_file task panicked: {e}"))?
 }
 
 #[tauri::command]
 pub async fn save_compose_file(path: String, content: String) -> Result<(), String> {
-    // Validate the path points to a compose/yaml file
-    let p = std::path::Path::new(&path);
-    let fname = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
-    if !(fname.ends_with(".yml") || fname.ends_with(".yaml")) {
-        return Err("Only .yml/.yaml files can be saved".to_string());
-    }
-    // Basic validation: content must not be empty
+    let pb = validate_compose_path(&path)?;
+    // Basic validation: content must not be empty and must be bounded.
     if content.trim().is_empty() {
         return Err("Content cannot be empty".to_string());
     }
-    tokio::fs::write(&path, &content)
-        .await
-        .map_err(|e| format!("Failed to save compose file: {e}"))
+    if content.len() > 10 * 1024 * 1024 {
+        return Err("Compose file too large (max 10 MiB)".to_string());
+    }
+    tokio::task::spawn_blocking(move || {
+        use std::io::Write;
+        let mut f = open_no_follow_write(&pb).map_err(|e| format!("Failed to open file: {e}"))?;
+        f.write_all(content.as_bytes())
+            .map_err(|e| format!("Failed to save compose file: {e}"))?;
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(|e| format!("save_compose_file task panicked: {e}"))?
 }
 
 #[tauri::command]
@@ -3033,6 +3342,14 @@ pub async fn update_remote_host(
     tags: Option<Vec<String>>,
 ) -> Result<(), String> {
     let mut config = orca_core::config::OrcaConfig::load().map_err(|e| format!("{e}"))?;
+    let original_url = {
+        let host = config
+            .remote_hosts
+            .iter()
+            .find(|h| h.id == id)
+            .ok_or("Host not found")?;
+        host.url.clone()
+    };
     let host = config
         .remote_hosts
         .iter_mut()
@@ -3050,17 +3367,21 @@ pub async fn update_remote_host(
     if let Some(t) = tags {
         host.tags = t;
     }
+    let new_url = host.url.clone();
+    let new_token = host.token.clone();
+    let new_tls = host.tls_verify;
     config.save().map_err(|e| format!("{e}"))?;
 
-    // If this host is currently active, update the override
+    // Only refresh the active-host override if THIS host is the one currently
+    // active — compare by the pre-edit URL so changes to name/tags of an
+    // inactive host don't silently switch the active target.
     if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
-        if guard.is_some() {
-            drop(guard);
-            // Re-apply the override with updated values
-            let host = config.remote_hosts.iter().find(|h| h.id == id).unwrap();
-            if let Ok(mut w) = DAEMON_URL_OVERRIDE.write() {
-                *w = Some((host.url.clone(), host.token.clone(), host.tls_verify));
-            }
+        let is_active = guard.as_ref().map(|(u, _, _)| u == &original_url).unwrap_or(false);
+        drop(guard);
+        if is_active
+            && let Ok(mut w) = DAEMON_URL_OVERRIDE.write()
+        {
+            *w = Some((new_url, new_token, new_tls));
         }
     }
     Ok(())
@@ -3220,7 +3541,7 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
 
     // System health (resources)
     let system = match client
-        .get(format!("{url}/system/health"))
+        .get(format!("{api_url}/system/health"))
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await
@@ -3231,7 +3552,7 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
 
     // Container list
     let containers = match client
-        .get(format!("{url}/containers"))
+        .get(format!("{api_url}/containers"))
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await
@@ -3249,7 +3570,7 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
 
     // Images count
     let images_total = match client
-        .get(format!("{url}/images"))
+        .get(format!("{api_url}/images"))
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await
@@ -3326,8 +3647,9 @@ pub async fn probe_all_hosts() -> Result<Vec<serde_json::Value>, String> {
         } else {
             &noverify_client
         };
+        let api_url = format!("{}/api/v1", normalize_daemon_url(&host.url));
         let resp = client
-            .get(format!("{}/health", host.url))
+            .get(format!("{api_url}/health"))
             .header("Authorization", format!("Bearer {}", host.token))
             .send()
             .await;

@@ -74,15 +74,22 @@ pub async fn auth_middleware(
         return Ok(response);
     }
 
-    // Allow webhook endpoints — they validate via HMAC signature
-    if req.uri().path().contains("/webhooks/") {
+    // Allow webhook endpoints — they validate via HMAC signature (GitHub) or
+    // a shared token header (Docker Hub). Exact-match the specific paths to
+    // avoid accidentally exempting future routes whose paths happen to
+    // contain the substring "/webhooks/".
+    let path = req.uri().path();
+    if matches!(
+        path,
+        "/api/v1/webhooks/github" | "/api/v1/webhooks/dockerhub"
+    ) {
         return Ok(next.run(req).await);
     }
 
-    // Allow WebSocket endpoints — they do their own auth via query param
-    if req.uri().path().ends_with("/terminal")
-        || req.uri().path().ends_with("/enable-stream")
-        || req.uri().path().ends_with("/tunnel")
+    // Allow WebSocket endpoints — they do their own auth via query param.
+    if path.ends_with("/terminal")
+        || path.ends_with("/enable-stream")
+        || path.ends_with("/tunnel")
     {
         return Ok(next.run(req).await);
     }
@@ -1262,6 +1269,36 @@ async fn build_from_url_endpoint(
     let url = body.source_url.clone();
     let tag = body.tag.clone().unwrap_or_default();
 
+    // Validate URL: must be http(s), must not target a private/loopback/
+    // metadata-service address (basic SSRF guardrails). Reject URLs whose
+    // scheme-free start looks like a git option (e.g. `--upload-pack=...`).
+    if url.starts_with('-') {
+        return Err(ApiError(anyhow::anyhow!("URL must not start with '-'")));
+    }
+    let parsed = reqwest::Url::parse(&url)
+        .map_err(|e| ApiError(anyhow::anyhow!("Invalid source URL: {e}")))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        other => {
+            return Err(ApiError(anyhow::anyhow!(
+                "Unsupported URL scheme '{other}': only http/https are allowed"
+            )));
+        }
+    }
+    if let Some(host) = parsed.host_str() {
+        let h = host.to_ascii_lowercase();
+        let is_localhost = h == "localhost" || h == "0.0.0.0";
+        let is_private_ip = h.parse::<std::net::IpAddr>().map(|ip| is_private_or_loopback(&ip)).unwrap_or(false);
+        let is_metadata = h == "169.254.169.254" || h == "metadata.google.internal";
+        if is_localhost || is_private_ip || is_metadata {
+            return Err(ApiError(anyhow::anyhow!(
+                "Refusing to fetch private/loopback/metadata host '{host}'"
+            )));
+        }
+    } else {
+        return Err(ApiError(anyhow::anyhow!("URL must have a host")));
+    }
+
     // Create a temp directory for the build context
     let tmp_dir = tempfile::tempdir().map_err(|e| ApiError(anyhow::anyhow!("Failed to create temp directory: {e}")))?;
     let tmp_path = tmp_dir.path().to_string_lossy().to_string();
@@ -1272,9 +1309,24 @@ async fn build_from_url_endpoint(
         || url.contains("bitbucket.org/");
 
     if is_git {
-        // Clone the git repo
+        // Clone the git repo. Use `--` so the URL can never be interpreted
+        // as a flag, and disable any ext-protocol handlers that could
+        // exec arbitrary commands. Also disable prompting.
         let output = tokio::process::Command::new("git")
-            .args(["clone", "--depth", "1", &url, &tmp_path])
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GIT_ASKPASS", "/bin/true")
+            .args([
+                "-c",
+                "protocol.ext.allow=never",
+                "-c",
+                "protocol.file.allow=never",
+                "clone",
+                "--depth",
+                "1",
+                "--",
+                url.as_str(),
+                tmp_path.as_str(),
+            ])
             .output()
             .await
             .map_err(|e| ApiError(anyhow::anyhow!("Failed to run git clone. Is git installed? Error: {e}")))?;
@@ -1283,8 +1335,17 @@ async fn build_from_url_endpoint(
             return Err(ApiError(anyhow::anyhow!("git clone failed: {stderr}")));
         }
     } else {
-        // Download as a raw Dockerfile
-        let resp = reqwest::get(&url)
+        // Download as a raw Dockerfile. Use a bounded client with a timeout
+        // and a small redirect budget so a hostile server can't stall or
+        // bounce us into an SSRF target.
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .build()
+            .map_err(|e| ApiError(anyhow::anyhow!("Failed to build HTTP client: {e}")))?;
+        let resp = client
+            .get(parsed)
+            .send()
             .await
             .map_err(|e| ApiError(anyhow::anyhow!("Failed to download URL: {e}")))?;
         if !resp.status().is_success() {
@@ -1293,11 +1354,21 @@ async fn build_from_url_endpoint(
                 resp.status()
             )));
         }
-        let content = resp
-            .text()
+        // Cap body size so a hostile server can't OOM the daemon.
+        const MAX_DOCKERFILE: usize = 1_048_576; // 1 MiB
+        let bytes = resp
+            .bytes()
             .await
             .map_err(|e| ApiError(anyhow::anyhow!("Failed to read response: {e}")))?;
-        std::fs::write(tmp_dir.path().join("Dockerfile"), &content)
+        if bytes.len() > MAX_DOCKERFILE {
+            return Err(ApiError(anyhow::anyhow!(
+                "Dockerfile too large: {} bytes (max {MAX_DOCKERFILE})",
+                bytes.len()
+            )));
+        }
+        let content = std::str::from_utf8(&bytes)
+            .map_err(|e| ApiError(anyhow::anyhow!("Dockerfile is not valid UTF-8: {e}")))?;
+        std::fs::write(tmp_dir.path().join("Dockerfile"), content)
             .map_err(|e| ApiError(anyhow::anyhow!("Failed to write Dockerfile: {e}")))?;
     }
 
@@ -2310,6 +2381,86 @@ async fn commit_container(
 
 // --- Image Import ---
 
+/// True if the IP address is a loopback, link-local, or RFC1918 private
+/// range. Used to block SSRF attempts.
+fn is_private_or_loopback(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.is_unspecified()
+                // CGNAT / carrier-grade NAT
+                || (v4.octets()[0] == 100 && (64..=127).contains(&v4.octets()[1]))
+                // 169.254.0.0/16 covers AWS metadata and general link-local
+                || v4.octets()[0] == 169 && v4.octets()[1] == 254
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                // IPv4-mapped: check the mapped address too
+                || v6.to_ipv4_mapped().map(|v4| is_private_or_loopback(&std::net::IpAddr::V4(v4))).unwrap_or(false)
+                // fc00::/7 (unique local) and fe80::/10 (link-local)
+                || (v6.segments()[0] & 0xfe00) == 0xfc00
+                || (v6.segments()[0] & 0xffc0) == 0xfe80
+        }
+    }
+}
+
+/// Reject paths that could traverse outside a permitted area. The daemon
+/// runs as the user, so a caller with the API token can in principle read
+/// or write anything the user can; but we still refuse absolute paths that
+/// look like they target sensitive locations and any path containing `..`
+/// so that misuse is obvious and observable.
+fn validate_user_file_path(p: &str, require_parent_exists: bool) -> anyhow::Result<std::path::PathBuf> {
+    let pb = std::path::PathBuf::from(p);
+    if p.is_empty() {
+        anyhow::bail!("path is empty");
+    }
+    if p.contains("..") {
+        anyhow::bail!("path must not contain '..'");
+    }
+    // Reject null bytes (which can confuse C APIs on some platforms).
+    if p.bytes().any(|b| b == 0) {
+        anyhow::bail!("path contains null bytes");
+    }
+    // Require an absolute path so intent is explicit.
+    if !pb.is_absolute() {
+        anyhow::bail!("path must be absolute");
+    }
+    // Disallow a small set of obviously-dangerous targets.
+    let s = p.to_ascii_lowercase();
+    let forbidden_prefixes = [
+        "/etc/",
+        "/root/",
+        "/boot/",
+        "/proc/",
+        "/sys/",
+        "/dev/",
+        "/var/run/",
+        "/var/lib/",
+        "/usr/",
+        "/bin/",
+        "/sbin/",
+    ];
+    for pref in forbidden_prefixes {
+        if s.starts_with(pref) {
+            anyhow::bail!("path targets a restricted directory");
+        }
+    }
+    if require_parent_exists
+        && let Some(parent) = pb.parent()
+        && !parent.as_os_str().is_empty()
+        && !parent.exists()
+    {
+        anyhow::bail!("parent directory does not exist");
+    }
+    Ok(pb)
+}
+
 #[derive(Deserialize)]
 struct ImportImageRequest {
     path: String,
@@ -2319,7 +2470,8 @@ async fn import_image(
     State(state): State<Arc<AppState>>,
     Json(body): Json<ImportImageRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let file = tokio::fs::read(&body.path)
+    let path = validate_user_file_path(&body.path, true)?;
+    let file = tokio::fs::read(&path)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to read file: {e}"))?;
     let mut stream =
@@ -2358,11 +2510,23 @@ async fn export_container_tar(
     use futures::StreamExt;
     use tokio::io::AsyncWriteExt;
 
+    let dest = validate_user_file_path(&query.path, true)?;
     let docker = &state.rt().await.docker;
     let mut stream = docker.export_container(&id);
-    let mut file = tokio::fs::File::create(&query.path)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to create file: {e}"))?;
+    // Open with create_new to avoid following symlinks and clobbering
+    // unrelated files.
+    let std_file = {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        opts.open(&dest)
+            .map_err(|e| anyhow::anyhow!("Failed to create file: {e}"))?
+    };
+    let mut file = tokio::fs::File::from_std(std_file);
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.map_err(|e| anyhow::anyhow!("Export stream error: {e}"))?;
@@ -2392,12 +2556,22 @@ async fn save_image_tar(
     use futures::StreamExt;
     use tokio::io::AsyncWriteExt;
 
+    let dest = validate_user_file_path(&query.path, true)?;
     let image_ref = resolve_image_ref(&state, &id).await?;
     let docker = &state.rt().await.docker;
     let mut stream = docker.export_image(&image_ref);
-    let mut file = tokio::fs::File::create(&query.path)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to create file: {e}"))?;
+    let std_file = {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        opts.open(&dest)
+            .map_err(|e| anyhow::anyhow!("Failed to create file: {e}"))?
+    };
+    let mut file = tokio::fs::File::from_std(std_file);
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.map_err(|e| anyhow::anyhow!("Export stream error: {e}"))?;
@@ -4408,44 +4582,21 @@ async fn auto_register_stack_links(
     }
 }
 
-/// Generate a random alphanumeric password for compose template deployments.
+/// Generate a random alphanumeric password using the OS CSPRNG. Used for
+/// compose template deployments, so must be cryptographically strong —
+/// these values become database/session/API secrets.
 fn generate_password(len: usize) -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let mut seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    // Mix in process id for extra entropy
-    seed ^= std::process::id() as u128;
-    let mut result = String::with_capacity(len);
-    for i in 0..len {
-        // Simple LCG-style mixing
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407 + i as u128);
-        let idx = ((seed >> 64) as usize) % CHARS.len();
-        result.push(CHARS[idx] as char);
-    }
-    result
+    use rand::Rng;
+    use rand::distributions::Alphanumeric;
+    rand::rngs::OsRng.sample_iter(&Alphanumeric).take(len).map(char::from).collect()
 }
 
-/// Generate random bytes using the same LCG approach as generate_password.
+/// Generate cryptographically random bytes via the OS CSPRNG.
 fn generate_random_bytes(len: usize) -> Vec<u8> {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let mut seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    seed ^= std::process::id() as u128;
-    let mut result = Vec::with_capacity(len);
-    for i in 0..len {
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407 + i as u128);
-        result.push((seed >> 64) as u8);
-    }
-    result
+    use rand::RngCore;
+    let mut buf = vec![0u8; len];
+    rand::rngs::OsRng.fill_bytes(&mut buf);
+    buf
 }
 
 /// Generate a random hex string of the given byte length.
@@ -4653,8 +4804,29 @@ async fn deploy_template(
     if let Some(yaml) = compose_yaml {
         // --- Compose stack deploy path ---
         let stack_name = overrides.name.unwrap_or_else(|| template.id.clone());
-        let stack_dir = stacks_base_dir().join(&stack_name);
+        // Validate the name and verify containment so an attacker-controlled
+        // name can't escape the stacks directory via `..` or an absolute
+        // path.
+        validate_stack_name(&stack_name)?;
+        let base = stacks_base_dir();
+        let stack_dir = base.join(&stack_name);
+        if !stack_dir.starts_with(&base) {
+            return Err(anyhow::anyhow!("Refusing to deploy outside stacks directory").into());
+        }
         std::fs::create_dir_all(&stack_dir).map_err(|e| anyhow::anyhow!("Failed to create stack directory: {e}"))?;
+
+        // Reject any `rel_path` in generated_files that would escape the
+        // stack directory — they're also joined with stack_dir below.
+        if let Some(ref gen_files) = template.generated_files {
+            for (rel_path, _) in gen_files {
+                if rel_path.contains("..") || std::path::Path::new(rel_path).is_absolute() {
+                    return Err(anyhow::anyhow!(
+                        "generated_files path '{rel_path}' is invalid"
+                    )
+                    .into());
+                }
+            }
+        }
 
         // Replace all occurrences of "changeme" with generated passwords.
         // Each unique password placeholder gets a distinct generated value per service context,
@@ -4851,7 +5023,12 @@ async fn deploy_template(
 
 /// GET /stacks/dir/{name} — returns the stack directory path for a given stack name.
 async fn get_stack_dir(Path(name): Path<String>) -> Result<impl IntoResponse, ApiError> {
-    let dir = stacks_base_dir().join(&name);
+    validate_stack_name(&name)?;
+    let base = stacks_base_dir();
+    let dir = base.join(&name);
+    if !dir.starts_with(&base) {
+        return Err(anyhow::anyhow!("stack path is outside stacks directory").into());
+    }
     Ok(Json(serde_json::json!({
         "name": name,
         "path": dir.to_string_lossy(),
@@ -4859,11 +5036,28 @@ async fn get_stack_dir(Path(name): Path<String>) -> Result<impl IntoResponse, Ap
     })))
 }
 
+/// Validate a compose project / stack name against Docker Compose rules.
+/// Letters, digits, hyphens, underscores only; must not be empty or `..`/`.`.
+fn validate_stack_name(name: &str) -> anyhow::Result<()> {
+    if name.is_empty() || name.len() > 128 {
+        anyhow::bail!("invalid stack name");
+    }
+    if name == "." || name == ".." {
+        anyhow::bail!("invalid stack name");
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) {
+        anyhow::bail!("stack name contains invalid characters");
+    }
+    Ok(())
+}
+
 /// PATCH /stacks/{name}/env — update a single env var in the stack's .env file.
 async fn update_stack_env(
     Path(name): Path<String>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, ApiError> {
+    validate_stack_name(&name)?;
+
     let key = body["key"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing 'key' field"))?;
@@ -4875,8 +5069,20 @@ async fn update_stack_env(
     if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return Err(anyhow::anyhow!("Invalid env var name: {key}").into());
     }
+    // Reject newlines in value — would let the attacker inject additional
+    // env vars beyond the one they're "editing".
+    if value.contains('\n') || value.contains('\r') {
+        return Err(anyhow::anyhow!("env value must not contain newlines").into());
+    }
 
     let stack_dir = stacks_base_dir().join(&name);
+    // Belt-and-braces: ensure the resolved path is actually inside the base
+    // dir. Rejects any odd edge case where validate_stack_name missed
+    // something.
+    let base = stacks_base_dir();
+    if !stack_dir.starts_with(&base) {
+        return Err(anyhow::anyhow!("stack path is outside stacks directory").into());
+    }
     if !stack_dir.exists() {
         return Err(anyhow::anyhow!("Stack directory not found: {name}").into());
     }
@@ -5285,6 +5491,27 @@ async fn tunnel_ws(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    // Block known-dangerous metadata/loopback/private endpoints. Even when
+    // the caller has a valid bearer token, we refuse to be used as a
+    // generic network pivot (cloud metadata, the daemon host's sibling
+    // services, etc.). Container-name targets like `my-app` pass through —
+    // the check only bites on bare IPs and a few well-known names.
+    let h = params.host.to_ascii_lowercase();
+    if h == "localhost"
+        || h == "metadata.google.internal"
+        || h == "metadata"
+        || h == "169.254.169.254"
+    {
+        tracing::warn!("Tunnel: refusing to connect to metadata/loopback host '{h}'");
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if let Ok(ip) = h.parse::<std::net::IpAddr>() {
+        if is_private_or_loopback(&ip) {
+            tracing::warn!("Tunnel: refusing to connect to private/loopback IP '{ip}'");
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+
     tracing::info!("Tunnel: opening connection to {}:{}", params.host, params.port);
     Ok(ws.on_upgrade(move |socket| handle_tunnel(socket, params.host, params.port)))
 }
@@ -5358,26 +5585,35 @@ async fn webhook_github(
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Bound the body size defensively — the outer DefaultBodyLimit should
+    // already reject oversize requests, but belt-and-braces.
+    if body.len() > orca_core::webhook::MAX_WEBHOOK_BODY_BYTES {
+        return Err(anyhow::anyhow!("webhook body too large").into());
+    }
+
     let config = orca_core::config::OrcaConfig::load()?;
 
-    // Validate signature if a webhook secret is configured
-    if let Some(ref global_secret) = config.webhook_secret {
-        let sig = headers
-            .get("x-hub-signature-256")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        if !orca_core::webhook::validate_github_signature(global_secret, &body, sig) {
-            // Try per-rule secrets
-            let any_valid = config.deploy_rules.iter().any(|r| {
-                r.webhook_secret
-                    .as_ref()
-                    .map(|s| orca_core::webhook::validate_github_signature(s, &body, sig))
-                    .unwrap_or(false)
-            });
-            if !any_valid {
-                return Err(anyhow::anyhow!("Invalid webhook signature").into());
+    // Collect every configured secret: the global one plus any per-rule
+    // secrets. `require_valid_signature` rejects if the list is empty, so an
+    // unconfigured daemon never accepts an unsigned webhook.
+    let mut secrets: Vec<&str> = Vec::new();
+    if let Some(ref s) = config.webhook_secret {
+        if !s.is_empty() {
+            secrets.push(s.as_str());
+        }
+    }
+    for r in &config.deploy_rules {
+        if let Some(ref s) = r.webhook_secret {
+            if !s.is_empty() {
+                secrets.push(s.as_str());
             }
         }
+    }
+
+    let sig_header = headers.get("x-hub-signature-256").and_then(|v| v.to_str().ok());
+    if let Err(msg) = orca_core::webhook::require_valid_signature(&secrets, &body, sig_header) {
+        tracing::warn!("{msg}");
+        return Err(anyhow::anyhow!("{msg}").into());
     }
 
     let event_type = headers
@@ -5426,12 +5662,45 @@ async fn webhook_github(
 
 async fn webhook_dockerhub(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Bound request size.
+    if body.len() > orca_core::webhook::MAX_WEBHOOK_BODY_BYTES {
+        return Err(anyhow::anyhow!("webhook body too large").into());
+    }
+
+    let config = orca_core::config::OrcaConfig::load()?;
+
+    // Docker Hub webhooks do not carry an HMAC signature, so we require a
+    // shared token in the `X-Orca-Webhook-Token` header. Any configured
+    // webhook_secret or per-rule secret is accepted.
+    let provided = headers.get("x-orca-webhook-token").and_then(|v| v.to_str().ok());
+    let mut candidates: Vec<&str> = Vec::new();
+    if let Some(ref s) = config.webhook_secret {
+        if !s.is_empty() {
+            candidates.push(s.as_str());
+        }
+    }
+    for r in &config.deploy_rules {
+        if let Some(ref s) = r.webhook_secret {
+            if !s.is_empty() {
+                candidates.push(s.as_str());
+            }
+        }
+    }
+
+    let authed = candidates
+        .iter()
+        .any(|expected| orca_core::webhook::validate_dockerhub_token(expected, provided));
+    if !authed {
+        tracing::warn!("Docker Hub webhook rejected: missing/invalid X-Orca-Webhook-Token");
+        return Err(anyhow::anyhow!("unauthorized webhook").into());
+    }
+
     let payload = orca_core::webhook::parse_dockerhub_event(&body)
         .map_err(|e| anyhow::anyhow!("Failed to parse Docker Hub webhook: {e}"))?;
 
-    let config = orca_core::config::OrcaConfig::load()?;
     let rules = config.find_matching_rules(&payload.image, &payload.tag);
     let matched = rules.len();
 
@@ -7091,10 +7360,37 @@ struct AddRouteRequest {
     path: Option<String>,
 }
 
+/// Validate a gateway hostname as a DNS-1123 subdomain. Used before the
+/// hostname is written into the TLS cert filename or Caddy config, which
+/// would otherwise allow path traversal or config injection.
+fn validate_gateway_hostname(hostname: &str) -> anyhow::Result<()> {
+    if hostname.is_empty() || hostname.len() > 253 {
+        anyhow::bail!("hostname length must be 1..=253 characters");
+    }
+    for label in hostname.split('.') {
+        if label.is_empty() || label.len() > 63 {
+            anyhow::bail!("hostname label must be 1..=63 characters");
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            anyhow::bail!("hostname label must not start or end with '-'");
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            anyhow::bail!("hostname contains invalid characters");
+        }
+    }
+    Ok(())
+}
+
 async fn gateway_add_route(
     State(state): State<Arc<AppState>>,
     Json(req): Json<AddRouteRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    validate_gateway_hostname(&req.hostname)?;
+    if let Some(p) = &req.path {
+        if p.contains('\n') || p.contains('\0') {
+            return Err(anyhow::anyhow!("path must not contain newlines or nulls").into());
+        }
+    }
     let mut config = state.config.lock().await;
 
     // Check for duplicate hostname+path combination
@@ -7196,6 +7492,7 @@ async fn gateway_update_route(
     Path(hostname): Path<String>,
     Json(req): Json<UpdateRouteRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    validate_gateway_hostname(&hostname)?;
     let mut config = state.config.lock().await;
     let route = config
         .gateway
