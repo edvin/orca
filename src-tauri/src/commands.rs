@@ -480,7 +480,8 @@ pub async fn subscribe_container_logs(app: tauri::AppHandle, id: String, tail: O
 
         let resp = match stream_client
             .get(format!(
-                "{base}/containers/{container_id}/logs?follow=true&tail={tail_n}"
+                "{base}/containers/{}/logs?follow=true&tail={tail_n}",
+                urlencoding::encode(&container_id),
             ))
             .send()
             .await

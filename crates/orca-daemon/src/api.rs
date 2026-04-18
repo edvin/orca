@@ -101,11 +101,15 @@ pub async fn auth_middleware(
         _ => return Err(StatusCode::UNAUTHORIZED),
     };
 
-    // Constant-time comparison to prevent timing attacks
+    // Constant-time comparison to prevent timing attacks. Fail-closed if
+    // the configured token is ever empty — `ct_eq` on two empty slices
+    // returns 1, which would otherwise let `Authorization: Bearer ` past
+    // the check on any future regression in `ensure_token` or a hand-
+    // edited config file.
     use subtle::ConstantTimeEq;
     let expected = state.api_token.as_bytes();
     let provided = provided_token.as_bytes();
-    if expected.len() != provided.len() || expected.ct_eq(provided).unwrap_u8() != 1 {
+    if expected.is_empty() || expected.len() != provided.len() || expected.ct_eq(provided).unwrap_u8() != 1 {
         return Err(StatusCode::UNAUTHORIZED);
     }
 

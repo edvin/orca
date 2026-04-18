@@ -6,6 +6,7 @@ import { useRefresh } from "../lib/useRefresh";
 import type { AppTemplate, SetupGuide, ImageSearchResult, RemoteHost, ActiveHost } from "../lib/types";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import { logError, logInfo } from "../lib/activityStore";
 import { sanitizeSvg } from "../lib/sanitize";
 
@@ -567,6 +568,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   };
 
   const deleteTemplate = async (template: AppTemplate) => {
+    const ok = await confirmDanger({
+      title: `Delete template "${template.name}"?`,
+      message: "This removes the template from your catalog. Deployed containers are not affected.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
     try {
       await invoke("delete_user_template", { id: template.id });
       await refreshTemplates();

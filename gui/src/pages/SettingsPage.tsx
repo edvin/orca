@@ -402,6 +402,9 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   };
 
   const deleteRule = async (id: string) => {
+    const rule = deployRules().find((r: any) => r.id === id);
+    const label = rule?.name ? `"${rule.name}"` : "this rule";
+    if (!(await confirmDanger(`Delete deploy rule?`, `Remove ${label}? Webhooks matching this rule will stop auto-deploying.`))) return;
     try {
       await invoke("delete_deploy_rule", { id });
       showToast("Rule deleted", "success");
@@ -1976,6 +1979,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                             </button>
                             <button class="btn btn-sm btn-danger" onClick={async () => {
+                              const label = sched.name ? `"${sched.name}"` : "this schedule";
+                              if (!(await confirmDanger(`Delete schedule?`, `Remove ${label}? It will stop running on its cron trigger.`))) return;
                               try { await invoke("delete_schedule", { id: sched.id }); showToast("Deleted", "success"); await refreshSchedules(); }
                               catch (e) { showToast(`Failed: ${e}`, "error"); }
                             }} title="Delete">
