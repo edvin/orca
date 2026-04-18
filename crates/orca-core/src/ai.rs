@@ -10,8 +10,16 @@ pub struct AiQuery {
 pub struct AiContext {
     pub container_id: Option<String>,
     pub container_name: Option<String>,
+    /// UNTRUSTED: free-form output from a container. May contain
+    /// attacker-controlled text designed to look like instructions to the
+    /// LLM. Callers MUST treat it strictly as data (wrap in an explicit
+    /// `<untrusted_container_output>` block, strip fence-breaking
+    /// sequences) and never concatenate it verbatim into a system prompt.
     pub container_logs: Option<String>,
     pub exit_code: Option<i64>,
+    /// UNTRUSTED: error text surfaced by Docker/Kubernetes/other tooling;
+    /// can reflect container-controlled strings. Same handling as
+    /// `container_logs`.
     pub error: Option<String>,
     pub image: Option<String>,
 }

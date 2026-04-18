@@ -388,13 +388,13 @@ pub async fn execute_tool(
 
         // === Templates ===
         "list_templates" => {
-            let templates = orca_backend_common::templates::all_templates();
+            let templates = orca_backend_common::templates::all_templates().await;
             Ok(serde_json::to_value(templates).unwrap_or_default())
         }
 
         "deploy_template" => {
             let id = get_str(&arguments, "id")?;
-            let templates = orca_backend_common::templates::all_templates();
+            let templates = orca_backend_common::templates::all_templates().await;
             let template = templates
                 .iter()
                 .find(|t| t.id == id)

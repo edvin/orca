@@ -1346,9 +1346,20 @@ pub async fn update_stack_env(name: String, key: String, value: String) -> Resul
 
 // --- Events ---
 
-static EVENT_SUBSCRIPTION: OnceLock<Mutex<Option<tokio::task::JoinHandle<()>>>> = OnceLock::new();
+/// Abort-on-drop wrapper for the daemon-events streaming task. Mirrors
+/// `LogStreamHandle` — the bare `JoinHandle` would detach on drop, leaking
+/// the task if anything replaced the slot without calling `abort()` first.
+struct EventHandle(tokio::task::JoinHandle<()>);
 
-fn event_subscription_slot() -> &'static Mutex<Option<tokio::task::JoinHandle<()>>> {
+impl Drop for EventHandle {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+static EVENT_SUBSCRIPTION: OnceLock<Mutex<Option<EventHandle>>> = OnceLock::new();
+
+fn event_subscription_slot() -> &'static Mutex<Option<EventHandle>> {
     EVENT_SUBSCRIPTION.get_or_init(|| Mutex::new(None))
 }
 
@@ -1360,15 +1371,14 @@ pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
     let base = daemon_url();
     use tauri::Emitter;
 
-    // Cancel any previous subscription task.
-    if let Ok(mut slot) = event_subscription_slot().lock()
-        && let Some(prev) = slot.take()
-    {
-        prev.abort();
-    }
-
     // SSE streams must not be time-limited — the default 30 s client would
-    // abort the stream mid-session.
+    // abort the stream mid-session. We do NOT abort the previous handle here;
+    // doing so before the new task is ready opens a window in which two
+    // concurrent callers can both race past the abort, spawn two tasks, and
+    // store the second into the slot while detaching the first. Instead, we
+    // spawn the new task, then atomically swap it into the slot under the
+    // mutex guard — the old `EventHandle` (if any) is dropped at that point,
+    // and its `Drop` impl aborts the previous task deterministically.
     let resp = authed_client_with_timeout(0)
         .get(format!("{base}/events"))
         .send()
@@ -1395,11 +1405,22 @@ pub async fn subscribe_events(app: tauri::AppHandle) -> Result<(), String> {
         let _ = app.emit("orca-event-stream-closed", ());
     });
 
-    if let Ok(mut slot) = event_subscription_slot().lock() {
-        *slot = Some(handle);
+    // Atomic swap: installing the new EventHandle drops the old one (if any),
+    // and its Drop aborts the previous task. If the lock is poisoned, the
+    // EventHandle we constructed below is simply dropped here — its Drop
+    // aborts the freshly spawned task rather than leaking it.
+    let new_handle = EventHandle(handle);
+    match event_subscription_slot().lock() {
+        Ok(mut slot) => {
+            // Replacing `*slot` runs Drop on the previous value under the guard.
+            *slot = Some(new_handle);
+            Ok(())
+        }
+        Err(_) => {
+            drop(new_handle);
+            Err("Event subscription slot poisoned".to_string())
+        }
     }
-
-    Ok(())
 }
 
 // --- Machine ---
@@ -3183,6 +3204,19 @@ pub async fn get_ca_info() -> Result<serde_json::Value, String> {
 /// Bound on content that any frontend can write via `write_temp_file`.
 const MAX_TEMP_FILE_BYTES: usize = 16 * 1024 * 1024;
 
+/// Allowlist of extensions that may be written via `write_temp_file`.
+/// Matched against the lowercased suffix of the sanitized filename.
+/// These are inert data formats — none of them trigger script execution
+/// when opened by the OS default handler on Linux / macOS / Windows.
+/// `.html` is deliberately NOT in this list: opening HTML via the browser
+/// would execute inline JS, and opening it as a file could also run JS.
+const ALLOWED_TEMP_EXTENSIONS: &[&str] = &[".yml", ".yaml", ".json", ".log", ".txt", ".tar", ".tar.gz", ".tgz"];
+
+fn has_allowed_temp_extension(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    ALLOWED_TEMP_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
+}
+
 #[tauri::command]
 pub async fn write_temp_file(name: String, content: String) -> Result<String, String> {
     if content.len() > MAX_TEMP_FILE_BYTES {
@@ -3201,6 +3235,14 @@ pub async fn write_temp_file(name: String, content: String) -> Result<String, St
         .ok_or("Invalid filename encoding")?;
     if safe_name.starts_with('.') || safe_name.is_empty() || safe_name.len() > 255 {
         return Err("Invalid filename".into());
+    }
+    // Extension allowlist: reject anything that could be executed by an OS
+    // handler (e.g. .desktop, .bat, .command, .lnk, .html, .svg, .exe).
+    if !has_allowed_temp_extension(safe_name) {
+        return Err(format!(
+            "Disallowed file extension for {safe_name}. Allowed: {}",
+            ALLOWED_TEMP_EXTENSIONS.join(", ")
+        ));
     }
     let path = orca_tmp.join(safe_name);
     // Open with create_new so we never follow a symlink or clobber a file
@@ -3235,13 +3277,45 @@ fn orca_temp_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("orca-desktop")
 }
 
+/// Extensions that must never be dispatched via the OS default handler —
+/// any of these could trigger arbitrary code execution or inline-JS through
+/// the browser. Matched case-insensitively against the full suffix.
+const DISALLOWED_OPEN_EXTENSIONS: &[&str] = &[
+    ".desktop", ".sh", ".command", ".app", ".bat", ".cmd", ".ps1", ".exe", ".msi", ".lnk", ".html", ".htm", ".svg",
+    ".xhtml", ".vbs", ".wsf",
+];
+
 #[tauri::command]
 pub async fn open_file_in_browser(path: String) -> Result<(), String> {
-    // Allow URLs only with http/https schemes. Reject anything else so
-    // malicious content can't trigger `file://` / custom-handler opens.
-    if path.starts_with("http://") || path.starts_with("https://") {
-        return open::that(&path).map_err(|e| format!("Failed to open URL: {e}"));
+    // Strict URL validation: we cannot trust a prefix check — `HtTp://`,
+    // leading whitespace, or embedded credentials could otherwise slip past
+    // and be handed to `open::that`, which on some platforms interprets
+    // them as shell-escaped invocations.
+    if let Ok(url) = url::Url::parse(&path) {
+        let scheme = url.scheme();
+        if scheme == "http" || scheme == "https" {
+            if url.host_str().is_none_or(str::is_empty) {
+                return Err("URL is missing a host".to_string());
+            }
+            if !url.username().is_empty() || url.password().is_some() {
+                return Err("URLs containing credentials are not allowed".to_string());
+            }
+            if path.chars().any(char::is_whitespace) {
+                return Err("URL must not contain whitespace".to_string());
+            }
+            return open::that(url.as_str()).map_err(|e| format!("Failed to open URL: {e}"));
+        }
+        // Any other scheme parsed as a URL (file:, javascript:, custom
+        // protocols, …) is rejected outright. We intentionally do not fall
+        // through to the local-file branch: treating a `file://` URL as a
+        // filesystem path would bypass the canonicalization check.
+        if scheme.len() > 1 {
+            return Err(format!("Unsupported URL scheme: {scheme}"));
+        }
+        // A single-letter "scheme" is almost certainly a Windows drive
+        // letter (e.g. `C:\foo`), so fall through to the local-file branch.
     }
+
     // For file paths, restrict to OUR per-app temp subdirectory — the
     // previous check of just the system temp dir was too permissive because
     // any other process can drop files there.
@@ -3255,6 +3329,21 @@ pub async fn open_file_in_browser(path: String) -> Result<(), String> {
             "Access denied: only Orca temp files can be opened (got: {}, expected under: {})",
             canonical.display(),
             orca_tmp.display()
+        ));
+    }
+    // Belt-and-braces: even inside the temp dir, refuse to launch any
+    // extension that could be executed by the OS handler. The writer-side
+    // allowlist already blocks these, but this guards against files placed
+    // by a different mechanism or a future change to `write_temp_file`.
+    let name_lower = canonical
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    if DISALLOWED_OPEN_EXTENSIONS.iter().any(|ext| name_lower.ends_with(ext)) {
+        return Err(format!(
+            "Refusing to launch executable/script file: {}",
+            canonical.display()
         ));
     }
     open::that(&path).map_err(|e| format!("Failed to open file: {e}"))
@@ -3716,15 +3805,34 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
 
     // Health check
     let api_url = format!("{}/api/v1", normalize_daemon_url(&url));
-    let health = client
+    let resp = client
         .get(format!("{api_url}/health"))
         .header("Authorization", format!("Bearer {token}"))
         .send()
         .await
-        .map_err(|e| format!("{e}"))?
-        .json::<serde_json::Value>()
-        .await
         .map_err(|e| format!("{e}"))?;
+    // Non-2xx (e.g. 5xx from a daemon that is up but unhealthy, or 401 from
+    // a bad token) must NOT count as online — the caller uses `online=true`
+    // to decide whether to surface the host in fleet dashboards.
+    if !resp.status().is_success() {
+        return Ok(serde_json::json!({
+            "online": false,
+            "error": format!("http {}", resp.status()),
+        }));
+    }
+    let health = resp.json::<serde_json::Value>().await.map_err(|e| format!("{e}"))?;
+    // A daemon that is up but missing `version` in its health response is
+    // almost certainly NOT a real Orca daemon (or is a broken/partial one).
+    // Treat it as offline rather than report misleading `version=null`.
+    let version = match health.get("version").and_then(|v| v.as_str()) {
+        Some(v) if !v.is_empty() => v.to_string(),
+        _ => {
+            return Ok(serde_json::json!({
+                "online": false,
+                "error": "health response missing version",
+            }));
+        }
+    };
 
     // System health (resources)
     let system = match client
@@ -3768,7 +3876,7 @@ pub async fn probe_host(host_id: Option<String>) -> Result<serde_json::Value, St
 
     Ok(serde_json::json!({
         "online": true,
-        "version": health.get("version").and_then(|v| v.as_str()),
+        "version": version,
         "docker_connected": system.as_ref().and_then(|s| s.get("docker_connected").and_then(|v| v.as_bool())),
         "cpu_count": system.as_ref().and_then(|s| s["system_resources"]["cpu_count"].as_u64()),
         "memory_total": system.as_ref().and_then(|s| s["system_resources"]["memory_total_bytes"].as_u64()),

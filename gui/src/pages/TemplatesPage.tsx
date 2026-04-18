@@ -345,8 +345,14 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         const currentHostKey = originalHost.is_remote && originalHost.id ? originalHost.id : "__local__";
         if (targetHostId !== currentHostKey) {
           setDeployStatus(`Switching to ${targetHostLabel}...`);
-          await invoke("switch_host", { id: targetHostId === "__local__" ? null : targetHostId });
+          const switchId = targetHostId === "__local__" ? null : targetHostId;
+          await invoke("switch_host", { id: switchId });
           switchedHost = true;
+          // Mirror Titlebar.switchToHost: notify the rest of the app so
+          // per-page state (metrics, caches, etc.) resets for the new
+          // host. Without this the UI keeps showing the old host's data.
+          document.dispatchEvent(new CustomEvent("orca-host-switch", { detail: { hostId: switchId } }));
+          document.dispatchEvent(new CustomEvent("orca-refresh"));
         }
 
         // Pre-check: verify host ports are available
@@ -454,7 +460,11 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       } finally {
         if (switchedHost && originalHost) {
           try {
-            await invoke("switch_host", { id: originalHost.is_remote && originalHost.id ? originalHost.id : null });
+            const switchBackId = originalHost.is_remote && originalHost.id ? originalHost.id : null;
+            await invoke("switch_host", { id: switchBackId });
+            // Keep the rest of the app in sync after the silent restore.
+            document.dispatchEvent(new CustomEvent("orca-host-switch", { detail: { hostId: switchBackId } }));
+            document.dispatchEvent(new CustomEvent("orca-refresh"));
           } catch { /* best effort switch-back */ }
         }
         setDeploying(false);

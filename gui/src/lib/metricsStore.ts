@@ -242,6 +242,22 @@ export function clearAllMetrics() {
   for (const k of Object.keys(highCpuStreak)) delete highCpuStreak[k];
 }
 
+// Register a single module-level `orca-host-switch` listener so the
+// metrics store is wiped whenever the active host changes — regardless
+// of whether the Dashboard is mounted. Previously the listener lived in
+// DashboardPage.onMount, which meant metrics leaked across hosts for
+// any user who switched hosts without visiting the Dashboard first.
+let hostSwitchListenerRegistered = false;
+function initHostSwitchListener() {
+  if (hostSwitchListenerRegistered) return;
+  if (typeof document === "undefined") return;
+  document.addEventListener("orca-host-switch", () => {
+    clearAllMetrics();
+  });
+  hostSwitchListenerRegistered = true;
+}
+initHostSwitchListener();
+
 /**
  * Drop metrics for containers that are no longer present. Call this from a
  * single place (e.g. the Dashboard after it reconciles the container list)

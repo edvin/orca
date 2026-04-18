@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, Image, ComposeProject, SystemHealth, GatewayStatus, GatewayRoute } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
-import { recordMetrics, getDashboardCpuHistory, getDashboardMemHistory, getPerContainerCpuChartHistory, getPerContainerMemChartHistory, clearAllMetrics } from "../lib/metricsStore";
+import { recordMetrics, getDashboardCpuHistory, getDashboardMemHistory, getPerContainerCpuChartHistory, getPerContainerMemChartHistory } from "../lib/metricsStore";
 
 import TimeChart from "../components/TimeChart";
 import LastUpdated from "../components/LastUpdated";
@@ -98,9 +98,11 @@ export default function DashboardPage(props: DashboardPageProps) {
 
   useRefresh(fetchAll);
 
-  // Reset chart history when switching hosts
+  // Reset page-local state when switching hosts.
+  // NOTE: clearAllMetrics() is NOT called here — the metricsStore module
+  // registers its own `orca-host-switch` listener so metrics are cleared
+  // even when the Dashboard isn't mounted.
   const handleHostSwitch = () => {
-    clearAllMetrics();
     setContainerStats({});
     setContainersState("loading");
     setImagesState("loading");

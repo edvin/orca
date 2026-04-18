@@ -30,6 +30,19 @@ fn default_true() -> bool {
     true
 }
 
+/// Deserialize an `Option<String>` such that the empty string maps to `None`.
+/// Avoids surprising `Some("")` values that slip past "is this set?" guards.
+fn deserialize_nonempty_string_opt<'de, D>(d: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(d)?;
+    Ok(match opt {
+        Some(s) if s.is_empty() => None,
+        other => other,
+    })
+}
+
 /// Saved registry credentials.
 /// Passwords are stored as base64-encoded strings in the config file.
 /// This is NOT encryption — it simply avoids plaintext passwords in the JSON.
@@ -89,7 +102,11 @@ pub struct OrcaConfig {
     /// Telemetry opt-in (off by default, obviously).
     pub telemetry: bool,
     /// API authentication token. Auto-generated on first daemon start.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_nonempty_string_opt"
+    )]
     pub api_token: Option<String>,
     /// Saved registry credentials (passwords are base64-encoded, not encrypted).
     #[serde(default)]
@@ -142,8 +159,8 @@ pub struct ScheduledAction {
     pub name: String,
     /// Container name or ID to act on.
     pub container: String,
-    /// Action to perform: "start", "stop", "restart".
-    pub action: String,
+    /// Action to perform.
+    pub action: ScheduledActionKind,
     /// Cron expression (e.g., "0 3 * * 0" for Sunday at 3am).
     pub cron: String,
     #[serde(default = "default_true")]
@@ -154,6 +171,20 @@ pub struct ScheduledAction {
     /// For action="build": name of an orca.yaml build target to execute.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build_target: Option<String>,
+}
+
+/// The kind of action a [`ScheduledAction`] performs.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScheduledActionKind {
+    Start,
+    Stop,
+    Restart,
+    Build,
+    /// Forward-compat catch-all for actions a newer daemon can emit but
+    /// older clients don't know about.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Gateway (managed Caddy reverse proxy) configuration.
@@ -209,6 +240,10 @@ pub enum GatewayTlsMode {
     #[default]
     OrcaCa,
     Custom,
+    /// Forward-compat catch-all for modes a newer daemon can emit but
+    /// older clients don't know about.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -218,6 +253,10 @@ pub enum TraefikIntegrationMode {
     GatewayOnly,
     SeparatePorts,
     GatewayProxiesTraefik,
+    /// Forward-compat catch-all for modes a newer daemon can emit but
+    /// older clients don't know about.
+    #[serde(other)]
+    Unknown,
 }
 
 impl Default for GatewayConfig {
@@ -314,6 +353,10 @@ pub struct DeployRecord {
 pub enum DeployStatus {
     Success,
     Failed,
+    /// Forward-compat catch-all for deploy statuses a newer daemon can
+    /// emit but older clients don't know about.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Extract the registry host from an image reference.
@@ -531,8 +574,16 @@ impl OrcaConfig {
     /// Ensure an API token exists. Generates a cryptographically random
     /// 32-character hex token if none is set, saves the config, and returns
     /// a reference to the token.
+    ///
+    /// Treats `Some("")` as missing so a disk-side empty string cannot slip
+    /// past this guard. Takes an advisory file lock on the config dir for
+    /// the duration of the check to serialize cross-process first-boot
+    /// token-generation races.
     pub fn ensure_token(&mut self) -> anyhow::Result<&str> {
-        if self.api_token.is_none() {
+        // Serialize concurrent ensure_token() callers (e.g. simultaneous
+        // daemon and CLI first-boot) so only one generates a token.
+        let _lock = Self::acquire_save_lock()?;
+        if self.api_token.as_deref().is_none_or(str::is_empty) {
             let token = generate_random_token()?;
             self.api_token = Some(token);
             self.save()?;
@@ -589,11 +640,37 @@ impl OrcaConfig {
         })
     }
 
+    /// Acquire an exclusive advisory file lock on a sidecar `.lock` file
+    /// inside the config dir, for the duration of any mutation. The returned
+    /// guard releases the lock on drop.
+    fn acquire_save_lock() -> anyhow::Result<SaveLock> {
+        let path = Self::config_path();
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("invalid config path: no parent"))?;
+        std::fs::create_dir_all(parent)?;
+        let lock_path = parent.join(".config.lock");
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)?;
+        use fs2::FileExt;
+        file.lock_exclusive()
+            .map_err(|e| anyhow::anyhow!("failed to acquire config lock: {e}"))?;
+        Ok(SaveLock { file })
+    }
+
     /// Persist the config atomically: write to a temp file alongside the target,
     /// fsync it, set 0600 perms on Unix, then rename over the destination.
     /// This prevents truncation/corruption if the process is killed mid-write
     /// and reduces the window for concurrent-writer lost updates.
     pub fn save(&self) -> anyhow::Result<()> {
+        // Exclusive advisory lock serializes concurrent writers (including
+        // across processes like daemon + CLI).
+        let _lock = Self::acquire_save_lock()?;
+
         let path = Self::config_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -640,8 +717,27 @@ impl OrcaConfig {
             let _ = std::fs::remove_file(&tmp_path);
             return Err(e.into());
         }
+
+        // Fsync the parent directory on Unix so the rename is durable after
+        // a crash. Windows doesn't expose this and doesn't need it.
+        #[cfg(unix)]
+        {
+            if let Some(parent) = path.parent()
+                && let Ok(dir) = std::fs::File::open(parent)
+            {
+                let _ = dir.sync_all();
+            }
+        }
+
         Ok(())
     }
+}
+
+/// RAII guard for the config save lock. Holds the exclusive file lock for
+/// its lifetime; the lock is released when the inner file handle is dropped.
+struct SaveLock {
+    #[allow(dead_code)]
+    file: std::fs::File,
 }
 
 #[cfg(test)]

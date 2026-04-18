@@ -12,28 +12,73 @@ pub struct Event {
 #[serde(tag = "type", content = "data")]
 pub enum EventKind {
     // Machine events
-    MachineStarted { name: String },
-    MachineStopped { name: String },
-    MachineError { name: String, error: String },
+    MachineStarted {
+        name: String,
+    },
+    MachineStopped {
+        name: String,
+    },
+    MachineError {
+        name: String,
+        error: String,
+    },
 
     // Container events
-    ContainerCreated { id: String, name: String },
-    ContainerStarted { id: String, name: String },
-    ContainerStopped { id: String, name: String },
-    ContainerRemoved { id: String, name: String },
-    ContainerDied { id: String, name: String, exit_code: i32 },
+    ContainerCreated {
+        id: String,
+        name: String,
+    },
+    ContainerStarted {
+        id: String,
+        name: String,
+    },
+    ContainerStopped {
+        id: String,
+        name: String,
+    },
+    ContainerRemoved {
+        id: String,
+        name: String,
+    },
+    ContainerDied {
+        id: String,
+        name: String,
+        exit_code: i32,
+    },
 
     // Image events
-    ImagePulled { id: String, reference: String },
-    ImageRemoved { id: String },
+    ImagePulled {
+        id: String,
+        reference: String,
+    },
+    ImageRemoved {
+        id: String,
+    },
 
     // Volume events
-    VolumeCreated { name: String },
-    VolumeRemoved { name: String },
+    VolumeCreated {
+        name: String,
+    },
+    VolumeRemoved {
+        name: String,
+    },
 
     // Build events
-    BuildStarted { id: String, tag: String },
-    BuildCompleted { id: String, tag: String, success: bool },
+    BuildStarted {
+        id: String,
+        tag: String,
+    },
+    BuildCompleted {
+        id: String,
+        tag: String,
+        success: bool,
+    },
+
+    /// Forward-compat catch-all for events emitted by newer daemons that
+    /// older clients don't recognize. Keeps deserialization non-fatal
+    /// across version skew.
+    #[serde(other)]
+    Unknown,
 }
 
 #[cfg(test)]

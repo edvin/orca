@@ -25,13 +25,31 @@ fn hub_client() -> &'static reqwest::Client {
 }
 
 pub async fn search_docker_hub(query: &str, limit: u32) -> anyhow::Result<Vec<ImageSearchResult>> {
+    // Clamp limit to a sane upper bound. Docker Hub rejects large page_size
+    // values and an attacker-chosen 10M would hammer upstream for no reason.
+    let limit = limit.min(100);
+
     let url = format!(
         "https://hub.docker.com/v2/search/repositories/?query={}&page_size={}",
         urlencoding::encode(query),
         limit
     );
 
-    let resp = hub_client().get(&url).send().await?.json::<serde_json::Value>().await?;
+    // Cap response body to 2 MiB to avoid unbounded memory growth if
+    // upstream (or a hijacked endpoint) serves a huge response.
+    const MAX_BYTES: usize = 2 * 1024 * 1024;
+    let response = hub_client().get(&url).send().await?;
+    let mut stream = response.bytes_stream();
+    let mut buf: Vec<u8> = Vec::new();
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk?;
+        if buf.len() + bytes.len() > MAX_BYTES {
+            anyhow::bail!("Docker Hub response exceeded {} bytes", MAX_BYTES);
+        }
+        buf.extend_from_slice(&bytes);
+    }
+    let resp: serde_json::Value = serde_json::from_slice(&buf)?;
 
     let results = resp
         .get("results")

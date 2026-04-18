@@ -92,6 +92,10 @@ export default function LogViewer(props: LogViewerProps) {
   const [fontSize, setFontSize] = createSignal(
     parseInt(localStorage.getItem("log-font-size") || "13", 10)
   );
+  // While the user has scrolled up, we stop trimming the head of the buffer
+  // so their viewport doesn't silently jump to unrelated content. New lines
+  // queue in `pendingLines` and are flushed when they re-enable autoscroll.
+  const [pendingLines, setPendingLines] = createSignal<string[]>([]);
   let logContainer: HTMLDivElement | undefined;
   let filterRef: HTMLInputElement | undefined;
 
@@ -154,12 +158,22 @@ export default function LogViewer(props: LogViewerProps) {
           if (disposed) return;
           if (event.payload.containerId === containerId) {
             const newLines = processLines([event.payload.line]);
-            if (newLines.length > 0) {
-              setLines((prev) => {
+            if (newLines.length === 0) return;
+            // When the user has scrolled up, trimming the head of the
+            // buffer would shift their viewport to unrelated content.
+            // Freeze the buffer and queue incoming lines until they
+            // re-enable autoscroll.
+            if (!autoScroll() && lines().length + newLines.length > MAX_LINES) {
+              setPendingLines((prev) => {
                 const combined = [...prev, ...newLines];
                 return combined.length > MAX_LINES ? combined.slice(-MAX_LINES) : combined;
               });
+              return;
             }
+            setLines((prev) => {
+              const combined = [...prev, ...newLines];
+              return combined.length > MAX_LINES ? combined.slice(-MAX_LINES) : combined;
+            });
           }
         }
       );
@@ -228,11 +242,31 @@ export default function LogViewer(props: LogViewerProps) {
     compileHighlight(filter(), useRegex(), caseSensitive()),
   );
 
+  const flushPendingLines = () => {
+    const pending = pendingLines();
+    if (pending.length === 0) return;
+    setPendingLines([]);
+    setLines((prev) => {
+      const combined = [...prev, ...pending];
+      return combined.length > MAX_LINES ? combined.slice(-MAX_LINES) : combined;
+    });
+  };
+
+  const resumeAutoScroll = () => {
+    setAutoScroll(true);
+    flushPendingLines();
+    if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
+  };
+
   const handleScroll = () => {
     if (!logContainer) return;
     const { scrollTop, scrollHeight, clientHeight } = logContainer;
     // If user scrolled up more than 50px from bottom, disable auto-scroll
-    setAutoScroll(scrollHeight - scrollTop - clientHeight < 50);
+    const atBottom = scrollHeight - scrollTop - clientHeight < 50;
+    const wasOn = autoScroll();
+    setAutoScroll(atBottom);
+    // Scrolling back to the bottom should unfreeze the buffer.
+    if (!wasOn && atBottom) flushPendingLines();
   };
 
   const copyAll = () => {
@@ -350,9 +384,10 @@ export default function LogViewer(props: LogViewerProps) {
           <button
             class={`btn btn-sm ${autoScroll() ? "btn-primary" : ""}`}
             onClick={() => {
-              setAutoScroll(!autoScroll());
-              if (!autoScroll() && logContainer) {
-                logContainer.scrollTop = logContainer.scrollHeight;
+              if (autoScroll()) {
+                setAutoScroll(false);
+              } else {
+                resumeAutoScroll();
               }
             }}
           >
@@ -385,6 +420,32 @@ export default function LogViewer(props: LogViewerProps) {
           <div class="log-loading">Loading logs...</div>
         }
       >
+        <div style={{ position: "relative", flex: "1", "min-height": "0", display: "flex", "flex-direction": "column" }}>
+        <Show when={pendingLines().length > 0}>
+          <button
+            onClick={resumeAutoScroll}
+            style={{
+              position: "absolute",
+              bottom: "12px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              "z-index": "10",
+              background: "#388bfd",
+              color: "#fff",
+              border: "none",
+              "border-radius": "999px",
+              padding: "6px 14px",
+              "font-size": "12px",
+              "font-weight": "600",
+              cursor: "pointer",
+              "box-shadow": "0 4px 12px rgba(0,0,0,0.4)",
+              "font-family": "inherit",
+            }}
+            title="Click to resume auto-scroll and load buffered lines"
+          >
+            {pendingLines().length} new lines — click to resume
+          </button>
+        </Show>
         <div
           class="log-content"
           ref={logContainer}
@@ -430,6 +491,7 @@ export default function LogViewer(props: LogViewerProps) {
               }}
             </For>
           </Show>
+        </div>
         </div>
       </Show>
     </div>

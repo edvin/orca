@@ -19,6 +19,12 @@ type PendingConfirm = {
 // clobbered if two callers invoke confirm() before the first is answered.
 const [queue, setQueue] = createSignal<PendingConfirm[]>([]);
 const [isOpen, setIsOpen] = createSignal(false);
+// When the queue advances to a new head (either by answering one dialog or
+// because a new confirm arrived), we briefly refuse key-based confirmation
+// so a rapid Enter double-tap can't answer the next dialog before the user
+// has a chance to see its prompt.
+let keyGuardUntil = 0;
+const KEY_GUARD_MS = 150;
 
 function current(): PendingConfirm | undefined {
   return queue()[0];
@@ -52,6 +58,10 @@ function handleResult(result: boolean) {
   setQueue((q) => q.slice(1));
   if (queue().length === 0) {
     setIsOpen(false);
+  } else {
+    // Queue still has items — a new head just became visible. Block
+    // keyboard confirmation briefly so users don't auto-answer it.
+    keyGuardUntil = performance.now() + KEY_GUARD_MS;
   }
   head?.resolve(result);
 }
@@ -64,6 +74,10 @@ export default function ConfirmDialog() {
   const onKey = (e: KeyboardEvent) => {
     if (!isOpen()) return;
     if (e.key === "Escape") {
+      if (performance.now() < keyGuardUntil) {
+        e.preventDefault();
+        return;
+      }
       e.preventDefault();
       handleResult(false);
     } else if (e.key === "Enter") {
@@ -73,6 +87,12 @@ export default function ConfirmDialog() {
         target
         && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
       ) {
+        return;
+      }
+      // Swallow Enter during the guard window so a rapid double-tap can't
+      // blow through two queued dialogs without the user seeing the second.
+      if (performance.now() < keyGuardUntil) {
+        e.preventDefault();
         return;
       }
       e.preventDefault();

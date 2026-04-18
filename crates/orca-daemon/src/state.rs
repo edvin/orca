@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::{Mutex, RwLock, broadcast};
+use tokio::sync::{Mutex, Notify, RwLock, broadcast};
 
 use orca_backend_common::BollardRuntime;
 use orca_backend_common::k8s::K3sManager;
@@ -18,6 +18,10 @@ pub struct AppState {
     pub events_tx: broadcast::Sender<Event>,
     /// API authentication token. Empty string means auth is disabled (--no-auth).
     pub api_token: String,
+    /// Fired when the runtime is hot-swapped so background tasks can
+    /// re-subscribe against the new runtime immediately instead of
+    /// polling.
+    pub swap_notify: Arc<Notify>,
 }
 
 impl AppState {
@@ -34,6 +38,7 @@ impl AppState {
             k8s,
             events_tx,
             api_token,
+            swap_notify: Arc::new(Notify::new()),
         }
     }
 
@@ -46,6 +51,10 @@ impl AppState {
     pub async fn swap_runtime(&self, new_runtime: Arc<BollardRuntime>) {
         let mut guard = self.runtime.write().await;
         *guard = new_runtime;
+        drop(guard);
+        // Wake any task that was waiting on the old subscription so it can
+        // re-subscribe against the new runtime immediately.
+        self.swap_notify.notify_waiters();
         tracing::info!("Runtime connection hot-swapped successfully");
     }
 }

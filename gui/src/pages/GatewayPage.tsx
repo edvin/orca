@@ -81,6 +81,10 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [traefikHttpPort, setTraefikHttpPort] = createSignal("30080");
   const [traefikHttpsPort, setTraefikHttpsPort] = createSignal("30443");
   const [applyingTraefik, setApplyingTraefik] = createSignal(false);
+  // Gate the daemon→form prime so refresh (Ctrl-R / host-switch) doesn't
+  // clobber in-progress edits. Reset when the user explicitly saves/cancels.
+  const [traefikFormDirty, setTraefikFormDirty] = createSignal(false);
+  let traefikFormInitialized = false;
 
   // Dismissed suggestions
   const [dismissedKeys, setDismissedKeys] = createSignal<string[]>([]);
@@ -170,9 +174,15 @@ export default function GatewayPage(props: GatewayPageProps) {
     try {
       const ts = (await invoke("gateway_traefik_status")) as TraefikStatus;
       setTraefikStatus(ts);
-      setTraefikMode(ts.mode || "gateway_only");
-      setTraefikHttpPort(String(ts.traefik_http_port || 30080));
-      setTraefikHttpsPort(String(ts.traefik_https_port || 30443));
+      // Only prime the form fields on first fetch or when the user hasn't
+      // started editing — otherwise a refresh (Ctrl-R / host-switch) would
+      // clobber in-progress edits.
+      if (!traefikFormInitialized || !traefikFormDirty()) {
+        setTraefikMode(ts.mode || "gateway_only");
+        setTraefikHttpPort(String(ts.traefik_http_port || 30080));
+        setTraefikHttpsPort(String(ts.traefik_https_port || 30443));
+        traefikFormInitialized = true;
+      }
     } catch { /* K8s may not be running */ }
   };
 
@@ -185,6 +195,8 @@ export default function GatewayPage(props: GatewayPageProps) {
         traefikHttpsPort: parseInt(traefikHttpsPort(), 10) || 30443,
       });
       showToast("Traefik integration mode updated", "success");
+      // Successfully persisted — form is no longer dirty, safe to re-prime.
+      setTraefikFormDirty(false);
       await fetchTraefikStatus();
     } catch (e) {
       logError(`Failed to set Traefik mode: ${e}`);
@@ -367,17 +379,65 @@ export default function GatewayPage(props: GatewayPageProps) {
   const handleSaveEdit = async () => {
     const original = editRoute();
     if (!original) return;
+
+    // Validate ALL fields up-front — before any daemon mutation — so we
+    // never end up in a half-applied state where the old route has been
+    // removed and the new one failed to add.
+    const rawHostname = editHostname().trim();
+    if (!rawHostname) {
+      showToast("Hostname is required", "error");
+      return;
+    }
+    const containerName = editContainer().trim();
+    if (!containerName) {
+      showToast("Container is required", "error");
+      return;
+    }
+    const port = parseInt(editPort(), 10);
+    if (isNaN(port) || port < 1 || port > 65535) {
+      showToast("Port must be between 1 and 65535", "error");
+      return;
+    }
+    const domain = status()?.domain || "localhost";
+    const newHostname = rawHostname.includes(".") ? rawHostname : `${rawHostname}.${domain}`;
+    const pathValue = editPath().trim() || null;
+
     setEditSaving(true);
     try {
-      await invoke("gateway_remove_route", { hostname: original.hostname });
-      const domain = status()?.domain || "localhost";
-      const newHostname = editHostname().includes(".") ? editHostname() : `${editHostname()}.${domain}`;
-      await invoke("gateway_add_route", {
-        hostname: newHostname,
-        containerName: editContainer(),
-        port: parseInt(editPort(), 10),
-        path: editPath().trim() || null,
-      });
+      if (newHostname === original.hostname) {
+        // Hostname unchanged — use the in-place update endpoint. It
+        // accepts container/port/enabled changes atomically.
+        await invoke("gateway_update_route", {
+          hostname: original.hostname,
+          containerName,
+          port,
+          enabled: original.enabled,
+        });
+      } else {
+        // Hostname changed — the PUT endpoint keys on hostname so it
+        // can't rename. Add under the new hostname FIRST, then remove
+        // the old. If the add fails (port conflict, invalid hostname,
+        // daemon error), the original route is still intact.
+        await invoke("gateway_add_route", {
+          hostname: newHostname,
+          containerName,
+          port,
+          path: pathValue,
+        });
+        try {
+          await invoke("gateway_remove_route", { hostname: original.hostname });
+        } catch (removeErr) {
+          // Both routes exist now — surface a specific warning so the
+          // user can clean up manually rather than silently leaving a
+          // duplicate.
+          logError(`Added new route but failed to remove old "${original.hostname}": ${removeErr}`);
+          showToast(`New route added but failed to remove old "${original.hostname}" — remove it manually`, "error");
+          setEditRoute(null);
+          setEditSaving(false);
+          await refresh();
+          return;
+        }
+      }
       showToast("Route updated", "success");
       setEditRoute(null);
       await refresh();
@@ -1210,7 +1270,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                   border: traefikMode() === "gateway_only" ? "1px solid #1f6feb" : "1px solid #30363d",
                   background: traefikMode() === "gateway_only" ? "rgba(31,111,235,0.08)" : "#161b22",
                 }}
-                onClick={() => setTraefikMode("gateway_only")}
+                onClick={() => { setTraefikMode("gateway_only"); setTraefikFormDirty(true); }}
               >
                 <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "8px" }}>
                   <div style={{
@@ -1232,7 +1292,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                   border: traefikMode() === "separate_ports" ? "1px solid #1f6feb" : "1px solid #30363d",
                   background: traefikMode() === "separate_ports" ? "rgba(31,111,235,0.08)" : "#161b22",
                 }}
-                onClick={() => setTraefikMode("separate_ports")}
+                onClick={() => { setTraefikMode("separate_ports"); setTraefikFormDirty(true); }}
               >
                 <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "8px" }}>
                   <div style={{
@@ -1254,7 +1314,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                   border: traefikMode() === "gateway_proxies_traefik" ? "1px solid #1f6feb" : "1px solid #30363d",
                   background: traefikMode() === "gateway_proxies_traefik" ? "rgba(31,111,235,0.08)" : "#161b22",
                 }}
-                onClick={() => setTraefikMode("gateway_proxies_traefik")}
+                onClick={() => { setTraefikMode("gateway_proxies_traefik"); setTraefikFormDirty(true); }}
               >
                 <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "8px" }}>
                   <div style={{
@@ -1275,11 +1335,11 @@ export default function GatewayPage(props: GatewayPageProps) {
                 <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
                   <div class="form-group" style={{ "margin-bottom": "0" }}>
                     <label class="form-label" style={{ "font-size": "11px" }}>Traefik HTTP Port</label>
-                    <input class="form-input" type="number" value={traefikHttpPort()} onInput={(e) => setTraefikHttpPort(e.currentTarget.value)} style={{ width: "100px" }} />
+                    <input class="form-input" type="number" value={traefikHttpPort()} onInput={(e) => { setTraefikHttpPort(e.currentTarget.value); setTraefikFormDirty(true); }} style={{ width: "100px" }} />
                   </div>
                   <div class="form-group" style={{ "margin-bottom": "0" }}>
                     <label class="form-label" style={{ "font-size": "11px" }}>Traefik HTTPS Port</label>
-                    <input class="form-input" type="number" value={traefikHttpsPort()} onInput={(e) => setTraefikHttpsPort(e.currentTarget.value)} style={{ width: "100px" }} />
+                    <input class="form-input" type="number" value={traefikHttpsPort()} onInput={(e) => { setTraefikHttpsPort(e.currentTarget.value); setTraefikFormDirty(true); }} style={{ width: "100px" }} />
                   </div>
                 </div>
               </div>
@@ -1631,7 +1691,7 @@ export default function GatewayPage(props: GatewayPageProps) {
             </div>
             <div class="modal-footer">
               <button class="btn" onClick={() => setEditRoute(null)} disabled={editSaving()}>Cancel</button>
-              <button class="btn btn-primary" onClick={handleSaveEdit} disabled={editSaving() || !editHostname().trim()}>
+              <button class="btn btn-primary" onClick={handleSaveEdit} disabled={editSaving() || !editHostname().trim() || !editContainer().trim() || isNaN(parseInt(editPort(), 10))}>
                 {editSaving() ? "Saving..." : "Save Changes"}
               </button>
             </div>

@@ -38,6 +38,14 @@ import KeyboardShortcuts from "./components/KeyboardShortcuts";
 export type Page = "fleet" | "dashboard" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "builds" | "volumes" | "volume-detail" | "networks" | "gateway" | "kubernetes" | "environment" | "activity" | "settings";
 
 export default function App() {
+  // The AI assistant opens this same App in a second webview via a #ai hash.
+  // Detect it up front so we can skip every main-window side effect
+  // (daemon bootstrap, event subscription, deep-link listener, keyboard
+  // shortcuts, fleet polling). If we didn't skip, both webviews would race
+  // on `subscribe_events` — the Rust side aborts the previous subscription
+  // on each call, so whichever window wins would silently starve the other.
+  const isAiWindow = typeof window !== "undefined" && window.location.hash === "#ai";
+
   const [page, setPage] = createSignal<Page>("dashboard");
   const [detailId, setDetailId] = createSignal<string | null>(null);
   const [daemonStatus, setDaemonStatus] = createSignal<string>("connecting");
@@ -296,6 +304,7 @@ export default function App() {
   // silent after a daemon restart.
   let prevDaemonStatus: string | null = null;
   createEffect(() => {
+    if (isAiWindow) return; // AI window doesn't manage daemon/events
     const status = daemonStatus();
     const wasRunning = prevDaemonStatus === "running";
     prevDaemonStatus = status;
@@ -318,6 +327,12 @@ export default function App() {
   });
 
   onMount(() => {
+    // AI window runs in a separate webview and only renders <AiWindow/>.
+    // Skip every main-window bootstrap (deep-link listener, event stream,
+    // daemon polling, global shortcuts) so we don't fight the main window
+    // for the single daemon event subscription.
+    if (isAiWindow) return;
+
     // Listen for deep link URLs (orca:// protocol). Guard against the
     // unmount-before-subscribe race: if the component has been cleaned up
     // before onOpenUrl resolves, we immediately unsubscribe and drop the
@@ -417,9 +432,6 @@ export default function App() {
       console.error("Resize failed:", err);
     }
   };
-
-  // If loaded with #ai hash, render standalone AI window
-  const isAiWindow = window.location.hash === "#ai";
 
   return (
     <Show when={!isAiWindow} fallback={<AiWindow />}>

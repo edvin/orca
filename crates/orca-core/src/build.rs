@@ -52,6 +52,10 @@ pub enum BuildStatus {
     Success,
     Failed,
     Cancelled,
+    /// Forward-compat catch-all for states a newer daemon can emit but
+    /// older clients don't know about.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -64,6 +68,10 @@ pub enum BuildSource {
     Webhook,
     Url,
     External,
+    /// Forward-compat catch-all for sources a newer daemon can emit but
+    /// older clients don't know about.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -21,3 +21,4 @@ hex = "0.4"
 subtle = "2"
 getrandom = { workspace = true }
 rand = { workspace = true }
+fs2 = "0.4"

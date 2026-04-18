@@ -13,6 +13,45 @@ const CADDY_IMAGE: &str = "caddy:2-alpine";
 const CADDY_CONTAINER: &str = "orca-gateway";
 const CADDY_ADMIN_PORT: u16 = 2019;
 
+/// HTML-entity-escape a user-supplied string for safe insertion into
+/// the landing page's HTML. We render stack-link names, hostnames,
+/// container names, and URLs into an `index.html` that's served to
+/// every gateway user; anything not escaped here is a stored XSS sink.
+fn escape_html(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Validate a URL that's about to be rendered as an `href`. Returns the
+/// original string if it parses as http/https/mailto; otherwise returns
+/// `#` so a malformed or `javascript:` URL cannot become a clickable
+/// script-execution sink on the landing page.
+fn sanitize_href(url: &str) -> String {
+    match reqwest::Url::parse(url) {
+        Ok(parsed) => match parsed.scheme() {
+            "http" | "https" | "mailto" => url.to_string(),
+            scheme => {
+                tracing::warn!("gateway landing page: refusing URL with disallowed scheme '{scheme}' (url redacted)");
+                "#".to_string()
+            }
+        },
+        Err(e) => {
+            tracing::warn!("gateway landing page: refusing unparseable URL: {e}");
+            "#".to_string()
+        }
+    }
+}
+
 /// Check if the gateway ports are available.
 /// Pass the current gateway config ports to exclude them from conflict detection
 /// (the gateway itself holds those ports when running).
@@ -315,15 +354,30 @@ fn ca_dir() -> std::path::PathBuf {
 }
 
 /// Write user-provided custom cert/key PEM content to files in the certs directory.
+/// Hard upper bound on accepted cert/key PEM input so a misbehaving
+/// caller can't force an unbounded write.
+const MAX_CUSTOM_PEM_BYTES: usize = 64 * 1024;
+
 fn write_custom_cert_files(config: &GatewayConfig) -> Result<()> {
     let dir = certs_dir();
     std::fs::create_dir_all(&dir)?;
 
     if let Some(cert_pem) = &config.custom_cert.as_deref().filter(|s| !s.trim().is_empty()) {
+        if cert_pem.len() > MAX_CUSTOM_PEM_BYTES {
+            anyhow::bail!("custom certificate PEM exceeds {MAX_CUSTOM_PEM_BYTES} byte limit");
+        }
+        // Parse the PEM to ensure we're writing a syntactically valid
+        // certificate rather than an arbitrary filesystem path or junk.
+        rcgen::CertificateParams::from_ca_cert_pem(cert_pem)
+            .map_err(|e| anyhow::anyhow!("custom certificate is not a valid PEM: {e}"))?;
         std::fs::write(dir.join("cert.pem"), cert_pem)?;
         tracing::info!("Wrote custom certificate to {}", dir.join("cert.pem").display());
     }
     if let Some(key_pem) = &config.custom_key.as_deref().filter(|s| !s.trim().is_empty()) {
+        if key_pem.len() > MAX_CUSTOM_PEM_BYTES {
+            anyhow::bail!("custom key PEM exceeds {MAX_CUSTOM_PEM_BYTES} byte limit");
+        }
+        rcgen::KeyPair::from_pem(key_pem).map_err(|e| anyhow::anyhow!("custom key is not a valid PEM: {e}"))?;
         let key_path = dir.join("key.pem");
         std::fs::write(&key_path, key_pem)?;
         #[cfg(unix)]
@@ -521,16 +575,19 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     let mut load_files: Vec<serde_json::Value> = enabled_routes
         .iter()
         .map(|route| match config.tls_mode {
-            GatewayTlsMode::OrcaCa => serde_json::json!({
+            GatewayTlsMode::OrcaCa | GatewayTlsMode::Unknown => serde_json::json!({
                 "certificate": format!("/certs/{}.pem", route.hostname),
                 "key": format!("/certs/{}-key.pem", route.hostname),
             }),
             GatewayTlsMode::Custom => {
-                let cert = config.custom_cert.as_deref().unwrap_or("/certs/cert.pem");
-                let key = config.custom_key.as_deref().unwrap_or("/certs/key.pem");
+                // The custom_cert/custom_key fields hold PEM *content*, not a
+                // path. `write_custom_cert_files` writes that content to
+                // fixed locations inside the certs volume; always reference
+                // those files so Caddy doesn't try to parse a PEM blob as a
+                // path or read from an arbitrary filesystem location.
                 serde_json::json!({
-                    "certificate": cert,
-                    "key": key,
+                    "certificate": "/certs/cert.pem",
+                    "key": "/certs/key.pem",
                 })
             }
         })
@@ -708,13 +765,16 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
     let default_env = ordered_envs.first().cloned().unwrap_or_else(|| "local".to_string());
     let has_envs = !ordered_envs.is_empty();
 
-    // Build tab buttons
+    // Build tab buttons. Env names come from user-controlled
+    // `stack_links`, so they must be HTML-escaped for both attribute and
+    // text-node contexts before interpolation.
     let mut tab_buttons = String::new();
     for env in &ordered_envs {
         let active = if *env == default_env { " active" } else { "" };
-        let label = capitalize(env);
+        let label = escape_html(&capitalize(env));
+        let env_attr = escape_html(env);
         tab_buttons.push_str(&format!(
-            r#"<button class="env-tab{active}" data-env="{env}" onclick="switchEnv(this,'{env}')">{label}</button>"#,
+            r#"<button class="env-tab{active}" data-env="{env_attr}" onclick="switchEnv(this,'{env_attr}')">{label}</button>"#,
         ));
     }
 
@@ -801,13 +861,13 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
                           </div>
                         </div>"##,
                         color = color,
-                        initial = initial,
-                        name = link.name,
-                        display_url = display_url,
+                        initial = escape_html(&initial),
+                        name = escape_html(&link.name),
+                        display_url = escape_html(&display_url),
                     ));
                 } else if let Some(ref url) = url_opt {
                     let container_line = if let Some(ref info) = container_info {
-                        format!(r#"<div class="card-target">{info}</div>"#)
+                        format!(r#"<div class="card-target">{}</div>"#, escape_html(info))
                     } else {
                         String::new()
                     };
@@ -821,11 +881,11 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
                           </div>
                           <div class="card-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
                         </a>"##,
-                        url = url,
+                        url = escape_html(&sanitize_href(url)),
                         color = color,
-                        initial = initial,
-                        name = link.name,
-                        display_url = display_url,
+                        initial = escape_html(&initial),
+                        name = escape_html(&link.name),
+                        display_url = escape_html(&display_url),
                         container_line = container_line,
                     ));
                 }
@@ -838,14 +898,14 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
                 let stack_label = if group.stack.is_empty() {
                     String::new()
                 } else {
-                    format!(r#" <span class="group-stack">{}</span>"#, group.stack)
+                    format!(r#" <span class="group-stack">{}</span>"#, escape_html(&group.stack))
                 };
                 panel_content.push_str(&format!(
                     r#"<div class="group-section">
                       <div class="group-header"><span class="group-line"></span><span class="group-name">{group_name}{stack_label}</span><span class="group-line"></span></div>
                       <div class="card-grid">{cards_html}</div>
                     </div>"#,
-                    group_name = group.group,
+                    group_name = escape_html(&group.group),
                     stack_label = stack_label,
                     cards_html = cards_html,
                 ));
@@ -893,12 +953,12 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
                           </div>
                           <div class="card-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
                         </a>"##,
-                        url = url,
+                        url = escape_html(&sanitize_href(&url)),
                         color = color,
-                        initial = initial,
-                        display_name = display_name,
-                        display_url = display_url,
-                        container = route.container_name,
+                        initial = escape_html(&initial),
+                        display_name = escape_html(&display_name),
+                        display_url = escape_html(&display_url),
+                        container = escape_html(&route.container_name),
                         port = route.port,
                     ));
                 }
@@ -922,13 +982,13 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
                   <div class="empty-title">No {env_label} links configured</div>
                   <div class="empty-desc">Add them to your <code>orca.yaml</code> stack links.</div>
                 </div>"##,
-                env_label = env_label,
+                env_label = escape_html(&env_label),
             ));
         }
 
         env_panels.push_str(&format!(
             r#"<div class="env-panel" data-env="{env}" style="display:{display}">{panel_content}</div>"#,
-            env = env,
+            env = escape_html(env),
             display = display,
             panel_content = panel_content,
         ));
@@ -974,12 +1034,12 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
                   </div>
                   <div class="card-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
                 </a>"##,
-                url = url,
+                url = escape_html(&sanitize_href(&url)),
                 color = color,
-                initial = initial,
-                display_name = display_name,
-                display_url = display_url,
-                container = route.container_name,
+                initial = escape_html(&initial),
+                display_name = escape_html(&display_name),
+                display_url = escape_html(&display_url),
+                container = escape_html(&route.container_name),
                 port = route.port,
             ));
         }
@@ -1273,8 +1333,8 @@ function switchEnv(btn,env){{
 </script>
 </body>
 </html>"##,
-        domain = domain,
-        port_suffix = port_suffix,
+        domain = escape_html(domain),
+        port_suffix = escape_html(&port_suffix),
         count = count,
         count_label = count_label,
         main_content = main_content,
@@ -1456,14 +1516,18 @@ mod tests {
     }
 
     #[test]
-    fn test_build_caddy_config_custom_tls_with_explicit_paths() {
+    fn test_build_caddy_config_custom_tls_ignores_field_values_for_path() {
+        // custom_cert / custom_key now hold PEM *content*, not filesystem
+        // paths. Regardless of the field values, Caddy must be pointed at
+        // the fixed /certs/cert.pem and /certs/key.pem locations where
+        // write_custom_cert_files() wrote the validated content.
         let config = GatewayConfig {
             domain: "example.com".to_string(),
             http_port: 80,
             https_port: 443,
             tls_mode: GatewayTlsMode::Custom,
-            custom_cert: Some("/etc/ssl/my-cert.pem".to_string()),
-            custom_key: Some("/etc/ssl/my-key.pem".to_string()),
+            custom_cert: Some("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----".to_string()),
+            custom_key: Some("-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----".to_string()),
             routes: vec![make_route("app", "frontend-1", 3000)],
             ..Default::default()
         };
@@ -1472,8 +1536,8 @@ mod tests {
 
         let load_files = caddy["apps"]["tls"]["certificates"]["load_files"].as_array().unwrap();
         let cert_entry = &load_files[0];
-        assert_eq!(cert_entry["certificate"], "/etc/ssl/my-cert.pem");
-        assert_eq!(cert_entry["key"], "/etc/ssl/my-key.pem");
+        assert_eq!(cert_entry["certificate"], "/certs/cert.pem");
+        assert_eq!(cert_entry["key"], "/certs/key.pem");
     }
 
     #[test]

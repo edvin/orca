@@ -943,6 +943,7 @@ fn cmd_config_export(include_secrets: bool) -> anyhow::Result<()> {
     let tls_mode = match config.gateway.tls_mode {
         orca_core::config::GatewayTlsMode::OrcaCa => "orca_ca".to_string(),
         orca_core::config::GatewayTlsMode::Custom => "custom".to_string(),
+        orca_core::config::GatewayTlsMode::Unknown => "unknown".to_string(),
     };
 
     let routes: Vec<RouteExport> = config
@@ -1045,6 +1046,7 @@ fn cmd_config_get(key: &str) -> anyhow::Result<()> {
         "gateway.tls_mode" => match config.gateway.tls_mode {
             orca_core::config::GatewayTlsMode::OrcaCa => "orca_ca".to_string(),
             orca_core::config::GatewayTlsMode::Custom => "custom".to_string(),
+            orca_core::config::GatewayTlsMode::Unknown => "unknown".to_string(),
         },
         _ => {
             eprintln!("Unknown key: {key}");

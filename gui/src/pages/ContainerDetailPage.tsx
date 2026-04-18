@@ -58,6 +58,11 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [exposePort, setExposePort] = createSignal("80");
   const [exposing, setExposing] = createSignal(false);
   const [existingRoute, setExistingRoute] = createSignal<{ hostname: string; url: string } | null>(null);
+  // Configured gateway domain (e.g. "localhost", "dev.example.com"). We
+  // load this when opening the expose dialog so the suffix / preview
+  // / POST body all use the user's actual configured domain rather than
+  // hardcoding ".localhost".
+  const [exposeDomain, setExposeDomain] = createSignal("localhost");
 
   // Commit dialog state
   const [showCommitDialog, setShowCommitDialog] = createSignal(false);
@@ -344,6 +349,15 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const openExposeDialog = async () => {
     const c = container();
     if (!c) return;
+    // Pull the configured gateway domain so the hostname suffix and URL
+    // preview reflect the user's real setup (matches how GatewayPage
+    // handleAddRoute / handleSaveEdit resolve the domain).
+    try {
+      const s = (await invoke("gateway_status")) as { domain?: string } | null;
+      setExposeDomain(s?.domain || "localhost");
+    } catch {
+      setExposeDomain("localhost");
+    }
     // Check if route already exists
     try {
       const routes = (await invoke("gateway_list_routes")) as Array<{ hostname: string; container_name: string; url: string }>;
@@ -375,7 +389,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     const port = parseInt(exposePort(), 10);
     if (!hostname || isNaN(port)) return;
 
-    const fullHostname = hostname.includes(".") ? hostname : `${hostname}.localhost`;
+    const domain = exposeDomain() || "localhost";
+    const fullHostname = hostname.includes(".") ? hostname : `${hostname}.${domain}`;
     setExposing(true);
     try {
       await invoke("gateway_add_route", {
@@ -1740,7 +1755,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                         autofocus
                         style={{ flex: "1" }}
                       />
-                      <span style={{ color: "#8b949e", "font-size": "13px" }}>.localhost</span>
+                      <span style={{ color: "#8b949e", "font-size": "13px" }}>.{exposeDomain()}</span>
                     </div>
                   </div>
                   <div class="form-group">
@@ -1756,7 +1771,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   </div>
                   <Show when={exposeHostname().trim()}>
                     <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "8px" }}>
-                      URL: <span class="mono" style={{ color: "#58a6ff" }}>https://{exposeHostname().includes(".") ? exposeHostname() : `${exposeHostname()}.localhost`}</span>
+                      URL: <span class="mono" style={{ color: "#58a6ff" }}>https://{exposeHostname().includes(".") ? exposeHostname() : `${exposeHostname()}.${exposeDomain()}`}</span>
                     </div>
                   </Show>
                 </div>

@@ -55,6 +55,28 @@ pub fn validate_k8s_name(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Validate a Secret/ConfigMap *data key*.
+///
+/// Kubernetes allows keys like `API_TOKEN` that contain `_`, which
+/// `validate_k8s_name` rejects. Per the K8s API reference, keys must
+/// consist only of alphanumerics, `-`, `_`, and `.`, be 1-253 chars,
+/// and not be `.` or `..`.
+pub fn validate_k8s_data_key(k: &str) -> anyhow::Result<()> {
+    if k.is_empty() || k.len() > 253 {
+        anyhow::bail!("Invalid Kubernetes data key: length");
+    }
+    if k == "." || k == ".." {
+        anyhow::bail!("Invalid Kubernetes data key: reserved");
+    }
+    if !k
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        anyhow::bail!("Invalid Kubernetes data key: {k}");
+    }
+    Ok(())
+}
+
 /// Extract the `kind` of every YAML document in a multi-document string.
 /// Returns one entry per document. Any document that is empty or missing a
 /// `kind` field yields `None` for that slot; callers must reject such
@@ -637,7 +659,10 @@ impl K3sManager {
         // Step 2b: Merge k3s kubeconfig into ~/.kube/config as "orca" context
         for _ in 0..10 {
             if std::path::Path::new("/etc/rancher/k3s/k3s.yaml").exists() {
-                match Self::merge_kubeconfig_context() {
+                let merge_result = tokio::task::spawn_blocking(Self::merge_kubeconfig_context)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("join error in merge_kubeconfig_context: {e}"))?;
+                match merge_result {
                     Ok(()) => {
                         log.push_str(">>> Added 'orca' context to ~/.kube/config\n");
                         log.push_str("    Use: kubectl --context orca get pods\n\n");
@@ -766,7 +791,18 @@ impl K3sManager {
                                         let fixed = kubeconfig.replace("127.0.0.1", "localhost");
 
                                         // Safe merge — file-based, never passes TLS keys as argv.
-                                        match merge_k3s_kubeconfig_safely(&fixed, &kube_dir, &Self::extended_path()) {
+                                        let ext_path = Self::extended_path();
+                                        let fixed_clone = fixed.clone();
+                                        let kube_dir_clone = kube_dir.clone();
+                                        let merge_res = tokio::task::spawn_blocking(move || {
+                                            merge_k3s_kubeconfig_safely(&fixed_clone, &kube_dir_clone, &ext_path)
+                                        })
+                                        .await;
+                                        let merge_res = match merge_res {
+                                            Ok(r) => r,
+                                            Err(e) => Err(anyhow::anyhow!("join error: {e}")),
+                                        };
+                                        match merge_res {
                                             Ok(()) => {
                                                 // Verify the context was created
                                                 let verify = std::process::Command::new("kubectl")
@@ -940,7 +976,18 @@ impl K3sManager {
                     // but we access it via localhost from Windows
                     let fixed = kubeconfig.replace("127.0.0.1", "localhost");
 
-                    match merge_k3s_kubeconfig_safely(&fixed, &kube_dir, &Self::extended_path()) {
+                    let ext_path = Self::extended_path();
+                    let fixed_clone = fixed.clone();
+                    let kube_dir_clone = kube_dir.clone();
+                    let merge_res = tokio::task::spawn_blocking(move || {
+                        merge_k3s_kubeconfig_safely(&fixed_clone, &kube_dir_clone, &ext_path)
+                    })
+                    .await;
+                    let merge_res = match merge_res {
+                        Ok(r) => r,
+                        Err(e) => Err(anyhow::anyhow!("join error: {e}")),
+                    };
+                    match merge_res {
                         Ok(()) => {
                             // Clear cached K8s client
                             *self.client.lock().await = None;
@@ -1516,99 +1563,18 @@ impl K8sManager for K3sManager {
         let dest = dirs::home_dir()
             .ok_or_else(|| anyhow::anyhow!("cannot resolve home directory"))?
             .join(".kube");
-        tokio::fs::create_dir_all(&dest).await?;
 
         let dest_file = dest.join("config");
 
-        // Rewrite the source so its default context is renamed to "orca"
-        // BEFORE we merge. Previously we merged then called
-        // `kubectl config rename-context default orca` against the user's
-        // main kubeconfig, silently clobbering any pre-existing "default"
-        // context (e.g. minikube, docker-desktop).
-        let renamed = rename_kubeconfig_default_to_orca(&source)
-            .map_err(|e| anyhow::anyhow!("failed to rewrite k3s kubeconfig: {e}"))?;
+        // Delegate to the shared sync helper which does tempfile RAII cleanup
+        // correctly — wrap in spawn_blocking since it performs synchronous
+        // std::fs and std::process::Command calls.
+        let extended_path = Self::extended_path();
+        let dest_for_blocking = dest.clone();
+        tokio::task::spawn_blocking(move || merge_k3s_kubeconfig_safely(&source, &dest_for_blocking, &extended_path))
+            .await
+            .map_err(|e| anyhow::anyhow!("install_kubeconfig join error: {e}"))??;
 
-        // Write the renamed kubeconfig to a secure temp file in the same
-        // directory, then merge and atomically rename over the dest file.
-        let tmp_file = {
-            let tmp = tempfile::Builder::new()
-                .prefix(".orca-k3s-")
-                .suffix(".yaml")
-                .tempfile_in(&dest)?;
-            let (file, path) = tmp.keep()?; // we'll clean up ourselves
-            drop(file);
-            // Set 0600 before writing so a narrow race can't leak keys.
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-            }
-            tokio::fs::write(&path, &renamed).await?;
-            path
-        };
-        let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
-        let merge_env = if dest_file.exists() {
-            format!("{}{sep}{}", tmp_file.display(), dest_file.display())
-        } else {
-            tmp_file.display().to_string()
-        };
-
-        let merge_output = std::process::Command::new("kubectl")
-            .env("PATH", Self::extended_path())
-            .env("KUBECONFIG", &merge_env)
-            .args(["config", "view", "--flatten"])
-            .output();
-
-        // Clean up the temp file no matter what follows.
-        let cleanup = |path: &PathBuf| {
-            let path = path.clone();
-            tokio::spawn(async move {
-                let _ = tokio::fs::remove_file(&path).await;
-            });
-        };
-
-        let merge_output = match merge_output {
-            Ok(o) if o.status.success() => o,
-            Ok(o) => {
-                cleanup(&tmp_file);
-                anyhow::bail!("kubectl config view failed: {}", String::from_utf8_lossy(&o.stderr));
-            }
-            Err(e) => {
-                cleanup(&tmp_file);
-                return Err(anyhow::anyhow!("failed to run kubectl: {e}"));
-            }
-        };
-
-        // Refuse to write an empty or nonsensically small output — that
-        // would silently wipe the user's existing ~/.kube/config. We expect
-        // at least an `apiVersion:` line plus contexts.
-        if merge_output.stdout.len() < 32 {
-            cleanup(&tmp_file);
-            anyhow::bail!(
-                "kubectl produced suspiciously short output ({} bytes); refusing to overwrite {}",
-                merge_output.stdout.len(),
-                dest_file.display()
-            );
-        }
-
-        // Write atomically: write to `.config.orca-new` in the same dir,
-        // then rename over the real config. If anything goes wrong between
-        // the stdout check and the rename, the user's original file is
-        // untouched.
-        let new_file = dest.join(".config.orca-new");
-        tokio::fs::write(&new_file, &merge_output.stdout).await?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&new_file, std::fs::Permissions::from_mode(0o600));
-        }
-        if let Err(e) = tokio::fs::rename(&new_file, &dest_file).await {
-            let _ = tokio::fs::remove_file(&new_file).await;
-            cleanup(&tmp_file);
-            return Err(anyhow::anyhow!("failed to rename merged kubeconfig into place: {e}"));
-        }
-
-        cleanup(&tmp_file);
         tracing::info!("Merged k3s kubeconfig as 'orca' context in {}", dest_file.display());
 
         Ok(dest_file)
@@ -2282,6 +2248,9 @@ impl K8sManager for K3sManager {
         if let Some(c) = container {
             validate_k8s_name(c)?;
         }
+        // Clamp tail to a sane upper bound so a caller can't ask for
+        // unbounded log history (kubectl buffers stdout in memory).
+        let tail = tail.map(|t| t.min(100_000));
         #[cfg(target_os = "windows")]
         {
             let mut cmd_args = vec!["-u", "root", "--", "k3s", "kubectl", "logs", name, "-n", namespace];
@@ -3642,11 +3611,12 @@ impl K8sManager for K3sManager {
         validate_k8s_name(namespace)?;
         validate_k8s_name(name)?;
         // Keys go on the kubectl command line on Windows, so they must
-        // match Kubernetes' own key shape. Values must never contain
-        // NUL/newlines — those would either break `--from-literal=k=v`
-        // parsing or silently split the arg on WSL's shell.
+        // match Kubernetes' data-key shape (allows `_`). Values must never
+        // contain NUL/newlines — those would either break
+        // `--from-literal=k=v` parsing or silently split the arg on WSL's
+        // shell.
         for (k, v) in &data {
-            validate_k8s_name(k)?;
+            validate_k8s_data_key(k)?;
             if v.contains('\n') || v.contains('\0') {
                 anyhow::bail!("secret value for key '{k}' contains forbidden control characters");
             }
@@ -3741,7 +3711,7 @@ impl K8sManager for K3sManager {
         validate_k8s_name(name)?;
         // Same validation as create_secret — see comments there.
         for (k, v) in &data {
-            validate_k8s_name(k)?;
+            validate_k8s_data_key(k)?;
             if v.contains('\n') || v.contains('\0') {
                 anyhow::bail!("secret value for key '{k}' contains forbidden control characters");
             }

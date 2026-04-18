@@ -197,8 +197,19 @@ pub async fn run_cmd_streaming(
         }
     });
 
-    let _ = stdout_task.await;
-    let _ = stderr_task.await;
+    // Overall timeout: 30 minutes. Install scripts can be long but should
+    // never hang indefinitely; bound the wait so a stuck subprocess can't
+    // pin this task forever.
+    const OVERALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1800);
+    let drain = async {
+        let _ = stdout_task.await;
+        let _ = stderr_task.await;
+    };
+    if tokio::time::timeout(OVERALL_TIMEOUT, drain).await.is_err() {
+        heartbeat.abort();
+        let _ = child.start_kill();
+        return Err(format!("command timed out after {}s", OVERALL_TIMEOUT.as_secs()));
+    }
     heartbeat.abort();
 
     let status = child.wait().await.map_err(|e| e.to_string())?;

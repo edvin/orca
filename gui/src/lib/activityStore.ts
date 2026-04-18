@@ -22,7 +22,18 @@ export function addEvent(event: Omit<ActivityEvent, "id" | "timestamp">) {
   };
   setEvents((prev) => {
     const updated = [full, ...prev];
-    if (updated.length > 200) updated.length = 200;
+    if (updated.length > 200) {
+      // Count how many unread (error/warning) events are being evicted so
+      // unreadCount stays in sync with what's actually retained.
+      const dropped = updated.slice(200);
+      const droppedUnread = dropped.filter(
+        (e) => e.severity === "error" || e.severity === "warning",
+      ).length;
+      if (droppedUnread > 0) {
+        setUnreadCount((c) => Math.max(0, c - droppedUnread));
+      }
+      updated.length = 200;
+    }
     return updated;
   });
   // Only count errors and warnings as unread notifications

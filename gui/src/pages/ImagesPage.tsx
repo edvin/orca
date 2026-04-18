@@ -61,6 +61,9 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
   const { sortField, sortDir, toggleSort, sortFn } = useSort<Image>("tag");
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  // Generation counter for Docker Hub search — guards against stale
+  // responses (slow earlier queries resolving after a newer query).
+  let searchGen = 0;
 
   // Image file browser state
   interface FileEntry { name: string; size: string; permissions: string; modified: string; is_dir: boolean; link_target?: string }
@@ -150,20 +153,28 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   const doSearch = async (q: string) => {
     if (q.length < 2) {
+      // Invalidate any in-flight request too so its response is ignored.
+      searchGen++;
       setSearchResults([]);
       setShowSearchDropdown(false);
+      setSearching(false);
       return;
     }
+    const myGen = ++searchGen;
     setSearching(true);
     setShowSearchDropdown(true);
     try {
       const results = (await invoke("search_images", { query: q })) as ImageSearchResult[];
+      // Only apply the result if this is still the most recent request.
+      if (myGen !== searchGen) return;
       setSearchResults(results);
     } catch (e) {
+      if (myGen !== searchGen) return;
       logError(`Failed to search images: ${e}`, `Query "${q}"`);
       setSearchResults([]);
+    } finally {
+      if (myGen === searchGen) setSearching(false);
     }
-    setSearching(false);
   };
 
   const onPullInput = (value: string) => {
@@ -723,15 +734,15 @@ export default function ImagesPage(props: ImagesPageProps) {
     <div class="meta">
       <span>Scanned: ${escapeHtml(timestamp)}</span>
       <span>Scanner: Trivy (via Orca Desktop)</span>
-      <span>${vulns.length} vulnerabilities found</span>
+      <span>${escapeHtml(String(vulns.length))} vulnerabilities found</span>
     </div>
   </div>
   <div class="summary">
-    <div class="summary-card total"><div class="number">${scan.total}</div><div class="label">Total</div></div>
-    <div class="summary-card critical"><div class="number">${scan.critical}</div><div class="label">Critical</div></div>
-    <div class="summary-card high"><div class="number">${scan.high}</div><div class="label">High</div></div>
-    <div class="summary-card medium"><div class="number">${scan.medium}</div><div class="label">Medium</div></div>
-    <div class="summary-card low"><div class="number">${scan.low}</div><div class="label">Low</div></div>
+    <div class="summary-card total"><div class="number">${escapeHtml(String(scan.total))}</div><div class="label">Total</div></div>
+    <div class="summary-card critical"><div class="number">${escapeHtml(String(scan.critical))}</div><div class="label">Critical</div></div>
+    <div class="summary-card high"><div class="number">${escapeHtml(String(scan.high))}</div><div class="label">High</div></div>
+    <div class="summary-card medium"><div class="number">${escapeHtml(String(scan.medium))}</div><div class="label">Medium</div></div>
+    <div class="summary-card low"><div class="number">${escapeHtml(String(scan.low))}</div><div class="label">Low</div></div>
   </div>
   <div class="table-wrap">
     <table>

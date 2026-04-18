@@ -90,12 +90,24 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move {
             loop {
                 let mut events_rx = state_for_events.rt().await.subscribe_events();
-                while let Ok(event) = events_rx.recv().await {
-                    let _ = events_tx_clone.send(event);
+                // Wait for either an event on the current subscription or a
+                // hot-swap notification. `Notify::notified` must be created
+                // *before* we start waiting so we don't miss a swap that
+                // happens between subscribe and the first `.notified().await`.
+                let swap_notify = state_for_events.swap_notify.clone();
+                loop {
+                    let notified = swap_notify.notified();
+                    tokio::select! {
+                        event = events_rx.recv() => match event {
+                            Ok(event) => { let _ = events_tx_clone.send(event); }
+                            Err(_) => break,
+                        },
+                        _ = notified => break,
+                    }
                 }
-                // Inner receiver closed — usually because the runtime was
-                // hot-swapped. Give the swap a beat to land, then reattach.
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                // Either the inner receiver closed or a swap was signalled.
+                // Loop back and re-subscribe against the (possibly new)
+                // runtime. No polling sleep needed.
             }
         });
     }
@@ -534,17 +546,14 @@ async fn run_scheduler(state: Arc<state::AppState>) {
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(60)).await;
 
-        // `OrcaConfig::load` reads and parses config JSON off disk. Run it
-        // inside spawn_blocking so we don't stall a tokio worker waiting
-        // for a slow FS (e.g. a laggy network mount for $HOME).
-        let config = match tokio::task::spawn_blocking(orca_core::config::OrcaConfig::load).await {
-            Ok(Ok(c)) => c,
-            _ => continue,
-        };
+        // Snapshot schedules from the in-memory config so we don't stall
+        // a tokio worker on disk I/O and so we see the same view of
+        // schedules other handlers are mutating through `state.config`.
+        let schedules = state.config.lock().await.schedules.clone();
 
         let now = chrono::Utc::now();
 
-        for schedule in &config.schedules {
+        for schedule in &schedules {
             if !schedule.enabled {
                 continue;
             }
@@ -576,13 +585,13 @@ async fn run_scheduler(state: Arc<state::AppState>) {
             }
 
             tracing::info!(
-                "Scheduler: executing '{}' — {} on '{}'",
+                "Scheduler: executing '{}' — {:?} on '{}'",
                 schedule.name,
                 schedule.action,
                 schedule.container
             );
 
-            if schedule.action == "build" {
+            if schedule.action == orca_core::config::ScheduledActionKind::Build {
                 // Skip if a previous build for this schedule is still
                 // running. This is cheap — we re-check on every tick.
                 {
@@ -673,7 +682,8 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                             &dockerfile,
                             args,
                             orca_core::build::BuildSource::Scheduled,
-                        );
+                        )
+                        .await;
                         let build_id = record.id.clone();
                         let rt = state.rt().await;
                         let events_tx = state.events_tx.clone();
@@ -715,7 +725,8 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                                     } else {
                                         orca_core::build::BuildStatus::Success
                                     };
-                                    crate::build_manager::update_build(&build_id, status.clone(), image_id, error_msg);
+                                    crate::build_manager::update_build(&build_id, status.clone(), image_id, error_msg)
+                                        .await;
                                     let _ = events_tx.send(orca_core::event::Event {
                                         timestamp: chrono::Utc::now().to_rfc3339(),
                                         kind: orca_core::event::EventKind::BuildCompleted {
@@ -731,7 +742,8 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                                         orca_core::build::BuildStatus::Failed,
                                         None,
                                         Some(e.to_string()),
-                                    );
+                                    )
+                                    .await;
                                     let _ = events_tx.send(orca_core::event::Event {
                                         timestamp: chrono::Utc::now().to_rfc3339(),
                                         kind: orca_core::event::EventKind::BuildCompleted {
@@ -754,17 +766,23 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                     tracing::warn!("Scheduler: build action without build_target in '{}'", schedule.name);
                 }
             } else {
+                use orca_core::config::ScheduledActionKind;
                 use orca_core::runtime::ContainerRuntime;
                 let rt = state.rt().await;
-                let result = match schedule.action.as_str() {
-                    "start" => rt.as_ref().start_container(&schedule.container).await,
-                    "stop" => rt.as_ref().stop_container(&schedule.container, 10).await,
-                    "restart" => {
+                let result = match schedule.action {
+                    ScheduledActionKind::Start => rt.as_ref().start_container(&schedule.container).await,
+                    ScheduledActionKind::Stop => rt.as_ref().stop_container(&schedule.container, 10).await,
+                    ScheduledActionKind::Restart => {
                         let _ = rt.as_ref().stop_container(&schedule.container, 10).await;
                         rt.as_ref().start_container(&schedule.container).await
                     }
-                    _ => {
-                        tracing::warn!("Unknown schedule action: {}", schedule.action);
+                    ScheduledActionKind::Build => {
+                        // Handled in the `if schedule.action == Build` branch above.
+                        tracing::warn!("Scheduler: unexpected Build reached action dispatch");
+                        continue;
+                    }
+                    ScheduledActionKind::Unknown => {
+                        tracing::warn!("Unknown schedule action in '{}'", schedule.name);
                         continue;
                     }
                 };
@@ -775,12 +793,16 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                 }
             }
 
-            // Update last_run timestamp
-            if let Ok(mut cfg) = orca_core::config::OrcaConfig::load() {
+            // Update last_run timestamp through the shared config lock so
+            // we don't race with handlers that are mutating other fields.
+            {
+                let mut cfg = state.config.lock().await;
                 if let Some(s) = cfg.schedules.iter_mut().find(|s| s.id == schedule.id) {
                     s.last_run = Some(now.timestamp() as u64);
                 }
-                let _ = cfg.save();
+                if let Err(e) = cfg.save() {
+                    tracing::error!("Scheduler: failed to save last_run for '{}': {e}", schedule.name);
+                }
             }
         }
     }

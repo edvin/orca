@@ -1,6 +1,11 @@
-import { createSignal, onMount, onCleanup, For, Show, createEffect, createMemo, untrack } from "solid-js";
+import { createSignal, onMount, onCleanup, For, Show, createEffect, createMemo } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { copyToClipboard } from "../lib/clipboard";
+
+// Cap the combined in-memory buffer so following many containers at once
+// can't grow unbounded.
+const MAX_ENTRIES = 20_000;
 
 interface MultiLogViewerProps {
   containers: Array<{ id: string; name: string }>;
@@ -62,7 +67,6 @@ interface LogEntry {
   containerId: string;
   containerName: string;
   line: string;
-  color: string;
 }
 
 export default function MultiLogViewer(props: MultiLogViewerProps) {
@@ -72,85 +76,209 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
   const [useRegex, setUseRegex] = createSignal(false);
   const [caseSensitive, setCaseSensitive] = createSignal(false);
   const [autoScroll, setAutoScroll] = createSignal(true);
-  const initialContainers = untrack(() => props.containers);
   const [visibleContainers, setVisibleContainers] = createSignal<Set<string>>(
-    new Set(initialContainers.map((c) => c.id))
+    new Set(props.containers.map((c) => c.id))
   );
   const [fontSize] = createSignal(
     parseInt(localStorage.getItem("log-font-size") || "13", 10)
   );
+  // Reactive colorMap driven by a createEffect so adds/removes in
+  // props.containers update in-place — existing containers keep their
+  // assigned color, freed slots are reused for new ones. Previously this
+  // was computed once from the initial prop snapshot, so any later change
+  // caused later containers to render without a color.
+  const [colorMap, setColorMap] = createSignal<Map<string, string>>(new Map());
   let logContainer: HTMLDivElement | undefined;
 
-  const colorMap = new Map<string, string>();
-  initialContainers.forEach((c, i) => {
-    colorMap.set(c.id, COLORS[i % COLORS.length]);
+  // Module-level for this component instance — flipped synchronously on
+  // unmount so any in-flight async callback skips its state writes.
+  let disposed = false;
+
+  // Assign a stable color per container id. When props.containers changes,
+  // preserve existing assignments and reuse released colors for new ids.
+  createEffect(() => {
+    const ids = props.containers.map((c) => c.id);
+    const idSet = new Set(ids);
+    setColorMap((prev) => {
+      const next = new Map<string, string>();
+      const used = new Set<string>();
+      // Keep previous assignments for ids that still exist.
+      for (const id of ids) {
+        const existing = prev.get(id);
+        if (existing) {
+          next.set(id, existing);
+          used.add(existing);
+        }
+      }
+      // Assign from the first available color for new ids.
+      for (const id of ids) {
+        if (next.has(id)) continue;
+        const free = COLORS.find((c) => !used.has(c)) ?? COLORS[next.size % COLORS.length];
+        next.set(id, free);
+        used.add(free);
+      }
+      return next;
+    });
+    // Also drop visibility entries for removed containers so the filter
+    // doesn't include stale ids.
+    setVisibleContainers((prev) => {
+      const filtered = new Set<string>();
+      for (const id of prev) if (idSet.has(id)) filtered.add(id);
+      // Newly added containers default to visible.
+      for (const id of ids) if (!prev.has(id)) filtered.add(id);
+      return filtered;
+    });
+    // Drop entries from containers that have been removed.
+    setEntries((prev) => prev.filter((e) => idSet.has(e.containerId)));
   });
 
-  // Module-level for this component instance — flipped synchronously on
-  // unmount so any in-flight fetch skips its state writes.
-  let disposed = false;
-  // Prevents a slow fetch from being re-issued every 2s before it finishes,
-  // which used to let concurrent fetches race each other into setEntries.
-  let inFlight = false;
+  const colorFor = (id: string): string => colorMap().get(id) || COLORS[0];
 
-  const fetchAllLogs = async () => {
-    if (disposed) return;
-    setLoading(true);
-    try {
+  // Subscribe per-container to the streaming log endpoint and merge incoming
+  // lines into a single chronologically-appended store. This replaces the
+  // 2s full-replacement polling that churned the DOM for every refresh.
+  onMount(() => {
+    let unlistens: UnlistenFn[] = [];
+    let subscribedIds = new Set<string>();
+    let refreshPending = false;
+
+    onCleanup(() => {
+      disposed = true;
+      for (const u of unlistens) {
+        try { u(); } catch {}
+      }
+      unlistens = [];
+      for (const id of subscribedIds) {
+        invoke("unsubscribe_container_logs", { id }).catch(() => {});
+      }
+      subscribedIds.clear();
+    });
+
+    const appendLines = (c: { id: string; name: string }, raw: string[]) => {
+      if (disposed) return;
+      const newItems: LogEntry[] = raw
+        .flatMap((l) => l.replace(/\r/g, "").split("\n"))
+        .map((l) => l.trimEnd())
+        .filter((l) => l.length > 0)
+        .map((line) => ({ containerId: c.id, containerName: c.name, line }));
+      if (newItems.length === 0) return;
+      setEntries((prev) => {
+        const combined = prev.concat(newItems);
+        return combined.length > MAX_ENTRIES ? combined.slice(-MAX_ENTRIES) : combined;
+      });
+    };
+
+    const resubscribeAll = async () => {
+      if (disposed) return;
+      // Tear down any old subscriptions/listeners from a previous containers prop.
+      for (const u of unlistens) { try { u(); } catch {} }
+      unlistens = [];
+      for (const id of subscribedIds) {
+        invoke("unsubscribe_container_logs", { id }).catch(() => {});
+      }
+      subscribedIds = new Set();
+
+      setLoading(true);
+      const list = props.containers.slice();
+
+      // Initial tail fetch per container — faster than waiting for each
+      // to trickle in over SSE.
       const results = await Promise.allSettled(
-        props.containers.map((c) =>
-          invoke("container_logs", { id: c.id, tail: 200 }) as Promise<string[]>
-        )
+        list.map((c) => invoke("container_logs", { id: c.id, tail: 200 }) as Promise<string[]>),
       );
       if (disposed) return;
 
       const allEntries: LogEntry[] = [];
       results.forEach((result, idx) => {
-        if (result.status === "fulfilled") {
-          const container = props.containers[idx];
-          const color = colorMap.get(container.id) || COLORS[0];
-          const logLines = result.value
-            .flatMap((l) => l.replace(/\r/g, "").split("\n"))
+        if (result.status !== "fulfilled") return;
+        const c = list[idx];
+        for (const raw of result.value) {
+          const cleaned = raw.replace(/\r/g, "").split("\n")
             .map((l) => l.trimEnd())
             .filter((l) => l.length > 0);
-          for (const line of logLines) {
-            allEntries.push({
-              containerId: container.id,
-              containerName: container.name,
-              line,
-              color,
-            });
+          for (const line of cleaned) {
+            allEntries.push({ containerId: c.id, containerName: c.name, line });
           }
         }
       });
+      // Replace the seed snapshot (we're starting fresh for this containers list).
+      setEntries(
+        allEntries.length > MAX_ENTRIES ? allEntries.slice(-MAX_ENTRIES) : allEntries,
+      );
+      setLoading(false);
 
-      setEntries(allEntries);
-    } catch (e) {
-      if (disposed) return;
-      setEntries([{
-        containerId: "",
-        containerName: "Error",
-        line: `Failed to fetch logs: ${e}`,
-        color: "#f85149",
-      }]);
-    }
-    if (!disposed) setLoading(false);
-  };
+      // Attach the event listener once and dispatch by containerId.
+      const byId = new Map(list.map((c) => [c.id, c] as const));
+      const unlisten = await listen<{ containerId: string; line: string }>(
+        "container-log-line",
+        (event) => {
+          if (disposed) return;
+          const c = byId.get(event.payload.containerId);
+          if (!c) return;
+          appendLines(c, [event.payload.line]);
+        },
+      );
+      if (disposed) {
+        try { unlisten(); } catch {}
+        return;
+      }
+      unlistens.push(unlisten);
 
-  onMount(() => {
-    onCleanup(() => {
-      disposed = true;
-    });
-    fetchAllLogs();
-    const interval = setInterval(() => {
-      if (inFlight || disposed) return;
-      inFlight = true;
-      fetchAllLogs().finally(() => {
-        inFlight = false;
+      // Kick off streaming subscriptions.
+      for (const c of list) {
+        subscribedIds.add(c.id);
+        invoke("subscribe_container_logs", { id: c.id, tail: 0 }).catch((e) => {
+          console.error(`Failed to subscribe to logs for ${c.name}:`, e);
+        });
+      }
+    };
+
+    // Reactively refresh subscriptions when the set of containers changes.
+    createEffect(() => {
+      // Track props.containers identity (and length) to rebuild on change.
+      const ids = props.containers.map((c) => c.id).join("\u0000");
+      // Collapse rapid prop changes into one async rebuild.
+      if (refreshPending) return;
+      refreshPending = true;
+      queueMicrotask(() => {
+        refreshPending = false;
+        if (disposed) return;
+        resubscribeAll().catch((e) => console.error("MultiLogViewer resubscribe failed:", e));
       });
-    }, 2000);
-    onCleanup(() => clearInterval(interval));
+      // Read `ids` so Solid tracks it.
+      void ids;
+    });
   });
+
+  // Expose a refresh hook for the toolbar button.
+  const refreshLogs = async () => {
+    if (disposed) return;
+    setLoading(true);
+    setEntries([]);
+    // Re-run the initial tail fetch for all currently-subscribed containers.
+    const list = props.containers.slice();
+    const results = await Promise.allSettled(
+      list.map((c) => invoke("container_logs", { id: c.id, tail: 200 }) as Promise<string[]>),
+    );
+    if (disposed) return;
+    const allEntries: LogEntry[] = [];
+    results.forEach((result, idx) => {
+      if (result.status !== "fulfilled") return;
+      const c = list[idx];
+      for (const raw of result.value) {
+        const cleaned = raw.replace(/\r/g, "").split("\n")
+          .map((l) => l.trimEnd())
+          .filter((l) => l.length > 0);
+        for (const line of cleaned) {
+          allEntries.push({ containerId: c.id, containerName: c.name, line });
+        }
+      }
+    });
+    setEntries(
+      allEntries.length > MAX_ENTRIES ? allEntries.slice(-MAX_ENTRIES) : allEntries,
+    );
+    setLoading(false);
+  };
 
   createEffect(() => {
     if (autoScroll() && logContainer) {
@@ -314,7 +442,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
             <button class="action-icon" onClick={copyAll} title="Copy all logs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             </button>
-            <button class="action-icon" onClick={fetchAllLogs} title="Refresh">
+            <button class="action-icon" onClick={refreshLogs} title="Refresh">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
             </button>
             <button class="action-icon" onClick={() => props.onClose()} title="Close">
@@ -338,7 +466,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
         >
           <For each={props.containers}>
             {(c) => {
-              const color = colorMap.get(c.id) || COLORS[0];
+              const color = () => colorFor(c.id);
               const isVisible = () => visibleContainers().has(c.id);
               return (
                 <label
@@ -356,14 +484,14 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
                     type="checkbox"
                     checked={isVisible()}
                     onChange={() => toggleContainer(c.id)}
-                    style={{ "accent-color": color }}
+                    style={{ "accent-color": color() }}
                   />
                   <span
                     style={{
                       width: "8px",
                       height: "8px",
                       "border-radius": "50%",
-                      background: isVisible() ? color : "#484f58",
+                      background: isVisible() ? color() : "#484f58",
                       "flex-shrink": "0",
                     }}
                   />
@@ -400,6 +528,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
             }>
               <For each={filteredEntries()}>
                 {(entry) => {
+                  const entryColor = () => colorFor(entry.containerId);
                   return (
                     <div
                       style={{
@@ -407,14 +536,14 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
                         "font-family": "'JetBrains Mono NF', monospace",
                         "font-size": `${fontSize()}px`,
                         "line-height": "1.4",
-                        "border-left": `3px solid ${entry.color}`,
+                        "border-left": `3px solid ${entryColor()}`,
                         "margin-left": "8px",
                         "padding-left": "8px",
                       }}
                     >
                       <span
                         style={{
-                          color: entry.color,
+                          color: entryColor(),
                           "min-width": "140px",
                           "max-width": "140px",
                           "flex-shrink": "0",

@@ -230,20 +230,31 @@ export default function KubernetesPage() {
   useRefresh(refreshStatus);
 
   let hasLoadedOnce = false;
+  // Guard against tab/namespace-change races: each refreshWorkloads() run
+  // increments workloadReqId and captures the current tab. Before any
+  // setter fires we early-return if either changed — avoids stale data
+  // clobbering the fresh tab's state.
+  let workloadReqId = 0;
 
   const refreshWorkloads = async () => {
     const s = status();
     if (!s?.running) return;
     const ns = selectedNs();
+    const myReq = ++workloadReqId;
+    const myTab = tab();
+    const stale = () => myReq !== workloadReqId || myTab !== tab();
     // Only show spinner on first load — never on refresh
-    if (!hasLoadedOnce) setLoading(true);
+    if (!hasLoadedOnce) {
+      if (stale()) return;
+      setLoading(true);
+    }
     try {
-      const currentTab = tab();
-      if (currentTab === "pods") {
+      if (myTab === "pods") {
         const [podResult, metricsResult] = await Promise.allSettled([
           invoke("k8s_pods", { namespace: ns }) as Promise<Pod[]>,
           invoke("k8s_pod_metrics", { namespace: ns }) as Promise<PodMetrics[]>,
         ]);
+        if (stale()) return;
         if (podResult.status === "fulfilled") setPods(podResult.value);
         if (metricsResult.status === "fulfilled") {
           const map: Record<string, PodMetrics> = {};
@@ -252,76 +263,97 @@ export default function KubernetesPage() {
           }
           setPodMetrics(map);
         }
-      } else if (currentTab === "deployments") {
+      } else if (myTab === "deployments") {
         const [depResult, hpaResult] = await Promise.allSettled([
           invoke("k8s_deployments", { namespace: ns }) as Promise<Deployment[]>,
           invoke("k8s_hpas", { namespace: ns }) as Promise<HorizontalPodAutoscaler[]>,
         ]);
+        if (stale()) return;
         if (depResult.status === "fulfilled") setDeployments(depResult.value);
         if (hpaResult.status === "fulfilled") setHpas(hpaResult.value);
-      } else if (currentTab === "services") {
+      } else if (myTab === "services") {
         const [svcResult, npResult] = await Promise.allSettled([
           invoke("k8s_services", { namespace: ns }) as Promise<K8sService[]>,
           invoke("k8s_network_policies", { namespace: ns }) as Promise<NetworkPolicy[]>,
         ]);
+        if (stale()) return;
         if (svcResult.status === "fulfilled") setServices(svcResult.value);
         if (npResult.status === "fulfilled") setNetworkPolicies(npResult.value);
-      } else if (currentTab === "ingresses") {
-        setIngresses((await invoke("k8s_ingresses", { namespace: ns })) as Ingress[]);
-      } else if (currentTab === "storage") {
+      } else if (myTab === "ingresses") {
+        const result = (await invoke("k8s_ingresses", { namespace: ns })) as Ingress[];
+        if (stale()) return;
+        setIngresses(result);
+      } else if (myTab === "storage") {
         const [pvcResult, pvResult, scResult] = await Promise.allSettled([
           invoke("k8s_pvcs", { namespace: ns }) as Promise<PersistentVolumeClaim[]>,
           invoke("k8s_pvs") as Promise<PersistentVolume[]>,
           invoke("k8s_storage_classes") as Promise<StorageClass[]>,
         ]);
+        if (stale()) return;
         if (pvcResult.status === "fulfilled") setPvcs(pvcResult.value);
         if (pvResult.status === "fulfilled") setPvs(pvResult.value);
         if (scResult.status === "fulfilled") setStorageClasses(scResult.value);
-      } else if (currentTab === "crds") {
-        setCrds((await invoke("k8s_crds")) as CustomResourceDefinition[]);
-      } else if (currentTab === "events") {
-        setEvents((await invoke("k8s_events", { namespace: ns })) as K8sEvent[]);
-      } else if (currentTab === "config") {
+      } else if (myTab === "crds") {
+        const result = (await invoke("k8s_crds")) as CustomResourceDefinition[];
+        if (stale()) return;
+        setCrds(result);
+      } else if (myTab === "events") {
+        const result = (await invoke("k8s_events", { namespace: ns })) as K8sEvent[];
+        if (stale()) return;
+        setEvents(result);
+      } else if (myTab === "config") {
         const [cmResult, secResult] = await Promise.all([
           invoke("k8s_configmaps", { namespace: ns }) as Promise<K8sConfigMap[]>,
           invoke("k8s_secrets", { namespace: ns }) as Promise<K8sSecret[]>,
         ]);
+        if (stale()) return;
         setConfigMaps(cmResult);
         setSecrets(secResult);
-      } else if (currentTab === "helm") {
+      } else if (myTab === "helm") {
         try {
           if (helmAvailable() === null) {
             const avail = (await invoke("k8s_helm_available")) as { available: boolean };
+            if (stale()) return;
             setHelmAvailable(avail.available);
           }
           if (helmAvailable()) {
-            setHelmReleases((await invoke("k8s_helm_list")) as HelmRelease[]);
+            const releases = (await invoke("k8s_helm_list")) as HelmRelease[];
+            if (stale()) return;
+            setHelmReleases(releases);
           }
         } catch { /* helm not available */ }
-      } else if (currentTab === "jobs") {
+      } else if (myTab === "jobs") {
         const [jobData, cronData] = await Promise.all([
           invoke("k8s_jobs", { namespace: ns }) as Promise<K8sJob[]>,
           invoke("k8s_cronjobs", { namespace: ns }) as Promise<K8sCronJob[]>,
         ]);
+        if (stale()) return;
         setJobs(jobData);
         setCronJobs(cronData);
-      } else if (currentTab === "daemonsets") {
-        setDaemonSets((await invoke("k8s_daemonsets", { namespace: ns })) as K8sDaemonSet[]);
-      } else if (currentTab === "statefulsets") {
-        setStatefulSets((await invoke("k8s_statefulsets", { namespace: ns })) as K8sStatefulSet[]);
-      } else if (currentTab === "replicasets") {
-        setReplicaSets((await invoke("k8s_replicasets", { namespace: ns })) as K8sReplicaSet[]);
-      } else if (currentTab === "topology") {
+      } else if (myTab === "daemonsets") {
+        const result = (await invoke("k8s_daemonsets", { namespace: ns })) as K8sDaemonSet[];
+        if (stale()) return;
+        setDaemonSets(result);
+      } else if (myTab === "statefulsets") {
+        const result = (await invoke("k8s_statefulsets", { namespace: ns })) as K8sStatefulSet[];
+        if (stale()) return;
+        setStatefulSets(result);
+      } else if (myTab === "replicasets") {
+        const result = (await invoke("k8s_replicasets", { namespace: ns })) as K8sReplicaSet[];
+        if (stale()) return;
+        setReplicaSets(result);
+      } else if (myTab === "topology") {
         // Topology needs pods, deployments, services, and optionally metrics
-        const [p, d, s, m] = await Promise.allSettled([
+        const [p, d, svcT, m] = await Promise.allSettled([
           invoke("k8s_pods", { namespace: ns }) as Promise<Pod[]>,
           invoke("k8s_deployments", { namespace: ns }) as Promise<Deployment[]>,
           invoke("k8s_services", { namespace: ns }) as Promise<K8sService[]>,
           invoke("k8s_pod_metrics", { namespace: ns }) as Promise<PodMetrics[]>,
         ]);
+        if (stale()) return;
         if (p.status === "fulfilled") setPods(p.value);
         if (d.status === "fulfilled") setDeployments(d.value);
-        if (s.status === "fulfilled") setServices(s.value);
+        if (svcT.status === "fulfilled") setServices(svcT.value);
         if (m.status === "fulfilled") {
           const map: Record<string, PodMetrics> = {};
           for (const met of m.value) map[met.name] = met;
@@ -330,8 +362,10 @@ export default function KubernetesPage() {
       }
     } catch {
     } finally {
-      setLoading(false);
-      hasLoadedOnce = true;
+      if (!stale()) {
+        setLoading(false);
+        hasLoadedOnce = true;
+      }
     }
   };
 
@@ -3554,18 +3588,47 @@ spec:
                     const next = !logFollow();
                     setLogFollow(next);
                     if (next) {
-                      // Start polling
+                      // Start polling. Stop escalating tail / polling
+                      // forever once the pod disappears — otherwise we
+                      // spin requesting the backlog of a dead pod.
                       const podName = logPod();
                       const ns = selectedNs();
+                      let emptyStreak = 0;
+                      const EMPTY_STREAK_LIMIT = 5;
                       const poll = async () => {
                         try {
                           setLogTail((t) => Math.min(t + 100, 5000));
                           const lines = (await invoke("k8s_pod_logs", {
                             namespace: ns, name: podName, container: null, tail: logTail(),
                           })) as string[];
-                          setLogLines(lines);
-                          if (logContainerRef) logContainerRef.scrollTop = logContainerRef.scrollHeight;
-                        } catch { /* ignore follow errors */ }
+                          if (!lines || lines.length === 0) {
+                            emptyStreak++;
+                          } else {
+                            if (emptyStreak > 0) {
+                              // Pod is producing output again — reset
+                              // tail so we don't keep requesting a huge
+                              // backlog every tick.
+                              setLogTail(100);
+                            }
+                            emptyStreak = 0;
+                            setLogLines(lines);
+                            if (logContainerRef) logContainerRef.scrollTop = logContainerRef.scrollHeight;
+                          }
+                        } catch (e) {
+                          // 404 / pod-gone / kubectl error counts toward
+                          // the streak too.
+                          const msg = String(e || "");
+                          if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+                            emptyStreak += EMPTY_STREAK_LIMIT; // fast-fail
+                          } else {
+                            emptyStreak++;
+                          }
+                        }
+                        if (emptyStreak >= EMPTY_STREAK_LIMIT) {
+                          if (logFollowInterval) { clearInterval(logFollowInterval); logFollowInterval = null; }
+                          setLogFollow(false);
+                          showToast("Pod no longer available — stopped following logs", "info");
+                        }
                       };
                       logFollowInterval = setInterval(poll, 2000);
                     } else {

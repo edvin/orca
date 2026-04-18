@@ -12,6 +12,11 @@ static BUILDKIT_CACHE: Mutex<Option<(Instant, Vec<BuildRecord>)>> = Mutex::new(N
 /// How long to cache BuildKit history results.
 const BUILDKIT_CACHE_TTL_SECS: u64 = 30;
 
+/// Serialises every read-modify-write cycle on `index.json` so two
+/// concurrent start/update/delete calls cannot race and clobber each
+/// other's changes.
+static HISTORY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn builds_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -83,20 +88,27 @@ pub fn save_history(mut records: Vec<BuildRecord>) {
 }
 
 /// Create a new build record.
-pub fn start_build(
+///
+/// Acquires `HISTORY_LOCK` around the read-modify-write on `index.json`
+/// so two concurrent callers cannot race and clobber each other's
+/// records. The id now includes 16 random bits so two builds started in
+/// the same millisecond still get unique ids.
+pub async fn start_build(
     tag: &str,
     context_path: &str,
     dockerfile: &str,
     build_args: HashMap<String, String>,
     source: BuildSource,
 ) -> BuildRecord {
-    let id = format!(
-        "{:x}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-    );
+    use rand::RngCore;
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let mut rand_bytes = [0u8; 2];
+    rand::rngs::OsRng.fill_bytes(&mut rand_bytes);
+    let rand_u16 = u16::from_be_bytes(rand_bytes);
+    let id = format!("{millis:x}{rand_u16:04x}");
     let _ = std::fs::create_dir_all(logs_dir());
 
     let record = BuildRecord {
@@ -115,6 +127,7 @@ pub fn start_build(
         source,
     };
 
+    let _guard = HISTORY_LOCK.lock().await;
     let mut history = load_history();
     history.push(record.clone());
     save_history(history);
@@ -122,7 +135,8 @@ pub fn start_build(
 }
 
 /// Update a build record (mark complete/failed).
-pub fn update_build(id: &str, status: BuildStatus, image_id: Option<String>, error: Option<String>) {
+pub async fn update_build(id: &str, status: BuildStatus, image_id: Option<String>, error: Option<String>) {
+    let _guard = HISTORY_LOCK.lock().await;
     let mut history = load_history();
     if let Some(record) = history.iter_mut().find(|r| r.id == id) {
         let now = chrono::Utc::now();
@@ -145,6 +159,14 @@ pub fn update_build(id: &str, status: BuildStatus, image_id: Option<String>, err
 }
 
 /// Append a line to a build's log file.
+///
+/// Note: atomicity relies on `O_APPEND`, which guarantees single-write
+/// atomicity on POSIX. On Windows there is no equivalent guarantee, so
+/// concurrent appends from multiple build tasks to the same log may
+/// interleave at sub-line boundaries. Because each build has its own
+/// id-derived log file path, and per-build append calls are sequenced
+/// from the single build-driving task, this hasn't caused problems in
+/// practice.
 pub fn append_log(id: &str, line: &str) {
     use std::io::Write;
     let path = match log_path(id) {
@@ -187,7 +209,8 @@ pub fn analyze_cache(build_id: &str) -> Option<orca_core::build::CacheAnalysis> 
 }
 
 /// Delete a build record and its log.
-pub fn delete_build(id: &str) {
+pub async fn delete_build(id: &str) {
+    let _guard = HISTORY_LOCK.lock().await;
     let mut history = load_history();
     history.retain(|r| r.id != id);
     save_history(history);

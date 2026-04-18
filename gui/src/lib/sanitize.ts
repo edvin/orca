@@ -119,6 +119,14 @@ export function sanitizeSvg(raw: string): string {
     // these tags entirely.
   }
 
+  // mXSS defence: reject anything containing a CDATA section outright.
+  // The sanitiser parses as XML (where CDATA is literal content), but
+  // callers insert the output via `innerHTML` into an HTML container,
+  // where the HTML parser treats `<![CDATA[` as a bogus comment and can
+  // smuggle tags across the sanitiser boundary. Belt-and-braces: the
+  // walker below also strips CDATA/comment nodes from the parsed tree.
+  if (raw.includes("<![CDATA[")) return "";
+
   const parser = new DOMParser();
   const doc = parser.parseFromString(raw, "image/svg+xml");
   const root = doc.documentElement;
@@ -131,6 +139,14 @@ export function sanitizeSvg(raw: string): string {
     if (!SVG_ALLOWED_TAGS.has(tag)) {
       node.remove();
       return;
+    }
+    // Replace CDATA sections (nodeType 4) and comments (nodeType 8)
+    // with plain text nodes so re-serialisation HTML-escapes them.
+    // Iterating `childNodes` (not `children`) catches non-element nodes.
+    for (const cn of Array.from(node.childNodes)) {
+      if (cn.nodeType === 4 || cn.nodeType === 8) {
+        cn.replaceWith(cn.textContent ?? "");
+      }
     }
     for (const attr of Array.from(node.attributes)) {
       const name = attr.name.toLowerCase();

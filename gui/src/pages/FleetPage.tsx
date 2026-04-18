@@ -9,6 +9,12 @@ import type { RemoteHost, HostStatus } from "../lib/types";
 // Module-level signal — persists across navigation
 const [lastSeen, setLastSeen] = createSignal<Record<string, number>>({});
 
+// Re-entrancy guard for probeAll. A 30s interval + onMount + useRefresh
+// can all fire probeAll concurrently; without this the batch loops
+// interleave and fight over setHosts. When a probe is already in flight,
+// callers await the existing promise instead of starting a new run.
+let probingPromise: Promise<void> | null = null;
+
 // Tag color palette (cycling through category-style colors)
 const TAG_COLORS = [
   { bg: "rgba(88, 166, 255, 0.1)", color: "#58a6ff", border: "rgba(88, 166, 255, 0.15)" },
@@ -127,47 +133,58 @@ export default function FleetPage(props: FleetPageProps) {
     }
   };
 
-  const probeAll = async () => {
-    const hostList = await buildHostList();
-    // Show the checking state immediately
-    setHosts(hostList);
-    setLoading(false);
-    setProbeProgress({ current: 0, total: hostList.length });
+  const probeAll = async (): Promise<void> => {
+    // Await any in-flight probe instead of kicking off a second one in
+    // parallel — otherwise two runs fight over setHosts and lastSeen.
+    if (probingPromise) return probingPromise;
+    probingPromise = (async () => {
+      try {
+        const hostList = await buildHostList();
+        // Show the checking state immediately
+        setHosts(hostList);
+        setLoading(false);
+        setProbeProgress({ current: 0, total: hostList.length });
 
-    // Staggered batch probing for better UX with large fleets
-    const updated = [...hostList];
-    for (let i = 0; i < hostList.length; i += BATCH_SIZE) {
-      const batch = hostList.slice(i, i + BATCH_SIZE);
-      setProbeProgress({ current: i, total: hostList.length });
+        // Staggered batch probing for better UX with large fleets
+        const updated = [...hostList];
+        for (let i = 0; i < hostList.length; i += BATCH_SIZE) {
+          const batch = hostList.slice(i, i + BATCH_SIZE);
+          setProbeProgress({ current: i, total: hostList.length });
 
-      const results = await Promise.allSettled(
-        batch.map(host => probeHost(host))
-      );
+          const results = await Promise.allSettled(
+            batch.map(host => probeHost(host))
+          );
 
-      // Update each host incrementally
-      for (let j = 0; j < batch.length; j++) {
-        const idx = i + j;
-        const result = results[j];
-        updated[idx] = result.status === "fulfilled"
-          ? result.value
-          : { ...hostList[idx], checking: false, online: false, error: "Probe failed" };
+          // Update each host incrementally
+          for (let j = 0; j < batch.length; j++) {
+            const idx = i + j;
+            const result = results[j];
+            updated[idx] = result.status === "fulfilled"
+              ? result.value
+              : { ...hostList[idx], checking: false, online: false, error: "Probe failed" };
+          }
+          setHosts([...updated]);
+        }
+
+        // Track last-seen timestamps for online hosts — functional update
+        // so a concurrent writer can't clobber our entries.
+        const now = Date.now();
+        setLastSeen((prev) => {
+          const next = { ...prev };
+          for (const host of updated) {
+            const key = host.id || "__local__";
+            if (host.online) next[key] = now;
+          }
+          return next;
+        });
+        setHosts(updated);
+        setLastUpdated(new Date());
+        setProbeProgress(null);
+      } finally {
+        probingPromise = null;
       }
-      setHosts([...updated]);
-    }
-
-    // Track last-seen timestamps for online hosts
-    const now = Date.now();
-    const seen = { ...lastSeen() };
-    for (const host of updated) {
-      const key = host.id || "__local__";
-      if (host.online) {
-        seen[key] = now;
-      }
-    }
-    setLastSeen(seen);
-    setHosts(updated);
-    setLastUpdated(new Date());
-    setProbeProgress(null);
+    })();
+    return probingPromise;
   };
 
   const probeSelected = async () => {
@@ -196,14 +213,18 @@ export default function FleetPage(props: FleetPageProps) {
       });
     }
 
-    // Update last-seen
+    // Update last-seen — functional update to avoid clobbering a
+    // concurrent probeAll's writes.
     const now = Date.now();
-    const seen = { ...lastSeen() };
-    for (const host of hosts()) {
-      const key = host.id || "__local__";
-      if (host.online) seen[key] = now;
-    }
-    setLastSeen(seen);
+    const currentHosts = hosts();
+    setLastSeen((prev) => {
+      const next = { ...prev };
+      for (const host of currentHosts) {
+        const key = host.id || "__local__";
+        if (host.online) next[key] = now;
+      }
+      return next;
+    });
     setLastUpdated(new Date());
   };
 

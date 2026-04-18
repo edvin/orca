@@ -18,16 +18,53 @@ interface ToastMessage {
 let nextId = 0;
 const [toasts, setToasts] = createSignal<ToastMessage[]>([]);
 
+// Cap on how many toasts are shown at once. Beyond this, the oldest is
+// dropped so a burst of errors doesn't stack unreadably off-screen.
+const MAX_VISIBLE = 5;
+
+// Pending auto-dismiss timeouts keyed by toast id. A manual dismiss must
+// clear its timeout or we'll mutate the toast list after it's already gone
+// (harmless today, but also pure bookkeeping leak). This also ensures that
+// when we evict an overflowed toast, we don't leave its timer to race and
+// filter out an unrelated toast that's been assigned the same slot.
+const pendingTimeouts = new Map<number, ReturnType<typeof setTimeout>>();
+
+function dismissToast(id: number) {
+  const t = pendingTimeouts.get(id);
+  if (t !== undefined) {
+    clearTimeout(t);
+    pendingTimeouts.delete(id);
+  }
+  setToasts((prev) => prev.filter((t) => t.id !== id));
+}
+
 export function showToast(
   message: string,
   type: ToastType = "info",
   action?: { label: string; onClick: () => void }
 ) {
   const id = nextId++;
-  setToasts((prev) => [...prev, { id, message, type, action }]);
-  setTimeout(() => {
+  setToasts((prev) => {
+    const next = [...prev, { id, message, type, action }];
+    // Evict oldest toasts (from the head) when over the cap; clear their
+    // timeouts so they don't fire against a later toast list.
+    while (next.length > MAX_VISIBLE) {
+      const dropped = next.shift();
+      if (dropped) {
+        const t = pendingTimeouts.get(dropped.id);
+        if (t !== undefined) {
+          clearTimeout(t);
+          pendingTimeouts.delete(dropped.id);
+        }
+      }
+    }
+    return next;
+  });
+  const handle = setTimeout(() => {
+    pendingTimeouts.delete(id);
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, type === "error" ? 8000 : 4000);
+  pendingTimeouts.set(id, handle);
 
   // Only log errors to activity feed (info toasts are too noisy)
   if (type === "error") logError(message);
@@ -90,7 +127,7 @@ export default function ToastContainer() {
                     class="toast-action"
                     onClick={() => {
                       action().onClick();
-                      setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+                      dismissToast(toast.id);
                     }}
                   >
                     {action().label}
@@ -103,7 +140,7 @@ export default function ToastContainer() {
             </Show>
             <button
               class="toast-close"
-              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              onClick={() => dismissToast(toast.id)}
             >
               {"\u00d7"}
             </button>

@@ -4,7 +4,14 @@ import { CanvasAddon } from "@xterm/addon-canvas";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke } from "@tauri-apps/api/core";
+import { showToast } from "./Toast";
 import "@xterm/xterm/css/xterm.css";
+
+// Hard cap on how much data we're willing to have queued in the WebSocket
+// send buffer before we drop further input. Browsers will eventually kill
+// the renderer if bufferedAmount grows without bound (e.g. pasting 100KB
+// into a terminal whose far end is slow to drain).
+const WS_BUFFER_LIMIT = 1_048_576; // 1 MiB
 
 const TERM_FONT = "'JetBrains Mono NF', Menlo, Monaco, 'Courier New', monospace";
 
@@ -31,6 +38,35 @@ export default function K8sTerminal(props: K8sTerminalProps) {
   const [fontSize, setFontSize] = createSignal(
     parseInt(localStorage.getItem("terminal-font-size") || "14", 10)
   );
+
+  // Throttle the "dropped input" warning so a 100KB paste doesn't produce
+  // thousands of toasts.
+  let backpressureWarned = false;
+  const sendWithBackpressure = (payload: Uint8Array | string): boolean => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    if (ws.bufferedAmount > WS_BUFFER_LIMIT) {
+      if (!backpressureWarned) {
+        backpressureWarned = true;
+        showToast(
+          "Terminal is overloaded — dropping input. Wait for the remote end to catch up.",
+          "error",
+        );
+        const checkDrain = () => {
+          if (disposed) return;
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          if (ws.bufferedAmount <= WS_BUFFER_LIMIT / 2) {
+            backpressureWarned = false;
+          } else {
+            setTimeout(checkDrain, 250);
+          }
+        };
+        setTimeout(checkDrain, 250);
+      }
+      return false;
+    }
+    ws.send(payload);
+    return true;
+  };
 
   const changeFontSize = (delta: number) => {
     const next = Math.max(9, Math.min(24, fontSize() + delta));
@@ -146,10 +182,9 @@ export default function K8sTerminal(props: K8sTerminalProps) {
         }
         if (e.ctrlKey && e.key === "v") {
           navigator.clipboard.readText().then((text) => {
-            if (!disposed && ws?.readyState === WebSocket.OPEN) {
-              const normalized = text.replace(/\r\n/g, "\r").replace(/\n/g, "\r");
-              ws.send(new TextEncoder().encode(normalized));
-            }
+            if (disposed) return;
+            const normalized = text.replace(/\r\n/g, "\r").replace(/\n/g, "\r");
+            sendWithBackpressure(new TextEncoder().encode(normalized));
           });
           return false;
         }
@@ -157,9 +192,8 @@ export default function K8sTerminal(props: K8sTerminalProps) {
       });
 
       term.onData((data: string) => {
-        if (!disposed && ws?.readyState === WebSocket.OPEN) {
-          ws.send(new TextEncoder().encode(data));
-        }
+        if (disposed) return;
+        sendWithBackpressure(new TextEncoder().encode(data));
       });
 
       term.onResize(({ cols, rows }) => {

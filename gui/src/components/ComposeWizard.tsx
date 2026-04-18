@@ -539,6 +539,13 @@ export default function ComposeWizard(props: ComposeWizardProps) {
                                           "border-bottom": "1px solid #21262d",
                                         }}
                                         onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); selectImage(svc.id, img); }}
+                                        // mousedown's stopPropagation does NOT stop the subsequent
+                                        // click event — without this, the document-level click
+                                        // listener in ComposeWizard (and any Dropdown instance
+                                        // higher up the tree) would fire after mousedown and
+                                        // close the autocomplete before the click has a chance
+                                        // to register on the suggestion. Stop the click too.
+                                        onClick={(e) => e.stopPropagation()}
                                       >
                                         {img}
                                       </div>

@@ -34,6 +34,7 @@ use std::sync::Arc;
 pub fn run() {
     let daemon_manager = Arc::new(daemon::DaemonManager::new());
     let dm = daemon_manager.clone();
+    let dm_for_run = daemon_manager.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -331,7 +332,20 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building orca")
-        .run(|_app, _event| {
+        .run(move |_app, _event| {
+            // Ensure the bundled daemon is killed when the app exits through
+            // ANY path — tray "Quit Orca" (app.exit()), programmatic exit via
+            // `tauri_plugin_process`, or the platform event loop terminating.
+            // Without these handlers, `Drop for DaemonManager` only fires if
+            // the `Arc` is dropped, which doesn't happen on `app.exit()` —
+            // leaving the daemon orphaned on port 9477.
+            match &_event {
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                    dm_for_run.stop();
+                }
+                _ => {}
+            }
+
             #[cfg(target_os = "macos")]
             {
                 use tauri::Manager;

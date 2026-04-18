@@ -114,17 +114,25 @@ export default function YamlEditor(props: YamlEditorProps) {
     if (!props.onSave || !editorView) return;
     setSaving(true);
     try {
-      await props.onSave(editorView.state.doc.toString());
+      const saved = editorView.state.doc.toString();
+      await props.onSave(saved);
+      // Re-baseline so subsequent edits are compared against what was
+      // actually saved (not the original prop value).
+      setInitialValue(saved);
       setModified(false);
     } finally {
       setSaving(false);
     }
   };
 
+  // The baseline the document is compared against to decide whether it's
+  // "modified". Tracked as a signal so the external-sync effect below can
+  // reset it when the editor's value is replaced from props, otherwise the
+  // modified badge stays true after sync even though the buffer matches.
+  const [initialValue, setInitialValue] = createSignal(props.value);
+
   onMount(() => {
     try {
-      const initialValue = props.value;
-
       const saveKeymap = keymap.of([
         {
           key: "Mod-s",
@@ -137,7 +145,7 @@ export default function YamlEditor(props: YamlEditorProps) {
 
       const updateListener = EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          setModified(update.state.doc.toString() !== initialValue);
+          setModified(update.state.doc.toString() !== initialValue());
         }
       });
 
@@ -178,6 +186,13 @@ export default function YamlEditor(props: YamlEditorProps) {
         const newValue = props.value;
         if (editorView && editorView.state.doc.toString() !== newValue) {
           editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: newValue } });
+          // After an external sync the document now matches `newValue`, so
+          // reset the comparison baseline and the modified flag. The
+          // updateListener will fire from our dispatch above and would
+          // otherwise leave `modified` briefly stale against the old
+          // initialValue.
+          setInitialValue(newValue);
+          setModified(false);
         }
       });
 

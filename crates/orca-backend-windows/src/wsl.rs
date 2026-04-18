@@ -13,6 +13,22 @@ use orca_core::runtime::RuntimeKind;
 
 use crate::WindowsBackend;
 
+/// The fixed name of the Orca-owned base image cache distro. User-created
+/// distros must not use this name or any `orca-base-` prefixed name, since
+/// Orca treats those names as its own and may export/unregister them.
+const ORCA_BASE_DISTRO: &str = "orca-base-Ubuntu-24.04";
+
+/// Reserved name prefix for Orca-owned base image caches. Any distro whose
+/// name starts with this (case-insensitive) is reserved and cannot be
+/// created via the public `create` API.
+const ORCA_BASE_PREFIX: &str = "orca-base-";
+
+/// Marker file dropped inside an Orca-owned base distro to prove ownership
+/// before we export/reuse it. Without the marker we refuse to treat a
+/// same-named distro as ours.
+const ORCA_BASE_MARKER_PATH: &str = "/etc/orca-base-stamp";
+const ORCA_BASE_MARKER_CONTENT: &str = "orca-base-marker v1";
+
 /// Validate a WSL distro name. Must be safe as an argv to `wsl.exe` and
 /// usable as a Windows filesystem fragment (wsl stores distros under
 /// `%LOCALAPPDATA%\Packages\...`).
@@ -28,6 +44,16 @@ fn validate_distro_name(name: &str) -> anyhow::Result<()> {
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
     {
         anyhow::bail!("WSL distro name must contain only ASCII alphanumerics, '-', and '_'");
+    }
+    // Reserve the `orca-base-` prefix (case-insensitive) for Orca's own
+    // base image cache distros. User-facing create/delete must refuse
+    // names in this namespace so they can't collide with, or overwrite,
+    // the shared cache.
+    if name.to_ascii_lowercase().starts_with(ORCA_BASE_PREFIX) {
+        anyhow::bail!(
+            "WSL distro name '{name}' is reserved: names starting with 'orca-base-' \
+             are used for Orca's internal base image cache. Please choose a different name."
+        );
     }
     Ok(())
 }
@@ -47,6 +73,17 @@ impl MachineManager for WindowsBackend {
     async fn create(&self, config: MachineConfig) -> anyhow::Result<MachineInfo> {
         validate_distro_name(&config.name)?;
         validate_resources(&config)?;
+
+        // Defence-in-depth: `validate_distro_name` already rejects any
+        // `orca-base-*` name, but assert the exact cache name here too
+        // so this invariant is obvious at the call site and survives any
+        // future loosening of the prefix rule.
+        if config.name == ORCA_BASE_DISTRO {
+            anyhow::bail!(
+                "The name '{ORCA_BASE_DISTRO}' is reserved for Orca's base image cache. \
+                 Please choose a different name."
+            );
+        }
 
         // Strategy: install Ubuntu-24.04 first, then export & re-import under
         // the requested `config.name`. Without the export/import dance,
@@ -73,9 +110,24 @@ impl MachineManager for WindowsBackend {
         //    marker distro (`orca-base-Ubuntu-24.04`) that no one else
         //    should create. If a previous run left it behind we reuse it;
         //    otherwise we install fresh.
-        let base_name = "orca-base-Ubuntu-24.04";
+        //
+        //    Name-matching alone is not sufficient proof of ownership —
+        //    a user could have manually created (or imported on another
+        //    machine) a distro with that exact name. Before reusing a
+        //    same-named distro, we verify it carries our marker file
+        //    `/etc/orca-base-stamp`, dropped at first provision. If the
+        //    marker is missing we refuse to touch it and tell the user
+        //    to rename or unregister it manually.
+        let base_name = ORCA_BASE_DISTRO;
         let orca_base_installed = existing.iter().any(|m| m.name == base_name);
-        if !orca_base_installed {
+        if orca_base_installed {
+            if !verify_orca_base_marker(base_name).await {
+                anyhow::bail!(
+                    "A WSL distro named '{base_name}' already exists but was not created by Orca. \
+                     Please remove it manually (wsl --unregister {base_name}) or rename it before proceeding."
+                );
+            }
+        } else {
             // Prefer `--name` so modern wsl.exe installs `Ubuntu-24.04`
             // directly under our unique name. Older wsl.exe lacks
             // `--name`, so fall back to installing `Ubuntu-24.04` and
@@ -167,6 +219,12 @@ impl MachineManager for WindowsBackend {
                     .await;
                 // tempfile Drop removes `tmp_tar`.
             }
+
+            // Seal the freshly-provisioned base as Orca's by writing the
+            // marker file. This MUST happen before the first export below
+            // so future `create` calls can verify ownership and never
+            // silently piggyback on a user-created same-named distro.
+            ensure_orca_base_marker(base_name).await?;
         }
 
         // 2. Export our orca-owned base to a tarball, then import under
@@ -312,6 +370,23 @@ fi"#,
     }
 
     async fn delete(&self, name: &str) -> anyhow::Result<()> {
+        // Refuse to delete Orca's shared base image cache. If we let this
+        // through, the next `create` has to re-download ~500MB of Ubuntu
+        // and the user loses any in-flight provision work on another
+        // distro that depends on the cache. `validate_distro_name` also
+        // rejects `orca-base-*` names, but we keep an explicit guard
+        // here so the error message is specific rather than a generic
+        // "reserved name" complaint.
+        if name.to_ascii_lowercase().starts_with(ORCA_BASE_PREFIX) {
+            tracing::warn!(
+                "Refusing to delete Orca-owned base distro '{name}'. \
+                 If you truly want to remove it, run `wsl --unregister {name}` manually."
+            );
+            anyhow::bail!(
+                "Refusing to delete '{name}': it is Orca's internal base image cache. \
+                 Run `wsl --unregister {name}` manually if you really want to remove it."
+            );
+        }
         validate_distro_name(name)?;
         // Log any stop failure instead of swallowing it silently so a
         // stuck/crashing stop path is visible in the daemon log.
@@ -519,4 +594,102 @@ async fn wsl_exec(distro: &str, command: &str) -> anyhow::Result<String> {
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Drop Orca's marker file inside a just-provisioned base distro. The
+/// marker proves the distro was created by Orca so future runs can tell
+/// it apart from a same-named user distro. Owned by root, mode 0644.
+async fn ensure_orca_base_marker(distro: &str) -> anyhow::Result<()> {
+    // Write via a heredoc so the content is never interpolated by the
+    // shell, then chmod to the intended mode. The file lives under /etc
+    // which is root-owned, so the file ends up root-owned too (wsl_exec
+    // runs as root).
+    let cmd = format!(
+        "set -euo pipefail; cat > {path} <<'ORCA_MARKER_EOF'\n{content}\nORCA_MARKER_EOF\nchmod 0644 {path}",
+        path = ORCA_BASE_MARKER_PATH,
+        content = ORCA_BASE_MARKER_CONTENT,
+    );
+    wsl_exec(distro, &cmd).await.map(|_| ())
+}
+
+/// Return true iff the distro carries Orca's ownership marker. Any
+/// failure to exec into the distro, or a non-zero exit from `test -f`,
+/// is treated as "not ours" — we would rather re-install than wrongly
+/// reuse a user distro.
+async fn verify_orca_base_marker(distro: &str) -> bool {
+    let output = Command::new("wsl.exe")
+        .env("WSL_UTF8", "1")
+        .args([
+            "-d",
+            distro,
+            "--user",
+            "root",
+            "--",
+            "test",
+            "-f",
+            ORCA_BASE_MARKER_PATH,
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await;
+    match output {
+        Ok(o) => o.status.success(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_normal_names() {
+        validate_distro_name("orca").unwrap();
+        validate_distro_name("my-dev-box").unwrap();
+        validate_distro_name("box_01").unwrap();
+        validate_distro_name("Ubuntu-24.04-ish").unwrap_err(); // '.' is not allowed
+    }
+
+    #[test]
+    fn rejects_reserved_orca_base_name() {
+        // The canonical Orca-owned name "orca-base-Ubuntu-24.04" contains
+        // a '.' that the charset check rejects before the reserved-prefix
+        // check fires. Either rejection path is acceptable — we just
+        // require that the name is never accepted by `validate_distro_name`.
+        validate_distro_name("orca-base-Ubuntu-24.04").unwrap_err();
+    }
+
+    #[test]
+    fn rejects_any_orca_base_prefix() {
+        // These names pass the charset check and are rejected specifically
+        // because of the reserved-prefix rule — assert the error message
+        // mentions "reserved" so we know that rule is doing the work.
+        let err = validate_distro_name("orca-base-foo").unwrap_err();
+        assert!(err.to_string().contains("reserved"));
+        validate_distro_name("orca-base-").unwrap_err();
+        // Case-insensitive.
+        let err2 = validate_distro_name("Orca-Base-Foo").unwrap_err();
+        assert!(err2.to_string().contains("reserved"));
+        validate_distro_name("ORCA-BASE-X").unwrap_err();
+    }
+
+    #[test]
+    fn rejects_empty_and_too_long() {
+        validate_distro_name("").unwrap_err();
+        validate_distro_name(&"a".repeat(65)).unwrap_err();
+    }
+
+    #[test]
+    fn rejects_leading_dash_or_dot() {
+        validate_distro_name("-foo").unwrap_err();
+        validate_distro_name(".foo").unwrap_err();
+    }
+
+    #[test]
+    fn rejects_invalid_chars() {
+        validate_distro_name("foo bar").unwrap_err();
+        validate_distro_name("foo/bar").unwrap_err();
+        validate_distro_name("foo$bar").unwrap_err();
+    }
 }

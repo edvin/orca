@@ -33,11 +33,12 @@ export async function startEventSubscription(): Promise<void> {
   if (started) return;
   if (starting) return starting;
   const my = ++generation;
+  let bailed = false;
   starting = (async () => {
     let localUnlisten: (() => void) | null = null;
     try {
       const { listen } = await import("@tauri-apps/api/event");
-      if (my !== generation) return; // cancelled during dynamic import
+      if (my !== generation) { bailed = true; return; } // cancelled during dynamic import
       localUnlisten = await listen("orca-event", (event) => {
         for (const cb of Array.from(listeners)) {
           try {
@@ -54,6 +55,7 @@ export async function startEventSubscription(): Promise<void> {
         // next start() installs.
         try { localUnlisten(); } catch {}
         localUnlisten = null;
+        bailed = true;
         return;
       }
       unlistenTauri = localUnlisten;
@@ -68,6 +70,7 @@ export async function startEventSubscription(): Promise<void> {
           try { unlistenTauri(); } catch {}
           unlistenTauri = null;
         }
+        bailed = true;
         return;
       }
       started = true;
@@ -83,7 +86,19 @@ export async function startEventSubscription(): Promise<void> {
       starting = null;
     }
   })();
-  return starting;
+  const current = starting;
+  await current;
+  // If we bailed because a concurrent stop/restart bumped the generation
+  // while we were awaiting, and nothing else has since taken over
+  // (no live subscription, no newer start in flight), kick off a
+  // replacement start so the caller isn't left without a subscription.
+  // The generation equality check bounds this: each iteration either
+  // succeeds (started=true), gets superseded by a newer start (which
+  // will itself be awaited by whoever triggered it), or we are the
+  // newest and simply retry once.
+  if (bailed && !started && !starting) {
+    return startEventSubscription();
+  }
 }
 
 /** Tear down the current subscription, if any. */
