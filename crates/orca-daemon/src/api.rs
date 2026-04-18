@@ -1,3 +1,9 @@
+// `collapsible_match` (new in clippy 1.95) suggests collapsing several
+// `Message::Binary(data) => { if err { break } }` patterns into a match
+// guard. The guard form is semantically wrong here — it would skip the
+// state-changing write when the predicate is false — so allow the lint.
+#![allow(clippy::collapsible_match)]
+
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -1525,7 +1531,7 @@ async fn build_stats() -> Result<impl IntoResponse, ApiError> {
     // Average duration by tag (top 5 tags by count)
     let mut avg_duration_by_tag: Vec<serde_json::Value> = Vec::new();
     let mut sorted_tags: Vec<(String, usize)> = tag_counts.into_iter().collect();
-    sorted_tags.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted_tags.sort_by_key(|t| std::cmp::Reverse(t.1));
     sorted_tags.truncate(5);
     for (tag, _) in &sorted_tags {
         let tag_durations: Vec<f64> = history
