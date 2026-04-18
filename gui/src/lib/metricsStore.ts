@@ -12,6 +12,12 @@ export interface MetricSnapshot {
 }
 
 const MAX_POINTS = 60;
+// Metrics for a container whose most recent snapshot is older than this are
+// considered stale and opportunistically pruned on the next recordMetrics()
+// call. This guarantees the history map is bounded even when the user
+// never opens the Dashboard (which is the only page wiring
+// `pruneMetricsExcept`).
+const STALE_AFTER_MS = 10 * 60 * 1000;
 const [metricsHistory, setMetricsHistory] = createSignal<Record<string, MetricSnapshot[]>>({});
 
 // --- Resource usage alerts ---
@@ -67,11 +73,41 @@ function evaluateAlerts(containerId: string, containerName: string, snapshot: Me
 }
 
 export function recordMetrics(containerId: string, snapshot: MetricSnapshot, containerName?: string) {
+  const cutoff = Date.now() - STALE_AFTER_MS;
+  const staleIds: string[] = [];
   setMetricsHistory((prev) => {
+    // Opportunistically drop history for any container whose most recent
+    // snapshot is older than the staleness window. This covers the case
+    // where a user never visits the Dashboard — otherwise a
+    // MetricSnapshot[] would accumulate per distinct short-lived container
+    // id for the lifetime of the session.
+    const next: Record<string, MetricSnapshot[]> = {};
+    for (const [id, hist] of Object.entries(prev)) {
+      if (id === containerId) continue; // re-added below
+      const lastTs = hist.length > 0 ? hist[hist.length - 1].timestamp : 0;
+      if (lastTs >= cutoff) {
+        next[id] = hist;
+      } else {
+        staleIds.push(id);
+      }
+    }
     const existing = prev[containerId] || [];
-    const updated = [...existing, snapshot].slice(-MAX_POINTS);
-    return { ...prev, [containerId]: updated };
+    next[containerId] = [...existing, snapshot].slice(-MAX_POINTS);
+    return next;
   });
+
+  // Drop the paired alert-tracking state for any ids we just pruned so
+  // `lastAlertTime` / `highCpuStreak` can't leak after history is gone.
+  if (staleIds.length > 0) {
+    const stale = new Set(staleIds);
+    for (const k of Object.keys(lastAlertTime)) {
+      const id = k.split(":")[0];
+      if (stale.has(id)) delete lastAlertTime[k];
+    }
+    for (const k of Object.keys(highCpuStreak)) {
+      if (stale.has(k)) delete highCpuStreak[k];
+    }
+  }
 
   // Evaluate resource alerts after recording
   evaluateAlerts(containerId, containerName || containerId.slice(0, 12), snapshot);

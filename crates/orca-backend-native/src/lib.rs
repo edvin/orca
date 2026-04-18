@@ -88,8 +88,14 @@ impl NativeBackend {
             candidates.push(PathBuf::from(format!("{home}/.colima/docker/docker.sock")));
         }
 
-        // Podman sockets
-        if let Ok(uid) = std::env::var("UID") {
+        // Podman sockets. Use the real UID from libc::getuid() — the
+        // `$UID` env var is only exported by interactive shells, so a
+        // daemon launched from systemd/launchd or any non-shell context
+        // would silently skip the rootless Podman socket lookup.
+        #[cfg(unix)]
+        {
+            // SAFETY: `getuid(2)` is always safe to call and cannot fail.
+            let uid = unsafe { libc::getuid() };
             candidates.push(PathBuf::from(format!("/run/user/{uid}/podman/podman.sock")));
         }
         candidates.push(PathBuf::from("/run/podman/podman.sock"));

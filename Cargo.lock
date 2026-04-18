@@ -3397,6 +3397,7 @@ version = "0.45.0"
 dependencies = [
  "anyhow",
  "bollard",
+ "libc",
  "orca-backend-common",
  "orca-core",
  "tokio",
@@ -3414,6 +3415,7 @@ dependencies = [
  "orca-core",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]

@@ -63,40 +63,127 @@ impl MachineManager for WindowsBackend {
 
         tracing::info!("Installing WSL2 base image...");
 
-        // 1. Install the Ubuntu base image with its default name. Use
-        //    `--no-launch` so no user provisioning runs (we'd prefer the
-        //    root user anyway — see #3 below).
-        let base_already_installed = existing.iter().any(|m| m.name == "Ubuntu-24.04" || m.name == "Ubuntu");
-        let base_name = "Ubuntu-24.04";
-        if !base_already_installed {
-            let output = Command::new("wsl.exe")
-                .args(["--install", "-d", base_name, "--no-launch"])
+        // 1. Install a base image into a distro name we unambiguously own.
+        //
+        //    Orca will NEVER touch a user-installed `Ubuntu` or
+        //    `Ubuntu-24.04` distro — we treat those as foreign and out of
+        //    scope. Exporting and deleting a user's distro to "reuse" its
+        //    rootfs would destroy their home directory and any packages
+        //    they installed. Instead we install into a uniquely-named
+        //    marker distro (`orca-base-Ubuntu-24.04`) that no one else
+        //    should create. If a previous run left it behind we reuse it;
+        //    otherwise we install fresh.
+        let base_name = "orca-base-Ubuntu-24.04";
+        let orca_base_installed = existing.iter().any(|m| m.name == base_name);
+        if !orca_base_installed {
+            // Prefer `--name` so modern wsl.exe installs `Ubuntu-24.04`
+            // directly under our unique name. Older wsl.exe lacks
+            // `--name`, so fall back to installing `Ubuntu-24.04` and
+            // immediately renaming via export/import into our name.
+            let named_install = Command::new("wsl.exe")
+                .args(["--install", "-d", "Ubuntu-24.04", "--name", base_name, "--no-launch"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output()
                 .await?;
 
-            if !output.status.success() {
-                // Fall back to the versionless name for older wsl.exe.
-                let output2 = Command::new("wsl.exe")
-                    .args(["--install", "-d", "Ubuntu", "--no-launch"])
+            if !named_install.status.success() {
+                // Older wsl.exe: install under default name into our own
+                // tempfile, then import under our unique name. We refuse
+                // to do this if a stray `Ubuntu-24.04` already exists —
+                // that distro is NOT ours.
+                let user_owned_collision = self
+                    .list()
+                    .await?
+                    .iter()
+                    .any(|m| m.name == "Ubuntu-24.04" || m.name == "Ubuntu");
+                if user_owned_collision {
+                    anyhow::bail!(
+                        "A user-installed 'Ubuntu-24.04' distro is present. \
+                         Orca will not modify it. Please install a newer wsl.exe \
+                         (supports --name) or rename your existing distro."
+                    );
+                }
+                let install_default = Command::new("wsl.exe")
+                    .args(["--install", "-d", "Ubuntu-24.04", "--no-launch"])
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .output()
                     .await?;
-                if !output2.status.success() {
-                    let stderr = String::from_utf8_lossy(&output2.stderr);
+                if !install_default.status.success() {
+                    let stderr = String::from_utf8_lossy(&install_default.stderr);
                     anyhow::bail!("Failed to install WSL2 base distro: {stderr}");
                 }
+                // Export-and-reimport the just-installed Ubuntu-24.04
+                // into our marker distro name, then unregister the
+                // default-named one (which we created this run).
+                let tmp_tar = tempfile::Builder::new()
+                    .prefix("orca-wsl-base-")
+                    .suffix(".tar")
+                    .tempfile()?;
+                let tar_path_str = tmp_tar
+                    .path()
+                    .to_str()
+                    .ok_or_else(|| anyhow::anyhow!("invalid tarball path"))?
+                    .to_string();
+                let export = Command::new("wsl.exe")
+                    .args(["--export", "Ubuntu-24.04", &tar_path_str])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .output()
+                    .await?;
+                if !export.status.success() {
+                    let stderr = String::from_utf8_lossy(&export.stderr);
+                    anyhow::bail!("Failed to export freshly-installed base: {stderr}");
+                }
+                let base_dest = dirs::data_dir()
+                    .ok_or_else(|| anyhow::anyhow!("cannot resolve data_dir"))?
+                    .join("orca")
+                    .join("wsl")
+                    .join(base_name);
+                tokio::fs::create_dir_all(&base_dest).await?;
+                let import_base = Command::new("wsl.exe")
+                    .args([
+                        "--import",
+                        base_name,
+                        base_dest.to_str().ok_or_else(|| anyhow::anyhow!("invalid dest dir"))?,
+                        &tar_path_str,
+                        "--version",
+                        "2",
+                    ])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .output()
+                    .await?;
+                if !import_base.status.success() {
+                    let stderr = String::from_utf8_lossy(&import_base.stderr);
+                    anyhow::bail!("Failed to import base under orca name: {stderr}");
+                }
+                // We created this default-named distro in this run — it
+                // is ours to remove.
+                let _ = Command::new("wsl.exe")
+                    .args(["--unregister", "Ubuntu-24.04"])
+                    .output()
+                    .await;
+                // tempfile Drop removes `tmp_tar`.
             }
         }
 
-        // 2. Export the installed base to a tarball, then import under
-        //    `config.name` into a distro-specific data dir, then delete the
-        //    base. The user ends up with a distro that carries exactly the
-        //    requested name.
-        let temp_dir = std::env::temp_dir();
-        let tar_path = temp_dir.join(format!("orca-wsl-{distro_name}.tar"));
+        // 2. Export our orca-owned base to a tarball, then import under
+        //    `config.name` into a distro-specific data dir. We only ever
+        //    export from a distro we own.
+        //
+        //    Use tempfile::NamedTempFile so the path is unguessable and
+        //    Drop cleans it up even on panic — the previous predictable
+        //    `/tmp/orca-wsl-<name>.tar` path let a local attacker
+        //    pre-create a symlink to redirect the export, or race us to
+        //    replace the tar with a malicious one before the import.
+        let tmp_tar = tempfile::Builder::new().prefix("orca-wsl-").suffix(".tar").tempfile()?;
+        let tar_path_str = tmp_tar
+            .path()
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("invalid tarball path"))?
+            .to_string();
         let dest_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("cannot resolve data_dir"))?
             .join("orca")
@@ -105,13 +192,7 @@ impl MachineManager for WindowsBackend {
         tokio::fs::create_dir_all(&dest_dir).await?;
 
         let export = Command::new("wsl.exe")
-            .args([
-                "--export",
-                base_name,
-                tar_path
-                    .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("invalid tarball path"))?,
-            ])
+            .args(["--export", base_name, &tar_path_str])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -126,9 +207,7 @@ impl MachineManager for WindowsBackend {
                 "--import",
                 &distro_name,
                 dest_dir.to_str().ok_or_else(|| anyhow::anyhow!("invalid dest dir"))?,
-                tar_path
-                    .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("invalid tarball path"))?,
+                &tar_path_str,
                 "--version",
                 "2",
             ])
@@ -136,8 +215,9 @@ impl MachineManager for WindowsBackend {
             .stderr(Stdio::piped())
             .output()
             .await?;
-        // Best-effort cleanup of the tarball.
-        let _ = tokio::fs::remove_file(&tar_path).await;
+        // Explicit drop of `tmp_tar` happens at end of scope — no manual
+        // remove needed; Drop handles it on both success and panic.
+        drop(tmp_tar);
         if !import.status.success() {
             let stderr = String::from_utf8_lossy(&import.stderr);
             anyhow::bail!("Failed to import WSL distro: {stderr}");
@@ -320,9 +400,14 @@ fi"#,
     }
 
     async fn runtime_socket(&self, _name: &str) -> anyhow::Result<PathBuf> {
-        // On Windows, we connect via TCP or named pipe
-        // The socket inside WSL2 is forwarded via socat or wsl-vpnkit
-        Ok(PathBuf::from("\\\\.\\pipe\\orca-docker"))
+        // Windows does not expose a Unix socket from WSL2 to the host.
+        // Returning a fabricated named-pipe path here (as earlier
+        // revisions did) caused downstream callers to spend time trying
+        // to open a pipe that nothing creates, producing confusing
+        // "file not found" / connect failures far from the root cause.
+        // Fail fast with a helpful message so callers immediately know
+        // to use `DOCKER_HOST` or the WSL TCP forwarder instead.
+        anyhow::bail!("Windows runtime has no Unix-socket; connect via DOCKER_HOST or WSL TCP forwarder")
     }
 }
 

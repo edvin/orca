@@ -136,7 +136,7 @@ propagateProxyEnv: true
         tokio::fs::write(tmp.path(), &lima_config).await?;
         let config_path = tmp.path().to_path_buf();
 
-        let output = Command::new("limactl")
+        let output = limactl_cmd()
             .args([
                 "create",
                 "--name",
@@ -161,8 +161,13 @@ propagateProxyEnv: true
     }
 
     async fn start(&self, name: &str) -> anyhow::Result<()> {
-        let output = Command::new("limactl")
-            .args(["start", name])
+        validate_vm_name(name)?;
+        let output = limactl_cmd()
+            // `--` separates options from positional names so a future
+            // limactl version that adds a flag starting like our name
+            // can't misinterpret it. Only `create` accepts a YAML path;
+            // start/stop/kill/delete/inspect all take VM names after --.
+            .args(["start", "--", name])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -176,8 +181,9 @@ propagateProxyEnv: true
     }
 
     async fn stop(&self, name: &str) -> anyhow::Result<()> {
-        let output = Command::new("limactl")
-            .args(["stop", name])
+        validate_vm_name(name)?;
+        let output = limactl_cmd()
+            .args(["stop", "--", name])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -191,8 +197,9 @@ propagateProxyEnv: true
     }
 
     async fn kill(&self, name: &str) -> anyhow::Result<()> {
-        let output = Command::new("limactl")
-            .args(["stop", "--force", name])
+        validate_vm_name(name)?;
+        let output = limactl_cmd()
+            .args(["stop", "--force", "--", name])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -206,6 +213,7 @@ propagateProxyEnv: true
     }
 
     async fn delete(&self, name: &str) -> anyhow::Result<()> {
+        validate_vm_name(name)?;
         // Stop first if running — log any failure so a stuck VM
         // manifests as something more actionable than a cryptic
         // "limactl delete" error later on.
@@ -213,8 +221,8 @@ propagateProxyEnv: true
             tracing::warn!("Lima delete: stop('{name}') failed (continuing): {e}");
         }
 
-        let output = Command::new("limactl")
-            .args(["delete", name])
+        let output = limactl_cmd()
+            .args(["delete", "--", name])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -228,7 +236,8 @@ propagateProxyEnv: true
     }
 
     async fn inspect(&self, name: &str) -> anyhow::Result<MachineInfo> {
-        let output = Command::new("limactl")
+        validate_vm_name(name)?;
+        let output = limactl_cmd()
             .args(["list", "--json"])
             .stdout(Stdio::piped())
             .output()
@@ -249,7 +258,7 @@ propagateProxyEnv: true
     }
 
     async fn list(&self) -> anyhow::Result<Vec<MachineInfo>> {
-        let output = Command::new("limactl")
+        let output = limactl_cmd()
             .args(["list", "--json"])
             .stdout(Stdio::piped())
             .output()
@@ -270,6 +279,27 @@ propagateProxyEnv: true
     async fn runtime_socket(&self, _name: &str) -> anyhow::Result<PathBuf> {
         Ok(self.socket_path.clone())
     }
+}
+
+/// Build a `Command::new("limactl")` with proxy env vars scrubbed.
+///
+/// The Lima template sets `propagateProxyEnv: true`, which means Lima
+/// reads `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` from whatever environment
+/// started the daemon and propagates them into the guest — where the
+/// `curl https://get.docker.com | sh` bootstrap then uses them. A
+/// poisoned proxy env var on the daemon host would therefore end up
+/// routing the Docker installer download through an attacker-controlled
+/// proxy. Remove these variables from every limactl invocation so the
+/// value the daemon sees never leaks into the VM image.
+fn limactl_cmd() -> Command {
+    let mut cmd = Command::new("limactl");
+    cmd.env_remove("HTTP_PROXY")
+        .env_remove("HTTPS_PROXY")
+        .env_remove("http_proxy")
+        .env_remove("https_proxy")
+        .env_remove("NO_PROXY")
+        .env_remove("no_proxy");
+    cmd
 }
 
 fn parse_lima_vm(vm: &serde_json::Value) -> MachineInfo {

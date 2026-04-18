@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http: https: ws: wss: tauri:; img-src 'self' data: https://github.com https://raw.githubusercontent.com https://img.shields.io"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: tauri: http://127.0.0.1:9477 ws://127.0.0.1:9477 https://hub.docker.com https://registry-1.docker.io https://api.anthropic.com https://api.openai.com https://api.github.com https: wss:; img-src 'self' data: https://github.com https://raw.githubusercontent.com https://img.shields.io"
     }
   },
   "bundle": {

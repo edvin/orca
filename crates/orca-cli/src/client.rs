@@ -312,26 +312,6 @@ impl DaemonClient {
         Ok(resp.json().await?)
     }
 
-    pub async fn start_machine(&self, name: &str) -> anyhow::Result<()> {
-        let resp = self
-            .http
-            .post(self.url(&format!("/machines/{}/start", encode_segment(name))))
-            .send()
-            .await?;
-        check_status(&resp)?;
-        Ok(())
-    }
-
-    pub async fn stop_machine(&self, name: &str) -> anyhow::Result<()> {
-        let resp = self
-            .http
-            .post(self.url(&format!("/machines/{}/stop", encode_segment(name))))
-            .send()
-            .await?;
-        check_status(&resp)?;
-        Ok(())
-    }
-
     // --- Gateway ---
 
     pub async fn gateway_status(&self) -> anyhow::Result<serde_json::Value> {

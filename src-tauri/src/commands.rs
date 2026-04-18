@@ -466,7 +466,7 @@ pub async fn subscribe_container_logs(app: tauri::AppHandle, id: String, tail: O
 
     // Abort any existing subscription for this container
     {
-        let mut map = log_stream_map().lock().unwrap();
+        let mut map = log_stream_map().lock().map_err(|e| format!("Lock poisoned: {e}"))?;
         map.remove(&id);
     }
 
@@ -538,7 +538,7 @@ pub async fn subscribe_container_logs(app: tauri::AppHandle, id: String, tail: O
         }
     });
 
-    let mut map = log_stream_map().lock().unwrap();
+    let mut map = log_stream_map().lock().map_err(|e| format!("Lock poisoned: {e}"))?;
     map.insert(id, LogStreamHandle(handle));
 
     Ok(())
@@ -548,7 +548,7 @@ pub async fn subscribe_container_logs(app: tauri::AppHandle, id: String, tail: O
 /// Aborts the background SSE task.
 #[tauri::command]
 pub async fn unsubscribe_container_logs(id: String) -> Result<(), String> {
-    let mut map = log_stream_map().lock().unwrap();
+    let mut map = log_stream_map().lock().map_err(|e| format!("Lock poisoned: {e}"))?;
     map.remove(&id); // Drop aborts the task
     Ok(())
 }
@@ -685,8 +685,10 @@ pub async fn create_and_run_container(
         .and_then(|v| v.as_str())
         .ok_or_else(|| "No container ID in response".to_string())?;
 
-    // Start the container
-    post_empty(&format!("/containers/{container_id}/start")).await?;
+    // Start the container. URL-encode the id to match the rest of this
+    // file — in the wild container names can contain characters (like
+    // `/`) that would otherwise create spurious extra path segments.
+    post_empty(&format!("/containers/{}/start", urlencoding::encode(container_id))).await?;
 
     Ok(create_result)
 }
@@ -1062,7 +1064,12 @@ pub async fn volume_list_files(name: String, path: Option<String>) -> Result<ser
 
 #[tauri::command]
 pub async fn volume_read_file(name: String, path: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/volumes/{name}/file?path={}", urlencoding::encode(&path))).await
+    get_json(&format!(
+        "/volumes/{}/file?path={}",
+        urlencoding::encode(&name),
+        urlencoding::encode(&path)
+    ))
+    .await
 }
 
 #[tauri::command]
@@ -2171,6 +2178,17 @@ fn validate_helm_chart(chart: &str) -> Result<(), String> {
     if chart.contains('\n') || chart.contains('\0') {
         return Err("Helm chart contains invalid characters".into());
     }
+    // Reject path-traversal shapes: local chart paths are not a
+    // supported use-case — a chart reference is either an OCI URL
+    // (`oci://...`) or a `repo/chart` form. Allowing `..` or `/`-prefixed
+    // inputs lets a caller pass e.g. `../../etc/passwd` into helm's
+    // argv, which is both confusing and dangerous.
+    if chart.contains("..") {
+        return Err("Helm chart must not contain '..'".into());
+    }
+    if chart.starts_with('/') {
+        return Err("Helm chart must not be an absolute path".into());
+    }
     Ok(())
 }
 
@@ -2797,38 +2815,47 @@ pub async fn get_wsl_config() -> Result<serde_json::Value, String> {
         std::env::var("USERPROFILE").map_err(|_| "USERPROFILE environment variable not set".to_string())?;
     let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
 
-    let mut memory = String::new();
-    let mut processors = String::new();
-    let mut swap = String::new();
+    // Filesystem reads can block for seconds on slow disks / NFS;
+    // dispatch to `spawn_blocking` so we don't park a tokio worker.
+    let (memory, processors, swap) = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        let mut memory = String::new();
+        let mut processors = String::new();
+        let mut swap = String::new();
 
-    if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path).map_err(|e| format!("Failed to read .wslconfig: {e}"))?;
+        if config_path.exists() {
+            let content =
+                std::fs::read_to_string(&config_path).map_err(|e| format!("Failed to read .wslconfig: {e}"))?;
 
-        let mut in_wsl2_section = false;
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.eq_ignore_ascii_case("[wsl2]") {
-                in_wsl2_section = true;
-                continue;
-            }
-            if trimmed.starts_with('[') {
-                in_wsl2_section = false;
-                continue;
-            }
-            if in_wsl2_section {
-                if let Some((key, value)) = trimmed.split_once('=') {
-                    let key = key.trim().to_lowercase();
-                    let value = value.trim().to_string();
-                    match key.as_str() {
-                        "memory" => memory = value,
-                        "processors" => processors = value,
-                        "swap" => swap = value,
-                        _ => {}
+            let mut in_wsl2_section = false;
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.eq_ignore_ascii_case("[wsl2]") {
+                    in_wsl2_section = true;
+                    continue;
+                }
+                if trimmed.starts_with('[') {
+                    in_wsl2_section = false;
+                    continue;
+                }
+                if in_wsl2_section {
+                    if let Some((key, value)) = trimmed.split_once('=') {
+                        let key = key.trim().to_lowercase();
+                        let value = value.trim().to_string();
+                        match key.as_str() {
+                            "memory" => memory = value,
+                            "processors" => processors = value,
+                            "swap" => swap = value,
+                            _ => {}
+                        }
                     }
                 }
             }
         }
-    }
+
+        Ok((memory, processors, swap))
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking join failed: {e}"))??;
 
     Ok(serde_json::json!({
         "memory": memory,
@@ -2874,46 +2901,52 @@ pub async fn save_wsl_config(memory: String, processors: String, swap: String) -
         std::env::var("USERPROFILE").map_err(|_| "USERPROFILE environment variable not set".to_string())?;
     let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
 
-    // Read existing config and preserve non-wsl2 sections
-    let existing = if config_path.exists() {
-        std::fs::read_to_string(&config_path).map_err(|e| format!("Failed to read .wslconfig: {e}"))?
-    } else {
-        String::new()
-    };
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        // Read existing config and preserve non-wsl2 sections
+        let existing = if config_path.exists() {
+            std::fs::read_to_string(&config_path).map_err(|e| format!("Failed to read .wslconfig: {e}"))?
+        } else {
+            String::new()
+        };
 
-    let mut other_sections = String::new();
-    let mut in_wsl2_section = false;
-    for line in existing.lines() {
-        let trimmed = line.trim();
-        if trimmed.eq_ignore_ascii_case("[wsl2]") {
-            in_wsl2_section = true;
-            continue;
+        let mut other_sections = String::new();
+        let mut in_wsl2_section = false;
+        for line in existing.lines() {
+            let trimmed = line.trim();
+            if trimmed.eq_ignore_ascii_case("[wsl2]") {
+                in_wsl2_section = true;
+                continue;
+            }
+            if trimmed.starts_with('[') {
+                in_wsl2_section = false;
+            }
+            if !in_wsl2_section {
+                other_sections.push_str(line);
+                other_sections.push('\n');
+            }
         }
-        if trimmed.starts_with('[') {
-            in_wsl2_section = false;
-        }
-        if !in_wsl2_section {
-            other_sections.push_str(line);
-            other_sections.push('\n');
-        }
-    }
 
-    // Build new content with [wsl2] section first
-    let mut content = String::from("[wsl2]\n");
-    if !memory.is_empty() {
-        content.push_str(&format!("memory={memory}\n"));
-    }
-    if !processors.is_empty() {
-        content.push_str(&format!("processors={processors}\n"));
-    }
-    if !swap.is_empty() {
-        content.push_str(&format!("swap={swap}\n"));
-    }
-    content.push('\n');
-    content.push_str(other_sections.trim_start());
+        // Build new content with [wsl2] section first
+        let mut content = String::from("[wsl2]\n");
+        if !memory.is_empty() {
+            content.push_str(&format!("memory={memory}\n"));
+        }
+        if !processors.is_empty() {
+            content.push_str(&format!("processors={processors}\n"));
+        }
+        if !swap.is_empty() {
+            content.push_str(&format!("swap={swap}\n"));
+        }
+        content.push('\n');
+        content.push_str(other_sections.trim_start());
 
-    std::fs::write(&config_path, content.trim_end_matches('\n'))
-        .map_err(|e| format!("Failed to write .wslconfig: {e}"))?;
+        std::fs::write(&config_path, content.trim_end_matches('\n'))
+            .map_err(|e| format!("Failed to write .wslconfig: {e}"))?;
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking join failed: {e}"))??;
 
     Ok(())
 }
@@ -3046,16 +3079,52 @@ pub async fn get_daemon_info() -> Result<serde_json::Value, String> {
         .parent()
         .map(|p| p.join("daemon.log"))
         .unwrap_or_default();
-    let log_tail = std::fs::read_to_string(&log_path)
-        .unwrap_or_default()
-        .lines()
-        .rev()
-        .take(100)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>()
-        .join("\n");
+
+    // Read only the last 64 KiB of the log. A long-running daemon can
+    // grow `daemon.log` to many MB; slurping the whole file into memory
+    // on every settings-panel refresh is wasteful and blocks the tokio
+    // worker. Seek to `len - 64KiB` and parse from there.
+    const TAIL_BYTES: u64 = 64 * 1024;
+    let log_path_clone = log_path.clone();
+    let log_tail = tokio::task::spawn_blocking(move || -> String {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut file = match std::fs::File::open(&log_path_clone) {
+            Ok(f) => f,
+            Err(_) => return String::new(),
+        };
+        let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+        let start = len.saturating_sub(TAIL_BYTES);
+        if file.seek(SeekFrom::Start(start)).is_err() {
+            return String::new();
+        }
+        let mut buf = Vec::with_capacity(TAIL_BYTES as usize);
+        if file.read_to_end(&mut buf).is_err() {
+            return String::new();
+        }
+        let text = String::from_utf8_lossy(&buf);
+        // If we seeked into the middle of a line, drop the partial
+        // leading line so the user doesn't see a mangled entry.
+        let trimmed: &str = if start > 0 {
+            match text.find('\n') {
+                Some(pos) => &text[pos + 1..],
+                None => &text,
+            }
+        } else {
+            &text
+        };
+        // Keep at most the last 100 lines — matches previous behaviour.
+        trimmed
+            .lines()
+            .rev()
+            .take(100)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join("\n")
+    })
+    .await
+    .unwrap_or_default();
 
     Ok(serde_json::json!({
         "binary_path": daemon::find_daemon_binary(),

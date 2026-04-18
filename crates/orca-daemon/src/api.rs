@@ -34,8 +34,45 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::state::AppState;
 
-/// Simple API error that maps anyhow errors to JSON 500 responses.
-struct ApiError(anyhow::Error);
+/// Serializes CA-on-first-boot initialization so two concurrent
+/// `/ca/certificate` requests cannot each generate a different CA and
+/// race the rename, leaving one of them with a cert signed by a key the
+/// other winner doesn't have.
+static CA_INIT_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Caps how many agent tool dispatches can run in parallel so a burst of
+/// OpenAI tool-calls cannot exhaust the daemon's resources.
+static AGENT_SEM: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(8);
+
+/// Simple API error that maps anyhow errors to JSON 500 responses by
+/// default, or to an explicit status code when constructed via a helper
+/// such as [`ApiError::bad_request`].
+///
+/// The struct stores the status alongside the error. The original
+/// tuple-like `ApiError(anyhow::Error)` construction sites are preserved
+/// through `From<anyhow::Error>`; callers that want a specific status
+/// code should use the helper constructors instead.
+struct ApiError {
+    status: StatusCode,
+    err: anyhow::Error,
+}
+
+#[allow(non_snake_case)]
+fn ApiError(err: anyhow::Error) -> ApiError {
+    ApiError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        err,
+    }
+}
+
+impl ApiError {
+    fn bad_request(msg: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            err: anyhow::anyhow!(msg.into()),
+        }
+    }
+}
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
@@ -44,9 +81,9 @@ impl IntoResponse for ApiError {
             error: String,
         }
         (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            self.status,
             Json(ErrorBody {
-                error: self.0.to_string(),
+                error: self.err.to_string(),
             }),
         )
             .into_response()
@@ -55,8 +92,25 @@ impl IntoResponse for ApiError {
 
 impl From<anyhow::Error> for ApiError {
     fn from(err: anyhow::Error) -> Self {
-        Self(err)
+        Self {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            err,
+        }
     }
+}
+
+/// Cheap regex-free validator for image IDs and refs as routed through
+/// the daemon. Matches `^[a-zA-Z0-9][a-zA-Z0-9._:/@-]{0,511}$`.
+fn is_valid_image_id(s: &str) -> bool {
+    if s.is_empty() || s.len() > 512 {
+        return false;
+    }
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphanumeric() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | ':' | '/' | '@' | '-'))
 }
 
 /// Authentication middleware. Checks for a valid Bearer token on all
@@ -942,9 +996,15 @@ async fn pull_image(
         // Auto-lookup saved credentials for this registry
         let config = state.config.lock().await;
         if let Some(cred) = config.find_credentials(&body.reference) {
+            // Refuse to proceed with an empty/broken password — previously
+            // a corrupt base64 silently yielded "" which some registries
+            // accept as anonymous.
+            let password = cred
+                .password()
+                .map_err(|e| anyhow::anyhow!("Registry credential for '{}' is unusable: {e}", cred.server))?;
             let registry_auth = orca_core::image::RegistryAuth {
                 username: cred.username.clone(),
-                password: cred.password(),
+                password,
                 server: Some(cred.server.clone()),
             };
             drop(config);
@@ -1874,38 +1934,51 @@ async fn volume_list_files(
     };
 
     let id = state.rt().await.create_container(opts).await?;
-    state.rt().await.start_container(&id).await?;
 
-    // Wait for container to finish
-    {
-        use bollard::container::WaitContainerOptions;
-        use futures::StreamExt;
-        let wait_opts = WaitContainerOptions {
-            condition: "not-running",
+    // Wrap start + wait + log collection + inspect in an async block so
+    // that the helper container is removed on *every* exit path, not just
+    // the happy path. Previously a `?` in any of those steps would leak
+    // the container.
+    type WorkResult = anyhow::Result<(Vec<String>, Option<i64>)>;
+    let work: WorkResult = async {
+        state.rt().await.start_container(&id).await?;
+
+        // Wait for container to finish
+        {
+            use bollard::container::WaitContainerOptions;
+            use futures::StreamExt;
+            let wait_opts = WaitContainerOptions {
+                condition: "not-running",
+            };
+            let _ = tokio::time::timeout(
+                Duration::from_secs(10),
+                state.rt().await.docker.wait_container(&id, Some(wait_opts)).next(),
+            )
+            .await;
+        }
+
+        // Collect logs
+        let log_rx = state.rt().await.container_logs(&id, false, Some(1000)).await?;
+        let mut lines = Vec::new();
+        let mut rx = log_rx;
+        while let Some(line) = rx.recv().await {
+            lines.push(line);
+        }
+
+        // Check exit code
+        let exit_code = match state.rt().await.inspect_container(&id).await {
+            Ok(info) => info.exit_code,
+            Err(_) => None,
         };
-        let _ = tokio::time::timeout(
-            Duration::from_secs(10),
-            state.rt().await.docker.wait_container(&id, Some(wait_opts)).next(),
-        )
-        .await;
+
+        Ok((lines, exit_code))
     }
+    .await;
 
-    // Collect logs
-    let log_rx = state.rt().await.container_logs(&id, false, Some(1000)).await?;
-    let mut lines = Vec::new();
-    let mut rx = log_rx;
-    while let Some(line) = rx.recv().await {
-        lines.push(line);
-    }
-
-    // Check exit code
-    let exit_code = match state.rt().await.inspect_container(&id).await {
-        Ok(info) => info.exit_code,
-        Err(_) => None,
-    };
-
-    // Clean up
+    // Clean up the helper container no matter what happened above.
     let _ = state.rt().await.remove_container(&id, true).await;
+
+    let (lines, exit_code) = work?;
 
     // If the container exited with non-zero, return an error
     if let Some(code) = exit_code
@@ -1996,30 +2069,39 @@ async fn volume_read_file(
     };
 
     let id = state.rt().await.create_container(opts).await?;
-    state.rt().await.start_container(&id).await?;
 
-    // Wait for container to finish
-    {
-        use bollard::container::WaitContainerOptions;
-        use futures::StreamExt;
-        let wait_opts = WaitContainerOptions {
-            condition: "not-running",
-        };
-        let _ = tokio::time::timeout(
-            Duration::from_secs(10),
-            state.rt().await.docker.wait_container(&id, Some(wait_opts)).next(),
-        )
-        .await;
-    }
+    // Same pattern as volume_list_files: ensure the helper container is
+    // removed even if the middle steps bail with `?`.
+    let work: anyhow::Result<Vec<String>> = async {
+        state.rt().await.start_container(&id).await?;
 
-    let log_rx = state.rt().await.container_logs(&id, false, Some(10000)).await?;
-    let mut lines = Vec::new();
-    let mut rx = log_rx;
-    while let Some(line) = rx.recv().await {
-        lines.push(line);
+        // Wait for container to finish
+        {
+            use bollard::container::WaitContainerOptions;
+            use futures::StreamExt;
+            let wait_opts = WaitContainerOptions {
+                condition: "not-running",
+            };
+            let _ = tokio::time::timeout(
+                Duration::from_secs(10),
+                state.rt().await.docker.wait_container(&id, Some(wait_opts)).next(),
+            )
+            .await;
+        }
+
+        let log_rx = state.rt().await.container_logs(&id, false, Some(10000)).await?;
+        let mut lines = Vec::new();
+        let mut rx = log_rx;
+        while let Some(line) = rx.recv().await {
+            lines.push(line);
+        }
+        Ok(lines)
     }
+    .await;
 
     let _ = state.rt().await.remove_container(&id, true).await;
+
+    let lines = work?;
 
     Ok(Json(serde_json::json!({ "content": lines.join("\n") })))
 }
@@ -2635,6 +2717,17 @@ async fn scan_image(
     use futures::StreamExt;
 
     tracing::info!("scan_image: starting scan for {image_id}");
+
+    // Validate the caller-supplied id before doing anything else. An image
+    // id can be a sha256 digest, a repo:tag, a repo@digest, or a short hex
+    // prefix — all of which fit `^[a-zA-Z0-9][a-zA-Z0-9._:/@-]{0,511}$`.
+    // Anything else (spaces, leading dashes, shell metacharacters) must be
+    // rejected so the resolver can't turn a malicious string into a Trivy
+    // argument.
+    if !is_valid_image_id(&image_id) {
+        return Err(ApiError::bad_request(format!("invalid image id: {image_id}")));
+    }
+
     let image_ref = resolve_image_ref(&state, &image_id).await?;
     let docker = &state.rt().await.docker;
 
@@ -2645,7 +2738,10 @@ async fn scan_image(
     let socket_path = "/var/run/docker.sock".to_string();
     tracing::debug!("scan_image: mounting docker socket at {socket_path}");
 
-    // Run Trivy as a container with access to the Docker socket
+    // Run Trivy as a container with access to the Docker socket. `--`
+    // terminates option parsing so a maliciously crafted image ref that
+    // happens to look like a flag (e.g. starts with `-`) can't be
+    // interpreted as a Trivy option.
     let config = Config {
         image: Some("ghcr.io/aquasecurity/trivy:latest".to_string()),
         cmd: Some(vec![
@@ -2653,6 +2749,7 @@ async fn scan_image(
             "--format".to_string(),
             "json".to_string(),
             "--quiet".to_string(),
+            "--".to_string(),
             image_ref.clone(),
         ]),
         host_config: Some(HostConfig {
@@ -3850,7 +3947,10 @@ async fn k8s_pod_terminal_ws(
 async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: String) {
     use tokio::process::Command as TokioCommand;
 
-    // Spawn kubectl exec process
+    // Spawn kubectl exec process. `.kill_on_drop(true)` ensures the child
+    // doesn't outlive the WebSocket handler — without it, a client that
+    // disconnects leaves kubectl (and the underlying `exec` session)
+    // running until it hits its own EOF on stdin.
     #[cfg(target_os = "windows")]
     let child_result = {
         TokioCommand::new("wsl")
@@ -3862,6 +3962,7 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
             .spawn()
     };
 
@@ -3879,6 +3980,7 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
             .spawn()
     };
 
@@ -4005,6 +4107,11 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
         _ = stderr_task => {}
         _ = child.wait() => {}
     }
+
+    // Whichever branch fired the select first, any others might still be
+    // alive — explicitly ask the child to exit before it drops. `start_kill`
+    // is a no-op if the process has already exited.
+    let _ = child.start_kill();
 }
 
 // --- Environment ---
@@ -4685,17 +4792,32 @@ fn ca_dir() -> std::path::PathBuf {
 /// Propagates errors instead of panicking so callers (including the
 /// unauthenticated `/ca/certificate` endpoint) cannot crash the daemon
 /// by putting the config dir in an unwritable state.
-fn get_or_create_ca() -> anyhow::Result<(String, String)> {
+async fn get_or_create_ca() -> anyhow::Result<(String, String)> {
     let dir = ca_dir();
     let cert_path = dir.join("ca.pem");
     let key_path = dir.join("ca-key.pem");
 
-    // If both files exist, read and return them
+    // Fast path: both files already exist and are readable. Outside the
+    // lock so steady-state reads stay concurrent.
     if cert_path.exists()
         && key_path.exists()
         && let (Ok(cert_pem), Ok(key_pem)) = (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path))
     {
         tracing::info!("Loaded existing CA from {}", dir.display());
+        return Ok((cert_pem, key_pem));
+    }
+
+    // First-boot path: serialize so two concurrent callers don't each
+    // generate a different CA and race the rename.
+    let _guard = CA_INIT_LOCK.lock().await;
+
+    // Re-check under the lock — the previous holder may have created
+    // both files already.
+    if cert_path.exists()
+        && key_path.exists()
+        && let (Ok(cert_pem), Ok(key_pem)) = (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path))
+    {
+        tracing::info!("Loaded existing CA from {} (post-lock)", dir.display());
         return Ok((cert_pem, key_pem));
     }
 
@@ -4725,17 +4847,60 @@ fn get_or_create_ca() -> anyhow::Result<(String, String)> {
     let cert_pem = cert.pem();
     let key_pem = key_pair.serialize_pem();
 
-    // Save to disk
+    // Save to disk. Write key first, then cert, using `create_new` on
+    // temp siblings + atomic rename so a second writer can't silently
+    // clobber an already-written file from a racing generator.
     std::fs::create_dir_all(&dir).map_err(|e| anyhow::anyhow!("Failed to create CA directory: {e}"))?;
-    std::fs::write(&cert_path, &cert_pem).map_err(|e| anyhow::anyhow!("Failed to write CA certificate: {e}"))?;
-    std::fs::write(&key_path, &key_pem).map_err(|e| anyhow::anyhow!("Failed to write CA private key: {e}"))?;
 
-    // Restrict key file permissions on Unix
+    let key_tmp = dir.join("ca-key.pem.tmp");
+    let cert_tmp = dir.join("ca.pem.tmp");
+    // Clean up stragglers from a prior crashed generator.
+    let _ = std::fs::remove_file(&key_tmp);
+    let _ = std::fs::remove_file(&cert_tmp);
+
+    // Key first, with a narrow perms mode where the platform allows it.
+    {
+        use std::io::Write as _;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let mut f = opts
+            .open(&key_tmp)
+            .map_err(|e| anyhow::anyhow!("Failed to create CA key temp: {e}"))?;
+        f.write_all(key_pem.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to write CA key temp: {e}"))?;
+        f.sync_all().ok();
+    }
+    std::fs::rename(&key_tmp, &key_path).map_err(|e| {
+        let _ = std::fs::remove_file(&key_tmp);
+        anyhow::anyhow!("Failed to install CA key: {e}")
+    })?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
     }
+
+    // Then cert.
+    {
+        use std::io::Write as _;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        let mut f = opts
+            .open(&cert_tmp)
+            .map_err(|e| anyhow::anyhow!("Failed to create CA cert temp: {e}"))?;
+        f.write_all(cert_pem.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to write CA cert temp: {e}"))?;
+        f.sync_all().ok();
+    }
+    std::fs::rename(&cert_tmp, &cert_path).map_err(|e| {
+        let _ = std::fs::remove_file(&cert_tmp);
+        anyhow::anyhow!("Failed to install CA cert: {e}")
+    })?;
 
     tracing::info!("Saved new CA certificate to {}", cert_path.display());
     Ok((cert_pem, key_pem))
@@ -4743,7 +4908,7 @@ fn get_or_create_ca() -> anyhow::Result<(String, String)> {
 
 /// Generate (or retrieve from cache) a leaf certificate signed by the Orca CA.
 /// The certificate uses `subject` as the CN (defaults to "localhost").
-fn get_or_generate_cert_key_pair<'a>(
+async fn get_or_generate_cert_key_pair<'a>(
     subject: Option<&str>,
     cache: &'a mut Option<CachedCertKeyPair>,
 ) -> anyhow::Result<&'a CachedCertKeyPair> {
@@ -4752,7 +4917,7 @@ fn get_or_generate_cert_key_pair<'a>(
 
         // Load the CA — propagate any error so callers can surface a 500
         // instead of panicking the daemon.
-        let (ca_cert_pem, ca_key_pem) = get_or_create_ca()?;
+        let (ca_cert_pem, ca_key_pem) = get_or_create_ca().await?;
         let ca_key =
             rcgen::KeyPair::from_pem(&ca_key_pem).map_err(|e| anyhow::anyhow!("Failed to parse CA key: {e}"))?;
         let ca_params = rcgen::CertificateParams::from_ca_cert_pem(&ca_cert_pem)
@@ -4806,7 +4971,7 @@ fn get_or_generate_cert_key_pair<'a>(
 
 /// Resolve a GeneratedValue to a string, using user_inputs for UserInput variants.
 /// `cert_cache` is used to ensure SelfSignedCert and SelfSignedKey produce a matching pair.
-fn resolve_generated_value(
+async fn resolve_generated_value(
     key: &str,
     value: &orca_core::templates::GeneratedValue,
     user_inputs: &HashMap<String, String>,
@@ -4822,7 +4987,7 @@ fn resolve_generated_value(
             Some(String::new())
         }),
         GeneratedValue::SelfSignedCert { subject } => {
-            match get_or_generate_cert_key_pair(subject.as_deref(), cert_cache) {
+            match get_or_generate_cert_key_pair(subject.as_deref(), cert_cache).await {
                 Ok(pair) => Some(pair.cert_pem.clone()),
                 Err(e) => {
                     tracing::warn!("Self-signed cert generation failed: {e}");
@@ -4830,7 +4995,7 @@ fn resolve_generated_value(
                 }
             }
         }
-        GeneratedValue::SelfSignedKey => match get_or_generate_cert_key_pair(None, cert_cache) {
+        GeneratedValue::SelfSignedKey => match get_or_generate_cert_key_pair(None, cert_cache).await {
             Ok(pair) => Some(pair.key_pem.clone()),
             Err(e) => {
                 tracing::warn!("Self-signed key generation failed: {e}");
@@ -4895,7 +5060,7 @@ async fn deploy_template(
         if let Some(ref gen_env) = template.generated_env {
             let mut env_lines = Vec::new();
             for (key, gen_value) in gen_env {
-                if let Some(resolved) = resolve_generated_value(key, gen_value, &user_inputs, &mut cert_cache) {
+                if let Some(resolved) = resolve_generated_value(key, gen_value, &user_inputs, &mut cert_cache).await {
                     env_lines.push(format!("{key}={resolved}"));
                 }
             }
@@ -4912,7 +5077,9 @@ async fn deploy_template(
         // Process generated_files: resolve values and write files
         if let Some(ref gen_files) = template.generated_files {
             for (rel_path, gen_value) in gen_files {
-                if let Some(resolved) = resolve_generated_value(rel_path, gen_value, &user_inputs, &mut cert_cache) {
+                if let Some(resolved) =
+                    resolve_generated_value(rel_path, gen_value, &user_inputs, &mut cert_cache).await
+                {
                     let file_path = stack_dir.join(rel_path);
                     if let Some(parent) = file_path.parent() {
                         std::fs::create_dir_all(parent)
@@ -7157,6 +7324,18 @@ async fn agent_execute_tool(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AgentExecuteRequest>,
 ) -> impl IntoResponse {
+    // Cap concurrency so a flood of agent requests can't exhaust the
+    // daemon's resources.
+    let _permit = match AGENT_SEM.acquire().await {
+        Ok(p) => p,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({ "error": "agent pool closed" })),
+            );
+        }
+    };
+
     match crate::agent::execute_tool(&state, &body.tool, body.arguments).await {
         Ok(result) => (StatusCode::OK, Json(serde_json::json!({ "result": result }))),
         Err(err) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))),
@@ -7188,7 +7367,19 @@ async fn agent_openai_proxy(
     let tool_calls = tool_calls.or_else(|| body.get("tool_calls").and_then(|tc| tc.as_array()).cloned());
 
     let tool_calls = match tool_calls {
-        Some(tc) => tc,
+        Some(tc) => {
+            // Cap tool_calls length so a malicious caller can't force the
+            // daemon into an arbitrarily long dispatch loop.
+            if tc.len() > 16 {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": format!("too many tool_calls: {} (max 16)", tc.len()),
+                    })),
+                );
+            }
+            tc
+        }
         None => {
             // No tool calls — return the available tools so the caller can use them
             let catalog = orca_core::agent_tools::tool_catalog();
@@ -7242,7 +7433,12 @@ async fn agent_openai_proxy(
             })
             .unwrap_or(serde_json::json!({}));
 
+        // Cap concurrency per tool dispatch. We acquire inside the loop
+        // so each tool call waits its turn rather than holding one permit
+        // for the whole batch.
+        let permit = AGENT_SEM.acquire().await.ok();
         let result = crate::agent::execute_tool(&state, name, arguments).await;
+        drop(permit);
 
         tool_results.push(serde_json::json!({
             "role": "tool",
@@ -7878,7 +8074,7 @@ async fn gateway_get_dismissed(State(state): State<Arc<AppState>>) -> Result<imp
 /// not be able to crash the process by putting the config dir in an
 /// unwritable state.
 async fn ca_certificate() -> Result<impl IntoResponse, ApiError> {
-    let (cert_pem, _) = get_or_create_ca()?;
+    let (cert_pem, _) = get_or_create_ca().await?;
     Ok((
         [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         cert_pem,
@@ -7887,7 +8083,7 @@ async fn ca_certificate() -> Result<impl IntoResponse, ApiError> {
 
 /// GET /ca/info — returns CA info as JSON (auth required).
 async fn ca_info() -> Result<impl IntoResponse, ApiError> {
-    let (cert_pem, _) = get_or_create_ca()?;
+    let (cert_pem, _) = get_or_create_ca().await?;
 
     let x509 = openssl::x509::X509::from_pem(cert_pem.as_bytes())
         .map_err(|e| anyhow::anyhow!("Failed to parse CA certificate: {e}"))?;

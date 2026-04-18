@@ -168,18 +168,6 @@ enum K8sAction {
 enum MachineAction {
     /// List all machines
     List,
-    /// Start a machine
-    Start {
-        /// Machine name (default: "default")
-        #[arg(default_value = "default")]
-        name: String,
-    },
-    /// Stop a machine
-    Stop {
-        /// Machine name (default: "default")
-        #[arg(default_value = "default")]
-        name: String,
-    },
 }
 
 #[derive(Subcommand)]
@@ -360,8 +348,6 @@ async fn main() -> anyhow::Result<()> {
         },
         Commands::Machine { action } => match action {
             MachineAction::List => cmd_machine_list(&client).await?,
-            MachineAction::Start { name } => cmd_machine_start(&client, &name).await?,
-            MachineAction::Stop { name } => cmd_machine_stop(&client, &name).await?,
         },
         Commands::Gateway { action } => match action {
             GatewayAction::Status => cmd_gateway_status(&client).await?,
@@ -465,10 +451,15 @@ async fn cmd_container_exec(client: &client::DaemonClient, id: &str, cmd: Vec<St
         print!("{}", result.output);
     }
     if result.exit_code != 0 {
-        // POSIX exit codes are unsigned bytes; clamp to avoid wrap-around
-        // from negative values (which would produce confusing codes like
-        // 255 — colliding with "command not found" semantics).
-        let code = result.exit_code.clamp(0, 255);
+        // POSIX exit codes are unsigned bytes. Negative codes from the
+        // daemon (e.g. -1 for "failed to spawn") must NOT silently map to
+        // 0 — that would report success to the calling shell. Map any
+        // negative code to 1 ("general error"); otherwise cap at 255.
+        let code = if result.exit_code < 0 {
+            1
+        } else {
+            std::cmp::min(result.exit_code, 255)
+        };
         std::process::exit(code);
     }
     Ok(())
@@ -608,20 +599,6 @@ async fn cmd_machine_list(client: &client::DaemonClient) -> anyhow::Result<()> {
             m.name, m.state, m.config.cpus, mem, m.config.runtime
         );
     }
-    Ok(())
-}
-
-async fn cmd_machine_start(client: &client::DaemonClient, name: &str) -> anyhow::Result<()> {
-    println!("Starting machine '{name}'...");
-    client.start_machine(name).await?;
-    println!("Machine '{name}' started.");
-    Ok(())
-}
-
-async fn cmd_machine_stop(client: &client::DaemonClient, name: &str) -> anyhow::Result<()> {
-    println!("Stopping machine '{name}'...");
-    client.stop_machine(name).await?;
-    println!("Machine '{name}' stopped.");
     Ok(())
 }
 
@@ -844,6 +821,25 @@ async fn cmd_ca_install(client: &client::DaemonClient) -> anyhow::Result<()> {
         // tempfile Drop will remove the file.
         Ok(())
     } else {
+        // If we got here on Linux with step 1 succeeding but step 2
+        // (update-ca-certificates) failing, the .crt is sitting in the
+        // system trust source dir WITHOUT having been rehashed — remove
+        // it so a partial install doesn't persist a cert that will be
+        // picked up by the next `update-ca-certificates` run.
+        #[cfg(target_os = "linux")]
+        {
+            let step1_ok = status.as_ref().map(|s| s.success()).unwrap_or(false);
+            let step2_failed = matches!(
+                &linux_step2_status,
+                Some(Ok(s)) if !s.success()
+            ) || matches!(&linux_step2_status, Some(Err(_)));
+            if step1_ok && step2_failed {
+                let _ = std::process::Command::new("sudo")
+                    .args(["rm", "-f", "/usr/local/share/ca-certificates/orca-ca.crt"])
+                    .status();
+            }
+        }
+
         eprintln!("Automatic installation failed. Install manually:");
         eprintln!("  {manual_instructions}");
         // Keep the tempfile alive at its CURRENT unpredictable path so a

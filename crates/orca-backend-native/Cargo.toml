@@ -12,3 +12,6 @@ anyhow.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 bollard = "0.18"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

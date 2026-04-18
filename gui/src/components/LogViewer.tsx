@@ -192,7 +192,11 @@ export default function LogViewer(props: LogViewerProps) {
     }
   });
 
-  const filtered = () => {
+  // Memoized so we only recompute / recompile the filter RegExp when one of
+  // the tracked signals changes. Previously this was a plain function that
+  // was called 4+ times per render (header count, matchCount, scroll
+  // effect, `<For>` source), each time rebuilding the regex from scratch.
+  const filtered = createMemo(() => {
     const f = filter();
     let result = lines();
     if (f) {
@@ -211,7 +215,7 @@ export default function LogViewer(props: LogViewerProps) {
       if (line.trim() === "" && i > 0 && arr[i - 1].trim() === "") return false;
       return true;
     });
-  };
+  });
 
   const matchCount = () => {
     if (!filter()) return 0;

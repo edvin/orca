@@ -73,6 +73,13 @@ const SVG_ALLOWED_ATTRS = new Set([
   "gradientTransform",
   "spreadMethod",
   "patternUnits",
+  // `href` / `xlink:href` are needed so `<use href="#icon-id">` and
+  // `<image href="#...">` can reference local fragments. The per-attribute
+  // URL check below rejects any non-fragment target, so adding these to the
+  // allow-list does not admit external URLs.
+  "href",
+  "xlink:href",
+  "src",
 ]);
 
 const DANGEROUS_URL_PREFIX = /^\s*(javascript|data|vbscript):/i;
@@ -161,6 +168,14 @@ export function sanitizeSvg(raw: string): string {
         // Reject JS schemes, CSS expressions, @import, and any `url(...)`
         // whose target isn't a local fragment.
         const v = attr.value;
+        // CSS identifier escapes (`\75rl(...)`) let an attacker spell
+        // `url(...)` / `javascript:` past the literal-string checks below.
+        // Legitimate template icons never need `\` in a style value, so
+        // reject outright.
+        if (v.indexOf("\\") !== -1) {
+          node.removeAttribute(attr.name);
+          continue;
+        }
         if (/expression\s*\(|@import|javascript:|vbscript:|data:/i.test(v)) {
           node.removeAttribute(attr.name);
           continue;
@@ -219,6 +234,13 @@ export function safeHref(url: unknown): string {
   const s = String(url ?? "").trim();
   if (!s) return "";
   if (DANGEROUS_URL_PREFIX.test(s)) return "";
-  if (/^(https?:|mailto:|\/|#)/i.test(s)) return s;
+  // Reject protocol-relative URLs (`//evil.example/x`) — they inherit the
+  // current page's scheme and effectively behave like absolute cross-origin
+  // links, bypassing the intent of the leading-`/` branch below.
+  if (/^\/\//.test(s)) return "";
+  // A leading `/` is allowed only for same-origin absolute paths; the
+  // following character must NOT be another `/` (that would be
+  // protocol-relative, handled above).
+  if (/^(https?:\/\/|mailto:|\/[^\/]|#)/i.test(s)) return s;
   return "";
 }

@@ -75,18 +75,30 @@ async fn main() -> anyhow::Result<()> {
     // show the Environment page and help the user install prerequisites.
     let runtime = connect_runtime().await;
 
-    // Start the Docker event listener
+    // Start the Docker event listener. The inner broadcast::Receiver is
+    // bound to whichever BollardRuntime we subscribed to. When
+    // `reconnect_runtime` hot-swaps the runtime via `swap_runtime`, the
+    // old inner channel closes — we must re-subscribe against the *new*
+    // runtime to keep events flowing. The outer `loop` does exactly that.
     let (events_tx, _) = broadcast::channel(256);
-    let mut events_rx = runtime.subscribe_events();
-    let events_tx_clone = events_tx.clone();
-    tokio::spawn(async move {
-        while let Ok(event) = events_rx.recv().await {
-            let _ = events_tx_clone.send(event);
-        }
-    });
-
     let k8s = Arc::new(orca_backend_common::k8s::K3sManager::from_env());
-    let state = Arc::new(AppState::new(config, runtime, k8s, events_tx, api_token));
+    let state = Arc::new(AppState::new(config, runtime, k8s, events_tx.clone(), api_token));
+
+    {
+        let state_for_events = state.clone();
+        let events_tx_clone = events_tx.clone();
+        tokio::spawn(async move {
+            loop {
+                let mut events_rx = state_for_events.rt().await.subscribe_events();
+                while let Ok(event) = events_rx.recv().await {
+                    let _ = events_tx_clone.send(event);
+                }
+                // Inner receiver closed — usually because the runtime was
+                // hot-swapped. Give the swap a beat to land, then reattach.
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+        });
+    }
 
     // Start the scheduled actions runner (checks every 60 seconds)
     let scheduler_state = state.clone();
@@ -522,9 +534,12 @@ async fn run_scheduler(state: Arc<state::AppState>) {
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(60)).await;
 
-        let config = match orca_core::config::OrcaConfig::load() {
-            Ok(c) => c,
-            Err(_) => continue,
+        // `OrcaConfig::load` reads and parses config JSON off disk. Run it
+        // inside spawn_blocking so we don't stall a tokio worker waiting
+        // for a slow FS (e.g. a laggy network mount for $HOME).
+        let config = match tokio::task::spawn_blocking(orca_core::config::OrcaConfig::load).await {
+            Ok(Ok(c)) => c,
+            _ => continue,
         };
 
         let now = chrono::Utc::now();
@@ -583,57 +598,74 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                         "Scheduler: triggering build target '{target_name}' for '{}'",
                         schedule.name
                     );
-                    // Scan stack directories for build targets
-                    let base = dirs::config_dir()
-                        .unwrap_or_else(|| std::path::PathBuf::from("."))
-                        .join("orca")
-                        .join("stacks");
-                    let mut found = None;
-                    if let Ok(entries) = std::fs::read_dir(&base) {
-                        for entry in entries.flatten() {
-                            let path = entry.path();
-                            if path.is_dir() {
-                                let yaml_path = path.join("orca.yaml");
-                                if yaml_path.exists()
-                                    && let Ok(content) = std::fs::read_to_string(&yaml_path)
-                                    && let Ok(yaml) = serde_yaml::from_str::<serde_yaml::Value>(&content)
-                                    && let Some(builds) = yaml.get("builds").and_then(|v| v.as_sequence())
-                                {
-                                    for item in builds {
-                                        if item.get("name").and_then(|v| v.as_str()) == Some(target_name) {
-                                            let ctx = item.get("context").and_then(|v| v.as_str()).unwrap_or(".");
-                                            let tag = item.get("tag").and_then(|v| v.as_str()).unwrap_or("");
-                                            let dockerfile =
-                                                item.get("dockerfile").and_then(|v| v.as_str()).unwrap_or("Dockerfile");
-                                            let mut args = std::collections::HashMap::new();
-                                            if let Some(args_map) = item.get("args").and_then(|v| v.as_mapping()) {
-                                                for (k, v) in args_map {
-                                                    if let (Some(key), Some(val)) = (k.as_str(), v.as_str()) {
-                                                        args.insert(key.to_string(), val.to_string());
+                    // Scan stack directories for build targets. Both the
+                    // directory listing and the per-file reads are
+                    // synchronous stdlib calls, so do them off the tokio
+                    // worker pool to avoid stalling unrelated tasks.
+                    let target_name_owned = target_name.clone();
+                    let found: Option<(String, String, String, std::collections::HashMap<String, String>)> =
+                        tokio::task::spawn_blocking(move || {
+                            let base = dirs::config_dir()
+                                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                                .join("orca")
+                                .join("stacks");
+                            let mut found = None;
+                            if let Ok(entries) = std::fs::read_dir(&base) {
+                                for entry in entries.flatten() {
+                                    let path = entry.path();
+                                    if path.is_dir() {
+                                        let yaml_path = path.join("orca.yaml");
+                                        if yaml_path.exists()
+                                            && let Ok(content) = std::fs::read_to_string(&yaml_path)
+                                            && let Ok(yaml) = serde_yaml::from_str::<serde_yaml::Value>(&content)
+                                            && let Some(builds) = yaml.get("builds").and_then(|v| v.as_sequence())
+                                        {
+                                            for item in builds {
+                                                if item.get("name").and_then(|v| v.as_str())
+                                                    == Some(target_name_owned.as_str())
+                                                {
+                                                    let ctx =
+                                                        item.get("context").and_then(|v| v.as_str()).unwrap_or(".");
+                                                    let tag = item.get("tag").and_then(|v| v.as_str()).unwrap_or("");
+                                                    let dockerfile = item
+                                                        .get("dockerfile")
+                                                        .and_then(|v| v.as_str())
+                                                        .unwrap_or("Dockerfile");
+                                                    let mut args = std::collections::HashMap::new();
+                                                    if let Some(args_map) =
+                                                        item.get("args").and_then(|v| v.as_mapping())
+                                                    {
+                                                        for (k, v) in args_map {
+                                                            if let (Some(key), Some(val)) = (k.as_str(), v.as_str()) {
+                                                                args.insert(key.to_string(), val.to_string());
+                                                            }
+                                                        }
                                                     }
+                                                    let context_path = if ctx.starts_with('/') {
+                                                        std::path::PathBuf::from(ctx)
+                                                    } else {
+                                                        path.join(ctx)
+                                                    };
+                                                    found = Some((
+                                                        context_path.to_string_lossy().to_string(),
+                                                        tag.to_string(),
+                                                        dockerfile.to_string(),
+                                                        args,
+                                                    ));
+                                                    break;
                                                 }
                                             }
-                                            let context_path = if ctx.starts_with('/') {
-                                                std::path::PathBuf::from(ctx)
-                                            } else {
-                                                path.join(ctx)
-                                            };
-                                            found = Some((
-                                                context_path.to_string_lossy().to_string(),
-                                                tag.to_string(),
-                                                dockerfile.to_string(),
-                                                args,
-                                            ));
+                                        }
+                                        if found.is_some() {
                                             break;
                                         }
                                     }
                                 }
-                                if found.is_some() {
-                                    break;
-                                }
                             }
-                        }
-                    }
+                            found
+                        })
+                        .await
+                        .unwrap_or(None);
                     if let Some((context_path, tag, dockerfile, args)) = found {
                         let record = crate::build_manager::start_build(
                             &tag,

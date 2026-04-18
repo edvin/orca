@@ -15,3 +15,4 @@ serde_json.workspace = true
 tracing.workspace = true
 bollard = "0.18"
 dirs.workspace = true
+tempfile = "3"

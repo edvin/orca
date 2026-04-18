@@ -56,14 +56,23 @@ impl RegistryCredential {
         }
     }
 
-    pub fn password(&self) -> String {
+    /// Decode the stored base64 password. Returns an error rather than an
+    /// empty string on malformed input so callers never silently attempt to
+    /// authenticate with an empty password (which legacy registries can
+    /// mistakenly accept, or which just produces a confusing "auth failed"
+    /// error that the user can't diagnose).
+    pub fn password(&self) -> anyhow::Result<String> {
         use base64::Engine;
-        String::from_utf8(
-            base64::engine::general_purpose::STANDARD
-                .decode(&self.password_b64)
-                .unwrap_or_default(),
-        )
-        .unwrap_or_default()
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&self.password_b64)
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "stored password for registry '{}' is not valid base64: {e}",
+                    self.server
+                )
+            })?;
+        String::from_utf8(bytes)
+            .map_err(|e| anyhow::anyhow!("stored password for registry '{}' is not valid UTF-8: {e}", self.server))
     }
 }
 
@@ -456,6 +465,11 @@ impl OrcaConfig {
             .join("config.json")
     }
 
+    /// Maximum permitted config file size. A hostile or corrupted config
+    /// several gigabytes in size would otherwise OOM the daemon on startup.
+    /// Real configs are a few KB.
+    const MAX_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
+
     /// Load config from disk. Returns an error on parse failure so callers
     /// cannot accidentally overwrite a corrupt-but-recoverable file with
     /// defaults. Use [`load_or_default`] for callers that explicitly want
@@ -464,6 +478,14 @@ impl OrcaConfig {
         let path = Self::config_path();
         if !path.exists() {
             return Ok(Self::default());
+        }
+        let md = std::fs::metadata(&path)?;
+        if md.len() > Self::MAX_CONFIG_BYTES {
+            anyhow::bail!(
+                "config file {} is suspiciously large ({} bytes); refusing to load",
+                path.display(),
+                md.len()
+            );
         }
         let contents = std::fs::read_to_string(&path)?;
         let cfg: Self = serde_json::from_str(&contents)
@@ -716,7 +738,7 @@ mod tests {
     #[test]
     fn registry_credential_password_roundtrip() {
         let cred = RegistryCredential::new("https://ghcr.io", "GH", "user", "s3cret!");
-        assert_eq!(cred.password(), "s3cret!");
+        assert_eq!(cred.password().unwrap(), "s3cret!");
     }
 
     #[test]

@@ -16,6 +16,10 @@ type RunStage = "form" | "pulling" | "creating" | "starting" | "done" | "error";
 const tagCache = new Map<string, string[]>();
 
 export default function RunContainerDialog(props: RunContainerDialogProps) {
+  // Flipped on cleanup so pending debounced tag fetches / network lookups
+  // don't write to signals after the dialog is closed.
+  let disposed = false;
+
   const handleEscape = (e: KeyboardEvent) => {
     if (e.key === "Escape" && stage() === "form") {
       if (showTagSuggestions()) {
@@ -31,6 +35,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
     (async () => {
       try {
         const nets = (await invoke("list_networks")) as Array<{ name: string; driver: string }>;
+        if (disposed) return;
         const builtIn = ["bridge", "host", "none"];
         const options = builtIn.map((n) => ({ value: n, label: n }));
         for (const net of nets) {
@@ -44,7 +49,11 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
       }
     })();
   });
-  onCleanup(() => document.removeEventListener("keydown", handleEscape));
+  onCleanup(() => {
+    disposed = true;
+    document.removeEventListener("keydown", handleEscape);
+    if (tagFetchTimer) clearTimeout(tagFetchTimer);
+  });
 
   const [image, setImage] = createSignal(props.initialImage || "");
   const [name, setName] = createSignal("");
@@ -93,19 +102,22 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
     }
 
     tagFetchTimer = setTimeout(async () => {
+      if (disposed) return;
       setTagLoading(true);
       try {
         const tags = await invoke("fetch_image_tags", { image: imageName.trim() }) as string[];
+        if (disposed) return;
         const limited = tags.slice(0, 10);
         tagCache.set(imageName.trim(), limited);
         setTagSuggestions(limited);
         setShowTagSuggestions(limited.length > 0);
         setSelectedTagIndex(-1);
       } catch {
+        if (disposed) return;
         setTagSuggestions([]);
         setShowTagSuggestions(false);
       } finally {
-        setTagLoading(false);
+        if (!disposed) setTagLoading(false);
       }
     }, 400);
   };

@@ -35,8 +35,11 @@ impl WindowsBackend {
     }
 
     /// Connect via explicit TCP address (used when WSL2 forwards the socket).
-    pub fn connect_tcp(_addr: &str) -> anyhow::Result<Self> {
-        let docker = bollard::Docker::connect_with_http_defaults()?;
+    /// The `addr` argument is honored — prior revisions silently ignored it
+    /// and fell back to `DOCKER_HOST`, which made "connect to 10.x.y.z"
+    /// requests actually connect to whatever the environment pointed at.
+    pub fn connect_tcp(addr: &str) -> anyhow::Result<Self> {
+        let docker = bollard::Docker::connect_with_http(addr, 120, bollard::API_DEFAULT_VERSION)?;
         Ok(Self {
             runtime: BollardRuntime::new(docker),
             distro_name: "orca".to_string(),

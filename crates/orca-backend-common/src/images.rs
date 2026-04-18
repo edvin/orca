@@ -248,14 +248,23 @@ async fn create_build_context(path: &str) -> anyhow::Result<Vec<u8>> {
         anyhow::bail!("Build context '{path}' is not a directory");
     }
 
-    let buf = Vec::new();
-    let mut archive = tar::Builder::new(buf);
-
-    // Respect .dockerignore if present
+    // Respect .dockerignore if present (async, cheap).
     let ignore_patterns = load_dockerignore(context_path).await;
 
-    add_dir_to_tar(&mut archive, context_path, context_path, &ignore_patterns)?;
-    let bytes = archive.into_inner()?;
+    // The actual tar build is blocking (synchronous stdlib fs + tar
+    // writer). A large build context can take seconds to walk, which
+    // would stall a tokio worker. Hand it off to spawn_blocking so the
+    // async runtime stays responsive.
+    let context_path = context_path.to_path_buf();
+    let bytes = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
+        let buf = Vec::new();
+        let mut archive = tar::Builder::new(buf);
+        add_dir_to_tar(&mut archive, &context_path, &context_path, &ignore_patterns)?;
+        let bytes = archive.into_inner()?;
+        Ok(bytes)
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("build context task panicked: {e}"))??;
     Ok(bytes)
 }
 
@@ -278,9 +287,21 @@ fn add_dir_to_tar(
             continue;
         }
 
-        if path.is_dir() {
+        // Use `entry.file_type()` (does NOT follow symlinks) rather than
+        // `path.is_dir()`/`path.is_file()`, which do. Otherwise a symlink
+        // pointing to e.g. `/etc/shadow` or outside the build context
+        // would be silently resolved and shipped to the docker daemon.
+        // Skip symlinks entirely — safer than trying to verify their
+        // target stays inside the context.
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            tracing::debug!("build context: skipping symlink {relative}");
+            continue;
+        }
+
+        if file_type.is_dir() {
             add_dir_to_tar(archive, base, &path, ignore)?;
-        } else if path.is_file() {
+        } else if file_type.is_file() {
             archive.append_path_with_name(&path, &relative)?;
         }
     }

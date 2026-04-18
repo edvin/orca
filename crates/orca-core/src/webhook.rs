@@ -86,11 +86,36 @@ pub fn validate_dockerhub_token(expected: &str, provided: Option<&str>) -> bool 
 /// A single OCI image path segment (namespace or name). Must not contain
 /// `/` — that would let a crafted payload produce an image reference like
 /// `ghcr.io/evil/target/name` that matches unintended rules.
+///
+/// Matches the OCI distribution spec for path components:
+/// `[a-z0-9]+(?:[._-][a-z0-9]+)*` — lowercase only, cannot start/end with
+/// a separator, cannot contain consecutive separators. Rejects `..`,
+/// leading `-`, and similar tricks that previously passed.
 fn is_valid_image_segment(s: &str) -> bool {
-    !s.is_empty()
-        && s.len() <= 255
-        && s.chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    if s.is_empty() || s.len() > 255 {
+        return false;
+    }
+    let bytes = s.as_bytes();
+    // First + last must be alphanumeric lowercase.
+    if !matches!(bytes[0], b'a'..=b'z' | b'0'..=b'9') {
+        return false;
+    }
+    if !matches!(bytes[bytes.len() - 1], b'a'..=b'z' | b'0'..=b'9') {
+        return false;
+    }
+    let mut prev_sep = false;
+    for &b in bytes {
+        let is_sep = matches!(b, b'_' | b'-' | b'.');
+        let is_alnum = matches!(b, b'a'..=b'z' | b'0'..=b'9');
+        if !(is_sep || is_alnum) {
+            return false;
+        }
+        if is_sep && prev_sep {
+            return false;
+        }
+        prev_sep = is_sep;
+    }
+    true
 }
 
 /// A Docker Hub `repo_name` — either a single segment (`nginx`) or exactly

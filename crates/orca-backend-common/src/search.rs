@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,6 +11,19 @@ pub struct ImageSearchResult {
     pub pulls: Option<String>,
 }
 
+/// Shared reqwest client with a 15s timeout. Without a timeout a slow or
+/// hung Docker Hub search would block the request forever and accumulate
+/// connections on every retry.
+fn hub_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .expect("reqwest client build")
+    })
+}
+
 pub async fn search_docker_hub(query: &str, limit: u32) -> anyhow::Result<Vec<ImageSearchResult>> {
     let url = format!(
         "https://hub.docker.com/v2/search/repositories/?query={}&page_size={}",
@@ -16,12 +31,7 @@ pub async fn search_docker_hub(query: &str, limit: u32) -> anyhow::Result<Vec<Im
         limit
     );
 
-    let resp = reqwest::Client::new()
-        .get(&url)
-        .send()
-        .await?
-        .json::<serde_json::Value>()
-        .await?;
+    let resp = hub_client().get(&url).send().await?.json::<serde_json::Value>().await?;
 
     let results = resp
         .get("results")

@@ -86,7 +86,15 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
     colorMap.set(c.id, COLORS[i % COLORS.length]);
   });
 
+  // Module-level for this component instance — flipped synchronously on
+  // unmount so any in-flight fetch skips its state writes.
+  let disposed = false;
+  // Prevents a slow fetch from being re-issued every 2s before it finishes,
+  // which used to let concurrent fetches race each other into setEntries.
+  let inFlight = false;
+
   const fetchAllLogs = async () => {
+    if (disposed) return;
     setLoading(true);
     try {
       const results = await Promise.allSettled(
@@ -94,6 +102,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
           invoke("container_logs", { id: c.id, tail: 200 }) as Promise<string[]>
         )
       );
+      if (disposed) return;
 
       const allEntries: LogEntry[] = [];
       results.forEach((result, idx) => {
@@ -117,6 +126,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
 
       setEntries(allEntries);
     } catch (e) {
+      if (disposed) return;
       setEntries([{
         containerId: "",
         containerName: "Error",
@@ -124,12 +134,21 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
         color: "#f85149",
       }]);
     }
-    setLoading(false);
+    if (!disposed) setLoading(false);
   };
 
   onMount(() => {
+    onCleanup(() => {
+      disposed = true;
+    });
     fetchAllLogs();
-    const interval = setInterval(fetchAllLogs, 2000);
+    const interval = setInterval(() => {
+      if (inFlight || disposed) return;
+      inFlight = true;
+      fetchAllLogs().finally(() => {
+        inFlight = false;
+      });
+    }, 2000);
     onCleanup(() => clearInterval(interval));
   });
 

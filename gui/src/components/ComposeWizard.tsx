@@ -73,6 +73,14 @@ function createEmptyService(): ServiceDef {
   };
 }
 
+// Service / dependency names are sanitized on input, but defense in depth:
+// only emit names that match this pattern. Anything else is treated as an
+// empty string so the caller can fail closed.
+const SAFE_NAME_RE = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+function safeName(name: string): string {
+  return SAFE_NAME_RE.test(name) ? name : "";
+}
+
 function generateYaml(_stackName: string, services: ServiceDef[]): string {
   const lines: string[] = [];
   const namedVolumes = new Set<string>();
@@ -81,15 +89,19 @@ function generateYaml(_stackName: string, services: ServiceDef[]): string {
 
   for (const svc of services) {
     if (!svc.name || !svc.image) continue;
-    lines.push(`  ${svc.name}:`);
-    lines.push(`    image: ${svc.image}`);
+    const svcName = safeName(svc.name);
+    if (!svcName) continue;
+    lines.push(`  ${svcName}:`);
+    lines.push(`    image: ${yamlQuote(svc.image)}`);
 
     if (svc.ports.length > 0) {
       const validPorts = svc.ports.filter((p) => p.host && p.container);
       if (validPorts.length > 0) {
         lines.push("    ports:");
         for (const p of validPorts) {
-          lines.push(`      - "${p.host}:${p.container}"`);
+          // Emit host:container as a single quoted scalar so an attacker
+          // can't inject `"` or a newline through either half.
+          lines.push(`      - ${yamlQuote(`${p.host}:${p.container}`)}`);
         }
       }
     }
@@ -99,7 +111,7 @@ function generateYaml(_stackName: string, services: ServiceDef[]): string {
       if (validEnv.length > 0) {
         lines.push("    environment:");
         for (const e of validEnv) {
-          lines.push(`      ${e.key}: ${yamlQuote(e.value)}`);
+          lines.push(`      ${yamlQuote(e.key)}: ${yamlQuote(e.value)}`);
         }
       }
     }
@@ -109,7 +121,7 @@ function generateYaml(_stackName: string, services: ServiceDef[]): string {
       if (validVols.length > 0) {
         lines.push("    volumes:");
         for (const v of validVols) {
-          lines.push(`      - ${v.source}:${v.target}`);
+          lines.push(`      - ${yamlQuote(`${v.source}:${v.target}`)}`);
           // Track named volumes (not paths)
           if (!v.source.startsWith("/") && !v.source.startsWith("./") && !v.source.startsWith("~")) {
             namedVolumes.add(v.source);
@@ -119,13 +131,16 @@ function generateYaml(_stackName: string, services: ServiceDef[]): string {
     }
 
     if (svc.restart && svc.restart !== "no") {
-      lines.push(`    restart: ${svc.restart}`);
+      lines.push(`    restart: ${yamlQuote(svc.restart)}`);
     }
 
     if (svc.dependsOn.length > 0) {
-      lines.push("    depends_on:");
-      for (const dep of svc.dependsOn) {
-        lines.push(`      - ${dep}`);
+      const validDeps = svc.dependsOn.map(safeName).filter((d) => d.length > 0);
+      if (validDeps.length > 0) {
+        lines.push("    depends_on:");
+        for (const dep of validDeps) {
+          lines.push(`      - ${yamlQuote(dep)}`);
+        }
       }
     }
   }
@@ -134,7 +149,8 @@ function generateYaml(_stackName: string, services: ServiceDef[]): string {
     lines.push("");
     lines.push("volumes:");
     for (const vol of namedVolumes) {
-      lines.push(`  ${vol}:`);
+      const name = safeName(vol);
+      if (name) lines.push(`  ${name}:`);
     }
   }
 

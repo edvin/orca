@@ -1,3 +1,30 @@
+// --- Content-Security-Policy (see `tauri.conf.json`) ---
+//
+// The `connect-src` in tauri.conf.json reads:
+//
+//   'self' ipc: tauri:
+//   http://127.0.0.1:9477 ws://127.0.0.1:9477
+//   https://hub.docker.com https://registry-1.docker.io
+//   https://api.anthropic.com https://api.openai.com
+//   https://api.github.com
+//   https: wss:
+//
+// Trade-offs:
+//
+// * Plain `http:` / `ws:` wildcards were dropped. The only plaintext
+//   origin allowed is the loopback daemon on port 9477 — any other
+//   insecure origin would let a MITM on a shared network inject data
+//   into the renderer.
+//
+// * `https:` and `wss:` wildcards remain. Remote-host support is a
+//   first-class feature: users can point Orca at any daemon reachable
+//   over TLS, and the CSP cannot enumerate those up front. The
+//   explicit hostnames listed above are redundant under `https:` but
+//   kept as in-source documentation of the known call destinations.
+//
+// If we ever drop remote-host support, narrow `https:` / `wss:` to the
+// enumerated set above.
+
 mod commands;
 mod daemon;
 mod tray;

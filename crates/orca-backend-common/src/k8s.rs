@@ -110,6 +110,92 @@ fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
     serde_yaml::to_string(&cfg).map_err(|e| anyhow::anyhow!("failed to serialize kubeconfig: {e}"))
 }
 
+/// Merge a raw k3s-style kubeconfig into `<dest_dir>/config` under an
+/// "orca" context, safely.
+///
+/// "Safely" here means **never** passing TLS private key material as a
+/// kubectl argument (where it would be world-readable through
+/// `/proc/<pid>/cmdline`). Instead:
+///
+/// 1. Rename the `default` context/cluster/user to `orca` in the
+///    provided YAML via `rename_kubeconfig_default_to_orca`.
+/// 2. Stage the rewritten YAML to a 0600-mode temp file inside
+///    `dest_dir`.
+/// 3. Run `kubectl config view --flatten` with
+///    `KUBECONFIG=<tmp>:<dest>` (or just `<tmp>` if dest doesn't
+///    exist yet).
+/// 4. Atomically rename the merged output over `<dest_dir>/config`.
+///
+/// `extended_path` is the PATH value to pass to the kubectl invocation
+/// so homebrew kubectl binaries are picked up on macOS.
+///
+/// This helper mirrors the non-Windows `install_kubeconfig` body and is
+/// what the three `enable_*` code paths (Linux host, macOS Lima, Windows
+/// WSL) now use — previously they each duplicated a `kubectl config set
+/// ... --client-key-data=<b64>` pattern that leaked private keys.
+fn merge_k3s_kubeconfig_safely(
+    source_yaml: &str,
+    dest_dir: &std::path::Path,
+    extended_path: &str,
+) -> anyhow::Result<()> {
+    std::fs::create_dir_all(dest_dir).map_err(|e| anyhow::anyhow!("create kubeconfig dir: {e}"))?;
+    let dest_file = dest_dir.join("config");
+
+    let renamed = rename_kubeconfig_default_to_orca(source_yaml)
+        .map_err(|e| anyhow::anyhow!("failed to rewrite k3s kubeconfig: {e}"))?;
+
+    let tmp = tempfile::Builder::new()
+        .prefix(".orca-k3s-")
+        .suffix(".yaml")
+        .tempfile_in(dest_dir)
+        .map_err(|e| anyhow::anyhow!("create kubeconfig temp: {e}"))?;
+    let tmp_path = tmp.path().to_path_buf();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600));
+    }
+    std::fs::write(&tmp_path, &renamed).map_err(|e| anyhow::anyhow!("write temp kubeconfig: {e}"))?;
+
+    let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+    let merge_env = if dest_file.exists() {
+        format!("{}{sep}{}", tmp_path.display(), dest_file.display())
+    } else {
+        tmp_path.display().to_string()
+    };
+
+    let out = std::process::Command::new("kubectl")
+        .env("PATH", extended_path)
+        .env("KUBECONFIG", &merge_env)
+        .args(["config", "view", "--flatten"])
+        .output()
+        .map_err(|e| anyhow::anyhow!("failed to run kubectl: {e}"))?;
+    if !out.status.success() {
+        anyhow::bail!("kubectl config view failed: {}", String::from_utf8_lossy(&out.stderr));
+    }
+    if out.stdout.len() < 32 {
+        anyhow::bail!(
+            "kubectl produced suspiciously short output ({} bytes); refusing to overwrite {}",
+            out.stdout.len(),
+            dest_file.display()
+        );
+    }
+
+    let new_file = dest_dir.join(".config.orca-new");
+    std::fs::write(&new_file, &out.stdout).map_err(|e| anyhow::anyhow!("write merged kubeconfig: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&new_file, std::fs::Permissions::from_mode(0o600));
+    }
+    if let Err(e) = std::fs::rename(&new_file, &dest_file) {
+        let _ = std::fs::remove_file(&new_file);
+        anyhow::bail!("failed to rename merged kubeconfig into place: {e}");
+    }
+    drop(tmp);
+    Ok(())
+}
+
 fn extract_all_yaml_kinds(yaml: &str) -> anyhow::Result<Vec<Option<String>>> {
     use serde::Deserialize;
     use serde_yaml::{Deserializer, Value};
@@ -251,89 +337,24 @@ impl K3sManager {
     }
 
     /// Merge k3s kubeconfig into ~/.kube/config as the "orca" context.
-    /// Uses kubectl config commands to safely modify the kubeconfig.
+    ///
+    /// This used to shell out to `kubectl config set ... --client-key-data=<b64>`,
+    /// which leaks the TLS private key through the process command line
+    /// (any local user can read `/proc/<pid>/cmdline`). The safe pattern —
+    /// already used by `install_kubeconfig` — is to stage the k3s
+    /// kubeconfig in a 0600-mode temp file in `~/.kube`, run
+    /// `kubectl config view --flatten` over `KUBECONFIG=<tmp>:<dest>`,
+    /// then atomically rename the result over the destination.
     fn merge_kubeconfig_context() -> anyhow::Result<()> {
         let k3s_config = "/etc/rancher/k3s/k3s.yaml";
         let k3s_content = std::fs::read_to_string(k3s_config)?;
 
-        // Extract server URL from k3s config (usually https://127.0.0.1:6443)
-        let server = k3s_content
-            .lines()
-            .find(|l| l.trim().starts_with("server:"))
-            .map(|l| {
-                l.trim()
-                    .trim_start_matches("server:")
-                    .trim()
-                    .trim_matches('"')
-                    .to_string()
-            })
-            .unwrap_or_else(|| "https://127.0.0.1:6443".to_string());
+        let dest_dir = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("cannot resolve home directory"))?
+            .join(".kube");
 
-        // Extract certificate-authority-data and client certs from k3s config
-        let ca_data = k3s_content
-            .lines()
-            .find(|l| l.trim().starts_with("certificate-authority-data:"))
-            .map(|l| {
-                l.trim()
-                    .trim_start_matches("certificate-authority-data:")
-                    .trim()
-                    .to_string()
-            });
-        let client_cert = k3s_content
-            .lines()
-            .find(|l| l.trim().starts_with("client-certificate-data:"))
-            .map(|l| {
-                l.trim()
-                    .trim_start_matches("client-certificate-data:")
-                    .trim()
-                    .to_string()
-            });
-        let client_key = k3s_content
-            .lines()
-            .find(|l| l.trim().starts_with("client-key-data:"))
-            .map(|l| l.trim().trim_start_matches("client-key-data:").trim().to_string());
-
-        // Ensure ~/.kube directory exists
-        if let Some(home) = dirs::home_dir() {
-            let _ = std::fs::create_dir_all(home.join(".kube"));
-        }
-
-        // Use kubectl config commands to add our context
-        // Set cluster
-        let mut cmd = std::process::Command::new("kubectl");
-        cmd.env("PATH", Self::extended_path());
-        cmd.args(["config", "set-cluster", "orca", &format!("--server={server}")]);
-        let _ = cmd.output();
-
-        // Set certificate-authority-data directly via config set
-        if let Some(ca) = &ca_data {
-            let _ = std::process::Command::new("kubectl")
-                .env("PATH", Self::extended_path())
-                .args(["config", "set", "clusters.orca.certificate-authority-data", ca])
-                .output();
-        }
-
-        // Set user credentials
-        if let Some(cert) = &client_cert {
-            let _ = std::process::Command::new("kubectl")
-                .env("PATH", Self::extended_path())
-                .args(["config", "set", "users.orca.client-certificate-data", cert])
-                .output();
-        }
-        if let Some(key) = &client_key {
-            let _ = std::process::Command::new("kubectl")
-                .env("PATH", Self::extended_path())
-                .args(["config", "set", "users.orca.client-key-data", key])
-                .output();
-        }
-
-        // Set context
-        let _ = std::process::Command::new("kubectl")
-            .env("PATH", Self::extended_path())
-            .args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"])
-            .output();
-
-        tracing::info!("Merged k3s config into ~/.kube/config as 'orca' context (server={server})");
+        merge_k3s_kubeconfig_safely(&k3s_content, &dest_dir, &Self::extended_path())?;
+        tracing::info!("Merged k3s config into ~/.kube/config as 'orca' context");
         Ok(())
     }
 
@@ -739,101 +760,39 @@ impl K3sManager {
                                 {
                                     Ok(kubeconfig) => {
                                         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-                                        let kube_dir = format!("{home}/.kube");
-                                        let _ = std::fs::create_dir_all(&kube_dir);
+                                        let kube_dir = std::path::PathBuf::from(format!("{home}/.kube"));
                                         // k3s config has server: https://127.0.0.1:6443
                                         // Lima VZ forwards ports, so localhost:6443 works on the host
                                         let fixed = kubeconfig.replace("127.0.0.1", "localhost");
 
-                                        // Use kubectl config set commands for reliable merge
-                                        // This avoids issues with KUBECONFIG merge + rename
-                                        let tmp_path = format!("{kube_dir}/.orca-k3s-temp");
-                                        std::fs::write(&tmp_path, &fixed)
-                                            .map_err(|e| anyhow::anyhow!("Failed to write temp kubeconfig: {e}"))?;
-
-                                        // Extract certs from the k3s config and set them on our "orca" context
-                                        let _ = std::process::Command::new("kubectl")
-                                            .env("PATH", Self::extended_path())
-                                            .args(["--kubeconfig", &tmp_path, "config", "view", "--raw", "-o", "json"])
-                                            .output()
-                                            .inspect(|o| {
-                                                if o.status.success()
-                                                    && let Ok(v) =
-                                                        serde_json::from_slice::<serde_json::Value>(&o.stdout)
-                                                {
-                                                    let server = v["clusters"][0]["cluster"]["server"]
-                                                        .as_str()
-                                                        .unwrap_or("https://localhost:6443");
-                                                    let ca = v["clusters"][0]["cluster"]["certificate-authority-data"]
-                                                        .as_str()
-                                                        .unwrap_or("");
-                                                    let cert = v["users"][0]["user"]["client-certificate-data"]
-                                                        .as_str()
-                                                        .unwrap_or("");
-                                                    let key =
-                                                        v["users"][0]["user"]["client-key-data"].as_str().unwrap_or("");
-
-                                                    let _ = std::process::Command::new("kubectl")
-                                                        .env("PATH", Self::extended_path())
-                                                        .args([
-                                                            "config",
-                                                            "set-cluster",
-                                                            "orca",
-                                                            &format!("--server={server}"),
-                                                        ])
-                                                        .output();
-                                                    let _ = std::process::Command::new("kubectl")
-                                                        .env("PATH", Self::extended_path())
-                                                        .args([
-                                                            "config",
-                                                            "set",
-                                                            "clusters.orca.certificate-authority-data",
-                                                            ca,
-                                                        ])
-                                                        .output();
-                                                    let _ = std::process::Command::new("kubectl")
-                                                        .env("PATH", Self::extended_path())
-                                                        .args([
-                                                            "config",
-                                                            "set",
-                                                            "users.orca.client-certificate-data",
-                                                            cert,
-                                                        ])
-                                                        .output();
-                                                    let _ = std::process::Command::new("kubectl")
-                                                        .env("PATH", Self::extended_path())
-                                                        .args(["config", "set", "users.orca.client-key-data", key])
-                                                        .output();
-                                                    let _ = std::process::Command::new("kubectl")
-                                                        .env("PATH", Self::extended_path())
-                                                        .args([
-                                                            "config",
-                                                            "set-context",
-                                                            "orca",
-                                                            "--cluster=orca",
-                                                            "--user=orca",
-                                                        ])
-                                                        .output();
+                                        // Safe merge — file-based, never passes TLS keys as argv.
+                                        match merge_k3s_kubeconfig_safely(&fixed, &kube_dir, &Self::extended_path()) {
+                                            Ok(()) => {
+                                                // Verify the context was created
+                                                let verify = std::process::Command::new("kubectl")
+                                                    .env("PATH", Self::extended_path())
+                                                    .args(["--context", "orca", "cluster-info"])
+                                                    .output();
+                                                match verify {
+                                                    Ok(o) if o.status.success() => {
+                                                        send("Added 'orca' context to ~/.kube/config".into()).await;
+                                                        send("Use: kubectl --context orca get pods".into()).await;
+                                                    }
+                                                    _ => {
+                                                        send(
+                                                            "Warning: 'orca' context may not be properly configured"
+                                                                .into(),
+                                                        )
+                                                        .await;
+                                                        tracing::warn!(
+                                                            "kubectl --context orca cluster-info failed after kubeconfig merge"
+                                                        );
+                                                    }
                                                 }
-                                            });
-                                        let _ = std::fs::remove_file(&tmp_path);
-
-                                        // Verify the context was created
-                                        let verify = std::process::Command::new("kubectl")
-                                            .env("PATH", Self::extended_path())
-                                            .args(["--context", "orca", "cluster-info"])
-                                            .output();
-                                        match verify {
-                                            Ok(o) if o.status.success() => {
-                                                send("Added 'orca' context to ~/.kube/config".into()).await;
-                                                send("Use: kubectl --context orca get pods".into()).await;
                                             }
-                                            _ => {
-                                                send("Warning: 'orca' context may not be properly configured".into())
-                                                    .await;
-                                                tracing::warn!(
-                                                    "kubectl --context orca cluster-info failed after kubeconfig merge"
-                                                );
+                                            Err(e) => {
+                                                send(format!("Warning: failed to merge kubeconfig: {e}")).await;
+                                                tracing::warn!("kubeconfig merge failed: {e}");
                                             }
                                         }
 
@@ -975,68 +934,25 @@ impl K3sManager {
                     let kubeconfig = String::from_utf8_lossy(&output.stdout).to_string();
                     let home = std::env::var("USERPROFILE")
                         .unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| "C:\\Users\\Default".into()));
-                    let kube_dir = format!("{home}\\.kube");
-                    let _ = std::fs::create_dir_all(&kube_dir);
+                    let kube_dir = std::path::PathBuf::from(format!("{home}\\.kube"));
 
-                    // Write k3s config as temp file, extract certs, set up "orca" context
-                    let tmp_path = format!("{kube_dir}\\orca-k3s-temp");
                     // Fix server address: k3s binds to 127.0.0.1 inside WSL
                     // but we access it via localhost from Windows
                     let fixed = kubeconfig.replace("127.0.0.1", "localhost");
-                    std::fs::write(&tmp_path, &fixed)
-                        .map_err(|e| anyhow::anyhow!("Failed to write temp kubeconfig: {e}"))?;
 
-                    // Extract certs and create "orca" context via explicit set commands
-                    // This is more reliable than merge+rename which can fail with existing configs
-                    let _ = std::process::Command::new("kubectl")
-                        .env("PATH", Self::extended_path())
-                        .args(["--kubeconfig", &tmp_path, "config", "view", "--raw", "-o", "json"])
-                        .output()
-                        .and_then(|o| {
-                            if o.status.success() {
-                                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&o.stdout) {
-                                    let server = v["clusters"][0]["cluster"]["server"]
-                                        .as_str()
-                                        .unwrap_or("https://localhost:6443");
-                                    let ca = v["clusters"][0]["cluster"]["certificate-authority-data"]
-                                        .as_str()
-                                        .unwrap_or("");
-                                    let cert = v["users"][0]["user"]["client-certificate-data"].as_str().unwrap_or("");
-                                    let key = v["users"][0]["user"]["client-key-data"].as_str().unwrap_or("");
+                    match merge_k3s_kubeconfig_safely(&fixed, &kube_dir, &Self::extended_path()) {
+                        Ok(()) => {
+                            // Clear cached K8s client
+                            *self.client.lock().await = None;
 
-                                    let _ = std::process::Command::new("kubectl")
-                                        .env("PATH", Self::extended_path())
-                                        .args(["config", "set-cluster", "orca", &format!("--server={server}")])
-                                        .output();
-                                    let _ = std::process::Command::new("kubectl")
-                                        .env("PATH", Self::extended_path())
-                                        .args(["config", "set", "clusters.orca.certificate-authority-data", ca])
-                                        .output();
-                                    let _ = std::process::Command::new("kubectl")
-                                        .env("PATH", Self::extended_path())
-                                        .args(["config", "set", "users.orca.client-certificate-data", cert])
-                                        .output();
-                                    let _ = std::process::Command::new("kubectl")
-                                        .env("PATH", Self::extended_path())
-                                        .args(["config", "set", "users.orca.client-key-data", key])
-                                        .output();
-                                    let _ = std::process::Command::new("kubectl")
-                                        .env("PATH", Self::extended_path())
-                                        .args(["config", "set-context", "orca", "--cluster=orca", "--user=orca"])
-                                        .output();
-                                }
-                            }
-                            Ok(o)
-                        });
-
-                    // Clean up temp file
-                    let _ = std::fs::remove_file(&tmp_path);
-
-                    // Clear cached K8s client
-                    *self.client.lock().await = None;
-
-                    send(format!("    Added 'orca' context to {kube_dir}\\config")).await;
-                    send("    Use: kubectl --context orca get pods".into()).await;
+                            send(format!("    Added 'orca' context to {}\\config", kube_dir.display())).await;
+                            send("    Use: kubectl --context orca get pods".into()).await;
+                        }
+                        Err(e) => {
+                            send(format!("    Warning: failed to merge kubeconfig: {e}")).await;
+                            tracing::warn!("kubeconfig merge failed: {e}");
+                        }
+                    }
                 }
                 _ => {
                     send("    Warning: could not copy kubeconfig yet (cluster may still be starting)".into()).await;
@@ -3725,6 +3641,16 @@ impl K8sManager for K3sManager {
     ) -> anyhow::Result<()> {
         validate_k8s_name(namespace)?;
         validate_k8s_name(name)?;
+        // Keys go on the kubectl command line on Windows, so they must
+        // match Kubernetes' own key shape. Values must never contain
+        // NUL/newlines — those would either break `--from-literal=k=v`
+        // parsing or silently split the arg on WSL's shell.
+        for (k, v) in &data {
+            validate_k8s_name(k)?;
+            if v.contains('\n') || v.contains('\0') {
+                anyhow::bail!("secret value for key '{k}' contains forbidden control characters");
+            }
+        }
         let stype = secret_type.unwrap_or("Opaque");
 
         #[cfg(target_os = "windows")]
@@ -3813,6 +3739,13 @@ impl K8sManager for K3sManager {
     ) -> anyhow::Result<()> {
         validate_k8s_name(namespace)?;
         validate_k8s_name(name)?;
+        // Same validation as create_secret — see comments there.
+        for (k, v) in &data {
+            validate_k8s_name(k)?;
+            if v.contains('\n') || v.contains('\0') {
+                anyhow::bail!("secret value for key '{k}' contains forbidden control characters");
+            }
+        }
 
         #[cfg(target_os = "windows")]
         {
@@ -4750,8 +4683,12 @@ spec:
           kind: TraefikService
 "#;
 
-        // Apply via kubectl since Traefik CRDs might not be in k8s-openapi
-        let _ = self.apply_yaml(dashboard_yaml).await;
+        // Apply via kubectl since Traefik CRDs might not be in k8s-openapi.
+        // Propagate errors up so callers can decide whether to surface
+        // them — previously this silently swallowed everything, which
+        // made dashboard failures (e.g. CRDs missing after upgrade)
+        // invisible.
+        self.apply_yaml(dashboard_yaml).await?;
         Ok(())
     }
 }

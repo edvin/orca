@@ -28,10 +28,15 @@ export default function StatusBar(props: StatusBarProps) {
     } catch { /* ignore */ }
   };
 
+  // Flipped on cleanup so the 5s-delayed `checkUpdate` (and hourly poll)
+  // don't call `setUpdateAvailable` after the component is unmounted.
+  let disposed = false;
+
   const checkUpdate = async () => {
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
+      if (disposed) return;
       if (update) {
         setUpdateAvailable({ version: update.version, body: update.body ?? undefined });
       }
@@ -69,12 +74,19 @@ export default function StatusBar(props: StatusBarProps) {
 
   onMount(() => {
     pollHealth();
-    // Check for updates after 5 seconds, then every hour
-    setTimeout(checkUpdate, 5000);
+    // Check for updates after 5 seconds, then every hour. The initial
+    // setTimeout handle must be captured so we can cancel it if the
+    // component unmounts before the 5s elapses.
+    const t = setTimeout(checkUpdate, 5000);
     const updateInterval = setInterval(checkUpdate, 3600000);
-    getVersion().then((v) => setAppVersion(v)).catch(() => {});
+    getVersion().then((v) => { if (!disposed) setAppVersion(v); }).catch(() => {});
     const interval = setInterval(pollHealth, 15000);
-    onCleanup(() => { clearInterval(interval); clearInterval(updateInterval); });
+    onCleanup(() => {
+      disposed = true;
+      clearTimeout(t);
+      clearInterval(interval);
+      clearInterval(updateInterval);
+    });
   });
 
   const memPercent = () => {
