@@ -22,7 +22,10 @@ fn validate_vm_name(name: &str) -> anyhow::Result<()> {
     if name.starts_with('-') || name.starts_with('.') {
         anyhow::bail!("VM name must not start with '-' or '.'");
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    {
         anyhow::bail!("VM name must contain only ASCII alphanumerics, '-', and '_'");
     }
     Ok(())

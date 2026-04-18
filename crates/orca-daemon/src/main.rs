@@ -573,10 +573,7 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                 {
                     let in_flight = in_flight_builds.lock().await;
                     if in_flight.contains(&schedule.id) {
-                        tracing::info!(
-                            "Scheduler: skipping '{}' — previous build still running",
-                            schedule.name
-                        );
+                        tracing::info!("Scheduler: skipping '{}' — previous build still running", schedule.name);
                         continue;
                     }
                 }

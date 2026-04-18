@@ -316,9 +316,7 @@ fn extract_registry_host(image_ref: &str) -> String {
     let first = image_ref.split('/').next().unwrap_or(image_ref);
     // A registry host must contain `.`, `:` (port), or be literally `localhost`.
     // Bare `nginx` or `library/nginx` means Docker Hub.
-    if image_ref.contains('/')
-        && (first.contains('.') || first.contains(':') || first == "localhost")
-    {
+    if image_ref.contains('/') && (first.contains('.') || first.contains(':') || first == "localhost") {
         first.to_string()
     } else {
         "docker.io".to_string()
@@ -358,8 +356,7 @@ impl OrcaConfig {
                     // registry host for the strip to happen.
                     match image.split_once('/') {
                         Some((first, rest)) => {
-                            let is_registry_host =
-                                first.contains('.') || first.contains(':') || first == "localhost";
+                            let is_registry_host = first.contains('.') || first.contains(':') || first == "localhost";
                             is_registry_host && rest == pattern
                         }
                         None => false,
@@ -582,7 +579,9 @@ impl OrcaConfig {
         let contents = serde_json::to_string_pretty(self)?;
 
         // Write to a unique temp file in the same directory so rename is atomic.
-        let parent = path.parent().ok_or_else(|| anyhow::anyhow!("invalid config path: no parent"))?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("invalid config path: no parent"))?;
         let mut rng_bytes = [0u8; 8];
         getrandom::getrandom(&mut rng_bytes)
             .map_err(|e| anyhow::anyhow!("failed to read OS RNG for temp suffix: {e}"))?;
@@ -610,9 +609,7 @@ impl OrcaConfig {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            if let Err(e) =
-                std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600))
-            {
+            if let Err(e) = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600)) {
                 tracing::warn!("failed to set 0600 on {}: {}", tmp_path.display(), e);
             }
         }

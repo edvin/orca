@@ -102,7 +102,11 @@ pub fn save_user_templates(templates: &[AppTemplate]) -> anyhow::Result<()> {
 pub fn generate_token() -> String {
     use rand::Rng;
     use rand::distributions::Alphanumeric;
-    rand::rngs::OsRng.sample_iter(&Alphanumeric).take(32).map(char::from).collect()
+    rand::rngs::OsRng
+        .sample_iter(&Alphanumeric)
+        .take(32)
+        .map(char::from)
+        .collect()
 }
 
 /// Get all templates (community catalog + user-defined).

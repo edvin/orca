@@ -122,9 +122,7 @@ impl DaemonClient {
                 headers.insert(reqwest::header::AUTHORIZATION, val);
             }
             None => {
-                eprintln!(
-                    "warning: no API token found in config or ORCA_TOKEN env. Requests will be unauthenticated."
-                );
+                eprintln!("warning: no API token found in config or ORCA_TOKEN env. Requests will be unauthenticated.");
             }
         }
 
@@ -181,7 +179,11 @@ impl DaemonClient {
 
     #[allow(dead_code)]
     pub async fn remove_container(&self, id: &str) -> anyhow::Result<()> {
-        let resp = self.http.delete(self.url(&format!("/containers/{}", encode_segment(id)))).send().await?;
+        let resp = self
+            .http
+            .delete(self.url(&format!("/containers/{}", encode_segment(id))))
+            .send()
+            .await?;
         check_status(&resp)?;
         Ok(())
     }
@@ -235,7 +237,11 @@ impl DaemonClient {
     }
 
     pub async fn remove_image(&self, id: &str) -> anyhow::Result<()> {
-        let resp = self.http.delete(self.url(&format!("/images/{}", encode_segment(id)))).send().await?;
+        let resp = self
+            .http
+            .delete(self.url(&format!("/images/{}", encode_segment(id))))
+            .send()
+            .await?;
         check_status(&resp)?;
         Ok(())
     }
@@ -255,13 +261,21 @@ impl DaemonClient {
     }
 
     pub async fn stack_up(&self, name: &str) -> anyhow::Result<()> {
-        let resp = self.http.post(self.url(&format!("/stacks/{}/up", encode_segment(name)))).send().await?;
+        let resp = self
+            .http
+            .post(self.url(&format!("/stacks/{}/up", encode_segment(name))))
+            .send()
+            .await?;
         check_status(&resp)?;
         Ok(())
     }
 
     pub async fn stack_down(&self, name: &str) -> anyhow::Result<()> {
-        let resp = self.http.post(self.url(&format!("/stacks/{}/down", encode_segment(name)))).send().await?;
+        let resp = self
+            .http
+            .post(self.url(&format!("/stacks/{}/down", encode_segment(name))))
+            .send()
+            .await?;
         check_status(&resp)?;
         Ok(())
     }

@@ -62,8 +62,8 @@ fn validate_k8s_name(name: &str) -> anyhow::Result<()> {
 /// clashes with a pre-existing "default" context.
 fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
     use serde_yaml::{Mapping, Value};
-    let mut cfg: Value = serde_yaml::from_str(yaml)
-        .map_err(|e| anyhow::anyhow!("kubeconfig is not valid YAML: {e}"))?;
+    let mut cfg: Value =
+        serde_yaml::from_str(yaml).map_err(|e| anyhow::anyhow!("kubeconfig is not valid YAML: {e}"))?;
 
     fn rename_context_refs(ctx: &mut Mapping) {
         for key in ["cluster", "user"] {
@@ -88,7 +88,8 @@ fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
 
                     // For contexts, also rewrite the `context: { cluster, user }` refs.
                     if key == "contexts"
-                        && let Some(Value::Mapping(ctx)) = item.as_mapping_mut().and_then(|m| m.get_mut(Value::from("context")))
+                        && let Some(Value::Mapping(ctx)) =
+                            item.as_mapping_mut().and_then(|m| m.get_mut(Value::from("context")))
                     {
                         rename_context_refs(ctx);
                     }
@@ -111,15 +112,11 @@ fn extract_all_yaml_kinds(yaml: &str) -> anyhow::Result<Vec<Option<String>>> {
     use serde_yaml::{Deserializer, Value};
     let mut kinds = Vec::new();
     for doc in Deserializer::from_str(yaml) {
-        let value = Value::deserialize(doc)
-            .map_err(|e| anyhow::anyhow!("invalid YAML document: {e}"))?;
+        let value = Value::deserialize(doc).map_err(|e| anyhow::anyhow!("invalid YAML document: {e}"))?;
         if value.is_null() {
             continue;
         }
-        let kind = value
-            .get("kind")
-            .and_then(|k| k.as_str())
-            .map(|s| s.trim().to_string());
+        let kind = value.get("kind").and_then(|k| k.as_str()).map(|s| s.trim().to_string());
         kinds.push(kind);
     }
     Ok(kinds)
@@ -1655,10 +1652,7 @@ impl K8sManager for K3sManager {
             Ok(o) if o.status.success() => o,
             Ok(o) => {
                 cleanup(&tmp_file);
-                anyhow::bail!(
-                    "kubectl config view failed: {}",
-                    String::from_utf8_lossy(&o.stderr)
-                );
+                anyhow::bail!("kubectl config view failed: {}", String::from_utf8_lossy(&o.stderr));
             }
             Err(e) => {
                 cleanup(&tmp_file);
@@ -1692,9 +1686,7 @@ impl K8sManager for K3sManager {
         if let Err(e) = tokio::fs::rename(&new_file, &dest_file).await {
             let _ = tokio::fs::remove_file(&new_file).await;
             cleanup(&tmp_file);
-            return Err(anyhow::anyhow!(
-                "failed to rename merged kubeconfig into place: {e}"
-            ));
+            return Err(anyhow::anyhow!("failed to rename merged kubeconfig into place: {e}"));
         }
 
         cleanup(&tmp_file);
@@ -4837,7 +4829,9 @@ impl K3sManager {
         if kind.is_empty()
             || kind.len() > 63
             || kind.starts_with('-')
-            || !kind.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+            || !kind
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
         {
             anyhow::bail!("invalid resource kind: {kind}");
         }

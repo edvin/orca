@@ -1486,14 +1486,24 @@ pub async fn k8s_pvs() -> Result<serde_json::Value, String> {
 pub async fn k8s_delete_pod(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/pods/{}/{}", urlencoding::encode(&namespace), urlencoding::encode(&name))).await
+    delete(&format!(
+        "/k8s/pods/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
 pub async fn k8s_delete_pvc(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/pvcs/{}/{}", urlencoding::encode(&namespace), urlencoding::encode(&name))).await
+    delete(&format!(
+        "/k8s/pvcs/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
@@ -2173,25 +2183,16 @@ async fn proxy_tcp_to_ws(tcp_stream: tokio::net::TcpStream, ws_url: &str, tls_ve
     } else {
         use tokio_tungstenite::Connector;
         let config = std::sync::Arc::new(
-            rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(
-                rustls::crypto::ring::default_provider(),
-            ))
-            .with_safe_default_protocol_versions()
-            .map_err(|e| format!("rustls builder failed: {e}"))?
-            .dangerous()
-            .with_custom_certificate_verifier(std::sync::Arc::new(
-                DangerousNoopCertVerifier::new(),
-            ))
-            .with_no_client_auth(),
+            rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::ring::default_provider()))
+                .with_safe_default_protocol_versions()
+                .map_err(|e| format!("rustls builder failed: {e}"))?
+                .dangerous()
+                .with_custom_certificate_verifier(std::sync::Arc::new(DangerousNoopCertVerifier::new()))
+                .with_no_client_auth(),
         );
-        tokio_tungstenite::connect_async_tls_with_config(
-            ws_url,
-            None,
-            false,
-            Some(Connector::Rustls(config)),
-        )
-        .await
-        .map_err(|e| format!("WebSocket connect failed: {e}"))?
+        tokio_tungstenite::connect_async_tls_with_config(ws_url, None, false, Some(Connector::Rustls(config)))
+            .await
+            .map_err(|e| format!("WebSocket connect failed: {e}"))?
     };
 
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
@@ -3009,7 +3010,10 @@ const MAX_TEMP_FILE_BYTES: usize = 16 * 1024 * 1024;
 #[tauri::command]
 pub async fn write_temp_file(name: String, content: String) -> Result<String, String> {
     if content.len() > MAX_TEMP_FILE_BYTES {
-        return Err(format!("File too large ({} > {MAX_TEMP_FILE_BYTES} bytes)", content.len()));
+        return Err(format!(
+            "File too large ({} > {MAX_TEMP_FILE_BYTES} bytes)",
+            content.len()
+        ));
     }
     let orca_tmp = orca_temp_dir();
     std::fs::create_dir_all(&orca_tmp).map_err(|e| format!("Failed to create temp dir: {e}"))?;
@@ -3143,10 +3147,8 @@ fn validate_compose_path(path: &str) -> Result<std::path::PathBuf, String> {
     let base_canonical = match std::fs::canonicalize(&base) {
         Ok(c) => c,
         Err(_) => {
-            std::fs::create_dir_all(&base)
-                .map_err(|e| format!("Failed to create stacks dir: {e}"))?;
-            std::fs::canonicalize(&base)
-                .map_err(|e| format!("Failed to canonicalize stacks dir: {e}"))?
+            std::fs::create_dir_all(&base).map_err(|e| format!("Failed to create stacks dir: {e}"))?;
+            std::fs::canonicalize(&base).map_err(|e| format!("Failed to canonicalize stacks dir: {e}"))?
         }
     };
 
@@ -3173,8 +3175,7 @@ fn validate_compose_path(path: &str) -> Result<std::path::PathBuf, String> {
             return Err("Invalid path".into());
         }
     }
-    let existing_canonical =
-        std::fs::canonicalize(&existing).map_err(|e| format!("Invalid path: {e}"))?;
+    let existing_canonical = std::fs::canonicalize(&existing).map_err(|e| format!("Invalid path: {e}"))?;
     let pb = existing_canonical.join(&tail);
     if !pb.starts_with(&base_canonical) {
         return Err(format!(
@@ -3378,9 +3379,7 @@ pub async fn update_remote_host(
     if let Ok(guard) = DAEMON_URL_OVERRIDE.read() {
         let is_active = guard.as_ref().map(|(u, _, _)| u == &original_url).unwrap_or(false);
         drop(guard);
-        if is_active
-            && let Ok(mut w) = DAEMON_URL_OVERRIDE.write()
-        {
+        if is_active && let Ok(mut w) = DAEMON_URL_OVERRIDE.write() {
             *w = Some((new_url, new_token, new_tls));
         }
     }

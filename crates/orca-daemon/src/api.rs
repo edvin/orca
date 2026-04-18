@@ -85,18 +85,12 @@ pub async fn auth_middleware(
     // avoid accidentally exempting future routes whose paths happen to
     // contain the substring "/webhooks/".
     let path = req.uri().path();
-    if matches!(
-        path,
-        "/api/v1/webhooks/github" | "/api/v1/webhooks/dockerhub"
-    ) {
+    if matches!(path, "/api/v1/webhooks/github" | "/api/v1/webhooks/dockerhub") {
         return Ok(next.run(req).await);
     }
 
     // Allow WebSocket endpoints — they do their own auth via query param.
-    if path.ends_with("/terminal")
-        || path.ends_with("/enable-stream")
-        || path.ends_with("/tunnel")
-    {
+    if path.ends_with("/terminal") || path.ends_with("/enable-stream") || path.ends_with("/tunnel") {
         return Ok(next.run(req).await);
     }
 
@@ -1281,8 +1275,7 @@ async fn build_from_url_endpoint(
     if url.starts_with('-') {
         return Err(ApiError(anyhow::anyhow!("URL must not start with '-'")));
     }
-    let parsed = reqwest::Url::parse(&url)
-        .map_err(|e| ApiError(anyhow::anyhow!("Invalid source URL: {e}")))?;
+    let parsed = reqwest::Url::parse(&url).map_err(|e| ApiError(anyhow::anyhow!("Invalid source URL: {e}")))?;
     match parsed.scheme() {
         "http" | "https" => {}
         other => {
@@ -1294,7 +1287,10 @@ async fn build_from_url_endpoint(
     if let Some(host) = parsed.host_str() {
         let h = host.to_ascii_lowercase();
         let is_localhost = h == "localhost" || h == "0.0.0.0";
-        let is_private_ip = h.parse::<std::net::IpAddr>().map(|ip| is_private_or_loopback(&ip)).unwrap_or(false);
+        let is_private_ip = h
+            .parse::<std::net::IpAddr>()
+            .map(|ip| is_private_or_loopback(&ip))
+            .unwrap_or(false);
         let is_metadata = h == "169.254.169.254" || h == "metadata.google.internal";
         if is_localhost || is_private_ip || is_metadata {
             return Err(ApiError(anyhow::anyhow!(
@@ -1372,8 +1368,8 @@ async fn build_from_url_endpoint(
                 bytes.len()
             )));
         }
-        let content = std::str::from_utf8(&bytes)
-            .map_err(|e| ApiError(anyhow::anyhow!("Dockerfile is not valid UTF-8: {e}")))?;
+        let content =
+            std::str::from_utf8(&bytes).map_err(|e| ApiError(anyhow::anyhow!("Dockerfile is not valid UTF-8: {e}")))?;
         std::fs::write(tmp_dir.path().join("Dockerfile"), content)
             .map_err(|e| ApiError(anyhow::anyhow!("Failed to write Dockerfile: {e}")))?;
     }
@@ -4594,7 +4590,11 @@ async fn auto_register_stack_links(
 fn generate_password(len: usize) -> String {
     use rand::Rng;
     use rand::distributions::Alphanumeric;
-    rand::rngs::OsRng.sample_iter(&Alphanumeric).take(len).map(char::from).collect()
+    rand::rngs::OsRng
+        .sample_iter(&Alphanumeric)
+        .take(len)
+        .map(char::from)
+        .collect()
 }
 
 /// Generate cryptographically random bytes via the OS CSPRNG.
@@ -4826,10 +4826,7 @@ async fn deploy_template(
         if let Some(ref gen_files) = template.generated_files {
             for rel_path in gen_files.keys() {
                 if rel_path.contains("..") || std::path::Path::new(rel_path).is_absolute() {
-                    return Err(anyhow::anyhow!(
-                        "generated_files path '{rel_path}' is invalid"
-                    )
-                    .into());
+                    return Err(anyhow::anyhow!("generated_files path '{rel_path}' is invalid").into());
                 }
             }
         }
@@ -5051,7 +5048,10 @@ fn validate_stack_name(name: &str) -> anyhow::Result<()> {
     if name == "." || name == ".." {
         anyhow::bail!("invalid stack name");
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    {
         anyhow::bail!("stack name contains invalid characters");
     }
     Ok(())
@@ -5503,11 +5503,7 @@ async fn tunnel_ws(
     // services, etc.). Container-name targets like `my-app` pass through —
     // the check only bites on bare IPs and a few well-known names.
     let h = params.host.to_ascii_lowercase();
-    if h == "localhost"
-        || h == "metadata.google.internal"
-        || h == "metadata"
-        || h == "169.254.169.254"
-    {
+    if h == "localhost" || h == "metadata.google.internal" || h == "metadata" || h == "169.254.169.254" {
         tracing::warn!("Tunnel: refusing to connect to metadata/loopback host '{h}'");
         return Err(StatusCode::FORBIDDEN);
     }

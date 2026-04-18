@@ -764,10 +764,7 @@ async fn cmd_ca_install(client: &client::DaemonClient) -> anyhow::Result<()> {
     // local attacker can't pre-create a symlink at a predictable path and
     // swap the contents between write and `sudo security add-trusted-cert`
     // (a swap that would install an attacker-controlled root CA).
-    let tmpfile = tempfile::Builder::new()
-        .prefix("orca-ca-")
-        .suffix(".crt")
-        .tempfile()?;
+    let tmpfile = tempfile::Builder::new().prefix("orca-ca-").suffix(".crt").tempfile()?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -787,11 +784,7 @@ async fn cmd_ca_install(client: &client::DaemonClient) -> anyhow::Result<()> {
         // if TMPDIR contains unusual characters.
         (
             "sudo",
-            vec![
-                "cp",
-                tmp_str.as_str(),
-                "/usr/local/share/ca-certificates/orca-ca.crt",
-            ],
+            vec!["cp", tmp_str.as_str(), "/usr/local/share/ca-certificates/orca-ca.crt"],
             format!(
                 "sudo cp '{}' /usr/local/share/ca-certificates/orca-ca.crt && sudo update-ca-certificates",
                 tmp_str
@@ -831,7 +824,11 @@ async fn cmd_ca_install(client: &client::DaemonClient) -> anyhow::Result<()> {
     // On Linux, run `update-ca-certificates` as a second step so we can
     // surface per-step errors clearly.
     let linux_step2_status = if cfg!(target_os = "linux") && status.as_ref().map(|s| s.success()).unwrap_or(false) {
-        Some(std::process::Command::new("sudo").arg("update-ca-certificates").status())
+        Some(
+            std::process::Command::new("sudo")
+                .arg("update-ca-certificates")
+                .status(),
+        )
     } else {
         None
     };

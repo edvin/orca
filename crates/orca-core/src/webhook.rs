@@ -89,7 +89,8 @@ pub fn validate_dockerhub_token(expected: &str, provided: Option<&str>) -> bool 
 fn is_valid_image_segment(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 255
-        && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
 }
 
 /// A Docker Hub `repo_name` — either a single segment (`nginx`) or exactly
@@ -108,7 +109,8 @@ fn is_valid_dockerhub_repo(s: &str) -> bool {
 fn is_valid_tag(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 128
-        && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '+'))
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '+'))
 }
 
 /// Parse a GitHub "package" or "registry_package" webhook event.
@@ -134,7 +136,9 @@ pub fn parse_github_package_event(body: &[u8]) -> anyhow::Result<WebhookPayload>
         let namespace = pkg["namespace"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("package.namespace missing"))?;
-        let name = pkg["name"].as_str().ok_or_else(|| anyhow::anyhow!("package.name missing"))?;
+        let name = pkg["name"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("package.name missing"))?;
 
         if !is_valid_image_segment(namespace) || !is_valid_image_segment(name) {
             anyhow::bail!("invalid namespace/name in webhook payload");
@@ -171,7 +175,9 @@ pub fn parse_github_package_event(body: &[u8]) -> anyhow::Result<WebhookPayload>
             .as_str()
             .or_else(|| v["repository"]["owner"]["login"].as_str())
             .ok_or_else(|| anyhow::anyhow!("registry_package.namespace missing"))?;
-        let name = pkg["name"].as_str().ok_or_else(|| anyhow::anyhow!("registry_package.name missing"))?;
+        let name = pkg["name"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("registry_package.name missing"))?;
 
         if !is_valid_image_segment(namespace) || !is_valid_image_segment(name) {
             anyhow::bail!("invalid namespace/name in webhook payload");
