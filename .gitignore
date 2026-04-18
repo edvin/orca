@@ -6,6 +6,7 @@ gui/dist/
 *.swo
 .DS_Store
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 src-tauri/gen/
 src-tauri/binaries/
 gui/test-results/
