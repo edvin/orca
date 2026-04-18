@@ -189,7 +189,11 @@ impl DaemonClient {
     }
 
     pub async fn container_logs(&self, id: &str, tail: Option<u32>) -> anyhow::Result<Vec<String>> {
-        let mut url = format!("{}/api/v1/containers/{id}/logs?follow=false", self.base_url);
+        let mut url = format!(
+            "{}/api/v1/containers/{}/logs?follow=false",
+            self.base_url,
+            encode_segment(id)
+        );
         if let Some(n) = tail {
             url.push_str(&format!("&tail={n}"));
         }

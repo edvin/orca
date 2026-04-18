@@ -327,7 +327,7 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
         let _ = tokio::process::Command::new("wsl")
             .args(["-u", "root", "--", "bash", "-c",
                 "mkdir -p /etc/systemd/system/docker.service.d && \
-                 echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                 echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
                  systemctl daemon-reload 2>/dev/null; \
                  service docker start"
             ])

@@ -311,22 +311,22 @@ pub async fn list_containers() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn inspect_container(id: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/containers/{id}")).await
+    get_json(&format!("/containers/{}", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
 pub async fn container_stats(id: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/containers/{id}/stats")).await
+    get_json(&format!("/containers/{}/stats", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
 pub async fn start_container(id: String) -> Result<(), String> {
-    post_empty(&format!("/containers/{id}/start")).await
+    post_empty(&format!("/containers/{}/start", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
 pub async fn stop_container(id: String) -> Result<(), String> {
-    post_empty(&format!("/containers/{id}/stop")).await
+    post_empty(&format!("/containers/{}/stop", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
@@ -337,7 +337,7 @@ pub async fn exec_container(
 ) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     client()
-        .post(format!("{base}/containers/{id}/exec"))
+        .post(format!("{base}/containers/{}/exec", urlencoding::encode(&id)))
         .json(&serde_json::json!({
             "command": command,
             "workdir": workdir,
@@ -352,14 +352,14 @@ pub async fn exec_container(
 
 #[tauri::command]
 pub async fn remove_container(id: String) -> Result<(), String> {
-    delete(&format!("/containers/{id}")).await
+    delete(&format!("/containers/{}", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
 pub async fn rename_container(id: String, name: String) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
-        .post(format!("{base}/containers/{id}/rename"))
+        .post(format!("{base}/containers/{}/rename", urlencoding::encode(&id)))
         .json(&serde_json::json!({ "name": name }))
         .send()
         .await
@@ -393,7 +393,7 @@ pub async fn update_container(
     }
 
     let resp = client()
-        .post(format!("{base}/containers/{id}/update"))
+        .post(format!("{base}/containers/{}/update", urlencoding::encode(&id)))
         .json(&body)
         .send()
         .await
@@ -411,7 +411,7 @@ pub async fn update_container(
 
 #[tauri::command]
 pub async fn export_docker_run(id: String) -> Result<String, String> {
-    let resp: serde_json::Value = get_json(&format!("/containers/{id}/export/run")).await?;
+    let resp: serde_json::Value = get_json(&format!("/containers/{}/export/run", urlencoding::encode(&id))).await?;
     resp.get("command")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
@@ -420,7 +420,7 @@ pub async fn export_docker_run(id: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn export_compose(id: String) -> Result<String, String> {
-    let resp: serde_json::Value = get_json(&format!("/containers/{id}/export/compose")).await?;
+    let resp: serde_json::Value = get_json(&format!("/containers/{}/export/compose", urlencoding::encode(&id))).await?;
     resp.get("yaml")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
@@ -436,7 +436,8 @@ pub async fn container_logs(id: String, tail: Option<u32>) -> Result<Vec<String>
     // For follow mode we'd use Tauri events, but batch fetch is fine for initial view.
     let resp = client()
         .get(format!(
-            "{base}/containers/{id}/logs?follow=false&tail={}",
+            "{base}/containers/{}/logs?follow=false&tail={}",
+            urlencoding::encode(&id),
             tail.unwrap_or(500)
         ))
         .send()
@@ -850,7 +851,7 @@ pub async fn pull_image_stream(
 
 #[tauri::command]
 pub async fn remove_image(id: String) -> Result<(), String> {
-    delete(&format!("/images/{id}")).await
+    delete(&format!("/images/{}", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
@@ -943,12 +944,12 @@ pub async fn list_builds() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn get_build(id: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/builds/{id}")).await
+    get_json(&format!("/builds/{}", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
 pub async fn get_build_logs(id: String) -> Result<String, String> {
-    get_text(&format!("/builds/{id}/logs")).await
+    get_text(&format!("/builds/{}/logs", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
@@ -1055,7 +1056,7 @@ pub async fn volume_list_files(name: String, path: Option<String>) -> Result<ser
         Some(p) => format!("?path={}", urlencoding::encode(p)),
         None => String::new(),
     };
-    get_json(&format!("/volumes/{name}/files{query}")).await
+    get_json(&format!("/volumes/{}/files{query}", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
@@ -1065,7 +1066,7 @@ pub async fn volume_read_file(name: String, path: String) -> Result<serde_json::
 
 #[tauri::command]
 pub async fn volume_containers(name: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/volumes/{name}/containers")).await
+    get_json(&format!("/volumes/{}/containers", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
@@ -1111,7 +1112,7 @@ pub async fn commit_container(id: String, repo: String, tag: Option<String>) -> 
 
 #[tauri::command]
 pub async fn inspect_image(id: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/images/{id}")).await
+    get_json(&format!("/images/{}", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
@@ -2603,7 +2604,7 @@ pub async fn deploy_template_to_hosts(
             let _pull_ok = pull_result.map(|r| r.status().is_success()).unwrap_or(false);
 
             let resp = http
-                .post(format!("{base_url}/templates/{id}/deploy"))
+                .post(format!("{base_url}/templates/{}/deploy", urlencoding::encode(&id)))
                 .json(&body)
                 .send()
                 .await;
@@ -2662,7 +2663,7 @@ pub async fn deploy_template_to_hosts(
                 .await;
 
             let resp = http
-                .post(format!("{base_url}/templates/{id}/deploy"))
+                .post(format!("{base_url}/templates/{}/deploy", urlencoding::encode(&id)))
                 .json(&body)
                 .send()
                 .await;
@@ -3987,6 +3988,11 @@ pub async fn get_daemon_base() -> Result<serde_json::Value, String> {
 /// Converts http(s) to ws(s) and appends the given path + token.
 #[tauri::command]
 pub async fn get_daemon_ws_url(path: String) -> Result<String, String> {
+    // Reject paths containing '?' or '#' — those could let a malicious caller
+    // override the appended `?token=...` query string or inject a fragment.
+    if path.contains('?') || path.contains('#') {
+        return Err("Invalid path: must not contain '?' or '#'".to_string());
+    }
     let base = daemon_url();
     let ws_base = base.replace("https://", "wss://").replace("http://", "ws://");
     let token = active_api_token().unwrap_or_default();

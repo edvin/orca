@@ -383,7 +383,8 @@ fn generate_cert_for_hostname(hostname: &str) -> Result<()> {
         tracing::info!("Generating new Orca root CA for gateway certs");
         std::fs::create_dir_all(&ca_d)?;
 
-        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).expect("Failed to create CA params");
+        let mut params = rcgen::CertificateParams::new(Vec::<String>::new())
+            .map_err(|e| anyhow::anyhow!("Failed to create CA params: {e}"))?;
         params
             .distinguished_name
             .push(rcgen::DnType::CommonName, "Orca Desktop CA");
@@ -397,10 +398,11 @@ fn generate_cert_for_hostname(hostname: &str) -> Result<()> {
         params.not_before = now;
         params.not_after = now + time::Duration::days(365 * 10);
 
-        let key_pair = rcgen::KeyPair::generate().expect("Failed to generate CA key pair");
+        let key_pair =
+            rcgen::KeyPair::generate().map_err(|e| anyhow::anyhow!("Failed to generate CA key pair: {e}"))?;
         let cert = params
             .self_signed(&key_pair)
-            .expect("Failed to self-sign CA certificate");
+            .map_err(|e| anyhow::anyhow!("Failed to self-sign CA certificate: {e}"))?;
 
         let cert_pem = cert.pem();
         let key_pem = key_pair.serialize_pem();

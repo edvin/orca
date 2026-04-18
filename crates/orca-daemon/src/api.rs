@@ -680,11 +680,14 @@ async fn container_terminal_ws(
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, StatusCode> {
     // WebSocket upgrades bypass the auth middleware (GET that upgrades),
-    // so we check the token from a query parameter instead.
+    // so we check the token from a query parameter instead. Treat an
+    // empty configured token as "never authenticated" so a future bug in
+    // `ensure_token` can't open this endpoint up.
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
     use subtle::ConstantTimeEq;
-    if !state.api_token.is_empty()
-        && (state.api_token.len() != token.len() || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+    if state.api_token.is_empty()
+        || state.api_token.len() != token.len()
+        || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1
     {
         return Err(StatusCode::UNAUTHORIZED);
     }
@@ -1284,21 +1287,35 @@ async fn build_from_url_endpoint(
             )));
         }
     }
-    if let Some(host) = parsed.host_str() {
-        let h = host.to_ascii_lowercase();
-        let is_localhost = h == "localhost" || h == "0.0.0.0";
-        let is_private_ip = h
-            .parse::<std::net::IpAddr>()
-            .map(|ip| is_private_or_loopback(&ip))
-            .unwrap_or(false);
-        let is_metadata = h == "169.254.169.254" || h == "metadata.google.internal";
-        if is_localhost || is_private_ip || is_metadata {
-            return Err(ApiError(anyhow::anyhow!(
-                "Refusing to fetch private/loopback/metadata host '{host}'"
-            )));
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| ApiError(anyhow::anyhow!("URL must have a host")))?
+        .to_ascii_lowercase();
+    // Block well-known metadata hostnames even without DNS.
+    if host == "localhost" || host == "0.0.0.0" || host == "metadata" || host == "metadata.google.internal" {
+        return Err(ApiError(anyhow::anyhow!(
+            "Refusing to fetch private/loopback/metadata host '{host}'"
+        )));
+    }
+    // Resolve the host to all of its A/AAAA records and reject if any
+    // resolved address is private/loopback/metadata. This closes the
+    // DNS-rebinding / hostname-indirection gap where a name like
+    // `internal.example.com` could silently point at 169.254.169.254.
+    let port = parsed.port_or_known_default().unwrap_or(443);
+    let lookup_target = format!("{host}:{port}");
+    let resolved: Vec<std::net::SocketAddr> = match tokio::net::lookup_host(&lookup_target).await {
+        Ok(it) => it.collect(),
+        Err(e) => {
+            return Err(ApiError(anyhow::anyhow!("DNS lookup failed for '{host}': {e}")));
         }
-    } else {
-        return Err(ApiError(anyhow::anyhow!("URL must have a host")));
+    };
+    if resolved.is_empty() {
+        return Err(ApiError(anyhow::anyhow!("URL host '{host}' did not resolve")));
+    }
+    if resolved.iter().any(|sa| is_private_or_loopback(&sa.ip())) {
+        return Err(ApiError(anyhow::anyhow!(
+            "Refusing to fetch '{host}' — resolves to a private/loopback/metadata address"
+        )));
     }
 
     // Create a temp directory for the build context
@@ -3222,11 +3239,13 @@ async fn k8s_enable_ws(
     Query(params): Query<HashMap<String, String>>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, StatusCode> {
-    // Auth check (same as terminal WS)
+    // Auth check (same as terminal WS). Reject if the configured token is
+    // empty so a latent `ensure_token` regression never auth-bypasses.
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
     use subtle::ConstantTimeEq;
-    if !state.api_token.is_empty()
-        && (state.api_token.len() != token.len() || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+    if state.api_token.is_empty()
+        || state.api_token.len() != token.len()
+        || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1
     {
         return Err(StatusCode::UNAUTHORIZED);
     }
@@ -3804,13 +3823,22 @@ async fn k8s_pod_terminal_ws(
     Query(params): Query<HashMap<String, String>>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, StatusCode> {
-    // Auth via query param (same as container terminal)
+    // Auth via query param. Be strict when `api_token` is empty: a latent
+    // regression in `ensure_token` must never allow unauthenticated WS.
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
     use subtle::ConstantTimeEq;
-    if !state.api_token.is_empty()
-        && (state.api_token.len() != token.len() || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1)
+    if state.api_token.is_empty()
+        || state.api_token.len() != token.len()
+        || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1
     {
         return Err(StatusCode::UNAUTHORIZED);
+    }
+    // Validate pod / namespace names so they can't be reinterpreted as
+    // kubectl flags (e.g. a name of `--as=system:admin`).
+    if orca_backend_common::k8s::validate_k8s_name(&namespace).is_err()
+        || orca_backend_common::k8s::validate_k8s_name(&name).is_err()
+    {
+        return Err(StatusCode::BAD_REQUEST);
     }
     Ok(ws.on_upgrade(move |socket| handle_k8s_pod_terminal(socket, namespace, name)))
 }
@@ -7021,7 +7049,7 @@ async fn reconnect_runtime(State(state): State<Arc<AppState>>) -> Result<impl In
                     let configure_result = tokio::process::Command::new("wsl")
                         .args(["-u", "root", "--", "bash", "-c",
                             "mkdir -p /etc/systemd/system/docker.service.d && \
-                             echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' \
+                             echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' \
                              > /etc/systemd/system/docker.service.d/override.conf && \
                              systemctl daemon-reload && service docker restart"])
                         .output()

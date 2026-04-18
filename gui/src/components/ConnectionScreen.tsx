@@ -75,7 +75,7 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
               <p style={{ "margin-bottom": "8px" }}>The daemon binary (<code>orca-daemon</code>) was not found. To fix this:</p>
               <ol style={{ margin: "0", "padding-left": "18px" }}>
                 <li>
-                  <a href="https://github.com/edvin/orca/actions" target="_blank" style={{ color: "#58a6ff" }}>
+                  <a href="https://github.com/edvin/orca/actions" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>
                     Download orca-daemon
                   </a>{" "}
                   from GitHub Actions artifacts

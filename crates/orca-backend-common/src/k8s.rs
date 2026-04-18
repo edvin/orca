@@ -36,7 +36,10 @@ pub struct IngressHostEntry {
 
 /// Validate that a string is a safe Kubernetes resource name
 /// (alphanumeric, hyphens, dots; 1-253 chars).
-fn validate_k8s_name(name: &str) -> anyhow::Result<()> {
+pub fn validate_k8s_name(name: &str) -> anyhow::Result<()> {
+    // Re-stated here for the compile-time helper check; the condition is
+    // unchanged from before — the only change is the pub-crate→pub
+    // visibility below so the daemon can call this from WS handlers.
     if name.is_empty() || name.len() > 253 {
         anyhow::bail!("Invalid Kubernetes name: length");
     }
@@ -1736,6 +1739,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_pods(&self, namespace: &str) -> anyhow::Result<Vec<Pod>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "pods", "-n", namespace]).await?;
@@ -1811,6 +1815,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_deployments(&self, namespace: &str) -> anyhow::Result<Vec<Deployment>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "deployments", "-n", namespace]).await?;
@@ -1878,6 +1883,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_services(&self, namespace: &str) -> anyhow::Result<Vec<Service>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "services", "-n", namespace]).await?;
@@ -1982,6 +1988,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_ingresses(&self, namespace: &str) -> anyhow::Result<Vec<Ingress>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "ingresses", "-n", namespace]).await?;
@@ -2051,6 +2058,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_pvcs(&self, namespace: &str) -> anyhow::Result<Vec<PersistentVolumeClaim>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "pvc", "-n", namespace]).await?;
@@ -2759,6 +2767,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_secrets(&self, namespace: &str) -> anyhow::Result<Vec<K8sSecret>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "secrets", "-n", namespace]).await?;
@@ -2978,6 +2987,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_jobs(&self, namespace: &str) -> anyhow::Result<Vec<Job>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "jobs", "-n", namespace]).await?;
@@ -3073,6 +3083,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_cronjobs(&self, namespace: &str) -> anyhow::Result<Vec<CronJob>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "cronjobs", "-n", namespace]).await?;
@@ -3136,6 +3147,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_daemonsets(&self, namespace: &str) -> anyhow::Result<Vec<DaemonSet>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "daemonsets", "-n", namespace]).await?;
@@ -3217,6 +3229,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_statefulsets(&self, namespace: &str) -> anyhow::Result<Vec<StatefulSet>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "statefulsets", "-n", namespace]).await?;
@@ -3281,6 +3294,7 @@ impl K8sManager for K3sManager {
     }
 
     async fn list_replicasets(&self, namespace: &str) -> anyhow::Result<Vec<ReplicaSet>> {
+        validate_k8s_name(namespace)?;
         #[cfg(target_os = "windows")]
         {
             let json = self.wsl_kubectl_json(&["get", "replicasets", "-n", namespace]).await?;
