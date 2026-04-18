@@ -67,7 +67,7 @@ fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
 
     fn rename_context_refs(ctx: &mut Mapping) {
         for key in ["cluster", "user"] {
-            if let Some(v) = ctx.get_mut(&Value::from(key))
+            if let Some(v) = ctx.get_mut(Value::from(key))
                 && v.as_str() == Some("default")
             {
                 *v = Value::from("orca");
@@ -77,10 +77,10 @@ fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
 
     if let Some(mapping) = cfg.as_mapping_mut() {
         for key in ["clusters", "users", "contexts"] {
-            if let Some(list) = mapping.get_mut(&Value::from(key)).and_then(|v| v.as_sequence_mut()) {
+            if let Some(list) = mapping.get_mut(Value::from(key)).and_then(|v| v.as_sequence_mut()) {
                 for item in list {
                     if let Some(m) = item.as_mapping_mut()
-                        && let Some(v) = m.get_mut(&Value::from("name"))
+                        && let Some(v) = m.get_mut(Value::from("name"))
                         && v.as_str() == Some("default")
                     {
                         *v = Value::from("orca");
@@ -88,7 +88,7 @@ fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
 
                     // For contexts, also rewrite the `context: { cluster, user }` refs.
                     if key == "contexts"
-                        && let Some(Value::Mapping(ctx)) = item.as_mapping_mut().and_then(|m| m.get_mut(&Value::from("context")))
+                        && let Some(Value::Mapping(ctx)) = item.as_mapping_mut().and_then(|m| m.get_mut(Value::from("context")))
                     {
                         rename_context_refs(ctx);
                     }
@@ -96,7 +96,7 @@ fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
             }
         }
 
-        if let Some(v) = mapping.get_mut(&Value::from("current-context"))
+        if let Some(v) = mapping.get_mut(Value::from("current-context"))
             && v.as_str() == Some("default")
         {
             *v = Value::from("orca");

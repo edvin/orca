@@ -4818,7 +4818,7 @@ async fn deploy_template(
         // Reject any `rel_path` in generated_files that would escape the
         // stack directory — they're also joined with stack_dir below.
         if let Some(ref gen_files) = template.generated_files {
-            for (rel_path, _) in gen_files {
+            for rel_path in gen_files.keys() {
                 if rel_path.contains("..") || std::path::Path::new(rel_path).is_absolute() {
                     return Err(anyhow::anyhow!(
                         "generated_files path '{rel_path}' is invalid"
@@ -5505,11 +5505,11 @@ async fn tunnel_ws(
         tracing::warn!("Tunnel: refusing to connect to metadata/loopback host '{h}'");
         return Err(StatusCode::FORBIDDEN);
     }
-    if let Ok(ip) = h.parse::<std::net::IpAddr>() {
-        if is_private_or_loopback(&ip) {
-            tracing::warn!("Tunnel: refusing to connect to private/loopback IP '{ip}'");
-            return Err(StatusCode::FORBIDDEN);
-        }
+    if let Ok(ip) = h.parse::<std::net::IpAddr>()
+        && is_private_or_loopback(&ip)
+    {
+        tracing::warn!("Tunnel: refusing to connect to private/loopback IP '{ip}'");
+        return Err(StatusCode::FORBIDDEN);
     }
 
     tracing::info!("Tunnel: opening connection to {}:{}", params.host, params.port);
@@ -5597,16 +5597,16 @@ async fn webhook_github(
     // secrets. `require_valid_signature` rejects if the list is empty, so an
     // unconfigured daemon never accepts an unsigned webhook.
     let mut secrets: Vec<&str> = Vec::new();
-    if let Some(ref s) = config.webhook_secret {
-        if !s.is_empty() {
-            secrets.push(s.as_str());
-        }
+    if let Some(ref s) = config.webhook_secret
+        && !s.is_empty()
+    {
+        secrets.push(s.as_str());
     }
     for r in &config.deploy_rules {
-        if let Some(ref s) = r.webhook_secret {
-            if !s.is_empty() {
-                secrets.push(s.as_str());
-            }
+        if let Some(ref s) = r.webhook_secret
+            && !s.is_empty()
+        {
+            secrets.push(s.as_str());
         }
     }
 
@@ -5677,16 +5677,16 @@ async fn webhook_dockerhub(
     // webhook_secret or per-rule secret is accepted.
     let provided = headers.get("x-orca-webhook-token").and_then(|v| v.to_str().ok());
     let mut candidates: Vec<&str> = Vec::new();
-    if let Some(ref s) = config.webhook_secret {
-        if !s.is_empty() {
-            candidates.push(s.as_str());
-        }
+    if let Some(ref s) = config.webhook_secret
+        && !s.is_empty()
+    {
+        candidates.push(s.as_str());
     }
     for r in &config.deploy_rules {
-        if let Some(ref s) = r.webhook_secret {
-            if !s.is_empty() {
-                candidates.push(s.as_str());
-            }
+        if let Some(ref s) = r.webhook_secret
+            && !s.is_empty()
+        {
+            candidates.push(s.as_str());
         }
     }
 
@@ -7386,10 +7386,10 @@ async fn gateway_add_route(
     Json(req): Json<AddRouteRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     validate_gateway_hostname(&req.hostname)?;
-    if let Some(p) = &req.path {
-        if p.contains('\n') || p.contains('\0') {
-            return Err(anyhow::anyhow!("path must not contain newlines or nulls").into());
-        }
+    if let Some(p) = &req.path
+        && (p.contains('\n') || p.contains('\0'))
+    {
+        return Err(anyhow::anyhow!("path must not contain newlines or nulls").into());
     }
     let mut config = state.config.lock().await;
 

@@ -469,12 +469,10 @@ impl OrcaConfig {
             return Ok(Self::default());
         }
         let contents = std::fs::read_to_string(&path)?;
-        serde_json::from_str(&contents)
-            .map_err(|e| anyhow::anyhow!("config at {} is not valid JSON: {e}", path.display()))
-            .map(|c: Self| {
-                Self::warn_insecure_perms(&path);
-                c
-            })
+        let cfg: Self = serde_json::from_str(&contents)
+            .map_err(|e| anyhow::anyhow!("config at {} is not valid JSON: {e}", path.display()))?;
+        Self::warn_insecure_perms(&path);
+        Ok(cfg)
     }
 
     /// Like [`load`] but returns defaults on missing or unparseable file.
