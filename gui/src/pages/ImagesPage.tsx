@@ -758,8 +758,22 @@ export default function ImagesPage(props: ImagesPageProps) {
     try {
       const safeName = imageName.replace(/[^a-zA-Z0-9_-]/g, "_");
       const fileName = `vulnerability-report-${safeName}.html`;
-      const filePath = await invoke("write_temp_file", { name: fileName, content: html }) as string;
-      setReportPath(filePath);
+      // Trigger a browser download via an object-URL blob instead of
+      // writing through the Tauri temp-file command. The Tauri command
+      // deliberately refuses `.html` (opening HTML via a temp path
+      // would run inline JS under the OS file handler), and the browser
+      // save dialog gives the user explicit control over the
+      // destination.
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setReportPath(fileName);
     } catch (e) {
       showToast(`Failed to export report: ${e}`, "error");
     }
@@ -1883,14 +1897,14 @@ export default function ImagesPage(props: ImagesPageProps) {
         </div>
       </Show>
 
-      {/* Report exported dialog */}
+      {/* Report downloaded dialog */}
       <Show when={reportPath()}>
         <div class="modal-overlay"
           onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setReportPath(null); }}>
-          <div class="modal-dialog" style={{ "max-width": "600px" }}>
+          <div class="modal-dialog" style={{ "max-width": "520px" }}>
             <div class="modal-header">
-              <span class="modal-title">Report Ready</span>
+              <span class="modal-title">Report Downloaded</span>
               <button class="modal-close" onClick={() => setReportPath(null)}>{"\u00d7"}</button>
             </div>
             <div class="modal-body" style={{ "text-align": "center", padding: "24px" }}>
@@ -1899,41 +1913,17 @@ export default function ImagesPage(props: ImagesPageProps) {
                 <polyline points="22 4 12 14.01 9 11.01"/>
               </svg>
               <div style={{ "font-size": "15px", "font-weight": "600", "margin-bottom": "8px" }}>
-                Vulnerability report exported
+                Vulnerability report saved
               </div>
-              <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "20px" }}>
-                <div class="mono" style={{
-                  "font-size": "11px", color: "#8b949e", flex: "1",
-                  background: "#161b22", padding: "8px 12px", "border-radius": "6px",
-                  "word-break": "break-all", "text-align": "left",
-                }}>
-                  {reportPath()}
-                </div>
-                <button
-                  class="btn btn-sm"
-                  title="Copy path"
-                  onClick={() => {
-                    navigator.clipboard.writeText(reportPath()!);
-                    showToast("Path copied", "success");
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                </button>
+              <div class="mono" style={{
+                "font-size": "11px", color: "#8b949e",
+                background: "#161b22", padding: "8px 12px", "border-radius": "6px",
+                "word-break": "break-all", "margin-bottom": "20px",
+              }}>
+                {reportPath()}
               </div>
               <div style={{ display: "flex", gap: "8px", "justify-content": "center" }}>
-                <button
-                  class="btn btn-primary"
-                  onClick={async () => {
-                    try {
-                      await invoke("open_file_in_browser", { path: reportPath()! });
-                    } catch (e) {
-                      showToast(`Failed to open: ${e}`, "error");
-                    }
-                  }}
-                >
-                  Open in Browser
-                </button>
-                <button class="btn" onClick={() => setReportPath(null)}>Close</button>
+                <button class="btn btn-primary" onClick={() => setReportPath(null)}>Close</button>
               </div>
             </div>
           </div>

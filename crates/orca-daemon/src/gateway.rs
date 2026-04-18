@@ -767,14 +767,20 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
 
     // Build tab buttons. Env names come from user-controlled
     // `stack_links`, so they must be HTML-escaped for both attribute and
-    // text-node contexts before interpolation.
+    // text-node contexts before interpolation. We deliberately do NOT put
+    // the env name into an `onclick="…"` attribute: HTML-entity escapes
+    // (`&#39;`, `&quot;`) get decoded by the HTML parser *before* the
+    // onclick script body parses, so an attacker-controlled env name
+    // could break out of the JS single-quoted string. Instead, bind the
+    // click handler in the trailing `<script>` block and read the value
+    // from `dataset.env` (HTML attribute context, safe under escape_html).
     let mut tab_buttons = String::new();
     for env in &ordered_envs {
         let active = if *env == default_env { " active" } else { "" };
         let label = escape_html(&capitalize(env));
         let env_attr = escape_html(env);
         tab_buttons.push_str(&format!(
-            r#"<button class="env-tab{active}" data-env="{env_attr}" onclick="switchEnv(this,'{env_attr}')">{label}</button>"#,
+            r#"<button class="env-tab{active}" data-env="{env_attr}">{label}</button>"#,
         ));
     }
 
@@ -1322,14 +1328,17 @@ fn generate_landing_page(config: &GatewayConfig) -> String {
   </div>
 </div>
 <script>
-function switchEnv(btn,env){{
-  document.querySelectorAll('.env-tab').forEach(function(t){{t.classList.remove('active')}});
-  btn.classList.add('active');
-  document.querySelectorAll('.env-panel').forEach(function(p){{
-    if(p.getAttribute('data-env')===env){{p.style.display='block';p.style.opacity='0';setTimeout(function(){{p.style.opacity='1'}},10)}}
-    else{{p.style.display='none'}}
+document.querySelectorAll('.env-tab').forEach(function(btn){{
+  btn.addEventListener('click',function(){{
+    var env=this.dataset.env;
+    document.querySelectorAll('.env-tab').forEach(function(t){{t.classList.remove('active')}});
+    this.classList.add('active');
+    document.querySelectorAll('.env-panel').forEach(function(p){{
+      if(p.getAttribute('data-env')===env){{p.style.display='block';p.style.opacity='0';setTimeout(function(){{p.style.opacity='1'}},10)}}
+      else{{p.style.display='none'}}
+    }});
   }});
-}}
+}});
 </script>
 </body>
 </html>"##,

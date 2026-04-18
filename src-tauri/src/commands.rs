@@ -3210,7 +3210,11 @@ const MAX_TEMP_FILE_BYTES: usize = 16 * 1024 * 1024;
 /// when opened by the OS default handler on Linux / macOS / Windows.
 /// `.html` is deliberately NOT in this list: opening HTML via the browser
 /// would execute inline JS, and opening it as a file could also run JS.
-const ALLOWED_TEMP_EXTENSIONS: &[&str] = &[".yml", ".yaml", ".json", ".log", ".txt", ".tar", ".tar.gz", ".tgz"];
+/// `.pem` is inert (no OS handler executes it) and is required by the
+/// "Download CA certificate" flow in SettingsPage.
+const ALLOWED_TEMP_EXTENSIONS: &[&str] = &[
+    ".yml", ".yaml", ".json", ".log", ".txt", ".tar", ".tar.gz", ".tgz", ".pem",
+];
 
 fn has_allowed_temp_extension(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();

@@ -582,11 +582,14 @@ impl OrcaConfig {
     pub fn ensure_token(&mut self) -> anyhow::Result<&str> {
         // Serialize concurrent ensure_token() callers (e.g. simultaneous
         // daemon and CLI first-boot) so only one generates a token.
-        let _lock = Self::acquire_save_lock()?;
+        let lock = Self::acquire_save_lock()?;
         if self.api_token.as_deref().is_none_or(str::is_empty) {
             let token = generate_random_token()?;
             self.api_token = Some(token);
-            self.save()?;
+            // Must use the locked variant — re-acquiring `.config.lock` on a
+            // second FD would deadlock: flock(2) on Linux tracks the open
+            // file description, not the process, so our own held FD blocks us.
+            self.save_with_lock(&lock)?;
         }
         self.api_token
             .as_deref()
@@ -669,8 +672,14 @@ impl OrcaConfig {
     pub fn save(&self) -> anyhow::Result<()> {
         // Exclusive advisory lock serializes concurrent writers (including
         // across processes like daemon + CLI).
-        let _lock = Self::acquire_save_lock()?;
+        let lock = Self::acquire_save_lock()?;
+        self.save_with_lock(&lock)
+    }
 
+    /// Internal save path used when the caller already holds a `SaveLock`.
+    /// Must never call `acquire_save_lock` — re-entering the flock on a new
+    /// FD from the same process would block forever on Linux.
+    fn save_with_lock(&self, _lock: &SaveLock) -> anyhow::Result<()> {
         let path = Self::config_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
