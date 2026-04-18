@@ -9,6 +9,7 @@ import Spinner from "../components/Spinner";
 import Breadcrumb from "../components/Breadcrumb";
 import YamlEditor from "../components/YamlEditor";
 import { logError } from "../lib/activityStore";
+import { confirmDanger } from "../components/ConfirmDialog";
 
 interface StackDetailPageProps {
   stackName: string;
@@ -181,7 +182,15 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                 <Show when={s().status === "Running"}>
                   <button
                     class="btn btn-sm"
-                    onClick={() => doStackAction("compose_down")}
+                    onClick={async () => {
+                      const ok = await confirmDanger({
+                        title: "Compose Down",
+                        message: "This will stop and remove the stack's containers. Continue?",
+                        confirmLabel: "Down",
+                      });
+                      if (!ok) return;
+                      doStackAction("compose_down");
+                    }}
                     disabled={actionInProgress()}
                     title="Stop stack"
                   >

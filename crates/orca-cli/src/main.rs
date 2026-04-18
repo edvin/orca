@@ -842,19 +842,26 @@ async fn cmd_ca_install(client: &client::DaemonClient) -> anyhow::Result<()> {
     if overall_ok {
         println!("CA certificate installed successfully.");
         // tempfile Drop will remove the file.
+        Ok(())
     } else {
         eprintln!("Automatic installation failed. Install manually:");
         eprintln!("  {manual_instructions}");
-        eprintln!("Certificate saved to: {tmp_str}");
-        // Move the temp file to a stable location so the user can still
-        // finish manually; otherwise the tempfile Drop would delete it.
-        let stable_path = std::env::temp_dir().join("orca-ca.crt");
-        if std::fs::copy(&tmp_path, &stable_path).is_ok() {
-            eprintln!("  (copied to {})", stable_path.display());
+        // Keep the tempfile alive at its CURRENT unpredictable path so a
+        // local attacker cannot race us to replace the PEM with their own
+        // root CA before the user runs the manual install command. We
+        // deliberately do NOT copy to `/tmp/orca-ca.crt` — that predictable
+        // path re-introduced the exact TOCTOU the hardened path was
+        // designed to prevent.
+        match _tmp_guard.keep() {
+            Ok((_file, persisted)) => {
+                eprintln!("Certificate saved to: {}", persisted.display());
+            }
+            Err(e) => {
+                eprintln!("(Failed to preserve temp cert file: {e})");
+            }
         }
+        anyhow::bail!("CA certificate installation failed — see message above")
     }
-
-    Ok(())
 }
 
 // --- Templates ---

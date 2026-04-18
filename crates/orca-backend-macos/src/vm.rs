@@ -73,14 +73,21 @@ provision:
   - mode: system
     script: |
       #!/bin/bash
-      set -eu
+      # pipefail so `curl | sh` propagates a curl failure — without it a
+      # DNS/TLS failure on get.docker.com is silently ignored and the VM
+      # boots "successfully" with no Docker installed.
+      set -euo pipefail
 
       # Install container runtime
       if ! command -v {runtime_pkg} &> /dev/null; then
         if [ "{runtime_pkg}" = "podman" ]; then
           apt-get update -qq && apt-get install -y -qq podman
         else
-          curl -fsSL https://get.docker.com | sh
+          # Download the installer first so we can propagate download
+          # failures before executing.
+          curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+          sh /tmp/get-docker.sh
+          rm -f /tmp/get-docker.sh
           usermod -aG docker $LIMA_CIDATA_USER
         fi
       fi
@@ -199,8 +206,12 @@ propagateProxyEnv: true
     }
 
     async fn delete(&self, name: &str) -> anyhow::Result<()> {
-        // Stop first if running
-        let _ = self.stop(name).await;
+        // Stop first if running — log any failure so a stuck VM
+        // manifests as something more actionable than a cryptic
+        // "limactl delete" error later on.
+        if let Err(e) = self.stop(name).await {
+            tracing::warn!("Lima delete: stop('{name}') failed (continuing): {e}");
+        }
 
         let output = Command::new("limactl")
             .args(["delete", name])

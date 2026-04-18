@@ -27,8 +27,31 @@ fn logs_dir() -> PathBuf {
     builds_dir().join("logs")
 }
 
-pub fn log_path(build_id: &str) -> PathBuf {
-    logs_dir().join(format!("{build_id}.log"))
+/// Validate a build id against a restricted character set.
+///
+/// Build ids come from the URL path for log read/write/delete endpoints,
+/// and any `..` or path-separator character would let an authenticated
+/// caller traverse out of the logs directory and read/delete arbitrary
+/// `.log` files the daemon user can reach (e.g. CI or audit logs).
+pub fn validate_build_id(build_id: &str) -> anyhow::Result<()> {
+    if build_id.is_empty() || build_id.len() > 128 {
+        anyhow::bail!("invalid build id: length");
+    }
+    if build_id.starts_with('-') || build_id.starts_with('.') {
+        anyhow::bail!("invalid build id: must not start with '-' or '.'");
+    }
+    if !build_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    {
+        anyhow::bail!("invalid build id: illegal characters");
+    }
+    Ok(())
+}
+
+pub fn log_path(build_id: &str) -> anyhow::Result<PathBuf> {
+    validate_build_id(build_id)?;
+    Ok(logs_dir().join(format!("{build_id}.log")))
 }
 
 /// Load build history from disk.
@@ -49,7 +72,9 @@ pub fn save_history(mut records: Vec<BuildRecord>) {
         // Remove oldest entries and their log files
         let to_remove: Vec<BuildRecord> = records.drain(..records.len() - MAX_HISTORY).collect();
         for r in to_remove {
-            let _ = std::fs::remove_file(log_path(&r.id));
+            if let Ok(p) = log_path(&r.id) {
+                let _ = std::fs::remove_file(p);
+            }
         }
     }
     let dir = builds_dir();
@@ -110,7 +135,9 @@ pub fn update_build(id: &str, status: BuildStatus, image_id: Option<String>, err
             record.duration_secs = Some((now - started.with_timezone(&chrono::Utc)).num_milliseconds() as f64 / 1000.0);
         }
         // Count log lines
-        if let Ok(log) = std::fs::read_to_string(log_path(id)) {
+        if let Ok(p) = log_path(id)
+            && let Ok(log) = std::fs::read_to_string(p)
+        {
             record.log_lines = log.lines().count() as u64;
         }
     }
@@ -120,7 +147,13 @@ pub fn update_build(id: &str, status: BuildStatus, image_id: Option<String>, err
 /// Append a line to a build's log file.
 pub fn append_log(id: &str, line: &str) {
     use std::io::Write;
-    let path = log_path(id);
+    let path = match log_path(id) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!("append_log: rejecting invalid build id '{id}': {e}");
+            return;
+        }
+    };
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(f, "{}", line);
     }
@@ -128,7 +161,7 @@ pub fn append_log(id: &str, line: &str) {
 
 /// Get build log content.
 pub fn get_log(id: &str) -> Option<String> {
-    std::fs::read_to_string(log_path(id)).ok()
+    log_path(id).ok().and_then(|p| std::fs::read_to_string(p).ok())
 }
 
 /// Analyze build log for cache hit information.
@@ -158,7 +191,9 @@ pub fn delete_build(id: &str) {
     let mut history = load_history();
     history.retain(|r| r.id != id);
     save_history(history);
-    let _ = std::fs::remove_file(log_path(id));
+    if let Ok(p) = log_path(id) {
+        let _ = std::fs::remove_file(p);
+    }
 }
 
 // --- BuildKit History Integration ---

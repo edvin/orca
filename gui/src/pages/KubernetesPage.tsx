@@ -106,6 +106,10 @@ export default function KubernetesPage() {
   const [logTail, setLogTail] = createSignal(200);
   let logFollowInterval: ReturnType<typeof setInterval> | null = null;
   let logContainerRef: HTMLDivElement | undefined;
+  // K8s setup WebSocket: tracked at page scope so onCleanup can close it on
+  // fast unmount / navigation, and so a re-invocation of handleEnable can
+  // close any prior socket before opening a new one.
+  let setupWs: WebSocket | null = null;
 
   // Feature 4: Helm
   const [helmReleases, setHelmReleases] = createSignal<HelmRelease[]>([]);
@@ -361,10 +365,21 @@ export default function KubernetesPage() {
         clearInterval(logFollowInterval);
         logFollowInterval = null;
       }
+      if (setupWs) {
+        try { setupWs.close(); } catch {}
+        setupWs = null;
+      }
     });
   });
 
   const handleEnable = async () => {
+    // Close any previous setup WebSocket before opening a new one so
+    // rapid re-invocations don't leak sockets.
+    if (setupWs) {
+      try { setupWs.close(); } catch {}
+      setupWs = null;
+    }
+
     setEnabling(true);
     setSetupLog("");
     setSetupRunning(true);
@@ -375,6 +390,7 @@ export default function KubernetesPage() {
       // Get WebSocket URL for the active daemon (local or remote)
       const wsUrl = await invoke("get_daemon_ws_url", { path: "/k8s/enable-stream" }) as string;
       const ws = new WebSocket(wsUrl);
+      setupWs = ws;
 
       ws.onopen = () => {
         setSetupLog("Starting Kubernetes setup...\n");
@@ -388,11 +404,13 @@ export default function KubernetesPage() {
           setEnabling(false);
           refreshStatus();
           ws.close();
+          if (setupWs === ws) setupWs = null;
         } else if (line === "[ERROR]") {
           setSetupSuccess(false);
           setSetupRunning(false);
           setEnabling(false);
           ws.close();
+          if (setupWs === ws) setupWs = null;
         } else {
           setSetupLog((prev) => prev + line + "\n");
           // Check for instruction-style output (not an actual install)
@@ -405,6 +423,7 @@ export default function KubernetesPage() {
       ws.onerror = () => {
         // WebSocket failed — fall back to non-streaming invoke
         ws.close();
+        if (setupWs === ws) setupWs = null;
         (async () => {
           try {
             setSetupLog("Live streaming not available, using batch mode...\n\n");
@@ -433,6 +452,7 @@ export default function KubernetesPage() {
       };
 
       ws.onclose = () => {
+        if (setupWs === ws) setupWs = null;
         // Ensure state is cleaned up if connection drops unexpectedly
         if (setupRunning()) {
           setSetupRunning(false);
@@ -3475,6 +3495,7 @@ spec:
                         <a
                           href={`http://localhost:${localVal()}`}
                           target="_blank"
+                          rel="noopener noreferrer"
                           style={{ "font-size": "11px", color: "#58a6ff", "text-decoration": "none", "white-space": "nowrap" }}
                         >
                           Open in browser

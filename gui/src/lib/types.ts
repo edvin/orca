@@ -390,6 +390,8 @@ export interface SystemHealth {
   system_resources: SystemResources | null;
   warnings: string[];
   gpu?: GpuInfo;
+  os?: string;
+  arch?: string;
 }
 
 export interface DiskUsage {

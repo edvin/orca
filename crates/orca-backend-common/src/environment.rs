@@ -246,7 +246,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     send(">>> Configuring TCP listener...".into()).await;
                     let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
                         "mkdir -p /etc/systemd/system/docker.service.d && \
-                         echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                         echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
                          systemctl daemon-reload 2>/dev/null"
                     ]).await;
                     send(">>> Starting Docker service...".into()).await;
@@ -295,7 +295,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 send(">>> Configuring TCP listener...".into()).await;
                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
                     "mkdir -p /etc/systemd/system/docker.service.d && \
-                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
                      systemctl daemon-reload 2>/dev/null"
                 ]).await;
 
@@ -395,7 +395,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     apt-get update && apt-get install -y nvidia-container-toolkit && \
                     nvidia-ctk runtime configure --runtime=docker && \
                     mkdir -p /etc/systemd/system/docker.service.d && \
-                    echo -e '[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                    echo -e '[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
                     systemctl daemon-reload && \
                     systemctl restart docker
                 "#;
@@ -1446,7 +1446,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 // On Windows, configure TCP listener and start Docker inside WSL2
                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
                     "mkdir -p /etc/systemd/system/docker.service.d && \
-                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
                      systemctl daemon-reload 2>/dev/null; \
                      service docker start"
                 ]).await
@@ -1610,7 +1610,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                                 log.push_str("Configuring TCP listener...\n");
                                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
                                     "mkdir -p /etc/systemd/system/docker.service.d && \
-                                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
                                      systemctl daemon-reload 2>/dev/null"
                                 ]).await;
                                 log.push_str("Restarting Docker with TCP listener...\n");
@@ -1674,7 +1674,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 log.push_str("\n>>> Configuring Docker TCP listener for Orca...\n");
                 let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
                     "mkdir -p /etc/systemd/system/docker.service.d && \
-                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
+                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
                      systemctl daemon-reload 2>/dev/null; \
                      echo 'TCP listener configured on port 2375'"
                 ]).await.map(|o| log.push_str(&format!("{o}\n")));

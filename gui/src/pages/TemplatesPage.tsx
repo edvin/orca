@@ -730,7 +730,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
             <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
-            <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank"
+            <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener noreferrer"
               class="btn" style={{ "font-size": "12px", "text-decoration": "none" }}>
               Contribute Template
             </a>
@@ -870,6 +870,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                     <a
                       href={hubUrl}
                       target="_blank"
+                      rel="noopener noreferrer"
                       class="btn btn-sm"
                       style={{ "text-decoration": "none", "text-align": "center" }}
                       onClick={(e) => e.stopPropagation()}
@@ -958,7 +959,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                         Image
                         <Show when={imageRegistryLink(template().image)}>
                           {(link) => (
-                            <a href={link().url} target="_blank" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
+                            <a href={link().url} target="_blank" rel="noopener noreferrer" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
                               {link().label} {"\u2197"}
                             </a>
                           )}

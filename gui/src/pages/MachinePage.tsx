@@ -4,6 +4,7 @@ import type { MachineInfo, SystemHealth } from "../lib/types";
 import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { logError } from "../lib/activityStore";
+import { confirmDanger } from "../components/ConfirmDialog";
 
 function UsageBar(props: { used: number; total: number; label: string }) {
   const percent = () => (props.total > 0 ? (props.used / props.total) * 100 : 0);
@@ -71,6 +72,12 @@ export default function MachinePage() {
   };
 
   const pruneAll = async () => {
+    const ok = await confirmDanger({
+      title: "Prune Docker System",
+      message: "Remove all unused containers, images, volumes, and build cache? This cannot be undone.",
+      confirmLabel: "Prune",
+    });
+    if (!ok) return;
     setPruning(true);
     try {
       await invoke("prune_images");

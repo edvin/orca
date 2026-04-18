@@ -929,7 +929,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                             const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
                             return (
                               <div class="mono" style={{ "line-height": "1.8", "font-size": "12px", display: "flex", "align-items": "center", gap: "6px" }}>
-                                <a href={`${proto}://localhost:${p.host_port}`} target="_blank" style={{ color: "#58a6ff" }} title={`Open ${proto}://localhost:${p.host_port}`}>
+                                <a href={`${proto}://localhost:${p.host_port}`} target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }} title={`Open ${proto}://localhost:${p.host_port}`}>
                                   :{p.host_port}
                                 </a>
                                 <span style={{ color: "#484f58" }}>{"\u2192"}</span>
@@ -1168,6 +1168,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                                 <a
                                   href={`${proto}://localhost:${p.host_port}`}
                                   target="_blank"
+                                  rel="noopener noreferrer"
                                   style={{ color: "#58a6ff", "font-size": "12px", "margin-top": "6px", display: "inline-block" }}
                                   onClick={(e) => e.stopPropagation()}
                                 >
@@ -1177,6 +1178,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                               <a
                                 href={`${proto}://localhost:${p.host_port}`}
                                 target="_blank"
+                                rel="noopener noreferrer"
                                 class="btn btn-sm"
                                 style={{ "font-size": "11px", padding: "4px 10px", "flex-shrink": "0" }}
                                 onClick={(e) => e.stopPropagation()}

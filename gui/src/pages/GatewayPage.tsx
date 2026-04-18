@@ -7,6 +7,7 @@ import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
 import { SkeletonCard } from "../components/Skeleton";
+import { safeHref } from "../lib/sanitize";
 
 interface GatewayPageProps {
   onNavigate?: (target: string) => void;
@@ -402,8 +403,10 @@ export default function GatewayPage(props: GatewayPageProps) {
   };
 
   const openUrl = (url: string) => {
-    shellOpen(url).catch(() => {
-      window.open(url, "_blank");
+    const safe = safeHref(url);
+    if (!safe) return;
+    shellOpen(safe).catch(() => {
+      window.open(safe, "_blank", "noopener,noreferrer");
     });
   };
 

@@ -157,6 +157,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
   const flatFiltered = () => filtered();
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.isComposing || e.keyCode === 229) return;
     const items = flatFiltered();
     if (e.key === "ArrowDown") {
       e.preventDefault();

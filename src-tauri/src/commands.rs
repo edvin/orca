@@ -953,7 +953,7 @@ pub async fn get_build_logs(id: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn delete_build(id: String) -> Result<(), String> {
-    delete(&format!("/builds/{id}")).await
+    delete(&format!("/builds/{}", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
@@ -1010,7 +1010,7 @@ pub async fn list_build_targets() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn start_build_target(name: String) -> Result<serde_json::Value, String> {
-    post_json(&format!("/builds/targets/{name}")).await
+    post_json(&format!("/builds/targets/{}", urlencoding::encode(&name))).await
 }
 
 // --- Volumes ---
@@ -1022,7 +1022,7 @@ pub async fn list_volumes() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn remove_volume(name: String) -> Result<(), String> {
-    delete(&format!("/volumes/{name}")).await
+    delete(&format!("/volumes/{}", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
@@ -1245,7 +1245,7 @@ pub async fn create_network(name: String, driver: Option<String>) -> Result<serd
 
 #[tauri::command]
 pub async fn remove_network(name: String) -> Result<(), String> {
-    delete(&format!("/networks/{name}")).await
+    delete(&format!("/networks/{}", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
@@ -1262,27 +1262,27 @@ pub async fn list_stacks() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn get_stack(name: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/stacks/{name}")).await
+    get_json(&format!("/stacks/{}", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn start_stack(name: String) -> Result<(), String> {
-    post_empty(&format!("/stacks/{name}/start")).await
+    post_empty(&format!("/stacks/{}/start", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn stop_stack(name: String) -> Result<(), String> {
-    post_empty(&format!("/stacks/{name}/stop")).await
+    post_empty(&format!("/stacks/{}/stop", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn restart_stack(name: String) -> Result<(), String> {
-    post_empty(&format!("/stacks/{name}/restart")).await
+    post_empty(&format!("/stacks/{}/restart", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn compose_up(name: String) -> Result<serde_json::Value, String> {
-    post_json(&format!("/stacks/{name}/up")).await
+    post_json(&format!("/stacks/{}/up", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
@@ -1317,18 +1317,18 @@ pub async fn validate_compose(path: String) -> Result<serde_json::Value, String>
 
 #[tauri::command]
 pub async fn compose_down(name: String) -> Result<serde_json::Value, String> {
-    post_json(&format!("/stacks/{name}/down")).await
+    post_json(&format!("/stacks/{}/down", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn compose_pull(name: String) -> Result<serde_json::Value, String> {
-    post_json(&format!("/stacks/{name}/pull")).await
+    post_json(&format!("/stacks/{}/pull", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn update_stack_env(name: String, key: String, value: String) -> Result<(), String> {
     patch_json(
-        &format!("/stacks/{name}/env"),
+        &format!("/stacks/{}/env", urlencoding::encode(&name)),
         &serde_json::json!({ "key": key, "value": value }),
     )
     .await?;
@@ -1693,7 +1693,12 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
 
     let base = daemon_url();
     let resp = client()
-        .get(format!("{base}/k8s/yaml/{kind}/{namespace}/{name}"))
+        .get(format!(
+            "{base}/k8s/yaml/{}/{}/{}",
+            urlencoding::encode(&kind),
+            urlencoding::encode(&namespace),
+            urlencoding::encode(&name)
+        ))
         .send()
         .await
         .map_err(|e| format!("Failed to get YAML: {e}"))?;
@@ -1709,13 +1714,13 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
 #[tauri::command]
 pub async fn k8s_events(namespace: String) -> Result<serde_json::Value, String> {
     validate_k8s_name(&namespace)?;
-    get_json(&format!("/k8s/events/{namespace}")).await
+    get_json(&format!("/k8s/events/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_create_namespace(name: String) -> Result<(), String> {
-    let base = daemon_url();
     validate_k8s_name(&name)?;
+    let base = daemon_url();
     let resp = client()
         .post(format!("{base}/k8s/namespaces"))
         .json(&serde_json::json!({ "name": name }))
@@ -1734,17 +1739,19 @@ pub async fn k8s_create_namespace(name: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn k8s_delete_namespace(name: String) -> Result<(), String> {
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/namespaces/{name}")).await
+    delete(&format!("/k8s/namespaces/{}", urlencoding::encode(&name))).await
 }
 
 #[tauri::command]
 pub async fn k8s_configmaps(namespace: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/configmaps/{namespace}")).await
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/configmaps/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_secrets(namespace: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/secrets/{namespace}")).await
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/secrets/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
@@ -1754,11 +1761,11 @@ pub async fn k8s_create_secret(
     data: serde_json::Value,
     secret_type: Option<String>,
 ) -> Result<(), String> {
-    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{base}/k8s/secrets/{namespace}"))
+        .post(format!("{base}/k8s/secrets/{}", urlencoding::encode(&namespace)))
         .json(&serde_json::json!({ "name": name, "data": data, "secret_type": secret_type }))
         .send()
         .await
@@ -1775,16 +1782,25 @@ pub async fn k8s_create_secret(
 pub async fn k8s_delete_secret(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/secrets/{namespace}/{name}")).await
+    delete(&format!(
+        "/k8s/secrets/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
 pub async fn k8s_update_secret(namespace: String, name: String, data: serde_json::Value) -> Result<(), String> {
-    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
+    let base = daemon_url();
     let resp = client()
-        .put(format!("{base}/k8s/secrets/{namespace}/{name}"))
+        .put(format!(
+            "{base}/k8s/secrets/{}/{}",
+            urlencoding::encode(&namespace),
+            urlencoding::encode(&name)
+        ))
         .json(&serde_json::json!({ "data": data }))
         .send()
         .await
@@ -1805,11 +1821,11 @@ pub async fn k8s_create_pvc(
     size: String,
     access_modes: Vec<String>,
 ) -> Result<(), String> {
-    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
+    let base = daemon_url();
     let resp = client()
-        .post(format!("{base}/k8s/pvcs/{namespace}"))
+        .post(format!("{base}/k8s/pvcs/{}", urlencoding::encode(&namespace)))
         .json(&serde_json::json!({
             "name": name,
             "storage_class": storage_class,
@@ -1831,12 +1847,20 @@ pub async fn k8s_create_pvc(
 
 #[tauri::command]
 pub async fn k8s_pod_metrics(namespace: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/metrics/{namespace}")).await
+    validate_k8s_name(&namespace)?;
+    get_json(&format!("/k8s/metrics/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_rollout_history(namespace: String, name: String) -> Result<serde_json::Value, String> {
-    get_json(&format!("/k8s/deployments/{namespace}/{name}/history")).await
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    get_json(&format!(
+        "/k8s/deployments/{}/{}/history",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
@@ -1845,9 +1869,15 @@ pub async fn k8s_rollout_undo(
     name: String,
     revision: Option<u32>,
 ) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
     let base = daemon_url();
     client()
-        .post(format!("{base}/k8s/deployments/{namespace}/{name}/rollback"))
+        .post(format!(
+            "{base}/k8s/deployments/{}/{}/rollback",
+            urlencoding::encode(&namespace),
+            urlencoding::encode(&name)
+        ))
         .json(&serde_json::json!({ "revision": revision }))
         .send()
         .await
@@ -1862,26 +1892,32 @@ pub async fn k8s_rollout_undo(
 #[tauri::command]
 pub async fn k8s_daemonsets(namespace: String) -> Result<serde_json::Value, String> {
     validate_k8s_name(&namespace)?;
-    get_json(&format!("/k8s/daemonsets/{namespace}")).await
+    get_json(&format!("/k8s/daemonsets/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_statefulsets(namespace: String) -> Result<serde_json::Value, String> {
     validate_k8s_name(&namespace)?;
-    get_json(&format!("/k8s/statefulsets/{namespace}")).await
+    get_json(&format!("/k8s/statefulsets/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_replicasets(namespace: String) -> Result<serde_json::Value, String> {
     validate_k8s_name(&namespace)?;
-    get_json(&format!("/k8s/replicasets/{namespace}")).await
+    get_json(&format!("/k8s/replicasets/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_scale_statefulset(namespace: String, name: String, replicas: u32) -> Result<(), String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
     let base = daemon_url();
     let resp = client()
-        .post(format!("{base}/k8s/statefulsets/{namespace}/{name}/scale"))
+        .post(format!(
+            "{base}/k8s/statefulsets/{}/{}/scale",
+            urlencoding::encode(&namespace),
+            urlencoding::encode(&name)
+        ))
         .json(&serde_json::json!({ "replicas": replicas }))
         .send()
         .await
@@ -1896,28 +1932,50 @@ pub async fn k8s_scale_statefulset(namespace: String, name: String, replicas: u3
 
 #[tauri::command]
 pub async fn k8s_restart_statefulset(namespace: String, name: String) -> Result<(), String> {
-    post_empty(&format!("/k8s/statefulsets/{namespace}/{name}/restart")).await
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    post_empty(&format!(
+        "/k8s/statefulsets/{}/{}/restart",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
 pub async fn k8s_delete_daemonset(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/daemonsets/{namespace}/{name}")).await
+    delete(&format!(
+        "/k8s/daemonsets/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
 pub async fn k8s_delete_statefulset(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/statefulsets/{namespace}/{name}")).await
+    delete(&format!(
+        "/k8s/statefulsets/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
 pub async fn k8s_delete_replicaset(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/replicasets/{namespace}/{name}")).await
+    delete(&format!(
+        "/k8s/replicasets/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 // --- K8s HPAs, Network Policies, Storage Classes, CRDs ---
@@ -1925,7 +1983,7 @@ pub async fn k8s_delete_replicaset(namespace: String, name: String) -> Result<()
 #[tauri::command]
 pub async fn k8s_hpas(namespace: String) -> Result<serde_json::Value, String> {
     validate_k8s_name(&namespace)?;
-    get_json(&format!("/k8s/hpas/{namespace}")).await
+    get_json(&format!("/k8s/hpas/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
@@ -1937,12 +1995,12 @@ pub async fn k8s_create_hpa(
     max: i32,
     cpu_target: i32,
 ) -> Result<serde_json::Value, String> {
-    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
     validate_k8s_name(&deployment)?;
+    let base = daemon_url();
     client()
-        .post(format!("{base}/k8s/hpas/{namespace}"))
+        .post(format!("{base}/k8s/hpas/{}", urlencoding::encode(&namespace)))
         .json(&serde_json::json!({
             "name": name,
             "deployment": deployment,
@@ -1962,20 +2020,30 @@ pub async fn k8s_create_hpa(
 pub async fn k8s_delete_hpa(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/hpas/{namespace}/{name}")).await
+    delete(&format!(
+        "/k8s/hpas/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
 pub async fn k8s_network_policies(namespace: String) -> Result<serde_json::Value, String> {
     validate_k8s_name(&namespace)?;
-    get_json(&format!("/k8s/network-policies/{namespace}")).await
+    get_json(&format!("/k8s/network-policies/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_delete_network_policy(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/network-policies/{namespace}/{name}")).await
+    delete(&format!(
+        "/k8s/network-policies/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
@@ -1993,22 +2061,26 @@ pub async fn k8s_crds() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn k8s_jobs(namespace: String) -> Result<serde_json::Value, String> {
     validate_k8s_name(&namespace)?;
-    get_json(&format!("/k8s/jobs/{namespace}")).await
+    get_json(&format!("/k8s/jobs/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_cronjobs(namespace: String) -> Result<serde_json::Value, String> {
     validate_k8s_name(&namespace)?;
-    get_json(&format!("/k8s/cronjobs/{namespace}")).await
+    get_json(&format!("/k8s/cronjobs/{}", urlencoding::encode(&namespace))).await
 }
 
 #[tauri::command]
 pub async fn k8s_trigger_cronjob(namespace: String, name: String) -> Result<serde_json::Value, String> {
-    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
+    let base = daemon_url();
     client()
-        .post(format!("{base}/k8s/cronjobs/{namespace}/{name}/trigger"))
+        .post(format!(
+            "{base}/k8s/cronjobs/{}/{}/trigger",
+            urlencoding::encode(&namespace),
+            urlencoding::encode(&name)
+        ))
         .send()
         .await
         .map_err(|e| format!("Trigger failed: {e}"))?
@@ -2021,23 +2093,37 @@ pub async fn k8s_trigger_cronjob(namespace: String, name: String) -> Result<serd
 pub async fn k8s_delete_job(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/jobs/{namespace}/{name}")).await
+    delete(&format!(
+        "/k8s/jobs/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
 pub async fn k8s_delete_cronjob(namespace: String, name: String) -> Result<(), String> {
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
-    delete(&format!("/k8s/cronjobs/{namespace}/{name}")).await
+    delete(&format!(
+        "/k8s/cronjobs/{}/{}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
 }
 
 #[tauri::command]
 pub async fn k8s_suspend_cronjob(namespace: String, name: String, suspend: bool) -> Result<serde_json::Value, String> {
-    let base = daemon_url();
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&name)?;
+    let base = daemon_url();
     client()
-        .put(format!("{base}/k8s/cronjobs/{namespace}/{name}/suspend"))
+        .put(format!(
+            "{base}/k8s/cronjobs/{}/{}/suspend",
+            urlencoding::encode(&namespace),
+            urlencoding::encode(&name)
+        ))
         .json(&serde_json::json!({ "suspend": suspend }))
         .send()
         .await
@@ -2054,6 +2140,8 @@ pub async fn k8s_helm_list() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn k8s_helm_uninstall(name: String, namespace: String) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&name)?;
+    validate_k8s_name(&namespace)?;
     let base = daemon_url();
     client()
         .post(format!("{base}/k8s/helm/uninstall"))
@@ -2071,6 +2159,19 @@ pub async fn k8s_helm_available() -> Result<serde_json::Value, String> {
     get_json("/k8s/helm/available").await
 }
 
+fn validate_helm_chart(chart: &str) -> Result<(), String> {
+    if chart.is_empty() || chart.len() > 512 {
+        return Err("Invalid Helm chart: length".into());
+    }
+    if chart.starts_with('-') {
+        return Err("Helm chart must not begin with '-'".into());
+    }
+    if chart.contains('\n') || chart.contains('\0') {
+        return Err("Helm chart contains invalid characters".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn k8s_helm_install(
     release_name: String,
@@ -2078,6 +2179,9 @@ pub async fn k8s_helm_install(
     namespace: String,
     set_values: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&release_name)?;
+    validate_k8s_name(&namespace)?;
+    validate_helm_chart(&chart)?;
     let base = daemon_url();
     client()
         .post(format!("{base}/k8s/helm/install"))
@@ -2414,7 +2518,7 @@ pub async fn deploy_template(
 ) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     let resp = client()
-        .post(format!("{base}/templates/{id}/deploy"))
+        .post(format!("{base}/templates/{}/deploy", urlencoding::encode(&id)))
         .json(&serde_json::json!({
             "name": name,
             "ports": ports,
@@ -2625,7 +2729,8 @@ pub async fn save_user_template(template: serde_json::Value) -> Result<serde_jso
 pub async fn delete_user_template(id: String) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     client()
-        .delete(format!("{base}/templates/user?id={id}"))
+        .delete(format!("{base}/templates/user"))
+        .query(&[("id", &id)])
         .send()
         .await
         .map_err(|e| format!("Delete failed: {e}"))?
@@ -3125,6 +3230,18 @@ fn stacks_base_dir() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("orca")
         .join("stacks")
+}
+
+/// Expose the resolved absolute stacks directory path to the frontend.
+/// Previously the Compose Wizard hard-coded `~/.config/orca/stacks` and
+/// that tilde was never expanded — every Save Only call was rejected by
+/// `validate_compose_path` with "Path must be absolute".
+#[tauri::command]
+pub async fn get_stacks_dir() -> Result<String, String> {
+    let p = stacks_base_dir();
+    // Ensure the directory exists so callers can canonicalize immediately.
+    std::fs::create_dir_all(&p).map_err(|e| format!("Failed to create stacks dir: {e}"))?;
+    Ok(p.to_string_lossy().to_string())
 }
 
 fn validate_compose_path(path: &str) -> Result<std::path::PathBuf, String> {
@@ -3812,7 +3929,7 @@ pub async fn save_deploy_rule(
 
 #[tauri::command]
 pub async fn delete_deploy_rule(id: String) -> Result<(), String> {
-    delete(&format!("/deploy/rules/{id}")).await
+    delete(&format!("/deploy/rules/{}", urlencoding::encode(&id))).await
 }
 
 #[tauri::command]
@@ -3917,7 +4034,7 @@ pub async fn save_schedule(
 
 #[tauri::command]
 pub async fn delete_schedule(id: String) -> Result<(), String> {
-    delete(&format!("/schedules/{id}")).await
+    delete(&format!("/schedules/{}", urlencoding::encode(&id))).await
 }
 
 // --- Docker Hub Tag Autocomplete ---
@@ -4035,7 +4152,7 @@ pub async fn gateway_add_route(
 
 #[tauri::command]
 pub async fn gateway_remove_route(hostname: String) -> Result<(), String> {
-    delete(&format!("/gateway/routes/{hostname}")).await
+    delete(&format!("/gateway/routes/{}", urlencoding::encode(&hostname))).await
 }
 
 #[tauri::command]
@@ -4047,7 +4164,7 @@ pub async fn gateway_update_route(
 ) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
-        .put(format!("{base}/gateway/routes/{hostname}"))
+        .put(format!("{base}/gateway/routes/{}", urlencoding::encode(&hostname)))
         .json(&serde_json::json!({
             "container_name": container_name,
             "port": port,

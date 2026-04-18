@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, Show } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, Show } from "solid-js";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, rectangularSelection } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { yaml } from "@codemirror/lang-yaml";
@@ -172,6 +172,13 @@ export default function YamlEditor(props: YamlEditorProps) {
       editorView = new EditorView({
         state,
         parent: containerRef!,
+      });
+
+      createEffect(() => {
+        const newValue = props.value;
+        if (editorView && editorView.state.doc.toString() !== newValue) {
+          editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: newValue } });
+        }
       });
 
       onCleanup(() => {

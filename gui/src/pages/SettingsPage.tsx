@@ -1238,6 +1238,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                           : ""
                         }
                         target="_blank"
+                        rel="noopener noreferrer"
                         class="btn btn-sm"
                         style={{
                           "text-decoration": "none",
@@ -2440,7 +2441,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             </div>
 
             <div style={{ "text-align": "center", "font-size": "12px", color: "#484f58", "padding-top": "8px" }}>
-              Full details: <a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" style={{ color: "#58a6ff" }}>Privacy Statement</a> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" style={{ color: "#58a6ff" }}>Security Policy</a>
+              Full details: <a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Privacy Statement</a> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security Policy</a>
             </div>
           </div>
         </Show>

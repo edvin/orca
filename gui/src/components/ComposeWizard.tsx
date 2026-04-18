@@ -73,7 +73,7 @@ function createEmptyService(): ServiceDef {
   };
 }
 
-function generateYaml(stackName: string, services: ServiceDef[]): string {
+function generateYaml(_stackName: string, services: ServiceDef[]): string {
   const lines: string[] = [];
   const namedVolumes = new Set<string>();
 
@@ -291,7 +291,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
     setError("");
     try {
       const name = stackName().trim();
-      const dir = `${getStacksDir()}/${name}`;
+      const dir = `${await getStacksDir()}/${name}`;
       const filePath = `${dir}/docker-compose.yml`;
       const yamlContent = generatedYaml();
       await invoke("save_compose_file", { path: filePath, content: yamlContent });
@@ -309,7 +309,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
     setError("");
     try {
       const name = stackName().trim();
-      const dir = `${getStacksDir()}/${name}`;
+      const dir = `${await getStacksDir()}/${name}`;
       const filePath = `${dir}/docker-compose.yml`;
       const yamlContent = generatedYaml();
       await invoke("save_compose_file", { path: filePath, content: yamlContent });
@@ -323,10 +323,16 @@ export default function ComposeWizard(props: ComposeWizardProps) {
     setDeploying(false);
   };
 
-  const getStacksDir = () => {
-    // ~/.config/orca/stacks on Linux, ~/Library/Application Support/orca/stacks on macOS
-    // save_compose_file will create the directory if it doesn't exist
-    return "~/.config/orca/stacks";
+  // Cached absolute stacks directory resolved by the Tauri backend.
+  // Hard-coding `~/.config/orca/stacks` fails under save_compose_file's
+  // `validate_compose_path`, which rejects non-absolute paths and never
+  // expands `~`. We resolve once on first use and reuse the value.
+  let stacksDirCache: string | null = null;
+  const getStacksDir = async (): Promise<string> => {
+    if (stacksDirCache) return stacksDirCache;
+    const resolved = (await invoke("get_stacks_dir")) as string;
+    stacksDirCache = resolved;
+    return resolved;
   };
 
   // Close autocomplete on click outside

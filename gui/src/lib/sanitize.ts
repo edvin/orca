@@ -78,6 +78,25 @@ const SVG_ALLOWED_ATTRS = new Set([
 const DANGEROUS_URL_PREFIX = /^\s*(javascript|data|vbscript):/i;
 
 /**
+ * Local fragment URL: `#foo`, `#foo-bar`, etc. Cross-document `<use href>`
+ * / paint-server `url()` references are treated as external and removed —
+ * they would otherwise let a sanitised icon fetch arbitrary URLs (tracking
+ * pixels, internal-network exfil) on render.
+ */
+const LOCAL_FRAGMENT = /^#[A-Za-z0-9_-]+$/;
+
+/** Matches CSS `url(...)` tokens in style values. Permissive on
+ * whitespace / quoting. */
+const CSS_URL_TOKEN = /url\s*\([^)]*\)/gi;
+
+/**
+ * Attributes whose value can legitimately be a `url(#id)` reference (paint
+ * servers, masks, clip paths, filters). For these we allow only local
+ * fragments.
+ */
+const PAINT_SERVER_ATTRS = new Set(["fill", "stroke", "clip-path", "mask", "filter"]);
+
+/**
  * Sanitize an SVG string. Allow-listed tags and attributes only; any event
  * handler, script, foreignObject, or URL-valued attribute with a dangerous
  * scheme is dropped. Returns a safe SVG string, or an empty string if the
@@ -116,16 +135,53 @@ export function sanitizeSvg(raw: string): string {
         node.removeAttribute(attr.name);
         continue;
       }
-      if (
-        (name === "href" || name === "xlink:href" || name === "src") &&
-        DANGEROUS_URL_PREFIX.test(attr.value)
-      ) {
-        node.removeAttribute(attr.name);
-        continue;
+      if (name === "href" || name === "xlink:href" || name === "src") {
+        // `<use href="...">`, `<image href="...">`, etc. Allow only local
+        // fragment references (`#icon-id`). Any absolute or remote URL is
+        // a tracking / SSRF / exfiltration vector.
+        if (!LOCAL_FRAGMENT.test(attr.value.trim())) {
+          node.removeAttribute(attr.name);
+          continue;
+        }
       }
-      if (name === "style" && /expression\s*\(|javascript:|@import|url\s*\(\s*["']?\s*javascript:/i.test(attr.value)) {
-        node.removeAttribute(attr.name);
-        continue;
+      if (PAINT_SERVER_ATTRS.has(name)) {
+        // `fill="url(...)"` / `stroke="url(...)"` etc. must only reference
+        // local fragments. Any `url(http://…)` here would cause the
+        // webview to fetch the target on render.
+        const v = attr.value.trim();
+        if (v.startsWith("url(") || /\burl\s*\(/i.test(v)) {
+          const match = v.match(/^url\s*\(\s*["']?([^)"']+)["']?\s*\)$/);
+          if (!match || !LOCAL_FRAGMENT.test(match[1].trim())) {
+            node.removeAttribute(attr.name);
+            continue;
+          }
+        }
+      }
+      if (name === "style") {
+        // Reject JS schemes, CSS expressions, @import, and any `url(...)`
+        // whose target isn't a local fragment.
+        const v = attr.value;
+        if (/expression\s*\(|@import|javascript:|vbscript:|data:/i.test(v)) {
+          node.removeAttribute(attr.name);
+          continue;
+        }
+        let externalUrl = false;
+        for (const m of v.matchAll(CSS_URL_TOKEN)) {
+          const inner = m[0]
+            .replace(/^url\s*\(/i, "")
+            .replace(/\)$/, "")
+            .trim()
+            .replace(/^["']|["']$/g, "")
+            .trim();
+          if (!LOCAL_FRAGMENT.test(inner)) {
+            externalUrl = true;
+            break;
+          }
+        }
+        if (externalUrl) {
+          node.removeAttribute(attr.name);
+          continue;
+        }
       }
     }
     for (const child of Array.from(node.children)) {

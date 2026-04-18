@@ -685,6 +685,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                     <a
                       href={`${proto}://localhost:${p.host_port}`}
                       target="_blank"
+                      rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
                       style={{ color: "#58a6ff", "font-size": "12px" }}
                       title={`Open ${proto}://localhost:${p.host_port}`}

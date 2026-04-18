@@ -3864,17 +3864,45 @@ impl K8sManager for K3sManager {
     ) -> anyhow::Result<()> {
         validate_k8s_name(namespace)?;
         validate_k8s_name(name)?;
+        validate_k8s_name(storage_class)?;
+        // Size must look like `1Gi`, `500Mi`, `2T`, `100` (bytes), etc. Do
+        // NOT trust raw strings — a value containing a newline followed by
+        // arbitrary YAML would inject additional (still-allowlisted)
+        // documents when routed through `apply_yaml` on Windows.
+        if !size
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | 'i'))
+            || size.is_empty()
+            || size.len() > 32
+        {
+            anyhow::bail!("invalid PVC size quantity: {size}");
+        }
+        // Access modes are a small fixed set in Kubernetes.
+        const VALID_ACCESS_MODES: &[&str] = &["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"];
+        for m in &access_modes {
+            if !VALID_ACCESS_MODES.contains(&m.as_str()) {
+                anyhow::bail!("invalid accessMode: {m}");
+            }
+        }
 
         #[cfg(target_os = "windows")]
         {
-            let pvc_yaml = format!(
-                "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: {name}\n  namespace: {namespace}\nspec:\n  accessModes:\n{modes}\n  storageClassName: {storage_class}\n  resources:\n    requests:\n      storage: {size}",
-                modes = access_modes
-                    .iter()
-                    .map(|m| format!("    - {m}"))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            );
+            // Build the PVC spec via serde_yaml to guarantee scalar
+            // values are quoted as needed — never via string format.
+            let pvc_value = serde_json::json!({
+                "apiVersion": "v1",
+                "kind": "PersistentVolumeClaim",
+                "metadata": { "name": name, "namespace": namespace },
+                "spec": {
+                    "accessModes": access_modes,
+                    "storageClassName": storage_class,
+                    "resources": {
+                        "requests": { "storage": size }
+                    }
+                }
+            });
+            let pvc_yaml =
+                serde_yaml::to_string(&pvc_value).map_err(|e| anyhow::anyhow!("failed to serialize PVC: {e}"))?;
             self.apply_yaml(&pvc_yaml).await?;
             return Ok(());
         }

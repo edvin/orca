@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, For, Show } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth, DockerDesktopStatus } from "../lib/types";
@@ -29,6 +29,19 @@ export default function EnvironmentPage() {
   const [actionSuccess, setActionSuccess] = createSignal<boolean | null>(null);
   let mouseDownOnOverlay = false;
   let logRef: HTMLPreElement | undefined;
+
+  // Tauri listener handles for env-fix streaming. Kept at component scope so
+  // a fast unmount or a subsequent runFix invocation can tear them down
+  // synchronously — preventing leaked listeners.
+  let unlistenFixLine: UnlistenFn | null = null;
+  let unlistenFixDone: UnlistenFn | null = null;
+  const teardownFixListeners = () => {
+    try { unlistenFixLine?.(); } catch {}
+    try { unlistenFixDone?.(); } catch {}
+    unlistenFixLine = null;
+    unlistenFixDone = null;
+  };
+  onCleanup(teardownFixListeners);
 
   createEffect(() => {
     actionLog();
@@ -62,24 +75,30 @@ export default function EnvironmentPage() {
   useRefresh(refresh);
 
   const runFix = async (action: string, checkName: string) => {
+    // Tear down any listeners from a previous runFix to avoid accumulation
+    // on re-entry.
+    teardownFixListeners();
+
     setActionName(checkName);
     setActionLog("");
     setActionRunning(true);
     setActionSuccess(null);
     setActionDialogOpen(true);
 
-    // Stream output via Tauri events for live feedback
-    const cleanup = { line: null as UnlistenFn | null, done: null as UnlistenFn | null };
+    // Resolver for the done promise, captured so we can synchronously
+    // register both listeners up front (matching XTerminal.tsx's pattern).
+    let resolveDone: (success: boolean) => void = () => {};
+    const donePromise = new Promise<boolean>((resolve) => { resolveDone = resolve; });
 
     try {
-      cleanup.line = await listen<string>("env-fix-line", (event) => {
+      // Await both subscriptions BEFORE kicking off the streaming invoke.
+      // Store unlisten handles in component-scoped lets so onCleanup can
+      // reach them even if we never return from the awaits below.
+      unlistenFixLine = await listen<string>("env-fix-line", (event) => {
         setActionLog((prev) => prev + event.payload + "\n");
       });
-
-      const donePromise = new Promise<boolean>((resolve) => {
-        listen<string>("env-fix-done", (event) => {
-          resolve(event.payload === "success");
-        }).then((unlisten) => { cleanup.done = unlisten; });
+      unlistenFixDone = await listen<string>("env-fix-done", (event) => {
+        resolveDone(event.payload === "success");
       });
 
       // Start the streaming fix (returns immediately, events stream in)
@@ -107,8 +126,7 @@ export default function EnvironmentPage() {
         setActionSuccess(false);
       }
     } finally {
-      cleanup.line?.();
-      cleanup.done?.();
+      teardownFixListeners();
       setActionRunning(false);
       // Auto-restart daemon after successful fix (Docker may have been restarted)
       if (actionSuccess()) {

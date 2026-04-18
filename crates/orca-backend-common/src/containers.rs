@@ -167,10 +167,23 @@ impl ContainerRuntime for BollardRuntime {
 
         tokio::spawn(async move {
             tokio::pin!(stream);
-            while let Some(Ok(output)) = stream.next().await {
-                let line = output.to_string();
-                if tx.send(line).await.is_err() {
-                    break;
+            while let Some(item) = stream.next().await {
+                match item {
+                    Ok(output) => {
+                        let line = output.to_string();
+                        if tx.send(line).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        // Don't silently swallow — previously a single
+                        // transient error would end the follow-log stream
+                        // with no indication to the caller. Forward the
+                        // error as a log line so consumers can see what
+                        // happened, then stop.
+                        let _ = tx.send(format!("[orca] log stream error: {e}\n")).await;
+                        break;
+                    }
                 }
             }
         });
@@ -280,12 +293,42 @@ impl ContainerRuntime for BollardRuntime {
             )
             .await?;
 
+        // Cap the accumulated output so an exec of a command like `yes`
+        // or `cat /dev/urandom` can't exhaust the daemon's memory. When
+        // the cap is reached we append a marker and stop concatenating,
+        // but keep consuming the stream so the container-side process
+        // doesn't block on a full stdout pipe.
+        const MAX_OUTPUT_BYTES: usize = 1_048_576; // 1 MiB
         let mut collected = String::new();
+        let mut truncated = false;
         let started = self.docker.start_exec(&exec.id, None).await?;
         match started {
             StartExecResults::Attached { mut output, .. } => {
-                while let Some(Ok(msg)) = output.next().await {
-                    collected.push_str(&msg.to_string());
+                while let Some(item) = output.next().await {
+                    match item {
+                        Ok(msg) => {
+                            if !truncated {
+                                let s = msg.to_string();
+                                if collected.len() + s.len() > MAX_OUTPUT_BYTES {
+                                    let remaining = MAX_OUTPUT_BYTES.saturating_sub(collected.len());
+                                    // Push as much as fits at a UTF-8 boundary, then mark truncated.
+                                    let mut cut = remaining;
+                                    while cut > 0 && !s.is_char_boundary(cut) {
+                                        cut -= 1;
+                                    }
+                                    collected.push_str(&s[..cut]);
+                                    collected.push_str("\n… [output truncated: exceeded 1 MiB limit]\n");
+                                    truncated = true;
+                                } else {
+                                    collected.push_str(&s);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("exec stream error: {e}");
+                            break;
+                        }
+                    }
                 }
             }
             StartExecResults::Detached => {}

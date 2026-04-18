@@ -135,10 +135,17 @@ export default function ImagesPage(props: ImagesPageProps) {
   // branches of the handler itself.
   let pullUnlisten: (() => void) | null = null;
 
+  // AbortController for the build stream. Held at component scope so
+  // onCleanup can cancel an in-flight build on unmount — previously the
+  // reader loop had no cancellation path.
+  let buildAbort: AbortController | null = null;
+
   onCleanup(() => {
     if (searchTimer) clearTimeout(searchTimer);
     try { pullUnlisten?.(); } catch {}
     pullUnlisten = null;
+    try { buildAbort?.abort(); } catch {}
+    buildAbort = null;
   });
 
   const doSearch = async (q: string) => {
@@ -364,6 +371,13 @@ export default function ImagesPage(props: ImagesPageProps) {
   const doBuild = async () => {
     const path = buildPath().trim();
     if (!path) return;
+
+    // Abort any previous in-flight build so a re-invocation doesn't leak
+    // a reader loop.
+    try { buildAbort?.abort(); } catch {}
+    const controller = new AbortController();
+    buildAbort = controller;
+
     setBuilding(true);
     setBuildOutput([]);
     setBuildLog([]);
@@ -384,6 +398,7 @@ export default function ImagesPage(props: ImagesPageProps) {
             return acc;
           }, {} as Record<string, string>),
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -396,7 +411,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       let buffer = "";
       let hadError = false;
 
-      while (true) {
+      while (!controller.signal.aborted) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -422,17 +437,26 @@ export default function ImagesPage(props: ImagesPageProps) {
         }
       }
 
-      if (hadError) {
+      if (controller.signal.aborted) {
+        // Unmount / user cancellation — don't surface a toast.
+      } else if (hadError) {
         showToast("Build failed -- check build output", "error");
       } else {
         showToast("Image built successfully", "success");
         await refresh();
       }
-    } catch (e) {
-      logError(`Failed to build image: ${e}`, `Context "${path}"${buildTag().trim() ? `, tag "${buildTag().trim()}"` : ""}`);
-      showToast(`Build error: ${e}`, "error");
-      setBuildOutput(prev => [...prev, `Error: ${e}`]);
+    } catch (e: any) {
+      // Swallow abort errors — they mean the component unmounted or the
+      // user cancelled, not a real build failure.
+      if (e?.name === "AbortError" || controller.signal.aborted) {
+        // no-op
+      } else {
+        logError(`Failed to build image: ${e}`, `Context "${path}"${buildTag().trim() ? `, tag "${buildTag().trim()}"` : ""}`);
+        showToast(`Build error: ${e}`, "error");
+        setBuildOutput(prev => [...prev, `Error: ${e}`]);
+      }
     }
+    if (buildAbort === controller) buildAbort = null;
     setBuilding(false);
   };
 
@@ -1356,12 +1380,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                                                       </span>
                                                     </td>
                                                     <td>
-                                                      <Show when={vuln.PrimaryURL} fallback={
+                                                      <Show when={safeHref(vuln.PrimaryURL)} fallback={
                                                         <span class="mono">{vuln.VulnerabilityID}</span>
                                                       }>
                                                         <a
-                                                          href={vuln.PrimaryURL}
+                                                          href={safeHref(vuln.PrimaryURL)}
                                                           target="_blank"
+                                                          rel="noopener noreferrer"
                                                           onClick={(e) => e.stopPropagation()}
                                                           style={{ color: "#58a6ff" }}
                                                         >

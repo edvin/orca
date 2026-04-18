@@ -184,6 +184,7 @@ pub fn run() {
             commands::save_lima_settings,
             commands::read_file,
             commands::save_compose_file,
+            commands::get_stacks_dir,
             commands::check_ports,
             commands::list_remote_hosts,
             commands::add_remote_host,

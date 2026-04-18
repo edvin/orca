@@ -10,6 +10,10 @@ interface LogViewerProps {
   onClose?: () => void;
 }
 
+// Cap the in-memory log buffer so a long-running follow doesn't grow
+// unbounded and freeze the renderer.
+const MAX_LINES = 20_000;
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -151,7 +155,10 @@ export default function LogViewer(props: LogViewerProps) {
           if (event.payload.containerId === containerId) {
             const newLines = processLines([event.payload.line]);
             if (newLines.length > 0) {
-              setLines((prev) => [...prev, ...newLines]);
+              setLines((prev) => {
+                const combined = [...prev, ...newLines];
+                return combined.length > MAX_LINES ? combined.slice(-MAX_LINES) : combined;
+              });
             }
           }
         }

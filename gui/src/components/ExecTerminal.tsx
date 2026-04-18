@@ -65,6 +65,7 @@ export default function ExecTerminal(props: ExecTerminalProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter") {
       runCommand();
     } else if (e.key === "ArrowUp") {

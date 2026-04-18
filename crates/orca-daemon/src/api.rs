@@ -4649,7 +4649,11 @@ fn ca_dir() -> std::path::PathBuf {
 
 /// Returns the persistent CA cert and key PEM strings.
 /// If the CA does not exist yet, generates a new root CA and saves it to disk.
-fn get_or_create_ca() -> (String, String) {
+///
+/// Propagates errors instead of panicking so callers (including the
+/// unauthenticated `/ca/certificate` endpoint) cannot crash the daemon
+/// by putting the config dir in an unwritable state.
+fn get_or_create_ca() -> anyhow::Result<(String, String)> {
     let dir = ca_dir();
     let cert_path = dir.join("ca.pem");
     let key_path = dir.join("ca-key.pem");
@@ -4660,13 +4664,13 @@ fn get_or_create_ca() -> (String, String) {
         && let (Ok(cert_pem), Ok(key_pem)) = (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path))
     {
         tracing::info!("Loaded existing CA from {}", dir.display());
-        return (cert_pem, key_pem);
+        return Ok((cert_pem, key_pem));
     }
 
     // Generate a new root CA
     tracing::info!("Generating new Orca root CA in {}", dir.display());
-    let mut params =
-        rcgen::CertificateParams::new(Vec::<String>::new()).expect("Failed to create CA certificate params");
+    let mut params = rcgen::CertificateParams::new(Vec::<String>::new())
+        .map_err(|e| anyhow::anyhow!("Failed to create CA certificate params: {e}"))?;
     params
         .distinguished_name
         .push(rcgen::DnType::CommonName, "Orca Desktop CA");
@@ -4681,18 +4685,18 @@ fn get_or_create_ca() -> (String, String) {
     params.not_before = now;
     params.not_after = now + time::Duration::days(365 * 10);
 
-    let key_pair = rcgen::KeyPair::generate().expect("Failed to generate CA key pair");
+    let key_pair = rcgen::KeyPair::generate().map_err(|e| anyhow::anyhow!("Failed to generate CA key pair: {e}"))?;
     let cert = params
         .self_signed(&key_pair)
-        .expect("Failed to generate CA certificate");
+        .map_err(|e| anyhow::anyhow!("Failed to generate CA certificate: {e}"))?;
 
     let cert_pem = cert.pem();
     let key_pem = key_pair.serialize_pem();
 
     // Save to disk
-    std::fs::create_dir_all(&dir).expect("Failed to create CA directory");
-    std::fs::write(&cert_path, &cert_pem).expect("Failed to write CA certificate");
-    std::fs::write(&key_path, &key_pem).expect("Failed to write CA private key");
+    std::fs::create_dir_all(&dir).map_err(|e| anyhow::anyhow!("Failed to create CA directory: {e}"))?;
+    std::fs::write(&cert_path, &cert_pem).map_err(|e| anyhow::anyhow!("Failed to write CA certificate: {e}"))?;
+    std::fs::write(&key_path, &key_pem).map_err(|e| anyhow::anyhow!("Failed to write CA private key: {e}"))?;
 
     // Restrict key file permissions on Unix
     #[cfg(unix)]
@@ -4702,7 +4706,7 @@ fn get_or_create_ca() -> (String, String) {
     }
 
     tracing::info!("Saved new CA certificate to {}", cert_path.display());
-    (cert_pem, key_pem)
+    Ok((cert_pem, key_pem))
 }
 
 /// Generate (or retrieve from cache) a leaf certificate signed by the Orca CA.
@@ -4710,18 +4714,20 @@ fn get_or_create_ca() -> (String, String) {
 fn get_or_generate_cert_key_pair<'a>(
     subject: Option<&str>,
     cache: &'a mut Option<CachedCertKeyPair>,
-) -> &'a CachedCertKeyPair {
+) -> anyhow::Result<&'a CachedCertKeyPair> {
     if cache.is_none() {
         let cn = subject.unwrap_or("localhost");
 
-        // Load the CA
-        let (ca_cert_pem, ca_key_pem) = get_or_create_ca();
-        let ca_key = rcgen::KeyPair::from_pem(&ca_key_pem).expect("Failed to parse CA key");
-        let ca_params =
-            rcgen::CertificateParams::from_ca_cert_pem(&ca_cert_pem).expect("Failed to parse CA certificate");
+        // Load the CA — propagate any error so callers can surface a 500
+        // instead of panicking the daemon.
+        let (ca_cert_pem, ca_key_pem) = get_or_create_ca()?;
+        let ca_key =
+            rcgen::KeyPair::from_pem(&ca_key_pem).map_err(|e| anyhow::anyhow!("Failed to parse CA key: {e}"))?;
+        let ca_params = rcgen::CertificateParams::from_ca_cert_pem(&ca_cert_pem)
+            .map_err(|e| anyhow::anyhow!("Failed to parse CA certificate: {e}"))?;
         let ca_cert = ca_params
             .self_signed(&ca_key)
-            .expect("Failed to reconstruct CA certificate");
+            .map_err(|e| anyhow::anyhow!("Failed to reconstruct CA certificate: {e}"))?;
 
         // Build SANs: CN value + "localhost" + "127.0.0.1" (deduplicated)
         let mut san_dns: Vec<String> = vec![cn.to_string()];
@@ -4740,8 +4746,8 @@ fn get_or_generate_cert_key_pair<'a>(
             )));
         }
 
-        let mut params =
-            rcgen::CertificateParams::new(Vec::<String>::new()).expect("Failed to create leaf certificate params");
+        let mut params = rcgen::CertificateParams::new(Vec::<String>::new())
+            .map_err(|e| anyhow::anyhow!("Failed to create leaf certificate params: {e}"))?;
         params.distinguished_name.push(rcgen::DnType::CommonName, cn);
         params.subject_alt_names = san_types;
 
@@ -4750,10 +4756,11 @@ fn get_or_generate_cert_key_pair<'a>(
         params.not_before = now;
         params.not_after = now + time::Duration::days(365);
 
-        let leaf_key = rcgen::KeyPair::generate().expect("Failed to generate leaf key pair");
+        let leaf_key =
+            rcgen::KeyPair::generate().map_err(|e| anyhow::anyhow!("Failed to generate leaf key pair: {e}"))?;
         let leaf_cert = params
             .signed_by(&leaf_key, &ca_cert, &ca_key)
-            .expect("Failed to sign leaf certificate with CA");
+            .map_err(|e| anyhow::anyhow!("Failed to sign leaf certificate with CA: {e}"))?;
 
         let cert_pem = leaf_cert.pem();
         let key_pem = leaf_key.serialize_pem();
@@ -4762,7 +4769,7 @@ fn get_or_generate_cert_key_pair<'a>(
 
         *cache = Some(CachedCertKeyPair { cert_pem, key_pem });
     }
-    cache.as_ref().unwrap()
+    Ok(cache.as_ref().expect("cache just populated"))
 }
 
 /// Resolve a GeneratedValue to a string, using user_inputs for UserInput variants.
@@ -4783,13 +4790,21 @@ fn resolve_generated_value(
             Some(String::new())
         }),
         GeneratedValue::SelfSignedCert { subject } => {
-            let pair = get_or_generate_cert_key_pair(subject.as_deref(), cert_cache);
-            Some(pair.cert_pem.clone())
+            match get_or_generate_cert_key_pair(subject.as_deref(), cert_cache) {
+                Ok(pair) => Some(pair.cert_pem.clone()),
+                Err(e) => {
+                    tracing::warn!("Self-signed cert generation failed: {e}");
+                    None
+                }
+            }
         }
-        GeneratedValue::SelfSignedKey => {
-            let pair = get_or_generate_cert_key_pair(None, cert_cache);
-            Some(pair.key_pem.clone())
-        }
+        GeneratedValue::SelfSignedKey => match get_or_generate_cert_key_pair(None, cert_cache) {
+            Ok(pair) => Some(pair.key_pem.clone()),
+            Err(e) => {
+                tracing::warn!("Self-signed key generation failed: {e}");
+                None
+            }
+        },
     }
 }
 
@@ -5251,7 +5266,13 @@ async fn ai_ask(
         }
     }
 
-    let http_client = reqwest::Client::new();
+    // Bound every AI request to 60s so a hostile or misconfigured provider
+    // URL can't pin an Axum worker indefinitely across multi-round tool
+    // calling.
+    let http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {e}"))?;
 
     // Build tool definitions for the LLM
     let catalog = orca_core::agent_tools::tool_catalog();
@@ -5423,6 +5444,20 @@ async fn get_lima_settings() -> Result<impl IntoResponse, ApiError> {
 }
 
 async fn save_lima_settings(Json(body): Json<LimaSettingsRequest>) -> Result<impl IntoResponse, ApiError> {
+    // Validate the VM name so it can't be misinterpreted as a limactl flag
+    // (a name starting with `-` would), and so odd characters don't leak
+    // into subprocess argv.
+    if body.name.is_empty()
+        || body.name.len() > 64
+        || body.name.starts_with('-')
+        || body.name.starts_with('.')
+        || !body
+            .name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    {
+        return Err(anyhow::anyhow!("invalid lima VM name").into());
+    }
     let path_env = format!(
         "/opt/homebrew/bin:/usr/local/bin:{}",
         std::env::var("PATH").unwrap_or_default()
@@ -5497,30 +5532,67 @@ async fn tunnel_ws(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Block known-dangerous metadata/loopback/private endpoints. Even when
-    // the caller has a valid bearer token, we refuse to be used as a
-    // generic network pivot (cloud metadata, the daemon host's sibling
-    // services, etc.). Container-name targets like `my-app` pass through —
-    // the check only bites on bare IPs and a few well-known names.
-    let h = params.host.to_ascii_lowercase();
-    if h == "localhost" || h == "metadata.google.internal" || h == "metadata" || h == "169.254.169.254" {
+    // Block known-dangerous metadata/loopback/private endpoints. `host`
+    // may arrive in many equivalent forms — `127.1`, `2130706433`,
+    // `0x7f000001`, `0`, `LOCALHOST.`, IPv6 `::1`, or a hostname whose DNS
+    // entry resolves to a private address. We guard all of them by
+    // resolving `host:port` via `tokio::net::lookup_host` and rejecting if
+    // ANY resolved address is loopback/private/metadata. We then connect
+    // to the already-resolved `SocketAddr` so a DNS-rebinding attacker
+    // can't flip the answer between check and connect.
+    let mut h = params.host.trim().trim_end_matches('.').to_ascii_lowercase();
+    if h.is_empty() || h.len() > 253 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    // Reject bare numeric-IP forms that aren't dotted-quad/IPv6 — they
+    // exist solely to confuse allowlist checks. If it parses as a u32
+    // decimal, or starts with `0x`, or is pure octal, we canonicalize by
+    // requiring the user to spell out a real IPv4/IPv6 literal.
+    if h.bytes().all(|b| b.is_ascii_digit()) || h.starts_with("0x") || h.starts_with("0X") {
+        tracing::warn!("Tunnel: refusing non-canonical numeric host '{h}'");
+        return Err(StatusCode::FORBIDDEN);
+    }
+    // Block well-known synthetic names.
+    if h == "localhost" || h == "metadata.google.internal" || h == "metadata" {
         tracing::warn!("Tunnel: refusing to connect to metadata/loopback host '{h}'");
         return Err(StatusCode::FORBIDDEN);
     }
-    if let Ok(ip) = h.parse::<std::net::IpAddr>()
-        && is_private_or_loopback(&ip)
-    {
-        tracing::warn!("Tunnel: refusing to connect to private/loopback IP '{ip}'");
+
+    // Strip brackets from a bracketed-IPv6 form before passing to lookup_host.
+    if h.starts_with('[') && h.ends_with(']') {
+        h = h[1..h.len() - 1].to_string();
+    }
+
+    let lookup_target = format!("{h}:{}", params.port);
+    let resolved: Vec<std::net::SocketAddr> = match tokio::net::lookup_host(&lookup_target).await {
+        Ok(it) => it.collect(),
+        Err(e) => {
+            tracing::warn!("Tunnel: DNS lookup failed for '{lookup_target}': {e}");
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+    if resolved.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if resolved.iter().any(|sa| is_private_or_loopback(&sa.ip())) {
+        tracing::warn!("Tunnel: refusing '{h}' — resolves to a private/loopback/metadata address");
         return Err(StatusCode::FORBIDDEN);
     }
 
     tracing::info!("Tunnel: opening connection to {}:{}", params.host, params.port);
-    Ok(ws.on_upgrade(move |socket| handle_tunnel(socket, params.host, params.port)))
+    // Pass the already-resolved addresses along so handle_tunnel doesn't
+    // re-resolve via getaddrinfo (which could return a different answer
+    // under DNS rebinding).
+    Ok(ws.on_upgrade(move |socket| handle_tunnel(socket, params.host, resolved)))
 }
 
-async fn handle_tunnel(socket: WebSocket, host: String, port: u16) {
-    // Connect to the target TCP service
-    let tcp_stream = match tokio::net::TcpStream::connect((&*host, port)).await {
+async fn handle_tunnel(socket: WebSocket, host: String, resolved: Vec<std::net::SocketAddr>) {
+    // Connect to the FIRST resolved address — we already verified above
+    // that none of the addresses are private/loopback/metadata, so pick
+    // any. This prevents DNS-rebinding between check and connect.
+    let addr = resolved[0];
+    let port = addr.port();
+    let tcp_stream = match tokio::net::TcpStream::connect(addr).await {
         Ok(s) => {
             tracing::info!("Tunnel: connected to {host}:{port}");
             s
@@ -6395,7 +6467,10 @@ async fn list_ai_models(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         _ => return Ok(Json(serde_json::json!({ "models": Vec::<String>::new() }))),
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {e}"))?;
 
     let models: Vec<String> = match provider.as_str() {
         "anthropic" => {
@@ -7765,17 +7840,22 @@ async fn gateway_get_dismissed(State(state): State<Arc<AppState>>) -> Result<imp
 // --- CA Certificate ---
 
 /// GET /ca/certificate — returns the CA certificate PEM (no auth required).
-async fn ca_certificate() -> impl IntoResponse {
-    let (cert_pem, _) = get_or_create_ca();
-    (
+///
+/// Returns a proper 500 response on failure instead of panicking the
+/// whole daemon — an attacker who can reach this unauthed endpoint must
+/// not be able to crash the process by putting the config dir in an
+/// unwritable state.
+async fn ca_certificate() -> Result<impl IntoResponse, ApiError> {
+    let (cert_pem, _) = get_or_create_ca()?;
+    Ok((
         [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         cert_pem,
-    )
+    ))
 }
 
 /// GET /ca/info — returns CA info as JSON (auth required).
 async fn ca_info() -> Result<impl IntoResponse, ApiError> {
-    let (cert_pem, _) = get_or_create_ca();
+    let (cert_pem, _) = get_or_create_ca()?;
 
     let x509 = openssl::x509::X509::from_pem(cert_pem.as_bytes())
         .map_err(|e| anyhow::anyhow!("Failed to parse CA certificate: {e}"))?;
