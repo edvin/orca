@@ -1254,6 +1254,19 @@ async fn start_build_endpoint(
     let build_args_opt = body.build_args.clone();
 
     let build_id_for_task = build_id.clone();
+    // Take the BUILD_TASKS lock BEFORE spawning so the worker can't race
+    // us into its `remove` path on a multi-thread runtime. Without this,
+    // a fast / cached / trivially-erroring build could complete on
+    // another worker thread, hit the `remove(&build_id)` site at the end
+    // of the closure before this parent reaches `insert`, find the entry
+    // absent, then we'd insert a stale `JoinHandle` that nothing ever
+    // cleans up — leaking one entry per rapid build forever.
+    //
+    // Holding the guard across `tokio::spawn(...)` is safe because the
+    // parent does no `.await` between spawn and `insert` below, so the
+    // guard drops synchronously after the insert and the worker's
+    // `build_tasks().lock().await` can then proceed.
+    let mut build_tasks_guard = build_tasks().lock().await;
     let handle = tokio::spawn(async move {
         let build_id = build_id_for_task;
         match ImageManager::build(
@@ -1322,7 +1335,8 @@ async fn start_build_endpoint(
             }
         }
     });
-    build_tasks().lock().await.insert(build_id.clone(), handle);
+    build_tasks_guard.insert(build_id.clone(), handle);
+    drop(build_tasks_guard);
 
     Ok(Json(record))
 }

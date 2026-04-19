@@ -37,7 +37,12 @@ export default function StatusBar(props: StatusBarProps) {
       const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
       if (disposed) return;
-      if (update) {
+      // Real tauri-plugin-updater returns `null` when no update is
+      // available or an `Update` object with `.version` set. Defend
+      // against a truthy-but-empty response (broken backend, test
+      // harness that returns `{}` for unmocked commands) so we never
+      // render "Update available: vundefined" in the status bar.
+      if (update && typeof update.version === "string" && update.version.length > 0) {
         setUpdateAvailable({ version: update.version, body: update.body ?? undefined });
       }
     } catch { /* updater not configured or not in Tauri context */ }
