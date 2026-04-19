@@ -41,5 +41,11 @@ time = "0.3"
 serde_yaml = "0.9"
 tempfile = "3"
 rand = { workspace = true }
+# Direct dep so we can install a process-wide CryptoProvider at startup.
+# hyper-rustls (pulled transitively via `kube`) does not auto-select a
+# provider, so the first TLS handshake (e.g. talking to the K3s API
+# server) would panic at runtime with "Could not automatically determine
+# the process-level CryptoProvider".
+rustls = { version = "0.23", features = ["ring"] }
 
 [dev-dependencies]

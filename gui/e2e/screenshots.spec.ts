@@ -355,7 +355,7 @@ test.describe("Orca Desktop Screenshots", () => {
   test("11 - K8s Deployments", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
     await selectK8sNamespace(page, "demo");
-    const tab = page.locator(".filter-pill", { hasText: "Deployments" }).first();
+    const tab = page.locator(".tab-item", { hasText: "Deployments" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
       await waitForPageLoad(page);
@@ -366,7 +366,7 @@ test.describe("Orca Desktop Screenshots", () => {
   test("12 - K8s Services", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
     await selectK8sNamespace(page, "demo");
-    const tab = page.locator(".filter-pill", { hasText: "Services" }).first();
+    const tab = page.locator(".tab-item", { hasText: "Services" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
       await waitForPageLoad(page);
@@ -376,7 +376,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("13 - K8s Helm", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
-    const tab = page.locator(".filter-pill", { hasText: "Helm" }).first();
+    const tab = page.locator(".tab-item", { hasText: "Helm" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
       await waitForPageLoad(page);
@@ -386,7 +386,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("14 - K8s Jobs", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
-    const tab = page.locator(".filter-pill", { hasText: "Jobs" }).first();
+    const tab = page.locator(".tab-item", { hasText: "Jobs" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
       await waitForPageLoad(page);
@@ -397,7 +397,7 @@ test.describe("Orca Desktop Screenshots", () => {
   test("15 - K8s Topology", async ({ page }) => {
     await navigateTo(page, "Kubernetes");
     await selectK8sNamespace(page, "demo");
-    const tab = page.locator(".filter-pill", { hasText: "Topology" }).first();
+    const tab = page.locator(".tab-item", { hasText: "Topology" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
       await waitForPageLoad(page);

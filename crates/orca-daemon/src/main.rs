@@ -53,6 +53,16 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    // Install the rustls `ring` crypto provider process-wide. rustls 0.23
+    // does not pick a default provider on its own — every TLS connection
+    // would otherwise panic the worker thread with
+    //   "Could not automatically determine the process-level CryptoProvider"
+    // the first time it tries to handshake (e.g. when the kube client
+    // connects to the K8s API server). `install_default` is idempotent
+    // when called from one place at startup, and returns Err if something
+    // else already installed a provider — which we tolerate.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let args = Args::parse();
     let mut config = orca_core::config::OrcaConfig::load()?;
 
