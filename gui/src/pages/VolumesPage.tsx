@@ -9,6 +9,7 @@ import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 import { logError } from "../lib/activityStore";
 import { SkeletonRow } from "../components/Skeleton";
+import Spinner from "../components/Spinner";
 
 interface VolumesPageProps {
   onNavigate?: (target: string) => void;
@@ -23,6 +24,7 @@ export default function VolumesPage(props: VolumesPageProps) {
   const [createLabels, setCreateLabels] = createSignal("");
   const [creating, setCreating] = createSignal(false);
   const [loaded, setLoaded] = createSignal(false);
+  const [deletingName, setDeletingName] = createSignal<string | null>(null);
   const { sortField, sortDir, toggleSort, sortFn } = useSort<Volume>("name");
 
   const refresh = async () => {
@@ -58,6 +60,7 @@ export default function VolumesPage(props: VolumesPageProps) {
   const removeVolume = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
     if (!await confirmDanger("Remove Volume", `Remove volume "${name}"? This will permanently delete the volume data.`)) return;
+    setDeletingName(name);
     try {
       await invoke("remove_volume", { name });
       showToast(`Volume "${name}" removed`, "success");
@@ -65,6 +68,8 @@ export default function VolumesPage(props: VolumesPageProps) {
     } catch (err) {
       logError(`Failed to remove volume: ${err}`, `Volume "${name}"`);
       showToast(`Failed to remove volume: ${err}`, "error");
+    } finally {
+      setDeletingName(null);
     }
   };
 
@@ -150,9 +155,18 @@ export default function VolumesPage(props: VolumesPageProps) {
                   </td>
                   <td style={{ color: "#8b949e" }}>{formatTimestamp(v.created_at)}</td>
                   <td style={{ "text-align": "right" }}>
-                    <button class="action-icon action-icon-delete" title="Remove volume" onClick={(e) => removeVolume(v.name, e)}>
-                      {"\uD83D\uDDD1"}
-                    </button>
+                    <Show
+                      when={deletingName() === v.name}
+                      fallback={
+                        <button class="action-icon action-icon-delete" title="Remove volume" disabled={deletingName() !== null} onClick={(e) => removeVolume(v.name, e)}>
+                          {"\uD83D\uDDD1"}
+                        </button>
+                      }
+                    >
+                      <span title="Removing volume..." style={{ display: "inline-flex", "align-items": "center", gap: "6px", color: "#8b949e", "font-size": "12px", "justify-content": "flex-end" }}>
+                        <Spinner size={12} /> Removing...
+                      </span>
+                    </Show>
                   </td>
                 </tr>
               )}

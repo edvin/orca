@@ -33,6 +33,8 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [showPull, setShowPull] = createSignal(false);
   const [showPruneConfirm, setShowPruneConfirm] = createSignal(false);
   const [pruning, setPruning] = createSignal(false);
+  const [deletingImageId, setDeletingImageId] = createSignal<string | null>(null);
+  const [batchDeleteProgress, setBatchDeleteProgress] = createSignal<{ done: number; total: number } | null>(null);
   let pullInputRef: HTMLInputElement | undefined;
   const [showBuild, setShowBuild] = createSignal(false);
   const [buildPath, setBuildPath] = createSignal("");
@@ -230,6 +232,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const removeImage = async (id: string, tag: string, e: MouseEvent) => {
     e.stopPropagation();
     if (!await confirmDanger("Remove Image", `Remove image '${tag}'?`)) return;
+    setDeletingImageId(id);
     try {
       await invoke("remove_image", { id });
       showToast("Image removed", "success");
@@ -246,6 +249,8 @@ export default function ImagesPage(props: ImagesPageProps) {
       else if (msg.includes("is being used")) msg = msg.substring(msg.indexOf("image"));
       logError(`Failed to remove image: ${msg}`, `Image "${tag}"`);
       showToast(`Cannot remove '${tag}': ${msg}`, "error");
+    } finally {
+      setDeletingImageId(null);
     }
   };
 
@@ -258,29 +263,35 @@ export default function ImagesPage(props: ImagesPageProps) {
       `Delete ${count} selected image${count !== 1 ? "s" : ""}? This cannot be undone.`
     )) return;
 
+    setBatchDeleteProgress({ done: 0, total: count });
     // Delete in multiple passes — child images may block parent deletion
     let totalDeleted = 0;
     let lastErrors = 0;
-    for (let pass = 0; pass < 3; pass++) {
-      const remaining = Array.from(selected());
-      if (remaining.length === 0) break;
-      try {
-        const result = (await invoke("batch_delete_images", {
-          ids: remaining,
-          force: true,
-        })) as any;
-        const deleted = result.deleted?.length || 0;
-        totalDeleted += deleted;
-        lastErrors = result.errors?.length || 0;
-        // Remove successfully deleted from selection
-        const deletedSet = new Set(result.deleted || []);
-        setSelected(new Set(remaining.filter((id: string) => !deletedSet.has(id))));
-        await refresh();
-        if (lastErrors === 0) break; // All done
-      } catch (e) {
-        logError(`Failed to batch delete images: ${e}`, `${remaining.length} images remaining`);
-        break;
+    try {
+      for (let pass = 0; pass < 3; pass++) {
+        const remaining = Array.from(selected());
+        if (remaining.length === 0) break;
+        try {
+          const result = (await invoke("batch_delete_images", {
+            ids: remaining,
+            force: true,
+          })) as any;
+          const deleted = result.deleted?.length || 0;
+          totalDeleted += deleted;
+          lastErrors = result.errors?.length || 0;
+          setBatchDeleteProgress({ done: totalDeleted, total: count });
+          // Remove successfully deleted from selection
+          const deletedSet = new Set(result.deleted || []);
+          setSelected(new Set(remaining.filter((id: string) => !deletedSet.has(id))));
+          await refresh();
+          if (lastErrors === 0) break; // All done
+        } catch (e) {
+          logError(`Failed to batch delete images: ${e}`, `${remaining.length} images remaining`);
+          break;
+        }
       }
+    } finally {
+      setBatchDeleteProgress(null);
     }
     showToast(
       `Deleted ${totalDeleted} image${totalDeleted !== 1 ? "s" : ""}${lastErrors ? `, ${lastErrors} could not be removed` : ""}`,
@@ -1015,7 +1026,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       </Show>
 
       {/* Floating batch action bar */}
-      <Show when={selected().size > 0}>
+      <Show when={selected().size > 0 || batchDeleteProgress()}>
         <div style={{
           position: "fixed",
           bottom: "32px",
@@ -1034,14 +1045,22 @@ export default function ImagesPage(props: ImagesPageProps) {
           "z-index": "100",
           animation: "batch-bar-slide-in 0.25s ease-out",
         }}>
-          <span style={{ "font-size": "13px", color: "#e6edf3" }}>
-            {selected().size} image{selected().size !== 1 ? "s" : ""} selected
-          </span>
-          <button class="btn btn-sm btn-danger" onClick={batchDelete}>
+          <Show when={batchDeleteProgress()} fallback={
+            <span style={{ "font-size": "13px", color: "#e6edf3" }}>
+              {selected().size} image{selected().size !== 1 ? "s" : ""} selected
+            </span>
+          }>
+            {(p) => (
+              <span style={{ "font-size": "13px", color: "#e6edf3", display: "inline-flex", "align-items": "center", gap: "8px" }}>
+                <Spinner size={12} /> Deleting images... ({p().done}/{p().total})
+              </span>
+            )}
+          </Show>
+          <button class="btn btn-sm btn-danger" onClick={batchDelete} disabled={!!batchDeleteProgress()} style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            {" "}Delete Selected
+            {batchDeleteProgress() ? "Deleting..." : "Delete Selected"}
           </button>
-          <button class="btn btn-sm" onClick={() => setSelected(new Set())}>
+          <button class="btn btn-sm" onClick={() => setSelected(new Set())} disabled={!!batchDeleteProgress()}>
             Clear
           </button>
         </div>
@@ -1171,11 +1190,21 @@ export default function ImagesPage(props: ImagesPageProps) {
                             setShowSaveTar(true);
                           }}
                         ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                        <button
-                          class="action-icon action-icon-delete"
-                          title="Remove image"
-                          onClick={(e) => removeImage(img.id, img.repo_tags[0] || img.id, e)}
-                        ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                        <Show
+                          when={deletingImageId() === img.id}
+                          fallback={
+                            <button
+                              class="action-icon action-icon-delete"
+                              title="Remove image"
+                              disabled={deletingImageId() !== null}
+                              onClick={(e) => removeImage(img.id, img.repo_tags[0] || img.id, e)}
+                            ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                          }
+                        >
+                          <span title="Removing image..." style={{ display: "inline-flex", "align-items": "center", "justify-content": "center", width: "28px", height: "28px" }}>
+                            <Spinner size={12} />
+                          </span>
+                        </Show>
                       </div>
                     </td>
                   </tr>

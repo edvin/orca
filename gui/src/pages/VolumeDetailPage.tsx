@@ -115,8 +115,11 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
     }
   };
 
+  const [removing, setRemoving] = createSignal(false);
   const doRemove = async () => {
+    if (removing()) return;
     if (!await confirmDanger("Remove Volume", `Remove volume "${props.volumeName}"? This will permanently delete the volume data.`)) return;
+    setRemoving(true);
     try {
       await invoke("remove_volume", { name: props.volumeName });
       showToast(`Volume "${props.volumeName}" removed`, "success");
@@ -124,6 +127,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
     } catch (err) {
       logError(`Failed to remove volume: ${err}`, `Volume "${props.volumeName}"`);
       showToast(`Failed to remove volume: ${err}`, "error");
+      setRemoving(false);
     }
   };
 
@@ -237,8 +241,11 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                 <button
                   class="btn btn-sm btn-danger"
                   onClick={doRemove}
+                  disabled={removing()}
+                  style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}
                 >
-                  Remove
+                  <Show when={removing()}><Spinner size={12} /></Show>
+                  {removing() ? "Removing..." : "Remove"}
                 </button>
               </div>
             </>

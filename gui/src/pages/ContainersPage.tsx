@@ -41,6 +41,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const [containerMenuOpen, setContainerMenuOpen] = createSignal<string | null>(null);
   const [selected, setSelected] = createSignal<Set<string>>(new Set());
+  const [batchDeleteProgress, setBatchDeleteProgress] = createSignal<{ done: number; total: number } | null>(null);
   const [showMultiLog, setShowMultiLog] = createSignal(false);
   const [showComposeEditor, setShowComposeEditor] = createSignal(false);
   const [composePath, setComposePath] = createSignal("");
@@ -441,14 +442,20 @@ export default function ContainersPage(props: ContainersPageProps) {
       "Delete Containers",
       `Delete ${count} selected container${count !== 1 ? "s" : ""}? This cannot be undone.`
     )) return;
+    setBatchDeleteProgress({ done: 0, total: count });
     let deleted = 0;
-    for (const id of ids) {
-      try {
-        await invoke("remove_container", { id, force: true });
-        deleted++;
-      } catch (err) {
-        logError(`Failed to remove container: ${err}`, `Container ${id}`);
+    try {
+      for (const id of ids) {
+        try {
+          await invoke("remove_container", { id, force: true });
+          deleted++;
+        } catch (err) {
+          logError(`Failed to remove container: ${err}`, `Container ${id}`);
+        }
+        setBatchDeleteProgress({ done: deleted, total: count });
       }
+    } finally {
+      setBatchDeleteProgress(null);
     }
     showToast(`Deleted ${deleted} container${deleted !== 1 ? "s" : ""}`, "success");
     setSelected(new Set<string>());
@@ -1149,7 +1156,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       </Show>
 
       {/* Floating batch action bar */}
-      <Show when={selected().size > 0}>
+      <Show when={selected().size > 0 || batchDeleteProgress()}>
         <div style={{
           position: "fixed",
           bottom: "32px",
@@ -1168,20 +1175,28 @@ export default function ContainersPage(props: ContainersPageProps) {
           "z-index": "100",
           animation: "batch-bar-slide-in 0.25s ease-out",
         }}>
-          <span style={{ "font-size": "13px", color: "#e6edf3" }}>
-            {selected().size} container{selected().size !== 1 ? "s" : ""} selected
-          </span>
-          <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStart}>
+          <Show when={batchDeleteProgress()} fallback={
+            <span style={{ "font-size": "13px", color: "#e6edf3" }}>
+              {selected().size} container{selected().size !== 1 ? "s" : ""} selected
+            </span>
+          }>
+            {(p) => (
+              <span style={{ "font-size": "13px", color: "#e6edf3", display: "inline-flex", "align-items": "center", gap: "8px" }}>
+                <Spinner size={12} /> Deleting containers... ({p().done}/{p().total})
+              </span>
+            )}
+          </Show>
+          <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStart} disabled={!!batchDeleteProgress()}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Selected
           </button>
-          <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStop}>
+          <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStop} disabled={!!batchDeleteProgress()}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> Stop Selected
           </button>
-          <button class="btn btn-sm btn-danger" onClick={batchDelete}>
+          <button class="btn btn-sm btn-danger" onClick={batchDelete} disabled={!!batchDeleteProgress()} style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            {" "}Delete Selected
+            {batchDeleteProgress() ? "Deleting..." : "Delete Selected"}
           </button>
-          <button class="btn btn-sm" onClick={() => setSelected(new Set<string>())}>
+          <button class="btn btn-sm" onClick={() => setSelected(new Set<string>())} disabled={!!batchDeleteProgress()}>
             Clear
           </button>
         </div>

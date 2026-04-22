@@ -142,11 +142,14 @@ export default function LogViewer(props: LogViewerProps) {
     const containerId = props.containerId;
 
     // Register cleanup synchronously so the onCleanup survives the async
-    // fetchLogs().then(...) chain.
+    // fetchLogs().then(...) chain. Use the captured `containerId` — reading
+    // `props.containerId` here throws a stale-accessor error when LogViewer
+    // is rendered inside `<Show>{(c) => <LogViewer .../>}</Show>` and Show
+    // unmounts, which bubbles up and breaks further reactive updates.
     onCleanup(() => {
       disposed = true;
       try { unlisten?.(); } catch {}
-      invoke("unsubscribe_container_logs", { id: props.containerId }).catch(() => {});
+      invoke("unsubscribe_container_logs", { id: containerId }).catch(() => {});
       document.removeEventListener("keydown", handleKeyDown);
     });
 
