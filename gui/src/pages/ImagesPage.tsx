@@ -1223,8 +1223,17 @@ export default function ImagesPage(props: ImagesPageProps) {
                               const tags = d?.repo_tags || d?.RepoTags || img.repo_tags || [];
                               const imageId = d?.id || d?.Id || img.id;
                               const created = d?.created_at || d?.Created || img.created_at;
-                              const size = d?.size_bytes || d?.Size || img.size_bytes;
-                              const layers = d?.RootFS?.Layers || d?.rootfs?.Layers || d?.rootfs?.layers || d?.layers || [];
+                              // Use the list API's Size — it matches the row
+                              // header and `docker image ls`. The inspect
+                              // endpoint's Size has different semantics
+                              // (v1.44+: only bytes unique to this image),
+                              // which confusingly differs from the row.
+                              const size = img.size_bytes;
+                              // Show the same layer count the "View Layers"
+                              // dialog opens into (history length). RootFS
+                              // diff count differs because history entries
+                              // include zero-size steps like ENV / LABEL.
+                              const layerCount = imageHistoryData().length;
                               return (<>
                                 <div class="card-grid">
                                   <div class="card-label">Image ID</div>
@@ -1254,21 +1263,16 @@ export default function ImagesPage(props: ImagesPageProps) {
                                   <div class="card-value">{formatTimestamp(created)}</div>
 
                                   <div class="card-label">Layers</div>
-                                  <div class="card-value">
-                                    {Array.isArray(layers) ? layers.length : 0} layer{Array.isArray(layers) && layers.length !== 1 ? "s" : ""}
+                                  <div class="card-value" style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
+                                    <span>{layerCount} layer{layerCount !== 1 ? "s" : ""}</span>
+                                    <Show when={layerCount > 0}>
+                                      <button class="btn btn-sm" style={{ "font-size": "11px", padding: "1px 8px" }}
+                                        onClick={(e) => { e.stopPropagation(); setLayersDialogImage(img); }}>
+                                        View Layers
+                                      </button>
+                                    </Show>
                                   </div>
                                 </div>
-
-                                {/* Layer count + view button */}
-                                <Show when={imageHistoryData().length > 0}>
-                                  <div style={{ "margin-top": "4px", "font-size": "12px", color: "#8b949e" }}>
-                                    {imageHistoryData().length} layers
-                                    <button class="btn btn-sm" style={{ "margin-left": "8px", "font-size": "11px", padding: "1px 8px" }}
-                                      onClick={(e) => { e.stopPropagation(); setLayersDialogImage(img); }}>
-                                      View Layers
-                                    </button>
-                                  </div>
-                                </Show>
 
                                 <div style={{ "margin-top": "12px", display: "flex", gap: "8px", "align-items": "center", "flex-wrap": "wrap" }}>
                                   <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); openFileBrowser(img.id); }}>

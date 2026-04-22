@@ -2789,12 +2789,22 @@ async fn resolve_image_ref(state: &AppState, id: &str) -> anyhow::Result<String>
 }
 
 /// Scan an image for vulnerabilities using Trivy (run as a container).
+///
+/// The image tarball is exported via the daemon's own Docker connection and
+/// uploaded into the Trivy container, which then scans it with `--input`.
+/// We deliberately do NOT mount the host's Docker socket into the Trivy
+/// container: on macOS (OrbStack / Docker Desktop) the mounted socket is
+/// typically not readable from inside another container, which made Trivy
+/// fall through its docker → containerd → podman → remote resolvers and
+/// fail on every one. Feeding the tar directly sidesteps that entirely and
+/// also means Trivy never needs docker-socket privileges.
 async fn scan_image(
     State(state): State<Arc<AppState>>,
     Path(image_id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    use bollard::container::{Config, CreateContainerOptions, LogsOptions, WaitContainerOptions};
-    use bollard::models::{HostConfig, Mount, MountTypeEnum};
+    use bollard::container::{
+        Config, CreateContainerOptions, LogsOptions, UploadToContainerOptions, WaitContainerOptions,
+    };
     use futures::StreamExt;
 
     tracing::info!("scan_image: starting scan for {image_id}");
@@ -2812,17 +2822,50 @@ async fn scan_image(
     let image_ref = resolve_image_ref(&state, &image_id).await?;
     let docker = &state.rt().await.docker;
 
-    // The Docker socket to mount into the Trivy container.
-    // Inside a Lima/Colima VM, Docker's socket is always at /var/run/docker.sock
-    // even though the *host* accesses it via ~/.lima/orca/sock/docker.sock.
-    // We must use the in-VM path since the container runs inside the VM.
-    let socket_path = "/var/run/docker.sock".to_string();
-    tracing::debug!("scan_image: mounting docker socket at {socket_path}");
+    // Export the image to a tar via the daemon's working Docker connection.
+    // This is the same call `docker save` makes.
+    tracing::debug!("scan_image: exporting image tar for {image_ref}");
+    let mut image_tar: Vec<u8> = Vec::new();
+    let mut export_stream = docker.export_image(&image_ref);
+    while let Some(chunk) = export_stream.next().await {
+        let bytes = chunk
+            .map_err(|e| anyhow::anyhow!("Failed to export image tar for scan: {e}"))?;
+        image_tar.extend_from_slice(&bytes);
+    }
+    tracing::debug!(
+        "scan_image: exported {} bytes of image tar",
+        image_tar.len()
+    );
 
-    // Run Trivy as a container with access to the Docker socket. `--`
-    // terminates option parsing so a maliciously crafted image ref that
-    // happens to look like a flag (e.g. starts with `-`) can't be
-    // interpreted as a Trivy option.
+    // Wrap the image tar in a second tar archive so we can use
+    // upload_to_container to drop it at /tmp/image.tar inside Trivy.
+    let upload_tar: Vec<u8> = {
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(image_tar.len() as u64);
+        header.set_mode(0o644);
+        header.set_mtime(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        );
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "image.tar", &image_tar[..])
+            .map_err(|e| anyhow::anyhow!("Failed to build upload tar: {e}"))?;
+        builder
+            .into_inner()
+            .map_err(|e| anyhow::anyhow!("Failed to finalise upload tar: {e}"))?
+    };
+    // Free the intermediate copy now that we've wrapped it.
+    drop(image_tar);
+
+    // Run Trivy as a container. `--` terminates option parsing so a
+    // maliciously crafted image ref that happens to look like a flag
+    // (e.g. starts with `-`) can't be interpreted as a Trivy option.
+    // `--input` reads the image from a tar file instead of querying
+    // any container runtime.
     let config = Config {
         image: Some("ghcr.io/aquasecurity/trivy:latest".to_string()),
         cmd: Some(vec![
@@ -2830,19 +2873,9 @@ async fn scan_image(
             "--format".to_string(),
             "json".to_string(),
             "--quiet".to_string(),
-            "--".to_string(),
-            image_ref.clone(),
+            "--input".to_string(),
+            "/tmp/image.tar".to_string(),
         ]),
-        host_config: Some(HostConfig {
-            mounts: Some(vec![Mount {
-                target: Some("/var/run/docker.sock".to_string()),
-                source: Some(socket_path),
-                typ: Some(MountTypeEnum::BIND),
-                read_only: Some(true),
-                ..Default::default()
-            }]),
-            ..Default::default()
-        }),
         ..Default::default()
     };
 
@@ -2893,114 +2926,146 @@ async fn scan_image(
         }
     };
 
-    let id = &container.id;
+    let container_id = container.id.clone();
 
-    docker.start_container::<String>(id, None).await.map_err(|e| {
-        tracing::error!("scan_image: failed to start Trivy container: {e}");
-        anyhow::anyhow!("Failed to start Trivy container: {e}")
-    })?;
+    // From here on, the container exists and MUST be removed — even if any
+    // of the upload/start/wait/log/parse steps fails or we panic on a bad
+    // response. We run the scan in an inner async block, capture the
+    // result, then force-remove the container unconditionally before
+    // returning to the caller.
+    let scan_result = async {
+        docker
+            .upload_to_container(
+                &container_id,
+                Some(UploadToContainerOptions {
+                    path: "/tmp",
+                    ..Default::default()
+                }),
+                upload_tar.into(),
+            )
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to upload image tar into Trivy container: {e}")
+            })?;
 
-    // Trivy scans can take a while — wait up to 5 minutes
-    let wait_opts = WaitContainerOptions {
-        condition: "not-running",
-    };
-    let _ = tokio::time::timeout(
-        Duration::from_secs(300),
-        docker.wait_container(id, Some(wait_opts)).next(),
-    )
+        docker
+            .start_container::<String>(&container_id, None)
+            .await
+            .map_err(|e| {
+                tracing::error!("scan_image: failed to start Trivy container: {e}");
+                anyhow::anyhow!("Failed to start Trivy container: {e}")
+            })?;
+
+        // Trivy scans can take a while — wait up to 5 minutes
+        let wait_opts = WaitContainerOptions {
+            condition: "not-running",
+        };
+        let _ = tokio::time::timeout(
+            Duration::from_secs(300),
+            docker.wait_container(&container_id, Some(wait_opts)).next(),
+        )
+        .await;
+
+        // Collect stdout and stderr
+        let log_opts_out = LogsOptions::<String> {
+            stdout: true,
+            stderr: false,
+            ..Default::default()
+        };
+        let log_opts_err = LogsOptions::<String> {
+            stdout: false,
+            stderr: true,
+            ..Default::default()
+        };
+
+        let mut stdout = String::new();
+        let mut stream = docker.logs(&container_id, Some(log_opts_out));
+        while let Some(Ok(chunk)) = stream.next().await {
+            stdout.push_str(&chunk.to_string());
+        }
+
+        let mut stderr = String::new();
+        let mut stream = docker.logs(&container_id, Some(log_opts_err));
+        while let Some(Ok(chunk)) = stream.next().await {
+            stderr.push_str(&chunk.to_string());
+        }
+
+        // If no stdout, surface whatever Trivy wrote to stderr.
+        if stdout.trim().is_empty() {
+            let detail = if stderr.trim().is_empty() {
+                "Trivy produced no output. The image tar may be corrupt or Trivy crashed before writing any output.".to_string()
+            } else {
+                format!("Trivy error:\n{}", stderr.trim())
+            };
+            return Ok::<_, anyhow::Error>(Json(serde_json::json!({
+                "error": detail,
+                "total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
+            })));
+        }
+
+        // Parse the Trivy JSON output
+        let trivy_results: serde_json::Value = match serde_json::from_str(&stdout) {
+            Ok(v) => v,
+            Err(e) => {
+                return Ok(Json(serde_json::json!({
+                    "error": format!("Failed to parse Trivy output: {e}\n\nRaw output (first 500 chars):\n{}", &stdout[..stdout.len().min(500)]),
+                    "total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
+                })));
+            }
+        };
+
+        // Count vulnerabilities by severity
+        let mut critical = 0u64;
+        let mut high = 0u64;
+        let mut medium = 0u64;
+        let mut low = 0u64;
+
+        if let Some(results) = trivy_results.get("Results").and_then(|r| r.as_array()) {
+            for result in results {
+                if let Some(vulns) = result.get("Vulnerabilities").and_then(|v| v.as_array()) {
+                    for vuln in vulns {
+                        match vuln.get("Severity").and_then(|s| s.as_str()) {
+                            Some("CRITICAL") => critical += 1,
+                            Some("HIGH") => high += 1,
+                            Some("MEDIUM") => medium += 1,
+                            Some("LOW") | Some("UNKNOWN") => low += 1,
+                            _ => low += 1,
+                        }
+                    }
+                }
+            }
+        }
+
+        let total = critical + high + medium + low;
+
+        Ok(Json(serde_json::json!({
+            "total": total,
+            "critical": critical,
+            "high": high,
+            "medium": medium,
+            "low": low,
+            "results": trivy_results.get("Results").cloned().unwrap_or(serde_json::json!([])),
+        })))
+    }
     .await;
 
-    // Collect stdout and stderr
-    let log_opts_out = LogsOptions::<String> {
-        stdout: true,
-        stderr: false,
-        ..Default::default()
-    };
-    let log_opts_err = LogsOptions::<String> {
-        stdout: false,
-        stderr: true,
-        ..Default::default()
-    };
-
-    let mut stdout = String::new();
-    let mut stream = docker.logs(id, Some(log_opts_out));
-    while let Some(Ok(chunk)) = stream.next().await {
-        stdout.push_str(&chunk.to_string());
-    }
-
-    let mut stderr = String::new();
-    let mut stream = docker.logs(id, Some(log_opts_err));
-    while let Some(Ok(chunk)) = stream.next().await {
-        stderr.push_str(&chunk.to_string());
-    }
-
-    // Clean up
-    let _ = docker
+    // Always force-remove the Trivy container, success or failure.
+    if let Err(e) = docker
         .remove_container(
-            id,
+            &container_id,
             Some(bollard::container::RemoveContainerOptions {
                 force: true,
                 ..Default::default()
             }),
         )
-        .await;
-
-    // If no stdout, return error with stderr details
-    if stdout.trim().is_empty() {
-        let detail = if stderr.trim().is_empty() {
-            "Trivy produced no output. The image may not exist or the Docker socket may not be accessible.".to_string()
-        } else {
-            format!("Trivy error:\n{}", stderr.trim())
-        };
-        return Ok(Json(serde_json::json!({
-            "error": detail,
-            "total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
-        })));
+        .await
+    {
+        tracing::warn!(
+            "scan_image: failed to remove Trivy container {container_id}: {e}"
+        );
     }
 
-    // Parse the Trivy JSON output
-    let trivy_results: serde_json::Value = match serde_json::from_str(&stdout) {
-        Ok(v) => v,
-        Err(e) => {
-            return Ok(Json(serde_json::json!({
-                "error": format!("Failed to parse Trivy output: {e}\n\nRaw output (first 500 chars):\n{}", &stdout[..stdout.len().min(500)]),
-                "total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0,
-            })));
-        }
-    };
-
-    // Count vulnerabilities by severity
-    let mut critical = 0u64;
-    let mut high = 0u64;
-    let mut medium = 0u64;
-    let mut low = 0u64;
-
-    if let Some(results) = trivy_results.get("Results").and_then(|r| r.as_array()) {
-        for result in results {
-            if let Some(vulns) = result.get("Vulnerabilities").and_then(|v| v.as_array()) {
-                for vuln in vulns {
-                    match vuln.get("Severity").and_then(|s| s.as_str()) {
-                        Some("CRITICAL") => critical += 1,
-                        Some("HIGH") => high += 1,
-                        Some("MEDIUM") => medium += 1,
-                        Some("LOW") | Some("UNKNOWN") => low += 1,
-                        _ => low += 1,
-                    }
-                }
-            }
-        }
-    }
-
-    let total = critical + high + medium + low;
-
-    Ok(Json(serde_json::json!({
-        "total": total,
-        "critical": critical,
-        "high": high,
-        "medium": medium,
-        "low": low,
-        "results": trivy_results.get("Results").cloned().unwrap_or(serde_json::json!([])),
-    })))
+    scan_result.map_err(Into::into)
 }
 
 async fn volume_containers(

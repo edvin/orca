@@ -39,6 +39,7 @@ base64.workspace = true
 rcgen = { version = "0.13", features = ["x509-parser"] }
 time = "0.3"
 serde_yaml = "0.9"
+tar = "0.4"
 tempfile = "3"
 rand = { workspace = true }
 # Direct dep so we can install a process-wide CryptoProvider at startup.
