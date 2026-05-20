@@ -109,7 +109,9 @@ jobs:
           fi
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli
 
       - name: Import Apple certificate
         if: runner.os == 'macOS'
