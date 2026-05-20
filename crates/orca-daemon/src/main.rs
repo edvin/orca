@@ -246,7 +246,7 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     }
 
     // 1. Try native socket connection (Linux, macOS, or Docker Desktop on Windows)
-    match orca_backend_native::NativeBackend::connect() {
+    match orca_backend_native::NativeBackend::connect().await {
         Ok(native) => {
             let socket_path = native.socket_path.display().to_string();
             let rt = Arc::new(native.runtime);
@@ -262,72 +262,8 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     // 2. On macOS, try starting the Lima VM if it exists
     #[cfg(target_os = "macos")]
     {
-        use tokio::process::Command;
-        // Check if a Lima VM exists (orca or docker)
-        if let Ok(output) = Command::new("limactl")
-            .env(
-                "PATH",
-                format!(
-                    "/opt/homebrew/bin:/usr/local/bin:{}",
-                    std::env::var("PATH").unwrap_or_default()
-                ),
-            )
-            .args(["list", "--format", "{{.Name}} {{.Status}}"])
-            .output()
-            .await
-        {
-            let text = String::from_utf8_lossy(&output.stdout);
-            let vm_name = if text.lines().any(|l| l.starts_with("orca ")) {
-                Some("orca")
-            } else if text.lines().any(|l| l.starts_with("docker ")) {
-                Some("docker")
-            } else {
-                None
-            };
-
-            if let Some(name) = vm_name {
-                let is_running = text.lines().any(|l| l.starts_with(name) && l.contains("Running"));
-
-                // Reconcile Lima VM config — apply any missing settings.
-                // This may stop the VM if changes are needed, so we always ensure it's started after.
-                let was_reconfigured = reconcile_lima_config(name, is_running).await;
-
-                if !is_running || was_reconfigured {
-                    tracing::info!("Starting Lima VM '{name}'...");
-                    let _ = Command::new("limactl")
-                        .env(
-                            "PATH",
-                            format!(
-                                "/opt/homebrew/bin:/usr/local/bin:{}",
-                                std::env::var("PATH").unwrap_or_default()
-                            ),
-                        )
-                        .args(["start", name])
-                        .output()
-                        .await;
-                }
-
-                // Wait for Docker socket to appear
-                let home = std::env::var("HOME").unwrap_or_default();
-                let socket = format!("{home}/.lima/{name}/sock/docker.sock");
-                for attempt in 1..=15 {
-                    if std::path::Path::new(&socket).exists() {
-                        tracing::info!("Lima socket ready: {socket}");
-                        if let Ok(docker) =
-                            bollard::Docker::connect_with_socket(&socket, 120, bollard::API_DEFAULT_VERSION)
-                        {
-                            if docker.ping().await.is_ok() {
-                                tracing::info!("Connected to Docker via Lima VM '{name}' (attempt {attempt})");
-                                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
-                            }
-                        }
-                    }
-                    if attempt <= 14 {
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                    }
-                }
-                tracing::warn!("Lima VM '{name}' exists but Docker socket not available after 30s");
-            }
+        if let Some(rt) = connect_via_lima().await {
+            return rt;
         }
     }
 
@@ -412,6 +348,267 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     ))
 }
 
+/// Common PATH extension for invoking Lima — Homebrew prefixes are not on
+/// the default `launchd` PATH that Tauri inherits.
+#[cfg(target_os = "macos")]
+fn lima_path_env() -> String {
+    format!(
+        "/opt/homebrew/bin:/usr/local/bin:{}",
+        std::env::var("PATH").unwrap_or_default()
+    )
+}
+
+/// Find Orca's Lima VM and the status `limactl list` reports for it.
+/// Returns (name, status) where status is one of "Running", "Stopped", "Broken",
+/// or another Lima-defined string. Prefers "orca", then "docker" as fallback.
+#[cfg(target_os = "macos")]
+async fn find_lima_vm() -> Option<(&'static str, String)> {
+    use tokio::process::Command;
+    let out = Command::new("limactl")
+        .env("PATH", lima_path_env())
+        .args(["list", "--format", "{{.Name}}\t{{.Status}}"])
+        .output()
+        .await
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut orca = None;
+    let mut docker = None;
+    for line in text.lines() {
+        let mut it = line.split('\t');
+        let name = it.next().unwrap_or("").trim();
+        let status = it.next().unwrap_or("").trim().to_string();
+        match name {
+            "orca" => orca = Some(("orca", status)),
+            "docker" => docker = Some(("docker", status)),
+            _ => {}
+        }
+    }
+    orca.or(docker)
+}
+
+/// Attempt to start the Lima VM. Captures stderr and returns it on failure
+/// so callers can log the actual reason (stale pid file, disk lock,
+/// "Broken" state, etc.) instead of a silent timeout.
+#[cfg(target_os = "macos")]
+async fn lima_start(name: &str) -> Result<(), String> {
+    use tokio::process::Command;
+    let out = Command::new("limactl")
+        .env("PATH", lima_path_env())
+        .args(["start", name])
+        .output()
+        .await
+        .map_err(|e| format!("spawn failed: {e}"))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        Err(if stderr.is_empty() { stdout } else { stderr })
+    }
+}
+
+/// Force-stop the Lima VM and remove leftover unix sockets so a subsequent
+/// `limactl start` can recover from a half-dead state. Lima itself usually
+/// clears stale PID files, but the forwarded docker.sock and ha.sock files
+/// are unix sockets created by the host agent — if the agent was killed by
+/// a host reboot, they can persist with no listener and confuse Bollard.
+#[cfg(target_os = "macos")]
+async fn lima_force_recover(name: &str) {
+    use tokio::process::Command;
+    tracing::warn!("Lima VM '{name}': attempting force-stop recovery");
+    match Command::new("limactl")
+        .env("PATH", lima_path_env())
+        .args(["stop", "--force", name])
+        .output()
+        .await
+    {
+        Ok(o) if o.status.success() => tracing::info!("Lima VM '{name}': force-stop succeeded"),
+        Ok(o) => tracing::warn!(
+            "Lima VM '{name}': force-stop returned {}: {}",
+            o.status,
+            String::from_utf8_lossy(&o.stderr).trim()
+        ),
+        Err(e) => tracing::warn!("Lima VM '{name}': force-stop spawn failed: {e}"),
+    }
+
+    let home = std::env::var("HOME").unwrap_or_default();
+    // Unix socket files created by the host agent. Files in `~/.lima/<name>/`
+    // such as `ha.pid`, `qemu.pid`, `lima.yaml`, `serial0.log`, `diffdisk`
+    // are NOT touched — Lima manages those, and deleting the disk image
+    // would lose the user's containers.
+    for stale in &[
+        format!("{home}/.lima/{name}/sock/docker.sock"),
+        format!("{home}/.lima/{name}/ha.sock"),
+    ] {
+        if std::path::Path::new(stale).exists() {
+            match std::fs::remove_file(stale) {
+                Ok(_) => tracing::info!("Removed stale socket: {stale}"),
+                Err(e) => tracing::debug!("Could not remove {stale}: {e}"),
+            }
+        }
+    }
+}
+
+/// Deep clean: remove every ephemeral state file Lima writes during boot
+/// (PID files, all sockets under `sock/`, log files). Preserves
+/// `lima.yaml`, `diffdisk`, `basedisk`, `cidata.iso`, ssh keys — anything
+/// that holds user data or VM identity. Used when tier-2 force-recover
+/// wasn't enough.
+#[cfg(target_os = "macos")]
+fn lima_deep_clean(name: &str) {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dir = format!("{home}/.lima/{name}");
+
+    // Remove the entire forwarded-socket directory — Lima recreates it on
+    // start. Anything in there is host-managed runtime state.
+    let sock_dir = format!("{dir}/sock");
+    if std::path::Path::new(&sock_dir).exists() {
+        match std::fs::remove_dir_all(&sock_dir) {
+            Ok(_) => tracing::info!("Lima VM '{name}': removed stale sock/ directory"),
+            Err(e) => tracing::debug!("Could not remove {sock_dir}: {e}"),
+        }
+    }
+
+    // Individual ephemeral files. These are all re-created by lima on
+    // boot — none of them hold user data. We deliberately do NOT touch
+    // `lima.yaml`, `*disk*`, `cidata.iso`, or anything under `_config/`.
+    let ephemerals = [
+        "ha.pid",
+        "qemu.pid",
+        "ha.sock",
+        "ha.stdout.log",
+        "ha.stderr.log",
+        "serial0.log",
+        "serial0.sock",
+        "serialv.log",
+        "serialv.sock",
+        "serialp.log",
+        "serialp.sock",
+        "vz-identifier",
+    ];
+    for name in &ephemerals {
+        let p = format!("{dir}/{name}");
+        if std::path::Path::new(&p).exists() {
+            match std::fs::remove_file(&p) {
+                Ok(_) => tracing::info!("Lima VM '{}': removed stale {name}", name),
+                Err(e) => tracing::debug!("Could not remove {p}: {e}"),
+            }
+        }
+    }
+}
+
+
+/// Poll for the Lima Docker socket and return a Bollard client once a
+/// real `ping` succeeds. File existence alone is not enough — after a
+/// host reboot the socket inode often lingers without a listener.
+#[cfg(target_os = "macos")]
+async fn wait_for_lima_docker(name: &str, attempts: u32) -> Option<bollard::Docker> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let socket = format!("{home}/.lima/{name}/sock/docker.sock");
+    for attempt in 1..=attempts {
+        if std::path::Path::new(&socket).exists()
+            && let Ok(docker) =
+                bollard::Docker::connect_with_socket(&socket, 120, bollard::API_DEFAULT_VERSION)
+            && docker.ping().await.is_ok()
+        {
+            tracing::info!(
+                "Connected to Docker via Lima VM '{name}' (attempt {attempt}/{attempts})"
+            );
+            return Some(docker);
+        }
+        if attempt < attempts {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    }
+    None
+}
+
+/// Bring up Lima and return a working runtime. Handles the
+/// post-host-reboot case: capture limactl errors, force-recover on
+/// failure, then retry once.
+#[cfg(target_os = "macos")]
+async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> {
+    let (name, status) = find_lima_vm().await?;
+    tracing::info!("Found Lima VM '{name}' (status: {status})");
+
+    let is_running = status == "Running";
+    let was_reconfigured = reconcile_lima_config(name, is_running).await;
+
+    // If the VM is already Running and we made no changes, just wait for
+    // the socket — no need to invoke `limactl start`.
+    if is_running && !was_reconfigured {
+        if let Some(docker) = wait_for_lima_docker(name, 15).await {
+            return Some(Arc::new(orca_backend_common::BollardRuntime::new(docker)));
+        }
+        // Running but socket isn't responsive — fall through to recovery.
+        tracing::warn!("Lima VM '{name}' reports Running but Docker socket is unresponsive");
+    } else {
+        tracing::info!("Starting Lima VM '{name}'...");
+    }
+
+    match lima_start(name).await {
+        Ok(()) => {
+            if let Some(docker) = wait_for_lima_docker(name, 15).await {
+                return Some(Arc::new(orca_backend_common::BollardRuntime::new(docker)));
+            }
+            tracing::warn!(
+                "Lima VM '{name}': start succeeded but Docker socket never became responsive"
+            );
+        }
+        Err(e) => {
+            tracing::error!("Lima VM '{name}': start failed: {e}");
+        }
+    }
+
+    // Tier 2: force-stop, remove the forwarded docker.sock + ha.sock,
+    // retry. Handles the common "have to `lima delete orca` after boot"
+    // symptom — usually a stale ha.pid + stale forwarded docker.sock.
+    lima_force_recover(name).await;
+    match lima_start(name).await {
+        Ok(()) => {
+            if let Some(docker) = wait_for_lima_docker(name, 15).await {
+                tracing::info!("Lima VM '{name}': recovered after force-stop");
+                return Some(Arc::new(orca_backend_common::BollardRuntime::new(docker)));
+            }
+            tracing::warn!("Lima VM '{name}': tier-2 start succeeded but socket still down");
+        }
+        Err(e) => {
+            tracing::warn!("Lima VM '{name}': tier-2 start failed: {e}");
+        }
+    }
+
+    // Tier 3: deep clean — remove every ephemeral state file Lima writes
+    // on boot (PID files, sockets, serial logs). Preserves the disk image
+    // and lima.yaml, so user data is safe. This is non-destructive but
+    // gets us out of states where leftover artifacts from a hard host
+    // shutdown confuse Lima into a "Broken" status.
+    tracing::warn!("Lima VM '{name}': tier-2 recovery exhausted, deep-cleaning state files");
+    lima_force_recover(name).await;
+    lima_deep_clean(name);
+    match lima_start(name).await {
+        Ok(()) => {
+            if let Some(docker) = wait_for_lima_docker(name, 15).await {
+                tracing::info!("Lima VM '{name}': recovered after deep clean");
+                return Some(Arc::new(orca_backend_common::BollardRuntime::new(docker)));
+            }
+            tracing::error!(
+                "Lima VM '{name}': deep-clean start succeeded but Docker socket never came up. \
+                 The disk image may be corrupt — use the Environment page's repair action."
+            );
+        }
+        Err(e) => {
+            tracing::error!(
+                "Lima VM '{name}': deep-clean start failed: {e}. \
+                 Open the Environment page and click the 'Repair Lima VM' fix."
+            );
+        }
+    }
+    None
+}
+
 /// Reconcile Lima VM config: ensure port forwarding, mounts, etc. match desired state.
 /// Reads ~/.lima/<name>/lima.yaml, checks for required settings, applies fixes via `limactl edit --set`.
 /// If the VM is running and changes are needed, it will be stopped and edited.
@@ -486,14 +683,28 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
         tracing::info!("  - Removing broken 'ignore: true' port forwarding rule");
     }
 
-    // If running, stop first — limactl edit requires a stopped VM
+    // If running, stop first — limactl edit requires a stopped VM. Try a
+    // graceful stop, but fall back to --force if the VM is wedged: a
+    // half-stopped VM still has a lima.yaml lock and the subsequent
+    // `limactl edit` would fail too.
     if is_running {
         tracing::info!("Stopping Lima VM '{vm_name}' to apply config updates...");
-        let _ = Command::new("limactl")
-            .env("PATH", &path_env)
-            .args(["stop", vm_name])
-            .output()
-            .await;
+        let stop_ok = matches!(
+            Command::new("limactl")
+                .env("PATH", &path_env)
+                .args(["stop", vm_name])
+                .output()
+                .await,
+            Ok(o) if o.status.success()
+        );
+        if !stop_ok {
+            tracing::warn!("Lima VM '{vm_name}': graceful stop failed, forcing");
+            let _ = Command::new("limactl")
+                .env("PATH", &path_env)
+                .args(["stop", "--force", vm_name])
+                .output()
+                .await;
+        }
     }
 
     // Remove the broken ignore rule if present

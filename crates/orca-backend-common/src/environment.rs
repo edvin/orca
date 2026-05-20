@@ -717,6 +717,73 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 }
             }
         }
+        #[cfg(target_os = "macos")]
+        "repair_lima_orca" => {
+            send(">>> Repairing Lima VM\n".into()).await;
+            send("    This force-stops the VM, removes stale lock and socket files,\n".into()).await;
+            send("    and restarts it. Your containers and images are preserved.\n\n".into()).await;
+
+            let (vm, status) = match find_lima_vm_for_repair().await {
+                Some(v) => v,
+                None => {
+                    send("    No Lima VM found. Use 'Set up Docker' to create one.\n".into()).await;
+                    anyhow::bail!("No Lima VM exists to repair");
+                }
+            };
+            send(format!(">>> Step 1/4: Stopping Lima VM '{vm}' (current status: {status})\n")).await;
+            // Graceful stop first, then force — `--force` alone leaves the
+            // VM in a bad state when it's already stopped.
+            let _ = run_cmd("limactl", &["stop", &vm]).await;
+            match run_cmd("limactl", &["stop", "--force", &vm]).await {
+                Ok(_) => send("    Stopped.\n".into()).await,
+                Err(e) => send(format!("    Stop reported: {e}\n")).await,
+            }
+
+            send(">>> Step 2/4: Removing stale lock and socket files\n".into()).await;
+            lima_repair_clean(&vm, &send).await;
+
+            send(format!(">>> Step 3/4: Starting Lima VM '{vm}'\n")).await;
+            match run_cmd_streaming("limactl", &["start", &vm], &tx).await {
+                Ok(_) => send("    Start command completed.\n".into()).await,
+                Err(e) => {
+                    send(format!("\n    Start failed: {e}\n")).await;
+                    send("    The disk image or config may be corrupt.\n".into()).await;
+                    send("    Use Settings → Reset Orca to recreate the VM\n".into()).await;
+                    send("    (warning: this deletes containers and images).\n".into()).await;
+                    anyhow::bail!("limactl start failed: {e}");
+                }
+            }
+
+            send(">>> Step 4/4: Verifying Docker connection\n".into()).await;
+            let home = std::env::var("HOME").unwrap_or_default();
+            let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
+            let mut ok = false;
+            for i in 0..15 {
+                if std::path::Path::new(&socket).exists()
+                    && run_cmd(
+                        "docker",
+                        &["-H", &format!("unix://{socket}"), "info", "--format", "{{.ServerVersion}}"],
+                    )
+                    .await
+                    .is_ok()
+                {
+                    ok = true;
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                if i % 3 == 2 {
+                    send(format!("    Waiting for Docker... ({}s)\n", (i + 1) * 2)).await;
+                }
+            }
+            if ok {
+                send("    Docker is reachable. Repair complete.\n".into()).await;
+            } else {
+                send("    Docker socket did not come up within 30s.\n".into()).await;
+                send("    The VM started but Docker inside it isn't responding.\n".into()).await;
+                send("    Try again, or use Settings → Reset Orca to recreate the VM.\n".into()).await;
+                anyhow::bail!("VM started but Docker socket never became reachable");
+            }
+        }
         // For all other actions, fall back to non-streaming run_fix
         _ => {
             send(format!("Running {action}...")).await;
@@ -725,6 +792,71 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
         }
     }
     Ok(())
+}
+
+/// Helpers for repair_lima_orca. Mirror the daemon-side logic in
+/// `orca-daemon/src/main.rs` but stream progress through the SSE channel
+/// so the GUI's repair dialog can show the user what's happening.
+#[cfg(target_os = "macos")]
+async fn find_lima_vm_for_repair() -> Option<(String, String)> {
+    let out = run_cmd("limactl", &["list", "--format", "{{.Name}}\t{{.Status}}"])
+        .await
+        .ok()?;
+    let mut orca = None;
+    let mut docker = None;
+    for line in out.lines() {
+        let mut it = line.split('\t');
+        let name = it.next().unwrap_or("").trim();
+        let status = it.next().unwrap_or("").trim().to_string();
+        match name {
+            "orca" => orca = Some(("orca".to_string(), status)),
+            "docker" => docker = Some(("docker".to_string(), status)),
+            _ => {}
+        }
+    }
+    orca.or(docker)
+}
+
+#[cfg(target_os = "macos")]
+async fn lima_repair_clean<F, Fut>(vm: &str, send: &F)
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dir = format!("{home}/.lima/{vm}");
+
+    let sock_dir = format!("{dir}/sock");
+    if std::path::Path::new(&sock_dir).exists() {
+        match std::fs::remove_dir_all(&sock_dir) {
+            Ok(_) => send("    Removed sock/ directory\n".into()).await,
+            Err(e) => send(format!("    Could not remove sock/: {e}\n")).await,
+        }
+    }
+
+    // Match the ephemerals list in orca-daemon/src/main.rs::lima_deep_clean.
+    let ephemerals = [
+        "ha.pid",
+        "qemu.pid",
+        "ha.sock",
+        "ha.stdout.log",
+        "ha.stderr.log",
+        "serial0.log",
+        "serial0.sock",
+        "serialv.log",
+        "serialv.sock",
+        "serialp.log",
+        "serialp.sock",
+        "vz-identifier",
+    ];
+    let mut removed = 0;
+    for name in &ephemerals {
+        let p = format!("{dir}/{name}");
+        if std::path::Path::new(&p).exists() && std::fs::remove_file(&p).is_ok() {
+            removed += 1;
+        }
+    }
+    send(format!("    Removed {removed} ephemeral state file(s)\n")).await;
 }
 
 /// Decode command output, handling UTF-16LE (common from Windows CLI tools like wsl.exe).
@@ -1279,17 +1411,56 @@ pub async fn check_environment() -> EnvironmentStatus {
                     details: Some(format!("Server version: {version}")),
                 });
             } else {
-                // Docker not running — single action to set up everything
-                checks.push(HealthCheck {
-                    name: "Docker Runtime".to_string(),
-                    description: "Docker is not running. Click Fix to install and configure automatically.".to_string(),
-                    status: CheckStatus::Fail,
-                    fix_action: Some("setup_docker_macos".to_string()),
-                    details: Some(
-                        "Installs Homebrew, Lima, and Docker in a lightweight Linux VM using Apple Virtualization"
-                            .to_string(),
-                    ),
-                });
+                // Distinguish "Lima VM exists but not running" (offer Repair)
+                // from "no VM at all" (offer Setup). Without this branch
+                // both cases land on setup_docker_macos which is wrong for
+                // an existing-but-stuck VM: it would refuse to recreate.
+                let lima_vm_status = run_cmd("limactl", &["list", "--format", "{{.Name}}\t{{.Status}}"])
+                    .await
+                    .ok()
+                    .and_then(|out| {
+                        out.lines()
+                            .filter_map(|line| {
+                                let mut it = line.split('\t');
+                                let name = it.next()?.trim();
+                                let status = it.next()?.trim().to_string();
+                                if name == "orca" || name == "docker" {
+                                    Some((name.to_string(), status))
+                                } else {
+                                    None
+                                }
+                            })
+                            .next()
+                    });
+
+                if let Some((vm, status)) = lima_vm_status {
+                    checks.push(HealthCheck {
+                        name: "Docker Runtime".to_string(),
+                        description: format!(
+                            "Lima VM '{vm}' is {status} — Docker is unreachable. \
+                             Click Repair to recover (preserves your containers and images)."
+                        ),
+                        status: CheckStatus::Fail,
+                        fix_action: Some("repair_lima_orca".to_string()),
+                        details: Some(
+                            "Stops the VM, removes stale lock and socket files, and restarts it. \
+                             If repair fails, use the Reset action in Settings to recreate the VM."
+                                .to_string(),
+                        ),
+                    });
+                } else {
+                    // No Lima VM yet — first-time setup.
+                    checks.push(HealthCheck {
+                        name: "Docker Runtime".to_string(),
+                        description: "Docker is not running. Click Fix to install and configure automatically.".to_string(),
+                        status: CheckStatus::Fail,
+                        fix_action: Some("setup_docker_macos".to_string()),
+                        details: Some(
+                            "Installs Homebrew, Lima, and Docker in a lightweight Linux VM using Apple Virtualization"
+                                .to_string(),
+                        ),
+                    });
+                }
             }
         }
         "windows" => {
@@ -1947,6 +2118,50 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 Err(_) => output.push_str("\nDocker may still be starting. Restart Orca in a moment.\n"),
             }
 
+            Ok(output)
+        }
+        #[cfg(target_os = "macos")]
+        "repair_lima_orca" => {
+            let mut output = String::new();
+            output.push_str(">>> Repairing Lima VM\n");
+            let (vm, status) = find_lima_vm_for_repair()
+                .await
+                .ok_or_else(|| anyhow::anyhow!("No Lima VM exists to repair"))?;
+            output.push_str(&format!("VM '{vm}' status: {status}\n"));
+            let _ = run_cmd("limactl", &["stop", &vm]).await;
+            let _ = run_cmd("limactl", &["stop", "--force", &vm]).await;
+            output.push_str("Stopped.\n");
+
+            let home = std::env::var("HOME").unwrap_or_default();
+            let dir = format!("{home}/.lima/{vm}");
+            let _ = std::fs::remove_dir_all(format!("{dir}/sock"));
+            for f in [
+                "ha.pid",
+                "qemu.pid",
+                "ha.sock",
+                "ha.stdout.log",
+                "ha.stderr.log",
+                "serial0.log",
+                "serial0.sock",
+                "serialv.log",
+                "serialv.sock",
+                "serialp.log",
+                "serialp.sock",
+                "vz-identifier",
+            ] {
+                let _ = std::fs::remove_file(format!("{dir}/{f}"));
+            }
+            output.push_str("Removed stale state files.\n");
+
+            match run_cmd("limactl", &["start", &vm]).await {
+                Ok(o) => output.push_str(&format!("Started:\n{o}\n")),
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Repair failed at start step: {e}\n\
+                         Try the streaming Repair from the Environment page, or use Reset Orca."
+                    ));
+                }
+            }
             Ok(output)
         }
         _ => anyhow::bail!("Unknown fix action: {action}"),
