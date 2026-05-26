@@ -249,6 +249,18 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     match orca_backend_native::NativeBackend::connect().await {
         Ok(native) => {
             let socket_path = native.socket_path.display().to_string();
+            // On macOS the "native" socket is usually the Lima-forwarded
+            // docker.sock, so this path connects to an already-running Lima VM
+            // without going through connect_via_lima — where the
+            // IPv4-forwarding self-heal lives. Run it here too, or a VM that is
+            // simply up (the common case) never gets healed: only freshly
+            // created or recovered VMs would.
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(vm) = lima_vm_from_socket(&socket_path) {
+                    ensure_ip_forward(&vm).await;
+                }
+            }
             let rt = Arc::new(native.runtime);
             let kind = rt.detect_runtime().await;
             tracing::info!("Connected to {kind:?} runtime via socket: {socket_path}");
@@ -562,6 +574,16 @@ async fn ensure_ip_forward(name: &str) {
             tracing::warn!("Lima VM '{name}': enabling IPv4 forwarding failed to spawn: {e}")
         }
     }
+}
+
+/// Extract a Lima VM name from a forwarded docker socket path of the form
+/// `~/.lima/<vm>/sock/docker.sock`. Returns `None` for non-Lima sockets
+/// (Docker Desktop, Colima, …) so callers only self-heal actual Lima VMs.
+#[cfg(target_os = "macos")]
+fn lima_vm_from_socket(socket_path: &str) -> Option<String> {
+    let after = socket_path.split("/.lima/").nth(1)?;
+    let vm = after.split('/').next()?;
+    (!vm.is_empty()).then(|| vm.to_string())
 }
 
 /// Apply VM-up side effects (currently: ensure IPv4 forwarding) and wrap the
