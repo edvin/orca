@@ -526,6 +526,60 @@ async fn wait_for_lima_docker(name: &str, attempts: u32) -> Option<bollard::Dock
     None
 }
 
+/// Ensure IPv4 forwarding is enabled inside an already-running Lima VM.
+///
+/// dockerd enables this at daemon start, but our provisioning installs the
+/// HWE kernel (which forces a reboot) and the auto-recovery paths below can
+/// restart the VM into a kernel where `net.ipv4.ip_forward` reset to its
+/// default of 0 before dockerd reapplied it. That breaks container
+/// networking with "IPv4 forwarding is disabled. Networking will not work."
+///
+/// Newly created VMs get the same drop-in via the Lima provision script, so
+/// this only matters for VMs created before that fix shipped. It's cheap and
+/// idempotent, so we run it unconditionally once the VM is up. Best-effort:
+/// a failure here is logged, not fatal — networking may already be fine.
+#[cfg(target_os = "macos")]
+async fn ensure_ip_forward(name: &str) {
+    use tokio::process::Command;
+    // Persist via a drop-in (survives reboot) and apply immediately (-w).
+    let script = "echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf \
+                  && sysctl -w net.ipv4.ip_forward=1";
+    match Command::new("limactl")
+        .env("PATH", lima_path_env())
+        // No `--workdir`: matches the established `limactl shell <vm> sudo
+        // sh -c …` pattern used elsewhere (k8s.rs, environment.rs). Lima is
+        // brew-installed and unpinned, so we avoid depending on any flag that
+        // a given Homebrew `lima` version might not have.
+        .args(["shell", name, "sudo", "sh", "-c", script])
+        .output()
+        .await
+    {
+        Ok(o) if o.status.success() => {
+            tracing::debug!("Lima VM '{name}': IPv4 forwarding ensured");
+        }
+        Ok(o) => tracing::warn!(
+            "Lima VM '{name}': enabling IPv4 forwarding returned {}: {}",
+            o.status,
+            String::from_utf8_lossy(&o.stderr).trim()
+        ),
+        Err(e) => {
+            tracing::warn!("Lima VM '{name}': enabling IPv4 forwarding failed to spawn: {e}")
+        }
+    }
+}
+
+/// Apply VM-up side effects (currently: ensure IPv4 forwarding) and wrap the
+/// Docker handle in a runtime. Funnels every success path in
+/// `connect_via_lima` so the self-heal can't be forgotten on a new branch.
+#[cfg(target_os = "macos")]
+async fn finalize_lima_runtime(
+    name: &str,
+    docker: bollard::Docker,
+) -> Arc<orca_backend_common::BollardRuntime> {
+    ensure_ip_forward(name).await;
+    Arc::new(orca_backend_common::BollardRuntime::new(docker))
+}
+
 /// Bring up Lima and return a working runtime. Handles the
 /// post-host-reboot case: capture limactl errors, force-recover on
 /// failure, then retry once.
@@ -541,7 +595,7 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
     // the socket — no need to invoke `limactl start`.
     if is_running && !was_reconfigured {
         if let Some(docker) = wait_for_lima_docker(name, 15).await {
-            return Some(Arc::new(orca_backend_common::BollardRuntime::new(docker)));
+            return Some(finalize_lima_runtime(name, docker).await);
         }
         // Running but socket isn't responsive — fall through to recovery.
         tracing::warn!("Lima VM '{name}' reports Running but Docker socket is unresponsive");
@@ -552,7 +606,7 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
     match lima_start(name).await {
         Ok(()) => {
             if let Some(docker) = wait_for_lima_docker(name, 15).await {
-                return Some(Arc::new(orca_backend_common::BollardRuntime::new(docker)));
+                return Some(finalize_lima_runtime(name, docker).await);
             }
             tracing::warn!(
                 "Lima VM '{name}': start succeeded but Docker socket never became responsive"
@@ -571,7 +625,7 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
         Ok(()) => {
             if let Some(docker) = wait_for_lima_docker(name, 15).await {
                 tracing::info!("Lima VM '{name}': recovered after force-stop");
-                return Some(Arc::new(orca_backend_common::BollardRuntime::new(docker)));
+                return Some(finalize_lima_runtime(name, docker).await);
             }
             tracing::warn!("Lima VM '{name}': tier-2 start succeeded but socket still down");
         }
@@ -592,7 +646,7 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
         Ok(()) => {
             if let Some(docker) = wait_for_lima_docker(name, 15).await {
                 tracing::info!("Lima VM '{name}': recovered after deep clean");
-                return Some(Arc::new(orca_backend_common::BollardRuntime::new(docker)));
+                return Some(finalize_lima_runtime(name, docker).await);
             }
             tracing::error!(
                 "Lima VM '{name}': deep-clean start succeeded but Docker socket never came up. \

@@ -104,6 +104,16 @@ provision:
       if ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then
         apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04
       fi
+
+      # Enable IPv4 forwarding persistently. dockerd normally sets this at
+      # daemon start, but the HWE-kernel install above forces a reboot and
+      # Orca's auto-recovery can restart the VM into a kernel where the value
+      # defaulted back to 0 before dockerd reapplied it. The result surfaces
+      # to users as "IPv4 forwarding is disabled. Networking will not work."
+      # on `docker compose up`. The sysctl.d drop-in makes it survive reboots;
+      # the `-w` applies it now without waiting for one.
+      echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf
+      sysctl -w net.ipv4.ip_forward=1
 portForwards:
   # Forward the Docker/Podman socket
   - guestSocket: "/var/run/docker.sock"
