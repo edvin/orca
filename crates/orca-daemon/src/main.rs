@@ -500,7 +500,6 @@ fn lima_deep_clean(name: &str) {
     }
 }
 
-
 /// Poll for the Lima Docker socket and return a Bollard client once a
 /// real `ping` succeeds. File existence alone is not enough — after a
 /// host reboot the socket inode often lingers without a listener.
@@ -510,13 +509,10 @@ async fn wait_for_lima_docker(name: &str, attempts: u32) -> Option<bollard::Dock
     let socket = format!("{home}/.lima/{name}/sock/docker.sock");
     for attempt in 1..=attempts {
         if std::path::Path::new(&socket).exists()
-            && let Ok(docker) =
-                bollard::Docker::connect_with_socket(&socket, 120, bollard::API_DEFAULT_VERSION)
+            && let Ok(docker) = bollard::Docker::connect_with_socket(&socket, 120, bollard::API_DEFAULT_VERSION)
             && docker.ping().await.is_ok()
         {
-            tracing::info!(
-                "Connected to Docker via Lima VM '{name}' (attempt {attempt}/{attempts})"
-            );
+            tracing::info!("Connected to Docker via Lima VM '{name}' (attempt {attempt}/{attempts})");
             return Some(docker);
         }
         if attempt < attempts {
@@ -572,10 +568,7 @@ async fn ensure_ip_forward(name: &str) {
 /// Docker handle in a runtime. Funnels every success path in
 /// `connect_via_lima` so the self-heal can't be forgotten on a new branch.
 #[cfg(target_os = "macos")]
-async fn finalize_lima_runtime(
-    name: &str,
-    docker: bollard::Docker,
-) -> Arc<orca_backend_common::BollardRuntime> {
+async fn finalize_lima_runtime(name: &str, docker: bollard::Docker) -> Arc<orca_backend_common::BollardRuntime> {
     ensure_ip_forward(name).await;
     Arc::new(orca_backend_common::BollardRuntime::new(docker))
 }
@@ -608,9 +601,7 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
             if let Some(docker) = wait_for_lima_docker(name, 15).await {
                 return Some(finalize_lima_runtime(name, docker).await);
             }
-            tracing::warn!(
-                "Lima VM '{name}': start succeeded but Docker socket never became responsive"
-            );
+            tracing::warn!("Lima VM '{name}': start succeeded but Docker socket never became responsive");
         }
         Err(e) => {
             tracing::error!("Lima VM '{name}': start failed: {e}");

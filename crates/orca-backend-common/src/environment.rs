@@ -730,7 +730,10 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     anyhow::bail!("No Lima VM exists to repair");
                 }
             };
-            send(format!(">>> Step 1/4: Stopping Lima VM '{vm}' (current status: {status})\n")).await;
+            send(format!(
+                ">>> Step 1/4: Stopping Lima VM '{vm}' (current status: {status})\n"
+            ))
+            .await;
             // Graceful stop first, then force — `--force` alone leaves the
             // VM in a bad state when it's already stopped.
             let _ = run_cmd("limactl", &["stop", &vm]).await;
@@ -762,7 +765,13 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 if std::path::Path::new(&socket).exists()
                     && run_cmd(
                         "docker",
-                        &["-H", &format!("unix://{socket}"), "info", "--format", "{{.ServerVersion}}"],
+                        &[
+                            "-H",
+                            &format!("unix://{socket}"),
+                            "info",
+                            "--format",
+                            "{{.ServerVersion}}",
+                        ],
                     )
                     .await
                     .is_ok()
@@ -1452,7 +1461,8 @@ pub async fn check_environment() -> EnvironmentStatus {
                     // No Lima VM yet — first-time setup.
                     checks.push(HealthCheck {
                         name: "Docker Runtime".to_string(),
-                        description: "Docker is not running. Click Fix to install and configure automatically.".to_string(),
+                        description: "Docker is not running. Click Fix to install and configure automatically."
+                            .to_string(),
                         status: CheckStatus::Fail,
                         fix_action: Some("setup_docker_macos".to_string()),
                         details: Some(

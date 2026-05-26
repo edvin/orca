@@ -2828,14 +2828,10 @@ async fn scan_image(
     let mut image_tar: Vec<u8> = Vec::new();
     let mut export_stream = docker.export_image(&image_ref);
     while let Some(chunk) = export_stream.next().await {
-        let bytes = chunk
-            .map_err(|e| anyhow::anyhow!("Failed to export image tar for scan: {e}"))?;
+        let bytes = chunk.map_err(|e| anyhow::anyhow!("Failed to export image tar for scan: {e}"))?;
         image_tar.extend_from_slice(&bytes);
     }
-    tracing::debug!(
-        "scan_image: exported {} bytes of image tar",
-        image_tar.len()
-    );
+    tracing::debug!("scan_image: exported {} bytes of image tar", image_tar.len());
 
     // Wrap the image tar in a second tar archive so we can use
     // upload_to_container to drop it at /tmp/image.tar inside Trivy.
@@ -3060,9 +3056,7 @@ async fn scan_image(
         )
         .await
     {
-        tracing::warn!(
-            "scan_image: failed to remove Trivy container {container_id}: {e}"
-        );
+        tracing::warn!("scan_image: failed to remove Trivy container {container_id}: {e}");
     }
 
     scan_result.map_err(Into::into)
