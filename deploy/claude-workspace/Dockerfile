@@ -20,7 +20,7 @@ ENV PATH="/usr/local/go/bin:/home/node/go/bin:${PATH}"
 # World-writable RUSTUP_HOME/CARGO_HOME let that user `cargo install` at runtime.
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:/usr/local/go/bin:/home/node/go/bin:${PATH}
+    PATH=/usr/local/cargo/bin:/usr/local/go/bin:/home/node/go/bin:/home/node/.npm-global/bin:${PATH}
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
         sh -s -- -y --no-modify-path --default-toolchain stable && \
     chmod -R a+w "$RUSTUP_HOME" "$CARGO_HOME"
@@ -32,8 +32,9 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED && \
     pip3 install --no-cache-dir pipenv poetry black ruff mypy
 
-# Node tools (yarn is already in the node:20 base image) + Claude CLI
-RUN npm install -g typescript tsx pnpm @anthropic-ai/claude-code
+# Node global tools are installed as the `node` user further down (see the
+# npm install after USER node) so they live in a user-writable prefix —
+# notably letting `claude` self-update. yarn is already in the base image.
 
 # Go tools → shared GOBIN on PATH for every user (GOBIN is build-only, not a
 # persistent ENV, so the user's own `go install` falls back to ~/go/bin).
@@ -73,10 +74,18 @@ RUN echo 'node ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/node && \
       'export RUSTUP_HOME=/usr/local/rustup' \
       'export CARGO_HOME=/usr/local/cargo' \
       'export GOPATH="$HOME/go"' \
-      'export PATH="/usr/local/cargo/bin:/usr/local/go/bin:$HOME/go/bin:$PATH"' \
+      'export NPM_CONFIG_PREFIX="$HOME/.npm-global"' \
+      'export PATH="/usr/local/cargo/bin:/usr/local/go/bin:$HOME/go/bin:$HOME/.npm-global/bin:$PATH"' \
       > /etc/profile.d/dev-tools.sh
-ENV GOPATH=/home/node/go
+# npm global prefix in the user's home so `npm i -g` (incl. claude's own
+# self-update) doesn't need write access to root-owned /usr/local.
+ENV GOPATH=/home/node/go \
+    NPM_CONFIG_PREFIX=/home/node/.npm-global
 WORKDIR /workspace
 USER node
+
+# Install global Node tools as `node` (not root) so they're user-owned and
+# updatable — claude can self-update via `npm i -g @anthropic-ai/claude-code`.
+RUN npm install -g typescript tsx pnpm @anthropic-ai/claude-code
 
 CMD ["bash"]
