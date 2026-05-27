@@ -447,9 +447,11 @@
     "image": "ghcr.io/edvin/orca-claude-workspace:latest",
     "default_ports": [],
     "default_env": [],
-    "default_volumes": [],
+    "default_volumes": [
+      "claude-workspace-home:/home/dev"
+    ],
     "restart_policy": "no",
-    "notes": "Mount your project directory as a volume (e.g., /home/user/myproject:/workspace).\n\nOpen a terminal into the container and run `claude` to start. You can either:\n- Run `claude login` to authenticate with your Anthropic account (no API key needed)\n- Or set ANTHROPIC_API_KEY as an environment variable\n\nIncludes: Node 20, Python 3, Go, Rust, PHP 8, Claude CLI, TypeScript, pnpm, Docker CLI, GitHub CLI.",
+    "notes": "Mount your project directory as a volume (e.g., /home/user/myproject:/workspace).\n\nThe `claude-workspace-home:/home/dev` named volume persists your `claude login` and any self-updates across container restarts. Keep it a NAMED volume — a bind mount over /home/dev would hide the bundled tools.\n\nOpen a terminal into the container and run `claude` to start. You can either:\n- Run `claude login` to authenticate with your Anthropic account (no API key needed)\n- Or set ANTHROPIC_API_KEY as an environment variable\n\nIncludes: Node 20, Python 3, Go, Rust, PHP 8, Claude CLI, TypeScript, pnpm, Docker CLI, GitHub CLI. Runs as non-root user `dev`.",
     "is_builtin": true
   },
   {
