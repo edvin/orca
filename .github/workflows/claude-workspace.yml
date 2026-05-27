@@ -6,6 +6,11 @@ on:
       - 'deploy/claude-workspace/**'
     branches: [main]
   workflow_dispatch:
+  schedule:
+    # Weekly rebuild (Mondays 06:00 UTC) so the published :latest stays current
+    # with new Claude Code releases, tool updates, and base-image security
+    # patches — without waiting for a Dockerfile change.
+    - cron: '0 6 * * 1'
 
 env:
   REGISTRY: ghcr.io
