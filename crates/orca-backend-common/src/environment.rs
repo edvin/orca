@@ -585,7 +585,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                         "--cpus=4",
                         "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
                         "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
-                        "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Install HWE kernel for idmapped mount support (6.12+)\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n"}]"##,
+                        "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Install HWE kernel for idmapped mount support (6.12+)\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n# Enable IPv4 forwarding before dockerd needs it. dockerd reads ip_forward only\n# at startup; if it boots with forwarding off it warns 'IPv4 forwarding is\n# disabled' for its whole lifetime, so set it (and bounce docker) when off. The\n# drop-in persists, applied early by systemd-sysctl before docker on later boots.\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\nif [ $(cat /proc/sys/net/ipv4/ip_forward) != 1 ]; then\n  sysctl -w net.ipv4.ip_forward=1\n  systemctl is-active --quiet docker && systemctl restart docker || true\nfi\n"}]"##,
                         "template:docker"],
                     &tx
                 ).await;

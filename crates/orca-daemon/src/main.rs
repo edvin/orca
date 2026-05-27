@@ -534,24 +534,32 @@ async fn wait_for_lima_docker(name: &str, attempts: u32) -> Option<bollard::Dock
     None
 }
 
-/// Ensure IPv4 forwarding is enabled inside an already-running Lima VM.
+/// Ensure IPv4 forwarding is enabled inside an already-running Lima VM, and
+/// bounce dockerd if it came up without it.
 ///
-/// dockerd enables this at daemon start, but our provisioning installs the
-/// HWE kernel (which forces a reboot) and the auto-recovery paths below can
-/// restart the VM into a kernel where `net.ipv4.ip_forward` reset to its
-/// default of 0 before dockerd reapplied it. That breaks container
-/// networking with "IPv4 forwarding is disabled. Networking will not work."
+/// dockerd reads `net.ipv4.ip_forward` only at startup. Our provisioning
+/// installs the HWE kernel (forcing a reboot) and the auto-recovery paths
+/// below restart the VM; if dockerd comes up before the value is 1 it caches
+/// "disabled" and prints "IPv4 forwarding is disabled. Networking will not
+/// work." for its whole lifetime. Flipping the sysctl afterwards does NOT
+/// clear that — only a `systemctl restart docker` makes dockerd re-read it.
 ///
-/// Newly created VMs get the same drop-in via the Lima provision script, so
-/// this only matters for VMs created before that fix shipped. It's cheap and
-/// idempotent, so we run it unconditionally once the VM is up. Best-effort:
-/// a failure here is logged, not fatal — networking may already be fine.
+/// So we persist a drop-in (applied early on future boots, before dockerd)
+/// and, only when the live value is currently 0, set it and restart dockerd.
+/// Gating on the current value keeps this a no-op — no container-network
+/// blip — on the common already-healthy boot. Best-effort: a failure here is
+/// logged, not fatal.
 #[cfg(target_os = "macos")]
 async fn ensure_ip_forward(name: &str) {
     use tokio::process::Command;
-    // Persist via a drop-in (survives reboot) and apply immediately (-w).
-    let script = "echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf \
-                  && sysctl -w net.ipv4.ip_forward=1";
+    // Persist via a drop-in (survives reboot, applied by systemd-sysctl before
+    // dockerd on future boots). Only touch the live value / restart dockerd
+    // when forwarding is actually off — see the doc comment above.
+    let script = "echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf; \
+                  if [ \"$(cat /proc/sys/net/ipv4/ip_forward)\" != \"1\" ]; then \
+                  sysctl -w net.ipv4.ip_forward=1; \
+                  systemctl restart docker 2>/dev/null || true; \
+                  fi";
     match Command::new("limactl")
         .env("PATH", lima_path_env())
         // No `--workdir`: matches the established `limactl shell <vm> sudo
