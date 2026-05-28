@@ -257,8 +257,11 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
             // created or recovered VMs would.
             #[cfg(target_os = "macos")]
             {
+                // Fire-and-forget: never block the connect path on `limactl
+                // shell`. A wedged VM here would otherwise hang daemon startup
+                // and surface as "Daemon restart failed" in the UI.
                 if let Some(vm) = lima_vm_from_socket(&socket_path) {
-                    ensure_ip_forward(&vm).await;
+                    tokio::spawn(async move { ensure_ip_forward(&vm).await });
                 }
             }
             let rt = Arc::new(native.runtime);
@@ -552,6 +555,7 @@ async fn wait_for_lima_docker(name: &str, attempts: u32) -> Option<bollard::Dock
 #[cfg(target_os = "macos")]
 async fn ensure_ip_forward(name: &str) {
     use tokio::process::Command;
+    use tokio::time::{Duration, timeout};
     // Persist via a drop-in (survives reboot, applied by systemd-sysctl before
     // dockerd on future boots). Only touch the live value / restart dockerd
     // when forwarding is actually off — see the doc comment above.
@@ -560,16 +564,27 @@ async fn ensure_ip_forward(name: &str) {
                   sysctl -w net.ipv4.ip_forward=1; \
                   systemctl restart docker 2>/dev/null || true; \
                   fi";
-    match Command::new("limactl")
+    // Hard cap so a wedged VM can't make `limactl shell` block forever. Callers
+    // also fire-and-forget (`tokio::spawn`) so even a 30-second stall here
+    // can't delay daemon startup or the connect path.
+    let fut = Command::new("limactl")
         .env("PATH", lima_path_env())
         // No `--workdir`: matches the established `limactl shell <vm> sudo
         // sh -c …` pattern used elsewhere (k8s.rs, environment.rs). Lima is
         // brew-installed and unpinned, so we avoid depending on any flag that
         // a given Homebrew `lima` version might not have.
         .args(["shell", name, "sudo", "sh", "-c", script])
-        .output()
-        .await
-    {
+        .output();
+    let result = match timeout(Duration::from_secs(30), fut).await {
+        Ok(r) => r,
+        Err(_) => {
+            tracing::warn!(
+                "Lima VM '{name}': enabling IPv4 forwarding timed out after 30s — VM unresponsive, skipping"
+            );
+            return;
+        }
+    };
+    match result {
         Ok(o) if o.status.success() => {
             tracing::debug!("Lima VM '{name}': IPv4 forwarding ensured");
         }
@@ -599,7 +614,11 @@ fn lima_vm_from_socket(socket_path: &str) -> Option<String> {
 /// `connect_via_lima` so the self-heal can't be forgotten on a new branch.
 #[cfg(target_os = "macos")]
 async fn finalize_lima_runtime(name: &str, docker: bollard::Docker) -> Arc<orca_backend_common::BollardRuntime> {
-    ensure_ip_forward(name).await;
+    // Fire-and-forget — same rationale as the native-connect arm above: a
+    // wedged `limactl shell` here must not block `connect_via_lima` from
+    // returning, since that would stall daemon startup.
+    let vm = name.to_string();
+    tokio::spawn(async move { ensure_ip_forward(&vm).await });
     Arc::new(orca_backend_common::BollardRuntime::new(docker))
 }
 
