@@ -65,6 +65,7 @@ body {
 
 input, textarea, select, [contenteditable],
 pre, code, .mono, .selectable, .log-content,
+.ai-window-msg-bubble,
 .cm-editor, .monaco-editor, .xterm {
   user-select: text;
   -webkit-user-select: text;

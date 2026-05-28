@@ -132,7 +132,7 @@ export default function ConfirmDialog() {
                 </button>
               </div>
               <div class="modal-body">
-                <p style={{ "line-height": "1.5", "white-space": "pre-wrap" }}>
+                <p class="selectable" style={{ "line-height": "1.5", "white-space": "pre-wrap" }}>
                   {opts().message}
                 </p>
               </div>
