@@ -512,6 +512,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
           }
         >
           <div
+            class="selectable"
             ref={logContainer}
             onScroll={handleScroll}
             style={{

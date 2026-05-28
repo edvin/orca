@@ -52,6 +52,24 @@ body {
   line-height: 1.5;
 }
 
+/* ==================== Text selection ====================
+   Desktop-app convention: chrome (labels, nav, buttons) is not selectable, so
+   Cmd/Ctrl+A and drag-select can't grab the whole window — including the
+   background behind a modal. Real content (logs, code, editors, terminals,
+   form fields) opts back in below; add `selectable` to any other container
+   whose text should be copyable. */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input, textarea, select, [contenteditable],
+pre, code, .mono, .selectable, .log-content,
+.cm-editor, .monaco-editor, .xterm {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* ==================== App Layout ==================== */
 .app-root {
   display: flex;

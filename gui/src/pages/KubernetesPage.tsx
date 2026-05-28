@@ -3646,7 +3646,7 @@ spec:
                 }}>Close</button>
               </div>
             </div>
-            <div ref={logContainerRef} style={{
+            <div ref={logContainerRef} class="selectable" style={{
               flex: "1",
               overflow: "auto",
               padding: "12px 16px",
