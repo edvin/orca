@@ -153,6 +153,9 @@ pub async fn run_cmd_streaming(
             let mut reader = BufReader::new(out).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 update_last(&last2);
+                // Tee to the daemon log: the GUI stream is ephemeral, so this
+                // is the only durable record of what limactl/apt actually did.
+                tracing::info!(target: "fix_stream", "[out] {line}");
                 let _ = tx2.send(line).await;
             }
         }
@@ -165,6 +168,7 @@ pub async fn run_cmd_streaming(
             let mut reader = BufReader::new(err).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 update_last(&last3);
+                tracing::info!(target: "fix_stream", "[err] {line}");
                 let _ = tx3.send(line).await;
             }
         }
@@ -585,7 +589,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                         "--cpus=4",
                         "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
                         "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
-                        "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Install HWE kernel for idmapped mount support (6.12+)\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n# Persist IPv4 forwarding via a drop-in so systemd-sysctl applies it early on\n# future boots, before dockerd starts. Intentionally NO sysctl -w or\n# systemctl restart docker here: heavy systemctl actions inside cloud-init\n# provision stalled boot for ~10 min on 0.46.9. The daemon's runtime\n# self-heal handles flipping the live value (and bouncing dockerd if needed)\n# once we can reach the VM.\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n"}]"##,
+                        "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Keep apt fully non-interactive: under cloud-init there is no stdin, so a\n# debconf/needrestart prompt (24.04 pops 'which services to restart?' when a\n# kernel lands) would block provision forever. This was the silent post-boot\n# hang: VM reaches a login prompt, then provision wedges on apt.\nexport DEBIAN_FRONTEND=noninteractive\nexport NEEDRESTART_MODE=a\n# Install HWE kernel for idmapped mount support (6.12+). Best-effort: docker\n# works without it, so a slow/flaky apt mirror must never fail or hang setup.\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04 || true\nfi\n# Persist IPv4 forwarding via a drop-in so systemd-sysctl applies it early on\n# future boots, before dockerd starts. Intentionally NO sysctl -w or\n# systemctl restart docker here: heavy systemctl actions inside cloud-init\n# provision stalled boot for ~10 min on 0.46.9. The daemon's runtime\n# self-heal handles flipping the live value (and bouncing dockerd if needed)\n# once we can reach the VM.\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n"}]"##,
                         "template:docker"],
                     &tx
                 ).await;
@@ -2094,7 +2098,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                     "--memory=8", "--cpus=4",
                     "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
                     "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
-                    "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Install HWE kernel for idmapped mount support (6.12+)\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n"}]"##,
+                    "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Keep apt fully non-interactive: under cloud-init there is no stdin, so a\n# debconf/needrestart prompt (24.04 pops 'which services to restart?' when a\n# kernel lands) would block provision forever.\nexport DEBIAN_FRONTEND=noninteractive\nexport NEEDRESTART_MODE=a\n# Install HWE kernel for idmapped mount support (6.12+). Best-effort: docker\n# works without it, so a slow/flaky apt mirror must never fail or hang setup.\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04 || true\nfi\n"}]"##,
                     "template:docker"]).await {
                     Ok(_) => output.push_str("VM created.\n"),
                     Err(e) => output.push_str(&format!("VM creation failed: {e}\n")),
