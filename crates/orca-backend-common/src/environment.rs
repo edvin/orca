@@ -14,6 +14,51 @@ fn extended_path() -> String {
     format!("/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/sbin:{current}")
 }
 
+/// Minimum Lima version Orca's macOS setup is verified against. Lima 2.0
+/// (released 2025-11-06) is the first release whose VZ + usernet SSH bring-up
+/// we've confirmed works with our `limactl create` config; older 1.x can hang
+/// at "Waiting for port …:22" forever. Bumping this is a deliberate, tested
+/// release decision — keep it a compiled-in constant, not runtime config, so
+/// it can't drift from the code that actually drives Lima.
+const MIN_LIMA: (u32, u32, u32) = (2, 0, 0);
+
+/// Parse `limactl --version` output (e.g. "limactl version 2.0.0") into a
+/// (major, minor, patch) tuple. Tolerates a leading `v` and pre-release
+/// suffixes ("2.1.0-rc.1" → (2,1,0)). Returns None if no dotted version found.
+fn parse_lima_version(s: &str) -> Option<(u32, u32, u32)> {
+    for tok in s.split_whitespace() {
+        let t = tok.trim_start_matches('v');
+        let mut parts = t.split('.');
+        let (Some(a), Some(b)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        let (Ok(major), Ok(minor)) = (a.parse::<u32>(), b.parse::<u32>()) else {
+            continue;
+        };
+        // Patch may carry a suffix ("0-rc1") or be absent entirely.
+        let patch = parts
+            .next()
+            .and_then(|p| p.split(|c: char| !c.is_ascii_digit()).next())
+            .and_then(|p| p.parse::<u32>().ok())
+            .unwrap_or(0);
+        return Some((major, minor, patch));
+    }
+    None
+}
+
+/// Path to the marker file recording which Lima version created an instance.
+/// Co-located inside the instance dir so it's deleted with the VM (and
+/// re-stamped on recreate). Used to detect a stale VM built by an older Lima.
+fn lima_marker_path(vm: &str) -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    Some(
+        std::path::Path::new(&home)
+            .join(".lima")
+            .join(vm)
+            .join("orca-created-by"),
+    )
+}
+
 async fn detect_cli() -> &'static str {
     CLI_CELL
         .get_or_init(|| async {
@@ -487,14 +532,20 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
 
             // Step 2: Install Lima + Docker CLI + Docker Compose
             send(">>> Step 2/5: Installing Lima, Docker CLI, and Compose...\n".into()).await;
-            let lima_installed = run_cmd("limactl", &["--version"]).await.is_ok();
+            // Capture the version, don't just check presence: brew `install`
+            // is a no-op when limactl already exists, so a pre-existing (often
+            // years-old) Lima is never bumped unless we `upgrade` it below.
+            let lima_version = run_cmd("limactl", &["--version"])
+                .await
+                .ok()
+                .and_then(|s| parse_lima_version(&s));
             let docker_cli_installed = run_cmd("docker", &["--version"]).await.is_ok();
             let compose_installed = run_cmd("docker", &["compose", "version"]).await.is_ok();
             let buildx_installed = run_cmd("docker", &["buildx", "version"]).await.is_ok();
 
             {
                 let mut packages = Vec::new();
-                if !lima_installed {
+                if lima_version.is_none() {
                     packages.push("lima");
                 }
                 if !docker_cli_installed {
@@ -552,6 +603,52 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 }
             }
 
+            // Ensure Lima meets the minimum version we test against. A
+            // pre-existing limactl below MIN is the silent cause of VMs that
+            // boot but never become reachable ("Waiting for port …:22"), so
+            // upgrade it explicitly — brew `install` above would have skipped it.
+            if let Some(cur) = lima_version
+                && cur < MIN_LIMA
+            {
+                send(format!(
+                    "    Lima {}.{}.{} is older than the required {}.{}.{} — upgrading...\n",
+                    cur.0, cur.1, cur.2, MIN_LIMA.0, MIN_LIMA.1, MIN_LIMA.2
+                ))
+                .await;
+                if let Err(e) = run_cmd_streaming("brew", &["upgrade", "lima"], &tx).await {
+                    send(format!("\n    brew upgrade lima failed: {e}\n")).await;
+                    anyhow::bail!("Failed to upgrade Lima via Homebrew: {e}");
+                }
+            }
+            // Re-verify after any install/upgrade. Refuse to proceed on a Lima
+            // below MIN rather than create a VM that may never become reachable.
+            match run_cmd("limactl", &["--version"])
+                .await
+                .ok()
+                .and_then(|s| parse_lima_version(&s))
+            {
+                Some(v) if v >= MIN_LIMA => {
+                    send(format!("    Lima {}.{}.{} OK.\n", v.0, v.1, v.2)).await;
+                }
+                Some(v) => {
+                    anyhow::bail!(
+                        "Orca requires Lima >= {}.{}.{}, but found {}.{}.{}. \
+                         Run `brew update && brew upgrade lima`, then try again.",
+                        MIN_LIMA.0,
+                        MIN_LIMA.1,
+                        MIN_LIMA.2,
+                        v.0,
+                        v.1,
+                        v.2
+                    );
+                }
+                None => {
+                    anyhow::bail!(
+                        "Lima is not available after install. Install it with `brew install lima`."
+                    );
+                }
+            }
+
             // Step 3: Create Lima VM with Docker
             send(">>> Step 3/5: Creating Lima VM with Docker...\n".into()).await;
 
@@ -574,6 +671,34 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
 
             if has_orca_vm {
                 send(format!("    Lima VM '{}' already exists.\n", vm_name)).await;
+                // Surface a stale instance (built by an older Lima) — it can
+                // boot but never become reachable. We never auto-delete; the
+                // user chooses Recreate.
+                if let Some(p) = lima_marker_path(vm_name) {
+                    match std::fs::read_to_string(&p)
+                        .ok()
+                        .and_then(|s| parse_lima_version(&s))
+                    {
+                        Some(v) if v < MIN_LIMA => {
+                            send(format!(
+                                "    Note: this VM was created by Lima {}.{}.{}, older than the \
+                                 required {}.{}.{}. If Docker doesn't come up below, use Recreate \
+                                 to rebuild it.\n",
+                                v.0, v.1, v.2, MIN_LIMA.0, MIN_LIMA.1, MIN_LIMA.2
+                            ))
+                            .await;
+                        }
+                        None => {
+                            send(
+                                "    Note: this VM predates Orca version tracking. If Docker \
+                                 doesn't come up below, use Recreate to rebuild it.\n"
+                                    .into(),
+                            )
+                            .await;
+                        }
+                        _ => {}
+                    }
+                }
             } else {
                 send("    Creating 'orca' VM with Apple Virtualization...\n".into()).await;
                 send("    This downloads a Linux image, installs Docker, and upgrades the kernel.\n".into()).await;
@@ -599,6 +724,18 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     anyhow::bail!("Failed to create Lima VM: {e}");
                 }
                 send("\n    VM created.\n".into()).await;
+
+                // Stamp the Lima version that built this instance so a future
+                // setup can detect a stale VM (older Lima) and offer Recreate
+                // rather than silently reusing it.
+                if let Some(v) = run_cmd("limactl", &["--version"])
+                    .await
+                    .ok()
+                    .and_then(|s| parse_lima_version(&s))
+                    && let Some(p) = lima_marker_path("orca")
+                {
+                    let _ = std::fs::write(&p, format!("{}.{}.{}\n", v.0, v.1, v.2));
+                }
             }
 
             // Step 4: Start the VM
@@ -716,8 +853,22 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 }
                 Err(e) => {
                     send(format!("    Docker verification failed: {e}\n")).await;
-                    send("    The VM is running but Docker may still be starting.\n".into()).await;
-                    send("    Try restarting Orca Desktop in a minute.\n".into()).await;
+                    send("    The VM is running but Docker inside it never became reachable.\n".into())
+                        .await;
+                    send(
+                        "    This is the signature of a stale VM (often one built by an older\n"
+                            .into(),
+                    )
+                    .await;
+                    send(
+                        "    Lima). Wait a minute and restart Orca; if it persists, use the\n"
+                            .into(),
+                    )
+                    .await;
+                    send(
+                        "    'Recreate VM' button on the System Health page to rebuild it.\n".into(),
+                    )
+                    .await;
                 }
             }
         }
@@ -755,7 +906,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 Err(e) => {
                     send(format!("\n    Start failed: {e}\n")).await;
                     send("    The disk image or config may be corrupt.\n".into()).await;
-                    send("    Use Settings → Reset Orca to recreate the VM\n".into()).await;
+                    send("    Use the 'Recreate VM' button on the System Health page to rebuild it.\n".into()).await;
                     send("    (warning: this deletes containers and images).\n".into()).await;
                     anyhow::bail!("limactl start failed: {e}");
                 }
@@ -793,9 +944,31 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             } else {
                 send("    Docker socket did not come up within 30s.\n".into()).await;
                 send("    The VM started but Docker inside it isn't responding.\n".into()).await;
-                send("    Try again, or use Settings → Reset Orca to recreate the VM.\n".into()).await;
+                send("    Try again, or use the 'Recreate VM' button on the System Health page.\n".into()).await;
                 anyhow::bail!("VM started but Docker socket never became reachable");
             }
+        }
+        #[cfg(target_os = "macos")]
+        "recreate_lima_orca" => {
+            // Destructive: only ever invoked after explicit user confirmation in
+            // the GUI. Deletes the existing VM and rebuilds a fresh one — the
+            // fix for a stale instance created by an older Lima that the normal
+            // setup path would otherwise reuse as-is (see the "already exists"
+            // branch in setup_docker_macos).
+            send(">>> Recreating the Docker VM\n".into()).await;
+            send("    This permanently deletes the existing Lima VM and builds a fresh one.\n".into()).await;
+            send("    Containers, images, and volumes inside it are NOT preserved.\n\n".into()).await;
+            // Force-stop first so delete can't fail on a running or wedged VM.
+            for name in ["orca", "docker", "default"] {
+                let _ = run_cmd("limactl", &["stop", "-f", name]).await;
+                let _ = run_cmd("limactl", &["delete", "-f", name]).await;
+            }
+            send("    Old VM removed. Building a fresh one...\n\n".into()).await;
+            // Delegate to the full setup path: it re-checks the Lima version and,
+            // with no instance present, creates + starts + verifies a new one.
+            // Boxed because this recurses into the same async fn; clone tx so the
+            // `send` closure's borrow of it isn't moved out.
+            return Box::pin(run_fix_streaming("setup_docker_macos", tx.clone())).await;
         }
         // For all other actions, fall back to non-streaming run_fix
         _ => {
@@ -1457,7 +1630,7 @@ pub async fn check_environment() -> EnvironmentStatus {
                         fix_action: Some("repair_lima_orca".to_string()),
                         details: Some(
                             "Stops the VM, removes stale lock and socket files, and restarts it. \
-                             If repair fails, use the Reset action in Settings to recreate the VM."
+                             If repair fails, use the 'Recreate VM' button on the System Health page."
                                 .to_string(),
                         ),
                     });
@@ -2172,11 +2345,23 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 Err(e) => {
                     return Err(anyhow::anyhow!(
                         "Repair failed at start step: {e}\n\
-                         Try the streaming Repair from the Environment page, or use Reset Orca."
+                         Try the streaming Repair from the Environment page, or 'Recreate VM'."
                     ));
                 }
             }
             Ok(output)
+        }
+        #[cfg(target_os = "macos")]
+        "recreate_lima_orca" => {
+            // Non-streaming fallback for the destructive recreate (the GUI uses
+            // the streaming path; this only runs if the SSE stream itself
+            // failed). Confirmation already happened in the GUI.
+            for name in ["orca", "docker", "default"] {
+                let _ = run_cmd("limactl", &["stop", "-f", name]).await;
+                let _ = run_cmd("limactl", &["delete", "-f", name]).await;
+            }
+            // Delegate to setup, which recreates when no instance is present.
+            Box::pin(run_fix("setup_docker_macos")).await
         }
         _ => anyhow::bail!("Unknown fix action: {action}"),
     }

@@ -5,6 +5,7 @@ import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth, DockerD
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
+import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
 
 export default function EnvironmentPage() {
@@ -336,6 +337,25 @@ export default function EnvironmentPage() {
               runFix(action, "Docker Setup");
             }}>
               Set up Docker
+            </button>
+          </Show>
+          <Show when={navigator.platform.includes("Mac")}>
+            <button
+              class="btn"
+              disabled={actionRunning()}
+              onClick={async () => {
+                const ok = await confirmDanger({
+                  title: "Recreate Docker VM?",
+                  message:
+                    "This permanently deletes the existing Lima VM and builds a fresh one. " +
+                    "Containers, images, and volumes inside it will be lost. " +
+                    "Use this if the VM won't start or Docker never becomes reachable.",
+                  confirmLabel: "Recreate VM",
+                });
+                if (ok) runFix("recreate_lima_orca", "Recreate Docker VM");
+              }}
+            >
+              Recreate VM
             </button>
           </Show>
           <button class="btn" onClick={restartDocker} disabled={restartingDocker() || restartingOrca()}>
