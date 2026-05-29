@@ -59,6 +59,35 @@ fn lima_marker_path(vm: &str) -> Option<std::path::PathBuf> {
     )
 }
 
+// ---- Orca's Lima VM `--set` overrides (shared by both `limactl create` sites
+// so the config can't drift between them).
+
+/// Forward all 127.0.0.1-bound guest ports to the host, matching Docker
+/// Desktop's localhost behavior.
+const ORCA_PORT_FORWARDS: &str = r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#;
+
+/// Bind-mount the host's /Volumes and /private into the guest (writable).
+const ORCA_MOUNTS: &str = r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#;
+
+/// Pin the guest to Ubuntu 26.04 LTS (one image per arch; Lima picks the host's).
+/// Why this base: systemd 259 (>=256) lets Lima carry SSH + the docker-socket
+/// forward over **AF_VSOCK** (`.ssh.overVsock`) — a hypervisor channel that an
+/// IP-layer mesh VPN (NetBird/Tailscale/WireGuard) cannot intercept, unlike the
+/// gvisor *usernet IP* path 24.04 was stuck on (24.04 = systemd 255, one short).
+/// And kernel 7.0 has native idmapped overlayfs, so the old HWE-kernel apt
+/// install (the source of the 0.46.9 boot hang) is no longer needed.
+const ORCA_IMAGES: &str = r#".images = [{"location": "https://cloud-images.ubuntu.com/releases/resolute/release/ubuntu-26.04-server-cloudimg-arm64.img", "arch": "aarch64"}, {"location": "https://cloud-images.ubuntu.com/releases/resolute/release/ubuntu-26.04-server-cloudimg-amd64.img", "arch": "x86_64"}]"#;
+
+/// Use vsock for SSH (and thus the docker-socket forward). Auto-engages on a
+/// systemd-256+ guest; set explicitly to document intent and the VPN rationale.
+const ORCA_SSH_OVER_VSOCK: &str = ".ssh.overVsock = true";
+
+/// Provision now only persists IPv4 forwarding via a sysctl drop-in (applied by
+/// systemd-sysctl before dockerd on boot; the daemon self-heal flips the live
+/// value once reachable). No apt, no kernel install — kernel 7.0 already has
+/// idmapped overlayfs — so there's no cloud-init apt/debconf hang surface left.
+const ORCA_PROVISION: &str = r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n"}]"##;
+
 async fn detect_cli() -> &'static str {
     CLI_CELL
         .get_or_init(|| async {
@@ -701,23 +730,38 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 }
             } else {
                 send("    Creating 'orca' VM with Apple Virtualization...\n".into()).await;
-                send("    This downloads a Linux image, installs Docker, and upgrades the kernel.\n".into()).await;
+                send("    This downloads a Linux image (Ubuntu 26.04 LTS) and installs Docker.\n".into()).await;
                 send("    First-time setup takes 3-5 minutes.\n\n".into()).await;
 
-                // Create VM with --set to add port forwarding for 127.0.0.1-bound ports
-                // This matches Docker Desktop behavior where localhost:80 works from the host
+                // Create the VM. Args shared with the non-streaming run_fix path
+                // via the ORCA_* constants so the two can't drift. 26.04 + vsock
+                // is what lets the host↔guest channel survive a mesh VPN.
                 let create_result = run_cmd_streaming(
-                    "limactl", &["create", "--name=orca", "--vm-type=vz",
-                        "--rosetta", "--mount-writable",
+                    "limactl",
+                    &[
+                        "create",
+                        "--name=orca",
+                        "--vm-type=vz",
+                        "--rosetta",
+                        "--mount-writable",
                         "--mount-type=virtiofs",
                         "--memory=8",
                         "--cpus=4",
-                        "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
-                        "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
-                        "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Keep apt fully non-interactive: under cloud-init there is no stdin, so a\n# debconf/needrestart prompt (24.04 pops 'which services to restart?' when a\n# kernel lands) would block provision forever. This was the silent post-boot\n# hang: VM reaches a login prompt, then provision wedges on apt.\nexport DEBIAN_FRONTEND=noninteractive\nexport NEEDRESTART_MODE=a\n# Install HWE kernel for idmapped mount support (6.12+). Best-effort: docker\n# works without it, so a slow/flaky apt mirror must never fail or hang setup.\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04 || true\nfi\n# Persist IPv4 forwarding via a drop-in so systemd-sysctl applies it early on\n# future boots, before dockerd starts. Intentionally NO sysctl -w or\n# systemctl restart docker here: heavy systemctl actions inside cloud-init\n# provision stalled boot for ~10 min on 0.46.9. The daemon's runtime\n# self-heal handles flipping the live value (and bouncing dockerd if needed)\n# once we can reach the VM.\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n"}]"##,
-                        "template:docker"],
-                    &tx
-                ).await;
+                        "--set",
+                        ORCA_IMAGES,
+                        "--set",
+                        ORCA_SSH_OVER_VSOCK,
+                        "--set",
+                        ORCA_PORT_FORWARDS,
+                        "--set",
+                        ORCA_MOUNTS,
+                        "--set",
+                        ORCA_PROVISION,
+                        "template:docker",
+                    ],
+                    &tx,
+                )
+                .await;
 
                 if let Err(e) = create_result {
                     send(format!("\n    VM creation failed: {e}\n")).await;
@@ -803,30 +847,9 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             }
             send("    VM is reachable.\n".into()).await;
 
-            // Reboot to activate HWE kernel (6.17) if it was just provisioned
-            let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
-                .await
-                .unwrap_or_default();
-            if kernel_ver.trim().starts_with("6.8.") || kernel_ver.trim().starts_with("6.5.") {
-                send(">>> Activating upgraded kernel...\n".into()).await;
-                send("    Rebooting VM to switch from kernel ".into()).await;
-                send(format!(
-                    "{} to HWE kernel. This takes ~30 seconds.\n",
-                    kernel_ver.trim()
-                ))
-                .await;
-                let _ = run_cmd("limactl", &["stop", vm_name]).await;
-                let _ = run_cmd_streaming("limactl", &["start", vm_name], &tx).await;
-                let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
-                    .await
-                    .unwrap_or_default();
-                send(format!(
-                    "    Kernel upgraded: {} → {}\n",
-                    kernel_ver.trim(),
-                    new_ver.trim()
-                ))
-                .await;
-            }
+            // (No kernel-activation reboot: the 26.04 base ships kernel 7.0 with
+            // native idmapped overlayfs, so the old HWE-kernel install + reboot
+            // dance is gone.)
 
             // Step 5: Configure Docker context to use Lima
             send(">>> Step 5/5: Configuring Docker...\n".into()).await;
@@ -2315,12 +2338,34 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 .any(|l| l.trim() == "orca" || l.trim() == "docker" || l.trim() == "default")
             {
                 output.push_str("Creating Lima VM 'orca'...\n");
-                match run_cmd("limactl", &["create", "--name=orca", "--vm-type=vz", "--rosetta", "--mount-writable", "--mount-type=virtiofs",
-                    "--memory=8", "--cpus=4",
-                    "--set", r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
-                    "--set", r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#,
-                    "--set", r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\n# Keep apt fully non-interactive: under cloud-init there is no stdin, so a\n# debconf/needrestart prompt (24.04 pops 'which services to restart?' when a\n# kernel lands) would block provision forever.\nexport DEBIAN_FRONTEND=noninteractive\nexport NEEDRESTART_MODE=a\n# Install HWE kernel for idmapped mount support (6.12+). Best-effort: docker\n# works without it, so a slow/flaky apt mirror must never fail or hang setup.\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04 || true\nfi\n"}]"##,
-                    "template:docker"]).await {
+                // Same args as the streaming path, via the shared ORCA_* consts
+                // (26.04 + vsock; no HWE-kernel install).
+                match run_cmd(
+                    "limactl",
+                    &[
+                        "create",
+                        "--name=orca",
+                        "--vm-type=vz",
+                        "--rosetta",
+                        "--mount-writable",
+                        "--mount-type=virtiofs",
+                        "--memory=8",
+                        "--cpus=4",
+                        "--set",
+                        ORCA_IMAGES,
+                        "--set",
+                        ORCA_SSH_OVER_VSOCK,
+                        "--set",
+                        ORCA_PORT_FORWARDS,
+                        "--set",
+                        ORCA_MOUNTS,
+                        "--set",
+                        ORCA_PROVISION,
+                        "template:docker",
+                    ],
+                )
+                .await
+                {
                     Ok(_) => output.push_str("VM created.\n"),
                     Err(e) => output.push_str(&format!("VM creation failed: {e}\n")),
                 }
@@ -2329,23 +2374,8 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             output.push_str(&format!("Starting Lima VM '{vm_name}'...\n"));
             let _ = run_cmd("limactl", &["start", vm_name]).await;
 
-            // Reboot to activate HWE kernel if needed
-            let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
-                .await
-                .unwrap_or_default();
-            if kernel_ver.trim().starts_with("6.8.") || kernel_ver.trim().starts_with("6.5.") {
-                output.push_str("Activating HWE kernel (reboot)...\n");
-                let _ = run_cmd("limactl", &["stop", vm_name]).await;
-                let _ = run_cmd("limactl", &["start", vm_name]).await;
-                let new_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
-                    .await
-                    .unwrap_or_default();
-                output.push_str(&format!(
-                    "Kernel upgraded: {} → {}\n",
-                    kernel_ver.trim(),
-                    new_ver.trim()
-                ));
-            }
+            // (No kernel-activation reboot — 26.04 ships kernel 7.0 with native
+            // idmapped overlayfs.)
 
             // Verify
             match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
