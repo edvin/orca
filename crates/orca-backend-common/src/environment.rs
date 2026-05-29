@@ -755,6 +755,54 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             }
             send("    VM is running.\n".into()).await;
 
+            // Reachability gate. A managed/corporate Mac can intercept Lima's VZ
+            // host<->guest channel: the VM boots (VZ "running") but the hostagent
+            // can never reach guest SSH, so `limactl start` loops "Waiting for
+            // port ...:22" to a 10-minute timeout. Detect that here and give an
+            // accurate diagnosis instead of grinding through the kernel-reboot
+            // and docker-verify steps below — which would otherwise hang on
+            // `limactl shell` or leave the UI flooding with 500s. `limactl shell`
+            // against an unreachable VM returns "connection refused" promptly, so
+            // this probe is bounded (~30s) and won't stall a healthy slow boot.
+            send(">>> Checking the VM is reachable...\n".into()).await;
+            let mut reachable = false;
+            for i in 0..10 {
+                if run_cmd("limactl", &["shell", vm_name, "true"]).await.is_ok() {
+                    reachable = true;
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                if i % 3 == 2 {
+                    send(format!(
+                        "    Still waiting for the VM to accept connections... ({}s)\n",
+                        (i + 1) * 3
+                    ))
+                    .await;
+                }
+            }
+            if !reachable {
+                send("\n    The VM started but its network never came up — the host can't reach it.\n".into())
+                    .await;
+                send("    On managed/corporate Macs this is almost always endpoint-security or\n".into())
+                    .await;
+                send("    network-filtering software (a content-filter / VPN / EDR system extension)\n".into())
+                    .await;
+                send("    intercepting the VM's host networking. Lima's own `limactl start` hits the\n".into())
+                    .await;
+                send("    same wall (it loops on \"Waiting for port ...:22\").\n\n".into()).await;
+                send("    To fix:\n".into()).await;
+                send("      - Temporarily disable the content filter / VPN and run setup again, or\n".into())
+                    .await;
+                send("      - Ask IT to allow Lima / Virtualization.framework guest networking.\n".into())
+                    .await;
+                send("    List installed filters with:  systemextensionsctl list\n".into()).await;
+                anyhow::bail!(
+                    "VM started but never became reachable — host networking is likely blocked \
+                     by security/filtering software (see `systemextensionsctl list`)"
+                );
+            }
+            send("    VM is reachable.\n".into()).await;
+
             // Reboot to activate HWE kernel (6.17) if it was just provisioned
             let kernel_ver = run_cmd("limactl", &["shell", vm_name, "uname", "-r"])
                 .await
