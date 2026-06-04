@@ -76,6 +76,21 @@ export default function EnvironmentPage() {
   useRefresh(refresh);
 
   const runFix = async (action: string, checkName: string) => {
+    // Destructive actions are confirmed here (not at each call site) so every
+    // entry point — the header button AND a health-check Fix button that wires
+    // straight to runFix — gets the same guard.
+    if (action === "recreate_lima_orca") {
+      const ok = await confirmDanger({
+        title: "Recreate Docker VM?",
+        message:
+          "This permanently deletes the existing Lima VM and rebuilds it on " +
+          "Ubuntu 26.04 with vsock networking. Containers, images, and volumes " +
+          "inside it will be lost — you'll re-pull and re-run them.",
+        confirmLabel: "Recreate VM",
+      });
+      if (!ok) return;
+    }
+
     // Tear down any listeners from a previous runFix to avoid accumulation
     // on re-entry.
     teardownFixListeners();
@@ -343,17 +358,7 @@ export default function EnvironmentPage() {
             <button
               class="btn"
               disabled={actionRunning()}
-              onClick={async () => {
-                const ok = await confirmDanger({
-                  title: "Recreate Docker VM?",
-                  message:
-                    "This permanently deletes the existing Lima VM and builds a fresh one. " +
-                    "Containers, images, and volumes inside it will be lost. " +
-                    "Use this if the VM won't start or Docker never becomes reachable.",
-                  confirmLabel: "Recreate VM",
-                });
-                if (ok) runFix("recreate_lima_orca", "Recreate Docker VM");
-              }}
+              onClick={() => runFix("recreate_lima_orca", "Recreate Docker VM")}
             >
               Recreate VM
             </button>

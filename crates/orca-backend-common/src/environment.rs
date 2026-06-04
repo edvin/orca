@@ -22,6 +22,17 @@ fn extended_path() -> String {
 /// it can't drift from the code that actually drives Lima.
 const MIN_LIMA: (u32, u32, u32) = (2, 0, 0);
 
+/// Generation of Orca's Lima VM definition. Bump whenever the VM's base image
+/// or host↔guest transport changes in a way an existing VM can't acquire
+/// without a rebuild. Stamped into a host-side marker on create; on reuse a VM
+/// whose marker is missing or lower than this is offered an upgrade-Recreate
+/// (works even when the VM is unreachable — it's a host-side file, not a guest
+/// probe), and this auto-covers every future base change too.
+/// - Gen 1: pre-vsock Ubuntu 24.04 (HWE-kernel hack, gvisor *usernet IP* path —
+///   breaks under a mesh VPN like NetBird/Tailscale).
+/// - Gen 2: Ubuntu 26.04 LTS + vsock SSH (VPN-immune AF_VSOCK transport).
+const ORCA_VM_GENERATION: u32 = 2;
+
 /// Parse `limactl --version` output (e.g. "limactl version 2.0.0") into a
 /// (major, minor, patch) tuple. Tolerates a leading `v` and pre-release
 /// suffixes ("2.1.0-rc.1" → (2,1,0)). Returns None if no dotted version found.
@@ -59,6 +70,29 @@ fn lima_marker_path(vm: &str) -> Option<std::path::PathBuf> {
     )
 }
 
+/// Path to the marker recording which Orca VM generation built an instance.
+/// Co-located in the instance dir so it's deleted with the VM and re-stamped on
+/// recreate. A missing marker means a pre-tracking (gen 1) VM.
+fn lima_generation_path(vm: &str) -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    Some(
+        std::path::Path::new(&home)
+            .join(".lima")
+            .join(vm)
+            .join("orca-vm-generation"),
+    )
+}
+
+/// Read the Orca VM generation stamped for `vm`. Returns 1 (the pre-tracking
+/// base) when the marker is absent or unparseable, so an old VM is always
+/// treated as upgradeable rather than silently assumed current.
+fn lima_vm_generation(vm: &str) -> u32 {
+    lima_generation_path(vm)
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .unwrap_or(1)
+}
+
 // ---- Orca's Lima VM `--set` overrides (shared by both `limactl create` sites
 // so the config can't drift between them).
 
@@ -67,7 +101,8 @@ fn lima_marker_path(vm: &str) -> Option<std::path::PathBuf> {
 const ORCA_PORT_FORWARDS: &str = r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#;
 
 /// Bind-mount the host's /Volumes and /private into the guest (writable).
-const ORCA_MOUNTS: &str = r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#;
+const ORCA_MOUNTS: &str =
+    r#".mounts += [{"location": "/Volumes", "writable": true}, {"location": "/private", "writable": true}]"#;
 
 /// Pin the guest to Ubuntu 26.04 LTS (one image per arch; Lima picks the host's).
 /// Why this base: systemd 259 (>=256) lets Lima carry SSH + the docker-socket
@@ -672,9 +707,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     );
                 }
                 None => {
-                    anyhow::bail!(
-                        "Lima is not available after install. Install it with `brew install lima`."
-                    );
+                    anyhow::bail!("Lima is not available after install. Install it with `brew install lima`.");
                 }
             }
 
@@ -704,10 +737,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 // boot but never become reachable. We never auto-delete; the
                 // user chooses Recreate.
                 if let Some(p) = lima_marker_path(vm_name) {
-                    match std::fs::read_to_string(&p)
-                        .ok()
-                        .and_then(|s| parse_lima_version(&s))
-                    {
+                    match std::fs::read_to_string(&p).ok().and_then(|s| parse_lima_version(&s)) {
                         Some(v) if v < MIN_LIMA => {
                             send(format!(
                                 "    Note: this VM was created by Lima {}.{}.{}, older than the \
@@ -727,6 +757,18 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                         }
                         _ => {}
                     }
+                }
+                // Independently of the Lima-binary version, flag a VM built on an
+                // older Orca base (pre-26.04/pre-vsock). It still works without a
+                // VPN, so we never auto-rebuild — just point at Recreate.
+                if lima_vm_generation(vm_name) < ORCA_VM_GENERATION {
+                    send(
+                        "    Note: this VM uses an older base (pre-Ubuntu 26.04, no vsock). It \
+                         works without a VPN, but for VPN-immune networking use Recreate to \
+                         rebuild it on the current base.\n"
+                            .into(),
+                    )
+                    .await;
                 }
             } else {
                 send("    Creating 'orca' VM with Apple Virtualization...\n".into()).await;
@@ -780,6 +822,11 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 {
                     let _ = std::fs::write(&p, format!("{}.{}.{}\n", v.0, v.1, v.2));
                 }
+                // Stamp the VM generation too, so a future Orca that ships a
+                // newer base can detect this VM is outdated and offer an upgrade.
+                if let Some(p) = lima_generation_path("orca") {
+                    let _ = std::fs::write(&p, format!("{ORCA_VM_GENERATION}\n"));
+                }
             }
 
             // Step 4: Start the VM
@@ -825,20 +872,14 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 }
             }
             if !reachable {
-                send("\n    The VM started but its network never came up — the host can't reach it.\n".into())
-                    .await;
-                send("    On managed/corporate Macs this is almost always endpoint-security or\n".into())
-                    .await;
-                send("    network-filtering software (a content-filter / VPN / EDR system extension)\n".into())
-                    .await;
-                send("    intercepting the VM's host networking. Lima's own `limactl start` hits the\n".into())
-                    .await;
+                send("\n    The VM started but its network never came up — the host can't reach it.\n".into()).await;
+                send("    On managed/corporate Macs this is almost always endpoint-security or\n".into()).await;
+                send("    network-filtering software (a content-filter / VPN / EDR system extension)\n".into()).await;
+                send("    intercepting the VM's host networking. Lima's own `limactl start` hits the\n".into()).await;
                 send("    same wall (it loops on \"Waiting for port ...:22\").\n\n".into()).await;
                 send("    To fix:\n".into()).await;
-                send("      - Temporarily disable the content filter / VPN and run setup again, or\n".into())
-                    .await;
-                send("      - Ask IT to allow Lima / Virtualization.framework guest networking.\n".into())
-                    .await;
+                send("      - Temporarily disable the content filter / VPN and run setup again, or\n".into()).await;
+                send("      - Ask IT to allow Lima / Virtualization.framework guest networking.\n".into()).await;
                 send("    List installed filters with:  systemextensionsctl list\n".into()).await;
                 anyhow::bail!(
                     "VM started but never became reachable — host networking is likely blocked \
@@ -924,22 +965,10 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 }
                 Err(e) => {
                     send(format!("    Docker verification failed: {e}\n")).await;
-                    send("    The VM is running but Docker inside it never became reachable.\n".into())
-                        .await;
-                    send(
-                        "    This is the signature of a stale VM (often one built by an older\n"
-                            .into(),
-                    )
-                    .await;
-                    send(
-                        "    Lima). Wait a minute and restart Orca; if it persists, use the\n"
-                            .into(),
-                    )
-                    .await;
-                    send(
-                        "    'Recreate VM' button on the System Health page to rebuild it.\n".into(),
-                    )
-                    .await;
+                    send("    The VM is running but Docker inside it never became reachable.\n".into()).await;
+                    send("    This is the signature of a stale VM (often one built by an older\n".into()).await;
+                    send("    Lima). Wait a minute and restart Orca; if it persists, use the\n".into()).await;
+                    send("    'Recreate VM' button on the System Health page to rebuild it.\n".into()).await;
                 }
             }
         }
@@ -1658,6 +1687,20 @@ pub async fn check_environment() -> EnvironmentStatus {
                 }
             };
 
+            // Is there an Orca-managed Lima VM on an outdated base? Read from the
+            // host-side generation marker, so this works even when the VM is
+            // unreachable. Drives both the "Docker works but upgrade available"
+            // nudge and the choice of Repair-vs-Recreate when Docker is down.
+            let stale_base_vm = run_cmd("limactl", &["list", "--format", "{{.Name}}"])
+                .await
+                .ok()
+                .and_then(|out| {
+                    out.lines()
+                        .map(|l| l.trim().to_string())
+                        .find(|n| n == "orca" || n == "docker")
+                })
+                .filter(|vm| lima_vm_generation(vm) < ORCA_VM_GENERATION);
+
             if let Some(version) = docker_running {
                 // Docker is running (via Docker Desktop, Lima, Colima, etc.)
                 checks.push(HealthCheck {
@@ -1667,6 +1710,24 @@ pub async fn check_environment() -> EnvironmentStatus {
                     fix_action: None,
                     details: Some(format!("Server version: {version}")),
                 });
+                // Docker works, but on an old base. Offer (don't force) an
+                // upgrade — a happy user can ignore it; a user who's about to hit
+                // a VPN rollout gets a one-click path onto the vsock base.
+                if let Some(vm) = &stale_base_vm {
+                    checks.push(HealthCheck {
+                        name: "Docker VM Base".to_string(),
+                        description: "Your Docker VM runs an older base (pre-Ubuntu 26.04, no vsock). \
+                             Upgrading gives VPN-immune networking and drops the legacy kernel \
+                             workaround. Optional — safe to skip if Docker works for you."
+                            .to_string(),
+                        status: CheckStatus::Warning,
+                        fix_action: Some("recreate_lima_orca".to_string()),
+                        details: Some(format!(
+                            "Rebuilds VM '{vm}' on Ubuntu 26.04 + vsock SSH. Containers, images, \
+                             and volumes inside it are NOT preserved — you'll re-pull/re-run them."
+                        )),
+                    });
+                }
             } else {
                 // Distinguish "Lima VM exists but not running" (offer Repair)
                 // from "no VM at all" (offer Setup). Without this branch
@@ -1691,20 +1752,42 @@ pub async fn check_environment() -> EnvironmentStatus {
                     });
 
                 if let Some((vm, status)) = lima_vm_status {
-                    checks.push(HealthCheck {
-                        name: "Docker Runtime".to_string(),
-                        description: format!(
-                            "Lima VM '{vm}' is {status} — Docker is unreachable. \
-                             Click Repair to recover (preserves your containers and images)."
-                        ),
-                        status: CheckStatus::Fail,
-                        fix_action: Some("repair_lima_orca".to_string()),
-                        details: Some(
-                            "Stops the VM, removes stale lock and socket files, and restarts it. \
-                             If repair fails, use the 'Recreate VM' button on the System Health page."
-                                .to_string(),
-                        ),
-                    });
+                    // An old-base VM that's unreachable is the NetBird case:
+                    // Repair just restarts the same broken base and won't help.
+                    // Steer straight to Recreate (which rebuilds on 26.04+vsock).
+                    if stale_base_vm.is_some() {
+                        checks.push(HealthCheck {
+                            name: "Docker Runtime".to_string(),
+                            description: format!(
+                                "Lima VM '{vm}' is {status} but Docker is unreachable, and it runs \
+                                 an older base (pre-26.04, no vsock) that can fail behind a VPN. \
+                                 Recreate to rebuild it on Ubuntu 26.04 + vsock."
+                            ),
+                            status: CheckStatus::Fail,
+                            fix_action: Some("recreate_lima_orca".to_string()),
+                            details: Some(
+                                "Rebuilds the VM on the current base. Containers, images, and \
+                                 volumes inside it are NOT preserved. (A plain Repair restarts the \
+                                 same old base and usually won't fix a VPN-blocked VM.)"
+                                    .to_string(),
+                            ),
+                        });
+                    } else {
+                        checks.push(HealthCheck {
+                            name: "Docker Runtime".to_string(),
+                            description: format!(
+                                "Lima VM '{vm}' is {status} — Docker is unreachable. \
+                                 Click Repair to recover (preserves your containers and images)."
+                            ),
+                            status: CheckStatus::Fail,
+                            fix_action: Some("repair_lima_orca".to_string()),
+                            details: Some(
+                                "Stops the VM, removes stale lock and socket files, and restarts it. \
+                                 If repair fails, use the 'Recreate VM' button on the System Health page."
+                                    .to_string(),
+                            ),
+                        });
+                    }
                 } else {
                     // No Lima VM yet — first-time setup.
                     checks.push(HealthCheck {
@@ -2366,7 +2449,12 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 )
                 .await
                 {
-                    Ok(_) => output.push_str("VM created.\n"),
+                    Ok(_) => {
+                        output.push_str("VM created.\n");
+                        if let Some(p) = lima_generation_path("orca") {
+                            let _ = std::fs::write(&p, format!("{ORCA_VM_GENERATION}\n"));
+                        }
+                    }
                     Err(e) => output.push_str(&format!("VM creation failed: {e}\n")),
                 }
             }
