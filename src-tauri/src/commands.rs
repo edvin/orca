@@ -1473,6 +1473,28 @@ pub async fn k8s_reset() -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn k8s_get_runtime() -> Result<serde_json::Value, String> {
+    get_json("/k8s/runtime").await
+}
+
+#[tauri::command]
+pub async fn k8s_set_runtime(runtime: String) -> Result<(), String> {
+    let base = daemon_url();
+    let resp = client()
+        .put(format!("{base}/k8s/runtime"))
+        .json(&serde_json::json!({ "runtime": runtime }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        Err(resp.text().await.unwrap_or_default())
+    }
+}
+
+#[tauri::command]
 pub async fn k8s_namespaces() -> Result<serde_json::Value, String> {
     get_json("/k8s/namespaces").await
 }

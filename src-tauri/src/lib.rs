@@ -120,6 +120,8 @@ pub fn run() {
             commands::k8s_disable,
             commands::k8s_start,
             commands::k8s_reset,
+            commands::k8s_get_runtime,
+            commands::k8s_set_runtime,
             commands::k8s_namespaces,
             commands::k8s_pods,
             commands::k8s_deployments,

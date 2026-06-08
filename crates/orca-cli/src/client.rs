@@ -304,6 +304,28 @@ impl DaemonClient {
         Ok(())
     }
 
+    pub async fn k8s_get_runtime(&self) -> anyhow::Result<String> {
+        let resp = self.http.get(self.url("/k8s/runtime")).send().await?;
+        check_status(&resp)?;
+        let body: serde_json::Value = resp.json().await?;
+        Ok(body
+            .get("runtime")
+            .and_then(|v| v.as_str())
+            .unwrap_or("docker")
+            .to_string())
+    }
+
+    pub async fn k8s_set_runtime(&self, runtime: &str) -> anyhow::Result<()> {
+        let resp = self
+            .http
+            .put(self.url("/k8s/runtime"))
+            .json(&serde_json::json!({ "runtime": runtime }))
+            .send()
+            .await?;
+        check_status(&resp)?;
+        Ok(())
+    }
+
     // --- Machines ---
 
     pub async fn list_machines(&self) -> anyhow::Result<Vec<MachineInfo>> {

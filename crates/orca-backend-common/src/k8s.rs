@@ -14,7 +14,36 @@ use tokio::process::Command;
 
 use serde::Serialize;
 
+use orca_core::config::KubernetesRuntime;
 use orca_core::kubernetes::*;
+
+/// Build the `INSTALL_K3S_EXEC` server arguments for the chosen runtime.
+/// Docker runtime adds `--docker`, which makes k3s use cri-dockerd so locally
+/// built Docker images are usable by Kubernetes with no push or import.
+fn k3s_server_exec(runtime: KubernetesRuntime) -> String {
+    let docker = if runtime.uses_docker() { "--docker " } else { "" };
+    format!("server {docker}--write-kubeconfig-mode=644 --disable=metrics-server")
+}
+
+/// Full `curl … | INSTALL_K3S_EXEC='…' sh -` install pipeline for the runtime.
+/// `suffix` is appended verbatim (e.g. " 2>&1").
+fn k3s_install_cmd(runtime: KubernetesRuntime, suffix: &str) -> String {
+    format!(
+        "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='{}' sh -{suffix}",
+        k3s_server_exec(runtime)
+    )
+}
+
+/// Arguments for spawning `k3s server …` directly (systemd-less fallback).
+fn k3s_server_args(runtime: KubernetesRuntime) -> Vec<&'static str> {
+    let mut args = vec!["server"];
+    if runtime.uses_docker() {
+        args.push("--docker");
+    }
+    args.push("--write-kubeconfig-mode=644");
+    args.push("--disable=metrics-server");
+    args
+}
 
 /// Information about the Traefik Kubernetes service.
 #[derive(Debug, Clone, Serialize)]
@@ -563,14 +592,12 @@ impl K3sManager {
             .is_ok_and(|s| s.success())
     }
 
-    async fn install_k3s(&self) -> anyhow::Result<()> {
-        tracing::info!("Installing k3s...");
+    async fn install_k3s(&self, runtime: KubernetesRuntime) -> anyhow::Result<()> {
+        tracing::info!("Installing k3s (runtime: {runtime:?})...");
 
+        let install_cmd = k3s_install_cmd(runtime, "");
         let output = Command::new("sh")
-            .args([
-                "-c",
-                "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh -",
-            ])
+            .args(["-c", &install_cmd])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -586,7 +613,7 @@ impl K3sManager {
     }
 
     /// Enable k3s with step-by-step progress log returned as a string.
-    pub async fn enable_with_progress(&self) -> anyhow::Result<String> {
+    pub async fn enable_with_progress(&self, runtime: KubernetesRuntime) -> anyhow::Result<String> {
         let mut log = String::new();
 
         // Platform check
@@ -609,11 +636,9 @@ impl K3sManager {
             log.push_str(">>> Downloading and installing k3s...\n");
             log.push_str("    This downloads the k3s binary (~60MB)\n\n");
 
+            let install_cmd = k3s_install_cmd(runtime, " 2>&1");
             let output = Command::new("sh")
-                .args([
-                    "-c",
-                    "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh - 2>&1",
-                ])
+                .args(["-c", &install_cmd])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output()
@@ -648,7 +673,7 @@ impl K3sManager {
             _ => {
                 log.push_str("    systemd not available, starting directly...\n");
                 Command::new("k3s")
-                    .args(["server", "--write-kubeconfig-mode=644", "--disable=metrics-server"])
+                    .args(k3s_server_args(runtime))
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .spawn()?;
@@ -718,7 +743,11 @@ impl K3sManager {
     }
 
     /// Enable k3s with streaming progress via a channel.
-    pub async fn enable_streaming(&self, tx: tokio::sync::mpsc::Sender<String>) -> anyhow::Result<()> {
+    pub async fn enable_streaming(
+        &self,
+        runtime: KubernetesRuntime,
+        tx: tokio::sync::mpsc::Sender<String>,
+    ) -> anyhow::Result<()> {
         use crate::environment::run_cmd_streaming;
 
         let send = |msg: String| {
@@ -765,10 +794,9 @@ impl K3sManager {
                         send("".into()).await;
 
                         // Install k3s inside the Lima VM
+                        let install_cmd = k3s_install_cmd(runtime, "");
                         let install_result = crate::environment::run_cmd_streaming(
-                            "limactl", &["shell", vm, "sudo", "sh", "-c",
-                                "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh -"
-                            ], &tx
+                            "limactl", &["shell", vm, "sudo", "sh", "-c", &install_cmd], &tx
                         ).await;
 
                         match install_result {
@@ -933,9 +961,9 @@ impl K3sManager {
                 send(">>> Downloading and installing k3s in WSL2...".into()).await;
                 send("    This downloads the k3s binary (~60MB)\n".into()).await;
 
+                let install_cmd = k3s_install_cmd(runtime, "");
                 let install_result = run_cmd_streaming("wsl", &[
-                    "-u", "root", "--", "sh", "-c",
-                    "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh -"
+                    "-u", "root", "--", "sh", "-c", &install_cmd
                 ], &tx).await;
 
                 match install_result {
@@ -950,8 +978,12 @@ impl K3sManager {
 
                 // Make sure k3s service is running
                 send(">>> Starting k3s service...".into()).await;
+                let start_cmd = format!(
+                    "systemctl start k3s 2>/dev/null || k3s {} &",
+                    k3s_server_exec(runtime)
+                );
                 let _ = Command::new("wsl")
-                    .args(["-u", "root", "--", "sh", "-c", "systemctl start k3s 2>/dev/null || k3s server --write-kubeconfig-mode=644 --disable=metrics-server &"])
+                    .args(["-u", "root", "--", "sh", "-c", &start_cmd])
                     .output()
                     .await;
             }
@@ -1037,9 +1069,9 @@ impl K3sManager {
             send(">>> Downloading and installing k3s...".into()).await;
             send("    This downloads the k3s binary (~60MB)\n".into()).await;
 
+            let install_cmd = k3s_install_cmd(runtime, "");
             let result = run_cmd_streaming("sudo", &[
-                "-n", "sh", "-c",
-                "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --write-kubeconfig-mode=644 --disable=metrics-server' sh -"
+                "-n", "sh", "-c", &install_cmd
             ], &tx).await;
 
             match result {
@@ -1068,7 +1100,7 @@ impl K3sManager {
             _ => {
                 send("    systemd not available, starting directly...".into()).await;
                 match Command::new("k3s")
-                    .args(["server", "--write-kubeconfig-mode=644", "--disable=metrics-server"])
+                    .args(k3s_server_args(runtime))
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .spawn()
@@ -1128,9 +1160,9 @@ impl K3sManager {
 }
 
 impl K8sManager for K3sManager {
-    async fn enable(&self) -> anyhow::Result<()> {
+    async fn enable(&self, runtime: KubernetesRuntime) -> anyhow::Result<()> {
         if !self.is_k3s_installed().await {
-            self.install_k3s().await?;
+            self.install_k3s(runtime).await?;
         }
 
         // Enable + start k3s via systemd if available, otherwise direct
@@ -1292,7 +1324,7 @@ impl K8sManager for K3sManager {
         }
     }
 
-    async fn start(&self) -> anyhow::Result<()> {
+    async fn start(&self, runtime: KubernetesRuntime) -> anyhow::Result<()> {
         if !self.is_k3s_installed().await {
             anyhow::bail!("k3s is not installed — use Enable to install it first");
         }
@@ -1316,7 +1348,7 @@ impl K8sManager for K3sManager {
             if systemd_result.is_err() || !systemd_result.as_ref().is_ok_and(|s| s.success()) {
                 // Fallback: start k3s directly in background
                 Command::new("k3s")
-                    .args(["server", "--write-kubeconfig-mode=644", "--disable=metrics-server"])
+                    .args(k3s_server_args(runtime))
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .spawn()
@@ -1326,7 +1358,7 @@ impl K8sManager for K3sManager {
         }
     }
 
-    async fn reset(&self) -> anyhow::Result<()> {
+    async fn reset(&self, runtime: KubernetesRuntime) -> anyhow::Result<()> {
         self.disable().await?;
 
         // k3s-uninstall.sh removes everything
@@ -1340,7 +1372,7 @@ impl K8sManager for K3sManager {
         tracing::info!("k3s reset: {}", String::from_utf8_lossy(&output.stderr));
 
         // Re-enable
-        self.enable().await
+        self.enable(runtime).await
     }
 
     async fn status(&self) -> anyhow::Result<ClusterStatus> {

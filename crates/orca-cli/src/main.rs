@@ -162,6 +162,13 @@ enum K8sAction {
     Enable,
     /// Disable Kubernetes
     Disable,
+    /// Show or set the cluster container runtime (docker | containerd).
+    /// Docker (default) matches Docker Desktop: locally built images are usable
+    /// by Kubernetes with no push or import. Omit the value to show the current setting.
+    Runtime {
+        /// "docker" or "containerd". Omit to display the current value.
+        value: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -345,6 +352,7 @@ async fn main() -> anyhow::Result<()> {
             K8sAction::Status => cmd_k8s_status(&client).await?,
             K8sAction::Enable => cmd_k8s_enable(&client).await?,
             K8sAction::Disable => cmd_k8s_disable(&client).await?,
+            K8sAction::Runtime { value } => cmd_k8s_runtime(&client, value).await?,
         },
         Commands::Machine { action } => match action {
             MachineAction::List => cmd_machine_list(&client).await?,
@@ -572,6 +580,31 @@ async fn cmd_k8s_enable(client: &client::DaemonClient) -> anyhow::Result<()> {
     println!("Enabling Kubernetes...");
     client.k8s_enable().await?;
     println!("Kubernetes enabled.");
+    Ok(())
+}
+
+async fn cmd_k8s_runtime(
+    client: &client::DaemonClient,
+    value: Option<String>,
+) -> anyhow::Result<()> {
+    match value {
+        None => {
+            let runtime = client.k8s_get_runtime().await?;
+            println!("Kubernetes runtime: {runtime}");
+            if runtime == "docker" {
+                println!("  (Docker/cri-dockerd — matches Docker Desktop; locally built images work with no push or import)");
+            }
+        }
+        Some(v) => {
+            let runtime = v.to_lowercase();
+            if runtime != "docker" && runtime != "containerd" {
+                anyhow::bail!("runtime must be 'docker' or 'containerd', got '{v}'");
+            }
+            client.k8s_set_runtime(&runtime).await?;
+            println!("Kubernetes runtime set to: {runtime}");
+            println!("Takes effect on the next `orca k8s enable` (or `reset`); an already-running cluster keeps its current runtime until reset.");
+        }
+    }
     Ok(())
 }
 

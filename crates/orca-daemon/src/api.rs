@@ -293,6 +293,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/disable", post(k8s_disable))
         .route("/k8s/start", post(k8s_start))
         .route("/k8s/reset", post(k8s_reset))
+        .route("/k8s/runtime", get(k8s_get_runtime).put(k8s_set_runtime))
         .route("/k8s/kubeconfig", get(k8s_kubeconfig))
         .route("/k8s/namespaces", get(k8s_namespaces))
         .route("/k8s/pods/{namespace}", get(k8s_pods))
@@ -3481,7 +3482,8 @@ async fn k8s_status(State(state): State<Arc<AppState>>) -> Result<impl IntoRespo
 }
 
 async fn k8s_enable(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
-    let log = state.k8s.enable_with_progress().await?;
+    let runtime = state.config.lock().await.kubernetes_runtime;
+    let log = state.k8s.enable_with_progress(runtime).await?;
     Ok(Json(serde_json::json!({ "output": log })))
 }
 
@@ -3506,10 +3508,11 @@ async fn k8s_enable_ws(
 async fn handle_k8s_enable(mut socket: WebSocket, state: Arc<AppState>) {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
     let k8s = state.k8s.clone();
+    let runtime = state.config.lock().await.kubernetes_runtime;
 
     // Spawn the enable task
     tokio::spawn(async move {
-        match k8s.enable_streaming(tx.clone()).await {
+        match k8s.enable_streaming(runtime, tx.clone()).await {
             Ok(_) => {
                 let _ = tx.send("[DONE]".into()).await;
             }
@@ -3537,13 +3540,39 @@ async fn k8s_disable(State(state): State<Arc<AppState>>) -> Result<impl IntoResp
 }
 
 async fn k8s_start(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
-    state.k8s.start().await?;
+    let runtime = state.config.lock().await.kubernetes_runtime;
+    state.k8s.start(runtime).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn k8s_reset(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
-    state.k8s.reset().await?;
+    let runtime = state.config.lock().await.kubernetes_runtime;
+    state.k8s.reset(runtime).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn k8s_get_runtime(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let runtime = state.config.lock().await.kubernetes_runtime;
+    Ok(Json(serde_json::json!({ "runtime": runtime })))
+}
+
+#[derive(serde::Deserialize)]
+struct SetK8sRuntimeRequest {
+    runtime: orca_core::config::KubernetesRuntime,
+}
+
+async fn k8s_set_runtime(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<SetK8sRuntimeRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = state.config.lock().await;
+    config.kubernetes_runtime = body.runtime;
+    config
+        .save()
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+    // Note: takes effect on the next enable/reset; an already-installed k3s
+    // keeps the runtime it was installed with until reset.
+    Ok(Json(serde_json::json!({ "ok": true, "runtime": body.runtime })))
 }
 
 async fn k8s_kubeconfig(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {

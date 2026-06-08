@@ -89,6 +89,26 @@ impl RegistryCredential {
     }
 }
 
+/// Container runtime for Orca's built-in k3s cluster.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum KubernetesRuntime {
+    /// Docker via cri-dockerd (k3s `--docker`). Locally built images are usable
+    /// by Kubernetes with no push or import — matches Docker Desktop. Default.
+    #[default]
+    Docker,
+    /// k3s's embedded containerd — the upstream-Kubernetes default runtime.
+    /// Locally built images must be imported or pulled from a registry.
+    Containerd,
+}
+
+impl KubernetesRuntime {
+    /// True when k3s should be installed/started with `--docker` (cri-dockerd).
+    pub fn uses_docker(self) -> bool {
+        matches!(self, KubernetesRuntime::Docker)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrcaConfig {
     /// Where Orca stores its data (VMs, caches, etc).
@@ -150,6 +170,12 @@ pub struct OrcaConfig {
     /// Whether to intercept docker-desktop:// URLs and handle them in Orca.
     #[serde(default = "default_true")]
     pub intercept_docker_desktop_urls: bool,
+    /// Container runtime for the built-in k3s cluster. Defaults to Docker
+    /// (cri-dockerd) to match Docker Desktop: locally built images run in
+    /// Kubernetes with no push or import. Set to `containerd` for the
+    /// upstream-Kubernetes default runtime.
+    #[serde(default)]
+    pub kubernetes_runtime: KubernetesRuntime,
 }
 
 /// A scheduled container action (e.g., restart every Sunday).
@@ -487,6 +513,7 @@ impl Default for OrcaConfig {
             schedules: Vec::new(),
             gateway: GatewayConfig::default(),
             intercept_docker_desktop_urls: true,
+            kubernetes_runtime: KubernetesRuntime::default(),
         }
     }
 }

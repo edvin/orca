@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::KubernetesRuntime;
+
 /// Kubernetes cluster status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterStatus {
@@ -295,17 +297,19 @@ pub struct CustomResourceDefinition {
 /// Trait for managing a Kubernetes cluster (k3s).
 #[trait_variant::make(Send)]
 pub trait K8sManager {
-    /// Enable Kubernetes (install k3s if needed, start the cluster).
-    async fn enable(&self) -> anyhow::Result<()>;
+    /// Enable Kubernetes (install k3s if needed, start the cluster) with the
+    /// given container runtime.
+    async fn enable(&self, runtime: KubernetesRuntime) -> anyhow::Result<()>;
 
     /// Disable Kubernetes (stop k3s, optionally clean up).
     async fn disable(&self) -> anyhow::Result<()>;
 
-    /// Start Kubernetes (restart k3s without reinstalling).
-    async fn start(&self) -> anyhow::Result<()>;
+    /// Start Kubernetes (restart k3s without reinstalling). `runtime` is used
+    /// for the direct-spawn fallback when systemd is unavailable.
+    async fn start(&self, runtime: KubernetesRuntime) -> anyhow::Result<()>;
 
-    /// Reset the cluster (delete all workloads, start fresh).
-    async fn reset(&self) -> anyhow::Result<()>;
+    /// Reset the cluster (delete all workloads, reinstall with `runtime`).
+    async fn reset(&self, runtime: KubernetesRuntime) -> anyhow::Result<()>;
 
     /// Get cluster status.
     async fn status(&self) -> anyhow::Result<ClusterStatus>;

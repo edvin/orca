@@ -52,6 +52,7 @@ export default function KubernetesPage() {
   const [loading, setLoading] = createSignal(false);
   const [enabling, setEnabling] = createSignal(false);
   const [stopping, setStopping] = createSignal(false);
+  const [k8sRuntime, setK8sRuntime] = createSignal<string>("docker");
   const [portForwards, setPortForwards] = createSignal<Set<string>>(new Set());
   const [k8sMenuOpen, setK8sMenuOpen] = createSignal(false);
   const [scaleTarget, setScaleTarget] = createSignal<{ namespace: string; name: string; current: number } | null>(null);
@@ -405,6 +406,28 @@ export default function KubernetesPage() {
       }
     });
   });
+
+  const loadRuntime = async () => {
+    try {
+      const r = (await invoke("k8s_get_runtime")) as { runtime?: string };
+      if (r?.runtime) setK8sRuntime(r.runtime);
+    } catch {
+      // non-fatal: fall back to the "docker" default
+    }
+  };
+  onMount(loadRuntime);
+
+  const handleRuntimeChange = async (value: string) => {
+    const prev = k8sRuntime();
+    setK8sRuntime(value);
+    try {
+      await invoke("k8s_set_runtime", { runtime: value });
+      showToast(`Kubernetes runtime set to ${value}`, "success");
+    } catch (e) {
+      setK8sRuntime(prev);
+      showToast(`Failed to set runtime: ${e}`, "error");
+    }
+  };
 
   const handleEnable = async () => {
     // Close any previous setup WebSocket before opening a new one so
@@ -1108,6 +1131,17 @@ spec:
                   <div class="hero-subtitle">
                     Run a local Kubernetes cluster powered by k3s with Traefik ingress.
                     Deploy, scale, and manage containerized workloads with a production-grade orchestrator.
+                  </div>
+                  <div style={{ display: "flex", "align-items": "center", gap: "8px", "justify-content": "center", "margin-bottom": "12px", "font-size": "13px" }}>
+                    <label for="k8s-runtime">Container runtime:</label>
+                    <select
+                      id="k8s-runtime"
+                      value={k8sRuntime()}
+                      onChange={(e) => handleRuntimeChange(e.currentTarget.value)}
+                    >
+                      <option value="docker">Docker — matches Docker Desktop (no image push/import)</option>
+                      <option value="containerd">containerd — upstream Kubernetes default</option>
+                    </select>
                   </div>
                   <button
                     class="btn btn-primary btn-hero"
