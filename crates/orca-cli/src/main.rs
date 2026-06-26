@@ -583,16 +583,15 @@ async fn cmd_k8s_enable(client: &client::DaemonClient) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cmd_k8s_runtime(
-    client: &client::DaemonClient,
-    value: Option<String>,
-) -> anyhow::Result<()> {
+async fn cmd_k8s_runtime(client: &client::DaemonClient, value: Option<String>) -> anyhow::Result<()> {
     match value {
         None => {
             let runtime = client.k8s_get_runtime().await?;
             println!("Kubernetes runtime: {runtime}");
             if runtime == "docker" {
-                println!("  (Docker/cri-dockerd — matches Docker Desktop; locally built images work with no push or import)");
+                println!(
+                    "  (Docker/cri-dockerd — matches Docker Desktop; locally built images work with no push or import)"
+                );
             }
         }
         Some(v) => {
@@ -602,7 +601,9 @@ async fn cmd_k8s_runtime(
             }
             client.k8s_set_runtime(&runtime).await?;
             println!("Kubernetes runtime set to: {runtime}");
-            println!("Takes effect on the next `orca k8s enable` (or `reset`); an already-running cluster keeps its current runtime until reset.");
+            println!(
+                "Takes effect on the next `orca k8s enable` (or `reset`); an already-running cluster keeps its current runtime until reset."
+            );
         }
     }
     Ok(())

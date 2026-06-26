@@ -796,8 +796,11 @@ impl K3sManager {
                         // Install k3s inside the Lima VM
                         let install_cmd = k3s_install_cmd(runtime, "");
                         let install_result = crate::environment::run_cmd_streaming(
-                            "limactl", &["shell", vm, "sudo", "sh", "-c", &install_cmd], &tx
-                        ).await;
+                            "limactl",
+                            &["shell", vm, "sudo", "sh", "-c", &install_cmd],
+                            &tx,
+                        )
+                        .await;
 
                         match install_result {
                             Ok(_) => {
@@ -962,9 +965,8 @@ impl K3sManager {
                 send("    This downloads the k3s binary (~60MB)\n".into()).await;
 
                 let install_cmd = k3s_install_cmd(runtime, "");
-                let install_result = run_cmd_streaming("wsl", &[
-                    "-u", "root", "--", "sh", "-c", &install_cmd
-                ], &tx).await;
+                let install_result =
+                    run_cmd_streaming("wsl", &["-u", "root", "--", "sh", "-c", &install_cmd], &tx).await;
 
                 match install_result {
                     Ok(_) => send("\n>>> k3s installed in WSL2\n".into()).await,
@@ -978,10 +980,7 @@ impl K3sManager {
 
                 // Make sure k3s service is running
                 send(">>> Starting k3s service...".into()).await;
-                let start_cmd = format!(
-                    "systemctl start k3s 2>/dev/null || k3s {} &",
-                    k3s_server_exec(runtime)
-                );
+                let start_cmd = format!("systemctl start k3s 2>/dev/null || k3s {} &", k3s_server_exec(runtime));
                 let _ = Command::new("wsl")
                     .args(["-u", "root", "--", "sh", "-c", &start_cmd])
                     .output()
@@ -1070,9 +1069,7 @@ impl K3sManager {
             send("    This downloads the k3s binary (~60MB)\n".into()).await;
 
             let install_cmd = k3s_install_cmd(runtime, "");
-            let result = run_cmd_streaming("sudo", &[
-                "-n", "sh", "-c", &install_cmd
-            ], &tx).await;
+            let result = run_cmd_streaming("sudo", &["-n", "sh", "-c", &install_cmd], &tx).await;
 
             match result {
                 Ok(_) => send("\n>>> k3s binary installed\n".into()).await,
