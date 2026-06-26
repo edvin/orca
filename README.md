@@ -395,7 +395,7 @@ On macOS, Docker runs inside a lightweight Linux VM managed by [Lima](https://li
 When you first launch Orca on macOS, the setup wizard installs (via Homebrew):
 - **Lima** — lightweight VM manager using Apple's Virtualization.framework
 - **Docker CLI** + **Docker Compose** + **Docker Buildx** — the standard Docker tools
-- A Linux VM named "orca" with 8GB RAM, 4 CPUs, VirtioFS mounts, and port forwarding
+- A Linux VM named "orca" with auto-sized RAM, 4 CPUs, VirtioFS mounts, and port forwarding
 - **HWE kernel (6.17)** — upgraded from Ubuntu's default 6.8 for full VirtioFS permission support
 
 ### Port forwarding

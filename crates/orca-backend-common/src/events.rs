@@ -23,6 +23,7 @@ impl BollardRuntime {
             let mut backoff_secs: u64 = 1;
             loop {
                 let options = EventsOptions::<String> { ..Default::default() };
+                let inspect_docker = docker.clone();
                 let mut stream = docker.events(Some(options));
                 let mut had_successful_read = false;
 
@@ -53,7 +54,22 @@ impl BollardRuntime {
                                                 .and_then(|attrs| attrs.get("exitCode"))
                                                 .and_then(|c| c.parse().ok())
                                                 .unwrap_or(-1);
-                                            Some(EventKind::ContainerDied { id, name, exit_code })
+                                            let oom_killed = if id.is_empty() {
+                                                false
+                                            } else {
+                                                inspect_docker
+                                                    .inspect_container(&id, None)
+                                                    .await
+                                                    .ok()
+                                                    .and_then(|info| info.state.and_then(|s| s.oom_killed))
+                                                    .unwrap_or(false)
+                                            };
+                                            Some(EventKind::ContainerDied {
+                                                id,
+                                                name,
+                                                exit_code,
+                                                oom_killed,
+                                            })
                                         }
                                         _ => None,
                                     }

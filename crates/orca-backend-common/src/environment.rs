@@ -123,6 +123,63 @@ const ORCA_SSH_OVER_VSOCK: &str = ".ssh.overVsock = true";
 /// idmapped overlayfs — so there's no cloud-init apt/debconf hang surface left.
 const ORCA_PROVISION: &str = r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n"}]"##;
 
+const BYTES_PER_GIB: u64 = 1024 * 1024 * 1024;
+
+#[derive(Debug, Clone, Copy)]
+pub struct LimaMemoryDefault {
+    pub memory_gib: u32,
+    pub host_memory_gib: Option<u32>,
+}
+
+/// Pick a first-run Lima VM size from the Mac's physical RAM.
+///
+/// The VM should be big enough for normal compose stacks, but small Macs must
+/// keep enough memory for macOS and the GUI. Larger machines get a better
+/// default than the old flat 8 GiB without making first launch surprisingly
+/// greedy.
+pub fn recommended_lima_memory_gib(host_memory_gib: u32) -> u32 {
+    if host_memory_gib == 0 {
+        return 8;
+    }
+
+    let half = (host_memory_gib / 2).clamp(4, 16);
+    let leave_for_host = host_memory_gib.saturating_sub(2).max(2);
+    half.min(leave_for_host)
+}
+
+fn bytes_to_gib_ceil(bytes: u64) -> Option<u32> {
+    if bytes == 0 {
+        return None;
+    }
+    Some(bytes.div_ceil(BYTES_PER_GIB).min(u32::MAX as u64) as u32)
+}
+
+pub async fn detect_lima_memory_default() -> LimaMemoryDefault {
+    let host_memory_gib = run_cmd("sysctl", &["-n", "hw.memsize"])
+        .await
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .and_then(bytes_to_gib_ceil);
+
+    LimaMemoryDefault {
+        memory_gib: host_memory_gib.map(recommended_lima_memory_gib).unwrap_or(8),
+        host_memory_gib,
+    }
+}
+
+fn describe_lima_memory_default(default: LimaMemoryDefault) -> String {
+    match default.host_memory_gib {
+        Some(host_memory_gib) => format!(
+            "    VM memory: {} GiB (detected {} GiB on this Mac).\n",
+            default.memory_gib, host_memory_gib
+        ),
+        None => format!(
+            "    VM memory: {} GiB (could not detect host memory; using fallback).\n",
+            default.memory_gib
+        ),
+    }
+}
+
 async fn detect_cli() -> &'static str {
     CLI_CELL
         .get_or_init(|| async {
@@ -773,6 +830,9 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             } else {
                 send("    Creating 'orca' VM with Apple Virtualization...\n".into()).await;
                 send("    This downloads a Linux image (Ubuntu 26.04 LTS) and installs Docker.\n".into()).await;
+                let lima_memory_default = detect_lima_memory_default().await;
+                let lima_memory_arg = format!("--memory={}", lima_memory_default.memory_gib);
+                send(describe_lima_memory_default(lima_memory_default)).await;
                 send("    First-time setup takes 3-5 minutes.\n\n".into()).await;
 
                 // Create the VM. Args shared with the non-streaming run_fix path
@@ -787,7 +847,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                         "--rosetta",
                         "--mount-writable",
                         "--mount-type=virtiofs",
-                        "--memory=8",
+                        lima_memory_arg.as_str(),
                         "--cpus=4",
                         "--set",
                         ORCA_IMAGES,
@@ -807,6 +867,12 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
 
                 if let Err(e) = create_result {
                     send(format!("\n    VM creation failed: {e}\n")).await;
+                    send(format!(
+                        "    Orca requested {} GiB of VM memory. If this Mac is low on memory, \
+                         close other apps and try again.\n",
+                        lima_memory_default.memory_gib
+                    ))
+                    .await;
                     anyhow::bail!("Failed to create Lima VM: {e}");
                 }
                 send("\n    VM created.\n".into()).await;
@@ -2421,6 +2487,9 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 .any(|l| l.trim() == "orca" || l.trim() == "docker" || l.trim() == "default")
             {
                 output.push_str("Creating Lima VM 'orca'...\n");
+                let lima_memory_default = detect_lima_memory_default().await;
+                let lima_memory_arg = format!("--memory={}", lima_memory_default.memory_gib);
+                output.push_str(&describe_lima_memory_default(lima_memory_default));
                 // Same args as the streaming path, via the shared ORCA_* consts
                 // (26.04 + vsock; no HWE-kernel install).
                 match run_cmd(
@@ -2432,7 +2501,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                         "--rosetta",
                         "--mount-writable",
                         "--mount-type=virtiofs",
-                        "--memory=8",
+                        lima_memory_arg.as_str(),
                         "--cpus=4",
                         "--set",
                         ORCA_IMAGES,
@@ -2959,5 +3028,21 @@ mod tests {
         assert_eq!(parse_meminfo_kb(meminfo, "MemTotal:"), Some(16384000));
         assert_eq!(parse_meminfo_kb(meminfo, "MemAvailable:"), Some(8000000));
         assert_eq!(parse_meminfo_kb(meminfo, "SwapTotal:"), None);
+    }
+
+    #[test]
+    fn recommended_lima_memory_scales_with_host_memory() {
+        assert_eq!(recommended_lima_memory_gib(8), 4);
+        assert_eq!(recommended_lima_memory_gib(16), 8);
+        assert_eq!(recommended_lima_memory_gib(24), 12);
+        assert_eq!(recommended_lima_memory_gib(32), 16);
+        assert_eq!(recommended_lima_memory_gib(64), 16);
+    }
+
+    #[test]
+    fn recommended_lima_memory_keeps_room_for_small_hosts() {
+        assert_eq!(recommended_lima_memory_gib(0), 8);
+        assert_eq!(recommended_lima_memory_gib(4), 2);
+        assert_eq!(recommended_lima_memory_gib(6), 4);
     }
 }

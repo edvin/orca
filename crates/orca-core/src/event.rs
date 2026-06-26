@@ -44,6 +44,8 @@ pub enum EventKind {
         id: String,
         name: String,
         exit_code: i32,
+        #[serde(default)]
+        oom_killed: bool,
     },
 
     // Image events
@@ -113,10 +115,20 @@ mod tests {
             id: "def456".into(),
             name: "worker-1".into(),
             exit_code: 137,
+            oom_killed: true,
         };
         let json = serde_json::to_value(&kind).unwrap();
         assert_eq!(json["type"], "ContainerDied");
         assert_eq!(json["data"]["exit_code"], 137);
+        assert_eq!(json["data"]["oom_killed"], true);
+    }
+
+    #[test]
+    fn event_kind_container_died_defaults_oom_killed() {
+        let json = r#"{"type":"ContainerDied","data":{"id":"def456","name":"worker-1","exit_code":137}}"#;
+        let kind: EventKind = serde_json::from_str(json).unwrap();
+        let restored = serde_json::to_value(kind).unwrap();
+        assert_eq!(restored["data"]["oom_killed"], false);
     }
 
     #[test]

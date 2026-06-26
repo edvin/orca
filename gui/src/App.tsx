@@ -354,19 +354,40 @@ export default function App() {
     });
 
     const unsubEvents = onOrcaEvent((payload: any) => {
-      const eventType = payload?.type || payload?.Action || "";
-      const name = payload?.name || payload?.Actor?.Attributes?.name || "";
-      const reference = payload?.reference || payload?.Actor?.Attributes?.name || "";
+      const kind = payload?.kind;
+      const data = kind?.data || {};
+      const attrs = payload?.Actor?.Attributes || {};
+      const eventType = payload?.type || payload?.Action || kind?.type || "";
+      const id = data.id || payload?.id || payload?.Actor?.ID || payload?.Actor?.id || "";
+      const name = data.name || payload?.name || attrs.name || "";
+      const containerLabel = name || (id ? id.slice(0, 12) : "container");
+      const reference = data.reference || payload?.reference || attrs.name || data.id || "";
+      const exitCodeRaw = data.exit_code ?? attrs.exitCode;
+      const exitCode = typeof exitCodeRaw === "number" ? exitCodeRaw : Number.parseInt(String(exitCodeRaw ?? ""), 10);
+      const oomKilled = data.oom_killed === true || attrs.oomKilled === "true";
 
-      if (eventType === "container.died" || eventType === "die") {
-        addEvent({ type: "container.died", title: `Container '${name}' exited`, severity: "error" });
-        showToast(`Container '${name}' exited`, "error", {
-          label: "View Logs",
-          onClick: () => setPage("containers"),
+      if (eventType === "container.died" || eventType === "die" || eventType === "ContainerDied") {
+        const title = oomKilled
+          ? `Container '${containerLabel}' ran out of memory`
+          : `Container '${containerLabel}' exited`;
+        const detail = oomKilled
+          ? "Docker reported OOMKilled. Check the container memory limit or, on macOS, increase the Docker VM memory in Settings."
+          : Number.isFinite(exitCode) ? `Exit code: ${exitCode}` : undefined;
+        addEvent({ type: "container.died", title, detail, severity: "error" });
+        showToast(oomKilled ? `${title}. Check memory settings.` : title, "error", {
+          label: oomKilled && id ? "View Container" : "View Logs",
+          onClick: () => {
+            if (oomKilled && id) {
+              setDetailId(id);
+              setPage("container-detail");
+            } else {
+              setPage("containers");
+            }
+          },
         });
-      } else if (eventType === "container.started" || eventType === "start") {
-        addEvent({ type: "container.started", title: `Container '${name}' started`, severity: "success" });
-      } else if (eventType === "image.pulled" || eventType === "pull") {
+      } else if (eventType === "container.started" || eventType === "start" || eventType === "ContainerStarted") {
+        addEvent({ type: "container.started", title: `Container '${containerLabel}' started`, severity: "success" });
+      } else if (eventType === "image.pulled" || eventType === "pull" || eventType === "ImagePulled") {
         addEvent({ type: "image.pulled", title: `Image pulled: ${reference}`, severity: "success" });
         showToast(`Image pulled: ${reference}`, "success");
       }

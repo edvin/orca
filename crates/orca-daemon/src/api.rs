@@ -5910,6 +5910,7 @@ struct LimaSettingsRequest {
 }
 
 async fn get_lima_settings() -> Result<impl IntoResponse, ApiError> {
+    let memory_default = orca_backend_common::environment::detect_lima_memory_default().await;
     let output = tokio::process::Command::new("limactl")
         .args(["list", "--json"])
         .env(
@@ -5942,9 +5943,15 @@ async fn get_lima_settings() -> Result<impl IntoResponse, ApiError> {
             "cpus": vm["cpus"],
             "memory": vm["memory"],
             "disk": vm["disk"],
+            "recommended_memory_gib": memory_default.memory_gib,
+            "host_memory_gib": memory_default.host_memory_gib,
         })))
     } else {
-        Ok(Json(serde_json::json!({ "available": false })))
+        Ok(Json(serde_json::json!({
+            "available": false,
+            "recommended_memory_gib": memory_default.memory_gib,
+            "host_memory_gib": memory_default.host_memory_gib,
+        })))
     }
 }
 
@@ -5962,6 +5969,26 @@ async fn save_lima_settings(Json(body): Json<LimaSettingsRequest>) -> Result<imp
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
     {
         return Err(anyhow::anyhow!("invalid lima VM name").into());
+    }
+    if body.cpus == 0 {
+        return Err(anyhow::anyhow!("cpus must be at least 1").into());
+    }
+    if body.memory_gib < 2 {
+        return Err(anyhow::anyhow!("Lima VM memory must be at least 2 GiB").into());
+    }
+    if body.disk_gib < 10 {
+        return Err(anyhow::anyhow!("Lima VM disk must be at least 10 GiB").into());
+    }
+    let memory_default = orca_backend_common::environment::detect_lima_memory_default().await;
+    if let Some(host_memory_gib) = memory_default.host_memory_gib
+        && body.memory_gib > host_memory_gib
+    {
+        return Err(anyhow::anyhow!(
+            "Lima VM memory ({} GiB) exceeds this Mac's physical memory ({} GiB)",
+            body.memory_gib,
+            host_memory_gib
+        )
+        .into());
     }
 
     // Only one Lima edit at a time — `limactl edit --set` rewrites

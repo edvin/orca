@@ -273,6 +273,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   const [limaCpus, setLimaCpus] = createSignal(4);
   const [limaMemoryGib, setLimaMemoryGib] = createSignal(4);
   const [limaDiskGib, setLimaDiskGib] = createSignal(60);
+  const [limaRecommendedMemoryGib, setLimaRecommendedMemoryGib] = createSignal<number | null>(null);
+  const [limaHostMemoryGib, setLimaHostMemoryGib] = createSignal<number | null>(null);
   const [limaOrigCpus, setLimaOrigCpus] = createSignal(4);
   const [limaOrigMemoryGib, setLimaOrigMemoryGib] = createSignal(4);
   const [limaOrigDiskGib, setLimaOrigDiskGib] = createSignal(60);
@@ -776,8 +778,12 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         cpus?: number;
         memory?: number;
         disk?: number;
+        recommended_memory_gib?: number;
+        host_memory_gib?: number;
       };
       setLimaAvailable(settings.available);
+      setLimaRecommendedMemoryGib(settings.recommended_memory_gib ?? null);
+      setLimaHostMemoryGib(settings.host_memory_gib ?? null);
       if (settings.available) {
         setLimaName(settings.name || "");
         setLimaStatus(settings.status || "");
@@ -1049,7 +1055,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         type="number"
                         class="form-input"
                         min="2"
-                        max="64"
+                        max={Math.max(limaHostMemoryGib() || 64, limaMemoryGib())}
                         step="1"
                         value={limaMemoryGib()}
                         onInput={(e) => setLimaMemoryGib(parseInt(e.currentTarget.value) || 2)}
@@ -1058,6 +1064,16 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       />
                       <span style={{ "font-size": "13px", color: "#8b949e" }}>GB</span>
                     </div>
+                    <Show when={limaRecommendedMemoryGib()}>
+                      {(recommended) => (
+                        <span style={{ "font-size": "12px", color: "#8b949e" }}>
+                          Recommended: {recommended()} GB
+                          <Show when={limaHostMemoryGib()}>
+                            {(hostMemory) => <> for {hostMemory()} GB host</>}
+                          </Show>
+                        </span>
+                      )}
+                    </Show>
                   </div>
 
                   <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
