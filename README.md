@@ -528,7 +528,19 @@ cargo build --release --bin orca-daemon
 ./target/release/orca-daemon --socket auto
 ```
 
-The daemon listens on `http://127.0.0.1:9477` by default. On first run, it generates an API token and stores it in `~/.config/orca/config.json`.
+The daemon listens on `http://127.0.0.1:9477` by default. On first run, it
+generates an API token and stores it in its config file. The location is
+platform-specific:
+
+| Platform | Config path |
+|----------|-------------|
+| Linux (user/dev daemon) | `~/.config/orca/config.json` |
+| Linux (apt/systemd daemon) | `/etc/orca/config.json` |
+| macOS | `~/Library/Application Support/orca/config.json` |
+| Windows | `%APPDATA%\orca\config.json` |
+
+The easiest way to get the token is the desktop app: **Settings → Agent
+Integration**, where the API Token field has a reveal and copy button.
 
 ### Configure AI (optional)
 
@@ -550,7 +562,7 @@ export OPENAI_API_KEY="sk-..."
 # Health check (no auth required)
 curl http://127.0.0.1:9477/api/v1/health
 
-# Read the API token
+# Read the API token (macOS: ~/Library/Application Support/orca/config.json)
 TOKEN=$(cat ~/.config/orca/config.json | grep api_token | cut -d'"' -f4)
 
 # List containers (auth required)
@@ -618,7 +630,11 @@ Add this to your MCP configuration file:
 }
 ```
 
-Replace `YOUR_TOKEN_HERE` with your API token from `~/.config/orca/config.json`. The Settings page in the GUI shows the config with your token pre-filled.
+Replace `YOUR_TOKEN_HERE` with your API token. The easiest way to get it is
+the desktop app: **Settings → Agent Integration** shows the full config with a
+reveal/copy button, and copying the block substitutes your real token
+automatically. If you'd rather read it from disk, the config file location is
+platform-specific (see the table under [Run the daemon](#run-the-daemon-development)).
 
 ### OpenAI-Compatible Agents
 

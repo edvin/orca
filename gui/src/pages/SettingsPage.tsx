@@ -283,6 +283,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   const [mcpCopied, setMcpCopied] = createSignal(false);
   const [endpointCopied, setEndpointCopied] = createSignal(false);
   const [tokenCopied, setTokenCopied] = createSignal(false);
+  const [tokenRevealed, setTokenRevealed] = createSignal(false);
+  const [tokenError, setTokenError] = createSignal(false);
 
   const REGISTRY_PRESETS = [
     { label: "Docker Hub", server: "https://index.docker.io/v1/", name: "Docker Hub" },
@@ -579,7 +581,6 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         anthropic_model: string;
         openai_model: string;
         openai_url: string;
-        api_token: string;
       };
       // Detect Ollama: custom provider with 11434 URL
       const isOllama = settings.provider === "custom" && (settings.openai_url || "").includes("11434");
@@ -590,7 +591,6 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         settings.provider === "anthropic" ? settings.anthropic_model : settings.openai_model
       );
       setAiUrl(settings.openai_url || "");
-      setApiToken(settings.api_token);
       setAiApiKey("");
       // Load available models
       loadModels();
@@ -750,14 +750,37 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
     }
   };
 
-  const mcpConfig = () =>
+  // Lazily fetch the daemon API token. The token is NOT loaded on page visit —
+  // only when the user explicitly reveals or copies it, so it never sits
+  // rendered on screen by default.
+  const ensureToken = async (): Promise<string> => {
+    if (apiToken()) return apiToken();
+    try {
+      const token = (await invoke("get_api_token")) as string;
+      setApiToken(token);
+      setTokenError(false);
+      return token;
+    } catch {
+      // No token yet — usually the daemon hasn't started, so it never ran
+      // ensure_token() to generate and persist one.
+      setTokenError(true);
+      return "";
+    }
+  };
+
+  const toggleTokenRevealed = async () => {
+    if (!tokenRevealed()) await ensureToken();
+    setTokenRevealed(!tokenRevealed());
+  };
+
+  const mcpConfigWith = (token: string) =>
     JSON.stringify(
       {
         mcpServers: {
           orca: {
             url: "http://127.0.0.1:9477/api/v1/agent/mcp",
             headers: {
-              Authorization: `Bearer ${apiToken() || "YOUR_TOKEN_HERE"}`,
+              Authorization: `Bearer ${token || "YOUR_TOKEN_HERE"}`,
             },
           },
         },
@@ -765,6 +788,45 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
       null,
       2
     );
+
+  // On-screen config keeps the token hidden until revealed.
+  const mcpConfig = () => mcpConfigWith(tokenRevealed() ? apiToken() : "");
+
+  // Copy actions fetch the real token first so the copied value always works,
+  // regardless of whether the token is currently revealed on screen.
+  const copyMcpConfig = async () => {
+    const token = await ensureToken();
+    if (!token) {
+      showToast("No API token yet — is the daemon running?", "error");
+      return;
+    }
+    await copyToClipboard(mcpConfigWith(token), setMcpCopied);
+  };
+
+  const copyToken = async () => {
+    const token = await ensureToken();
+    if (!token) {
+      showToast("No API token yet — is the daemon running?", "error");
+      return;
+    }
+    await copyToClipboard(token, setTokenCopied);
+  };
+
+  const TOKEN_MASK = "•".repeat(32);
+
+  // Config/data/log locations mirror the daemon's platform-specific
+  // OrcaConfig::config_path() — macOS and Windows do NOT use ~/.config.
+  const platformPaths = () => {
+    if (isMac) {
+      const base = "~/Library/Application Support/orca";
+      return { config: `${base}/config.json`, data: `${base}/`, log: `${base}/daemon.log` };
+    }
+    if (isWindows) {
+      const base = "%APPDATA%\\orca";
+      return { config: `${base}\\config.json`, data: `${base}\\`, log: `${base}\\daemon.log` };
+    }
+    return { config: "~/.config/orca/config.json", data: "~/.local/share/orca/", log: "~/.config/orca/daemon.log" };
+  };
 
   const openaiEndpoint = "http://127.0.0.1:9477/api/v1/agent/openai/chat/completions";
 
@@ -1352,7 +1414,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       <button
                         class="action-icon"
                         style={{ position: "absolute", top: "8px", right: "8px", color: mcpCopied() ? "#3fb950" : "#8b949e" }}
-                        onClick={() => copyToClipboard(mcpConfig(), setMcpCopied)}
+                        onClick={copyMcpConfig}
                         title="Copy to clipboard"
                       >
                         <Show when={mcpCopied()} fallback={
@@ -1399,20 +1461,34 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       }}>
                         <div>
                           <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>API Token</div>
-                          <span class="mono" style={{ "font-size": "11px", color: "#e6edf3" }}>{apiToken() || "Loading..."}</span>
+                          <span class="mono" style={{ "font-size": "11px", color: tokenRevealed() && tokenError() ? "#f85149" : "#e6edf3" }}>{tokenRevealed() ? (apiToken() || (tokenError() ? "No token — is the daemon running?" : "Loading...")) : TOKEN_MASK}</span>
                         </div>
-                        <button
-                          class="action-icon"
-                          style={{ color: tokenCopied() ? "#3fb950" : "#8b949e", "flex-shrink": "0" }}
-                          onClick={() => copyToClipboard(apiToken(), setTokenCopied)}
-                          title="Copy token"
-                        >
-                          <Show when={tokenCopied()} fallback={
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                          }>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                          </Show>
-                        </button>
+                        <div style={{ display: "flex", "align-items": "center", gap: "4px", "flex-shrink": "0" }}>
+                          <button
+                            class="action-icon"
+                            style={{ color: tokenRevealed() ? "#58a6ff" : "#8b949e" }}
+                            onClick={toggleTokenRevealed}
+                            title={tokenRevealed() ? "Hide token" : "Reveal token"}
+                          >
+                            <Show when={tokenRevealed()} fallback={
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                            }>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 0 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                            </Show>
+                          </button>
+                          <button
+                            class="action-icon"
+                            style={{ color: tokenCopied() ? "#3fb950" : "#8b949e" }}
+                            onClick={copyToken}
+                            title="Copy token"
+                          >
+                            <Show when={tokenCopied()} fallback={
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                            }>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            </Show>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2505,9 +2581,9 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                   <For each={[
-                    ["Config File", "~/.config/orca/config.json"],
-                    ["Data Directory", "~/.local/share/orca/"],
-                    ["Daemon Log", daemonLogPath() || "~/.config/orca/daemon.log"],
+                    ["Config File", platformPaths().config],
+                    ["Data Directory", platformPaths().data],
+                    ["Daemon Log", daemonLogPath() || platformPaths().log],
                   ] as [string, string][]}>{([label, path]) => (
                     <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
                       <div>
