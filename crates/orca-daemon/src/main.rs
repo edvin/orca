@@ -452,11 +452,19 @@ async fn lima_force_recover(name: &str) {
         Err(e) => tracing::warn!("Lima VM '{name}': force-stop spawn failed: {e}"),
     }
 
+    remove_stale_lima_sockets(name);
+}
+
+/// Remove leftover host-agent unix sockets (`sock/docker.sock`, `ha.sock`) for
+/// a Lima VM. After a warm VM restart — or any time the host agent was killed —
+/// these can persist with no listener and confuse Bollard or the next
+/// `limactl start`. Files that hold VM identity or user data (`lima.yaml`,
+/// `diffdisk`, `cidata.iso`, PID files) are NOT touched. Used both by the
+/// tier-2 force-recover and on any Orca-initiated restart so a warm restart
+/// gets the same clean-socket treatment a host reboot does for free.
+#[cfg(target_os = "macos")]
+fn remove_stale_lima_sockets(name: &str) {
     let home = std::env::var("HOME").unwrap_or_default();
-    // Unix socket files created by the host agent. Files in `~/.lima/<name>/`
-    // such as `ha.pid`, `qemu.pid`, `lima.yaml`, `serial0.log`, `diffdisk`
-    // are NOT touched — Lima manages those, and deleting the disk image
-    // would lose the user's containers.
     for stale in &[
         format!("{home}/.lima/{name}/sock/docker.sock"),
         format!("{home}/.lima/{name}/ha.sock"),
@@ -631,9 +639,7 @@ async fn ensure_sme_masked(name: &str) {
     let result = match timeout(Duration::from_secs(60), fut).await {
         Ok(r) => r,
         Err(_) => {
-            tracing::warn!(
-                "Lima VM '{name}': SME mask check timed out after 60s — VM unresponsive, skipping"
-            );
+            tracing::warn!("Lima VM '{name}': SME mask check timed out after 60s — VM unresponsive, skipping");
             return;
         }
     };
@@ -782,9 +788,22 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
         }
     };
 
+    // A Gen-2 VM is the Ubuntu 26.04 + vsock base (image URL carries "26.04"
+    // and the "resolute" codename). Gen-1 is the legacy 24.04 + HWE-kernel VM.
+    // The two need *different* reconciles — the HWE-kernel patch is right for
+    // Gen-1 and actively wrong for Gen-2 (26.04 ships kernel 7.0), while the
+    // vsock-SSH assertion is right for Gen-2 and wrong for Gen-1 (systemd 255,
+    // no AF_VSOCK). Getting this wrong churned Gen-2 VMs through an endless
+    // stop/edit/start cycle (the HWE string never matched, so the patch was
+    // judged "missing" on every pass) and re-injected a 24.04 kernel install
+    // into a 26.04 VM. Beyond being wrong, each spurious warm restart re-snapshots
+    // the host resolver — behind a VPN that's another chance to hit the oversized
+    // search-domain DHCP hang — so de-churning is itself a mitigation.
+    let is_gen2 = yaml_content.contains("26.04") || yaml_content.contains("resolute");
+
     // Define desired config patches and how to detect them.
-    // Each entry: (description, check_fn, set_expression)
-    let patches: Vec<(&str, bool, &str)> = vec![
+    // Each entry: (description, already_present, set_expression)
+    let mut patches: Vec<(&str, bool, &str)> = vec![
         (
             "port forwarding (0.0.0.0 → host)",
             // Check: must have guestIP 0.0.0.0 with guestIPMustBeZero: true and NO ignore: true
@@ -804,19 +823,37 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
             r#".mounts += [{"location": "/private", "writable": true}]"#,
         ),
         (
-            "HWE kernel provision script",
-            yaml_content.contains("linux-generic-hwe"),
-            r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n"}]"##,
-        ),
-        (
             // Mask SME on Apple M4/M5 hosts: VZ advertises it to guests but
             // misexecutes it; SIMD libs (libyuv in Chromium) die with SIGILL
-            // on every video. See ensure_sme_masked() for the live-VM heal.
+            // on every video. Runtime-guarded (grep sme), so it's a no-op on
+            // other hosts and safe for both generations. See ensure_sme_masked()
+            // for the live-VM heal.
             "SME mask provision script (M4/M5 video SIGILL)",
             yaml_content.contains("arm64.nosme"),
             r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\nif grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then\n  echo 'GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX arm64.nosme\"' > /etc/default/grub.d/99-orca-nosme.cfg\n  update-grub\nfi\n"}]"##,
         ),
     ];
+
+    if is_gen2 {
+        // Assert vsock SSH so a config rewrite (this function, a resource
+        // change, a manual `limactl edit`) can't silently drop the VM back onto
+        // the TCP SSH port forward that a mesh VPN breaks. `=` is idempotent, so
+        // once present this never re-fires — no restart churn on a healthy VM.
+        patches.push((
+            "vsock SSH transport (.ssh.overVsock)",
+            yaml_content.contains("overVsock: true"),
+            ".ssh.overVsock = true",
+        ));
+    } else {
+        // Legacy Gen-1 (24.04) only: idmapped VirtioFS mounts need kernel 6.12+,
+        // so keep the HWE-kernel install. The presence check stops this from
+        // re-appending on every pass.
+        patches.push((
+            "HWE kernel provision script",
+            yaml_content.contains("linux-generic-hwe"),
+            r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n"}]"##,
+        ));
+    }
 
     // Also check if we need to remove the broken `ignore: true` rule
     let has_ignore_rule = yaml_content.contains("ignore: true");
@@ -863,6 +900,11 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
                 .output()
                 .await;
         }
+        // This is an Orca-initiated restart: clear the host-agent sockets the
+        // way a full host reboot does for free, so the coming `limactl start`
+        // re-derives a clean vsock transport instead of tripping over stale
+        // state left by the warm stop.
+        remove_stale_lima_sockets(vm_name);
     }
 
     // Remove the broken ignore rule if present

@@ -117,19 +117,38 @@ const ORCA_IMAGES: &str = r#".images = [{"location": "https://cloud-images.ubunt
 /// systemd-256+ guest; set explicitly to document intent and the VPN rationale.
 const ORCA_SSH_OVER_VSOCK: &str = ".ssh.overVsock = true";
 
-/// Provision persists IPv4 forwarding via a sysctl drop-in (applied by
-/// systemd-sysctl before dockerd on boot; the daemon self-heal flips the live
-/// value once reachable). No apt, no kernel install — kernel 7.0 already has
-/// idmapped overlayfs — so there's no cloud-init apt/debconf hang surface left.
+/// Provision does three boot-time jobs, all idempotent (Lima re-runs `system`
+/// provision on every boot, from the local cidata mount in its own `boot.sh`,
+/// *before* and independent of guest networking — so they still run on the
+/// exact boot where DHCP is hung):
 ///
-/// On Apple M4/M5 hosts it additionally masks the SME vector extension via a
-/// grub.d drop-in: Virtualization.framework advertises SME/SME2 to guests but
-/// does not execute it correctly, so runtime CPU dispatch in SIMD libraries
-/// picks SME paths and dies with SIGILL (e.g. libyuv in Chromium crashes every
-/// tab that plays video). `arm64.nosme` makes them fall back to NEON. Provision
-/// runs on every boot; the guard keeps it idempotent and the mask takes effect
-/// from the first VM restart after setup.
-const ORCA_PROVISION: &str = r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\nif grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then\n  printf '%s\\n' 'GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX arm64.nosme\"' > /etc/default/grub.d/99-orca-nosme.cfg\n  update-grub\nfi\n"}]"##;
+/// 1. Persist IPv4 forwarding via a sysctl drop-in (applied by systemd-sysctl
+///    before dockerd; the daemon self-heal flips the live value once reachable).
+///
+/// 2. On Apple M4/M5 hosts, mask the SME vector extension via a grub.d drop-in.
+///    Virtualization.framework advertises SME/SME2 to guests but does not
+///    execute it correctly, so runtime CPU dispatch in SIMD libraries picks SME
+///    paths and dies with SIGILL (e.g. libyuv in Chromium crashes every tab
+///    that plays video). `arm64.nosme` makes them fall back to NEON. Guarded on
+///    `grep sme`, so it's a no-op elsewhere; the mask takes effect from the
+///    first VM restart after setup. See also `ensure_sme_masked` (live heal).
+///
+/// 3. Statically configure the gvisor usernet interface and turn DHCP **off**.
+///    Behind a mesh VPN (NetBird) the host's `/etc/resolv.conf` search list is
+///    huge; Lima injects it verbatim into the guest's DHCP OFFER (option 119,
+///    `gvproxy.go` reads it unconditionally — no size budget, no lima.yaml knob,
+///    and the vz driver hard-codes MTU 1500 so it can't be widened). The
+///    oversized OFFER fragments, the guest's raw-socket DHCP client never
+///    reassembles it, `eth0` gets no IP, and Lima hangs on "Waiting for …:22".
+///    A full host reboot masks it (the VM boots before the VPN); a warm restart
+///    with the VPN up hits it every time. Pinning the interface to Lima's OWN
+///    slirp constants (guest 192.168.5.15/24, gateway .2, hostResolver DNS .3)
+///    removes DHCP from the boot path entirely. These are per-VM-private and
+///    fixed in Lima's source (`pkg/networks/const.go`), so this collides with
+///    nothing. Restarting networkd is safe — the control channel is AF_VSOCK,
+///    not IP. NOTE: create/recreate-time only; existing VMs upgrade via Recreate
+///    (we deliberately do NOT force static onto already-working VMs untested).
+const ORCA_PROVISION: &str = r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\nif grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then\n  printf '%s\\n' 'GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX arm64.nosme\"' > /etc/default/grub.d/99-orca-nosme.cfg\n  update-grub\nfi\nF=/etc/systemd/network/05-orca-slirp.network\nT=$(mktemp)\ncat > $T <<'EOF'\n[Match]\nName=eth* en*\nType=ether\n\n[Network]\nDHCP=no\nAddress=192.168.5.15/24\nGateway=192.168.5.2\nDNS=192.168.5.3\nDNS=192.168.5.2\nEOF\nif ! cmp -s $T $F; then\n  install -m 0644 $T $F\n  systemctl enable systemd-networkd >/dev/null 2>&1 || true\n  systemctl restart systemd-networkd >/dev/null 2>&1 || true\nfi\nrm -f $T\n"}]"##;
 
 const BYTES_PER_GIB: u64 = 1024 * 1024 * 1024;
 
@@ -947,17 +966,25 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             }
             if !reachable {
                 send("\n    The VM started but its network never came up — the host can't reach it.\n".into()).await;
-                send("    On managed/corporate Macs this is almost always endpoint-security or\n".into()).await;
-                send("    network-filtering software (a content-filter / VPN / EDR system extension)\n".into()).await;
-                send("    intercepting the VM's host networking. Lima's own `limactl start` hits the\n".into()).await;
-                send("    same wall (it loops on \"Waiting for port ...:22\").\n\n".into()).await;
-                send("    To fix:\n".into()).await;
+                send("    Lima loops on \"Waiting for port ...:22\" because it gates boot readiness on\n".into()).await;
+                send("    the guest's usernet (192.168.5.x) SSH, and that network never configured.\n\n".into()).await;
+                send("    #1 cause behind a mesh VPN (NetBird/Tailscale/WireGuard): the VPN pushes a\n".into()).await;
+                send("    large DNS *search-domain* list, Lima snapshots it at VM start and offers it\n".into()).await;
+                send("    over DHCP, and an oversized DHCP reply gets fragmented — the guest's DHCP\n".into()).await;
+                send("    client never sees it, so lima0 gets no IP. This is why a restart while the\n".into()).await;
+                send("    VPN is up fails but a boot *before* the VPN connects (e.g. after a full\n".into()).await;
+                send("    reboot) works.\n\n".into()).await;
+                send("    To fix, in order of preference:\n".into()).await;
+                send("      - Disconnect the VPN, start the VM, then reconnect the VPN, or\n".into()).await;
                 send("      - Temporarily disable the content filter / VPN and run setup again, or\n".into()).await;
                 send("      - Ask IT to allow Lima / Virtualization.framework guest networking.\n".into()).await;
-                send("    List installed filters with:  systemextensionsctl list\n".into()).await;
+                send("    (On managed Macs an EDR/content-filter system extension can cause the same\n".into()).await;
+                send("    wall — list them with:  systemextensionsctl list)\n".into()).await;
                 anyhow::bail!(
-                    "VM started but never became reachable — host networking is likely blocked \
-                     by security/filtering software (see `systemextensionsctl list`)"
+                    "VM started but never became reachable — usernet SSH never came up. Most likely \
+                     a mesh VPN's large DNS search-domain list oversized the guest's DHCP reply (boot \
+                     the VM with the VPN disconnected), or security/filtering software is blocking \
+                     Virtualization.framework guest networking (see `systemextensionsctl list`)"
                 );
             }
             send("    VM is reachable.\n".into()).await;
