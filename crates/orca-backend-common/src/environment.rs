@@ -117,11 +117,19 @@ const ORCA_IMAGES: &str = r#".images = [{"location": "https://cloud-images.ubunt
 /// systemd-256+ guest; set explicitly to document intent and the VPN rationale.
 const ORCA_SSH_OVER_VSOCK: &str = ".ssh.overVsock = true";
 
-/// Provision now only persists IPv4 forwarding via a sysctl drop-in (applied by
+/// Provision persists IPv4 forwarding via a sysctl drop-in (applied by
 /// systemd-sysctl before dockerd on boot; the daemon self-heal flips the live
 /// value once reachable). No apt, no kernel install — kernel 7.0 already has
 /// idmapped overlayfs — so there's no cloud-init apt/debconf hang surface left.
-const ORCA_PROVISION: &str = r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n"}]"##;
+///
+/// On Apple M4/M5 hosts it additionally masks the SME vector extension via a
+/// grub.d drop-in: Virtualization.framework advertises SME/SME2 to guests but
+/// does not execute it correctly, so runtime CPU dispatch in SIMD libraries
+/// picks SME paths and dies with SIGILL (e.g. libyuv in Chromium crashes every
+/// tab that plays video). `arm64.nosme` makes them fall back to NEON. Provision
+/// runs on every boot; the guard keeps it idempotent and the mask takes effect
+/// from the first VM restart after setup.
+const ORCA_PROVISION: &str = r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\nif grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then\n  printf '%s\\n' 'GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX arm64.nosme\"' > /etc/default/grub.d/99-orca-nosme.cfg\n  update-grub\nfi\n"}]"##;
 
 const BYTES_PER_GIB: u64 = 1024 * 1024 * 1024;
 
