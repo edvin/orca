@@ -105,6 +105,18 @@ provision:
         apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04
       fi
 
+      # Mask the SME vector extension (Apple M4/M5 hosts). Virtualization
+      # .framework advertises SME/SME2 to guests but does not execute it
+      # correctly; runtime CPU dispatch in SIMD libraries then picks SME
+      # paths and dies with SIGILL — e.g. libyuv in Chromium crashes every
+      # tab that plays video ("Aw, Snap! SIGILL"). Masking makes those
+      # libraries fall back to NEON. No-op on hosts without SME. Takes
+      # effect on the reboot forced by the HWE-kernel install above.
+      if grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then
+        printf '%s\n' 'GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX arm64.nosme"' > /etc/default/grub.d/99-orca-nosme.cfg
+        update-grub
+      fi
+
       # Enable IPv4 forwarding before dockerd needs it. dockerd reads
       # net.ipv4.ip_forward only at startup; the HWE-kernel install above
       # forces a reboot, and if dockerd comes up before forwarding is on it

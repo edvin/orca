@@ -261,7 +261,10 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
                 // shell`. A wedged VM here would otherwise hang daemon startup
                 // and surface as "Daemon restart failed" in the UI.
                 if let Some(vm) = lima_vm_from_socket(&socket_path) {
-                    tokio::spawn(async move { ensure_ip_forward(&vm).await });
+                    tokio::spawn(async move {
+                        ensure_ip_forward(&vm).await;
+                        ensure_sme_masked(&vm).await;
+                    });
                 }
             }
             let rt = Arc::new(native.runtime);
@@ -599,6 +602,56 @@ async fn ensure_ip_forward(name: &str) {
     }
 }
 
+/// Ensure the SME vector extension is masked for the next boot of an
+/// already-running Lima VM on Apple M4/M5 hosts.
+///
+/// Virtualization.framework advertises SME/SME2 to guests but does not
+/// execute it correctly; runtime CPU dispatch in SIMD libraries then picks
+/// SME paths and dies with SIGILL — most visibly libyuv in Chromium, which
+/// crashes every tab that plays video ("Aw, Snap! SIGILL"). Masking via
+/// `arm64.nosme` makes those libraries fall back to NEON.
+///
+/// A kernel cmdline change cannot take effect on a live system, so this only
+/// persists the grub.d drop-in; it becomes active on the VM's next restart
+/// (daemon recovery, host reboot, or app-driven restart). Guarded to be a
+/// no-op on hosts without SME and when the drop-in already exists.
+/// Best-effort: a failure here is logged, not fatal.
+#[cfg(target_os = "macos")]
+async fn ensure_sme_masked(name: &str) {
+    use tokio::process::Command;
+    use tokio::time::{Duration, timeout};
+    let script = "if grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then \
+                  echo 'GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX arm64.nosme\"' > /etc/default/grub.d/99-orca-nosme.cfg; \
+                  update-grub; \
+                  fi";
+    let fut = Command::new("limactl")
+        .env("PATH", lima_path_env())
+        .args(["shell", name, "sudo", "sh", "-c", script])
+        .output();
+    let result = match timeout(Duration::from_secs(60), fut).await {
+        Ok(r) => r,
+        Err(_) => {
+            tracing::warn!(
+                "Lima VM '{name}': SME mask check timed out after 60s — VM unresponsive, skipping"
+            );
+            return;
+        }
+    };
+    match result {
+        Ok(o) if o.status.success() => {
+            tracing::debug!("Lima VM '{name}': SME mask ensured");
+        }
+        Ok(o) => tracing::warn!(
+            "Lima VM '{name}': ensuring SME mask returned {}: {}",
+            o.status,
+            String::from_utf8_lossy(&o.stderr).trim()
+        ),
+        Err(e) => {
+            tracing::warn!("Lima VM '{name}': ensuring SME mask failed to spawn: {e}")
+        }
+    }
+}
+
 /// Extract a Lima VM name from a forwarded docker socket path of the form
 /// `~/.lima/<vm>/sock/docker.sock`. Returns `None` for non-Lima sockets
 /// (Docker Desktop, Colima, …) so callers only self-heal actual Lima VMs.
@@ -618,7 +671,10 @@ async fn finalize_lima_runtime(name: &str, docker: bollard::Docker) -> Arc<orca_
     // wedged `limactl shell` here must not block `connect_via_lima` from
     // returning, since that would stall daemon startup.
     let vm = name.to_string();
-    tokio::spawn(async move { ensure_ip_forward(&vm).await });
+    tokio::spawn(async move {
+        ensure_ip_forward(&vm).await;
+        ensure_sme_masked(&vm).await;
+    });
     Arc::new(orca_backend_common::BollardRuntime::new(docker))
 }
 
@@ -751,6 +807,14 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
             "HWE kernel provision script",
             yaml_content.contains("linux-generic-hwe"),
             r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\nif ! dpkg -l linux-generic-hwe-24.04 2>/dev/null | grep -q ^ii; then\n  apt-get update -qq && apt-get install -y -qq linux-generic-hwe-24.04\nfi\n"}]"##,
+        ),
+        (
+            // Mask SME on Apple M4/M5 hosts: VZ advertises it to guests but
+            // misexecutes it; SIMD libs (libyuv in Chromium) die with SIGILL
+            // on every video. See ensure_sme_masked() for the live-VM heal.
+            "SME mask provision script (M4/M5 video SIGILL)",
+            yaml_content.contains("arm64.nosme"),
+            r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\nif grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then\n  echo 'GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX arm64.nosme\"' > /etc/default/grub.d/99-orca-nosme.cfg\n  update-grub\nfi\n"}]"##,
         ),
     ];
 
