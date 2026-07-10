@@ -264,6 +264,7 @@ async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
                     tokio::spawn(async move {
                         ensure_ip_forward(&vm).await;
                         ensure_sme_masked(&vm).await;
+                        ensure_static_usernet(&vm).await;
                     });
                 }
             }
@@ -658,6 +659,58 @@ async fn ensure_sme_masked(name: &str) {
     }
 }
 
+/// Converge an already-running Lima VM onto the static gvisor-usernet config
+/// (see `orca_static_usernet_script`), applying it live without a recreate.
+///
+/// This is what lets us change the guest network by editing `ORCA_SLIRP_NETWORK`
+/// and shipping an Orca update: the script writes the drop-in and bounces
+/// networkd **only when the on-disk content differs**, so it's a silent no-op in
+/// steady state and re-applies after a config change. It rides `limactl shell`
+/// over AF_VSOCK, which works even when the guest's IP network is down — so it
+/// can rescue a VM already hung on the oversized-DHCP path, live.
+///
+/// Gen-2 (vsock) VMs only: legacy 24.04 VMs have no vsock (so `limactl shell`
+/// there rides the VPN-breakable TCP path) and this transport swap is untested
+/// on them; they're steered to Recreate elsewhere. Best-effort: logged, not fatal.
+#[cfg(target_os = "macos")]
+async fn ensure_static_usernet(name: &str) {
+    use tokio::process::Command;
+    use tokio::time::{Duration, timeout};
+
+    // Detect Gen-2 from lima.yaml (cheap) and skip everything else.
+    let home = std::env::var("HOME").unwrap_or_default();
+    let lima_yaml = format!("{home}/.lima/{name}/lima.yaml");
+    match tokio::fs::read_to_string(&lima_yaml).await {
+        Ok(c) if c.contains("overVsock: true") => {}
+        _ => return,
+    }
+
+    let script = format!(
+        "set -eu\n{}",
+        orca_backend_common::environment::orca_static_usernet_script()
+    );
+    let fut = Command::new("limactl")
+        .env("PATH", lima_path_env())
+        .args(["shell", name, "sudo", "sh", "-c", &script])
+        .output();
+    match timeout(Duration::from_secs(30), fut).await {
+        Ok(Ok(o)) if o.status.success() => {
+            tracing::debug!("Lima VM '{name}': static usernet ensured");
+        }
+        Ok(Ok(o)) => tracing::warn!(
+            "Lima VM '{name}': ensuring static usernet returned {}: {}",
+            o.status,
+            String::from_utf8_lossy(&o.stderr).trim()
+        ),
+        Ok(Err(e)) => {
+            tracing::warn!("Lima VM '{name}': ensuring static usernet failed to spawn: {e}")
+        }
+        Err(_) => {
+            tracing::warn!("Lima VM '{name}': ensuring static usernet timed out after 30s — VM unresponsive, skipping")
+        }
+    }
+}
+
 /// Extract a Lima VM name from a forwarded docker socket path of the form
 /// `~/.lima/<vm>/sock/docker.sock`. Returns `None` for non-Lima sockets
 /// (Docker Desktop, Colima, …) so callers only self-heal actual Lima VMs.
@@ -680,6 +733,7 @@ async fn finalize_lima_runtime(name: &str, docker: bollard::Docker) -> Arc<orca_
     tokio::spawn(async move {
         ensure_ip_forward(&vm).await;
         ensure_sme_masked(&vm).await;
+        ensure_static_usernet(&vm).await;
     });
     Arc::new(orca_backend_common::BollardRuntime::new(docker))
 }

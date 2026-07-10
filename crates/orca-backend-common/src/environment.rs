@@ -117,38 +117,72 @@ const ORCA_IMAGES: &str = r#".images = [{"location": "https://cloud-images.ubunt
 /// systemd-256+ guest; set explicitly to document intent and the VPN rationale.
 const ORCA_SSH_OVER_VSOCK: &str = ".ssh.overVsock = true";
 
-/// Provision does three boot-time jobs, all idempotent (Lima re-runs `system`
-/// provision on every boot, from the local cidata mount in its own `boot.sh`,
-/// *before* and independent of guest networking — so they still run on the
-/// exact boot where DHCP is hung):
+/// Path of the static usernet drop-in inside the guest.
+const ORCA_SLIRP_NETWORK_PATH: &str = "/etc/systemd/network/05-orca-slirp.network";
+
+/// Desired content of the static usernet drop-in — the **single source of truth**
+/// for the guest's gvisor-slirp interface, shared by create-time provisioning
+/// (`orca_provision_setarg`) and the daemon's live self-heal
+/// (`orca_static_usernet_script` → `ensure_static_usernet`).
 ///
-/// 1. Persist IPv4 forwarding via a sysctl drop-in (applied by systemd-sysctl
-///    before dockerd; the daemon self-heal flips the live value once reachable).
+/// Why static: behind a mesh VPN (NetBird) the host's `/etc/resolv.conf` search
+/// list is huge; Lima injects it verbatim into the guest's DHCP OFFER (option
+/// 119; `gvproxy.go` reads it unconditionally — no size budget, no lima.yaml
+/// knob, and the vz driver hard-codes MTU 1500 so it can't be widened). The
+/// oversized OFFER fragments, the guest's raw-socket DHCP client never
+/// reassembles it, `eth0` gets no IP, and Lima hangs on "Waiting for …:22" (a
+/// host reboot masks it — the VM boots before the VPN — but a warm restart with
+/// the VPN up hits it every time). Pinning the interface to Lima's OWN slirp
+/// constants (guest .15, gateway .2, hostResolver DNS .3 — fixed in Lima's
+/// `pkg/networks/const.go`, per-VM-private, so this collides with nothing)
+/// removes DHCP from the boot path entirely.
 ///
-/// 2. On Apple M4/M5 hosts, mask the SME vector extension via a grub.d drop-in.
-///    Virtualization.framework advertises SME/SME2 to guests but does not
-///    execute it correctly, so runtime CPU dispatch in SIMD libraries picks SME
-///    paths and dies with SIGILL (e.g. libyuv in Chromium crashes every tab
-///    that plays video). `arm64.nosme` makes them fall back to NEON. Guarded on
-///    `grep sme`, so it's a no-op elsewhere; the mask takes effect from the
-///    first VM restart after setup. See also `ensure_sme_masked` (live heal).
-///
-/// 3. Statically configure the gvisor usernet interface and turn DHCP **off**.
-///    Behind a mesh VPN (NetBird) the host's `/etc/resolv.conf` search list is
-///    huge; Lima injects it verbatim into the guest's DHCP OFFER (option 119,
-///    `gvproxy.go` reads it unconditionally — no size budget, no lima.yaml knob,
-///    and the vz driver hard-codes MTU 1500 so it can't be widened). The
-///    oversized OFFER fragments, the guest's raw-socket DHCP client never
-///    reassembles it, `eth0` gets no IP, and Lima hangs on "Waiting for …:22".
-///    A full host reboot masks it (the VM boots before the VPN); a warm restart
-///    with the VPN up hits it every time. Pinning the interface to Lima's OWN
-///    slirp constants (guest 192.168.5.15/24, gateway .2, hostResolver DNS .3)
-///    removes DHCP from the boot path entirely. These are per-VM-private and
-///    fixed in Lima's source (`pkg/networks/const.go`), so this collides with
-///    nothing. Restarting networkd is safe — the control channel is AF_VSOCK,
-///    not IP. NOTE: create/recreate-time only; existing VMs upgrade via Recreate
-///    (we deliberately do NOT force static onto already-working VMs untested).
-const ORCA_PROVISION: &str = r##".provision += [{"mode": "system", "script": "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\nif grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then\n  printf '%s\\n' 'GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX arm64.nosme\"' > /etc/default/grub.d/99-orca-nosme.cfg\n  update-grub\nfi\nF=/etc/systemd/network/05-orca-slirp.network\nT=$(mktemp)\ncat > $T <<'EOF'\n[Match]\nName=eth* en*\nType=ether\n\n[Network]\nDHCP=no\nAddress=192.168.5.15/24\nGateway=192.168.5.2\nDNS=192.168.5.3\nDNS=192.168.5.2\nEOF\nif ! cmp -s $T $F; then\n  install -m 0644 $T $F\n  systemctl enable systemd-networkd >/dev/null 2>&1 || true\n  systemctl restart systemd-networkd >/dev/null 2>&1 || true\nfi\nrm -f $T\n"}]"##;
+/// **To change the guest network later:** edit this content and ship an Orca
+/// update. `ensure_static_usernet` rewrites the file in place and bounces
+/// networkd only when the content differs, so every existing VM converges on the
+/// next daemon connect — no recreate. (networkd bounces are safe: the control
+/// channel is AF_VSOCK, not IP.)
+const ORCA_SLIRP_NETWORK: &str = "[Match]\nName=eth* en*\nType=ether\n\n[Network]\nDHCP=no\nAddress=192.168.5.15/24\nGateway=192.168.5.2\nDNS=192.168.5.3\nDNS=192.168.5.2\n";
+
+/// SME-mask step (Apple M4/M5): VZ advertises SME/SME2 to guests but misexecutes
+/// it, so SIMD libraries (libyuv in Chromium) pick SME paths and die with SIGILL
+/// on every video. `arm64.nosme` forces a NEON fallback. Guarded on `grep sme`,
+/// so it's a no-op elsewhere. Mirrors `ensure_sme_masked` and the reconcile patch.
+const ORCA_SME_MASK_SCRIPT: &str = "if grep -qw sme /proc/cpuinfo && [ ! -f /etc/default/grub.d/99-orca-nosme.cfg ]; then\n  echo 'GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX arm64.nosme\"' > /etc/default/grub.d/99-orca-nosme.cfg\n  update-grub\nfi\n";
+
+/// Idempotent shell fragment that writes [`ORCA_SLIRP_NETWORK`] and bounces
+/// networkd **only when the on-disk content changed** (so it's a no-op in steady
+/// state, and re-applies automatically after a config change ships). Shared by
+/// create-time provisioning and the daemon self-heal so the two can't drift.
+pub fn orca_static_usernet_script() -> String {
+    format!(
+        "F={path}\nT=$(mktemp)\ncat > $T <<'ORCA_NET_EOF'\n{content}ORCA_NET_EOF\nif ! cmp -s $T $F; then\n  install -m 0644 $T $F\n  systemctl enable systemd-networkd >/dev/null 2>&1 || true\n  systemctl restart systemd-networkd >/dev/null 2>&1 || true\nfi\nrm -f $T\n",
+        path = ORCA_SLIRP_NETWORK_PATH,
+        content = ORCA_SLIRP_NETWORK,
+    )
+}
+
+/// Full `mode: system` provision script: IPv4 forwarding + SME mask + static
+/// usernet. Idempotent — Lima re-runs `system` provision on every boot, from the
+/// local cidata mount in its own `boot.sh`, *before* and independent of guest
+/// networking (so it still runs on the exact boot where DHCP is hung). Composed
+/// from the shared pieces above so create-time and the daemon self-heals share
+/// one definition.
+fn orca_provision_script() -> String {
+    format!(
+        "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n{sme}{net}",
+        sme = ORCA_SME_MASK_SCRIPT,
+        net = orca_static_usernet_script(),
+    )
+}
+
+/// The `limactl --set` expression that appends our provision to lima.yaml.
+/// `serde_json` does the JSON string escaping, so [`orca_provision_script`] stays
+/// readable (real newlines, no hand-escaped `\n`).
+fn orca_provision_setarg() -> String {
+    let v = serde_json::json!([{ "mode": "system", "script": orca_provision_script() }]);
+    format!(".provision += {v}")
+}
 
 const BYTES_PER_GIB: u64 = 1024 * 1024 * 1024;
 
@@ -865,6 +899,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 // Create the VM. Args shared with the non-streaming run_fix path
                 // via the ORCA_* constants so the two can't drift. 26.04 + vsock
                 // is what lets the host↔guest channel survive a mesh VPN.
+                let orca_provision = orca_provision_setarg();
                 let create_result = run_cmd_streaming(
                     "limactl",
                     &[
@@ -885,7 +920,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                         "--set",
                         ORCA_MOUNTS,
                         "--set",
-                        ORCA_PROVISION,
+                        orca_provision.as_str(),
                         "template:docker",
                     ],
                     &tx,
@@ -2527,6 +2562,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 output.push_str(&describe_lima_memory_default(lima_memory_default));
                 // Same args as the streaming path, via the shared ORCA_* consts
                 // (26.04 + vsock; no HWE-kernel install).
+                let orca_provision = orca_provision_setarg();
                 match run_cmd(
                     "limactl",
                     &[
@@ -2547,7 +2583,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                         "--set",
                         ORCA_MOUNTS,
                         "--set",
-                        ORCA_PROVISION,
+                        orca_provision.as_str(),
                         "template:docker",
                     ],
                 )
