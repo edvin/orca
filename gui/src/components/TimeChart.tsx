@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
+import { t } from "../i18n";
 
 export interface TimeChartProps {
   data: Array<{ time: number; value: number }>;
@@ -83,12 +84,12 @@ export default function TimeChart(props: TimeChartProps) {
     const data = props.data;
     if (data.length === 0) return "";
     const now = data[data.length - 1].time;
-    const t = data[index].time;
-    const diffSec = Math.round((now - t) / 1000);
-    if (diffSec <= 5) return "now";
-    if (diffSec < 60) return `${diffSec}s ago`;
+    const timestamp = data[index].time;
+    const diffSec = Math.round((now - timestamp) / 1000);
+    if (diffSec <= 5) return t("components.time.now");
+    if (diffSec < 60) return t("components.time.secondsAgo", { count: diffSec });
     const diffMin = Math.round(diffSec / 60);
-    return `${diffMin}m ago`;
+    return t("components.time.minutesAgo", { count: diffMin });
   };
 
   const xAxisLabels = () => {

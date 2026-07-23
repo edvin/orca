@@ -8,6 +8,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
 import { SkeletonCard } from "../components/Skeleton";
 import { safeHref } from "../lib/sanitize";
+import { t } from "../i18n";
 
 interface GatewayPageProps {
   onNavigate?: (target: string) => void;
@@ -17,13 +18,13 @@ interface GatewayPageProps {
 function friendlyStartError(raw: string): string {
   if (raw.includes("port is already allocated")) {
     const port = raw.match(/port\s+(\d+)/i)?.[1] ?? "";
-    return `Port ${port} is already in use. Change the port in the Configuration tab or stop the conflicting service.`;
+    return t("infra.gateway.portInUse", { port });
   }
   if (raw.includes("No such image") || raw.includes("not found") || raw.includes("pull")) {
-    return "Could not download caddy:2-alpine. Check your internet connection.";
+    return t("infra.gateway.downloadCaddyFailed");
   }
   if (raw.includes("admin API") || raw.includes("not responding")) {
-    return "Gateway started but Caddy is not responding. Check Settings > About > Daemon Log.";
+    return t("infra.gateway.caddyNotResponding");
   }
   return raw;
 }
@@ -113,9 +114,9 @@ export default function GatewayPage(props: GatewayPageProps) {
         customCert: cfgCustomCert() || null,
         customKey: cfgCustomKey() || null,
       });
-      showToast("Gateway configuration saved", "success");
+      showToast(t("infra.gateway.configSaved"), "success");
     } catch (e) {
-      showToast(`Failed to save: ${e}`, "error");
+      showToast(t("infra.gateway.saveFailed", { error: String(e) }), "error");
     }
     setCfgSaving(false);
   };
@@ -127,7 +128,7 @@ export default function GatewayPage(props: GatewayPageProps) {
       const httpsP = parseInt(cfgHttpsPort(), 10) || 443;
       const result = (await invoke("gateway_check_ports", { httpPort: httpP, httpsPort: httpsP })) as { conflicts: string[] };
       setPortConflicts(result.conflicts || []);
-      if (result.conflicts.length === 0) showToast("Ports are available", "success");
+      if (result.conflicts.length === 0) showToast(t("infra.gateway.portsAvailable"), "success");
     } catch {}
     setCheckingPorts(false);
   };
@@ -597,10 +598,10 @@ export default function GatewayPage(props: GatewayPageProps) {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">Gateway</h1>
+        <h1 class="page-title">{t("infra.gateway.title")}</h1>
         <div class="page-actions">
           <Show when={status()?.running}>
-            <button class="btn" onClick={() => openUrl(landingUrl())} title="Open gateway landing page in browser">
+            <button class="btn" onClick={() => openUrl(landingUrl())} title={t("infra.gateway.noRoutes")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px", "vertical-align": "-2px" }}>
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
               </svg>
@@ -610,14 +611,14 @@ export default function GatewayPage(props: GatewayPageProps) {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-right": "4px", "vertical-align": "-2px" }}>
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              Add Route
+              {t("infra.gateway.addRoute")}
             </button>
           </Show>
           <Show
             when={status()?.running}
             fallback={
               <button class="btn btn-primary" onClick={handleStart} disabled={starting()}>
-                {starting() ? "Starting..." : "Start Gateway"}
+                {starting() ? t("infra.common.starting") : t("infra.gateway.startGateway")}
               </button>
             }
           >
@@ -625,15 +626,15 @@ export default function GatewayPage(props: GatewayPageProps) {
               Stop Gateway
             </button>
           </Show>
-          <button class="btn" onClick={refresh}>Refresh</button>
+          <button class="btn" onClick={refresh}>{t("infra.common.refresh")}</button>
         </div>
       </div>
 
       {/* Tab bar */}
       <div class="tab-bar" style={{ "margin-bottom": "24px" }}>
-        <button class={`tab-item ${activeTab() === "routes" ? "active" : ""}`} onClick={() => setActiveTab("routes")}>Routes</button>
-        <button class={`tab-item ${activeTab() === "configuration" ? "active" : ""}`} onClick={() => setActiveTab("configuration")}>Configuration</button>
-        <button class={`tab-item ${activeTab() === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>Settings</button>
+        <button class={`tab-item ${activeTab() === "routes" ? "active" : ""}`} onClick={() => setActiveTab("routes")}>{t("infra.gateway.routes")}</button>
+        <button class={`tab-item ${activeTab() === "configuration" ? "active" : ""}`} onClick={() => setActiveTab("configuration")}>{t("infra.gateway.configuration")}</button>
+        <button class={`tab-item ${activeTab() === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>{t("infra.gateway.settings")}</button>
       </div>
 
       {/* Port conflict warnings (visible across all tabs) */}
@@ -654,7 +655,7 @@ export default function GatewayPage(props: GatewayPageProps) {
             <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
           <div>
-            <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>Port Conflict Detected</div>
+            <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>{t("infra.gateway.portConflict")}</div>
             <For each={status()?.port_conflicts ?? []}>
               {(conflict) => <div>{conflict}</div>}
             </For>
@@ -683,13 +684,13 @@ export default function GatewayPage(props: GatewayPageProps) {
             <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
           </svg>
           <div>
-            <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>Failed to Start Gateway</div>
+            <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>{t("infra.gateway.startFailedTitle")}</div>
             <div style={{ color: "#e6edf3" }}>{startError()}</div>
           </div>
           <button
             style={{ "margin-left": "auto", background: "none", border: "none", cursor: "pointer", color: "#8b949e", "flex-shrink": "0" }}
             onClick={() => setStartError(null)}
-            title="Dismiss"
+            title={t("stack.dismiss")}
           >
             {"\u00d7"}
           </button>
@@ -710,7 +711,7 @@ export default function GatewayPage(props: GatewayPageProps) {
             <div class="card" style={{ "margin-bottom": "20px" }}>
               <div style={{ display: "grid", "grid-template-columns": "repeat(4, 1fr)", gap: "16px 24px", "font-size": "13px" }}>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">Status</span>
+                  <span class="card-label">{t("infra.common.status")}</span>
                   <span class="card-value" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
                     <span style={{
                       display: "inline-block",
@@ -723,7 +724,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                   </span>
                 </div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">Domain</span>
+                  <span class="card-label">{t("infra.gateway.domain")}</span>
                   <span class="card-value">*.{s().domain}</span>
                 </div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
@@ -731,19 +732,19 @@ export default function GatewayPage(props: GatewayPageProps) {
                   <span class="card-value">{s().tls_mode === "orca_ca" ? "Orca CA" : "Custom"}</span>
                 </div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">Routes</span>
+                  <span class="card-label">t("infra.gateway.routes")</span>
                   <span class="card-value">{s().routes_active} active</span>
                 </div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">HTTP Port</span>
+                  <span class="card-label">t("infra.gateway.configuration")</span>
                   <span class="card-value mono">:{s().http_port}</span>
                 </div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">HTTPS Port</span>
+                  <span class="card-label">t("infra.gateway.configuration")</span>
                   <span class="card-value mono">:{s().https_port}</span>
                 </div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">Landing Page</span>
+                  <span class="card-label">t("infra.gateway.configuration")</span>
                   <span class="card-value">
                     <button
                       class="btn-link"
@@ -756,7 +757,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </div>
                 <Show when={s().container_id}>
                   <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                    <span class="card-label">Container ID</span>
+                    <span class="card-label">t("container.id")</span>
                     <span class="card-value mono" style={{ "font-size": "11px" }}>{s().container_id?.substring(0, 12)}</span>
                   </div>
                 </Show>
@@ -860,8 +861,8 @@ export default function GatewayPage(props: GatewayPageProps) {
                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                   </svg>
                 </div>
-                <p class="empty-title">No routes configured</p>
-                <p>Add a route to map a hostname to a running container.</p>
+                <p class="empty-title">{t("infra.gateway.noRoutes")}</p>
+                <p>{t("infra.gateway.noRoutesDescription")}</p>
                 <button class="btn btn-primary" onClick={openAddDialog} style={{ "margin-top": "12px" }}>
                   Add Route
                 </button>
@@ -871,11 +872,11 @@ export default function GatewayPage(props: GatewayPageProps) {
             <table class="table">
               <thead>
                 <tr>
-                  <th>Hostname</th>
-                  <th>Container</th>
-                  <th>Port</th>
-                  <th>Status</th>
-                  <th style={{ "text-align": "right" }}>Actions</th>
+                  <th>{t("infra.gateway.hostname")}</th>
+                  <th>{t("infra.common.container")}</th>
+                  <th>{t("infra.common.port")}</th>
+                  <th>{t("infra.common.status")}</th>
+                  <th style={{ "text-align": "right" }}>{t("infra.common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -923,7 +924,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                         </button>
                         <button
                           class="action-icon"
-                          title="Edit route"
+                          title={t("infra.gateway.configuration")}
                           onClick={() => openEditRoute(route)}
                           style={{ "margin-right": "4px" }}
                         >
@@ -931,7 +932,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                         </button>
                         <button
                           class="action-icon action-icon-delete"
-                          title="Remove route"
+                          title={t("infra.gateway.configuration")}
                           onClick={() => handleRemoveRoute(route.hostname)}
                           style={{ color: "#f85149" }}
                         >
@@ -949,7 +950,7 @@ export default function GatewayPage(props: GatewayPageProps) {
         {/* Suggested Routes */}
         <Show when={status()?.running && suggestions().length > 0}>
           <div style={{ "margin-top": "20px" }}>
-            <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", "margin-bottom": "4px" }}>Suggested Routes</h3>
+            <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", "margin-bottom": "4px" }}>{t("infra.gateway.suggestedRoutes")}</h3>
             <p style={{ color: "#6e7681", "font-size": "12px", "margin-bottom": "12px" }}>Containers with exposed ports not yet in the gateway</p>
             <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
               <For each={suggestions()}>
@@ -986,7 +987,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                       Add to Gateway
                     </button>
                     <button
-                      title="Dismiss suggestion"
+                      title={t("infra.gateway.noRoutes")}
                       onClick={() => dismissAllPorts(container)}
                       style={{
                         background: "none",
@@ -1164,7 +1165,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                                   <Show when={resolved()}>
                                     <button
                                       class="action-icon"
-                                      title="Open in browser"
+                                      title={t("infra.gateway.noRoutes")}
                                       onClick={() => openUrl(resolved())}
                                       style={{ "flex-shrink": "0" }}
                                     >
@@ -1199,19 +1200,19 @@ export default function GatewayPage(props: GatewayPageProps) {
         <Show when={cfgLoaded()} fallback={<SkeletonCard height="200px" />}>
           <div class="card" style={{ padding: "20px" }}>
             <div class="form-group">
-              <label class="form-label">Domain</label>
+              <label class="form-label">t("infra.gateway.domain")</label>
               <input class="form-input" type="text" value={cfgDomain()} onInput={(e) => setCfgDomain(e.currentTarget.value)} placeholder="localhost" />
               <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>Routes will be created as subdomains (e.g., myapp.{cfgDomain()})</p>
             </div>
 
             <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
               <div class="form-group">
-                <label class="form-label">HTTP Port</label>
+                <label class="form-label">t("infra.gateway.configuration")</label>
                 <input class="form-input" type="number" value={cfgHttpPort()} onInput={(e) => setCfgHttpPort(e.currentTarget.value)} min="1" max="65535" style={httpConflict() ? { "border-color": "#d29922" } : undefined} />
                 <Show when={httpConflict()}><p style={{ "font-size": "11px", color: "#d29922", "margin-top": "4px" }}>{httpConflict()}</p></Show>
               </div>
               <div class="form-group">
-                <label class="form-label">HTTPS Port</label>
+                <label class="form-label">t("infra.gateway.configuration")</label>
                 <input class="form-input" type="number" value={cfgHttpsPort()} onInput={(e) => setCfgHttpsPort(e.currentTarget.value)} min="1" max="65535" style={httpsConflict() ? { "border-color": "#d29922" } : undefined} />
                 <Show when={httpsConflict()}><p style={{ "font-size": "11px", color: "#d29922", "margin-top": "4px" }}>{httpsConflict()}</p></Show>
               </div>
@@ -1224,7 +1225,7 @@ export default function GatewayPage(props: GatewayPageProps) {
             </div>
 
             <div class="form-group">
-              <label class="form-label">TLS Mode</label>
+              <label class="form-label">t("infra.gateway.configuration")</label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button class="btn" style={{ background: cfgTlsMode() === "orca_ca" ? "#1f6feb" : undefined, color: cfgTlsMode() === "orca_ca" ? "#fff" : undefined, "border-color": cfgTlsMode() === "orca_ca" ? "#1f6feb" : undefined }} onClick={() => setCfgTlsMode("orca_ca")}>Orca CA (automatic)</button>
                 <button class="btn" style={{ background: cfgTlsMode() === "custom" ? "#1f6feb" : undefined, color: cfgTlsMode() === "custom" ? "#fff" : undefined, "border-color": cfgTlsMode() === "custom" ? "#1f6feb" : undefined }} onClick={() => setCfgTlsMode("custom")}>Custom Certificate</button>
@@ -1240,11 +1241,11 @@ export default function GatewayPage(props: GatewayPageProps) {
 
             <Show when={cfgTlsMode() === "custom"}>
               <div class="form-group">
-                <label class="form-label">Certificate PEM</label>
+                <label class="form-label">t("infra.gateway.configuration")</label>
                 <textarea class="form-input" rows={4} value={cfgCustomCert()} onInput={(e) => setCfgCustomCert(e.currentTarget.value)} placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"} style={{ "font-family": "monospace", "font-size": "11px" }} />
               </div>
               <div class="form-group">
-                <label class="form-label">Private Key PEM</label>
+                <label class="form-label">t("infra.gateway.configuration")</label>
                 <textarea class="form-input" rows={4} value={cfgCustomKey()} onInput={(e) => setCfgCustomKey(e.currentTarget.value)} placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"} style={{ "font-family": "monospace", "font-size": "11px" }} />
               </div>
             </Show>
@@ -1365,7 +1366,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                 <table class="table" style={{ "margin-bottom": "0" }}>
                   <thead>
                     <tr>
-                      <th>Hostname</th>
+                      <th>t("container.hostname")</th>
                       <th>Namespace</th>
                       <th>Ingress</th>
                       <th />
@@ -1434,7 +1435,7 @@ export default function GatewayPage(props: GatewayPageProps) {
         <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
           <div class="modal-dialog">
             <div class="modal-header">
-              <h2 class="modal-title">Add Route</h2>
+              <h2 class="modal-title">t("corePages.containers.addRoute")</h2>
               <button class="modal-close" onClick={() => setShowAdd(false)}>
                 {"\u00d7"}
               </button>
@@ -1465,7 +1466,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label">Path (optional)</label>
+                  <label class="form-label">t("infra.gateway.configuration")</label>
                   <input
                     class="form-input"
                     type="text"
@@ -1541,7 +1542,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                   class="btn btn-primary"
                   disabled={adding() || !addHostname().trim() || !addContainer()}
                 >
-                  {adding() ? "Adding..." : "Add Route"}
+                  {adding() ? t("infra.common.adding") : t("infra.gateway.addRoute")}
                 </button>
               </div>
             </form>
@@ -1554,14 +1555,14 @@ export default function GatewayPage(props: GatewayPageProps) {
         <div class="modal-overlay" onMouseDown={(e) => { mouseDownOnOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }} onClick={(e) => { if (mouseDownOnOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowContainerPicker(false); mouseDownOnOverlay = false; }}>
           <div class="modal-dialog" style={{ "max-width": "620px", "max-height": "70vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
-              <h2 class="modal-title">Select Container</h2>
+              <h2 class="modal-title">t("infra.gateway.configuration")</h2>
               <button class="modal-close" onClick={() => setShowContainerPicker(false)}>{"\u00d7"}</button>
             </div>
             <div style={{ padding: "16px 20px 8px" }}>
               <input
                 class="form-input"
                 type="text"
-                placeholder="Search containers..."
+                placeholder={t("corePages.containers.searchPlaceholder")}
                 value={pickerSearch()}
                 onInput={(e) => setPickerSearch(e.currentTarget.value)}
                 autofocus
@@ -1650,7 +1651,7 @@ export default function GatewayPage(props: GatewayPageProps) {
               </Show>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn" onClick={() => setShowContainerPicker(false)}>Cancel</button>
+              <button type="button" class="btn" onClick={() => setShowContainerPicker(false)}>t("common.cancel")</button>
             </div>
           </div>
         </div>
@@ -1663,34 +1664,34 @@ export default function GatewayPage(props: GatewayPageProps) {
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setEditRoute(null); }}>
           <div class="modal-content" style={{ "max-width": "480px" }}>
             <div class="modal-header">
-              <h2>Edit Route</h2>
+              <h2>t("infra.gateway.configuration")</h2>
               <button class="modal-close" onClick={() => setEditRoute(null)}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
             <div class="modal-body" style={{ overflow: "visible" }}>
               <div class="form-group">
-                <label class="form-label">Hostname</label>
+                <label class="form-label">t("container.hostname")</label>
                 <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
                   <input class="form-input" type="text" value={editHostname()} onInput={(e) => setEditHostname(e.currentTarget.value)} style={{ flex: "1" }} />
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label">Container</label>
+                <label class="form-label">t("infra.common.container")</label>
                 <input class="form-input" type="text" value={editContainer()} onInput={(e) => setEditContainer(e.currentTarget.value)} />
               </div>
               <div class="form-group">
-                <label class="form-label">Container Port</label>
+                <label class="form-label">t("infra.gateway.configuration")</label>
                 <input class="form-input" type="number" value={editPort()} onInput={(e) => setEditPort(e.currentTarget.value)} min="1" max="65535" />
               </div>
               <div class="form-group">
-                <label class="form-label">Path (optional)</label>
+                <label class="form-label">t("infra.gateway.configuration")</label>
                 <input class="form-input" type="text" value={editPath()} onInput={(e) => setEditPath(e.currentTarget.value)} placeholder="/api/*" />
                 <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>Route a specific path to this container</p>
               </div>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => setEditRoute(null)} disabled={editSaving()}>Cancel</button>
+              <button class="btn" onClick={() => setEditRoute(null)} disabled={editSaving()}>t("common.cancel")</button>
               <button class="btn btn-primary" onClick={handleSaveEdit} disabled={editSaving() || !editHostname().trim() || !editContainer().trim() || isNaN(parseInt(editPort(), 10))}>
                 {editSaving() ? "Saving..." : "Save Changes"}
               </button>

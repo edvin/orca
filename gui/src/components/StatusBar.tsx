@@ -5,6 +5,7 @@ import type { SystemHealth, ActiveHost } from "../lib/types";
 import { showToast } from "./Toast";
 import { confirm } from "./ConfirmDialog";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning } from "../lib/ollamaSetup";
+import { t } from "../i18n";
 
 interface StatusBarProps {
   onNavigate?: (page: string) => void;
@@ -53,9 +54,9 @@ export default function StatusBar(props: StatusBarProps) {
     if (!info) return;
 
     const confirmed = await confirm({
-      title: "Update Available",
-      message: `Update to Orca Desktop v${info.version}?\n\nThe app will download the update and restart.${info.body ? `\n\nWhat's new:\n${info.body}` : ""}`,
-      confirmLabel: "Update",
+      title: t("components.status.updateTitle"),
+      message: t("components.status.updateMessage", { version: info.version, notes: info.body ? t("components.status.whatsNew", { body: info.body }) : "" }),
+      confirmLabel: t("components.status.update"),
     });
     if (!confirmed) return;
 
@@ -64,7 +65,7 @@ export default function StatusBar(props: StatusBarProps) {
       const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
       if (update) {
-        showToast("Downloading update...", "info");
+        showToast(t("components.status.downloading"), "info");
         // Stop the daemon before installing so the installer can replace the binary
         try { await invoke("stop_daemon"); } catch { /* ignore */ }
         await update.downloadAndInstall();
@@ -72,7 +73,7 @@ export default function StatusBar(props: StatusBarProps) {
         await relaunch();
       }
     } catch (e) {
-      showToast(`Update failed: ${e}`, "error");
+      showToast(t("components.status.updateFailed", { error: e }), "error");
       setInstalling(false);
     }
   };
@@ -117,7 +118,7 @@ export default function StatusBar(props: StatusBarProps) {
     <div class="status-bar">
       <div class="status-bar-left">
         <Show when={activeHost()}>
-          <span class="status-bar-item" title={activeHost()!.is_remote ? `Connected to ${activeHost()!.url}` : "Local daemon"}>
+          <span class="status-bar-item" title={activeHost()!.is_remote ? t("components.status.connectedTo", { url: activeHost()!.url }) : t("components.status.localDaemon")}>
             <span class="status-bar-dot" style={{ background: activeHost()!.is_remote ? "#58a6ff" : "#3fb950" }} />
             {activeHost()!.name}
           </span>
@@ -132,17 +133,17 @@ export default function StatusBar(props: StatusBarProps) {
         <Show when={health()?.docker_connected === false}>
           <span class="status-bar-item">
             <span class="status-bar-dot" style={{ background: "#f85149" }} />
-            Disconnected
+            {t("components.status.disconnected")}
           </span>
         </Show>
 
         <Show when={health()?.system_resources}>
           <span class="status-bar-separator" />
-          <span class="status-bar-item" title={`CPU: ${health()!.system_resources!.cpu_count} cores`}>
+          <span class="status-bar-item" title={t("components.status.cpuCores", { count: health()!.system_resources!.cpu_count })}>
             CPU {health()!.system_resources!.cpu_count}
           </span>
           <span class="status-bar-separator" />
-          <span class="status-bar-item" title={`Memory: ${memPercent().toFixed(0)}% used`}>
+          <span class="status-bar-item" title={t("components.status.memoryUsed", { percent: memPercent().toFixed(0) })}>
             RAM
             <span class="status-bar-mini-bar">
               <span class="status-bar-mini-fill" style={{ width: `${memPercent()}%`, background: barColor(memPercent()) }} />
@@ -150,8 +151,8 @@ export default function StatusBar(props: StatusBarProps) {
             {memPercent().toFixed(0)}%
           </span>
           <span class="status-bar-separator" />
-          <span class="status-bar-item" title={`Disk: ${diskPercent().toFixed(0)}% used`}>
-            Disk
+          <span class="status-bar-item" title={t("components.status.diskUsed", { percent: diskPercent().toFixed(0) })}>
+            {t("components.status.disk")}
             <span class="status-bar-mini-bar">
               <span class="status-bar-mini-fill" style={{ width: `${diskPercent()}%`, background: barColor(diskPercent()) }} />
             </span>
@@ -161,7 +162,7 @@ export default function StatusBar(props: StatusBarProps) {
 
         <Show when={health()?.gpu}>
           <span class="status-bar-separator" />
-          <span class="status-bar-item" title={`GPU: ${health()!.gpu!.name}`}>
+          <span class="status-bar-item" title={t("components.status.gpu", { name: health()!.gpu!.name })}>
             GPU
             <span class="status-bar-mini-bar">
               <span class="status-bar-mini-fill" style={{ width: `${Math.round(health()!.gpu!.memory_used_mb / health()!.gpu!.memory_total_mb * 100)}%`, background: barColor(Math.round(health()!.gpu!.memory_used_mb / health()!.gpu!.memory_total_mb * 100)) }} />
@@ -176,7 +177,7 @@ export default function StatusBar(props: StatusBarProps) {
             class="status-bar-item status-bar-warning status-bar-clickable"
             onClick={() => props.onNavigate?.("environment")}
           >
-            ⚠ {health()!.warnings.length} warning{health()!.warnings.length > 1 ? "s" : ""}
+            {t("components.status.warnings", { count: health()!.warnings.length })}
           </span>
         </Show>
 
@@ -212,8 +213,8 @@ export default function StatusBar(props: StatusBarProps) {
             disabled={installing()}
           >
             {installing()
-              ? "Installing..."
-              : `Update available: v${updateAvailable()!.version}`}
+              ? t("components.status.installing")
+              : t("components.status.available", { version: updateAvailable()!.version })}
           </button>
         </Show>
         <Show when={appVersion()}>

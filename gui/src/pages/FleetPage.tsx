@@ -5,6 +5,7 @@ import { formatBytes } from "../lib/format";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { showToast } from "../components/Toast";
 import type { RemoteHost, HostStatus } from "../lib/types";
+import { t } from "../i18n";
 
 // Module-level signal — persists across navigation
 const [lastSeen, setLastSeen] = createSignal<Record<string, number>>({});
@@ -37,13 +38,13 @@ function tagColor(tag: string) {
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t("infra.activity.justNow");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+  if (minutes < 60) return t("infra.activity.minutesAgo", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  if (hours < 24) return t("infra.activity.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days} day${days !== 1 ? "s" : ""} ago`;
+  return t("infra.activity.daysAgo", { count: days });
 }
 
 interface FleetPageProps {
@@ -232,12 +233,12 @@ export default function FleetPage(props: FleetPageProps) {
     const selected = selectedHosts();
     const toRemove = hosts().filter(h => selected.has(h.id) && h.id !== null);
     if (toRemove.length === 0) {
-      showToast("Cannot remove local host", "error");
+      showToast(t("infra.fleet.cannotRemoveLocal"), "error");
       return;
     }
     const ok = await confirmDanger(
-      "Remove Selected Hosts",
-      `Remove ${toRemove.length} host${toRemove.length !== 1 ? "s" : ""} from fleet? This only removes the configuration — it does not stop remote daemons.`
+      t("infra.fleet.removeSelectedTitle"),
+      t("infra.fleet.removeSelectedConfirm", { count: toRemove.length })
     );
     if (!ok) return;
 
@@ -245,12 +246,12 @@ export default function FleetPage(props: FleetPageProps) {
       try {
         await invoke("remove_remote_host", { id: host.id });
       } catch (e) {
-        showToast(`Failed to remove ${host.name}: ${e}`, "error");
+        showToast(t("infra.fleet.removeFailed", { name: host.name, error: String(e) }), "error");
       }
     }
     setSelectedHosts(new Set<string | null>());
     setSelectMode(false);
-    showToast(`Removed ${toRemove.length} host${toRemove.length !== 1 ? "s" : ""}`, "success");
+    showToast(t("infra.fleet.removed", { count: toRemove.length }), "success");
     await probeAll();
   };
 
@@ -282,7 +283,7 @@ export default function FleetPage(props: FleetPageProps) {
       const result = await invoke("compare_hosts", { hostIds }) as any;
       setCompareData(result);
     } catch (e) {
-      showToast(`Compare failed: ${e}`, "error");
+      showToast(t("infra.fleet.compareFailed", { error: String(e) }), "error");
       setCompareOpen(false);
     } finally {
       setCompareLoading(false);
@@ -339,24 +340,24 @@ export default function FleetPage(props: FleetPageProps) {
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "16px" }}>
         <div>
           <h1 style={{ margin: "0 0 4px 0", "font-size": "22px", "font-weight": "600", color: "#e6edf3" }}>
-            Fleet
+            {t("infra.fleet.title")}
           </h1>
           <span style={{ color: "#8b949e", "font-size": "13px" }}>
-            {onlineCount()} of {hosts().length} hosts online
+            {t("infra.fleet.hostsOnline", { online: onlineCount(), total: hosts().length })}
             <Show when={totalRunning() > 0}>
-              {" "}&middot; {totalRunning()} containers running across fleet
+              {" "}&middot; {t("infra.fleet.containersRunning", { count: totalRunning() })}
             </Show>
           </span>
         </div>
         <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
           <Show when={probeProgress()}>
             <span style={{ color: "#8b949e", "font-size": "12px" }}>
-              Checking {Math.min(probeProgress()!.current + BATCH_SIZE, probeProgress()!.total)}/{probeProgress()!.total} hosts...
+              {t("infra.fleet.checkingHosts", { current: Math.min(probeProgress()!.current + BATCH_SIZE, probeProgress()!.total), total: probeProgress()!.total })}
             </span>
           </Show>
           <Show when={!probeProgress() && lastUpdated()}>
             <span style={{ color: "#484f58", "font-size": "12px" }}>
-              Updated {lastUpdated()!.toLocaleTimeString()}
+              {t("infra.fleet.updated", { time: lastUpdated()!.toLocaleTimeString() })}
             </span>
           </Show>
           <button
@@ -375,7 +376,7 @@ export default function FleetPage(props: FleetPageProps) {
               color: "#e6edf3", cursor: "pointer",
             }}
           >
-            {selectMode() ? "Cancel Select" : "Select"}
+            {selectMode() ? t("infra.fleet.cancelSelect") : t("infra.fleet.select")}
           </button>
           <button
             onClick={probeAll}
@@ -387,7 +388,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: probeProgress() ? "0.5" : "1",
             }}
           >
-            Test All
+            {t("infra.fleet.testAll")}
           </button>
         </div>
       </div>
@@ -400,7 +401,7 @@ export default function FleetPage(props: FleetPageProps) {
           "border-radius": "8px", "margin-bottom": "12px",
         }}>
           <span style={{ color: "#8b949e", "font-size": "13px", "margin-right": "4px" }}>
-            {selectedHosts().size} selected
+            {t("infra.fleet.selectedCount", { count: selectedHosts().size })}
           </span>
           <button
             onClick={selectAll}
@@ -410,7 +411,7 @@ export default function FleetPage(props: FleetPageProps) {
               color: "#e6edf3", cursor: "pointer",
             }}
           >
-            Select All
+            {t("infra.fleet.selectAll")}
           </button>
           <button
             onClick={deselectAll}
@@ -420,7 +421,7 @@ export default function FleetPage(props: FleetPageProps) {
               color: "#e6edf3", cursor: "pointer",
             }}
           >
-            Deselect All
+            {t("infra.fleet.deselectAll")}
           </button>
           <div style={{ flex: "1" }} />
           <button
@@ -433,7 +434,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: selectedHosts().size === 0 ? "0.5" : "1",
             }}
           >
-            Test Selected
+            {t("infra.fleet.testSelected")}
           </button>
           <button
             onClick={openCompare}
@@ -458,7 +459,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: selectedHosts().size === 0 ? "0.5" : "1",
             }}
           >
-            Remove Selected
+            {t("infra.fleet.removeSelected")}
           </button>
         </div>
       </Show>
@@ -476,7 +477,7 @@ export default function FleetPage(props: FleetPageProps) {
               "border-color": activeTag() === null ? "#8b949e" : "#30363d",
             }}
           >
-            All
+            {t("infra.common.all")}
           </button>
           <For each={allTags()}>
             {(tag) => {
@@ -504,9 +505,9 @@ export default function FleetPage(props: FleetPageProps) {
       {/* Version mismatch warning */}
       <Show when={versionMismatch()}>
         <div style={{ padding: "10px 16px", background: "rgba(210, 169, 34, 0.1)", border: "1px solid rgba(210, 169, 34, 0.2)", "border-radius": "8px", "font-size": "12px", color: "#d29922", "margin-bottom": "12px" }}>
-          <div style={{ "font-weight": 600, "margin-bottom": "4px" }}>Version mismatch detected</div>
+          <div style={{ "font-weight": 600, "margin-bottom": "4px" }}>{t("infra.fleet.versionMismatch")}</div>
           <div style={{ color: "#8b949e" }}>
-            Some hosts are running different daemon versions. To upgrade, SSH into each host and run:
+            {t("infra.fleet.versionMismatchDescription")}
           </div>
           <code style={{ display: "block", "margin-top": "6px", padding: "6px 10px", background: "#0d1117", "border-radius": "4px", color: "#e6edf3", "font-size": "12px" }}>
             sudo apt update && sudo apt upgrade orca-daemon
@@ -613,7 +614,7 @@ export default function FleetPage(props: FleetPageProps) {
                       "letter-spacing": "0.5px",
                     }}
                   >
-                    Local
+                    {t("infra.fleet.local")}
                   </span>
                 </Show>
               </div>
@@ -657,7 +658,7 @@ export default function FleetPage(props: FleetPageProps) {
               {/* Offline error */}
               <Show when={!host.checking && !host.online}>
                 <div style={{ color: "#f85149", "font-size": "13px" }}>
-                  Offline
+                  {t("infra.fleet.offline")}
                   <Show when={host.error}>
                     <span style={{ color: "#8b949e", "font-size": "12px", display: "block", "margin-top": "4px", "word-break": "break-all" }}>
                       {host.error}
@@ -667,7 +668,7 @@ export default function FleetPage(props: FleetPageProps) {
                     const key = host.id || "__local__";
                     const ts = lastSeen()[key];
                     return <Show when={ts}><span style={{ color: "#8b949e", "font-size": "12px", display: "block", "margin-top": "4px" }}>
-                        Last seen {relativeTime(ts)}
+                        {t("infra.fleet.lastSeen", { time: relativeTime(ts) })}
                       </span></Show>;
                   })()}
                 </div>
@@ -696,7 +697,7 @@ export default function FleetPage(props: FleetPageProps) {
                 <Show when={host.cpu_count != null || host.memory_total != null}>
                   <div style={{ display: "flex", gap: "16px", "margin-bottom": "8px", color: "#c9d1d9", "font-size": "13px" }}>
                     <Show when={host.cpu_count != null}>
-                      <span>{host.cpu_count} CPU</span>
+                      <span>{t("infra.fleet.cpuCount", { count: host.cpu_count })}</span>
                     </Show>
                     <Show when={host.memory_total != null}>
                       <span>{formatBytes(host.memory_total!)} RAM</span>
@@ -708,7 +709,7 @@ export default function FleetPage(props: FleetPageProps) {
                 <Show when={host.disk_usage_percent != null}>
                   <div style={{ "margin-bottom": "10px" }}>
                     <div style={{ display: "flex", "justify-content": "space-between", "font-size": "12px", color: "#8b949e", "margin-bottom": "4px" }}>
-                      <span>Disk</span>
+                      <span>t("settings.general.disk")</span>
                       <span>{host.disk_usage_percent!.toFixed(1)}%</span>
                     </div>
                     <div style={{ height: "4px", background: "#21262d", "border-radius": "2px", overflow: "hidden" }}>
@@ -739,7 +740,7 @@ export default function FleetPage(props: FleetPageProps) {
                   </Show>
                   <Show when={host.images_total != null}>
                     <span style={{ color: "#8b949e" }}>
-                      {host.images_total} images
+                      {t("infra.fleet.imageCount", { count: host.images_total })}
                     </span>
                   </Show>
                 </div>
@@ -844,7 +845,7 @@ function CompareModal(props: CompareModalProps) {
           padding: "16px 24px", "border-bottom": "1px solid #21262d",
         }}>
           <h2 style={{ margin: 0, "font-size": "16px", "font-weight": 600, color: "#e6edf3" }}>
-            Host Comparison
+            {t("infra.fleet.hostComparison")}
           </h2>
           <button
             onClick={() => props.onClose()}
@@ -861,7 +862,7 @@ function CompareModal(props: CompareModalProps) {
         <div style={{ flex: "1", "overflow-y": "auto", padding: "20px 24px" }}>
           <Show when={props.loading}>
             <div style={{ "text-align": "center", color: "#8b949e", padding: "40px 0" }}>
-              Fetching data from hosts...
+              {t("infra.fleet.fetching")}
             </div>
           </Show>
 
@@ -934,7 +935,7 @@ function HostColumn(props: HostColumnProps) {
           display: "inline-block",
         }} />
         <span style={{ "font-size": "15px", "font-weight": 600, color: "#e6edf3" }}>
-          {host()?.name || "Unknown"}
+          {host()?.name || t("infra.common.unknown")}
         </span>
         <Show when={health()?.docker_version}>
           <span style={{ "font-size": "11px", color: "#484f58" }}>
@@ -991,11 +992,11 @@ function HostColumn(props: HostColumnProps) {
           "font-size": "12px", "font-weight": 600, color: "#8b949e",
           "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "8px",
         }}>
-          Containers ({containers().length})
+          {t("infra.fleet.containersHeading", { count: containers().length })}
         </div>
         <Show when={containers().length === 0}>
           <div style={{ color: "#484f58", "font-size": "12px", "font-style": "italic" }}>
-            No containers
+            {t("infra.fleet.noContainers")}
           </div>
         </Show>
         <For each={containers()}>
@@ -1026,7 +1027,7 @@ function HostColumn(props: HostColumnProps) {
                     padding: "0 5px", "border-radius": "3px",
                     background: "rgba(210, 169, 34, 0.12)", "flex-shrink": "0",
                   }}>
-                    unique
+                    {t("infra.fleet.unique")}
                   </span>
                 </Show>
               </div>
@@ -1041,11 +1042,11 @@ function HostColumn(props: HostColumnProps) {
           "font-size": "12px", "font-weight": 600, color: "#8b949e",
           "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "8px",
         }}>
-          Images ({images().length})
+          {t("infra.fleet.imagesHeading", { count: images().length })}
         </div>
         <Show when={images().length === 0}>
           <div style={{ color: "#484f58", "font-size": "12px", "font-style": "italic" }}>
-            No images
+            {t("infra.fleet.noImages")}
           </div>
         </Show>
         <For each={images()}>

@@ -5,6 +5,7 @@ import { yaml } from "@codemirror/lang-yaml";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter, HighlightStyle } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
+import { t } from "../i18n";
 
 // Tokyo Night theme for CodeMirror 6
 const tokyoNightTheme = EditorView.theme({
@@ -214,10 +215,10 @@ export default function YamlEditor(props: YamlEditorProps) {
         }}>
           <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
             <span style={{ "font-size": "13px", "font-weight": "600", color: "#a9b1d6" }}>
-              {props.title || "YAML Editor"}
+              {props.title || t("components.yaml.title")}
             </span>
             <Show when={modified()}>
-              <span style={{ "font-size": "11px", color: "#e0af68" }}>(modified)</span>
+              <span style={{ "font-size": "11px", color: "#e0af68" }}>{t("components.yaml.modified")}</span>
             </Show>
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
@@ -228,12 +229,12 @@ export default function YamlEditor(props: YamlEditorProps) {
                 disabled={saving() || !modified()}
                 style={{ "font-size": "11px" }}
               >
-                {saving() ? "Applying..." : "Apply Changes"}
+                {saving() ? t("components.yaml.applying") : t("components.yaml.apply")}
               </button>
             </Show>
             <Show when={props.onClose}>
               <button class="btn btn-sm" onClick={() => props.onClose?.()} style={{ "font-size": "11px" }}>
-                Close
+                {t("components.common.close")}
               </button>
             </Show>
           </div>
@@ -244,7 +245,7 @@ export default function YamlEditor(props: YamlEditorProps) {
           padding: "16px", color: "#f7768e", background: "rgba(247,118,142,0.08)",
           border: "1px solid rgba(247,118,142,0.2)", "border-radius": "8px", margin: "12px",
         }}>
-          <strong>Editor failed to load:</strong> {loadError()}
+          <strong>{t("components.yaml.loadFailed")}</strong> {loadError()}
           <pre style={{
             "margin-top": "12px", background: "#1a1b26", padding: "12px", "border-radius": "6px",
             "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px",

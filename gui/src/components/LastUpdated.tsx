@@ -1,4 +1,5 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
+import { t } from "../i18n";
 
 interface LastUpdatedProps {
   timestamp: Date | null;
@@ -6,12 +7,12 @@ interface LastUpdatedProps {
 
 function formatElapsed(ms: number): string {
   const seconds = Math.floor(ms / 1000);
-  if (seconds < 5) return "Updated just now";
-  if (seconds < 60) return `Updated ${seconds}s ago`;
+  if (seconds < 5) return t("components.lastUpdated.justNow");
+  if (seconds < 60) return t("components.lastUpdated.seconds", { count: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `Updated ${minutes}m ago`;
+  if (minutes < 60) return t("components.lastUpdated.minutes", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  return `Updated ${hours}h ago`;
+  return t("components.lastUpdated.hours", { count: hours });
 }
 
 export default function LastUpdated(props: LastUpdatedProps) {

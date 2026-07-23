@@ -1,4 +1,5 @@
 import { createSignal, For, Show, onMount, onCleanup } from "solid-js";
+import { t } from "../i18n";
 
 interface DropdownOption {
   value: string;
@@ -18,7 +19,7 @@ export default function Dropdown(props: DropdownProps) {
   let wrapperRef: HTMLDivElement | undefined;
 
   const selectedLabel = () =>
-    props.options.find((o) => o.value === props.value)?.label || props.value || props.placeholder || "Select...";
+    props.options.find((o) => o.value === props.value)?.label || props.value || props.placeholder || t("components.common.select");
 
   const handleClickOutside = (e: MouseEvent) => {
     if (open() && wrapperRef && !wrapperRef.contains(e.target as Node)) {

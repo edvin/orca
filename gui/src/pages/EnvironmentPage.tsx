@@ -7,6 +7,7 @@ import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
+import { t } from "../i18n";
 
 export default function EnvironmentPage() {
   const [status, setStatus] = createSignal<EnvironmentStatus | null>(null);
@@ -81,12 +82,9 @@ export default function EnvironmentPage() {
     // straight to runFix — gets the same guard.
     if (action === "recreate_lima_orca") {
       const ok = await confirmDanger({
-        title: "Recreate Docker VM?",
-        message:
-          "This permanently deletes the existing Lima VM and rebuilds it on " +
-          "Ubuntu 26.04 with vsock networking. Containers, images, and volumes " +
-          "inside it will be lost — you'll re-pull and re-run them.",
-        confirmLabel: "Recreate VM",
+        title: t("infra.environment.recreateVmTitle"),
+        message: t("infra.environment.recreateVmConfirm"),
+        confirmLabel: t("infra.environment.recreateVm"),
       });
       if (!ok) return;
     }
@@ -255,7 +253,7 @@ export default function EnvironmentPage() {
       try { await invoke("start_daemon"); } catch {}
       await new Promise(r => setTimeout(r, 3000));
 
-      showToast("Docker and Orca daemon restarted", "success");
+      showToast(t("infra.environment.dockerOrcaRestarted"), "success");
       await refresh();
     } catch (e) {
       logError(`Failed to restart Docker: ${e}`);
@@ -271,8 +269,8 @@ export default function EnvironmentPage() {
       // Step 1: If Orca runtime isn't available, the user needs to set up Docker first
       const dd = ddStatus();
       if (dd && !dd.orca_runtime_available) {
-        showToast("Setting up Orca runtime first...", "info");
-        runFix("setup_docker_macos", "Docker Setup");
+        showToast(t("infra.environment.settingUpRuntime"), "info");
+        runFix("setup_docker_macos", t("infra.environment.dockerSetup"));
         return;
       }
 
@@ -332,7 +330,7 @@ export default function EnvironmentPage() {
       }
     } catch (e) {
       logError(`Connection diagnostics failed: ${e}`);
-      setDiagnoseLog(`Failed to run diagnostics: ${e}`);
+      setDiagnoseLog(t("infra.environment.diagnosticsFailed", { error: String(e) }));
       setDiagnoseResult(false);
     } finally {
       setDiagnoseRunning(false);
@@ -342,16 +340,16 @@ export default function EnvironmentPage() {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">System Health</h1>
+        <h1 class="page-title">{t("infra.environment.title")}</h1>
         <div class="page-actions">
           <Show when={!health()?.docker_connected}>
             <button class="btn btn-primary" disabled={actionRunning()} onClick={() => {
               const action = navigator.platform.includes("Mac") ? "setup_docker_macos"
                 : navigator.platform.includes("Win") ? "install_docker"
                 : "install_docker_linux";
-              runFix(action, "Docker Setup");
+              runFix(action, t("infra.environment.dockerSetup"));
             }}>
-              Set up Docker
+              {t("infra.environment.setupDocker")}
             </button>
           </Show>
           <Show when={navigator.platform.includes("Mac")}>
@@ -367,10 +365,10 @@ export default function EnvironmentPage() {
             {restartingDocker() ? "Restarting..." : "Restart Docker & Orca"}
           </button>
           <button class="btn" onClick={runDiagnose}>
-            Diagnose
+            {t("infra.environment.diagnose")}
           </button>
           <button class="btn" onClick={refresh} disabled={loading()}>
-            {loading() ? "Checking..." : "Re-check"}
+            {loading() ? t("infra.common.checking") : t("infra.environment.recheck")}
           </button>
         </div>
       </div>
@@ -415,7 +413,7 @@ export default function EnvironmentPage() {
                 </div>
                 <div style={{ flex: "1" }}>
                   <div style={{ "font-size": "20px", "font-weight": "700", color: "#e6edf3", "margin-bottom": "4px" }}>
-                    All Systems Operational
+                    {t("infra.environment.allOperational")}
                   </div>
                   <div style={{ "font-size": "14px", color: "#8b949e", "line-height": "1.5" }}>
                     {platformLabel(s().platform)} {"\u2022"} Runtime: {
@@ -466,13 +464,13 @@ export default function EnvironmentPage() {
                     }}>
                       <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3", "margin-bottom": "10px" }}>Orca Runtime</div>
                       <div style={{ "font-size": "12px", color: "#3fb950", "line-height": "1.8" }}>
-                        ~200 MB RAM<br/>Free forever<br/>Open source<br/>Zero telemetry
+                        {t("infra.environment.orcaRuntimeComparison")}
                       </div>
                     </div>
                   </div>
 
                   <div style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "16px" }}>
-                    Your containers and images will still be available.
+                    {t("infra.environment.dataAvailable")}
                   </div>
 
                   {/* Stop Docker Desktop checkbox */}
@@ -487,7 +485,7 @@ export default function EnvironmentPage() {
                       onChange={(e) => setStopDdChecked(e.currentTarget.checked)}
                       style={{ "accent-color": "#58a6ff" }}
                     />
-                    Also stop Docker Desktop to free resources
+                    {t("infra.environment.stopDockerDesktopOption")}
                   </label>
 
                   <div style={{ display: "flex", gap: "10px" }}>
@@ -496,7 +494,7 @@ export default function EnvironmentPage() {
                       disabled={migrating()}
                       onClick={runMigration}
                     >
-                      {migrating() ? "Switching..." : "Switch to Orca Runtime"}
+                      {migrating() ? t("infra.common.switching") : t("infra.environment.switchRuntimeTitle")}
                     </button>
                     <button class="btn" onClick={() => setMigrationDismissed(true)}>
                       Maybe Later
@@ -516,7 +514,7 @@ export default function EnvironmentPage() {
                   display: "flex", "align-items": "center", gap: "8px",
                 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Using Orca runtime — Docker Desktop is installed but not the active context.
+                  {t("infra.environment.usingOrcaRuntime")}
                 </div>
               </Show>
 
@@ -607,15 +605,15 @@ export default function EnvironmentPage() {
                   <Show when={machine()}>
                     {(m) => (
                       <div style={{ background: "rgba(22, 27, 34, 0.5)", border: "1px solid rgba(255,255,255,0.06)", "border-radius": "10px", padding: "16px 18px" }}>
-                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>Runtime</div>
+                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>{t("infra.environment.runtime")}</div>
                         <div class="card-grid" style={{ "font-size": "12px" }}>
-                          <span class="card-label">Backend</span>
+                          <span class="card-label">{t("infra.environment.backend")}</span>
                           <span class="card-value">{m().backend} · {m().config.runtime}</span>
-                          <span class="card-label">State</span>
+                          <span class="card-label">{t("infra.common.state")}</span>
                           <span class={`state-badge ${m().state === "Running" ? "state-running" : "state-stopped"}`}>{m().state}</span>
-                          <span class="card-label">CPUs</span>
+                          <span class="card-label">t("settings.general.cpus")</span>
                           <span class="card-value">{m().config.cpus}</span>
-                          <span class="card-label">Memory</span>
+                          <span class="card-label">{t("infra.environment.memory")}</span>
                           <span class="card-value">{formatBytes(m().config.memory_mb * 1024 * 1024)}</span>
                         </div>
                       </div>
@@ -624,13 +622,13 @@ export default function EnvironmentPage() {
                   <Show when={health()?.system_resources}>
                     {(res) => (
                       <div style={{ background: "rgba(22, 27, 34, 0.5)", border: "1px solid rgba(255,255,255,0.06)", "border-radius": "10px", padding: "16px 18px" }}>
-                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>Resources</div>
+                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>{t("infra.environment.resources")}</div>
                         <div class="card-grid" style={{ "font-size": "12px" }}>
-                          <span class="card-label">Memory</span>
+                          <span class="card-label">t("corePages.common.memory")</span>
                           <span class="card-value">
                             {formatBytes(res().memory_total_bytes - res().memory_available_bytes)} / {formatBytes(res().memory_total_bytes)}
                           </span>
-                          <span class="card-label">Disk</span>
+                          <span class="card-label">{t("infra.common.disk")}</span>
                           <span class="card-value">
                             {formatBytes(res().disk_total_bytes - res().disk_free_bytes)} / {formatBytes(res().disk_total_bytes)}
                             <span style={{ color: "#6e7681", "margin-left": "4px" }}>({res().disk_usage_percent.toFixed(0)}%)</span>
@@ -701,7 +699,7 @@ export default function EnvironmentPage() {
                           </div>
                         </div>
                         <Show when={check.fix_action && check.status !== "Pass"}>
-                          <button class="btn btn-primary" disabled={actionRunning()} onClick={() => runFix(check.fix_action!, check.name)} style={{ "flex-shrink": "0" }}>Install</button>
+                          <button class="btn btn-primary" disabled={actionRunning()} onClick={() => runFix(check.fix_action!, check.name)} style={{ "flex-shrink": "0" }}>{t("infra.common.install")}</button>
                         </Show>
                         <Show when={check.status === "Pass"}>
                           <span style={{ color: "#3fb950", "font-size": "12px", "font-weight": "600", "flex-shrink": "0" }}>Done</span>
@@ -740,7 +738,7 @@ export default function EnvironmentPage() {
                     <span style={{ color: "#3fb950" }}>Connection available</span>
                   </Show>
                 }>
-                  <span>Testing connections...</span>
+                  <span>{t("infra.environment.testingConnections")}</span>
                 </Show>
               </span>
               <Show when={!diagnoseRunning()}>
@@ -765,7 +763,7 @@ export default function EnvironmentPage() {
             </div>
             <div class="modal-footer">
               <Show when={!diagnoseRunning()}>
-                <button class="btn" onClick={() => setDiagnoseOpen(false)}>Close</button>
+                <button class="btn" onClick={() => setDiagnoseOpen(false)}>t("common.close")</button>
                 <button class="btn btn-primary" onClick={runDiagnose}>Retry</button>
               </Show>
             </div>
@@ -781,7 +779,7 @@ export default function EnvironmentPage() {
               <span class="modal-title">
                 <Show when={actionRunning()} fallback={
                   <Show when={actionSuccess()} fallback={
-                    <span style={{ color: "#f85149" }}>{"\u2717"} {actionName()} failed</span>
+                    <span style={{ color: "#f85149" }}>{"\u2717"} {t("infra.environment.actionFailed", { action: actionName() })}</span>
                   }>
                     <span style={{ color: "#3fb950" }}>{"\u2713"} {actionName()} complete</span>
                   </Show>
@@ -811,7 +809,7 @@ export default function EnvironmentPage() {
             </div>
             <div class="modal-footer">
               <Show when={!actionRunning()}>
-                <button class="btn btn-primary" onClick={closeActionDialog}>Close</button>
+                <button class="btn btn-primary" onClick={closeActionDialog}>t("common.close")</button>
               </Show>
               <Show when={actionRunning()}>
                 <span style={{ "font-size": "12px", color: "var(--text-muted)" }}>This may take several minutes...</span>

@@ -15,6 +15,7 @@ import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 import { escapeHtml, safeHref } from "../lib/sanitize";
 import { logError } from "../lib/activityStore";
+import { t } from "../i18n";
 
 interface ImagesPageProps {
   autoOpenPull?: boolean;
@@ -231,11 +232,11 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   const removeImage = async (id: string, tag: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!await confirmDanger("Remove Image", `Remove image '${tag}'?`)) return;
+    if (!await confirmDanger(t("corePages.images.removeImage"), t("corePages.images.removeImageConfirm", { tag }))) return;
     setDeletingImageId(id);
     try {
       await invoke("remove_image", { id });
-      showToast("Image removed", "success");
+      showToast(t("corePages.images.removed"), "success");
       await refresh();
     } catch (err) {
       // Parse Docker error JSON if present
@@ -311,7 +312,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       await refresh();
     } catch (e) {
       logError(`Failed to prune images: ${e}`);
-      showToast(`Prune failed: ${e}`, "error");
+      showToast(t("corePages.images.pruneFailed", { error: e }), "error");
     } finally {
       setPruning(false);
       setShowPruneConfirm(false);
@@ -345,7 +346,7 @@ export default function ImagesPage(props: ImagesPageProps) {
             const layers = Object.values(next);
             const done = layers.filter((l: any) => l.status === "Pull complete" || l.status === "Already exists").length;
             const total = layers.length;
-            if (total > 0) setPullStatus(`Pulling ${ref_}... ${done}/${total} layers`);
+            if (total > 0) setPullStatus(t("corePages.images.pullLayers", { name: ref_, done, total }));
             return next;
           });
         } else if (data.event === "done") {
@@ -365,7 +366,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           setPullLayers({});
           setPulling(false);
           logError(`Failed to pull image: ${data.error}`, `Image "${ref_}"`);
-          showToast(`Pull failed: ${data.error}`, "error");
+          showToast(t("corePages.images.pullFailed", { error: data.error }), "error");
           try { pullUnlisten?.(); } catch {}
           pullUnlisten = null;
         }
@@ -462,7 +463,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       if (controller.signal.aborted) {
         // Unmount / user cancellation — don't surface a toast.
       } else if (hadError) {
-        showToast("Build failed -- check build output", "error");
+        showToast(t("corePages.images.buildFailed"), "error");
       } else {
         showToast("Image built successfully", "success");
         await refresh();
@@ -488,7 +489,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     setImporting(true);
     try {
       await invoke("import_image", { path });
-      showToast("Image imported successfully", "success");
+      showToast(t("corePages.images.imported"), "success");
       setShowImport(false);
       setImportPath("");
       await refresh();
@@ -511,7 +512,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       setSaveTarPath("");
     } catch (e) {
       logError(`Failed to save image: ${e}`, `Path "${path}"`);
-      showToast(`Save failed: ${e}`, "error");
+      showToast(t("corePages.images.saveFailed", { error: e }), "error");
     } finally {
       setSavingTar(false);
     }
@@ -635,7 +636,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       setFileContentPath(filePath);
     } catch (e) {
       logError(`Failed to read image file: ${e}`, `Image ${imageId}, path "${fullPath}"`);
-      showToast(`Failed to read file: ${e}`, "error");
+      showToast(t("corePages.images.readFileFailed", { error: e }), "error");
     }
   };
 
@@ -741,15 +742,15 @@ export default function ImagesPage(props: ImagesPageProps) {
 <body>
 <div class="container">
   <div class="header">
-    <h1>Vulnerability Report — <span>${escapeHtml(imageName)}</span></h1>
+    <h1>${escapeHtml(t("corePages.images.reportTitle"))} — <span>${escapeHtml(imageName)}</span></h1>
     <div class="meta">
-      <span>Scanned: ${escapeHtml(timestamp)}</span>
-      <span>Scanner: Trivy (via Orca Desktop)</span>
-      <span>${escapeHtml(String(vulns.length))} vulnerabilities found</span>
+      <span>${escapeHtml(t("corePages.images.reportScanned", { timestamp }))}</span>
+      <span>${escapeHtml(t("corePages.images.reportScanner"))}</span>
+      <span>${escapeHtml(t("corePages.images.reportFound", { count: vulns.length }))}</span>
     </div>
   </div>
   <div class="summary">
-    <div class="summary-card total"><div class="number">${escapeHtml(String(scan.total))}</div><div class="label">Total</div></div>
+    <div class="summary-card total"><div class="number">${escapeHtml(String(scan.total))}</div><div class="label">t("machine.total")</div></div>
     <div class="summary-card critical"><div class="number">${escapeHtml(String(scan.critical))}</div><div class="label">Critical</div></div>
     <div class="summary-card high"><div class="number">${escapeHtml(String(scan.high))}</div><div class="label">High</div></div>
     <div class="summary-card medium"><div class="number">${escapeHtml(String(scan.medium))}</div><div class="label">Medium</div></div>
@@ -757,11 +758,11 @@ export default function ImagesPage(props: ImagesPageProps) {
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Severity</th><th>CVE</th><th>Package</th><th>Installed</th><th>Fixed In</th><th>Title</th></tr></thead>
+      <thead><tr><th>${escapeHtml(t("corePages.images.severity"))}</th><th>CVE</th><th>${escapeHtml(t("corePages.images.package"))}</th><th>${escapeHtml(t("corePages.images.installed"))}</th><th>${escapeHtml(t("corePages.images.fixedIn"))}</th><th>${escapeHtml(t("corePages.images.vulnerabilityTitle"))}</th></tr></thead>
       <tbody>${vulnRows}</tbody>
     </table>
   </div>
-  <div class="footer">Generated by <a href="https://orca-desktop.com">Orca Desktop</a> using Trivy</div>
+  <div class="footer">${escapeHtml(t("corePages.images.reportGeneratedBy"))} <a href="https://orca-desktop.com">Orca Desktop</a> ${escapeHtml(t("corePages.images.reportUsingTrivy"))}</div>
 </div>
 </body>
 </html>`;
@@ -819,7 +820,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     <div>
       <div class="page-header">
         <h1 class="page-title">
-          Images
+          {t("corePages.images.title")}
           <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": "400", "margin-left": "8px" }}>
             {filtered().length} &middot; {formatBytes(totalSize())}
           </span>
@@ -829,7 +830,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           <input
             class="search-input"
             type="text"
-            placeholder="Filter images..."
+            placeholder={t("corePages.images.filterPlaceholder")}
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
           />
@@ -840,13 +841,13 @@ export default function ImagesPage(props: ImagesPageProps) {
             Build
           </button>
           <button class="btn" onClick={() => setShowImport(!showImport())}>
-            Import
+            {t("corePages.common.import")}
           </button>
           <button class="btn" onClick={() => setShowPruneConfirm(true)}>
-            Prune
+            {t("corePages.images.prune")}
           </button>
           <button class="btn" onClick={refresh}>
-            Refresh
+            {t("corePages.common.refresh")}
           </button>
         </div>
       </div>
@@ -855,7 +856,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       {/* Build panel */}
       <Show when={showBuild()}>
         <div class="card" style={{ "margin-bottom": "16px" }}>
-          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Build Image</div>
+          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>{t("corePages.images.buildImage")}</div>
           <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div class="form-group">
               <label class="form-label">Context path (directory with Dockerfile)</label>
@@ -869,17 +870,17 @@ export default function ImagesPage(props: ImagesPageProps) {
             </div>
             <div class="form-row">
               <div class="form-group" style={{ flex: 1 }}>
-                <label class="form-label">Dockerfile (optional)</label>
+                <label class="form-label">{t("corePages.images.dockerfileOptional")}</label>
                 <input
                   class="form-input"
                   type="text"
-                  placeholder="Dockerfile"
+                  placeholder={t("corePages.builds.dockerfileOptional")}
                   value={buildDockerfile()}
                   onInput={(e) => setBuildDockerfile(e.currentTarget.value)}
                 />
               </div>
               <div class="form-group" style={{ flex: 1 }}>
-                <label class="form-label">Tag (optional)</label>
+                <label class="form-label">{t("corePages.common.tagOptional")}</label>
                 <input
                   class="form-input"
                   type="text"
@@ -895,7 +896,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 style={{ "font-size": "12px", padding: "4px 10px" }}
                 onClick={() => setBuildArgs([...buildArgs(), { key: "", value: "" }])}
               >
-                + Add build arg
+                {t("corePages.images.addBuildArg")}
               </button>
               <Show when={buildArgs().length > 0}>
                 <div style={{ "margin-top": "8px" }}>
@@ -943,14 +944,14 @@ export default function ImagesPage(props: ImagesPageProps) {
                 onClick={doBuild}
                 disabled={building() || !buildPath().trim()}
               >
-                {building() ? (<><Spinner size={12} />{" Building..."}</>) : "Build"}
+                {building() ? (<><Spinner size={12} />{" "}{t("corePages.common.building")}</>) : t("corePages.common.build")}
               </button>
               <button class="btn" onClick={() => setShowBuild(false)}>
-                Cancel
+                {t("corePages.common.cancel")}
               </button>
               <Show when={buildOutput().length > 0 && !building()}>
                 <button class="btn" onClick={() => setBuildOutput([])}>
-                  Clear Output
+                  {t("corePages.images.clearOutput")}
                 </button>
               </Show>
             </div>
@@ -996,10 +997,10 @@ export default function ImagesPage(props: ImagesPageProps) {
       {/* Import panel */}
       <Show when={showImport()}>
         <div class="card" style={{ "margin-bottom": "16px" }}>
-          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Import Image from Tar</div>
+          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>{t("corePages.images.importFromTar")}</div>
           <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div class="form-group">
-              <label class="form-label">Path to tar file</label>
+              <label class="form-label">{t("corePages.images.tarPath")}</label>
               <input
                 class="form-input"
                 type="text"
@@ -1015,7 +1016,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 onClick={doImport}
                 disabled={importing() || !importPath().trim()}
               >
-                {importing() ? (<><Spinner size={12} />{" Importing..."}</>) : "Import"}
+                {importing() ? (<><Spinner size={12} />{" "}{t("corePages.images.importing")}</>) : t("corePages.common.import")}
               </button>
               <button class="btn" onClick={() => setShowImport(false)}>
                 Cancel
@@ -1047,21 +1048,21 @@ export default function ImagesPage(props: ImagesPageProps) {
         }}>
           <Show when={batchDeleteProgress()} fallback={
             <span style={{ "font-size": "13px", color: "#e6edf3" }}>
-              {selected().size} image{selected().size !== 1 ? "s" : ""} selected
+              {t("corePages.images.selectedCount", { count: selected().size })}
             </span>
           }>
             {(p) => (
               <span style={{ "font-size": "13px", color: "#e6edf3", display: "inline-flex", "align-items": "center", gap: "8px" }}>
-                <Spinner size={12} /> Deleting images... ({p().done}/{p().total})
+                <Spinner size={12} /> {t("corePages.images.deletingProgress", { done: p().done, total: p().total })}
               </span>
             )}
           </Show>
           <button class="btn btn-sm btn-danger" onClick={batchDelete} disabled={!!batchDeleteProgress()} style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            {batchDeleteProgress() ? "Deleting..." : "Delete Selected"}
+            {batchDeleteProgress() ? t("corePages.common.deleting") : t("corePages.common.deleteSelected")}
           </button>
           <button class="btn btn-sm" onClick={() => setSelected(new Set())} disabled={!!batchDeleteProgress()}>
-            Clear
+            {t("corePages.common.clear")}
           </button>
         </div>
       </Show>
@@ -1072,7 +1073,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           <Show when={lastUpdated() !== null} fallback={
             <table class="table">
               <thead>
-                <tr><th /><th>Repository / Tag</th><th>ID</th><th>Size</th><th>Created</th><th>Actions</th></tr>
+                <tr><th /><th>{t("corePages.images.repositoryTag")}</th><th>ID</th><th>{t("corePages.common.size")}</th><th>{t("corePages.common.created")}</th><th>{t("corePages.common.actions")}</th></tr>
               </thead>
               <tbody>
                 <SkeletonRow columns={6} />
@@ -1084,10 +1085,10 @@ export default function ImagesPage(props: ImagesPageProps) {
             </table>
           }>
             <div class="empty">
-              <p class="empty-title">No images found</p>
-              <p>Pull an image from Docker Hub using the Pull button above.</p>
+              <p class="empty-title">{t("corePages.images.noImages")}</p>
+              <p>{t("corePages.images.noImagesHint")}</p>
               <div class="empty-actions">
-                <button class="btn btn-primary" onClick={() => setShowPull(true)}>Pull Image</button>
+                <button class="btn btn-primary" onClick={() => setShowPull(true)}>{t("corePages.images.pullImage")}</button>
               </div>
             </div>
           </Show>
@@ -1104,11 +1105,11 @@ export default function ImagesPage(props: ImagesPageProps) {
                   style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
                 />
               </th>
-              <SortableHeader label="Repository / Tag" field="tag" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <SortableHeader label={t("corePages.images.repositoryTag")} field="tag" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <th>ID</th>
-              <SortableHeader label="Size" field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} style={{ "min-width": "90px" }} />
-              <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <th style={{ "text-align": "right" }}>Actions</th>
+              <SortableHeader label={t("corePages.common.size")} field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} style={{ "min-width": "90px" }} />
+              <SortableHeader label={t("corePages.common.created")} field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <th style={{ "text-align": "right" }}>{t("corePages.common.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1135,7 +1136,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                       <Show
                         when={img.repo_tags.length > 0}
                         fallback={
-                          <span style={{ color: "#8b949e" }}>&lt;untagged&gt;</span>
+                          <span style={{ color: "#8b949e" }}>{t("corePages.common.untagged")}</span>
                         }
                       >
                         <For each={img.repo_tags}>
@@ -1163,13 +1164,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                         <Show when={img.repo_tags.length > 0}>
                           <button
                             class="action-icon action-icon-start"
-                            title="Run container from this image"
+                            title={t("corePages.images.runFromImage")}
                             onClick={(e) => { e.stopPropagation(); setRunImage(img.repo_tags[0]); }}
                           >▶</button>
                         </Show>
                         <button
                           class="action-icon"
-                          title="Tag image"
+                          title={t("corePages.images.tagImage")}
                           onClick={(e) => {
                             e.stopPropagation();
                             setTagSource(img.id);
@@ -1195,13 +1196,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                           fallback={
                             <button
                               class="action-icon action-icon-delete"
-                              title="Remove image"
+                              title={t("corePages.images.removeImage")}
                               disabled={deletingImageId() !== null}
                               onClick={(e) => removeImage(img.id, img.repo_tags[0] || img.id, e)}
                             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                           }
                         >
-                          <span title="Removing image..." style={{ display: "inline-flex", "align-items": "center", "justify-content": "center", width: "28px", height: "28px" }}>
+                          <span title={t("corePages.images.removing")} style={{ display: "inline-flex", "align-items": "center", "justify-content": "center", width: "28px", height: "28px" }}>
                             <Spinner size={12} />
                           </span>
                         </Show>
@@ -1215,7 +1216,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                           <Show
                             when={inspectData()}
                             fallback={
-                              <span style={{ color: "#8b949e" }}><Spinner size={12} />{" "}Loading image details...</span>
+                              <span style={{ color: "#8b949e" }}><Spinner size={12} />{" "}{t("corePages.images.loadingDetails")}</span>
                             }
                           >
                             {(data) => {
@@ -1236,35 +1237,35 @@ export default function ImagesPage(props: ImagesPageProps) {
                               const layerCount = imageHistoryData().length;
                               return (<>
                                 <div class="card-grid">
-                                  <div class="card-label">Image ID</div>
+                                  <div class="card-label">{t("corePages.builds.imageId")}</div>
                                   <div class="card-value mono" style={{ "font-size": "11px", display: "flex", "align-items": "center", gap: "6px" }}>
                                     {imageId}
                                     <CopyButton text={imageId} label="Copy image ID" />
                                   </div>
 
-                                  <div class="card-label">Tags</div>
+                                  <div class="card-label">{t("corePages.images.tags")}</div>
                                   <div class="card-value">
-                                    <Show when={tags.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
+                                    <Show when={tags.length > 0} fallback={<span style={{ color: "#8b949e" }}>{t("corePages.images.none")}</span>}>
                                       <For each={tags}>
                                         {(tag: string) => (
                                           <div class="mono" style={{ "line-height": "1.6", display: "flex", "align-items": "center", gap: "4px" }}>
                                             {tag}
-                                            <CopyButton text={tag} label="Copy tag" />
+                                            <CopyButton text={tag} label={t("corePages.images.copyTag")} />
                                           </div>
                                         )}
                                       </For>
                                     </Show>
                                   </div>
 
-                                  <div class="card-label">Size</div>
+                                  <div class="card-label">t("corePages.common.size")</div>
                                   <div class="card-value">{formatBytes(typeof size === "number" ? size : 0)}</div>
 
-                                  <div class="card-label">Created</div>
+                                  <div class="card-label">{t("corePages.common.created")}</div>
                                   <div class="card-value">{formatTimestamp(created)}</div>
 
-                                  <div class="card-label">Layers</div>
+                                  <div class="card-label">{t("corePages.images.layersLabel")}</div>
                                   <div class="card-value" style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
-                                    <span>{layerCount} layer{layerCount !== 1 ? "s" : ""}</span>
+                                    <span>{t("corePages.images.layers", { count: layerCount })}</span>
                                     <Show when={layerCount > 0}>
                                       <button class="btn btn-sm" style={{ "font-size": "11px", padding: "1px 8px" }}
                                         onClick={(e) => { e.stopPropagation(); setLayersDialogImage(img); }}>
@@ -1284,8 +1285,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                                     onClick={(e) => { e.stopPropagation(); doScanImage(img.id); }}
                                   >
                                     {scanning() && scanImageId() === img.id
-                                      ? (<><Spinner size={12} />{" Scanning..."}</>)
-                                      : "Scan for Vulnerabilities"}
+                                      ? (<><Spinner size={12} />{" "}{t("corePages.images.scanning")}</>)
+                                      : t("corePages.images.scan")}
                                   </button>
                                 </div>
                                 <Show when={scanImageId() === img.id && scanResult()}>
@@ -1355,7 +1356,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                             "font-size": "12px",
                                             "font-weight": "600",
                                           }}>
-                                            {scanResult()!.high} High
+                                            {scanResult()!.high} {t("corePages.images.high")}
                                           </span>
                                         </Show>
                                         <Show when={scanResult()!.medium > 0}>
@@ -1508,10 +1509,10 @@ export default function ImagesPage(props: ImagesPageProps) {
             </div>
             <div class="modal-body">
               <div style={{ "margin-bottom": "14px", color: "#8b949e", "font-size": "13px" }}>
-                Source: <span class="mono" style={{ color: "#e6edf3" }}>{tagSourceLabel()}</span>
+                {t("corePages.images.sourceLabel", { name: tagSourceLabel() })}
               </div>
               <div class="form-group" style={{ "margin-bottom": "12px" }}>
-                <label class="form-label">Repository</label>
+                <label class="form-label">t("container.repository")</label>
                 <input
                   class="form-input"
                   type="text"
@@ -1521,7 +1522,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 />
               </div>
               <div class="form-group">
-                <label class="form-label">Tag</label>
+                <label class="form-label">t("corePages.common.tag")</label>
                 <input
                   class="form-input"
                   type="text"
@@ -1532,7 +1533,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               </div>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => { if (!tagging()) setShowTagDialog(false); }} disabled={tagging()}>Cancel</button>
+              <button class="btn" onClick={() => { if (!tagging()) setShowTagDialog(false); }} disabled={tagging()}>{t("corePages.common.cancel")}</button>
               <button
                 class="btn btn-primary"
                 disabled={tagging() || !tagRepo().trim()}
@@ -1568,7 +1569,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ "max-width": "500px" }}>
             <div class="modal-header">
-              <span class="modal-title">Save Image to Tar</span>
+              <span class="modal-title">{t("corePages.images.saveImageTar")}</span>
               <button class="modal-close" onClick={() => { if (!savingTar()) setShowSaveTar(false); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1589,13 +1590,13 @@ export default function ImagesPage(props: ImagesPageProps) {
               </div>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => { if (!savingTar()) setShowSaveTar(false); }} disabled={savingTar()}>Cancel</button>
+              <button class="btn" onClick={() => { if (!savingTar()) setShowSaveTar(false); }} disabled={savingTar()}>t("common.cancel")</button>
               <button
                 class="btn btn-primary"
                 disabled={savingTar() || !saveTarPath().trim()}
                 onClick={doSaveTar}
               >
-                {savingTar() ? (<><Spinner size={12} />{" Saving..."}</>) : "Save"}
+                {savingTar() ? (<><Spinner size={12} />{" "}{t("corePages.common.saving")}</>) : t("corePages.common.save")}
               </button>
             </div>
           </div>
@@ -1610,7 +1611,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ "max-width": "460px" }}>
             <div class="modal-header">
-              <span class="modal-title">Prune Unused Images</span>
+              <span class="modal-title">t("corePages.images.pruneUnused")</span>
               <button class="modal-close" onClick={() => setShowPruneConfirm(false)}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1618,13 +1619,11 @@ export default function ImagesPage(props: ImagesPageProps) {
                 This will remove all images that are not referenced by any container.
               </p>
               <p style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.5" }}>
-                Dangling images (untagged layers) and unused images will be deleted.
-                Images in use by running or stopped containers are kept.
-                This action cannot be undone.
+                {t("corePages.images.pruneDetail")}
               </p>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => setShowPruneConfirm(false)} disabled={pruning()}>Cancel</button>
+              <button class="btn" onClick={() => setShowPruneConfirm(false)} disabled={pruning()}>t("common.cancel")</button>
               <button class="btn" style={{ background: "#da3633", color: "#fff" }} onClick={pruneUnused} disabled={pruning()}>
                 {pruning() ? "Pruning..." : "Prune Images"}
               </button>
@@ -1641,7 +1640,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "min-height": "500px", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
-              <span class="modal-title">Pull Image</span>
+              <span class="modal-title">t("corePages.images.pullImage")</span>
               <button class="modal-close" onClick={() => { setShowPull(false); setPulling(false); setPullStatus(""); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1660,7 +1659,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                     ref={(el) => { pullInputRef = el; setTimeout(() => el.focus(), 50); }}
                     class="pull-input"
                     type="text"
-                    placeholder="Search Docker Hub and pull an image (e.g. nginx, postgres:16)"
+                    placeholder={t("corePages.images.pullPlaceholder")}
                     value={pullRef()}
                     onInput={(e) => onPullInput(e.currentTarget.value)}
                     onKeyDown={handlePullKeyDown}
@@ -1676,7 +1675,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                   }}>
                     <Show when={searching()}>
                       <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
-                        <Spinner size={12} />{" "}Searching...
+                        <Spinner size={12} />{" "}{t("corePages.common.searching")}
                       </div>
                     </Show>
                     <Show when={!searching() && searchResults().length === 0 && pullRef().trim().length >= 2}>
@@ -1714,14 +1713,14 @@ export default function ImagesPage(props: ImagesPageProps) {
                               color: "#8b949e", "font-size": "12px",
                               "white-space": "nowrap", overflow: "hidden", "text-overflow": "ellipsis",
                             }}>
-                              {result.description || "No description"}
+                              {result.description || t("corePages.common.noDescription")}
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: "12px", "font-size": "11px", color: "#8b949e", "flex-shrink": 0 }}>
                             <Show when={result.pulls}>
                               <span title="Downloads">{result.pulls}</span>
                             </Show>
-                            <span title="Stars">{"\u2605"} {result.stars}</span>
+                            <span title={t("corePages.templates.stars")}>{"\u2605"} {result.stars}</span>
                           </div>
                         </div>
                       )}
@@ -1734,7 +1733,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                   <input
                     class="form-input"
                     type="text"
-                    placeholder="Username"
+                    placeholder={t("corePages.images.username")}
                     value={authUsername()}
                     onInput={(e) => setAuthUsername(e.currentTarget.value)}
                     style={{ flex: 1 }}
@@ -1742,7 +1741,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                   <input
                     class="form-input"
                     type="password"
-                    placeholder="Password"
+                    placeholder={t("settings.tabs.registries")}
                     value={authPassword()}
                     onInput={(e) => setAuthPassword(e.currentTarget.value)}
                     style={{ flex: 1 }}
@@ -1797,7 +1796,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 onClick={() => setShowAuth(!showAuth())}
                 style={{ "margin-right": "auto" }}
               >
-                {showAuth() ? "Auth \u25B2" : "Auth \u25BC"}
+                {showAuth() ? t("corePages.images.authHide") : t("corePages.images.authShow")}
               </button>
               <button class="btn" onClick={() => { setShowPull(false); setPulling(false); setPullStatus(""); }}>{pulling() ? "Close" : "Cancel"}</button>
               <button
@@ -1831,7 +1830,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               <button
                 style={{ background: "none", border: "none", color: fileBrowserPath() === "/" || fileBrowserPath() === "" ? "#e6edf3" : "#58a6ff", cursor: "pointer", padding: "2px 6px", "font-size": "12px", "border-radius": "4px" }}
                 onClick={() => { const id = fileBrowserImage(); if (id) fetchImageFiles(id, "/"); }}
-                title="Root"
+                title={t("infra.volumeDetail.root")}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle" }}><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
               </button>
@@ -1860,14 +1859,14 @@ export default function ImagesPage(props: ImagesPageProps) {
             <div style={{ flex: "1", overflow: "auto" }}>
               <Show when={fileContent() !== null} fallback={
                 <Show when={!filesLoading()} fallback={
-                  <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}><Spinner size={14} /> Loading files...</div>
+                  <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}><Spinner size={14} /> {t("corePages.images.loadingFiles")}</div>
                 }>
                   <Show when={files().length > 0} fallback={
                     <Show when={fileError()} fallback={
-                      <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}>Empty directory</div>
+                      <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}>{t("corePages.images.emptyDirectory")}</div>
                     }>
                       <div style={{ padding: "16px 20px", color: "#f85149", background: "rgba(248, 81, 73, 0.1)", "border-radius": "6px", margin: "12px 16px", "font-size": "13px" }}>
-                        <strong>Error:</strong> {fileError()}
+                        <strong>t("common.error")</strong> {fileError()}
                       </div>
                     </Show>
                   }>
@@ -1909,7 +1908,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
                   <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
                     <span style={{ "font-size": "12px", color: "#e6edf3" }}>{fileContentPath()}</span>
-                    <button class="btn btn-sm" onClick={() => setFileContent(null)} style={{ "font-size": "11px", padding: "2px 8px" }}>Back</button>
+                    <button class="btn btn-sm" onClick={() => setFileContent(null)} style={{ "font-size": "11px", padding: "2px 8px" }}>t("corePages.common.back")</button>
                   </div>
                   <pre style={{
                     padding: "12px 16px",
@@ -1956,7 +1955,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 {reportPath()}
               </div>
               <div style={{ display: "flex", gap: "8px", "justify-content": "center" }}>
-                <button class="btn btn-primary" onClick={() => setReportPath(null)}>Close</button>
+                <button class="btn btn-primary" onClick={() => setReportPath(null)}>t("common.close")</button>
               </div>
             </div>
           </div>

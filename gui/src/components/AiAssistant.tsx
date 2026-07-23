@@ -1,6 +1,14 @@
 import { onMount } from "solid-js";
 import { logError } from "../lib/activityStore";
 import { showToast } from "./Toast";
+import { t, lang } from "../i18n";
+import { settingsDetailEn, settingsDetailZhCN } from "../i18n/settingsDetail";
+
+const tr = (key: string, params: Record<string, string | number> = {}) => {
+  const central = t(key);
+  const value = central === key ? (lang() === "zh-CN" ? settingsDetailZhCN[key] : settingsDetailEn[key]) ?? key : central;
+  return Object.entries(params).reduce((text, [name, replacement]) => text.replaceAll(`{${name}}`, String(replacement)), value);
+};
 
 interface AiAssistantProps {
   onNavigate?: (page: string) => void;
@@ -44,13 +52,13 @@ export async function openAiWindow() {
     // Listen for creation errors
     win.once("tauri://error", (e) => {
       logError(`AI window creation failed: ${JSON.stringify(e.payload)}`);
-      showToast(`Failed to open AI window: ${JSON.stringify(e.payload)}`, "error");
+      showToast(tr("ai.openFailed", { error: JSON.stringify(e.payload) }), "error");
     });
 
   } catch (e) {
     const msg = String(e);
     logError(`Failed to open AI window: ${msg}`);
-    showToast(`Failed to open AI window: ${msg}`, "error");
+    showToast(tr("ai.openFailed", { error: msg }), "error");
   }
 }
 

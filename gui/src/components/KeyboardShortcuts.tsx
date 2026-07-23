@@ -1,4 +1,5 @@
 import { For, onMount, onCleanup } from "solid-js";
+import { t } from "../i18n";
 
 interface ShortcutGroup {
   title: string;
@@ -8,26 +9,26 @@ interface ShortcutGroup {
 const isMac = navigator.platform.includes("Mac");
 const modKey = isMac ? "\u2318" : "Ctrl";
 
-const shortcutGroups: ShortcutGroup[] = [
+const shortcutGroups = (): ShortcutGroup[] => [
   {
-    title: "Navigation",
+    title: t("components.shortcuts.navigation"),
     shortcuts: [
-      { keys: [modKey, "K"], description: "Command palette" },
-      { keys: [modKey, "R"], description: "Refresh current page" },
-      { keys: ["Esc"], description: "Close dialog / Go back" },
+      { keys: [modKey, "K"], description: t("components.shortcuts.commandPalette") },
+      { keys: [modKey, "R"], description: t("components.shortcuts.refreshPage") },
+      { keys: ["Esc"], description: t("components.shortcuts.closeOrBack") },
     ],
   },
   {
-    title: "Logs",
+    title: t("components.shortcuts.logs"),
     shortcuts: [
-      { keys: [modKey, "F"], description: "Filter logs" },
-      { keys: ["+", "-"], description: "Adjust font size" },
+      { keys: [modKey, "F"], description: t("components.shortcuts.filterLogs") },
+      { keys: ["+", "-"], description: t("components.shortcuts.adjustFont") },
     ],
   },
   {
-    title: "General",
+    title: t("components.shortcuts.general"),
     shortcuts: [
-      { keys: ["?"], description: "Show keyboard shortcuts" },
+      { keys: ["?"], description: t("components.shortcuts.show") },
     ],
   },
 ];
@@ -112,7 +113,7 @@ export default function KeyboardShortcuts(props: KeyboardShortcutsProps) {
           </button>
         </div>
 
-        <For each={shortcutGroups}>
+        <For each={shortcutGroups()}>
           {(group) => (
             <div style={{ "margin-bottom": "16px" }}>
               <div style={{

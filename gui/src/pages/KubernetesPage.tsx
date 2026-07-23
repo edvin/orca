@@ -1,4 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Index, Show, createEffect } from "solid-js";
+import { t } from "../i18n";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "../components/Toast";
@@ -422,10 +423,10 @@ export default function KubernetesPage() {
     setK8sRuntime(value);
     try {
       await invoke("k8s_set_runtime", { runtime: value });
-      showToast(`Kubernetes runtime set to ${value}`, "success");
+      showToast(t("infra.kubernetes.runtimeSet", { value }), "success");
     } catch (e) {
       setK8sRuntime(prev);
-      showToast(`Failed to set runtime: ${e}`, "error");
+      showToast(t("infra.kubernetes.runtimeSetFailed", { error: e }), "error");
     }
   };
 
@@ -545,17 +546,17 @@ export default function KubernetesPage() {
     const local = localPort || port;
     try {
       await invoke("k8s_port_forward", { namespace, service, port, localPort: local });
-      showToast(`Port forwarded — accessible at localhost:${local}`, "success");
+      showToast(t("infra.kubernetes.portForwarded", { port: local }), "success");
       await refreshPortForwards();
     } catch (e) {
-      showToast(`Port forward failed: ${e}`, "error");
+      showToast(t("infra.kubernetes.portForwardFailed", { error: e }), "error");
     }
   };
 
   const stopPortForward = async (namespace: string, service: string, port: number) => {
     try {
       await invoke("k8s_stop_port_forward", { namespace, service, port });
-      showToast(`Port forward stopped`, "info");
+      showToast(t("infra.kubernetes.portForwardStopped"), "info");
       await refreshPortForwards();
     } catch {}
   };
@@ -565,14 +566,14 @@ export default function KubernetesPage() {
 
   const handleStop = async () => {
     setStopping(true);
-    showToast("Stopping Kubernetes cluster...", "info");
+    showToast(t("infra.kubernetes.stoppingCluster"), "info");
     try {
       await invoke("k8s_disable");
-      showToast("Kubernetes cluster stopped", "success");
+      showToast(t("infra.kubernetes.clusterStopped"), "success");
       await refreshStatus();
     } catch (e) {
       logError(`Failed to stop Kubernetes: ${e}`);
-      showToast(`Failed to stop: ${e}`, "error");
+      showToast(t("infra.kubernetes.stopFailed", { error: e }), "error");
     }
     setStopping(false);
   };
@@ -581,37 +582,37 @@ export default function KubernetesPage() {
     try {
       setEnabling(true);
       await invoke("k8s_start");
-      showToast("Kubernetes cluster started", "success");
+      showToast(t("infra.kubernetes.clusterStarted"), "success");
       await refreshStatus();
     } catch (e) {
       logError(`Failed to start Kubernetes: ${e}`);
-      showToast(`Failed to start: ${e}`, "error");
+      showToast(t("infra.kubernetes.startFailed", { error: e }), "error");
     } finally {
       setEnabling(false);
     }
   };
 
   const handleReset = async () => {
-    if (!await confirmDanger("Reset Kubernetes", "This will uninstall k3s and delete ALL workloads, data, and configuration. A fresh k3s will be reinstalled.")) return;
+    if (!await confirmDanger(t("infra.kubernetes.resetTitle"), t("infra.kubernetes.resetMessage"))) return;
     try {
       await invoke("k8s_reset");
-      showToast("Kubernetes cluster reset", "success");
+      showToast(t("infra.kubernetes.clusterReset"), "success");
       await refreshStatus();
     } catch (e) {
       logError(`Failed to reset Kubernetes cluster: ${e}`);
-      showToast(`Failed to reset: ${e}`, "error");
+      showToast(t("infra.kubernetes.resetFailed", { error: e }), "error");
     }
   };
 
   const handleDeletePod = async (namespace: string, name: string) => {
-    if (!await confirmDanger("Delete Pod", `Delete pod '${name}'?`)) return;
+    if (!await confirmDanger(t("infra.kubernetes.deletePodTitle"), t("infra.kubernetes.deletePodConfirm", { name }))) return;
     try {
       await invoke("k8s_delete_pod", { namespace, name });
-      showToast(`Pod ${name} deleted`, "success");
+      showToast(t("infra.kubernetes.podDeleted", { name }), "success");
       await refreshWorkloads();
     } catch (e) {
       logError(`Failed to delete pod: ${e}`, `Pod "${name}" in namespace "${namespace}"`);
-      showToast(`Failed to delete pod: ${e}`, "error");
+      showToast(t("infra.kubernetes.podDeleteFailed", { error: e }), "error");
     }
   };
 
@@ -626,36 +627,36 @@ export default function KubernetesPage() {
     try {
       const command = tab() === "statefulsets" ? "k8s_scale_statefulset" : "k8s_scale_deployment";
       await invoke(command, { namespace: target.namespace, name: target.name, replicas: scaleValue() });
-      showToast(`Scaled ${target.name} to ${scaleValue()} replicas`, "success");
+      showToast(t("infra.kubernetes.scaled", { name: target.name, count: scaleValue() }), "success");
       setScaleTarget(null);
       await refreshWorkloads();
     } catch (e) {
       const kind = tab() === "statefulsets" ? "StatefulSet" : "Deployment";
       logError(`Failed to scale ${kind}: ${e}`, `${kind} "${target.name}" in "${target.namespace}"`);
-      showToast(`Failed to scale: ${e}`, "error");
+      showToast(t("infra.kubernetes.scaleFailed", { error: e }), "error");
     }
   };
 
   const handleRestart = async (namespace: string, name: string) => {
     try {
       await invoke("k8s_restart_deployment", { namespace, name });
-      showToast(`Deployment ${name} restarting`, "success");
+      showToast(t("infra.kubernetes.restarting", { name }), "success");
       await refreshWorkloads();
     } catch (e) {
       logError(`Failed to restart deployment: ${e}`, `Deployment "${name}" in "${namespace}"`);
-      showToast(`Failed to restart: ${e}`, "error");
+      showToast(t("infra.kubernetes.restartFailed", { error: e }), "error");
     }
   };
 
   const handleDeletePvc = async (namespace: string, name: string) => {
-    if (!await confirmDanger("Delete PVC", `Delete PVC '${name}'? Associated data may be lost.`)) return;
+    if (!await confirmDanger(t("infra.kubernetes.deletePvcTitle"), t("infra.kubernetes.deletePvcConfirm", { name }))) return;
     try {
       await invoke("k8s_delete_pvc", { namespace, name });
-      showToast(`PVC ${name} deleted`, "success");
+      showToast(t("infra.kubernetes.pvcDeleted", { name }), "success");
       await refreshWorkloads();
     } catch (e) {
       logError(`Failed to delete PVC: ${e}`, `PVC "${name}" in namespace "${namespace}"`);
-      showToast(`Failed to delete PVC: ${e}`, "error");
+      showToast(t("infra.kubernetes.pvcDeleteFailed", { error: e }), "error");
     }
   };
 
@@ -683,9 +684,9 @@ export default function KubernetesPage() {
 
   const handleSaveSecret = async () => {
     const name = secretDialogName().trim();
-    if (!name) { showToast("Secret name is required", "error"); return; }
+    if (!name) { showToast(t("infra.kubernetes.secretNameRequired"), "error"); return; }
     const entries = secretDialogEntries().filter(e => e.key.trim());
-    if (entries.length === 0) { showToast("At least one key-value entry is required", "error"); return; }
+    if (entries.length === 0) { showToast(t("infra.kubernetes.secretEntryRequired"), "error"); return; }
     const data: Record<string, string> = {};
     for (const e of entries) data[e.key.trim()] = e.value;
     setSecretDialogSaving(true);
@@ -707,7 +708,7 @@ export default function KubernetesPage() {
   };
 
   const handleDeleteSecret = async (namespace: string, name: string) => {
-    if (!await confirmDanger("Delete Secret", `Delete secret '${name}'? This cannot be undone.`)) return;
+    if (!await confirmDanger(t("infra.kubernetes.deleteSecretTitle"), t("infra.kubernetes.deleteSecretConfirm", { name }))) return;
     try {
       await invoke("k8s_delete_secret", { namespace, name });
       showToast(`Secret '${name}' deleted`, "success");
@@ -721,12 +722,12 @@ export default function KubernetesPage() {
   // --- PVC Create handler ---
   const handleCreatePvc = async () => {
     const name = pvcName().trim();
-    if (!name) { showToast("PVC name is required", "error"); return; }
+    if (!name) { showToast(t("infra.kubernetes.pvcNameRequired"), "error"); return; }
     const storageClass = pvcStorageClass().trim();
-    if (!storageClass) { showToast("Storage class is required", "error"); return; }
+    if (!storageClass) { showToast(t("infra.kubernetes.storageClassRequired"), "error"); return; }
     const size = `${pvcSizeValue()}${pvcSizeUnit()}`;
     const accessModes = Array.from(pvcAccessModes());
-    if (accessModes.length === 0) { showToast("Select at least one access mode", "error"); return; }
+    if (accessModes.length === 0) { showToast(t("infra.kubernetes.accessModeRequired"), "error"); return; }
     setPvcCreating(true);
     try {
       await invoke("k8s_create_pvc", { namespace: selectedNs(), name, storageClass, size, accessModes });
@@ -760,7 +761,7 @@ export default function KubernetesPage() {
       setLogLines(lines);
     } catch (e) {
       logError(`Failed to fetch pod logs: ${e}`, `Pod "${name}" in namespace "${namespace}"`);
-      showToast(`Failed to get logs: ${e}`, "error");
+      showToast(t("infra.kubernetes.logsFailed", { error: e }), "error");
       setLogPod(null);
     }
   };
@@ -773,7 +774,7 @@ export default function KubernetesPage() {
       const history = (await invoke("k8s_rollout_history", { namespace, name })) as RolloutRevision[];
       setRollbackHistory(history);
     } catch (e) {
-      showToast(`Failed to get rollout history: ${e}`, "error");
+      showToast(t("infra.kubernetes.rolloutHistoryFailed", { error: e }), "error");
       setRollbackDep(null);
     } finally {
       setRollbackLoading(false);
@@ -783,20 +784,20 @@ export default function KubernetesPage() {
   const handleRollback = async (revision: number) => {
     const dep = rollbackDep();
     if (!dep) return;
-    if (!await confirmDanger("Rollback Deployment", `Rollback '${dep.name}' to revision ${revision}?`)) return;
+    if (!await confirmDanger(t("infra.kubernetes.rollbackTitle"), t("infra.kubernetes.rollbackConfirm", { name: dep.name, revision }))) return;
     try {
       await invoke("k8s_rollout_undo", { namespace: dep.namespace, name: dep.name, revision });
-      showToast(`Rolling back ${dep.name} to revision ${revision}`, "success");
+      showToast(t("infra.kubernetes.rollingBack", { name: dep.name, revision }), "success");
       setRollbackDep(null);
       await refreshWorkloads();
     } catch (e) {
-      showToast(`Rollback failed: ${e}`, "error");
+      showToast(t("infra.kubernetes.rollbackFailed", { error: e }), "error");
     }
   };
 
   // Feature 4: Helm uninstall handler
   const handleHelmUninstall = async (name: string, namespace: string) => {
-    if (!await confirmDanger("Uninstall Helm Release", `Uninstall '${name}' from namespace '${namespace}'?`)) return;
+    if (!await confirmDanger(t("infra.kubernetes.helmUninstallTitle"), t("infra.kubernetes.helmUninstallConfirm", { name, namespace }))) return;
     try {
       await invoke("k8s_helm_uninstall", { name, namespace });
       showToast(`Helm release '${name}' uninstalled`, "success");
@@ -810,7 +811,7 @@ export default function KubernetesPage() {
     const relName = helmReleaseName().trim();
     const chart = helmChartName().trim();
     if (!relName || !chart) {
-      showToast("Release name and chart are required", "error");
+      showToast(t("infra.kubernetes.helmRequired"), "error");
       return;
     }
     setHelmInstalling(true);
@@ -873,7 +874,7 @@ export default function KubernetesPage() {
     const pathType = ingressPathType();
 
     if (!name || !hostname || !svcName || !svcPort) {
-      showToast("Name, hostname, service, and port are required", "error");
+      showToast(t("infra.kubernetes.ingressRequired"), "error");
       return;
     }
 
@@ -965,7 +966,7 @@ spec:
     // Windows / no direct URL: port-forward traefik service port 9000, then open
     const tSvc = traefikService();
     if (!tSvc) {
-      showToast("Traefik service not found in kube-system", "error");
+      showToast(t("infra.kubernetes.traefikNotFound"), "error");
       return;
     }
     // Check if already forwarded
@@ -981,7 +982,7 @@ spec:
       await new Promise(r => setTimeout(r, 1500));
       await shellOpen("http://localhost:9000/dashboard/");
     } catch (e) {
-      showToast(`Failed to forward Traefik dashboard: ${e}`, "error");
+      showToast(t("infra.kubernetes.traefikForwardFailed", { error: e }), "error");
     } finally {
       setTraefikForwarding(false);
     }
@@ -1003,11 +1004,11 @@ spec:
   const applyYaml = async (yaml: string) => {
     try {
       await invoke("k8s_apply_yaml", { yaml });
-      showToast("YAML applied successfully", "success");
+      showToast(t("infra.kubernetes.yamlApplied"), "success");
       setYamlResource(null);
       refreshWorkloads();
     } catch (e) {
-      showToast(`Failed to apply: ${e}`, "error");
+      showToast(t("infra.kubernetes.yamlApplyFailed", { error: e }), "error");
       throw e;
     }
   };
@@ -1015,11 +1016,11 @@ spec:
   const handleDeployYaml = async (yaml: string) => {
     try {
       await invoke("k8s_apply_yaml", { yaml });
-      showToast("YAML deployed successfully", "success");
+      showToast(t("infra.kubernetes.yamlDeployed"), "success");
       setDeployYamlOpen(false);
       refreshWorkloads();
     } catch (e) {
-      showToast(`Failed to deploy: ${e}`, "error");
+      showToast(t("infra.kubernetes.yamlDeployFailed", { error: e }), "error");
       throw e;
     }
   };
@@ -1036,13 +1037,13 @@ spec:
       setSelectedNs(name);
     } catch (e) {
       logError(`Failed to create namespace: ${e}`);
-      showToast(`Failed to create namespace: ${e}`, "error");
+      showToast(t("infra.kubernetes.namespaceCreateFailed", { error: e }), "error");
     }
   };
 
   const handleDeleteNamespace = async () => {
     const ns = selectedNs();
-    if (!await confirmDanger("Delete Namespace", `Delete namespace '${ns}'? This will destroy ALL resources within it.`)) return;
+    if (!await confirmDanger(t("infra.kubernetes.deleteNsTitle"), t("infra.kubernetes.deleteNsConfirm", { ns }))) return;
     try {
       await invoke("k8s_delete_namespace", { name: ns });
       showToast(`Namespace '${ns}' deleted`, "success");
@@ -1050,7 +1051,7 @@ spec:
       await refreshStatus();
     } catch (e) {
       logError(`Failed to delete namespace: ${e}`);
-      showToast(`Failed to delete namespace: ${e}`, "error");
+      showToast(t("infra.kubernetes.namespaceDeleteFailed", { error: e }), "error");
     }
   };
 
@@ -1067,20 +1068,20 @@ spec:
   };
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: "pods", label: "Pods", icon: "\u2B22" },
-    { id: "deployments", label: "Deployments", icon: "\u25A6" },
-    { id: "daemonsets", label: "DaemonSets", icon: "\u25C9" },
-    { id: "statefulsets", label: "StatefulSets", icon: "\u25A3" },
-    { id: "replicasets", label: "ReplicaSets", icon: "\u25A7" },
-    { id: "services", label: "Services", icon: "\u29BF" },
-    { id: "ingresses", label: "Ingresses", icon: "\u21C4" },
-    { id: "storage", label: "Storage", icon: "\u25A8" },
-    { id: "events", label: "Events", icon: "\u26A0" },
-    { id: "config", label: "Config", icon: "\u2699" },
-    { id: "helm", label: "Helm", icon: "\u2388" },
-    { id: "jobs", label: "Jobs", icon: "\u23F0" },
-    { id: "crds", label: "CRDs", icon: "\u2756" },
-    { id: "topology", label: "Topology", icon: "\u25CE" },
+    { id: "pods", label: t("infra.kubernetes.pods"), icon: "\u2B22" },
+    { id: "deployments", label: t("infra.kubernetes.deployments"), icon: "\u25A6" },
+    { id: "daemonsets", label: t("infra.kubernetes.daemonSets"), icon: "\u25C9" },
+    { id: "statefulsets", label: t("infra.kubernetes.statefulSets"), icon: "\u25A3" },
+    { id: "replicasets", label: t("infra.kubernetes.replicaSets"), icon: "\u25A7" },
+    { id: "services", label: t("infra.kubernetes.services"), icon: "\u29BF" },
+    { id: "ingresses", label: t("infra.kubernetes.ingresses"), icon: "\u21C4" },
+    { id: "storage", label: t("infra.kubernetes.storage"), icon: "\u25A8" },
+    { id: "events", label: t("infra.kubernetes.events"), icon: "\u26A0" },
+    { id: "config", label: t("infra.kubernetes.config"), icon: "\u2699" },
+    { id: "helm", label: t("infra.kubernetes.helm"), icon: "\u2388" },
+    { id: "jobs", label: t("infra.kubernetes.jobs"), icon: "\u23F0" },
+    { id: "crds", label: t("infra.kubernetes.crds"), icon: "\u2756" },
+    { id: "topology", label: t("infra.kubernetes.topology"), icon: "\u25CE" },
   ];
 
   const emptyMessages: Record<Tab, { title: string; desc: string }> = {
@@ -1125,7 +1126,7 @@ spec:
           <Show when={!enabling()}>
             <div style={{ position: "relative" }}>
               <div style={{ "font-size": "48px", "margin-bottom": "16px", opacity: "0.6" }}>{"\u2638"}</div>
-              <div class="hero-title">Kubernetes</div>
+              <div class="hero-title">{t("infra.kubernetes.title")}</div>
               <Show when={status()?.installed} fallback={
                 <>
                   <div class="hero-subtitle">
@@ -1133,14 +1134,14 @@ spec:
                     Deploy, scale, and manage containerized workloads with a production-grade orchestrator.
                   </div>
                   <div style={{ display: "flex", "align-items": "center", gap: "8px", "justify-content": "center", "margin-bottom": "12px", "font-size": "13px" }}>
-                    <label for="k8s-runtime">Container runtime:</label>
+                    <label for="k8s-runtime">{t("infra.kubernetes.containerRuntime")}</label>
                     <select
                       id="k8s-runtime"
                       value={k8sRuntime()}
                       onChange={(e) => handleRuntimeChange(e.currentTarget.value)}
                     >
-                      <option value="docker">Docker — matches Docker Desktop (no image push/import)</option>
-                      <option value="containerd">containerd — upstream Kubernetes default</option>
+                      <option value="docker">{t("infra.kubernetes.dockerRuntime")}</option>
+                      <option value="containerd">{t("infra.kubernetes.containerdRuntime")}</option>
                     </select>
                   </div>
                   <button
@@ -1230,7 +1231,7 @@ spec:
           </span>
           <Show when={traefikIntegrationMode() && traefikService()}>
             <span class="status-bar-separator" />
-            <span style={{ "font-size": "11px", color: "#8b949e" }} title="Configured in Gateway page">
+            <span style={{ "font-size": "11px", color: "#8b949e" }} title={t("infra.kubernetes.configuredInGateway")}>
               {traefikIntegrationMode() === "separate_ports"
                 ? "Traefik: Separate ports"
                 : traefikIntegrationMode() === "gateway_proxies_traefik"
@@ -1253,7 +1254,7 @@ spec:
               <button
                 class="action-icon"
                 onClick={() => setK8sMenuOpen(!k8sMenuOpen())}
-                title="More actions"
+                title={t("infra.kubernetes.moreActions")}
                 style={{ color: "#8b949e" }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
@@ -1310,7 +1311,7 @@ spec:
           />
           <button
             class="action-icon"
-            title="Create namespace"
+            title={t("infra.kubernetes.createNamespace")}
             onClick={() => { setNewNsName(""); setCreateNsOpen(true); }}
             style={{ color: "#3fb950", "font-size": "16px" }}
           >
@@ -1319,7 +1320,7 @@ spec:
           <Show when={!systemNamespaces.has(selectedNs())}>
             <button
               class="action-icon action-icon-delete"
-              title="Delete namespace"
+              title={t("infra.kubernetes.deleteNamespace")}
               onClick={handleDeleteNamespace}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -1328,7 +1329,7 @@ spec:
           <div style={{ "margin-left": "auto" }}>
             <button
               class="btn btn-sm btn-primary"
-              title="Deploy from YAML"
+              title={t("infra.kubernetes.deployFromYaml")}
               onClick={() => setDeployYamlOpen(true)}
               style={{ "font-size": "12px", padding: "4px 12px" }}
             >
@@ -1372,15 +1373,15 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Ready</th>
-                  <th>Status</th>
-                  <th>CPU</th>
-                  <th>Memory</th>
-                  <th>Restarts</th>
-                  <th>Age</th>
-                  <th>IP</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.ready")}</th>
+                  <th>{t("infra.kubernetes.table.status")}</th>
+                  <th>{t("infra.kubernetes.table.cpu")}</th>
+                  <th>{t("infra.kubernetes.table.memory")}</th>
+                  <th>{t("infra.kubernetes.table.restarts")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.ip")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1412,35 +1413,35 @@ spec:
                         <div style={{ display: "flex", gap: "4px" }}>
                           <button
                             class="action-icon"
-                            title="View logs"
+                            title={t("infra.kubernetes.action.viewLogs")}
                             onClick={() => handleViewLogs(pod.namespace, pod.name)}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
                           </button>
                           <button
                             class="action-icon action-icon-restart"
-                            title="Restart pod"
+                            title={t("infra.kubernetes.action.restartPod")}
                             onClick={() => handleDeletePod(pod.namespace, pod.name)}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                           </button>
                           <button
                             class="action-icon action-icon-delete"
-                            title="Delete pod"
+                            title={t("infra.kubernetes.action.deletePod")}
                             onClick={() => handleDeletePod(pod.namespace, pod.name)}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                           </button>
                           <button
                             class="action-icon"
-                            title="View/Edit YAML"
+                            title={t("infra.kubernetes.action.viewEditYaml")}
                             onClick={() => viewYaml("pod", pod.name, pod.namespace)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                           </button>
                           <button
                             class="action-icon"
-                            title="Terminal"
+                            title={t("infra.kubernetes.action.terminal")}
                             onClick={() => setShellPod({ name: pod.name, namespace: pod.namespace })}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
@@ -1470,11 +1471,11 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Ready</th>
-                  <th>Images</th>
-                  <th>Age</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.ready")}</th>
+                  <th>{t("infra.kubernetes.table.images")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1517,21 +1518,21 @@ spec:
                           </button>
                           <button
                             class="action-icon"
-                            title="Restart deployment"
+                            title={t("infra.kubernetes.action.restartDeployment")}
                             onClick={() => handleRestart(dep.namespace, dep.name)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
                           </button>
                           <button
                             class="action-icon"
-                            title="Rollout history"
+                            title={t("infra.kubernetes.action.rolloutHistory")}
                             onClick={() => handleShowHistory(dep.namespace, dep.name)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                           </button>
                           <button
                             class="action-icon"
-                            title="View/Edit YAML"
+                            title={t("infra.kubernetes.action.viewEditYaml")}
                             onClick={() => viewYaml("deployment", dep.name, dep.namespace)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -1573,15 +1574,15 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
                   <th>Reference</th>
-                  <th>Min</th>
-                  <th>Max</th>
-                  <th>Current</th>
-                  <th>Target CPU</th>
-                  <th>Current CPU</th>
-                  <th>Age</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.min")}</th>
+                  <th>{t("infra.kubernetes.table.max")}</th>
+                  <th>{t("infra.kubernetes.table.current")}</th>
+                  <th>{t("infra.kubernetes.table.targetCpu")}</th>
+                  <th>{t("infra.kubernetes.table.currentCpu")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1600,14 +1601,14 @@ spec:
                         <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
                           <button
                             class="action-icon"
-                            title="View YAML"
+                            title={t("infra.kubernetes.action.viewYaml")}
                             onClick={() => viewYaml("hpa", hpa.name, hpa.namespace)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                           </button>
                           <button
                             class="action-icon action-icon-delete"
-                            title="Delete HPA"
+                            title={t("infra.kubernetes.action.deleteHpa")}
                             onClick={async () => {
                               const ok = await confirmDanger(`Delete HPA "${hpa.name}"?`, "This will remove the autoscaler. The deployment will keep its current replica count.");
                               if (!ok) return;
@@ -1646,14 +1647,14 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Desired</th>
-                  <th>Current</th>
-                  <th>Ready</th>
-                  <th>Node Selector</th>
-                  <th>Images</th>
-                  <th>Age</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.desired")}</th>
+                  <th>{t("infra.kubernetes.table.current")}</th>
+                  <th>{t("infra.kubernetes.table.ready")}</th>
+                  <th>{t("infra.kubernetes.table.nodeSelector")}</th>
+                  <th>{t("infra.kubernetes.table.images")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1693,14 +1694,14 @@ spec:
                         <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
                           <button
                             class="action-icon"
-                            title="View/Edit YAML"
+                            title={t("infra.kubernetes.action.viewEditYaml")}
                             onClick={() => viewYaml("daemonset", ds.name, ds.namespace)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                           </button>
                           <button
                             class="action-icon action-icon-delete"
-                            title="Delete DaemonSet"
+                            title={t("infra.kubernetes.action.deleteDaemonSet")}
                             onClick={async () => {
                               if (!await confirmDanger(`Delete DaemonSet "${ds.name}"?`, "This will remove the DaemonSet and its pods.")) return;
                               try {
@@ -1739,12 +1740,12 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Ready</th>
-                  <th>Replicas</th>
-                  <th>Images</th>
-                  <th>Age</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.ready")}</th>
+                  <th>{t("infra.kubernetes.table.replicas")}</th>
+                  <th>{t("infra.kubernetes.table.images")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1789,7 +1790,7 @@ spec:
                             </button>
                             <button
                               class="action-icon"
-                              title="Restart StatefulSet"
+                              title={t("infra.kubernetes.action.restartStatefulSet")}
                               onClick={async () => {
                                 try {
                                   await invoke("k8s_restart_statefulset", { namespace: sts.namespace, name: sts.name });
@@ -1797,7 +1798,7 @@ spec:
                                   await refreshWorkloads();
                                 } catch (e) {
                                   logError(`Failed to restart StatefulSet: ${e}`, `StatefulSet "${sts.name}" in "${sts.namespace}"`);
-                                  showToast(`Failed to restart: ${e}`, "error");
+                                  showToast(t("infra.kubernetes.restartFailed", { error: e }), "error");
                                 }
                               }}
                             >
@@ -1805,14 +1806,14 @@ spec:
                             </button>
                             <button
                               class="action-icon"
-                              title="View/Edit YAML"
+                              title={t("infra.kubernetes.action.viewEditYaml")}
                               onClick={() => viewYaml("statefulset", sts.name, sts.namespace)}
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                             </button>
                             <button
                               class="action-icon action-icon-delete"
-                              title="Delete StatefulSet"
+                              title={t("infra.kubernetes.action.deleteStatefulSet")}
                               onClick={async () => {
                                 if (!await confirmDanger(`Delete StatefulSet "${sts.name}"?`, "This will remove the StatefulSet and its pods.")) return;
                                 try {
@@ -1852,14 +1853,14 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Desired</th>
-                  <th>Current</th>
-                  <th>Ready</th>
-                  <th>Owner</th>
-                  <th>Images</th>
-                  <th>Age</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.desired")}</th>
+                  <th>{t("infra.kubernetes.table.current")}</th>
+                  <th>{t("infra.kubernetes.table.ready")}</th>
+                  <th>{t("infra.kubernetes.table.owner")}</th>
+                  <th>{t("infra.kubernetes.table.images")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1899,14 +1900,14 @@ spec:
                         <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
                           <button
                             class="action-icon"
-                            title="View/Edit YAML"
+                            title={t("infra.kubernetes.action.viewEditYaml")}
                             onClick={() => viewYaml("replicaset", rs.name, rs.namespace)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                           </button>
                           <button
                             class="action-icon action-icon-delete"
-                            title="Delete ReplicaSet"
+                            title={t("infra.kubernetes.action.deleteReplicaSet")}
                             onClick={async () => {
                               if (!await confirmDanger(`Delete ReplicaSet "${rs.name}"?`, "This will remove the ReplicaSet and its pods.")) return;
                               try {
@@ -1945,12 +1946,12 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Cluster IP</th>
-                  <th>Ports</th>
-                  <th>Age</th>
-                  <th style={{ "text-align": "right" }}>Access</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.type")}</th>
+                  <th>{t("infra.kubernetes.table.clusterIp")}</th>
+                  <th>{t("infra.kubernetes.table.ports")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th style={{ "text-align": "right" }}>{t("infra.kubernetes.table.access")}</th>
                   <th />
                 </tr>
               </thead>
@@ -2073,14 +2074,14 @@ spec:
                         <button
                           class="btn btn-sm"
                           style={{ "font-size": "11px", padding: "2px 8px" }}
-                          title="Create an Ingress to expose this service"
+                          title={t("infra.kubernetes.action.createIngress")}
                           onClick={() => openCreateIngress(svc)}
                         >
                           Expose
                         </button>
                         <button
                           class="action-icon"
-                          title="View/Edit YAML"
+                          title={t("infra.kubernetes.action.viewEditYaml")}
                           onClick={() => viewYaml("service", svc.name, svc.namespace)}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -2109,11 +2110,11 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Pod Selector</th>
-                  <th>Policy Types</th>
-                  <th>Age</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.podSelector")}</th>
+                  <th>{t("infra.kubernetes.table.policyTypes")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2144,14 +2145,14 @@ spec:
                         <div style={{ display: "flex", gap: "4px", "align-items": "center" }}>
                           <button
                             class="action-icon"
-                            title="View YAML"
+                            title={t("infra.kubernetes.action.viewYaml")}
                             onClick={() => viewYaml("networkpolicy", np.name, np.namespace)}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                           </button>
                           <button
                             class="action-icon action-icon-delete"
-                            title="Delete Network Policy"
+                            title={t("infra.kubernetes.action.deleteNetworkPolicy")}
                             onClick={async () => {
                               const ok = await confirmDanger(`Delete network policy "${np.name}"?`, "This may affect network connectivity for pods in this namespace.");
                               if (!ok) return;
@@ -2199,10 +2200,10 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Hosts</th>
-                  <th>Address</th>
-                  <th>Age</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.hosts")}</th>
+                  <th>{t("infra.kubernetes.table.address")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
                   <th />
                 </tr>
               </thead>
@@ -2217,7 +2218,7 @@ spec:
                       <td>
                         <button
                           class="action-icon"
-                          title="View/Edit YAML"
+                          title={t("infra.kubernetes.action.viewEditYaml")}
                           onClick={() => viewYaml("ingress", ing.name, ing.namespace)}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -2253,13 +2254,13 @@ spec:
             <table class="table" style={{ "margin-bottom": "24px" }}>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Status</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.status")}</th>
                   <th>Volume</th>
-                  <th>Capacity</th>
+                  <th>{t("infra.kubernetes.table.capacity")}</th>
                   <th>Class</th>
-                  <th>Age</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2284,7 +2285,7 @@ spec:
                       <td>
                         <button
                           class="action-icon action-icon-delete"
-                          title="Delete PVC"
+                          title={t("infra.kubernetes.action.deletePvc")}
                           onClick={() => handleDeletePvc(pvc.namespace, pvc.name)}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -2311,13 +2312,13 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Capacity</th>
-                  <th>Status</th>
-                  <th>Claim</th>
-                  <th>Reclaim Policy</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.capacity")}</th>
+                  <th>{t("infra.kubernetes.table.status")}</th>
+                  <th>{t("infra.kubernetes.table.claim")}</th>
+                  <th>{t("infra.kubernetes.table.reclaimPolicy")}</th>
                   <th>Class</th>
-                  <th>Age</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2363,12 +2364,12 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
                   <th>Provisioner</th>
-                  <th>Reclaim Policy</th>
+                  <th>{t("infra.kubernetes.table.reclaimPolicy")}</th>
                   <th>Binding Mode</th>
                   <th>Default</th>
-                  <th>Age</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2417,12 +2418,12 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Type</th>
+                  <th>{t("infra.kubernetes.table.type")}</th>
                   <th>Reason</th>
                   <th>Object</th>
-                  <th>Message</th>
-                  <th>Count</th>
-                  <th>Age</th>
+                  <th>{t("infra.kubernetes.table.message")}</th>
+                  <th>{t("infra.kubernetes.table.count")}</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2489,10 +2490,10 @@ spec:
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Keys</th>
-                    <th>Age</th>
-                    <th>Actions</th>
+                    <th>{t("infra.kubernetes.table.name")}</th>
+                    <th>{t("infra.kubernetes.table.keys")}</th>
+                    <th>{t("infra.kubernetes.table.age")}</th>
+                    <th>{t("infra.kubernetes.table.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2506,14 +2507,14 @@ spec:
                           <div style={{ display: "flex", gap: "4px" }}>
                             <button
                               class="action-icon"
-                              title="View data"
+                              title={t("infra.kubernetes.action.viewData")}
                               onClick={() => setViewConfigMap(cm)}
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                             </button>
                             <button
                               class="action-icon"
-                              title="View/Edit YAML"
+                              title={t("infra.kubernetes.action.viewEditYaml")}
                               onClick={() => viewYaml("configmap", cm.name, cm.namespace)}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
@@ -2541,11 +2542,11 @@ spec:
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Keys</th>
-                    <th>Age</th>
-                    <th>Actions</th>
+                    <th>{t("infra.kubernetes.table.name")}</th>
+                    <th>{t("infra.kubernetes.table.type")}</th>
+                    <th>{t("infra.kubernetes.table.keys")}</th>
+                    <th>{t("infra.kubernetes.table.age")}</th>
+                    <th>{t("infra.kubernetes.table.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2560,28 +2561,28 @@ spec:
                           <div style={{ display: "flex", gap: "4px" }}>
                             <button
                               class="action-icon"
-                              title="View secret values"
+                              title={t("infra.kubernetes.action.viewSecretValues")}
                               onClick={() => { setRevealedKeys(new Set<string>()); setViewSecret(sec); }}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                             </button>
                             <button
                               class="action-icon"
-                              title="Edit secret data"
+                              title={t("infra.kubernetes.action.editSecretData")}
                               onClick={() => openEditSecretDialog(sec)}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </button>
                             <button
                               class="action-icon"
-                              title="View/Edit YAML"
+                              title={t("infra.kubernetes.action.viewEditYaml")}
                               onClick={() => viewYaml("secret", sec.name, sec.namespace)}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
                             </button>
                             <button
                               class="action-icon action-icon-delete"
-                              title="Delete secret"
+                              title={t("infra.kubernetes.action.deleteSecret")}
                               onClick={() => handleDeleteSecret(sec.namespace, sec.name)}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -2649,13 +2650,13 @@ spec:
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
+                    <th>{t("infra.kubernetes.table.name")}</th>
                     <th>Namespace</th>
-                    <th>Chart</th>
-                    <th>Status</th>
-                    <th>Revision</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
+                    <th>{t("infra.kubernetes.table.chart")}</th>
+                    <th>{t("infra.kubernetes.table.status")}</th>
+                    <th>{t("infra.kubernetes.table.revision")}</th>
+                    <th>{t("infra.kubernetes.table.updated")}</th>
+                    <th>{t("infra.kubernetes.table.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2680,7 +2681,7 @@ spec:
                         <td>
                           <button
                             class="action-icon action-icon-delete"
-                            title="Uninstall release"
+                            title={t("infra.kubernetes.action.uninstallRelease")}
                             onClick={() => handleHelmUninstall(rel.name, rel.namespace)}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -2712,12 +2713,12 @@ spec:
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Schedule</th>
-                    <th>Suspend</th>
+                    <th>{t("infra.kubernetes.table.name")}</th>
+                    <th>{t("infra.kubernetes.table.schedule")}</th>
+                    <th>{t("infra.kubernetes.table.suspend")}</th>
                     <th>Active</th>
                     <th>Last Scheduled</th>
-                    <th>Actions</th>
+                    <th>{t("infra.kubernetes.table.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2750,7 +2751,7 @@ spec:
                         <td style={{ display: "flex", gap: "4px" }}>
                           <button
                             class="action-icon"
-                            title="Trigger Job now"
+                            title={t("infra.kubernetes.action.triggerJob")}
                             onClick={async () => {
                               try {
                                 const result = await invoke("k8s_trigger_cronjob", { namespace: cj.namespace, name: cj.name }) as { job: string };
@@ -2788,14 +2789,14 @@ spec:
                           </button>
                           <button
                             class="action-icon"
-                            title="View YAML"
+                            title={t("infra.kubernetes.action.viewYaml")}
                             onClick={() => viewYaml("CronJob", cj.name, cj.namespace)}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                           </button>
                           <button
                             class="action-icon action-icon-delete"
-                            title="Delete CronJob"
+                            title={t("infra.kubernetes.action.deleteCronJob")}
                             onClick={async () => {
                               if (!await confirmDanger(`Delete CronJob "${cj.name}"?`, "This will remove the CronJob and stop future scheduling.")) return;
                               try {
@@ -2824,12 +2825,12 @@ spec:
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Completions</th>
-                    <th>Duration</th>
+                    <th>{t("infra.kubernetes.table.name")}</th>
+                    <th>{t("infra.kubernetes.table.status")}</th>
+                    <th>{t("infra.kubernetes.table.completions")}</th>
+                    <th>{t("infra.kubernetes.table.duration")}</th>
                     <th>Started</th>
-                    <th>Actions</th>
+                    <th>{t("infra.kubernetes.table.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2853,28 +2854,28 @@ spec:
                         <td style={{ display: "flex", gap: "4px" }}>
                           <button
                             class="action-icon"
-                            title="View Logs"
+                            title={t("infra.kubernetes.action.viewLogs")}
                             onClick={() => {
                               setLogPod(job.name);
                               setLogLines([]);
                               setLogFollow(false);
                               invoke("k8s_pod_logs", { namespace: job.namespace, name: job.name, tail: logTail() })
                                 .then((lines) => setLogLines(lines as string[]))
-                                .catch((e) => showToast(`Failed to get logs: ${e}`, "error"));
+                                .catch((e) => showToast(t("infra.kubernetes.logsFailed", { error: e }), "error"));
                             }}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                           </button>
                           <button
                             class="action-icon"
-                            title="View YAML"
+                            title={t("infra.kubernetes.action.viewYaml")}
                             onClick={() => viewYaml("Job", job.name, job.namespace)}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                           </button>
                           <button
                             class="action-icon action-icon-delete"
-                            title="Delete Job"
+                            title={t("infra.kubernetes.action.deleteJob")}
                             onClick={async () => {
                               if (!await confirmDanger(`Delete Job "${job.name}"?`, "This will remove the Job and its pods.")) return;
                               try {
@@ -2913,13 +2914,13 @@ spec:
             <table class="table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Group</th>
+                  <th>{t("infra.kubernetes.table.name")}</th>
+                  <th>{t("infra.kubernetes.table.group")}</th>
                   <th>Kind</th>
-                  <th>Scope</th>
+                  <th>{t("infra.kubernetes.table.scope")}</th>
                   <th>Versions</th>
-                  <th>Age</th>
-                  <th>Actions</th>
+                  <th>{t("infra.kubernetes.table.age")}</th>
+                  <th>{t("infra.kubernetes.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2947,7 +2948,7 @@ spec:
                       <td>
                         <button
                           class="action-icon"
-                          title="View YAML"
+                          title={t("infra.kubernetes.action.viewYaml")}
                           onClick={() => viewYaml("crd", crd.name, "default")}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -3003,7 +3004,7 @@ spec:
                         onClick={() => setTab("services")}
                         onMouseEnter={() => setTopoHover(svcKey)}
                         onMouseLeave={() => setTopoHover(null)}
-                        title="Click to view services"
+                        title={t("infra.kubernetes.topology.clickServices")}
                       >
                         <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "6px" }}>
                           <span style={{ "font-size": "14px" }}>{"\u29BF"}</span>
@@ -3064,7 +3065,7 @@ spec:
                                 onClick={() => setTab("deployments")}
                                 onMouseEnter={() => setTopoHover(depKey)}
                                 onMouseLeave={() => setTopoHover(null)}
-                                title="Click to view deployments"
+                                title={t("infra.kubernetes.topology.clickDeployments")}
                               >
                                 <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "6px" }}>
                                   <span style={{ "font-size": "14px" }}>{"\u25A6"}</span>
@@ -3115,7 +3116,7 @@ spec:
                                           onClick={() => setTab("pods")}
                                           onMouseEnter={() => setTopoHover(podKey)}
                                           onMouseLeave={() => setTopoHover(null)}
-                                          title="Click to view pods"
+                                          title={t("infra.kubernetes.topology.clickPods")}
                                         >
                                           <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-bottom": "4px" }}>
                                             <span style={{
@@ -3348,7 +3349,7 @@ spec:
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setHelmInstallOpen(false); }}>
           <div class="modal-dialog" style={{ "max-width": "520px" }}>
             <div class="modal-header">
-              <span class="modal-title">Install Helm Chart</span>
+              <span class="modal-title">{t("infra.kubernetes.helm.install")}</span>
               <button class="modal-close" onClick={() => setHelmInstallOpen(false)}>{"\u00d7"}</button>
             </div>
             <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
@@ -3475,7 +3476,7 @@ spec:
                   <table class="table">
                     <thead>
                       <tr>
-                        <th>Revision</th>
+                        <th>{t("infra.kubernetes.table.revision")}</th>
                         <th>Change Cause</th>
                         <th />
                       </tr>
@@ -3846,7 +3847,7 @@ spec:
           <div class="modal-dialog" style={{ width: "1000px", "max-width": "92vw", height: "85vh", display: "flex", "flex-direction": "column", background: "#1a1b26" }}>
             <YamlEditor
               value={"# Enter your Kubernetes YAML here\n# Example:\n# apiVersion: v1\n# kind: Pod\n# metadata:\n#   name: my-pod\n# spec:\n#   containers:\n#   - name: my-container\n#     image: nginx\n"}
-              title="Deploy from YAML"
+              title={t("infra.kubernetes.deployFromYaml")}
               onSave={handleDeployYaml}
               onClose={() => setDeployYamlOpen(false)}
             />
@@ -4023,7 +4024,7 @@ spec:
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setCreateIngressOpen(false); }}>
           <div class="modal-dialog" style={{ "max-width": "520px" }}>
             <div class="modal-header">
-              <span class="modal-title">Create Ingress</span>
+              <span class="modal-title">{t("infra.kubernetes.helm.createIngress")}</span>
               <button class="modal-close" onClick={() => setCreateIngressOpen(false)}>{"\u00d7"}</button>
             </div>
             <div style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
@@ -4504,7 +4505,7 @@ spec:
                 <table class="table" style={{ "margin-bottom": "0" }}>
                   <thead>
                     <tr>
-                      <th>Name</th>
+                      <th>{t("infra.kubernetes.table.name")}</th>
                       <th>Port</th>
                       <th>Protocol</th>
                     </tr>

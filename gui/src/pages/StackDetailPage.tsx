@@ -10,6 +10,14 @@ import Breadcrumb from "../components/Breadcrumb";
 import YamlEditor from "../components/YamlEditor";
 import { logError } from "../lib/activityStore";
 import { confirmDanger } from "../components/ConfirmDialog";
+import { t, lang } from "../i18n";
+import { settingsDetailEn, settingsDetailZhCN } from "../i18n/settingsDetail";
+
+const tr = (key: string, params: Record<string, string | number> = {}) => {
+  const central = t(key);
+  const value = central === key ? (lang() === "zh-CN" ? settingsDetailZhCN[key] : settingsDetailEn[key]) ?? key : central;
+  return Object.entries(params).reduce((text, [name, replacement]) => text.replaceAll(`{${name}}`, String(replacement)), value);
+};
 
 interface StackDetailPageProps {
   stackName: string;
@@ -83,7 +91,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
     try {
       await invoke("stop_container", { id: containerId });
       await invoke("start_container", { id: containerId });
-      showToast("Service restarted", "success");
+      showToast(tr("stack.serviceRestarted"), "success");
       await fetchStack();
     } catch (err) {
       logError(`Failed to restart service: ${err}`, `Stack "${props.stackName}", service ${containerId}`);
@@ -95,11 +103,11 @@ export default function StackDetailPage(props: StackDetailPageProps) {
   const statusConfig = (status: string) => {
     switch (status) {
       case "Running":
-        return { class: "state-running", label: "Running" };
+        return { class: "state-running", label: tr("common.running") };
       case "Partial":
-        return { class: "state-paused", label: "Partial" };
+        return { class: "state-paused", label: tr("common.partial") };
       case "Stopped":
-        return { class: "state-exited", label: "Stopped" };
+        return { class: "state-exited", label: tr("common.stopped") };
       default:
         return { class: "state-created", label: status };
     }
@@ -121,7 +129,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
   };
 
   const breadcrumbItems = () => [
-    { label: "Stacks", onClick: () => props.onBack() },
+    { label: tr("stack.title"), onClick: () => props.onBack() },
     { label: props.stackName },
   ];
 
@@ -140,7 +148,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
           when={stack()}
           fallback={
             <div class="detail-page-info">
-              <div class="detail-page-name">Loading...</div>
+              <div class="detail-page-name">{tr("common.loading")}</div>
             </div>
           }
         >
@@ -149,23 +157,23 @@ export default function StackDetailPage(props: StackDetailPageProps) {
               <div class="detail-page-info">
                 <div class="detail-page-name">{s().name}</div>
                 <div class="detail-page-image" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                  {s().working_dir || "No working directory"}
+                  {s().working_dir || tr("stack.noWorkingDirectory")}
                   <Show when={s().working_dir}>
                     <button
                       class="btn btn-sm"
                       style={{ padding: "1px 6px", "font-size": "11px", "line-height": "1.4" }}
-                      title="Copy stack directory path"
+                      title={tr("stack.copyPathTitle")}
                       onClick={() => {
                         navigator.clipboard.writeText(s().working_dir!);
                         showToast("Path copied to clipboard", "success");
                       }}
                     >
-                      Copy path
+                      {tr("stack.copyPath")}
                     </button>
                   </Show>
                   <Show when={s().services.length > 0}>
                     <span style={{ "margin-left": "12px", color: "#484f58" }}>
-                      {runningCount()}/{s().services.length} services running
+                      {tr("stack.servicesRunning", { running: runningCount(), total: s().services.length })}
                     </span>
                   </Show>
                 </div>
@@ -202,9 +210,9 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                     class="btn btn-sm btn-primary"
                     onClick={() => doStackAction("compose_up")}
                     disabled={actionInProgress()}
-                    title="Start stack"
+                    title={tr("stack.startTitle")}
                   >
-                    &#9654; Start
+                    &#9654; {tr("common.start")}
                   </button>
                 </Show>
                 <Show when={s().working_dir}>
@@ -237,13 +245,13 @@ export default function StackDetailPage(props: StackDetailPageProps) {
           class={`detail-tab-item ${activeTab() === "services" ? "active" : ""}`}
           onClick={() => setActiveTab("services")}
         >
-          Services
+          {tr("stack.services")}
         </button>
         <button
           class={`detail-tab-item ${activeTab() === "logs" ? "active" : ""}`}
           onClick={() => setActiveTab("logs")}
         >
-          Logs
+          {tr("common.logs")}
         </button>
         <button
           class={`detail-tab-item ${activeTab() === "compose" ? "active" : ""}`}
@@ -252,7 +260,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
             if (!composeContent()) fetchComposeFile();
           }}
         >
-          Compose File
+          {tr("stack.composeFile")}
         </button>
       </div>
 
@@ -270,18 +278,18 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   padding: "24px 0",
                 }}
               >
-                No services found in this stack.
+                {tr("stack.noServices")}
               </div>
             }
           >
             <table class="table">
               <thead>
                 <tr>
-                  <th>Service</th>
-                  <th>Image</th>
-                  <th>State</th>
-                  <th>Ports</th>
-                  <th style={{ "text-align": "right" }}>Actions</th>
+                  <th>t("stack.service")</th>
+                  <th>t("common.image")</th>
+                  <th>t("common.state")</th>
+                  <th>t("stack.ports")</th>
+                  <th style={{ "text-align": "right" }}>t("common.actions")</th>
                 </tr>
               </thead>
               <tbody>
@@ -347,7 +355,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                               }}
                               disabled={serviceLoading() === svc.container_id}
                             >
-                              Start
+                              {tr("common.start")}
                             </button>
                           </Show>
                           <Show when={svc.state === "Running"}>
@@ -401,7 +409,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   "white-space": "nowrap",
                 }}
               >
-                Service:
+                {tr("stack.service")}:
               </span>
               <div class="filter-pills">
                 <button
@@ -479,7 +487,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   padding: "24px 0",
                 }}
               >
-                No compose file path available for this stack.
+                {tr("stack.noComposePath")}
               </div>
             </Show>
 

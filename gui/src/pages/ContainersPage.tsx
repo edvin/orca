@@ -13,6 +13,7 @@ import LastUpdated from "../components/LastUpdated";
 import { recordMetrics } from "../lib/metricsStore";
 import { logError } from "../lib/activityStore";
 import MultiLogViewer from "../components/MultiLogViewer";
+import { t } from "../i18n";
 
 interface ContainersPageProps {
   onNavigate?: (page: string) => void;
@@ -164,14 +165,14 @@ export default function ContainersPage(props: ContainersPageProps) {
         containerName: c.name,
         port,
       });
-      showToast(`Exposed ${c.name} at ${fullHostname}`, "success");
+      showToast(t("corePages.containers.exposed", { name: c.name, hostname: fullHostname }), "success");
       // Add to existing routes list and clear the form for another
       setExposeExistingRoutes([...exposeExistingRoutes(), { hostname: fullHostname, url: `https://${fullHostname}`, port }]);
       setExposeHostname("");
       setExposePort(c.ports?.length > 0 ? String(c.ports[0].container_port) : "80");
     } catch (err) {
       logError(`Failed to expose container: ${err}`);
-      showToast(`Failed to expose: ${err}`, "error");
+      showToast(t("corePages.containers.exposeFailed", { error: err }), "error");
     }
     setExposing(false);
   };
@@ -179,11 +180,11 @@ export default function ContainersPage(props: ContainersPageProps) {
   const handleUnexpose = async (hostname: string) => {
     try {
       await invoke("gateway_remove_route", { hostname });
-      showToast(`Route ${hostname} removed`, "success");
+      showToast(t("corePages.containers.routeRemoved", { hostname }), "success");
       setExposeExistingRoutes(exposeExistingRoutes().filter((r) => r.hostname !== hostname));
     } catch (err) {
       logError(`Failed to remove route: ${err}`);
-      showToast(`Failed to remove: ${err}`, "error");
+      showToast(t("corePages.containers.removeRouteFailed", { error: err }), "error");
     }
   };
 
@@ -213,7 +214,7 @@ export default function ContainersPage(props: ContainersPageProps) {
     setStackActionInProgress(name);
     try {
       await invoke("restart_stack", { name });
-      showToast("Stack restarted", "success");
+      showToast(t("corePages.containers.stackRestarted"), "success");
       setTimeout(refresh, 500);
     } catch (err) {
       logError(`Failed to restart stack: ${err}`, `Stack "${name}"`);
@@ -229,9 +230,9 @@ export default function ContainersPage(props: ContainersPageProps) {
       if (result && typeof result === "object") {
         const output = result as any;
         if (!output.success) {
-          showToast(`Pull failed: ${output.stderr || "Unknown error"}`, "error");
+          showToast(t("corePages.containers.pullFailed", { error: output.stderr || t("corePages.common.unknownError") }), "error");
         } else {
-          showToast("Images pulled successfully", "success");
+          showToast(t("corePages.containers.imagesPulled"), "success");
         }
       }
       setTimeout(refresh, 500);
@@ -243,7 +244,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   };
 
   const deleteStack = async (name: string) => {
-    if (!await confirmDanger("Delete Stack", `Delete stack "${name}"? This will stop and remove all containers in the stack.`)) return;
+    if (!await confirmDanger(t("corePages.containers.deleteStack"), t("corePages.containers.deleteStackConfirm", { name }))) return;
     setStackActionInProgress(name);
     try {
       await invoke("compose_down", { name });
@@ -251,7 +252,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       await refresh();
     } catch (err) {
       logError(`Failed to delete stack: ${err}`, `Stack "${name}"`);
-      showToast(`Failed to delete stack: ${err}`, "error");
+      showToast(t("corePages.containers.deleteStackFailed", { error: err }), "error");
     }
     setStackActionInProgress(null);
   };
@@ -394,7 +395,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       return c && c.state !== "Running";
     });
     if (ids.length === 0) {
-      showToast("No stopped containers selected", "info");
+      showToast(t("corePages.containers.noStoppedSelected"), "info");
       return;
     }
     let started = 0;
@@ -406,7 +407,7 @@ export default function ContainersPage(props: ContainersPageProps) {
         logError(`Failed to start container: ${err}`, `Container ${id}`);
       }
     }
-    showToast(`Started ${started} container${started !== 1 ? "s" : ""}`, "success");
+    showToast(t("corePages.containers.startedCount", { count: started }), "success");
     setSelected(new Set<string>());
     await refresh();
   };
@@ -417,7 +418,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       return c && c.state === "Running";
     });
     if (ids.length === 0) {
-      showToast("No running containers selected", "info");
+      showToast(t("corePages.containers.noRunningSelected"), "info");
       return;
     }
     let stopped = 0;
@@ -429,7 +430,7 @@ export default function ContainersPage(props: ContainersPageProps) {
         logError(`Failed to stop container: ${err}`, `Container ${id}`);
       }
     }
-    showToast(`Stopped ${stopped} container${stopped !== 1 ? "s" : ""}`, "success");
+    showToast(t("corePages.containers.stoppedCount", { count: stopped }), "success");
     setSelected(new Set<string>());
     await refresh();
   };
@@ -439,8 +440,8 @@ export default function ContainersPage(props: ContainersPageProps) {
     if (ids.length === 0) return;
     const count = ids.length;
     if (!await confirmDanger(
-      "Delete Containers",
-      `Delete ${count} selected container${count !== 1 ? "s" : ""}? This cannot be undone.`
+      t("corePages.containers.deleteContainers"),
+      t("corePages.containers.deleteSelectedConfirm", { count })
     )) return;
     setBatchDeleteProgress({ done: 0, total: count });
     let deleted = 0;
@@ -457,7 +458,7 @@ export default function ContainersPage(props: ContainersPageProps) {
     } finally {
       setBatchDeleteProgress(null);
     }
-    showToast(`Deleted ${deleted} container${deleted !== 1 ? "s" : ""}`, "success");
+    showToast(t("corePages.containers.deletedCount", { count: deleted }), "success");
     setSelected(new Set<string>());
     await refresh();
   };
@@ -483,11 +484,11 @@ export default function ContainersPage(props: ContainersPageProps) {
     setActionInProgress(id);
     try {
       await invoke(action, { id });
-      showToast(`Container ${action.replace("_container", "")} successful`, "success");
+      showToast(t("corePages.containers.actionSuccessful", { action: action.replace("_container", "") }), "success");
       await refresh();
     } catch (err) {
       logError(`Failed to ${action.replace("_container", "")} container: ${err}`, `Container ${id}`);
-      showToast(`${action} failed: ${err}`, "error");
+      showToast(t("corePages.containers.actionFailed", { action, error: err }), "error");
     }
     setLoading(false);
     setActionInProgress(null);
@@ -500,7 +501,7 @@ export default function ContainersPage(props: ContainersPageProps) {
     try {
       await invoke("stop_container", { id });
       await invoke("start_container", { id });
-      showToast("Container restart successful", "success");
+      showToast(t("corePages.containers.restartSuccessful"), "success");
       await refresh();
     } catch (err) {
       logError(`Failed to restart container: ${err}`, `Container ${id}`);
@@ -519,21 +520,21 @@ export default function ContainersPage(props: ContainersPageProps) {
       if (result && typeof result === "object") {
         const output = result as any;
         if (output.success === false) {
-          showToast(`Stack ${label} failed: ${output.stderr || output.stdout || "Check container logs for details"}`, "error");
+          showToast(t("corePages.containers.stackActionFailed", { action: label, error: output.stderr || output.stdout || t("corePages.containers.checkLogs") }), "error");
         } else {
-          showToast(`Stack ${label} completed`, "success");
+          showToast(t("corePages.containers.stackActionCompleted", { action: label }), "success");
         }
       } else {
-        showToast(`Stack ${label} completed`, "success");
+        showToast(t("corePages.containers.stackActionCompleted", { action: label }), "success");
       }
       setTimeout(refresh, 500);
     } catch (err) {
       const errStr = String(err);
       logError(`Failed to ${label} stack: ${errStr}`, `Stack "${name}"`);
       if (errStr.includes("compose file") || errStr.includes("not found")) {
-        showToast(`Stack ${label} failed: No compose file found. This stack was auto-detected from container labels.`, "error");
+        showToast(t("corePages.containers.stackNoCompose", { action: label }), "error");
       } else {
-        showToast(`Stack ${label} failed: ${errStr}`, "error");
+        showToast(t("corePages.containers.stackActionFailed", { action: label, error: errStr }), "error");
       }
     }
     setStackActionInProgress(null);
@@ -603,7 +604,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                   "white-space": "nowrap",
                   cursor: "pointer",
                 }}
-                title={`Gateway: https://${route.hostname} — click to manage`}
+                title={t("corePages.containers.gatewayManage", { hostname: route.hostname })}
                 onClick={(ev) => { ev.stopPropagation(); openExposeDialog(c); }}
               >
                 {route.hostname}
@@ -695,7 +696,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
                       style={{ color: "#58a6ff", "font-size": "12px" }}
-                      title={`Open ${proto}://localhost:${p.host_port}`}
+                      title={t("corePages.containers.openUrl", { url: `${proto}://localhost:${p.host_port}` })}
                     >
                       {p.host_port}:{p.container_port}
                     </a>
@@ -728,7 +729,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 class="action-icon action-icon-stop"
                 onClick={(e) => doAction("stop_container", c.id, e)}
                 disabled={loading()}
-                title="Stop"
+                title={t("common.stop")}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
               </button>
@@ -738,7 +739,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 class="action-icon action-icon-start"
                 onClick={(e) => doAction("start_container", c.id, e)}
                 disabled={loading()}
-                title="Start"
+                title={t("corePages.common.start")}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               </button>
@@ -798,7 +799,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                   <button
                     class="dropdown-item dropdown-item-danger"
                     onClick={async () => {
-                      if (await confirmDanger("Remove Container", `Remove container '${c.name}'? This cannot be undone.`)) {
+                      if (await confirmDanger(t("corePages.containers.removeContainer"), t("corePages.containers.removeContainerConfirm", { name: c.name }))) {
                         doAction("remove_container", c.id, new MouseEvent("click"));
                       }
                       setContainerMenuOpen(null);
@@ -820,7 +821,7 @@ export default function ContainersPage(props: ContainersPageProps) {
     <div>
       <div class="page-header">
         <h1 class="page-title">
-          Containers
+          {t("corePages.common.containers")}
           <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": "400", "margin-left": "8px" }}>
             {totalCount()}
           </span>
@@ -851,7 +852,7 @@ export default function ContainersPage(props: ContainersPageProps) {
             <input
               class="search-input"
               type="text"
-              placeholder="Search containers & stacks..."
+              placeholder={t("corePages.containers.searchPlaceholder")}
               value={search()}
               onInput={(e) => setSearch(e.currentTarget.value)}
               style={{ "padding-right": "30px" }}
@@ -860,7 +861,7 @@ export default function ContainersPage(props: ContainersPageProps) {
               <button
                 class="search-clear-btn"
                 onClick={() => setSearch("")}
-                title="Clear search"
+                title={t("corePages.common.clearSearch")}
                 type="button"
               >
                 &times;
@@ -869,13 +870,13 @@ export default function ContainersPage(props: ContainersPageProps) {
           </div>
           <Show when={runningContainers().length >= 2}>
             <button class="btn" onClick={() => setShowMultiLog(true)}>
-              Combined Logs
+              {t("corePages.containers.combinedLogs")}
             </button>
           </Show>
           <Show when={runningContainers().length > 0}>
             <button class="btn" style={{ color: "#f85149" }} onClick={async () => {
               const running = runningContainers();
-              if (!await confirmDanger("Stop All Containers", `Stop all ${running.length} running containers?`)) return;
+              if (!await confirmDanger(t("corePages.containers.stopAllTitle"), t("corePages.containers.stopAllConfirm", { count: running.length }))) return;
               let stopped = 0;
               for (const c of running) {
                 try {
@@ -888,7 +889,7 @@ export default function ContainersPage(props: ContainersPageProps) {
               showToast(`Stopped ${stopped} container${stopped !== 1 ? "s" : ""}`, "success");
               await refresh();
             }}>
-              Stop All
+              {t("corePages.containers.stopAll")}
             </button>
           </Show>
           <button class="btn" onClick={() => {
@@ -911,7 +912,7 @@ export default function ContainersPage(props: ContainersPageProps) {
           <Show when={lastUpdated() !== null} fallback={
             <table class="table">
               <thead>
-                <tr><th>Name</th><th>Image</th><th>Status</th><th>Ports</th><th>Actions</th></tr>
+                <tr><th>t("corePages.common.name")</th><th>t("common.image")</th><th>t("common.status")</th><th>t("stack.ports")</th><th>t("common.actions")</th></tr>
               </thead>
               <tbody>
                 <SkeletonRow columns={5} />
@@ -924,14 +925,14 @@ export default function ContainersPage(props: ContainersPageProps) {
           }>
             <div class="empty">
               <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg></div>
-              <p class="empty-title">No containers yet</p>
-              <p>Deploy a pre-configured app from the catalog, or click Run Container to start any Docker image with custom settings.</p>
+              <p class="empty-title">{t("corePages.containers.noContainers")}</p>
+              <p>{t("corePages.containers.noContainersHint")}</p>
               <div class="empty-actions">
                 <button class="btn btn-primary" onClick={() => props.onNavigate?.("templates")}>
-                  Browse App Catalog
+                  {t("corePages.dashboard.browseCatalog")}
                 </button>
                 <button class="btn" onClick={() => props.onNavigate?.("images")}>
-                  Go to Images
+                  {t("corePages.containers.goToImages")}
                 </button>
               </div>
             </div>
@@ -1059,14 +1060,14 @@ export default function ContainersPage(props: ContainersPageProps) {
                                 onClick={() => toggleGroupSelect(filteredContainers())}
                               />
                             </th>
-                            <th>Name</th>
-                            <th>Image</th>
-                            <th>State</th>
+                            <th>t("corePages.common.name")</th>
+                            <th>t("common.image")</th>
+                            <th>t("common.state")</th>
                             <th>CPU</th>
-                            <th>Memory</th>
-                            <th>Ports</th>
-                            <th>Net I/O</th>
-                            <th style={{ "text-align": "right" }}>Actions</th>
+                            <th>t("corePages.common.memory")</th>
+                            <th>t("stack.ports")</th>
+                            <th>t("corePages.containers.netIo")</th>
+                            <th style={{ "text-align": "right" }}>t("common.actions")</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1096,7 +1097,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                   />
                   <div>
                     <div class="stack-name">
-                      Standalone
+                      {t("corePages.containers.standalone")}
                       <span class="service-dots" style={{ "margin-left": "10px", display: "inline-flex" }}>
                         <For each={filteredGroups().standalone}>
                           {(c) => (
@@ -1115,7 +1116,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                       </span>
                     </div>
                     <div class="stack-meta">
-                      {filteredGroups().standalone.filter((c) => c.state === "Running").length}/{filteredGroups().standalone.length} running
+                      {t("corePages.containers.runningRatio", { running: filteredGroups().standalone.filter((c) => c.state === "Running").length, total: filteredGroups().standalone.length })}
                     </div>
                   </div>
                 </div>
@@ -1132,14 +1133,14 @@ export default function ContainersPage(props: ContainersPageProps) {
                             onClick={() => toggleGroupSelect(filteredGroups().standalone)}
                           />
                         </th>
-                        <th>Name</th>
-                        <th>Image</th>
-                        <th>State</th>
+                        <th>t("corePages.common.name")</th>
+                        <th>t("common.image")</th>
+                        <th>t("common.state")</th>
                         <th>CPU</th>
-                        <th>Memory</th>
-                        <th>Ports</th>
-                        <th>Net I/O</th>
-                        <th style={{ "text-align": "right" }}>Actions</th>
+                        <th>t("corePages.common.memory")</th>
+                        <th>t("stack.ports")</th>
+                        <th>t("corePages.containers.netIo")</th>
+                        <th style={{ "text-align": "right" }}>t("common.actions")</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1177,27 +1178,27 @@ export default function ContainersPage(props: ContainersPageProps) {
         }}>
           <Show when={batchDeleteProgress()} fallback={
             <span style={{ "font-size": "13px", color: "#e6edf3" }}>
-              {selected().size} container{selected().size !== 1 ? "s" : ""} selected
+              {t("corePages.containers.selectedCount", { count: selected().size })}
             </span>
           }>
             {(p) => (
               <span style={{ "font-size": "13px", color: "#e6edf3", display: "inline-flex", "align-items": "center", gap: "8px" }}>
-                <Spinner size={12} /> Deleting containers... ({p().done}/{p().total})
+                <Spinner size={12} /> {t("corePages.containers.deletingProgress", { done: p().done, total: p().total })}
               </span>
             )}
           </Show>
           <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStart} disabled={!!batchDeleteProgress()}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Selected
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> {t("corePages.containers.startSelected")}
           </button>
           <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStop} disabled={!!batchDeleteProgress()}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> Stop Selected
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> {t("corePages.containers.stopSelected")}
           </button>
           <button class="btn btn-sm btn-danger" onClick={batchDelete} disabled={!!batchDeleteProgress()} style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
             {batchDeleteProgress() ? "Deleting..." : "Delete Selected"}
           </button>
           <button class="btn btn-sm" onClick={() => setSelected(new Set<string>())} disabled={!!batchDeleteProgress()}>
-            Clear
+            {t("corePages.common.clear")}
           </button>
         </div>
       </Show>
@@ -1223,12 +1224,12 @@ export default function ContainersPage(props: ContainersPageProps) {
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay") && !composeDeploying()) setShowComposeEditor(false); }}>
           <div class="modal-dialog" style={{ "max-width": "800px", height: "80vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
-              <h2 class="modal-title">Deploy Compose Stack</h2>
+              <h2 class="modal-title">t("corePages.containers.deployCompose")</h2>
               <button class="modal-close" onClick={() => { if (!composeDeploying()) setShowComposeEditor(false); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body" style={{ flex: "1", display: "flex", "flex-direction": "column", gap: "12px", overflow: "hidden" }}>
               <div class="form-group">
-                <label class="form-label">Directory Path</label>
+                <label class="form-label">t("corePages.containers.directoryPath")</label>
                 <input class="form-input mono" type="text"
                   placeholder="/path/to/project (docker-compose.yml will be saved here)"
                   value={composePath()}
@@ -1264,7 +1265,7 @@ export default function ContainersPage(props: ContainersPageProps) {
               </Show>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => setShowComposeEditor(false)} disabled={composeDeploying() || composeValidating()}>Cancel</button>
+              <button class="btn" onClick={() => setShowComposeEditor(false)} disabled={composeDeploying() || composeValidating()}>t("common.cancel")</button>
               <button class="btn" disabled={composeValidating() || composeDeploying() || !composePath().trim() || !composeContent().trim()}
                 onClick={async () => {
                   const dir = composePath().trim();
@@ -1330,7 +1331,7 @@ export default function ContainersPage(props: ContainersPageProps) {
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setExposeContainer(null); }}>
           <div class="modal-dialog">
             <div class="modal-header">
-              <h2 class="modal-title">Expose via Gateway</h2>
+              <h2 class="modal-title">t("container.exposeGateway")</h2>
               <button class="modal-close" onClick={() => setExposeContainer(null)}>{"\u00d7"}</button>
             </div>
             <form onSubmit={handleExpose}>
@@ -1338,7 +1339,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 {/* Existing routes for this container */}
                 <Show when={exposeExistingRoutes().length > 0}>
                   <div style={{ "margin-bottom": "16px" }}>
-                    <label class="form-label">Active Routes</label>
+                    <label class="form-label">t("corePages.containers.activeRoutes")</label>
                     <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
                       <For each={exposeExistingRoutes()}>
                         {(route) => (
@@ -1346,7 +1347,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                             <span style={{ color: "#3fb950", "font-size": "8px" }}>{"\u25CF"}</span>
                             <span class="mono" style={{ flex: "1", "font-size": "13px", color: "#58a6ff" }}>{route.hostname}</span>
                             <span style={{ color: "#6e7681", "font-size": "11px" }}>:{route.port}</span>
-                            <button type="button" class="action-icon" style={{ color: "#f85149", "flex-shrink": "0" }} onClick={() => handleUnexpose(route.hostname)} title="Remove route">
+                            <button type="button" class="action-icon" style={{ color: "#f85149", "flex-shrink": "0" }} onClick={() => handleUnexpose(route.hostname)} title={t("infra.gateway.configuration")}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             </button>
                           </div>
@@ -1359,7 +1360,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 {/* Add new route form */}
                 <Show when={exposeExistingRoutes().length > 0}>
                   <div style={{ "border-top": "1px solid #21262d", "padding-top": "16px", "margin-bottom": "8px" }}>
-                    <label class="form-label" style={{ "font-size": "13px", "font-weight": "600" }}>Add Another Route</label>
+                    <label class="form-label" style={{ "font-size": "13px", "font-weight": "600" }}>t("corePages.containers.addAnotherRoute")</label>
                   </div>
                 </Show>
                 <div class="form-group">
@@ -1422,7 +1423,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 </Show>
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn" onClick={() => setExposeContainer(null)} disabled={exposing()}>Close</button>
+                <button type="button" class="btn" onClick={() => setExposeContainer(null)} disabled={exposing()}>t("common.close")</button>
                 <button type="submit" class="btn btn-primary" disabled={exposing() || !exposeHostname().trim()}>
                   {exposing() ? "Exposing..." : "Add Route"}
                 </button>

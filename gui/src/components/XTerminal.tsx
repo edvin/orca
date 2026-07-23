@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import "@xterm/xterm/css/xterm.css";
+import { t } from "../i18n";
 
 // Hard cap on how much data we're willing to have queued in the WebSocket
 // send buffer before we drop further input. Browsers will eventually kill
@@ -52,7 +53,7 @@ export default function XTerminal(props: XTerminalProps) {
       if (!backpressureWarned) {
         backpressureWarned = true;
         showToast(
-          "Terminal is overloaded — dropping input. Wait for the remote end to catch up.",
+          t("components.terminal.overloaded"),
           "error",
         );
         // Reset the flag once the buffer drains enough to accept again.
@@ -164,7 +165,7 @@ export default function XTerminal(props: XTerminalProps) {
 
       ws.onopen = () => {
         if (disposed || !term) return;
-        term.writeln(`\x1b[36mConnected to ${props.containerName}\x1b[0m`);
+        term.writeln(`\x1b[36m${t("components.terminal.connectedContainer", { name: props.containerName })}\x1b[0m`);
         setTimeout(() => {
           if (!disposed && ws?.readyState === WebSocket.OPEN && term) {
             ws.send(JSON.stringify({ cols: term.cols, rows: term.rows }));
@@ -181,8 +182,8 @@ export default function XTerminal(props: XTerminalProps) {
         }
       };
 
-      ws.onclose = () => { if (!disposed && term) term.writeln("\r\n\x1b[90mConnection closed\x1b[0m"); };
-      ws.onerror = () => { if (!disposed && term) term.writeln("\r\n\x1b[31mWebSocket error\x1b[0m"); };
+      ws.onclose = () => { if (!disposed && term) term.writeln(`\r\n\x1b[90m${t("components.terminal.connectionClosed")}\x1b[0m`); };
+      ws.onerror = () => { if (!disposed && term) term.writeln(`\r\n\x1b[31m${t("components.terminal.websocketError")}\x1b[0m`); };
 
       term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
         if (e.type !== "keydown" || !term) return true;
@@ -231,13 +232,13 @@ export default function XTerminal(props: XTerminalProps) {
     <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
       <div class="log-header">
         <div class="log-header-left">
-          <span class="log-title">Terminal: {props.containerName}</span>
+          <span class="log-title">{t("components.terminal.title", { name: props.containerName })}</span>
         </div>
         <div class="log-header-right">
           <div style={{ display: "flex", "align-items": "center", gap: "1px", background: "#21262d", "border-radius": "4px", padding: "0 2px" }}>
-            <button class="action-icon" onClick={() => changeFontSize(-1)} title="Decrease font size" style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>&minus;</button>
+            <button class="action-icon" onClick={() => changeFontSize(-1)} title={t("components.common.decreaseFontSize")} style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>&minus;</button>
             <span style={{ "font-size": "10px", color: "#8b949e", "min-width": "24px", "text-align": "center" }}>{fontSize()}</span>
-            <button class="action-icon" onClick={() => changeFontSize(1)} title="Increase font size" style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>+</button>
+            <button class="action-icon" onClick={() => changeFontSize(1)} title={t("components.common.increaseFontSize")} style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>+</button>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { copyToClipboard } from "../lib/clipboard";
+import { t } from "../i18n";
 
 interface CopyButtonProps {
   text: string;
@@ -20,7 +21,7 @@ export default function CopyButton(props: CopyButtonProps) {
     <button
       class="btn btn-sm copy-btn"
       onClick={handleClick}
-      title={props.label || "Copy to clipboard"}
+      title={props.label || t("components.copy.clipboard")}
       style={{
         padding: "2px 6px",
         "font-size": "11px",

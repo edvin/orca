@@ -5,6 +5,7 @@ import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { SkeletonRow } from "../components/Skeleton";
+import { t } from "../i18n";
 
 interface BuildsPageProps {
   onNavigate?: (target: string) => void;
@@ -17,14 +18,14 @@ function relativeTime(ts: string): string {
   const now = Date.now();
   const diff = now - new Date(ts).getTime();
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 0) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 0) return t("corePages.builds.justNow");
+  if (seconds < 60) return t("corePages.builds.secondsAgo", { count: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t("corePages.builds.minutesAgo", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("corePages.builds.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("corePages.builds.daysAgo", { count: days });
 }
 
 function formatDuration(secs: number | undefined): string {
@@ -58,12 +59,12 @@ function statusColor(status: BuildRecord["status"]): string {
 
 function sourceLabel(source: BuildRecord["source"]): string {
   switch (source) {
-    case "manual": return "Manual";
-    case "file_watch": return "File Watch";
-    case "scheduled": return "Scheduled";
-    case "webhook": return "Webhook";
+    case "manual": return t("corePages.builds.sourceManual");
+    case "file_watch": return t("corePages.builds.sourceFileWatch");
+    case "scheduled": return t("corePages.builds.sourceScheduled");
+    case "webhook": return t("corePages.builds.sourceWebhook");
     case "url": return "URL";
-    case "external": return "External";
+    case "external": return t("corePages.builds.sourceExternal");
     default: return source;
   }
 }
@@ -137,7 +138,7 @@ export default function BuildsPage(props: BuildsPageProps) {
       setBuildDetail(detail);
       setBuildLogs(logs || "");
     } catch (e) {
-      showToast(`Failed to load build: ${e}`, "error");
+      showToast(t("corePages.builds.loadFailed", { error: e }), "error");
     } finally {
       setLogsLoading(false);
     }
@@ -148,14 +149,14 @@ export default function BuildsPage(props: BuildsPageProps) {
     if (!await confirmDanger("Delete Build", "Delete this build record and its logs?")) return;
     try {
       await invoke("delete_build", { id });
-      showToast("Build deleted", "success");
+      showToast(t("corePages.builds.deleted"), "success");
       if (selectedBuild() === id) {
         setSelectedBuild(null);
         setBuildDetail(null);
       }
       await refresh();
     } catch (err) {
-      showToast(`Failed to delete build: ${err}`, "error");
+      showToast(t("corePages.builds.deleteFailed", { error: err }), "error");
     }
   };
 
@@ -167,20 +168,20 @@ export default function BuildsPage(props: BuildsPageProps) {
 
   const submitUrlBuild = async () => {
     const url = urlInput().trim();
-    if (!url) { showToast("URL is required", "error"); return; }
+    if (!url) { showToast(t("corePages.builds.urlRequired"), "error"); return; }
     setUrlBuilding(true);
     try {
       await invoke("build_from_url", {
         sourceUrl: url,
         tag: urlTag().trim() || null,
       });
-      showToast("Build started from URL", "success");
+      showToast(t("corePages.builds.urlStarted"), "success");
       setShowUrlDialog(false);
       setUrlInput("");
       setUrlTag("");
       await refresh();
     } catch (err) {
-      showToast(`Build from URL failed: ${err}`, "error");
+      showToast(t("corePages.builds.urlFailed", { error: err }), "error");
     } finally {
       setUrlBuilding(false);
     }
@@ -237,7 +238,7 @@ export default function BuildsPage(props: BuildsPageProps) {
       ]);
       setCompareLogs({ log1: log1 || "", log2: log2 || "" });
     } catch (e) {
-      showToast(`Failed to load logs: ${e}`, "error");
+      showToast(t("corePages.builds.logsLoadFailed", { error: e }), "error");
     } finally {
       setCompareLogsLoading(false);
     }
@@ -310,7 +311,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                 Builds per Day (Last 7 Days)
               </div>
               <Show when={(s.builds_per_day || []).length > 0} fallback={
-                <div style={{ color: "#484f58", "font-size": "13px" }}>No data</div>
+                <div style={{ color: "#484f58", "font-size": "13px" }}>{t("corePages.common.noData")}</div>
               }>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <For each={s.builds_per_day || []}>
@@ -348,10 +349,10 @@ export default function BuildsPage(props: BuildsPageProps) {
             {/* Most built images + avg duration */}
             <div>
               <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "10px", "font-weight": "500" }}>
-                Most Built Images
+                {t("corePages.builds.mostBuiltImages")}
               </div>
               <Show when={(s.most_built || []).length > 0} fallback={
-                <div style={{ color: "#484f58", "font-size": "13px" }}>No data</div>
+                <div style={{ color: "#484f58", "font-size": "13px" }}>t("corePages.common.noData")</div>
               }>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <For each={(s.most_built || []).slice(0, 5)}>
@@ -401,7 +402,7 @@ export default function BuildsPage(props: BuildsPageProps) {
 
               <Show when={(s.avg_duration_by_tag || []).length > 0}>
                 <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "8px", "margin-top": "16px", "font-weight": "500" }}>
-                  Avg Build Time by Image
+                  {t("corePages.builds.avgBuildTimeByImage")}
                 </div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <For each={s.avg_duration_by_tag || []}>
@@ -457,7 +458,7 @@ export default function BuildsPage(props: BuildsPageProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "20px" }}>
-            <h2 style={{ margin: "0", "font-size": "18px" }}>Build Comparison</h2>
+            <h2 style={{ margin: "0", "font-size": "18px" }}>{t("corePages.builds.comparisonTitle")}</h2>
             <button class="btn btn-ghost" onClick={closeComparison} style={{ "font-size": "18px", padding: "4px 8px" }}>
               {"\u00d7"}
             </button>
@@ -578,7 +579,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                     margin: "0",
                     "white-space": "pre-wrap",
                     "word-break": "break-word",
-                  }}>{logs().log1 || "No logs"}</pre>
+                  }}>{logs().log1 || t("corePages.builds.noLogs")}</pre>
                 </div>
                 <div>
                   <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "6px" }}>Build 2 Log ({b2.tag || b2.id.slice(0, 8)})</div>
@@ -621,7 +622,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             style={{ display: "inline-flex", "align-items": "center", gap: "6px", padding: "6px 12px" }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
-            Back to list
+            {t("corePages.builds.backToList")}
           </button>
         </div>
 
@@ -649,7 +650,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                     color: "#a78bfa",
                     border: "1px solid rgba(136, 132, 216, 0.3)",
                     "white-space": "nowrap",
-                  }}>External</span>
+                  }}>{t("corePages.builds.sourceExternal")}</span>
                 </Show>
               </div>
               <div style={{ color: "#8b949e", "font-size": "13px" }}>
@@ -702,7 +703,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                   }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
-                  Ask AI
+                  {t("corePages.builds.askAi")}
                 </button>
               </Show>
             </div>
@@ -738,7 +739,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
-                Ask AI to Debug
+                {t("corePages.builds.askAiDebug")}
               </button>
             </div>
           </Show>
@@ -749,21 +750,21 @@ export default function BuildsPage(props: BuildsPageProps) {
             gap: "12px",
           }}>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Status</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>t("common.status")</div>
               <div style={{ color: statusColor(detail.status), "font-weight": "500" }}>
                 {detail.status.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
               </div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Duration</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("corePages.common.duration")}</div>
               <div>{formatDuration(detail.duration_secs)}</div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Started</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>t("corePages.common.started")</div>
               <div>{relativeTime(detail.started_at)}</div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Source</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("corePages.common.source")}</div>
               <div>{sourceLabel(detail.source)}</div>
             </div>
             <div>
@@ -771,7 +772,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               <div style={{ "word-break": "break-all", "font-size": "13px" }}>{detail.context_path}</div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Dockerfile</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>t("corePages.builds.dockerfileOptional")</div>
               <div style={{ "font-size": "13px" }}>{detail.dockerfile}</div>
             </div>
             <Show when={detail.image_id}>
@@ -838,7 +839,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             </Show>
           </div>
           <Show when={logsLoading()}>
-            <div style={{ color: "#8b949e", padding: "20px", "text-align": "center" }}>Loading logs...</div>
+            <div style={{ color: "#8b949e", padding: "20px", "text-align": "center" }}>{t("corePages.builds.loadingLogs")}</div>
           </Show>
           <Show when={!logsLoading()}>
             <Show when={buildLogs()} fallback={
@@ -886,11 +887,11 @@ export default function BuildsPage(props: BuildsPageProps) {
               <div style={{ "font-size": "20px", "font-weight": "600" }}>{s().total_builds}</div>
             </div>
             <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Success Rate</div>
+              <div style={{ color: "#8b949e", "font-size": "12px" }}>{t("corePages.builds.successRate")}</div>
               <div style={{ "font-size": "20px", "font-weight": "600", color: "#3fb950" }}>{successRate()}</div>
             </div>
             <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Failed</div>
+              <div style={{ color: "#8b949e", "font-size": "12px" }}>{t("corePages.builds.status.failed")}</div>
               <div style={{ "font-size": "20px", "font-weight": "600", color: s().failure_count > 0 ? "#f85149" : undefined }}>{s().failure_count}</div>
             </div>
             <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
@@ -913,7 +914,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               onClick={() => setFilter(tab)}
               style={{ padding: "6px 14px", "font-size": "13px" }}
             >
-              {tab === "all" ? "All" : tab === "in_progress" ? "In Progress" : tab === "success" ? "Success" : "Failed"}
+              {t(`corePages.builds.status.${tab}`)}
             </button>
           )}
         </For>
@@ -925,12 +926,12 @@ export default function BuildsPage(props: BuildsPageProps) {
               disabled={compareLoading()}
               style={{ "font-size": "13px", padding: "6px 14px" }}
             >
-              {compareLoading() ? "Comparing..." : "Compare Selected"}
+              {compareLoading() ? t("corePages.builds.comparing") : t("corePages.builds.compareSelected")}
             </button>
           </Show>
           <Show when={compareMode() && compareSelected().length < 2 && compareSelected().length > 0}>
             <span style={{ color: "#8b949e", "font-size": "12px" }}>
-              Select {2 - compareSelected().length} more
+              {t("corePages.builds.selectMore", { count: 2 - compareSelected().length })}
             </span>
           </Show>
           <button
@@ -949,7 +950,7 @@ export default function BuildsPage(props: BuildsPageProps) {
           <div class="card" style={{ overflow: "hidden" }}>
             <table class="data-table" style={{ width: "100%", "border-collapse": "collapse" }}>
               <thead>
-                <tr><th>Status</th><th>Tag</th><th>Duration</th><th>Started</th><th>Source</th><th>Actions</th></tr>
+                <tr><th>t("common.status")</th><th>t("corePages.common.tag")</th><th>t("corePages.common.duration")</th><th>t("corePages.common.started")</th><th>t("corePages.common.source")</th><th>t("common.actions")</th></tr>
               </thead>
               <tbody>
                 <SkeletonRow columns={6} />
@@ -961,8 +962,8 @@ export default function BuildsPage(props: BuildsPageProps) {
           </div>
         }>
           <div class="card" style={{ padding: "40px", "text-align": "center", color: "#8b949e" }}>
-            <div style={{ "font-size": "16px", "margin-bottom": "8px" }}>No builds yet</div>
-            <div style={{ "font-size": "13px" }}>Build an image from the Images page or use the CLI.</div>
+            <div style={{ "font-size": "16px", "margin-bottom": "8px" }}>{t("corePages.builds.noBuilds")}</div>
+            <div style={{ "font-size": "13px" }}>{t("corePages.builds.noBuildsHint")}</div>
           </div>
         </Show>
       }>
@@ -973,12 +974,12 @@ export default function BuildsPage(props: BuildsPageProps) {
                 <Show when={compareMode()}>
                   <th style={{ width: "36px", "text-align": "center" }} />
                 </Show>
-                <th style={{ width: "40px", "text-align": "center" }}>Status</th>
-                <th>Tag</th>
-                <th>Duration</th>
-                <th>Started</th>
-                <th>Source</th>
-                <th style={{ width: "100px" }}>Actions</th>
+                <th style={{ width: "40px", "text-align": "center" }}>t("common.status")</th>
+                <th>t("corePages.common.tag")</th>
+                <th>t("corePages.common.duration")</th>
+                <th>t("corePages.common.started")</th>
+                <th>t("corePages.common.source")</th>
+                <th style={{ width: "100px" }}>t("common.actions")</th>
               </tr>
             </thead>
             <tbody>
@@ -1013,7 +1014,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                         color: statusColor(build.status),
                         "font-size": "16px",
                         "font-weight": "bold",
-                      }} title={build.status.replace("_", " ")}>
+                      }} title={t(`corePages.builds.status.${build.status}`)}>
                         {statusIcon(build.status)}
                       </span>
                     </td>
@@ -1029,7 +1030,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                             color: "#a78bfa",
                             border: "1px solid rgba(136, 132, 216, 0.3)",
                             "white-space": "nowrap",
-                          }}>External</span>
+                          }}>t("corePages.builds.sourceExternal")</span>
                         </Show>
                       </div>
                       <div style={{ color: "#8b949e", "font-size": "12px" }}>{build.context_path}</div>
@@ -1042,14 +1043,14 @@ export default function BuildsPage(props: BuildsPageProps) {
                         <button
                           class="btn btn-ghost btn-sm"
                           onClick={(e) => { e.stopPropagation(); selectBuild(build.id); }}
-                          title="View"
+                          title={t("corePages.common.view")}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                         <button
                           class="btn btn-ghost btn-sm"
                           onClick={(e) => deleteBuild(build.id, e)}
-                          title="Delete"
+                          title={t("corePages.common.delete")}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                         </button>
@@ -1069,10 +1070,10 @@ export default function BuildsPage(props: BuildsPageProps) {
     setBuildingTargets((prev) => { const s = new Set(prev); s.add(name); return s; });
     try {
       await invoke("start_build_target", { name });
-      showToast(`Build started: ${name}`, "success");
+      showToast(t("corePages.builds.targetStarted", { name }), "success");
       await refresh();
     } catch (e) {
-      showToast(`Build failed: ${e}`, "error");
+      showToast(t("corePages.builds.targetFailed", { error: e }), "error");
     } finally {
       setBuildingTargets((prev) => { const s = new Set(prev); s.delete(name); return s; });
     }
@@ -1087,7 +1088,7 @@ export default function BuildsPage(props: BuildsPageProps) {
         await invoke("start_build_target", { name: target.name });
         showToast(`Build started: ${target.name}`, "success");
       } catch (e) {
-        showToast(`Build failed for ${target.name}: ${e}`, "error");
+        showToast(t("corePages.builds.namedTargetFailed", { name: target.name, error: e }), "error");
       }
     }
     await refresh();
@@ -1112,11 +1113,11 @@ export default function BuildsPage(props: BuildsPageProps) {
           <table class="data-table" style={{ width: "100%", "border-collapse": "collapse" }}>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Tag</th>
-                <th>Context</th>
-                <th>Dockerfile</th>
-                <th style={{ width: "100px" }}>Actions</th>
+                <th>t("corePages.common.name")</th>
+                <th>t("corePages.common.tag")</th>
+                <th>t("corePages.builds.contextPath")</th>
+                <th>t("corePages.builds.dockerfileOptional")</th>
+                <th style={{ width: "100px" }}>t("common.actions")</th>
               </tr>
             </thead>
             <tbody>
@@ -1151,10 +1152,10 @@ export default function BuildsPage(props: BuildsPageProps) {
   return (
     <div class="page-container">
       <div class="page-header">
-        <h1>Builds</h1>
+        <h1>{t("corePages.builds.title")}</h1>
         <div style={{ display: "flex", gap: "8px" }}>
           <button class="btn" onClick={() => setShowUrlDialog(true)}>
-            Build from URL
+            {t("corePages.builds.buildFromUrl")}
           </button>
         </div>
       </div>
@@ -1165,7 +1166,7 @@ export default function BuildsPage(props: BuildsPageProps) {
           <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Build from URL</div>
           <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div class="form-group">
-              <label class="form-label">Source URL</label>
+              <label class="form-label">t("corePages.builds.sourceUrl")</label>
               <input
                 class="form-input"
                 type="text"
@@ -1175,7 +1176,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               />
             </div>
             <div class="form-group">
-              <label class="form-label">Tag (optional)</label>
+              <label class="form-label">t("corePages.common.tagOptional")</label>
               <input
                 class="form-input"
                 type="text"
@@ -1190,13 +1191,13 @@ export default function BuildsPage(props: BuildsPageProps) {
                 onClick={submitUrlBuild}
                 disabled={urlBuilding() || !urlInput().trim()}
               >
-                {urlBuilding() ? "Starting..." : "Build"}
+                {urlBuilding() ? t("corePages.builds.starting") : t("corePages.common.build")}
               </button>
               <button
                 class="btn btn-ghost"
                 onClick={() => { setShowUrlDialog(false); setUrlInput(""); setUrlTag(""); }}
               >
-                Cancel
+                {t("corePages.common.cancel")}
               </button>
             </div>
           </div>

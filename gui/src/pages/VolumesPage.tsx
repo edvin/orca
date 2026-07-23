@@ -10,6 +10,7 @@ import { useSort } from "../lib/useSort";
 import { logError } from "../lib/activityStore";
 import { SkeletonRow } from "../components/Skeleton";
 import Spinner from "../components/Spinner";
+import { t } from "../i18n";
 
 interface VolumesPageProps {
   onNavigate?: (target: string) => void;
@@ -59,11 +60,11 @@ export default function VolumesPage(props: VolumesPageProps) {
 
   const removeVolume = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!await confirmDanger("Remove Volume", `Remove volume "${name}"? This will permanently delete the volume data.`)) return;
+    if (!await confirmDanger(t("volumes.removeTitle"), t("volumes.removeConfirm", { name }))) return;
     setDeletingName(name);
     try {
       await invoke("remove_volume", { name });
-      showToast(`Volume "${name}" removed`, "success");
+      showToast(t("infra.volumes.removed", { name }), "success");
       await refresh();
     } catch (err) {
       logError(`Failed to remove volume: ${err}`, `Volume "${name}"`);
@@ -81,7 +82,7 @@ export default function VolumesPage(props: VolumesPageProps) {
     try {
       const labelLines = createLabels().split("\n").map(l => l.trim()).filter(l => l.includes("="));
       await invoke("create_volume", { name, driver: createDriver().trim() || null, labels: labelLines.length > 0 ? labelLines : null });
-      showToast(`Volume "${name}" created`, "success");
+      showToast(t("infra.volumes.created", { name }), "success");
       setCreateName(""); setCreateDriver("local"); setCreateLabels(""); setShowCreate(false);
       await refresh();
     } catch (err) {
@@ -95,14 +96,14 @@ export default function VolumesPage(props: VolumesPageProps) {
     <div>
       <div class="page-header">
         <h1 class="page-title">
-          Volumes
+          {t("infra.volumes.title")}
           <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": "400", "margin-left": "8px" }}>
             {volumes().length}
           </span>
         </h1>
         <div class="page-actions">
-          <button class="btn btn-primary" onClick={() => setShowCreate(true)}>Create</button>
-          <button class="btn" onClick={refresh}>Refresh</button>
+          <button class="btn btn-primary" onClick={() => setShowCreate(true)}>{t("infra.common.create")}</button>
+          <button class="btn" onClick={refresh}>{t("infra.common.refresh")}</button>
         </div>
       </div>
 
@@ -110,7 +111,7 @@ export default function VolumesPage(props: VolumesPageProps) {
         <Show when={loaded()} fallback={
           <table class="table">
             <thead>
-              <tr><th>Name</th><th>Driver</th><th>Size</th><th>Created</th><th>Actions</th></tr>
+              <tr><th>{t("infra.common.name")}</th><th>{t("infra.common.driver")}</th><th>{t("infra.common.size")}</th><th>{t("infra.common.created")}</th><th>{t("infra.common.actions")}</th></tr>
             </thead>
             <tbody>
               <SkeletonRow columns={5} />
@@ -122,8 +123,8 @@ export default function VolumesPage(props: VolumesPageProps) {
         }>
           <div class="empty">
             <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
-            <p class="empty-title">No volumes</p>
-            <p>Volumes are created automatically when containers need persistent storage, or create one manually above.</p>
+            <p class="empty-title">{t("infra.volumes.emptyTitle")}</p>
+            <p>{t("infra.volumes.emptyDescription")}</p>
           </div>
         </Show>
       }>
@@ -133,8 +134,8 @@ export default function VolumesPage(props: VolumesPageProps) {
               <SortableHeader label="Name" field="name" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <SortableHeader label="Driver" field="driver" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
               <SortableHeader label="Size" field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <th style={{ "text-align": "right" }}>Actions</th>
+              <SortableHeader label={t("infra.common.created")} field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <th style={{ "text-align": "right" }}>{t("infra.common.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -145,7 +146,7 @@ export default function VolumesPage(props: VolumesPageProps) {
                     <div style={{ "font-weight": "500" }}>{v.name}</div>
                     <Show when={Object.keys(v.labels).length > 0}>
                       <div style={{ "font-size": "11px", color: "#8b949e", "margin-top": "2px" }}>
-                        {Object.keys(v.labels).length} label{Object.keys(v.labels).length !== 1 ? "s" : ""}
+                        {t("infra.volumes.labelCount", { count: Object.keys(v.labels).length })}
                       </div>
                     </Show>
                   </td>
@@ -158,13 +159,13 @@ export default function VolumesPage(props: VolumesPageProps) {
                     <Show
                       when={deletingName() === v.name}
                       fallback={
-                        <button class="action-icon action-icon-delete" title="Remove volume" disabled={deletingName() !== null} onClick={(e) => removeVolume(v.name, e)}>
+                        <button class="action-icon action-icon-delete" title={t("infra.volumes.removeAction")} disabled={deletingName() !== null} onClick={(e) => removeVolume(v.name, e)}>
                           {"\uD83D\uDDD1"}
                         </button>
                       }
                     >
-                      <span title="Removing volume..." style={{ display: "inline-flex", "align-items": "center", gap: "6px", color: "#8b949e", "font-size": "12px", "justify-content": "flex-end" }}>
-                        <Spinner size={12} /> Removing...
+                      <span title={t("infra.volumes.removing")} style={{ display: "inline-flex", "align-items": "center", gap: "6px", color: "#8b949e", "font-size": "12px", "justify-content": "flex-end" }}>
+                        <Spinner size={12} /> {t("infra.volumes.removing")}
                       </span>
                     </Show>
                   </td>
@@ -179,29 +180,29 @@ export default function VolumesPage(props: VolumesPageProps) {
         <div class="modal-overlay" onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }} onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowCreate(false); (e.currentTarget as any).__mdOverlay = false; }}>
           <div class="modal-dialog">
             <div class="modal-header">
-              <h2 class="modal-title">Create Volume</h2>
+              <h2 class="modal-title">{t("infra.volumes.createTitle")}</h2>
               <button class="modal-close" onClick={() => setShowCreate(false)}>{"\u00d7"}</button>
             </div>
             <form onSubmit={handleCreate}>
               <div class="modal-body">
                 <div class="form-group">
-                  <label class="form-label">Name <span style={{ color: "#f85149" }}>*</span></label>
+                  <label class="form-label">{t("infra.common.name")} <span style={{ color: "#f85149" }}>*</span></label>
                   <input class="form-input" type="text" placeholder="my-volume" value={createName()} onInput={(e) => setCreateName(e.currentTarget.value)} autofocus />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Driver</label>
+                  <label class="form-label">{t("infra.common.driver")}</label>
                   <input class="form-input" type="text" placeholder="local" value={createDriver()} onInput={(e) => setCreateDriver(e.currentTarget.value)} />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Labels</label>
+                  <label class="form-label">{t("infra.common.labels")}</label>
                   <textarea class="form-textarea mono" placeholder={"key=value\nenvironment=production"} value={createLabels()} onInput={(e) => setCreateLabels(e.currentTarget.value)} rows={2} />
-                  <span class="form-hint">key=value, one per line</span>
+                  <span class="form-hint">{t("infra.volumes.labelsHint")}</span>
                 </div>
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn" onClick={() => setShowCreate(false)} disabled={creating()}>Cancel</button>
+                <button type="button" class="btn" onClick={() => setShowCreate(false)} disabled={creating()}>{t("infra.common.cancel")}</button>
                 <button type="submit" class="btn btn-primary" disabled={creating() || !createName().trim()}>
-                  {creating() ? "Creating..." : "Create"}
+                  {creating() ? t("infra.common.creating") : t("infra.common.create")}
                 </button>
               </div>
             </form>

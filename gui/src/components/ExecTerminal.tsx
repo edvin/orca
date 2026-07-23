@@ -1,6 +1,7 @@
 import { createSignal, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { copyToClipboard } from "../lib/clipboard";
+import { t } from "../i18n";
 
 interface ExecTerminalProps {
   containerId: string;
@@ -52,7 +53,7 @@ export default function ExecTerminal(props: ExecTerminalProps) {
         ...prev,
         {
           command: cmd,
-          output: `Error: ${e}`,
+          output: t("components.exec.error", { error: e }),
           exitCode: -1,
         },
       ]);
@@ -101,13 +102,13 @@ export default function ExecTerminal(props: ExecTerminalProps) {
   return (
     <div class="exec-terminal">
       <div class="exec-header">
-        <span class="exec-title">Exec: {props.containerName}</span>
+        <span class="exec-title">{t("components.exec.title", { name: props.containerName })}</span>
         <div class="btn-group">
           <button
             class="btn btn-sm"
             onClick={copyLastOutput}
             disabled={history().length === 0}
-            title="Copy last command output"
+            title={t("components.exec.copyLast")}
           >
             Copy Output
           </button>
@@ -125,14 +126,14 @@ export default function ExecTerminal(props: ExecTerminalProps) {
               </div>
               <pre class="exec-result">{entry.output}</pre>
               {entry.exitCode !== 0 && (
-                <div class="exec-exit-code">exit code: {entry.exitCode}</div>
+                <div class="exec-exit-code">{t("components.exec.exitCode", { code: entry.exitCode })}</div>
               )}
             </div>
           )}
         </For>
         {history().length === 0 && (
           <div style={{ color: "#8b949e", padding: "8px 0" }}>
-            Run commands inside the container. Try: ls, pwd, env, cat /etc/os-release
+            {t("components.exec.hint")}
           </div>
         )}
       </div>
@@ -141,7 +142,7 @@ export default function ExecTerminal(props: ExecTerminalProps) {
         <input
           class="exec-input"
           type="text"
-          placeholder={running() ? "Running..." : "Enter command..."}
+          placeholder={running() ? t("components.exec.running") : t("components.exec.placeholder")}
           value={input()}
           onInput={(e) => setInput(e.currentTarget.value)}
           onKeyDown={handleKeyDown}

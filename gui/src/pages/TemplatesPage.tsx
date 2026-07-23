@@ -9,6 +9,7 @@ import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError, logInfo } from "../lib/activityStore";
 import { sanitizeSvg } from "../lib/sanitize";
+import { t } from "../i18n";
 
 // Categories are derived dynamically from loaded templates
 
@@ -93,7 +94,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       const results = (await invoke("search_images", { query: q, limit: 50 })) as ImageSearchResult[];
       setHubResults(results);
     } catch (e: any) {
-      showToast(`Docker Hub search failed: ${e}`, "error");
+      showToast(t("corePages.templates.searchFailed", { error: e }), "error");
     } finally {
       setHubLoading(false);
     }
@@ -103,9 +104,9 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     setHubPulling((prev) => new Set([...prev, name]));
     try {
       await invoke("pull_image", { reference: name });
-      showToast(`Pulled ${name} successfully`, "success");
+      showToast(t("corePages.templates.pulled", { name }), "success");
     } catch (e: any) {
-      showToast(`Failed to pull ${name}: ${e}`, "error");
+      showToast(t("corePages.templates.pullFailed", { name, error: e }), "error");
     } finally {
       setHubPulling((prev) => {
         const next = new Set(prev);
@@ -568,10 +569,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       await invoke("save_user_template", { template });
       setEditorOpen(false);
       await refreshTemplates();
-      showToast(`Template "${template.name}" saved`, "success");
+      showToast(t("corePages.templates.saved", { name: template.name }), "success");
     } catch (e: any) {
       logError(`Failed to save template: ${e}`, `Template "${editorName()}"`);
-      showToast(`Failed to save template: ${e}`, "error");
+      showToast(t("corePages.templates.saveFailed", { error: e }), "error");
     } finally {
       setEditorSaving(false);
     }
@@ -587,7 +588,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     try {
       await invoke("delete_user_template", { id: template.id });
       await refreshTemplates();
-      showToast(`Template "${template.name}" deleted`, "success");
+      showToast(t("corePages.templates.deleted", { name: template.name }), "success");
     } catch (e: any) {
       logError(`Failed to delete template: ${e}`, `Template "${template.name}"`);
       showToast(`Failed to delete: ${e}`, "error");
@@ -598,7 +599,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const PortEditor = (props: { ports: () => PortEntry[]; update: typeof updatePort; add: typeof addPort; remove: typeof removePort }) => (
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-        <label class="form-label" style={{ margin: 0 }}>Port Mappings</label>
+        <label class="form-label" style={{ margin: 0 }}>t("container.portMappings")</label>
         <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.ports().length > 0} fallback={
@@ -607,7 +608,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>
             <span style={{ flex: "1" }}>Host Port</span>
-            <span style={{ flex: "1" }}>Container Port</span>
+            <span style={{ flex: "1" }}>t("infra.gateway.configuration")</span>
             <span style={{ width: "28px" }} />
           </div>
           <Index each={props.ports()}>
@@ -616,7 +617,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 <input class="form-input" style={{ flex: "1" }} value={port().host} onInput={(e) => props.update(i, "host", e.currentTarget.value)} placeholder="8080" />
                 <span style={{ color: "#484f58" }}>:</span>
                 <input class="form-input" style={{ flex: "1" }} value={port().container} onInput={(e) => props.update(i, "container", e.currentTarget.value)} placeholder="80" />
-                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <button class="action-icon" onClick={() => props.remove(i)} title={t("common.remove")} style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </Index>
@@ -628,7 +629,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const EnvEditor = (props: { env: () => EnvEntry[]; update: typeof updateEnv; add: typeof addEnv; remove: typeof removeEnv; showWarning?: boolean }) => (
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-        <label class="form-label" style={{ margin: 0 }}>Environment Variables</label>
+        <label class="form-label" style={{ margin: 0 }}>t("container.environment")</label>
         <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.env().length > 0} fallback={
@@ -646,7 +647,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 <input class="form-input" style={{ flex: "2", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={entry().key} onInput={(e) => props.update(i, "key", e.currentTarget.value)} placeholder="KEY" />
                 <span style={{ color: "#484f58" }}>=</span>
                 <input class="form-input" style={{ flex: "3", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} type={entry().key.toLowerCase().includes("password") || entry().key.toLowerCase().includes("secret") ? "password" : "text"} value={entry().value} onInput={(e) => props.update(i, "value", e.currentTarget.value)} placeholder="value" />
-                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <button class="action-icon" onClick={() => props.remove(i)} title={t("common.remove")} style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </Index>
@@ -663,7 +664,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const VolumeEditor = (props: { volumes: () => VolumeEntry[]; update: typeof updateVolume; add: typeof addVolume; remove: typeof removeVolume }) => (
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-        <label class="form-label" style={{ margin: 0 }}>Volumes</label>
+        <label class="form-label" style={{ margin: 0 }}>t("machine.volumes")</label>
         <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.volumes().length > 0} fallback={
@@ -681,7 +682,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol().source} onInput={(e) => props.update(i, "source", e.currentTarget.value)} placeholder="volume-name" />
                 <span style={{ color: "#484f58" }}>:</span>
                 <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol().target} onInput={(e) => props.update(i, "target", e.currentTarget.value)} placeholder="/data" />
-                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <button class="action-icon" onClick={() => props.remove(i)} title={t("common.remove")} style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </Index>
@@ -716,8 +717,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       <div class="template-desc">{props.template.description}</div>
       <Show when={!props.template.is_builtin}>
         <div style={{ position: "absolute", top: "8px", right: "8px", display: "flex", gap: "4px" }}>
-          <button class="action-icon" title="Edit" onClick={(e) => { e.stopPropagation(); openEditTemplate(props.template); }} style={{ "font-size": "12px", width: "24px", height: "24px" }}>{"\u270E"}</button>
-          <button class="action-icon" title="Delete" onClick={(e) => { e.stopPropagation(); deleteTemplate(props.template); }} style={{ width: "24px", height: "24px", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+          <button class="action-icon" title={t("corePages.common.edit")} onClick={(e) => { e.stopPropagation(); openEditTemplate(props.template); }} style={{ "font-size": "12px", width: "24px", height: "24px" }}>{"\u270E"}</button>
+          <button class="action-icon" title={t("components.common.delete")} onClick={(e) => { e.stopPropagation(); deleteTemplate(props.template); }} style={{ width: "24px", height: "24px", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
         </div>
       </Show>
     </div>
@@ -727,29 +728,29 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">App Catalog</h1>
+        <h1 class="page-title">{t("corePages.templates.title")}</h1>
         <Show when={activeTab() === "curated"}>
           <div class="page-actions">
             <input
               class="search-input"
               type="text"
-              placeholder="Search templates..."
+              placeholder={t("corePages.templates.searchPlaceholder")}
               value={search()}
               onInput={(e) => setSearch(e.currentTarget.value)}
             />
             <button class="btn" onClick={async () => {
               try {
                 await invoke("refresh_templates");
-                showToast("Catalog refreshed", "success");
+                showToast(t("corePages.templates.refreshSuccess"), "success");
                 refreshTemplates();
-              } catch (e) { showToast(`Refresh failed: ${e}`, "error"); }
-            }} title="Refresh community catalog">
+              } catch (e) { showToast(t("corePages.templates.refreshFailed", { error: e }), "error"); }
+            }} title={t("corePages.templates.refreshTitle")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
-            <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
+            <button class="btn btn-primary" onClick={openCreateTemplate}>t("corePages.templates.createTemplate")</button>
             <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener noreferrer"
               class="btn" style={{ "font-size": "12px", "text-decoration": "none" }}>
-              Contribute Template
+              {t("corePages.templates.contributeTemplate")}
             </a>
           </div>
         </Show>
@@ -761,7 +762,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           class={`filter-pill ${activeTab() === "curated" ? "active" : ""}`}
           onClick={() => setActiveTab("curated")}
         >
-          Curated
+          {t("corePages.templates.curated")}
         </button>
         <button
           class={`filter-pill ${activeTab() === "dockerhub" ? "active" : ""}`}
@@ -819,7 +820,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           <input
             class="search-input"
             type="text"
-            placeholder="Search Docker Hub..."
+            placeholder={t("corePages.templates.searchHub")}
             value={hubQuery()}
             onInput={(e) => setHubQuery(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Enter") searchDockerHub(); }}
@@ -839,7 +840,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
         <Show when={!hubLoading() && hubSearched() && hubResults().length === 0}>
           <div style={{ "text-align": "center", padding: "48px 0", color: "#8b949e" }}>
-            No results found
+            {t("corePages.common.noResults")}
           </div>
         </Show>
 
@@ -861,15 +862,15 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                     </Show>
                   </div>
                   <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "10px", flex: "1", overflow: "hidden", display: "-webkit-box", "-webkit-line-clamp": "3", "-webkit-box-orient": "vertical" }}>
-                    {result.description || "No description"}
+                    {result.description || t("corePages.common.noDescription")}
                   </div>
                   <div style={{ display: "flex", "align-items": "center", gap: "12px", "font-size": "11px", color: "#8b949e", "margin-bottom": "10px" }}>
-                    <span title="Stars" style={{ display: "flex", "align-items": "center", gap: "3px" }}>
+                    <span title={t("corePages.templates.stars")} style={{ display: "flex", "align-items": "center", gap: "3px" }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                       {result.stars.toLocaleString()}
                     </span>
                     <Show when={result.pulls}>
-                      <span title="Pulls" style={{ display: "flex", "align-items": "center", gap: "3px" }}>
+                      <span title={t("corePages.templates.pulls")} style={{ display: "flex", "align-items": "center", gap: "3px" }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         {formatPulls(result.pulls)}
                       </span>
@@ -882,7 +883,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                       disabled={isPulling()}
                       onClick={() => pullHubImage(result.name)}
                     >
-                      {isPulling() ? <><Spinner size={12} />{" "}Pulling...</> : "Pull"}
+                      {isPulling() ? <><Spinner size={12} />{" "}{t("corePages.common.pulling")}</> : t("corePages.common.pull")}
                     </button>
                     <a
                       href={hubUrl}
@@ -914,7 +915,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               <div class="modal-body">
                 <Show when={hostOptions().length > 1}>
                   <div class="form-group">
-                    <label class="form-label">Deploy to</label>
+                    <label class="form-label">t("corePages.templates.deployTo")</label>
                     <div style={{ display: "flex", "flex-wrap": "wrap", gap: "8px", "margin-top": "4px" }}>
                       <For each={hostOptions()}>
                         {(opt) => {
@@ -994,7 +995,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                     This template deploys a multi-service stack via docker-compose
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Compose YAML</label>
+                    <label class="form-label">t("corePages.templates.composeYaml")</label>
                     <textarea
                       class="form-input"
                       value={deployComposeYaml()}
@@ -1016,7 +1017,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 {/* User input fields from generated_env */}
                 <Show when={deployTarget()?.generated_env && Object.entries(deployTarget()!.generated_env!).some(([_, v]) => v.type === "user_input")}>
                   <div class="form-group">
-                    <label class="form-label">Configuration</label>
+                    <label class="form-label">t("corePages.templates.configuration")</label>
                     <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                       <For each={Object.entries(deployTarget()?.generated_env || {}).filter(([_, v]) => v.type === "user_input")}>
                         {([key, val]) => (
@@ -1043,7 +1044,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
                 <Show when={template().notes}>
                   <div class="form-group">
-                    <label class="form-label">Notes</label>
+                    <label class="form-label">t("corePages.templates.notes")</label>
                     <div style={{"font-size":"12px","color":"#8b949e","background":"#0d1117","padding":"10px","border-radius":"6px","border":"1px solid #21262d"}}>
                       {template().notes}
                     </div>
@@ -1056,7 +1057,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                     <Spinner size={12} />{" "}{deployStatus()}
                   </span>
                 </Show>
-                <button class="btn" onClick={() => closeDeploy()} disabled={deploying()}>Cancel</button>
+                <button class="btn" onClick={() => closeDeploy()} disabled={deploying()}>t("common.cancel")</button>
                 <button class="btn btn-primary" onClick={() => doDeploy()} disabled={deploying()}>
                   {deploying() ? "Deploying..." : (deployComposeYaml() ? "Deploy Stack" : "Deploy")}
                 </button>
@@ -1077,7 +1078,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             <div class="modal-body">
               <div style={{ display: "flex", gap: "12px" }}>
                 <div class="form-group" style={{ width: "60px", "flex-shrink": "0" }}>
-                  <label class="form-label">Icon</label>
+                  <label class="form-label">t("corePages.templates.icon")</label>
                   <input class="form-input" value={editorIcon()} onInput={(e) => setEditorIcon(e.currentTarget.value)} style={{ "text-align": "center", "font-size": "20px", padding: "4px" }} />
                 </div>
                 <div class="form-group" style={{ flex: "1" }}>
@@ -1085,7 +1086,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                   <input class="form-input" value={editorName()} onInput={(e) => setEditorName(e.currentTarget.value)} placeholder="My Template" />
                 </div>
                 <div class="form-group" style={{ width: "150px", "flex-shrink": "0" }}>
-                  <label class="form-label">Category</label>
+                  <label class="form-label">t("corePages.templates.category")</label>
                   <Dropdown
                     value={editorCategory()}
                     options={categories().filter((c: string) => c !== "All").map((cat: string) => ({ value: cat, label: cat }))}
@@ -1095,7 +1096,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               </div>
 
               <div class="form-group">
-                <label class="form-label">Description</label>
+                <label class="form-label">t("corePages.common.description")</label>
                 <input class="form-input" value={editorDesc()} onInput={(e) => setEditorDesc(e.currentTarget.value)} placeholder="Short description" />
               </div>
 
@@ -1109,12 +1110,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               <VolumeEditor volumes={editorVolumes} update={updateEditorVolume} add={addEditorVolume} remove={removeEditorVolume} />
 
               <div class="form-group">
-                <label class="form-label">Notes</label>
+                <label class="form-label">t("corePages.templates.notes")</label>
                 <textarea class="form-textarea" value={editorNotes()} onInput={(e) => setEditorNotes(e.currentTarget.value)} placeholder="Connection info, setup tips..." rows={2} />
               </div>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => setEditorOpen(false)}>Cancel</button>
+              <button class="btn" onClick={() => setEditorOpen(false)}>t("common.cancel")</button>
               <button class="btn btn-primary" onClick={saveTemplate} disabled={editorSaving()}>
                 {editorSaving() ? "Saving..." : editorIsNew() ? "Create" : "Save"}
               </button>

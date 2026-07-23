@@ -1,4 +1,5 @@
 import { createSignal, Show, onCleanup, onMount } from "solid-js";
+import { t } from "../i18n";
 
 interface ConfirmOptions {
   title: string;
@@ -48,9 +49,9 @@ export function confirmDanger(
   message?: string,
 ): Promise<boolean> {
   if (typeof arg1 === "string") {
-    return confirm({ title: arg1, message: message ?? "", confirmLabel: "Delete", danger: true });
+    return confirm({ title: arg1, message: message ?? "", confirmLabel: t("components.common.delete"), danger: true });
   }
-  return confirm({ confirmLabel: "Delete", ...arg1, danger: true });
+  return confirm({ confirmLabel: t("components.common.delete"), ...arg1, danger: true });
 }
 
 function handleResult(result: boolean) {
@@ -127,7 +128,7 @@ export default function ConfirmDialog() {
             <div class="modal-dialog" style={{ "max-width": "440px" }} role="dialog" aria-modal="true">
               <div class="modal-header">
                 <span class="modal-title">{opts().title}</span>
-                <button class="modal-close" onClick={() => handleResult(false)} aria-label="Close">
+                <button class="modal-close" onClick={() => handleResult(false)} aria-label={t("components.confirm.close")}>
                   {"\u00d7"}
                 </button>
               </div>
@@ -138,7 +139,7 @@ export default function ConfirmDialog() {
               </div>
               <div class="modal-footer">
                 <button class="btn" onClick={() => handleResult(false)}>
-                  {opts().cancelLabel || "Cancel"}
+                  {opts().cancelLabel || t("components.common.cancel")}
                 </button>
                 <button
                   ref={(el) => (confirmBtnRef = el)}
@@ -146,7 +147,7 @@ export default function ConfirmDialog() {
                   style={opts().danger ? { background: "#da3633", color: "#fff", border: "1px solid #da3633" } : {}}
                   onClick={() => handleResult(true)}
                 >
-                  {opts().confirmLabel || "Confirm"}
+                  {opts().confirmLabel || t("components.common.confirm")}
                 </button>
               </div>
             </div>

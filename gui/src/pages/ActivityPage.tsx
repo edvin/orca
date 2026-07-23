@@ -2,18 +2,19 @@ import { createSignal, For, Show, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { getEvents, clearEvents, markAllRead } from "../lib/activityStore";
 import type { ActivityEvent } from "../lib/activityStore";
+import { t } from "../i18n";
 
 function relativeTime(date: Date): string {
   const now = Date.now();
   const diff = now - date.getTime();
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t("infra.activity.justNow");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t("infra.activity.minutesAgo", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("infra.activity.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("infra.activity.daysAgo", { count: days });
 }
 
 function eventIcon(type: string): string {
@@ -65,10 +66,10 @@ export default function ActivityPage() {
   return (
     <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
       <div class="page-header">
-        <h1 class="page-title">Activity</h1>
+        <h1 class="page-title">{t("infra.activity.title")}</h1>
         <div class="page-actions">
           <Show when={getEvents().length > 0}>
-            <button class="btn btn-sm" onClick={clearEvents}>Clear</button>
+            <button class="btn btn-sm" onClick={clearEvents}>{t("infra.common.clear")}</button>
           </Show>
         </div>
       </div>
@@ -78,8 +79,8 @@ export default function ActivityPage() {
         when={getEvents().length > 0}
         fallback={
           <div class="empty" style={{ padding: "20px 0" }}>
-            <div class="empty-title">No activity yet</div>
-            <p>Errors and events will appear here as they happen.</p>
+            <div class="empty-title">{t("infra.activity.emptyTitle")}</div>
+            <p>{t("infra.activity.emptyDescription")}</p>
           </div>
         }
       >
@@ -125,9 +126,9 @@ export default function ActivityPage() {
           "font-weight": "600",
           color: "#8b949e",
         }}>
-          <span>Daemon Log</span>
+          <span>{t("infra.activity.daemonLog")}</span>
           <button class="btn btn-sm" onClick={fetchDaemonLog} disabled={logLoading()} style={{ "font-size": "11px", padding: "2px 8px" }}>
-            Refresh
+            {t("infra.common.refresh")}
           </button>
         </div>
         <pre
@@ -148,8 +149,8 @@ export default function ActivityPage() {
           {daemonLog().length > 0
             ? daemonLog().join("\n")
             : logLoading()
-            ? "Loading..."
-            : "No daemon log available"}
+            ? t("infra.common.loading")
+            : t("infra.activity.noDaemonLog")}
         </pre>
       </div>
     </div>

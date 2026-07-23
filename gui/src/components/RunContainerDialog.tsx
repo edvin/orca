@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import Spinner from "./Spinner";
 import Dropdown from "./Dropdown";
+import { t } from "../i18n";
 
 interface RunContainerDialogProps {
   onClose: () => void;
@@ -165,7 +166,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
     try {
       // Stage 1: Check if image exists locally
       setStage("pulling");
-      setStageMessage(`Checking if ${imgRef} is available locally...`);
+      setStageMessage(t("components.run.checking", { image: imgRef }));
 
       let needsPull = false;
       try {
@@ -176,20 +177,20 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
 
       // Stage 2: Pull if needed
       if (needsPull) {
-        setStageMessage(`Pulling ${imgRef}...`);
+        setStageMessage(t("components.run.pulling", { image: imgRef }));
         try {
           await invoke("pull_image", { reference: imgRef });
-          setStageMessage(`Pulled ${imgRef} successfully`);
+          setStageMessage(t("components.run.pulled", { image: imgRef }));
         } catch (pullErr) {
           setStage("error");
-          setErrorMessage(`Failed to pull image: ${pullErr}`);
+          setErrorMessage(t("components.run.pullFailed", { error: pullErr }));
           return;
         }
       }
 
       // Stage 3: Create container
       setStage("creating");
-      setStageMessage("Creating container...");
+      setStageMessage(t("components.run.creating"));
 
       const envLines = env().split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
       const portLines = ports().split(/[,\n]/).map((l) => l.trim()).filter((l) => l.length > 0);
@@ -210,11 +211,11 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
 
       // Stage 4: Done
       setStage("starting");
-      setStageMessage("Container started!");
+      setStageMessage(t("components.run.started"));
 
       const containerId = (result as any)?.id;
       setTimeout(() => {
-        showToast(`Container started from ${imgRef}`, "success");
+        showToast(t("components.run.startedToast", { image: imgRef }), "success");
         props.onCreated(containerId);
         props.onClose();
       }, 600);
@@ -239,7 +240,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
     <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
       <div class="modal-dialog">
         <div class="modal-header">
-          <h2 class="modal-title">Run Container</h2>
+          <h2 class="modal-title">{t("components.run.title")}</h2>
           <Show when={stage() === "form" || stage() === "error"}>
             <button class="modal-close" onClick={() => props.onClose()}>{"\u00d7"}</button>
           </Show>
@@ -259,11 +260,11 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                 {stageMessage()}
               </div>
               <div class="run-progress-steps">
-                <span class={`run-step ${stage() === "pulling" ? "active" : (stage() !== "form" ? "done" : "")}`}>Pull</span>
+                <span class={`run-step ${stage() === "pulling" ? "active" : (stage() !== "form" ? "done" : "")}`}>{t("components.run.pull")}</span>
                 <span class="run-step-arrow">{"\u2192"}</span>
-                <span class={`run-step ${stage() === "creating" ? "active" : (stage() === "starting" || stage() === "done" ? "done" : "")}`}>Create</span>
+                <span class={`run-step ${stage() === "creating" ? "active" : (stage() === "starting" || stage() === "done" ? "done" : "")}`}>{t("components.run.create")}</span>
                 <span class="run-step-arrow">{"\u2192"}</span>
-                <span class={`run-step ${stage() === "starting" || stage() === "done" ? "active done" : ""}`}>Start</span>
+                <span class={`run-step ${stage() === "starting" || stage() === "done" ? "active done" : ""}`}>{t("components.run.start")}</span>
               </div>
             </div>
           </div>
@@ -278,15 +279,15 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
               "border-radius": "8px",
               padding: "16px",
             }}>
-              <div style={{ color: "#f85149", "font-weight": "600", "margin-bottom": "8px" }}>Failed to start container</div>
+              <div style={{ color: "#f85149", "font-weight": "600", "margin-bottom": "8px" }}>{t("components.run.failed")}</div>
               <div class="mono" style={{ color: "#e6edf3", "font-size": "12px", "word-break": "break-all" }}>
                 {errorMessage()}
               </div>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" onClick={() => setStage("form")}>Back</button>
-            <button class="btn" onClick={() => props.onClose()}>Close</button>
+            <button class="btn" onClick={() => setStage("form")}>{t("components.common.back")}</button>
+            <button class="btn" onClick={() => props.onClose()}>{t("components.common.close")}</button>
           </div>
         </Show>
 
@@ -296,7 +297,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
             <div class="modal-body">
               <div class="form-row">
                 <div class="form-group" style={{ flex: 2, position: "relative" }}>
-                  <label class="form-label">Image <span style={{ color: "#f85149" }}>*</span></label>
+                  <label class="form-label">{t("components.run.image")} <span style={{ color: "#f85149" }}>*</span></label>
                   <input
                     class="form-input mono"
                     type="text"
@@ -340,16 +341,16 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                       color: "#8b949e",
                       "font-size": "11px",
                     }}>
-                      loading tags...
+                      {t("components.run.loadingTags")}
                     </div>
                   </Show>
                 </div>
                 <div class="form-group" style={{ flex: 1 }}>
-                  <label class="form-label">Name</label>
+                  <label class="form-label">{t("components.run.name")}</label>
                   <input
                     class="form-input"
                     type="text"
-                    placeholder="Optional"
+                    placeholder={t("components.run.optional")}
                     value={name()}
                     onInput={(e) => setName(e.currentTarget.value)}
                   />
@@ -357,7 +358,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
               </div>
 
               <div class="form-group">
-                <label class="form-label">Port Mappings</label>
+                <label class="form-label">{t("components.run.portMappings")}</label>
                 <input
                   class="form-input mono"
                   type="text"
@@ -365,11 +366,11 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                   value={ports()}
                   onInput={(e) => setPorts(e.currentTarget.value)}
                 />
-                <span class="form-hint">host:container — comma or newline separated</span>
+                <span class="form-hint">{t("components.run.portHint")}</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Environment Variables</label>
+                <label class="form-label">{t("components.run.environment")}</label>
                 <textarea
                   class="form-textarea mono"
                   placeholder={"KEY=value\nDATABASE_URL=postgres://..."}
@@ -385,12 +386,12 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                 onClick={() => setShowAdvanced(!showAdvanced())}
               >
                 <span class={`advanced-arrow ${showAdvanced() ? "expanded" : ""}`}>&#9654;</span>
-                Advanced Options
+                {t("components.run.advanced")}
               </button>
 
               <Show when={showAdvanced()}>
                 <div class="form-group">
-                  <label class="form-label">Command Override</label>
+                  <label class="form-label">{t("components.run.commandOverride")}</label>
                   <input
                     class="form-input mono"
                     type="text"
@@ -401,7 +402,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label">Volume Mounts</label>
+                  <label class="form-label">{t("components.run.volumeMounts")}</label>
                   <textarea
                     class="form-textarea mono"
                     placeholder={"/host/path:/container/path"}
@@ -409,11 +410,11 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                     onInput={(e) => setVolumes(e.currentTarget.value)}
                     rows={2}
                   />
-                  <span class="form-hint">host:container, one per line</span>
+                  <span class="form-hint">{t("components.run.volumeHint")}</span>
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label">Network</label>
+                  <label class="form-label">{t("components.run.network")}</label>
                   <Dropdown
                     value={network()}
                     options={availableNetworks()}
@@ -423,32 +424,32 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
 
                 <div class="form-row">
                   <div class="form-group" style={{ flex: 1 }}>
-                    <label class="form-label">Restart Policy</label>
+                    <label class="form-label">{t("components.run.restartPolicy")}</label>
                     <Dropdown
                       value={restartPolicy()}
                       options={[
-                        { value: "no", label: "No" },
-                        { value: "always", label: "Always" },
-                        { value: "unless-stopped", label: "Unless Stopped" },
-                        { value: "on-failure", label: "On Failure" },
+                        { value: "no", label: t("components.run.no") },
+                        { value: "always", label: t("components.run.always") },
+                        { value: "unless-stopped", label: t("components.run.unlessStopped") },
+                        { value: "on-failure", label: t("components.run.onFailure") },
                       ]}
                       onChange={(v) => setRestartPolicy(v)}
                     />
                   </div>
                   <div class="form-group" style={{ flex: 1 }}>
-                    <label class="form-label">CPU Limit</label>
+                    <label class="form-label">{t("components.run.cpuLimit")}</label>
                     <input
                       class="form-input"
                       type="number"
                       step="0.1"
                       min="0"
-                      placeholder="e.g. 0.5"
+                      placeholder={t("components.run.cpuExample")}
                       value={cpuLimit()}
                       onInput={(e) => setCpuLimit(e.currentTarget.value)}
                     />
                   </div>
                   <div class="form-group" style={{ flex: 1 }}>
-                    <label class="form-label">Memory</label>
+                    <label class="form-label">{t("components.run.memory")}</label>
                     <input
                       class="form-input"
                       type="text"
@@ -462,8 +463,8 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
             </div>
 
             <div class="modal-footer">
-              <button type="button" class="btn" onClick={() => props.onClose()}>Cancel</button>
-              <button type="submit" class="btn btn-primary" disabled={!image().trim()}>Run</button>
+              <button type="button" class="btn" onClick={() => props.onClose()}>{t("components.common.cancel")}</button>
+              <button type="submit" class="btn btn-primary" disabled={!image().trim()}>{t("components.run.run")}</button>
             </div>
           </form>
         </Show>

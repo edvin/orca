@@ -8,6 +8,14 @@ import LogViewer from "../components/LogViewer";
 import Spinner from "../components/Spinner";
 import LastUpdated from "../components/LastUpdated";
 import { logError } from "../lib/activityStore";
+import { t, lang } from "../i18n";
+import { settingsDetailEn, settingsDetailZhCN } from "../i18n/settingsDetail";
+
+const tr = (key: string, params: Record<string, string | number> = {}) => {
+  const central = t(key);
+  const value = central === key ? (lang() === "zh-CN" ? settingsDetailZhCN[key] : settingsDetailEn[key]) ?? key : central;
+  return Object.entries(params).reduce((text, [name, replacement]) => text.replaceAll(`{${name}}`, String(replacement)), value);
+};
 
 interface StacksPageProps {
   onNavigate?: (target: string) => void;
@@ -33,7 +41,7 @@ export default function StacksPage(props: StacksPageProps) {
     try {
       await invoke("stop_container", { id: containerId });
       await invoke("start_container", { id: containerId });
-      showToast("Service restarted", "success");
+      showToast(tr("stack.serviceRestarted"), "success");
       await refresh();
     } catch (err) {
       logError("Restart service", `Service ${containerId}: ${err}`);
@@ -91,11 +99,11 @@ export default function StacksPage(props: StacksPageProps) {
   const statusConfig = (status: string) => {
     switch (status) {
       case "Running":
-        return { class: "state-running", label: "Running" };
+        return { class: "state-running", label: tr("common.running") };
       case "Partial":
-        return { class: "state-paused", label: "Partial" };
+        return { class: "state-paused", label: tr("common.partial") };
       case "Stopped":
-        return { class: "state-exited", label: "Stopped" };
+        return { class: "state-exited", label: tr("common.stopped") };
       default:
         return { class: "state-created", label: status };
     }
@@ -120,7 +128,7 @@ export default function StacksPage(props: StacksPageProps) {
     <div>
       <div class="page-header">
         <h1 class="page-title">
-          Stacks
+          {tr("stack.title")}
           <span
             style={{
               "font-size": "13px",
@@ -129,12 +137,12 @@ export default function StacksPage(props: StacksPageProps) {
               "margin-left": "8px",
             }}
           >
-            {stacks().length} project{stacks().length !== 1 ? "s" : ""}
+            {tr("stack.projects", { count: stacks().length })}
           </span>
           <LastUpdated timestamp={lastUpdated()} />
         </h1>
         <button class="btn" onClick={refresh}>
-          Refresh
+          {tr("common.refresh")}
         </button>
       </div>
 
@@ -164,7 +172,7 @@ export default function StacksPage(props: StacksPageProps) {
                 class="btn btn-sm"
                 onClick={() => setComposeOutput(null)}
               >
-                Dismiss
+                {tr("stack.dismiss")}
               </button>
             </div>
             <Show when={co().output.stdout}>
@@ -204,12 +212,8 @@ export default function StacksPage(props: StacksPageProps) {
         fallback={
           <div class="empty">
             <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7"/><path d="M7 4h10a2 2 0 012 2v1H5V6a2 2 0 012-2z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="14" x2="13" y2="14"/></svg></div>
-            <p class="empty-title">No compose stacks detected</p>
-            <p>
-              Run{" "}
-              <code style={{ color: "#c9d1d9" }}>docker compose up</code> in
-              a project directory to see it here
-            </p>
+            <p class="empty-title">{tr("stack.empty")}</p>
+            <p>{tr("stack.emptyHint")}</p>
           </div>
         }
       >
@@ -264,8 +268,7 @@ export default function StacksPage(props: StacksPageProps) {
                           </span>
                         </div>
                         <div class="stack-meta">
-                          {runningCount()}/{stack.services.length} services
-                          running
+                          {tr("stack.servicesRunning", { running: runningCount(), total: stack.services.length })}
                           <Show when={stack.working_dir}>
                             <span class="stack-path">
                               {" "}
@@ -326,7 +329,7 @@ export default function StacksPage(props: StacksPageProps) {
                             disabled={isLoading()}
                             title="docker compose up -d"
                           >
-                            {isLoading() ? (<><Spinner size={12} />{" ..."}</>) : "Up"}
+                            {isLoading() ? (<><Spinner size={12} />{" ..."}</>) : tr("stack.up")}
                           </button>
                           <button
                             class="btn btn-sm btn-danger"
@@ -360,11 +363,11 @@ export default function StacksPage(props: StacksPageProps) {
                       <table class="table">
                         <thead>
                           <tr>
-                            <th>Service</th>
-                            <th>Image</th>
-                            <th>State</th>
-                            <th>Ports</th>
-                            <th style={{ "text-align": "right" }}>Actions</th>
+                            <th>t("stack.service")</th>
+                            <th>t("common.image")</th>
+                            <th>t("common.state")</th>
+                            <th>t("stack.ports")</th>
+                            <th style={{ "text-align": "right" }}>t("common.actions")</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -427,7 +430,7 @@ export default function StacksPage(props: StacksPageProps) {
                                         }}
                                         disabled={serviceLoading() === svc.container_id}
                                       >
-                                        Start
+                                        {tr("common.start")}
                                       </button>
                                     </Show>
                                     <Show when={svc.state === "Running"}>

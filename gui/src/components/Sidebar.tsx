@@ -2,6 +2,7 @@ import { createSignal, onMount, onCleanup, For, Show, JSX } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { Page } from "../App";
 import type { RemoteHost } from "../lib/types";
+import { t } from "../i18n";
 
 interface SidebarProps {
   currentPage: string;
@@ -126,18 +127,18 @@ const icons: Record<string, () => JSX.Element> = {
   ),
 };
 
-const mainNavItems: { id: Page; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "containers", label: "Containers" },
-  { id: "images", label: "Images" },
-  { id: "builds", label: "Builds" },
-  { id: "volumes", label: "Volumes" },
-  { id: "networks", label: "Networks" },
-  { id: "gateway", label: "Gateway" },
-  { id: "kubernetes", label: "Kubernetes" },
-  { id: "templates", label: "App Catalog" },
-  { id: "environment", label: "System Health" },
-  { id: "activity", label: "Activity" },
+const mainNavItems: { id: Page; labelKey: string }[] = [
+  { id: "dashboard", labelKey: "components.sidebar.dashboard" },
+  { id: "containers", labelKey: "components.sidebar.containers" },
+  { id: "images", labelKey: "components.sidebar.images" },
+  { id: "builds", labelKey: "components.sidebar.builds" },
+  { id: "volumes", labelKey: "components.sidebar.volumes" },
+  { id: "networks", labelKey: "components.sidebar.networks" },
+  { id: "gateway", labelKey: "components.sidebar.gateway" },
+  { id: "kubernetes", labelKey: "components.sidebar.kubernetes" },
+  { id: "templates", labelKey: "components.sidebar.appCatalog" },
+  { id: "environment", labelKey: "components.sidebar.systemHealth" },
+  { id: "activity", labelKey: "components.sidebar.activity" },
 ];
 
 // Persist collapsed state across navigations
@@ -198,10 +199,10 @@ export default function Sidebar(props: SidebarProps) {
           <button
             class={`nav-item ${props.currentPage === "fleet" ? "active" : ""}`}
             onClick={() => props.onNavigate("fleet" as Page)}
-            title={collapsed() ? "Fleet" : undefined}
+            title={collapsed() ? t("components.sidebar.fleet") : undefined}
           >
             <span class="nav-icon">{icons.fleet()}</span>
-            <span class="nav-label">Fleet</span>
+            <span class="nav-label">{t("components.sidebar.fleet")}</span>
           </button>
           <div class="nav-separator" />
         </Show>
@@ -210,10 +211,10 @@ export default function Sidebar(props: SidebarProps) {
             <button
               class={`nav-item ${props.currentPage === item.id ? "active" : ""}`}
               onClick={() => props.onNavigate(item.id)}
-              title={collapsed() ? item.label : undefined}
+              title={collapsed() ? t(item.labelKey) : undefined}
             >
               <span class="nav-icon">{icons[item.id]?.()}</span>
-              <span class="nav-label">{item.label}</span>
+              <span class="nav-label">{t(item.labelKey)}</span>
               <Show when={!collapsed() && badgeFor(item.id)}>
                 {(count) => <span class="nav-badge">{count()}</span>}
               </Show>
@@ -226,14 +227,14 @@ export default function Sidebar(props: SidebarProps) {
         <button
           class={`nav-item ${props.currentPage === "settings" ? "active" : ""}`}
           onClick={() => props.onNavigate("settings")}
-          title={collapsed() ? "Settings" : undefined}
+          title={collapsed() ? t("components.sidebar.settings") : undefined}
         >
           <span class="nav-icon">{icons.settings()}</span>
-          <span class="nav-label">Settings</span>
+          <span class="nav-label">{t("components.sidebar.settings")}</span>
         </button>
       </nav>
 
-      <button class="sidebar-toggle" onClick={toggleCollapsed} title={collapsed() ? "Expand sidebar" : "Collapse sidebar"}>
+      <button class="sidebar-toggle" onClick={toggleCollapsed} title={collapsed() ? t("components.sidebar.expand") : t("components.sidebar.collapse")}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
           style={{ transform: collapsed() ? "rotate(180deg)" : "none", transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)" }}
         >

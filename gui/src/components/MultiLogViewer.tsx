@@ -2,6 +2,7 @@ import { createSignal, onMount, onCleanup, For, Show, createEffect, createMemo }
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { copyToClipboard } from "../lib/clipboard";
+import { t } from "../i18n";
 
 // Cap the combined in-memory buffer so following many containers at once
 // can't grow unbounded.
@@ -396,10 +397,10 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
         >
           <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={{ "font-weight": "600", color: "#e6edf3", "font-size": "14px" }}>
-              Combined Logs
+              {t("components.logs.combined")}
             </span>
             <span style={{ "font-size": "12px", color: "#8b949e" }}>
-              {filteredEntries().length} lines from {props.containers.length} containers
+              {t("components.logs.combinedCount", { lines: filteredEntries().length, containers: props.containers.length })}
             </span>
           </div>
           <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
@@ -408,20 +409,20 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
                 class="search-input"
                 style={{ width: "240px", "font-size": "12px" }}
                 type="text"
-                placeholder="Filter logs..."
+                placeholder={t("components.logs.filterShort")}
                 value={filter()}
                 onInput={(e) => setFilter(e.currentTarget.value)}
               />
               <button
                 onClick={() => setUseRegex(!useRegex())}
-                title={useRegex() ? "Regex mode" : "Plain text mode"}
+                title={useRegex() ? t("components.logs.regex") : t("components.logs.plain")}
                 style={toggleBtnStyle(useRegex())}
               >
                 .*
               </button>
               <button
                 onClick={() => setCaseSensitive(!caseSensitive())}
-                title={caseSensitive() ? "Case sensitive" : "Case insensitive"}
+                title={caseSensitive() ? t("components.logs.sensitive") : t("components.logs.insensitive")}
                 style={toggleBtnStyle(caseSensitive())}
               >
                 Aa
@@ -437,15 +438,15 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
               }}
               style={{ "font-size": "12px" }}
             >
-              Auto-scroll
+              {t("components.logs.autoScroll")}
             </button>
-            <button class="action-icon" onClick={copyAll} title="Copy all logs">
+            <button class="action-icon" onClick={copyAll} title={t("components.logs.copyAll")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             </button>
-            <button class="action-icon" onClick={refreshLogs} title="Refresh">
+            <button class="action-icon" onClick={refreshLogs} title={t("components.common.refresh")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
             </button>
-            <button class="action-icon" onClick={() => props.onClose()} title="Close">
+            <button class="action-icon" onClick={() => props.onClose()} title={t("components.common.close")}>
               {"\u2715"}
             </button>
           </div>
@@ -507,7 +508,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
           when={!loading() || entries().length > 0}
           fallback={
             <div style={{ padding: "24px", color: "#8b949e", "text-align": "center" }}>
-              Loading logs...
+              {t("components.logs.loading")}
             </div>
           }
         >
@@ -524,7 +525,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
           >
             <Show when={filteredEntries().length > 0} fallback={
               <div style={{ padding: "24px", color: "#8b949e", "text-align": "center", "font-family": "'JetBrains Mono NF', monospace" }}>
-                (no log output)
+                {t("components.logs.empty")}
               </div>
             }>
               <For each={filteredEntries()}>

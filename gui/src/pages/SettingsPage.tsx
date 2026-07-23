@@ -7,6 +7,16 @@ import { logError } from "../lib/activityStore";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, updateOllamaSetup } from "../lib/ollamaSetup";
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
+import { t, lang, changeLang } from "../i18n";
+import { settingsDetailEn, settingsDetailZhCN } from "../i18n/settingsDetail";
+
+const tr = (key: string, params: Record<string, string | number> = {}) => {
+  const central = t(key);
+  const value = central === key
+    ? (lang() === "zh-CN" ? settingsDetailZhCN[key] : settingsDetailEn[key]) ?? key
+    : central;
+  return Object.entries(params).reduce((text, [name, replacement]) => text.replaceAll(`{${name}}`, String(replacement)), value);
+};
 
 type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "certificates" | "privacy" | "about";
 
@@ -66,7 +76,7 @@ function CertificateAuthoritySection() {
 
   return (
     <div class="settings-section">
-      <h2 class="settings-section-title">Orca Certificate Authority</h2>
+      <h2 class="settings-section-title">t("settings.tabs.certificates")</h2>
       <div class="card">
         <p style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.6" }}>
           Orca generates a local CA to sign TLS certificates for deployed app templates.
@@ -76,11 +86,11 @@ function CertificateAuthoritySection() {
         <Show when={caInfo()}>
           {(info) => (
             <div class="card-grid" style={{ "margin-bottom": "16px" }}>
-              <span class="card-label">Subject</span>
+              <span class="card-label">t("settings.tabs.certificates")</span>
               <span class="card-value mono">{info().subject}</span>
-              <span class="card-label">Expires</span>
+              <span class="card-label">t("settings.tabs.certificates")</span>
               <span class="card-value">{info().expires}</span>
-              <span class="card-label">Fingerprint</span>
+              <span class="card-label">t("settings.tabs.certificates")</span>
               <span class="card-value mono" style={{ "font-size": "11px", "word-break": "break-all" }}>{info().fingerprint}</span>
             </div>
           )}
@@ -114,7 +124,7 @@ function CertificateAuthoritySection() {
                   class="btn btn-ghost"
                   style={{ padding: "4px 8px", "flex-shrink": "0" }}
                   onClick={() => copyCommand(cmd)}
-                  title="Copy to clipboard"
+                  title={t("components.copy.clipboard")}
                 >
                   {copiedCmd() === cmd ? (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -939,7 +949,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">Settings</h1>
+        <h1 class="page-title">{tr("settings.title")}</h1>
       </div>
 
       <Show when={error()}>
@@ -950,16 +960,16 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
       {/* Tabs */}
       <div class="tab-bar" style={{"margin-bottom":"24px"}}>
-        <button class={`tab-item ${tab() === "general" ? "active" : ""}`} onClick={() => setTab("general")}>General</button>
-        <button class={`tab-item ${tab() === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>AI & Agents</button>
-        <button class={`tab-item ${tab() === "registries" ? "active" : ""}`} onClick={() => setTab("registries")}>Registries</button>
-        <button class={`tab-item ${tab() === "remote-hosts" ? "active" : ""}`} onClick={() => setTab("remote-hosts")}>Remote Hosts</button>
-        <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>Auto-Deploy</button>
-        <button class={`tab-item ${tab() === "schedules" ? "active" : ""}`} onClick={() => setTab("schedules")}>Schedules</button>
-        <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
-        <button class={`tab-item ${tab() === "certificates" ? "active" : ""}`} onClick={() => setTab("certificates")}>Certificates</button>
-        <button class={`tab-item ${tab() === "privacy" ? "active" : ""}`} onClick={() => setTab("privacy")}>Privacy & Security</button>
-        <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
+        <button class={`tab-item ${tab() === "general" ? "active" : ""}`} onClick={() => setTab("general")}>{tr("settings.tabs.general")}</button>
+        <button class={`tab-item ${tab() === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>{tr("settings.tabs.ai")}</button>
+        <button class={`tab-item ${tab() === "registries" ? "active" : ""}`} onClick={() => setTab("registries")}>{tr("settings.tabs.registries")}</button>
+        <button class={`tab-item ${tab() === "remote-hosts" ? "active" : ""}`} onClick={() => setTab("remote-hosts")}>{tr("settings.tabs.remoteHosts")}</button>
+        <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>{tr("settings.tabs.autoDeploy")}</button>
+        <button class={`tab-item ${tab() === "schedules" ? "active" : ""}`} onClick={() => setTab("schedules")}>{tr("settings.tabs.schedules")}</button>
+        <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>{tr("settings.tabs.maintenance")}</button>
+        <button class={`tab-item ${tab() === "certificates" ? "active" : ""}`} onClick={() => setTab("certificates")}>{tr("settings.tabs.certificates")}</button>
+        <button class={`tab-item ${tab() === "privacy" ? "active" : ""}`} onClick={() => setTab("privacy")}>{tr("settings.tabs.privacy")}</button>
+        <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>{tr("settings.tabs.about")}</button>
       </div>
 
       <div style={{ "max-width": "640px" }}>
@@ -968,17 +978,32 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <Show when={tab() === "general"}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
             <div class="settings-section">
-              <h2 class="settings-section-title">Preferences</h2>
+              <h2 class="settings-section-title">{tr("settings.general.preferences")}</h2>
               <div class="card">
+                <div class="settings-row">
+                  <div class="settings-row-left">
+                    <span class="settings-label">{tr("settings.general.language")}</span>
+                    <span class="settings-description">{tr("settings.general.languageDescription")}</span>
+                  </div>
+                  <Dropdown
+                    value={lang()}
+                    options={[
+                      { value: "en", label: tr("settings.general.english") },
+                      { value: "zh-CN", label: tr("settings.general.simplifiedChinese") },
+                    ]}
+                    onChange={(value) => changeLang(value as "en" | "zh-CN")}
+                  />
+                </div>
+                <div class="settings-divider" />
                 <Show when={!daemonConnected()}>
                   <div style={{ padding: "6px 0 10px", color: "#8b949e", "font-size": "12px" }}>
-                    Connect to daemon to change settings
+                    {tr("settings.general.connectDaemon")}
                   </div>
                 </Show>
                 <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
                   <div class="settings-row-left">
-                    <span class="settings-label">Start on Login</span>
-                    <span class="settings-description">Automatically launch Orca Desktop when you log in</span>
+                    <span class="settings-label">{tr("settings.general.startOnLogin")}</span>
+                    <span class="settings-description">{tr("settings.general.startOnLoginDescription")}</span>
                   </div>
                   <div
                     class="settings-toggle"
@@ -993,8 +1018,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 <div class="settings-divider" />
                 <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
                   <div class="settings-row-left">
-                    <span class="settings-label">Show Tray Icon</span>
-                    <span class="settings-description">Display Orca Desktop in the system tray</span>
+                    <span class="settings-label">{tr("settings.general.showTrayIcon")}</span>
+                    <span class="settings-description">{tr("settings.general.showTrayIconDescription")}</span>
                   </div>
                   <div
                     class="settings-toggle"
@@ -1009,8 +1034,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 <div class="settings-divider" />
                 <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
                   <div class="settings-row-left">
-                    <span class="settings-label">Intercept Docker Desktop URLs</span>
-                    <span class="settings-description">When enabled, docker-desktop:// links open in Orca instead of Docker Desktop</span>
+                    <span class="settings-label">{tr("settings.general.interceptUrls")}</span>
+                    <span class="settings-description">{tr("settings.general.interceptUrlsDescription")}</span>
                   </div>
                   <div
                     class="settings-toggle"
@@ -1028,10 +1053,10 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             {/* WSL2 Resources — Windows only */}
             <Show when={isWindows}>
               <div class="settings-section">
-                <h2 class="settings-section-title">WSL2 Resources</h2>
+                <h2 class="settings-section-title">t("settings.general.wslResources")</h2>
                 <div class="card" style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "12px" }}>
                   <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Memory</label>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>t("corePages.common.memory")</label>
                     <input
                       type="text"
                       class="form-input"
@@ -1042,7 +1067,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     />
                   </div>
                   <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Processors</label>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>t("settings.general.processors")</label>
                     <input
                       type="text"
                       class="form-input"
@@ -1053,7 +1078,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     />
                   </div>
                   <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Swap</label>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>t("settings.general.swap")</label>
                     <input
                       type="text"
                       class="form-input"
@@ -1078,7 +1103,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             {/* Lima VM Resources — macOS only */}
             <Show when={isMac && limaAvailable()}>
               <div class="settings-section">
-                <h2 class="settings-section-title">Virtual Machine</h2>
+                <h2 class="settings-section-title">t("settings.general.virtualMachine")</h2>
                 <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 10px" }}>Lima VM resources for Docker</p>
                 <div class="card" style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
                   <div style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "13px" }}>
@@ -1096,7 +1121,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </div>
 
                   <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>CPUs</label>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>t("settings.general.cpus")</label>
                     <input
                       type="number"
                       class="form-input"
@@ -1111,7 +1136,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </div>
 
                   <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Memory</label>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>t("corePages.common.memory")</label>
                     <div style={{ display: "flex", "align-items": "center", gap: "6px", flex: "1", "max-width": "160px" }}>
                       <input
                         type="number"
@@ -1139,7 +1164,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </div>
 
                   <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
-                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Disk</label>
+                    <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>t("settings.general.disk")</label>
                     <div style={{ display: "flex", "align-items": "center", gap: "6px", flex: "1", "max-width": "160px" }}>
                       <input
                         type="number"
@@ -1199,11 +1224,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
             {/* AI Assistant */}
             <div class="settings-section">
-              <h2 class="settings-section-title">AI Assistant</h2>
+              <h2 class="settings-section-title">t("settings.tabs.ai")</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
                   <div class="form-group">
-                    <label class="form-label">Provider</label>
+                    <label class="form-label">t("settings.tabs.ai")</label>
                     <div style={{ display: "flex", gap: "8px", "margin-top": "4px", "flex-wrap": "wrap" }}>
                       <For each={[
                         ["anthropic", "Anthropic (Claude)"],
@@ -1275,7 +1300,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   {/* Custom URL field */}
                   <Show when={aiProvider() === "custom"}>
                     <div class="form-group">
-                      <label class="form-label">API Base URL</label>
+                      <label class="form-label">t("settings.tabs.ai")</label>
                       <input
                         class="form-input mono"
                         type="text"
@@ -1393,7 +1418,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             {/* Agent Integration */}
             <div class="settings-section">
-              <h2 class="settings-section-title">Agent Integration</h2>
+              <h2 class="settings-section-title">t("settings.tabs.ai")</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
                   <div>
@@ -1415,7 +1440,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         class="action-icon"
                         style={{ position: "absolute", top: "8px", right: "8px", color: mcpCopied() ? "#3fb950" : "#8b949e" }}
                         onClick={copyMcpConfig}
-                        title="Copy to clipboard"
+                        title={t("components.copy.clipboard")}
                       >
                         <Show when={mcpCopied()} fallback={
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -1439,14 +1464,14 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         background: "#161b22", border: "1px solid #21262d", "border-radius": "6px", padding: "8px 12px",
                       }}>
                         <div>
-                          <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>Endpoint</div>
+                          <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>t("settings.tabs.ai")</div>
                           <span class="mono" style={{ "font-size": "11px", color: "#e6edf3", "word-break": "break-all" }}>{openaiEndpoint}</span>
                         </div>
                         <button
                           class="action-icon"
                           style={{ color: endpointCopied() ? "#3fb950" : "#8b949e", "flex-shrink": "0" }}
                           onClick={() => copyToClipboard(openaiEndpoint, setEndpointCopied)}
-                          title="Copy endpoint"
+                          title={t("components.copy.clipboard")}
                         >
                           <Show when={endpointCopied()} fallback={
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -1460,7 +1485,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         background: "#161b22", border: "1px solid #21262d", "border-radius": "6px", padding: "8px 12px",
                       }}>
                         <div>
-                          <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>API Token</div>
+                          <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>t("settings.tabs.ai")</div>
                           <span class="mono" style={{ "font-size": "11px", color: tokenRevealed() && tokenError() ? "#f85149" : "#e6edf3" }}>{tokenRevealed() ? (apiToken() || (tokenError() ? "No token — is the daemon running?" : "Loading...")) : TOKEN_MASK}</span>
                         </div>
                         <div style={{ display: "flex", "align-items": "center", gap: "4px", "flex-shrink": "0" }}>
@@ -1480,7 +1505,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                             class="action-icon"
                             style={{ color: tokenCopied() ? "#3fb950" : "#8b949e" }}
                             onClick={copyToken}
-                            title="Copy token"
+                            title={t("components.copy.clipboard")}
                           >
                             <Show when={tokenCopied()} fallback={
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -1501,7 +1526,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Registries Tab === */}
         <Show when={tab() === "registries"}>
           <div class="settings-section">
-            <h2 class="settings-section-title">Container Registries</h2>
+            <h2 class="settings-section-title">t("settings.tabs.registries")</h2>
             <div class="card">
               <Show when={registries().length > 0} fallback={
                 <div style={{ padding: "8px 0", color: "#8b949e" }}>No registries configured. Add credentials for private image registries.</div>
@@ -1509,11 +1534,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 <table class="table" style={{ margin: 0 }}>
                   <thead>
                     <tr>
-                      <th>Server</th>
-                      <th>Name</th>
-                      <th>Username</th>
-                      <th>Password</th>
-                      <th style={{ "text-align": "right" }}>Actions</th>
+                      <th>t("settings.tabs.registries")</th>
+                      <th>t("corePages.common.name")</th>
+                      <th>t("settings.tabs.registries")</th>
+                      <th>t("settings.tabs.registries")</th>
+                      <th style={{ "text-align": "right" }}>t("common.actions")</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1525,7 +1550,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                           <td>{reg.username}</td>
                           <td style={{ color: "#8b949e" }}>{"\u2022\u2022\u2022\u2022\u2022\u2022"}</td>
                           <td style={{ "text-align": "right" }}>
-                            <button class="btn btn-sm btn-danger" onClick={() => removeReg(reg.server)} title="Delete registry" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                            <button class="btn btn-sm btn-danger" onClick={() => removeReg(reg.server)} title={t("settings.tabs.registries")} style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                           </td>
                         </tr>
                       )}
@@ -1557,26 +1582,26 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </div>
                   <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                     <div class="form-group">
-                      <label class="form-label">Server URL</label>
+                      <label class="form-label">t("settings.tabs.registries")</label>
                       <input class="form-input" type="text" placeholder="https://ghcr.io" value={regServer()} onInput={(e) => setRegServer(e.currentTarget.value)} />
                     </div>
                     <div class="form-group">
-                      <label class="form-label">Display Name</label>
+                      <label class="form-label">t("settings.tabs.registries")</label>
                       <input class="form-input" type="text" placeholder="GitHub Container Registry" value={regName()} onInput={(e) => setRegName(e.currentTarget.value)} />
                     </div>
                     <div class="form-row">
                       <div class="form-group" style={{ flex: 1 }}>
-                        <label class="form-label">Username</label>
+                        <label class="form-label">t("settings.tabs.registries")</label>
                         <input class="form-input" type="text" placeholder="username" value={regUsername()} onInput={(e) => setRegUsername(e.currentTarget.value)} />
                       </div>
                       <div class="form-group" style={{ flex: 1 }}>
-                        <label class="form-label">Password</label>
+                        <label class="form-label">t("settings.tabs.registries")</label>
                         <input class="form-input" type="password" placeholder="password or token" value={regPassword()} onInput={(e) => setRegPassword(e.currentTarget.value)} />
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: "8px" }}>
-                      <button class="btn btn-primary" onClick={addRegistry} disabled={!regServer().trim() || !regUsername().trim() || !regPassword()}>Save</button>
-                      <button class="btn" onClick={() => setShowAddRegistry(false)}>Cancel</button>
+                      <button class="btn btn-primary" onClick={addRegistry} disabled={!regServer().trim() || !regUsername().trim() || !regPassword()}>t("common.save")</button>
+                      <button class="btn" onClick={() => setShowAddRegistry(false)}>t("common.cancel")</button>
                     </div>
                   </div>
                 </div>
@@ -1588,7 +1613,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Remote Hosts Tab === */}
         <Show when={tab() === "remote-hosts"}>
           <div class="settings-section">
-            <h2 class="settings-section-title">Remote Hosts</h2>
+            <h2 class="settings-section-title">t("settings.tabs.remoteHosts")</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
               Connect to remote servers running the orca-daemon. Switch between hosts from the titlebar dropdown.
             </p>
@@ -1598,11 +1623,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
+                    <th>t("corePages.common.name")</th>
                     <th style={{ "min-width": "200px" }}>URL</th>
-                    <th>Tags</th>
+                    <th>t("settings.tabs.registries")</th>
                     <th style={{ width: "60px" }}>TLS</th>
-                    <th style={{ "text-align": "right", width: "80px" }}>Actions</th>
+                    <th style={{ "text-align": "right", width: "80px" }}>t("common.actions")</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1642,14 +1667,14 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                             <button
                               class="btn btn-sm"
                               onClick={() => startEditHost(host)}
-                              title="Edit host"
+                              title={t("settings.tabs.remoteHosts")}
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                             </button>
                             <button
                               class="btn btn-sm btn-danger"
                               onClick={() => removeHost(host)}
-                              title="Remove host"
+                              title={t("settings.tabs.remoteHosts")}
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                             </button>
@@ -1676,11 +1701,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </h3>
                   <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                     <div class="form-group">
-                      <label class="form-label">Display Name</label>
+                      <label class="form-label">t("settings.tabs.registries")</label>
                       <input class="form-input" type="text" placeholder="Production Server" value={hostName()} onInput={(e) => setHostName(e.currentTarget.value)} />
                     </div>
                     <div class="form-group">
-                      <label class="form-label">Daemon URL</label>
+                      <label class="form-label">t("settings.tabs.remoteHosts")</label>
                       <input class="form-input" type="text" placeholder="https://prod.example.com:9477" value={hostUrl()} onInput={(e) => {
                         setHostUrl(e.currentTarget.value);
                         // Auto-set TLS verify based on protocol
@@ -1738,7 +1763,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       <button class="btn" onClick={() => { testHost(); }} disabled={hostTesting() || !hostUrl().trim()}>
                         {hostTesting() ? "Testing..." : "Test Connection"}
                       </button>
-                      <button class="btn" onClick={() => { setShowAddHost(false); resetHostForm(); }}>Cancel</button>
+                      <button class="btn" onClick={() => { setShowAddHost(false); resetHostForm(); }}>t("common.cancel")</button>
                     </div>
                     <Show when={hostTestResult()}>
                       <div style={{
@@ -1762,7 +1787,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Auto-Deploy Tab === */}
         <Show when={tab() === "auto-deploy"}>
           <div class="settings-section">
-            <h2 class="settings-section-title">Auto-Deploy</h2>
+            <h2 class="settings-section-title">t("settings.tabs.autoDeploy")</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
               Push code to GitHub and your containers update automatically. Orca receives a webhook when a new image is pushed, pulls it, and redeploys matching containers with the same configuration.
             </p>
@@ -1833,7 +1858,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         showToast(webhookSecret().trim() ? "Webhook secret saved" : "Webhook secret cleared", "success");
                       } catch (e) { showToast(`Failed: ${e}`, "error"); }
                     }}
-                  >Save</button>
+                  >t("common.save")</button>
                 </div>
                 <input class="form-input mono" type="password" placeholder="Same secret you set in GitHub webhook settings"
                   value={webhookSecret()} onInput={(e) => setWebhookSecret(e.currentTarget.value)}
@@ -1877,12 +1902,12 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Image Pattern</th>
-                    <th>Tag Filter</th>
-                    <th>Containers</th>
-                    <th style={{ width: "60px" }}>Status</th>
-                    <th style={{ "text-align": "right", width: "80px" }}>Actions</th>
+                    <th>t("corePages.common.name")</th>
+                    <th>t("settings.tabs.autoDeploy")</th>
+                    <th>t("settings.tabs.autoDeploy")</th>
+                    <th>t("corePages.common.containers")</th>
+                    <th style={{ width: "60px" }}>t("common.status")</th>
+                    <th style={{ "text-align": "right", width: "80px" }}>t("common.actions")</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1908,10 +1933,10 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         </td>
                         <td style={{ "text-align": "right" }}>
                           <div style={{ display: "flex", gap: "4px", "justify-content": "flex-end" }}>
-                            <button class="btn btn-sm" onClick={() => startEditRule(rule)} title="Edit">
+                            <button class="btn btn-sm" onClick={() => startEditRule(rule)} title={t("corePages.common.edit")}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                             </button>
-                            <button class="btn btn-sm btn-danger" onClick={() => deleteRule(rule.id)} title="Delete">
+                            <button class="btn btn-sm btn-danger" onClick={() => deleteRule(rule.id)} title={t("components.common.delete")}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                             </button>
                           </div>
@@ -1936,22 +1961,22 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 </h3>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                   <div class="form-group">
-                    <label class="form-label">Rule Name</label>
+                    <label class="form-label">t("settings.tabs.autoDeploy")</label>
                     <input class="form-input" type="text" placeholder="Production API" value={ruleName()} onInput={(e) => setRuleName(e.currentTarget.value)} />
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Image Pattern</label>
+                    <label class="form-label">t("settings.tabs.autoDeploy")</label>
                     <input class="form-input mono" type="text" placeholder="ghcr.io/myorg/myapp" value={ruleImage()} onInput={(e) => setRuleImage(e.currentTarget.value)} />
                     <span class="form-hint">The full image name without tag, e.g. ghcr.io/myorg/api. Matches any pushed image containing this text.</span>
                   </div>
                   <div class="form-row">
                     <div class="form-group" style={{ flex: 1 }}>
-                      <label class="form-label">Tag Filter</label>
+                      <label class="form-label">t("settings.tabs.autoDeploy")</label>
                       <input class="form-input mono" type="text" placeholder="latest, v*, main" value={ruleTagFilter()} onInput={(e) => setRuleTagFilter(e.currentTarget.value)} />
                       <span class="form-hint">* = any tag, v* = version tags (v1.0, v2.3.1), latest = only latest, main = branch</span>
                     </div>
                     <div class="form-group" style={{ flex: 1 }}>
-                      <label class="form-label">Container Names</label>
+                      <label class="form-label">t("settings.tabs.autoDeploy")</label>
                       <input class="form-input" type="text" placeholder="Leave empty to match by image" value={ruleContainers()} onInput={(e) => setRuleContainers(e.currentTarget.value)} />
                       <span class="form-hint">e.g. api, worker. Leave empty to redeploy any container using this image.</span>
                     </div>
@@ -1970,7 +1995,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     <button class="btn btn-primary" onClick={saveRule} disabled={!ruleName().trim() || !ruleImage().trim()}>
                       {editingRule() ? "Update" : "Save"}
                     </button>
-                    <button class="btn" onClick={() => { setShowAddRule(false); resetRuleForm(); }}>Cancel</button>
+                    <button class="btn" onClick={() => { setShowAddRule(false); resetRuleForm(); }}>t("common.cancel")</button>
                   </div>
                 </div>
               </div>
@@ -1979,15 +2004,15 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
           <Show when={deployHistory().length > 0}>
             <div class="settings-section" style={{ "margin-top": "24px" }}>
-              <h2 class="settings-section-title">Deploy History</h2>
+              <h2 class="settings-section-title">t("settings.tabs.autoDeploy")</h2>
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Time</th>
-                    <th>Rule</th>
-                    <th>Image</th>
-                    <th>Container</th>
-                    <th>Status</th>
+                    <th>t("container.time")</th>
+                    <th>t("settings.tabs.autoDeploy")</th>
+                    <th>t("common.image")</th>
+                    <th>t("infra.common.container")</th>
+                    <th>t("common.status")</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2022,7 +2047,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Schedules Tab === */}
         <Show when={tab() === "schedules"}>
           <div class="settings-section">
-            <h2 class="settings-section-title">Scheduled Actions</h2>
+            <h2 class="settings-section-title">t("settings.tabs.schedules")</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
               Schedule container actions to run automatically. Uses standard cron expressions. The daemon checks every 60 seconds.
             </p>
@@ -2031,12 +2056,12 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Container</th>
-                    <th>Action</th>
-                    <th>Schedule</th>
-                    <th style={{ width: "60px" }}>Status</th>
-                    <th style={{ "text-align": "right", width: "80px" }}>Actions</th>
+                    <th>t("corePages.common.name")</th>
+                    <th>t("infra.common.container")</th>
+                    <th>t("settings.tabs.schedules")</th>
+                    <th>t("settings.tabs.schedules")</th>
+                    <th style={{ width: "60px" }}>t("common.status")</th>
+                    <th style={{ "text-align": "right", width: "80px" }}>t("common.actions")</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2067,7 +2092,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                               setSchedAction(sched.action); setSchedCron(sched.cron); setSchedEnabled(sched.enabled);
                               setSchedBuildTarget(sched.build_target || "");
                               setShowAddSchedule(true);
-                            }} title="Edit">
+                            }} title={t("corePages.common.edit")}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                             </button>
                             <button class="btn btn-sm btn-danger" onClick={async () => {
@@ -2075,7 +2100,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                               if (!(await confirmDanger(`Delete schedule?`, `Remove ${label}? It will stop running on its cron trigger.`))) return;
                               try { await invoke("delete_schedule", { id: sched.id }); showToast("Deleted", "success"); await refreshSchedules(); }
                               catch (e) { showToast(`Failed: ${e}`, "error"); }
-                            }} title="Delete">
+                            }} title={t("components.common.delete")}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                             </button>
                           </div>
@@ -2101,11 +2126,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                   <div class="form-row">
                     <div class="form-group" style={{ flex: 1 }}>
-                      <label class="form-label">Name</label>
+                      <label class="form-label">t("corePages.common.name")</label>
                       <input class="form-input" type="text" placeholder="Nightly restart" value={schedName()} onInput={(e) => setSchedName(e.currentTarget.value)} />
                     </div>
                     <div class="form-group" style={{ flex: 1 }}>
-                      <label class="form-label">Action</label>
+                      <label class="form-label">t("settings.tabs.schedules")</label>
                       <Dropdown value={schedAction()} options={[
                         { value: "restart", label: "Restart" },
                         { value: "stop", label: "Stop" },
@@ -2117,7 +2142,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <Show when={schedAction() !== "build"}>
                     <div class="form-row">
                       <div class="form-group" style={{ flex: 1 }}>
-                        <label class="form-label">Container</label>
+                        <label class="form-label">t("infra.common.container")</label>
                         <input class="form-input" type="text" placeholder="Container name or ID" value={schedContainer()} onInput={(e) => setSchedContainer(e.currentTarget.value)} />
                       </div>
                     </div>
@@ -2125,7 +2150,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <Show when={schedAction() === "build"}>
                     <div class="form-row">
                       <div class="form-group" style={{ flex: 1 }}>
-                        <label class="form-label">Build Target</label>
+                        <label class="form-label">t("settings.tabs.schedules")</label>
                         <Show when={schedBuildTargets().length > 0} fallback={
                           <input class="form-input" type="text" placeholder="Build target name from orca.yaml" value={schedBuildTarget()} onInput={(e) => setSchedBuildTarget(e.currentTarget.value)} />
                         }>
@@ -2141,7 +2166,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </Show>
                   <div class="form-row">
                     <div class="form-group" style={{ flex: 2 }}>
-                      <label class="form-label">Cron Expression</label>
+                      <label class="form-label">t("settings.tabs.schedules")</label>
                       <input class="form-input mono" type="text" placeholder="0 3 * * 0" value={schedCron()} onInput={(e) => setSchedCron(e.currentTarget.value)} />
                       <span class="form-hint">
                         Examples: <code>0 3 * * 0</code> (Sun 3am), <code>0 18 * * 1-5</code> (weekdays 6pm), <code>0 */6 * * *</code> (every 6h), <code>0 0 1 * *</code> (1st of month)
@@ -2162,7 +2187,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     <button class="btn btn-primary" onClick={saveSchedRule} disabled={!schedName().trim() || !schedCron().trim() || (schedAction() === "build" ? !schedBuildTarget().trim() : !schedContainer().trim())}>
                       {editingSchedule() ? "Update" : "Save"}
                     </button>
-                    <button class="btn" onClick={() => { setShowAddSchedule(false); resetSchedForm(); }}>Cancel</button>
+                    <button class="btn" onClick={() => { setShowAddSchedule(false); resetSchedForm(); }}>t("common.cancel")</button>
                   </div>
                 </div>
               </div>
@@ -2174,7 +2199,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <Show when={tab() === "maintenance"}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
             <div class="settings-section">
-              <h2 class="settings-section-title">System Cleanup</h2>
+              <h2 class="settings-section-title">t("settings.tabs.maintenance")</h2>
               <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
                 Remove unused Docker resources to free up disk space. Select what to clean up and click "Run Cleanup".
               </p>
@@ -2278,7 +2303,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <div style={{ flex: "1" }}>
                     <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20M5 20V8l7-5 7 5v12"/><path d="M9 20v-6h6v6"/></svg>
-                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Build Cache</span>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>t("machine.buildCache")</span>
                       <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#3fb95020", color: "#3fb950" }}>Safe</span>
                     </div>
                     <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove Docker build cache to free disk space</div>
@@ -2344,7 +2369,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       </ul>
                     </div>
                     <div style={{ display: "flex", gap: "8px" }}>
-                      <button class="btn" onClick={() => setPruneShowConfirm(false)}>Cancel</button>
+                      <button class="btn" onClick={() => setPruneShowConfirm(false)}>t("common.cancel")</button>
                       <button
                         class="btn"
                         style={{ background: "#da3633", "border-color": "#da3633", color: "#fff" }}
@@ -2445,7 +2470,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             {/* Network Connections */}
             <div class="settings-section">
-              <h2 class="settings-section-title">Network Connections</h2>
+              <h2 class="settings-section-title">t("settings.tabs.privacy")</h2>
               <div class="card">
                 <p style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "12px" }}>Every network connection Orca makes — there are no hidden calls.</p>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "0" }}>
@@ -2472,7 +2497,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             {/* Security */}
             <div class="settings-section">
-              <h2 class="settings-section-title">Security</h2>
+              <h2 class="settings-section-title">t("settings.tabs.privacy")</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
                   <For each={[
@@ -2497,7 +2522,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             {/* Certificate Authority — moved to Certificates tab */}
             <div class="settings-section">
-              <h2 class="settings-section-title">Certificate Authority</h2>
+              <h2 class="settings-section-title">t("settings.tabs.certificates")</h2>
               <div class="card">
                 <p style={{ "font-size": "12px", color: "#8b949e", "line-height": "1.6" }}>
                   Certificate management has moved to the{" "}
@@ -2514,7 +2539,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             {/* AI Privacy */}
             <div class="settings-section">
-              <h2 class="settings-section-title">AI Privacy</h2>
+              <h2 class="settings-section-title">t("settings.tabs.privacy")</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "10px", "font-size": "13px", color: "#c9d1d9", "line-height": "1.6" }}>
                   <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
@@ -2547,7 +2572,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <Show when={tab() === "about"}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
             <div class="settings-section">
-              <h2 class="settings-section-title">Container Runtime</h2>
+              <h2 class="settings-section-title">t("settings.tabs.maintenance")</h2>
               <div class="card">
                 <Show when={machine()} fallback={
                   <div style={{ padding: "8px 0", color: "#8b949e" }}>
@@ -2556,19 +2581,19 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 }>
                   {(m) => (
                     <div class="card-grid">
-                      <span class="card-label">Runtime</span>
+                      <span class="card-label">t("machine.runtime")</span>
                       <span class="card-value">{m().config.runtime}</span>
-                      <span class="card-label">Backend</span>
+                      <span class="card-label">t("machine.backend")</span>
                       <span class="card-value">{m().backend}</span>
-                      <span class="card-label">State</span>
+                      <span class="card-label">t("common.state")</span>
                       <span class={`state-badge ${m().state === "Running" ? "state-running" : "state-stopped"}`}>{m().state}</span>
-                      <span class="card-label">Socket Path</span>
+                      <span class="card-label">t("settings.tabs.maintenance")</span>
                       <span class="card-value mono">
                         {m().config.runtime === "Docker" ? "/var/run/docker.sock" : `/run/user/${1000}/podman/podman.sock`}
                       </span>
-                      <span class="card-label">CPUs</span>
+                      <span class="card-label">t("settings.general.cpus")</span>
                       <span class="card-value">{m().config.cpus}</span>
-                      <span class="card-label">Memory</span>
+                      <span class="card-label">t("corePages.common.memory")</span>
                       <span class="card-value">{(m().config.memory_mb / 1024).toFixed(1)} GB</span>
                     </div>
                   )}
@@ -2577,7 +2602,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             </div>
 
             <div class="settings-section">
-              <h2 class="settings-section-title">Paths</h2>
+              <h2 class="settings-section-title">t("settings.tabs.maintenance")</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                   <For each={[
@@ -2594,7 +2619,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         class="action-icon"
                         style={{ color: "#8b949e", "flex-shrink": "0" }}
                         onClick={() => { navigator.clipboard.writeText(path); showToast("Path copied", "success"); }}
-                        title="Copy path"
+                        title={t("stack.copyPath")}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                       </button>
@@ -2605,7 +2630,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             </div>
 
             <div class="settings-section">
-              <h2 class="settings-section-title">Cleanup</h2>
+              <h2 class="settings-section-title">t("settings.tabs.maintenance")</h2>
               <div class="card">
                 <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
                   Remove Orca Desktop data from your system. This is useful before uninstalling or to start fresh.
@@ -2622,11 +2647,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         await invoke("cleanup", { scope: "templates" });
                         showToast("User templates removed", "success");
                       } catch (e) { logError(`Failed to remove templates: ${e}`); showToast(`Failed: ${e}`, "error"); }
-                    }} title="Remove user templates" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                    }} title={t("settings.tabs.maintenance")} style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
                     <div>
-                      <div style={{ "font-size": "13px", "font-weight": "500" }}>Stop & Remove VMs</div>
+                      <div style={{ "font-size": "13px", "font-weight": "500" }}>t("settings.tabs.maintenance")</div>
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Stop Lima VMs (macOS) or remove Docker TCP config (Windows)</div>
                     </div>
                     <button class="btn btn-sm" onClick={async () => {
@@ -2635,11 +2660,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         const result = (await invoke("cleanup", { scope: "vms" })) as { log: string[] };
                         showToast(result.log.join(". ") || "Cleanup done", "success");
                       } catch (e) { logError(`Failed to stop & remove VMs: ${e}`); showToast(`Failed: ${e}`, "error"); }
-                    }} title="Remove VMs" style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                    }} title={t("settings.tabs.maintenance")} style={{ color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0" }}>
                     <div>
-                      <div style={{ "font-size": "13px", "font-weight": "500", color: "#f85149" }}>Reset Everything</div>
+                      <div style={{ "font-size": "13px", "font-weight": "500", color: "#f85149" }}>t("settings.tabs.maintenance")</div>
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all config, templates, VMs, and data — like a fresh install</div>
                     </div>
                     <button class="btn btn-sm" style={{ color: "#f85149", "border-color": "#da363380" }} onClick={async () => {
@@ -2648,7 +2673,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         await invoke("cleanup", { scope: "all" });
                         showToast("Orca Desktop has been fully reset. Restart the app.", "success");
                       } catch (e) { logError(`Failed to reset everything: ${e}`); showToast(`Failed: ${e}`, "error"); }
-                    }}>Reset All</button>
+                    }}>t("settings.tabs.maintenance")</button>
                   </div>
                 </div>
               </div>

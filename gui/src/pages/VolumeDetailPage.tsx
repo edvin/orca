@@ -9,6 +9,7 @@ import CopyButton from "../components/CopyButton";
 import Breadcrumb from "../components/Breadcrumb";
 import Spinner from "../components/Spinner";
 import { logError } from "../lib/activityStore";
+import { t } from "../i18n";
 
 interface VolumeDetailPageProps {
   volumeName: string;
@@ -118,11 +119,11 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
   const [removing, setRemoving] = createSignal(false);
   const doRemove = async () => {
     if (removing()) return;
-    if (!await confirmDanger("Remove Volume", `Remove volume "${props.volumeName}"? This will permanently delete the volume data.`)) return;
+    if (!await confirmDanger(t("infra.volumeDetail.removeTitle"), t("infra.volumeDetail.removeConfirm", { name: props.volumeName }))) return;
     setRemoving(true);
     try {
       await invoke("remove_volume", { name: props.volumeName });
-      showToast(`Volume "${props.volumeName}" removed`, "success");
+      showToast(t("infra.volumes.removed", { name: props.volumeName }), "success");
       props.onBack();
     } catch (err) {
       logError(`Failed to remove volume: ${err}`, `Volume "${props.volumeName}"`);
@@ -185,7 +186,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       URL.revokeObjectURL(url);
       showToast("File listing exported", "success");
     } catch (e) {
-      showToast(`Failed to export listing: ${e}`, "error");
+      showToast(t("infra.volumeDetail.exportFailed", { error: String(e) }), "error");
     }
   };
 
@@ -213,7 +214,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       <div class="detail-page-header">
         <Show when={volume()} fallback={
           <div class="detail-page-info">
-            <div class="detail-page-name">Loading...</div>
+            <div class="detail-page-name">{t("infra.common.loading")}</div>
           </div>
         }>
           {(v) => (
@@ -234,9 +235,9 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                 <button
                   class="btn btn-sm"
                   onClick={exportFileListing}
-                  title="Export file listing as text"
+                  title={t("infra.volumeDetail.exportTitle")}
                 >
-                  Export Listing
+                  {t("infra.volumeDetail.exportListing")}
                 </button>
                 <button
                   class="btn btn-sm btn-danger"
@@ -245,7 +246,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                   style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}
                 >
                   <Show when={removing()}><Spinner size={12} /></Show>
-                  {removing() ? "Removing..." : "Remove"}
+                  {removing() ? t("infra.volumes.removing") : t("infra.volumeDetail.removeAction")}
                 </button>
               </div>
             </>
@@ -259,19 +260,19 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
           class={`detail-tab-item ${activeTab() === "overview" ? "active" : ""}`}
           onClick={() => switchTab("overview")}
         >
-          Overview
+          {t("infra.common.overview")}
         </button>
         <button
           class={`detail-tab-item ${activeTab() === "containers" ? "active" : ""}`}
           onClick={() => switchTab("containers")}
         >
-          Containers
+          {t("infra.common.containers")}
         </button>
         <button
           class={`detail-tab-item ${activeTab() === "files" ? "active" : ""}`}
           onClick={() => switchTab("files")}
         >
-          Files
+          {t("infra.volumeDetail.files")}
         </button>
       </div>
 
@@ -283,23 +284,23 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
             {(v) => (
               <div class="detail-section">
                 <div class="card-grid">
-                  <div class="card-label">Name</div>
+                  <div class="card-label">{t("infra.common.name")}</div>
                   <div class="card-value">{v().name}</div>
 
-                  <div class="card-label">Driver</div>
+                  <div class="card-label">{t("infra.common.driver")}</div>
                   <div class="card-value">{v().driver}</div>
 
-                  <div class="card-label">Mount Point</div>
+                  <div class="card-label">{t("infra.volumeDetail.mountPoint")}</div>
                   <div class="card-value" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
                     <span class="mono" style={{ "font-size": "12px" }}>{v().mountpoint}</span>
                     <CopyButton text={v().mountpoint} />
                   </div>
 
-                  <div class="card-label">Created</div>
+                  <div class="card-label">{t("infra.common.created")}</div>
                   <div class="card-value">{formatTimestamp(v().created_at)}</div>
 
                   <Show when={Object.keys(v().labels).length > 0}>
-                    <div class="card-label">Labels</div>
+                    <div class="card-label">{t("infra.common.labels")}</div>
                     <div class="card-value">
                       <For each={Object.entries(v().labels)}>
                         {([k, val]) => (
@@ -326,17 +327,17 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
             <Show when={!containersLoading()}>
               <Show when={containers().length > 0} fallback={
                 <div class="empty" style={{ padding: "40px 0" }}>
-                  <p class="empty-title">No containers use this volume</p>
-                  <p>This volume is not mounted by any container</p>
+                  <p class="empty-title">{t("infra.volumeDetail.noContainers")}</p>
+                  <p>{t("infra.volumeDetail.notMounted")}</p>
                 </div>
               }>
                 <table class="table">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Image</th>
-                      <th>State</th>
-                      <th>Mount Path</th>
+                      <th>{t("infra.common.name")}</th>
+                      <th>{t("infra.common.image")}</th>
+                      <th>{t("infra.common.state")}</th>
+                      <th>{t("infra.volumeDetail.mountPath")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -377,10 +378,10 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
           <div class="detail-section">
             <Show when={!fileBrowsingStarted()}>
               <div class="empty" style={{ padding: "40px 0" }}>
-                <p class="empty-title">Browse Volume Files</p>
-                <p style={{ "margin-bottom": "16px" }}>File browsing uses a temporary Alpine container to read volume contents</p>
+                <p class="empty-title">{t("infra.volumeDetail.browseTitle")}</p>
+                <p style={{ "margin-bottom": "16px" }}>{t("infra.volumeDetail.browseDescription")}</p>
                 <button class="btn btn-primary" onClick={startBrowsing}>
-                  Browse Files
+                  {t("infra.volumeDetail.browseFiles")}
                 </button>
               </div>
             </Show>
@@ -390,25 +391,25 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                 <button
                   class="btn btn-sm"
                   onClick={() => { setFileContent(null); setFileContentPath(null); fetchFiles(); }}
-                  title="Root"
+                  title={t("infra.volumeDetail.root")}
                 >
                   /
                 </button>
                 <Show when={currentPath() && !fileContent()}>
-                  <button class="btn btn-sm" onClick={navigateUp} title="Go up">
+                  <button class="btn btn-sm" onClick={navigateUp} title={t("infra.volumeDetail.goUp")}>
                     ..
                   </button>
                 </Show>
                 <Show when={fileContent()}>
-                  <button class="btn btn-sm" onClick={() => { setFileContent(null); setFileContentPath(null); }} title="Back to listing">
-                    Back
+                  <button class="btn btn-sm" onClick={() => { setFileContent(null); setFileContentPath(null); }} title={t("infra.volumeDetail.backToListing")}>
+                    {t("infra.common.back")}
                   </button>
                 </Show>
                 <div style={{ display: "flex", "align-items": "center", gap: "2px", color: "#8b949e", "font-size": "13px", "flex-wrap": "wrap" }}>
                   <span
                     style={{ cursor: "pointer", color: currentPath() ? "#58a6ff" : "#e6edf3", padding: "2px 4px" }}
                     onClick={() => fetchFiles()}
-                    title="Root"
+                    title={t("infra.volumeDetail.root")}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle" }}><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
                   </span>
@@ -470,11 +471,11 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                   <Show when={files().length > 0} fallback={
                     <Show when={fileError()} fallback={
                       <div class="empty" style={{ padding: "20px 0" }}>
-                        <p>Empty directory</p>
+                        <p>{t("infra.volumeDetail.emptyDirectory")}</p>
                       </div>
                     }>
                       <div style={{ padding: "16px 20px", color: "#f85149", background: "rgba(248, 81, 73, 0.1)", "border-radius": "6px", margin: "12px 0", "font-size": "13px" }}>
-                        <strong>Error:</strong> {fileError()}
+                        <strong>{t("infra.common.error")}:</strong> {fileError()}
                       </div>
                     </Show>
                   }>
