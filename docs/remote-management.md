@@ -14,7 +14,7 @@ Orca can manage Docker containers on remote Linux servers via the Orca daemon (`
 Run this on your remote server:
 
 ```bash
-curl -fsSL https://orca-desktop.com/install-daemon.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/edvin/orca/refs/heads/main/deploy/install-daemon.sh | sudo bash
 ```
 
 The installer will:
