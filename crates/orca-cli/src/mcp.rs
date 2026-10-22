@@ -66,12 +66,18 @@ pub async fn serve(target: Target) -> anyhow::Result<()> {
         .build()?;
     let target = Arc::new(target);
     let stdout = Arc::new(Mutex::new(tokio::io::stdout()));
-    let mut lines = BufReader::new(tokio::io::stdin()).lines();
+    let mut input = BufReader::new(tokio::io::stdin());
     eprintln!("orca mcp: serving Orca on {} over stdio", target.label);
 
     let mut tasks = tokio::task::JoinSet::new();
-    while let Some(line) = lines.next_line().await? {
-        let line = line.trim().to_string();
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        if input.read_until(b'\n', &mut buf).await? == 0 {
+            break;
+        }
+        // A line that isn't UTF-8 gets a parse error, like any bad JSON.
+        let line = String::from_utf8_lossy(&buf).trim().to_string();
         if line.is_empty() {
             continue;
         }
@@ -90,7 +96,8 @@ pub async fn serve(target: Target) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// One message to the daemon; the reply to write, if any (notifications get none).
+/// One line from the client; the reply to write, if any. A JSON-RPC batch
+/// (an array) is sent message by message and answered with an array.
 async fn forward(http: &reqwest::Client, target: &Target, line: &str) -> Option<String> {
     let message: serde_json::Value = match serde_json::from_str(line) {
         Ok(v) => v,
@@ -102,8 +109,28 @@ async fn forward(http: &reqwest::Client, target: &Target, line: &str) -> Option<
             ));
         }
     };
+    if let serde_json::Value::Array(batch) = &message {
+        if batch.is_empty() {
+            return Some(error_reply(serde_json::Value::Null, -32600, "Empty batch"));
+        }
+        let mut replies = Vec::new();
+        for m in batch {
+            if let Some(r) = forward_one(http, target, m)
+                .await
+                .and_then(|r| serde_json::from_str(&r).ok())
+            {
+                replies.push(r);
+            }
+        }
+        return (!replies.is_empty()).then(|| serde_json::Value::Array(replies).to_string());
+    }
+    forward_one(http, target, &message).await
+}
+
+/// One JSON-RPC message to the daemon; the reply, unless it's a notification.
+async fn forward_one(http: &reqwest::Client, target: &Target, message: &serde_json::Value) -> Option<String> {
     let id = message.get("id").cloned();
-    let mut req = http.post(&target.endpoint).json(&message);
+    let mut req = http.post(&target.endpoint).json(message);
     if let Some(t) = &target.token {
         req = req.bearer_auth(t);
     }

@@ -143,12 +143,16 @@ export default function LandingPageTab(props: Props) {
     pickedCustom() ? "custom" : !s.web_search ? "" : isEngine(s.web_search) ? s.web_search : "custom";
   const saveCustom = (s: LandingSettings) => {
     const v = (customUrl() ?? s.web_search ?? "").trim();
-    setCustomUrl(null);
-    if (!v || v === s.web_search) return;
+    if (!v || v === s.web_search) {
+      setCustomUrl(null);
+      return;
+    }
     if (!validCustom(v)) {
+      // Keep what was typed, so it can be fixed rather than retyped.
       showToast("Use an http(s) URL with {query} where the search terms go", "error");
       return;
     }
+    setCustomUrl(null);
     setPickedCustom(false);
     void save({ web_search: v });
   };

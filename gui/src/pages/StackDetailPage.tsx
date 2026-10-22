@@ -1,4 +1,4 @@
-import { createResource, createSignal, Show, For } from "solid-js";
+import { createResource, createSignal, onCleanup, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { stacksStore } from "../lib/dockerStore";
 import { useRefresh } from "../lib/useRefresh";
@@ -47,9 +47,12 @@ export default function StackDetailPage(props: StackDetailPageProps) {
   // Compose profiles: the optional parts of the stack. Read from the compose
   // file, so fetched on open and after changes, not on every event.
   // The gateway's routes, for the stack's URLs in the header.
-  const [routes] = createResource(() =>
+  const [routes, { refetch: refetchRoutes }] = createResource(() =>
     invoke<GatewayRoute[]>("gateway_list_routes").catch(() => [] as GatewayRoute[]),
   );
+  // Routes change when orca.yaml is saved or a route is added elsewhere.
+  const routesTimer = setInterval(() => { if (!document.hidden) void refetchRoutes(); }, 15_000);
+  onCleanup(() => clearInterval(routesTimer));
   const [profiles, { mutate: setProfiles, refetch: refetchProfiles }] = createResource(
     () => props.stackName,
     (name) => invoke<StackProfilesReport>("stack_profiles", { name }),
@@ -108,13 +111,15 @@ export default function StackDetailPage(props: StackDetailPageProps) {
     }
   };
 
-  const doStackAction = async (action: string) => {
+  const doStackAction = async (action: string): Promise<boolean> => {
     setActionInProgress(true);
+    let ok = false;
     try {
       const result = await invoke(action, { name: props.stackName });
       if (result && typeof result === "object") {
         const output = result as any;
         const failedHooks = ((output.hooks ?? []) as Array<{ hook: string; success: boolean; output: string }>).filter((h) => !h.success);
+        ok = output.success !== false;
         if (!output.success) {
           showToast(`${action.replace(/_/g, " ")} failed: ${output.stderr || "Unknown error"}`, "error");
         } else if (failedHooks.length > 0) {
@@ -124,6 +129,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
           showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
         }
       } else {
+        ok = true;
         showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
       }
       setTimeout(fetchStack, 500);
@@ -133,6 +139,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       showToast(`${action} failed: ${err}`, "error");
     }
     setActionInProgress(false);
+    return ok;
   };
 
   const restartService = async (containerId: string) => {
@@ -411,7 +418,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                           </button>
                           <Show when={svc.state === "Running"}>
                             <button class="btn btn-sm" title={`Open a shell in ${svc.container_name}`}
-                              onClick={() => { openContainerOn("terminal"); props.onNavigate?.(`container:${svc.container_id},stack:${props.stackName}`); }}>
+                              onClick={() => { openContainerOn(svc.container_id, "terminal"); props.onNavigate?.(`container:${svc.container_id},stack:${props.stackName}`); }}>
                               Shell
                             </button>
                           </Show>
@@ -582,7 +589,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                 <Show when={composeFiles().length > 1}>
                   <Dropdown
                     value={String(composeIndex())}
-                    options={composeFiles().map((f, i) => ({ value: String(i), label: f.path.split("/").pop() ?? f.path }))}
+                    options={composeFiles().map((f, i) => ({ value: String(i), label: f.path.split(/[\\/]/).pop() ?? f.path }))}
                     onChange={(v) => showComposeFile(Number(v))}
                     style={{ width: "240px" }}
                   />
@@ -624,8 +631,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                 <button
                   class="btn btn-sm btn-primary"
                   onClick={() => {
-                    doStackAction("compose_up");
-                    setSavedSinceLastRestart(false);
+                    void doStackAction("compose_up").then((ok) => ok && setSavedSinceLastRestart(false));
                   }}
                   disabled={actionInProgress()}
                 >
@@ -639,7 +645,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                 <YamlEditor
                   value={composeContent()!}
                   readOnly={false}
-                  title={`${props.stackName} — ${composePath()?.split("/").pop() ?? "compose file"}`}
+                  title={`${props.stackName} — ${composePath()?.split(/[\\/]/).pop() ?? "compose file"}`}
                   // eslint-disable-next-line solid/reactivity -- async event handler, reactivity not needed
                   onSave={async (content: string) => {
                     const path = composePath();

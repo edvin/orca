@@ -30,6 +30,9 @@ function current(): PendingConfirm | undefined {
   return queue()[0];
 }
 
+/** A dialog title as its button: "Delete schedule?" → "Delete schedule". */
+const actionLabel = (title: string) => title.replace(/\?\s*$/, "");
+
 /** Show a confirm dialog and return a promise that resolves to true/false */
 export function confirm(opts: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
@@ -49,9 +52,9 @@ export function confirmDanger(
 ): Promise<boolean> {
   if (typeof arg1 === "string") {
     // The button names the action, as the title does: "Stop all containers", not "Delete".
-    return confirm({ title: arg1, message: message ?? "", confirmLabel: arg1, danger: true });
+    return confirm({ title: arg1, message: message ?? "", confirmLabel: actionLabel(arg1), danger: true });
   }
-  return confirm({ confirmLabel: arg1.title, ...arg1, danger: true });
+  return confirm({ ...arg1, confirmLabel: arg1.confirmLabel ?? actionLabel(arg1.title), danger: true });
 }
 
 function handleResult(result: boolean) {

@@ -807,7 +807,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                     <button
                       class="dropdown-item"
                       onClick={() => {
-                        openContainerOn("terminal");
+                        openContainerOn(c.id, "terminal");
                         props.onNavigate?.(stackName ? `container:${c.id},stack:${stackName}` : `container:${c.id}`);
                         setContainerMenuOpen(null);
                       }}

@@ -1,7 +1,7 @@
 // ⌘K: find anything (stacks, containers, images, projects, URLs) and run
 // actions. Typing searches everything; with no query it shows the actions.
 
-import { createSignal, onMount, onCleanup, For, Show, createMemo, createResource } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, Show, createMemo, createResource } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "./Toast";
@@ -145,7 +145,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
     ...containers().flatMap((c) => [
       { id: `ct-${c.id}`, name: c.name, hint: `${c.state.toLowerCase()} · ${c.image}`, icon: "▣", category: "Containers", action: go(`container:${c.id}`) },
       ...(c.state === "Running"
-        ? [{ id: `sh-${c.id}`, name: `Shell in ${c.name}`, icon: ">_", category: "Containers", action: run(() => { openContainerOn("terminal"); props.onNavigate(`container:${c.id}`); }) }]
+        ? [{ id: `sh-${c.id}`, name: `Shell in ${c.name}`, icon: ">_", category: "Containers", action: run(() => { openContainerOn(c.id, "terminal"); props.onNavigate(`container:${c.id}`); }) }]
         : []),
     ]),
     ...images().flatMap((i) => i.repo_tags.filter((t) => t !== "<none>:<none>").map((t) => ({
@@ -184,6 +184,16 @@ export default function CommandPalette(props: CommandPaletteProps) {
   // Keyboard order follows the groups as shown.
   const flat = () => groupedCommands().flatMap((g) => g.commands);
   const indexOf = (cmd: Command) => flat().indexOf(cmd);
+  // The lists can change while typing (a container stops): stay in range.
+  createEffect(() => {
+    const n = flat().length;
+    if (selectedIndex() > n - 1) setSelectedIndex(Math.max(0, n - 1));
+  });
+  // Keep the chosen row visible when moving with the arrow keys.
+  createEffect(() => {
+    const i = selectedIndex();
+    queueMicrotask(() => document.querySelectorAll(".command-palette .command-item")[i]?.scrollIntoView({ block: "nearest" }));
+  });
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.isComposing || e.keyCode === 229) return;

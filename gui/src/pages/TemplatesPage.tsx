@@ -432,7 +432,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             setEnvSaved({});
             setShowSetupGuide(true);
           } else if (!switchedHost) {
-            props.onNavigate?.("stacks");
+            props.onNavigate?.(`stack:${stackName}`);
           }
         } else {
           const containerId = result?.id;

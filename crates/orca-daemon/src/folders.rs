@@ -29,20 +29,38 @@ fn folder(p: &str) -> Result<PathBuf, ApiError> {
     let path = path
         .canonicalize()
         .map_err(|e| ApiError::bad_request(format!("'{p}' can't be read: {e}")))?;
+    // A file (a compose file or anything else dropped on the window) stands for its folder.
+    let path = if path.is_file() {
+        path.parent().map(Path::to_path_buf).unwrap_or(path)
+    } else {
+        path
+    };
     if !path.is_dir() {
         return Err(ApiError::bad_request(format!("'{p}' is not a folder")));
     }
     Ok(path)
 }
 
-/// The compose project name Compose gives a folder.
-pub fn project_name(dir: &Path) -> String {
-    dir.file_name()
+/// The compose project name Compose gives a folder: lowercased, only
+/// letters, digits, `-` and `_`, not starting with `-` or `_`.
+pub fn project_name(dir: &Path) -> anyhow::Result<String> {
+    let name: String = dir
+        .file_name()
         .map(|n| n.to_string_lossy().to_lowercase())
         .unwrap_or_default()
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .collect()
+        .collect();
+    let name = name.trim_start_matches(['-', '_']).to_string();
+    if name.is_empty() {
+        anyhow::bail!(
+            "Compose can't name a project after the folder '{}'. Rename it to start with a letter or digit.",
+            dir.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default()
+        );
+    }
+    Ok(name)
 }
 
 /// `POST /folders/inspect`: what Orca would start from a folder.
@@ -52,33 +70,51 @@ pub async fn inspect(
 ) -> Result<impl IntoResponse, ApiError> {
     let dir = folder(&body.path)?;
     let dir_str = dir.to_string_lossy().to_string();
-    let name = project_name(&dir);
-    let compose_files: Vec<&str> = COMPOSE_FILE_NAMES
-        .iter()
-        .copied()
-        .filter(|f| dir.join(f).is_file())
-        .collect();
+    let name = project_name(&dir).map_err(|e| ApiError::bad_request(e.to_string()))?;
     let orca_yaml = ["orca.yaml", "orca.yml"].iter().any(|f| dir.join(f).is_file());
     let git = dir.join(".git").exists();
 
-    // Already running (or stopped) as a stack, from this folder?
-    let stack = match state.rt().await.list_containers(true).await {
-        Ok(containers) => compose::extract_projects(&containers)
-            .into_iter()
-            .find(|s| {
-                s.working_dir
-                    .as_deref()
-                    .and_then(|w| Path::new(w).canonicalize().ok())
-                    .as_deref()
-                    == Some(dir.as_path())
+    // orca.yaml's `compose:` list, else the files Compose finds by itself.
+    let mut error = None;
+    let listed = crate::api::orca_yaml_compose_files(&dir).unwrap_or_else(|e| {
+        error = Some(e.to_string());
+        None
+    });
+    let config = listed.as_ref().map(|l| l.join(","));
+    let compose_files: Vec<String> = match &listed {
+        Some(files) => files
+            .iter()
+            .map(|f| {
+                Path::new(f)
+                    .strip_prefix(&dir)
+                    .map(|r| r.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| f.clone())
             })
-            .map(|s| s.name),
-        Err(_) => None,
+            .collect(),
+        None => COMPOSE_FILE_NAMES
+            .iter()
+            .filter(|f| dir.join(f).is_file())
+            .map(|f| f.to_string())
+            .collect(),
     };
 
-    let (mut services, mut profiles, mut error) = (Vec::new(), Vec::new(), None);
-    if !compose_files.is_empty() {
-        match crate::stack_profiles::load_model(&state, &name, &dir_str, None).await {
+    // A stack with this name: from this folder (already running), or from
+    // another folder with the same name, which starting this one would replace.
+    let (mut stack, mut conflict) = (None, None);
+    if let Ok(containers) = state.rt().await.list_containers(true).await {
+        for s in compose::extract_projects(&containers) {
+            let from = s.working_dir.as_deref().and_then(|w| Path::new(w).canonicalize().ok());
+            if from.as_deref() == Some(dir.as_path()) {
+                stack = Some(s.name);
+            } else if s.name == name {
+                conflict = s.working_dir.clone();
+            }
+        }
+    }
+
+    let (mut services, mut profiles) = (Vec::new(), Vec::new());
+    if !compose_files.is_empty() && error.is_none() {
+        match crate::stack_profiles::load_model(&state, &name, &dir_str, config.as_deref()).await {
             Ok(model) => {
                 services = model.services.keys().cloned().collect();
                 profiles = model_profiles(&model);
@@ -96,6 +132,7 @@ pub async fn inspect(
         "services": services,
         "profiles": profiles,
         "stack": stack,
+        "conflict": conflict,
         "error": error,
     })))
 }
@@ -133,22 +170,18 @@ pub async fn create_compose(
         f.write_all(body.content.as_bytes())
             .map_err(|e| ApiError::bad_request(format!("Can't write {}: {e}", file.display())))?;
     }
+    // Check the file's own structure only: variables from an .env that
+    // doesn't exist yet, or another file next to it, aren't its problem.
     let dir_str = dir.to_string_lossy().to_string();
-    let check = state
-        .rt()
-        .await
-        .compose_args(&dir_str, None, &["config".to_string(), "-q".to_string()])
-        .await;
-    match check {
-        Ok(out) if out.success => Ok(Json(serde_json::json!({ "path": file.to_string_lossy() }))),
-        other => {
+    let file_str = file.to_string_lossy().to_string();
+    let args = ["config", "-q", "--no-interpolate"].map(String::from);
+    match state.rt().await.compose_args(&dir_str, Some(&file_str), &args).await {
+        Ok(out) if !out.success => {
             let _ = std::fs::remove_file(&file);
-            let why = match other {
-                Ok(out) => out.stderr.trim().to_string(),
-                Err(e) => e.to_string(),
-            };
-            Err(ApiError::bad_request(format!("Not saved: {why}")))
+            Err(ApiError::bad_request(format!("Not saved: {}", out.stderr.trim())))
         }
+        // Valid, or Compose couldn't run to check it: keep the file.
+        _ => Ok(Json(serde_json::json!({ "path": file_str }))),
     }
 }
 
@@ -158,7 +191,9 @@ mod tests {
 
     #[test]
     fn names_like_compose() {
-        assert_eq!(project_name(Path::new("/x/My Shop.v2")), "myshopv2");
-        assert_eq!(project_name(Path::new("/x/shop-api_1")), "shop-api_1");
+        assert_eq!(project_name(Path::new("/x/My Shop.v2")).unwrap(), "myshopv2");
+        assert_eq!(project_name(Path::new("/x/shop-api_1")).unwrap(), "shop-api_1");
+        assert_eq!(project_name(Path::new("/x/_shop")).unwrap(), "shop");
+        assert!(project_name(Path::new("/x/日本")).is_err());
     }
 }

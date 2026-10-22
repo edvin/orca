@@ -55,6 +55,34 @@ fn app_config(sub: &str) -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join(sub))
 }
 
+/// The `claude` CLI. An app started from the Dock or Finder gets a minimal
+/// PATH, so the usual install places are tried too.
+fn claude_cli_path() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["claude.cmd", "claude.exe"]
+    } else {
+        &["claude"]
+    };
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    let h = home();
+    dirs.extend([
+        h.join(".local").join("bin"),
+        h.join(".claude").join("local"),
+        h.join(".npm-global").join("bin"),
+        h.join(".bun").join("bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ]);
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        dirs.push(PathBuf::from(appdata).join("npm"));
+    }
+    dirs.iter()
+        .flat_map(|d| names.iter().map(move |n| d.join(n)))
+        .find(|p| p.is_file())
+}
+
 fn on_path(program: &str) -> bool {
     let exe = if cfg!(windows) {
         format!("{program}.exe")
@@ -72,7 +100,9 @@ fn clients() -> Vec<Client> {
             id: "claude-code",
             name: "Claude Code",
             path: || Some(home().join(".claude.json")),
-            detect: || on_path("claude") || home().join(".claude.json").exists() || home().join(".claude").is_dir(),
+            detect: || {
+                claude_cli_path().is_some() || home().join(".claude.json").exists() || home().join(".claude").is_dir()
+            },
             format: Format::Json {
                 key: "mcpServers",
                 with_type: true,
@@ -173,7 +203,10 @@ fn has_server(format: Format, path: &Path) -> bool {
             .ok()
             .and_then(|v| v.get(key)?.get(SERVER_NAME).cloned())
             .is_some(),
-        Format::CodexToml => text.lines().any(|l| l.trim() == format!("[mcp_servers.{SERVER_NAME}]")),
+        Format::CodexToml => text
+            .parse::<toml_edit::DocumentMut>()
+            .ok()
+            .is_some_and(|d| d.get("mcp_servers").and_then(|m| m.get(SERVER_NAME)).is_some()),
     }
 }
 
@@ -181,7 +214,7 @@ fn has_server(format: Format, path: &Path) -> bool {
 pub fn connect(id: &str, command: &Path, args: &[&str]) -> anyhow::Result<String> {
     let c = find(id)?;
     // Claude Code rewrites ~/.claude.json itself; its own CLI avoids racing it.
-    if c.id == "claude-code" && on_path("claude") {
+    if c.id == "claude-code" && claude_cli_path().is_some() {
         let _ = claude_cli(&["mcp", "remove", "--scope", "user", SERVER_NAME]);
         let mut cli_args = vec!["mcp", "add", "--scope", "user", SERVER_NAME, "--"];
         let cmd = command.to_string_lossy().to_string();
@@ -209,9 +242,10 @@ pub fn connect(id: &str, command: &Path, args: &[&str]) -> anyhow::Result<String
             })?;
         }
         Format::CodexToml => {
-            let args = args.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>().join(", ");
-            let block = format!("[mcp_servers.{SERVER_NAME}]\ncommand = {command:?}\nargs = [{args}]\n");
-            edit_toml_section(&path, Some(&block))?;
+            let mut table = toml_edit::Table::new();
+            table["command"] = toml_edit::value(command);
+            table["args"] = toml_edit::value(args.iter().copied().collect::<toml_edit::Array>());
+            edit_toml(&path, Some(table))?;
         }
     }
     Ok(c.after_connect.unwrap_or("Connected.").to_string())
@@ -220,7 +254,7 @@ pub fn connect(id: &str, command: &Path, args: &[&str]) -> anyhow::Result<String
 /// Remove Orca from a tool's config.
 pub fn disconnect(id: &str) -> anyhow::Result<()> {
     let c = find(id)?;
-    if c.id == "claude-code" && on_path("claude") {
+    if c.id == "claude-code" && claude_cli_path().is_some() {
         return claude_cli(&["mcp", "remove", "--scope", "user", SERVER_NAME]).map(|_| ());
     }
     let Some(path) = (c.path)() else { return Ok(()) };
@@ -234,12 +268,13 @@ pub fn disconnect(id: &str) -> anyhow::Result<()> {
             }
             Ok(())
         }),
-        Format::CodexToml => edit_toml_section(&path, None),
+        Format::CodexToml => edit_toml(&path, None),
     }
 }
 
 fn claude_cli(args: &[&str]) -> anyhow::Result<String> {
-    let out = std::process::Command::new(if cfg!(windows) { "claude.exe" } else { "claude" })
+    let claude = claude_cli_path().ok_or_else(|| anyhow::anyhow!("the claude command wasn't found"))?;
+    let out = std::process::Command::new(claude)
         .args(args)
         .output()
         .map_err(|e| anyhow::anyhow!("could not run claude: {e}"))?;
@@ -255,63 +290,109 @@ fn claude_cli(args: &[&str]) -> anyhow::Result<String> {
 
 /// Read a JSON object file (or start one), change it, and write it back
 /// atomically. A file that isn't plain JSON (VS Code allows comments) is
-/// left alone with an error rather than rewritten.
+/// left alone with an error rather than rewritten. If the tool rewrote the
+/// file meanwhile, the change is made again on its new content.
 fn edit_json(
     path: &Path,
-    change: impl FnOnce(&mut serde_json::Map<String, serde_json::Value>) -> anyhow::Result<()>,
+    change: impl Fn(&mut serde_json::Map<String, serde_json::Value>) -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
-    let mut root = match std::fs::read_to_string(path) {
-        Ok(text) if !text.trim().is_empty() => match serde_json::from_str::<serde_json::Value>(&text) {
-            Ok(serde_json::Value::Object(m)) => m,
-            _ => anyhow::bail!(
-                "{} isn't plain JSON (it may have comments), so Orca won't rewrite it. Add the server by hand.",
-                path.display()
-            ),
-        },
-        _ => serde_json::Map::new(),
-    };
-    change(&mut root)?;
-    let text = serde_json::to_string_pretty(&serde_json::Value::Object(root))? + "\n";
-    write_atomic(path, &text)
+    edit_text(path, |text| {
+        let mut root = if text.trim().is_empty() {
+            serde_json::Map::new()
+        } else {
+            match serde_json::from_str::<serde_json::Value>(text) {
+                Ok(serde_json::Value::Object(m)) => m,
+                _ => anyhow::bail!(
+                    "{} isn't plain JSON (it may have comments), so Orca won't rewrite it. Add the server by hand.",
+                    path.display()
+                ),
+            }
+        };
+        change(&mut root)?;
+        Ok(serde_json::to_string_pretty(&serde_json::Value::Object(root))? + "\n")
+    })
 }
 
-/// Replace (or remove, with `None`) the `[mcp_servers.orca]` table in a
-/// TOML file, keeping everything else as written.
-fn edit_toml_section(path: &Path, block: Option<&str>) -> anyhow::Result<()> {
-    let text = std::fs::read_to_string(path).unwrap_or_default();
-    let header = format!("[mcp_servers.{SERVER_NAME}]");
-    let mut out = String::new();
-    let mut skipping = false;
-    for line in text.lines() {
-        let t = line.trim();
-        if t == header {
-            skipping = true;
+/// Set (or remove, with `None`) `[mcp_servers.orca]` in a TOML file,
+/// keeping everything else, comments included, as written.
+fn edit_toml(path: &Path, table: Option<toml_edit::Table>) -> anyhow::Result<()> {
+    edit_text(path, |text| {
+        let mut doc: toml_edit::DocumentMut = text
+            .parse()
+            .map_err(|e| anyhow::anyhow!("{} isn't valid TOML, so Orca won't rewrite it: {e}", path.display()))?;
+        match &table {
+            Some(t) => {
+                if !doc.contains_key("mcp_servers") {
+                    let mut servers = toml_edit::Table::new();
+                    servers.set_implicit(true);
+                    doc["mcp_servers"] = toml_edit::Item::Table(servers);
+                }
+                let servers = doc["mcp_servers"]
+                    .as_table_like_mut()
+                    .ok_or_else(|| anyhow::anyhow!("mcp_servers in {} is not a table", path.display()))?;
+                servers.insert(SERVER_NAME, toml_edit::Item::Table(t.clone()));
+            }
+            None => {
+                if let Some(servers) = doc.get_mut("mcp_servers").and_then(|m| m.as_table_like_mut()) {
+                    servers.remove(SERVER_NAME);
+                }
+            }
+        }
+        Ok(doc.to_string())
+    })
+}
+
+/// Rewrite a config file another program also writes: read, change, and
+/// replace it only if it still holds what was read, else start over.
+fn edit_text(path: &Path, change: impl Fn(&str) -> anyhow::Result<String>) -> anyhow::Result<()> {
+    for _ in 0..5 {
+        let before = std::fs::read_to_string(path).unwrap_or_default();
+        let after = change(&before)?;
+        if after == before {
+            return Ok(());
+        }
+        if std::fs::read_to_string(path).unwrap_or_default() != before {
             continue;
         }
-        if skipping && t.starts_with('[') {
-            skipping = false;
-        }
-        if !skipping {
-            out.push_str(line);
-            out.push('\n');
-        }
+        return write_atomic(path, &after);
     }
-    if let Some(block) = block {
-        if !out.is_empty() && !out.ends_with("\n\n") {
-            out.push('\n');
-        }
-        out.push_str(block);
-    }
-    write_atomic(path, &out)
+    anyhow::bail!("{} keeps changing; close the tool and try again", path.display())
 }
 
+/// Replace a file in one step, keeping its permissions (configs that hold
+/// API keys are often private) and writing through a symlinked dotfile.
 fn write_atomic(path: &Path, text: &str) -> anyhow::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
+    let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let dir = target
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("{} has no folder", target.display()))?;
+    std::fs::create_dir_all(dir)?;
+    let name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let tmp = dir.join(format!(".{name}.orca-{}.tmp", std::process::id()));
+    {
+        use std::io::Write;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+            let mode = std::fs::metadata(&target)
+                .map(|m| m.permissions().mode() & 0o777)
+                .unwrap_or(0o600);
+            opts.mode(mode);
+        }
+        let _ = std::fs::remove_file(&tmp);
+        let mut f = opts.open(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()?;
     }
-    let tmp = path.with_extension("orca-tmp");
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, path)?;
+    if let Err(e) = std::fs::rename(&tmp, &target) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.into());
+    }
     Ok(())
 }
 
@@ -345,8 +426,20 @@ pub fn install_cli(source: &Path) -> anyhow::Result<PathBuf> {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
         }
+        // Windows can't replace a running .exe, but it can rename one: move
+        // the copy an AI tool is running out of the way first.
+        #[cfg(windows)]
+        {
+            let old = dest.with_extension("old");
+            let _ = std::fs::remove_file(&old);
+            if dest.exists() {
+                let _ = std::fs::rename(&dest, &old);
+            }
+        }
         std::fs::rename(&tmp, &dest)?;
     }
+    #[cfg(windows)]
+    let _ = std::fs::remove_file(dest.with_extension("old"));
     Ok(dest)
 }
 
@@ -394,24 +487,58 @@ mod tests {
     }
 
     #[test]
-    fn codex_toml_section_is_replaced_and_removed() {
+    fn codex_toml_server_is_replaced_and_removed_keeping_the_rest() {
         let p = tmp("toml").join("config.toml");
         std::fs::write(
             &p,
-            "model = \"o3\"\n\n[mcp_servers.orca]\ncommand = \"old\"\n\n[mcp_servers.git]\ncommand = \"git-mcp\"\n",
+            "# my settings\nmodel = \"o3\"\n\n[mcp_servers.orca]\ncommand = \"old\"\n\n[mcp_servers.git]\ncommand = \"git-mcp\" # keep\n",
         )
         .unwrap();
-        edit_toml_section(
-            &p,
-            Some("[mcp_servers.orca]\ncommand = \"/new/orca\"\nargs = [\"mcp\"]\n"),
-        )
+        let mut t = toml_edit::Table::new();
+        t["command"] = toml_edit::value("C:\\Users\\Zoë\\orca.exe");
+        t["args"] = toml_edit::value(["mcp"].into_iter().collect::<toml_edit::Array>());
+        edit_toml(&p, Some(t)).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        let doc: toml_edit::DocumentMut = text.parse().expect("still valid TOML");
+        assert_eq!(
+            doc["mcp_servers"]["orca"]["command"].as_str(),
+            Some("C:\\Users\\Zoë\\orca.exe")
+        );
+        assert!(text.contains("# my settings") && text.contains("# keep") && !text.contains("\"old\""));
+        assert!(has_server(Format::CodexToml, &p));
+        edit_toml(&p, None).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        assert!(!has_server(Format::CodexToml, &p) && text.contains("[mcp_servers.git]"));
+    }
+
+    #[test]
+    fn a_quoted_or_inline_entry_is_still_one_server() {
+        let p = tmp("toml-inline").join("config.toml");
+        std::fs::write(&p, "[mcp_servers]\norca = { command = \"old\" }\n").unwrap();
+        let mut t = toml_edit::Table::new();
+        t["command"] = toml_edit::value("/new/orca");
+        edit_toml(&p, Some(t)).unwrap();
+        let doc: toml_edit::DocumentMut = std::fs::read_to_string(&p).unwrap().parse().unwrap();
+        assert_eq!(doc["mcp_servers"]["orca"]["command"].as_str(), Some("/new/orca"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_configs_stay_private_and_symlinks_are_kept() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tmp("perm");
+        let real = d.join("real.json");
+        std::fs::write(&real, "{}").unwrap();
+        std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let link = d.join("link.json");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        edit_json(&link, |root| {
+            root.insert("a".into(), 1.into());
+            Ok(())
+        })
         .unwrap();
-        let t = std::fs::read_to_string(&p).unwrap();
-        assert!(t.contains("model = \"o3\"") && t.contains("[mcp_servers.git]") && t.contains("/new/orca"));
-        assert!(!t.contains("\"old\""));
-        assert_eq!(t.matches("[mcp_servers.orca]").count(), 1);
-        edit_toml_section(&p, None).unwrap();
-        let t = std::fs::read_to_string(&p).unwrap();
-        assert!(!t.contains("mcp_servers.orca") && t.contains("[mcp_servers.git]"));
+        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::metadata(&real).unwrap().permissions().mode() & 0o777, 0o600);
+        assert!(std::fs::read_to_string(&real).unwrap().contains("\"a\""));
     }
 }

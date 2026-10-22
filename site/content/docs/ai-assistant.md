@@ -104,7 +104,7 @@ With a cloud provider, the assistant has the same 69 tools that Orca offers to e
 When you name a container or image by part of its name and there's exactly one match, the assistant acts on it directly. It asks only when several resources match.
 
 > [!WARNING]
-> Tool calls run without a confirmation step, including ones that stop, remove or prune resources. Be explicit about what you want changed. Each message allows up to five rounds of tool calls.
+> Tool calls run without a confirmation step, including ones that stop or restart containers. Tools that delete data or work (removing containers, images, volumes, routes or projects, pruning, `compose down`, resetting a worktree's database, overwriting `orca.yaml`) are not available to the built-in assistant at all: do those in Orca, or from an AI tool connected over MCP, which asks you first. Each message allows up to five rounds of tool calls.
 
 Logs and errors attached with **Ask AI** are passed to the model marked as untrusted data, and the model is told not to follow instructions inside them.
 

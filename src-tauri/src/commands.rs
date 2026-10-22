@@ -3815,14 +3815,12 @@ pub async fn read_file(path: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn save_compose_file(path: String, content: String, create_new: Option<bool>) -> Result<(), String> {
     let pb = validate_compose_path(&path)?;
-    if create_new.unwrap_or(false) && pb.exists() {
-        let stack = pb
-            .parent()
-            .and_then(|d| d.file_name())
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        return Err(format!("A stack named '{stack}' already exists. Choose another name."));
-    }
+    let create_new = create_new.unwrap_or(false);
+    let stack = pb
+        .parent()
+        .and_then(|d| d.file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
     // Basic validation: content must not be empty and must be bounded.
     if content.trim().is_empty() {
         return Err("Content cannot be empty".to_string());
@@ -3832,7 +3830,18 @@ pub async fn save_compose_file(path: String, content: String, create_new: Option
     }
     tokio::task::spawn_blocking(move || {
         use std::io::Write;
-        let mut f = open_no_follow_write(&pb).map_err(|e| format!("Failed to open file: {e}"))?;
+        let opened = if create_new {
+            // Only for a new stack: refuse in one step if the file exists.
+            std::fs::OpenOptions::new().write(true).create_new(true).open(&pb)
+        } else {
+            open_no_follow_write(&pb)
+        };
+        let mut f = opened.map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => {
+                format!("A stack named '{stack}' already exists. Choose another name.")
+            }
+            _ => format!("Failed to open file: {e}"),
+        })?;
         f.write_all(content.as_bytes())
             .map_err(|e| format!("Failed to save compose file: {e}"))?;
         Ok::<_, String>(())
@@ -4969,6 +4978,13 @@ pub async fn open_folder_in(path: String, app: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let _ = mac_name;
+        // These launchers go through cmd.exe (code.cmd and friends), which
+        // would read &, |, ^, % and the like in a folder name as commands.
+        if path.chars().any(|c| "&|^%<>!;\"()".contains(c)) {
+            return Err(format!(
+                "Orca can't open {path} in another app because its name contains special characters. Open it from File Explorer."
+            ));
+        }
         if kind == "terminal" {
             if on_path("wt") {
                 std::process::Command::new("wt")

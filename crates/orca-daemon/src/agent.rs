@@ -665,6 +665,10 @@ pub async fn execute_tool(
                 tail,
             ];
             if let Some(svc) = arguments.get("service").and_then(|v| v.as_str()) {
+                if svc.starts_with('-') {
+                    return Err(format!("'{svc}' is not a service name"));
+                }
+                args.push("--".into());
                 args.push(svc.to_string());
             }
             let out = state
@@ -1008,42 +1012,6 @@ async fn resolve_stack_dir(state: &AppState, name: &str) -> Result<(String, Opti
 /// still sees is enough to diagnose with.
 pub fn redact_secrets(v: &serde_json::Value) -> serde_json::Value {
     use serde_json::Value;
-    const MASK: &str = "[redacted]";
-    let secretish = |name: &str| {
-        let n = name.to_ascii_lowercase();
-        [
-            "pass",
-            "secret",
-            "token",
-            "api_key",
-            "apikey",
-            "private_key",
-            "credential",
-            "auth",
-            "dsn",
-            "database_url",
-            "session_key",
-            "signing_key",
-        ]
-        .iter()
-        .any(|w| n.contains(w))
-    };
-    // scheme://user:password@host → scheme://user:[redacted]@host
-    let strip_url_password = |s: &str| -> String {
-        let Some(scheme_end) = s.find("://") else {
-            return s.to_string();
-        };
-        let rest = &s[scheme_end + 3..];
-        let Some(at) = rest.find('@') else { return s.to_string() };
-        let userinfo = &rest[..at];
-        if userinfo.contains('/') {
-            return s.to_string();
-        }
-        match userinfo.split_once(':') {
-            Some((user, _)) => format!("{}{user}:{MASK}{}", &s[..scheme_end + 3], &rest[at..]),
-            None => s.to_string(),
-        }
-    };
     match v {
         Value::Object(map) => {
             let is_k8s_secret = map
@@ -1056,7 +1024,7 @@ pub fn redact_secrets(v: &serde_json::Value) -> serde_json::Value {
                     .map(|(k, val)| {
                         let out = match val {
                             Value::String(_) if secretish(k) => Value::String(MASK.into()),
-                            Value::Object(data) if is_k8s_secret && k == "data" => {
+                            Value::Object(data) if is_k8s_secret && (k == "data" || k == "stringData") => {
                                 Value::Object(data.keys().map(|dk| (dk.clone(), Value::String(MASK.into()))).collect())
                             }
                             other => redact_secrets(other),
@@ -1067,20 +1035,149 @@ pub fn redact_secrets(v: &serde_json::Value) -> serde_json::Value {
             )
         }
         Value::Array(items) => Value::Array(items.iter().map(redact_secrets).collect()),
-        Value::String(s) => match s.split_once('=') {
-            Some((key, _)) if !key.is_empty() && !key.contains(' ') && secretish(key) => {
-                Value::String(format!("{key}={MASK}"))
-            }
-            _ => Value::String(strip_url_password(s)),
-        },
+        Value::String(s) => Value::String(redact_text(s)),
         other => other.clone(),
     }
+}
+
+const MASK: &str = "[redacted]";
+
+/// A key or variable name that usually holds a secret.
+fn secretish(name: &str) -> bool {
+    let n = name.trim().trim_matches(|c| c == '"' || c == '\'').to_ascii_lowercase();
+    [
+        "pass",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "private_key",
+        "credential",
+        "auth",
+        "dsn",
+        "database_url",
+        "session_key",
+        "signing_key",
+        "cookie",
+    ]
+    .iter()
+    .any(|w| n.contains(w))
+        || n == "key"
+        || n.ends_with("_key")
+        || n.ends_with("-key")
+        || n.ends_with(".key")
+        || n.ends_with("_pat")
+}
+
+/// Secrets in free text: logs, command output, a manifest, an .env file.
+/// Line by line: `KEY=value` and `key: value` with a secret-looking key,
+/// passwords in URLs, and the values of a Kubernetes Secret's `data:` and
+/// `stringData:`.
+fn redact_text(s: &str) -> String {
+    let secret_manifest = s.lines().any(|l| l.trim() == "kind: Secret");
+    let mut in_data = false;
+    let mut out = String::with_capacity(s.len());
+    for (i, line) in s.split('\n').enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let indented = line.starts_with(' ') || line.starts_with('\t');
+        if secret_manifest && !indented {
+            let t = line.trim_end();
+            in_data = t == "data:" || t == "stringData:";
+        } else if in_data
+            && indented
+            && let Some((k, _)) = line.split_once(':')
+        {
+            out.push_str(k);
+            out.push_str(": ");
+            out.push_str(MASK);
+            continue;
+        }
+        out.push_str(&redact_line(line));
+    }
+    out
+}
+
+fn redact_line(line: &str) -> String {
+    let trimmed = line.trim_start();
+    let lead = &line[..line.len() - trimmed.len()];
+    let body = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+    let prefix = &trimmed[..trimmed.len() - body.len()];
+    for sep in ['=', ':'] {
+        if let Some((key, value)) = body.split_once(sep) {
+            let key_ok = !key.is_empty() && !key.trim().contains(' ') && !key.contains("://");
+            if key_ok && secretish(key) && !value.trim().is_empty() {
+                let space = if sep == ':' { " " } else { "" };
+                return format!("{lead}{prefix}{}{sep}{space}{MASK}", key.trim_end());
+            }
+        }
+    }
+    strip_url_passwords(line)
+}
+
+/// scheme://user:password@host → scheme://user:[redacted]@host, for every URL in the text.
+fn strip_url_passwords(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find("://") {
+        out.push_str(&rest[..i + 3]);
+        rest = &rest[i + 3..];
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+            .unwrap_or(rest.len());
+        let authority = &rest[..end];
+        match authority.find('@') {
+            Some(at) if !authority[..at].contains('/') => match authority[..at].split_once(':') {
+                Some((user, _)) => {
+                    out.push_str(user);
+                    out.push(':');
+                    out.push_str(MASK);
+                    out.push_str(&authority[at..]);
+                }
+                None => out.push_str(authority),
+            },
+            _ => out.push_str(authority),
+        }
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 #[cfg(test)]
 mod redact_tests {
     use super::redact_secrets;
     use serde_json::json;
+
+    #[test]
+    fn secrets_in_text_manifests_and_command_output() {
+        let yaml = "apiVersion: v1\nkind: Secret\nmetadata:\n  name: db\ndata:\n  password: aHVudGVyMg==\n  user: YWRtaW4=\nstringData:\n  token: plain-tok\ntype: Opaque\n";
+        let env = "APP_ENV=local\nAPP_KEY=base64:abcdef\nexport GITHUB_PAT=ghp_123\nREDIS_URL=redis://u:p4ss@r:6379 and https://a:b@c.example\n";
+        let r = redact_secrets(&json!({ "yaml": yaml, "output": env, "logs": "db_password: hunter2" })).to_string();
+        for leaked in [
+            "aHVudGVyMg",
+            "YWRtaW4",
+            "plain-tok",
+            "abcdef",
+            "ghp_123",
+            "p4ss",
+            ":b@",
+            "hunter2",
+        ] {
+            assert!(!r.contains(leaked), "{leaked} leaked: {r}");
+        }
+        for kept in [
+            "name: db",
+            "APP_ENV=local",
+            "kind: Secret",
+            "type: Opaque",
+            "r:6379",
+            "c.example",
+        ] {
+            assert!(r.contains(kept), "{kept} lost: {r}");
+        }
+    }
 
     #[test]
     fn secrets_are_blanked_and_the_rest_kept() {

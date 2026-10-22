@@ -79,7 +79,11 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
       </div>
 
       <div class="ai-connect-list">
-        <For each={visible()} fallback={<div class="ai-connect-empty">Looking for AI tools…</div>}>
+        <For each={visible()} fallback={
+          <div class="ai-connect-empty">
+            {clients.loading ? "Looking for AI tools…" : "None of the AI tools Orca connects to are on this computer: Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex."}
+          </div>
+        }>
           {(c) => {
             const [color, letter] = TILE[c.id] ?? ["#8b949e", c.name[0]];
             return (

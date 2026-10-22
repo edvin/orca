@@ -188,18 +188,30 @@ export default function Sidebar(props: SidebarProps) {
       const remotes = (await invoke("list_remote_hosts")) as RemoteHost[];
       setHasRemoteHosts(remotes.length > 0);
     } catch { /* ignore */ }
-    try {
-      const k = (await invoke("k8s_status")) as { enabled?: boolean };
-      setK8sOff(k.enabled === false);
-    } catch { /* ignore */ }
   };
   createEffect(on(() => props.currentPage, loadRemoteHosts));
 
+  // Whether Kubernetes is on changes rarely: check now, on host switches and
+  // once a minute. A check that fails or times out says nothing either way,
+  // and only the newest answer counts.
+  let k8sCheck = 0;
+  const loadK8s = async () => {
+    const mine = ++k8sCheck;
+    try {
+      const k = (await invoke("k8s_status")) as { enabled?: boolean; error?: string | null };
+      if (mine === k8sCheck && !k.error) setK8sOff(k.enabled === false);
+    } catch { /* ignore */ }
+  };
+
   onMount(() => {
-    document.addEventListener("orca-host-switch", loadRemoteHosts);
+    void loadK8s();
+    const timer = setInterval(() => { if (!document.hidden) void loadK8s(); }, 60_000);
+    const onHost = () => { void loadRemoteHosts(); void loadK8s(); };
+    document.addEventListener("orca-host-switch", onHost);
     document.addEventListener("orca-refresh", loadRemoteHosts);
     onCleanup(() => {
-      document.removeEventListener("orca-host-switch", loadRemoteHosts);
+      clearInterval(timer);
+      document.removeEventListener("orca-host-switch", onHost);
       document.removeEventListener("orca-refresh", loadRemoteHosts);
     });
   });

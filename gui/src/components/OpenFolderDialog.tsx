@@ -20,6 +20,8 @@ interface FolderInfo {
   services: string[];
   profiles: string[];
   stack: string | null;
+  /** Another folder that already runs under the same project name. */
+  conflict: string | null;
   error: string | null;
 }
 
@@ -31,7 +33,7 @@ const STARTER = `services:
 `;
 
 export default function OpenFolderDialog(props: { onNavigate: (target: string) => void }) {
-  const [path, setPath] = createSignal(openFolderTarget() ?? "");
+  const [path, setPath] = createSignal("");
   const [typed, setTyped] = createSignal("");
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
@@ -41,7 +43,6 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
 
   const [info, { refetch }] = createResource(path, async (p) => {
     if (!p) return null;
-    setError("");
     try {
       return await invoke<FolderInfo>("inspect_folder", { path: p });
     } catch (e) {
@@ -50,15 +51,21 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
     }
   });
 
-  // A dropped compose file stands for its folder.
+  /** Look at a folder; the same one again looks again (after fixing what was wrong). */
+  const open = (p: string) => {
+    setError("");
+    if (p === path()) void refetch();
+    else setPath(p);
+  };
+
+  // A dropped file stands for its folder (the daemon takes the file's folder).
   createEffect(on(openFolderTarget, (t) => {
-    if (t === undefined) return;
-    setPath(/\.ya?ml$/i.test(t) ? t.replace(/[\\/][^\\/]+$/, "") : t);
+    if (t) open(t);
   }));
 
   const choose = async () => {
     const picked = await invoke<string | null>("pick_folder", { title: "Open a project folder" }).catch(() => null);
-    if (picked) setPath(picked);
+    if (picked) open(picked);
   };
 
   const close = () => {
@@ -83,7 +90,6 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
       props.onNavigate(`stack:${f.name}`);
     } catch (e) {
       setError(String(e));
-      void refetch();
     } finally {
       setBusy(false);
     }
@@ -109,7 +115,7 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
               <Show when={remote()}>
                 <div class="open-folder-or">You're managing a remote host: give the folder's path on that machine.</div>
               </Show>
-              <form class="assistant-row" onSubmit={(e) => { e.preventDefault(); if (typed().trim()) setPath(typed().trim()); }}>
+              <form class="assistant-row" onSubmit={(e) => { e.preventDefault(); if (typed().trim()) open(typed().trim()); }}>
                 <input class="form-input mono" placeholder="/path/to/project" value={typed()} onInput={(e) => setTyped(e.currentTarget.value)} />
                 <button class="btn" type="submit" disabled={!typed().trim() || info.loading}>Open</button>
               </form>
@@ -122,7 +128,7 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
                     <div class="open-folder-name">{f().name}</div>
                     <div class="mono open-folder-path">{f().path}</div>
                   </div>
-                  <button class="btn btn-sm" onClick={() => { setPath(""); setTyped(""); }} disabled={busy()}>Another folder</button>
+                  <button class="btn btn-sm" onClick={() => { setError(""); setPath(""); setTyped(""); }} disabled={busy()}>Another folder</button>
                 </div>
 
                 <Show when={f().stack}>
@@ -159,6 +165,12 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
                   </label>
                 </Show>
 
+                <Show when={f().conflict && !f().stack}>
+                  <div class="open-folder-error">
+                    Another folder, {f().conflict}, already runs as the stack “{f().name}”. Starting this one would replace it. Stop
+                    that stack first, or rename this folder.
+                  </div>
+                </Show>
                 <Show when={f().error}>
                   <div class="open-folder-error">{f().error}</div>
                 </Show>
@@ -173,7 +185,7 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
         <Show when={info()}>
           <div class="modal-footer">
             <button class="btn" onClick={close} disabled={busy()}>Cancel</button>
-            <button class="btn btn-primary" disabled={busy() || !!info()?.error} onClick={() => void start()}>
+            <button class="btn btn-primary" disabled={busy() || !!info()?.error || (!!info()?.conflict && !info()?.stack)} onClick={() => void start()}>
               {busy() ? <><Spinner size={12} /> Starting…</> : info()?.stack ? "Start again" : info()?.compose_files.length ? "Start" : "Create and start"}
             </button>
           </div>

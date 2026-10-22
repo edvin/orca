@@ -1,6 +1,6 @@
 //! A stack's compose files, for the stack page's editor. Only the files
 //! Compose itself recorded for the stack (its `config_files` label) can be
-//! read or written, wherever the project lives.
+//! read or written, and only YAML files inside the stack's folder.
 
 use std::sync::Arc;
 
@@ -12,16 +12,25 @@ use serde::Deserialize;
 use crate::api::{ApiError, resolve_stack_dir};
 use crate::state::AppState;
 
-/// The stack's compose files, in the order compose was given them.
+/// The stack's compose files, in the order compose was given them. The
+/// list comes from container labels, which an image can set too, so only
+/// `.yml`/`.yaml` files inside the stack's own folder are offered.
 async fn files_of(state: &AppState, name: &str) -> Result<Vec<String>, ApiError> {
-    let (_, config) = resolve_stack_dir(state, name).await?;
+    let (dir, config) = resolve_stack_dir(state, name).await?;
+    let dir = std::fs::canonicalize(&dir).unwrap_or_else(|_| dir.into());
     Ok(config
         .unwrap_or_default()
         .split(',')
         .map(str::trim)
-        .filter(|f| !f.is_empty())
+        .filter(|f| is_compose_file_in(&dir, f))
         .map(String::from)
         .collect())
+}
+
+fn is_compose_file_in(dir: &std::path::Path, file: &str) -> bool {
+    let p = std::path::Path::new(file);
+    let yaml = matches!(p.extension().and_then(|e| e.to_str()), Some("yml" | "yaml"));
+    yaml && std::fs::canonicalize(p).is_ok_and(|real| real.starts_with(dir) && real.is_file())
 }
 
 /// GET /stacks/{name}/compose-files
@@ -38,6 +47,23 @@ pub async fn get(
         })
         .collect();
     Ok(Json(serde_json::json!({ "files": out })))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn only_yaml_files_inside_the_stack_folder() {
+        let d = std::env::temp_dir().join(format!("orca-stackfiles-{}", std::process::id()));
+        std::fs::create_dir_all(d.join("sub")).unwrap();
+        let d = d.canonicalize().unwrap();
+        for f in ["compose.yaml", "sub/dev.yml", "notes.txt"] {
+            std::fs::write(d.join(f), "x").unwrap();
+        }
+        let ok = |f: &str| super::is_compose_file_in(&d, &d.join(f).to_string_lossy());
+        assert!(ok("compose.yaml") && ok("sub/dev.yml"));
+        assert!(!ok("notes.txt") && !ok("missing.yaml") && !ok("../outside.yaml"));
+        std::fs::remove_dir_all(&d).ok();
+    }
 }
 
 #[derive(Deserialize)]

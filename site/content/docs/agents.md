@@ -104,7 +104,8 @@ The endpoint takes JSON-RPC over `POST` and supports `initialize`, `ping`, `tool
 When an AI tool connects, Orca sends instructions on when to use which tools: `deploy_project` for a folder that isn't running yet, the `instance_*` tools inside a git worktree, and to ask before removing anything. Each tool also carries hints that clients use to decide when to ask you first:
 
 - Tools that only read (listings, logs, status, `read_orca_yaml`) are marked `readOnlyHint`, so clients may run them without asking.
-- Tools that delete or overwrite (`remove_*`, `prune_images`, `k8s_delete_pod`, `compose_down`, `instance_down`, `instance_db_reset`, `write_orca_yaml`, `gateway_remove_route`) are marked `destructiveHint`.
+- Tools that only add or start something (starting or restarting a container or stack, pulling images, adding a route or project, starting a build or an instance) are marked as not destructive.
+- Everything else that changes state is marked `destructiveHint`, from stopping a container or switching profiles to running a command in a container, applying Kubernetes YAML or removing anything, so clients that respect the hint ask you first.
 
 ## Agents working in git worktrees
 

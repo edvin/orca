@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onMount, Show, For } from "solid-js";
-import { takeContainerTab } from "../lib/containerTab";
+import { pendingContainerTab, takeContainerTab } from "../lib/containerTab";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
@@ -34,7 +34,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [container, setContainer] = createSignal<Container | null>(null);
   const [stats, setStats] = createSignal<ContainerStats | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
-  const [activeTab, setActiveTab] = createSignal<DetailTab>((takeContainerTab() as DetailTab | null) ?? "overview");
+  const [activeTab, setActiveTab] = createSignal<DetailTab>((takeContainerTab(props.containerId) as DetailTab | null) ?? "overview");
   const [_loading, setLoading] = createSignal(false);
   const [actionInProgress, setActionInProgress] = createSignal(false);
   const [dockerRunCmd, setDockerRunCmd] = createSignal<string | null>(null);
@@ -147,6 +147,12 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       fetchContainerFiles("/");
     }
   };
+  // "Shell" on this very container while its page is open.
+  createEffect(() => {
+    if (!pendingContainerTab()) return;
+    const tab = takeContainerTab(props.containerId);
+    if (tab) switchTab(tab as DetailTab);
+  });
 
   const fetchExportData = async () => {
     try {

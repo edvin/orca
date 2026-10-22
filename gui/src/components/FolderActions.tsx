@@ -14,6 +14,9 @@ let appsCache: Promise<FolderApp[]> | null = null;
 const folderApps = () => (appsCache ??= invoke<FolderApp[]>("folder_apps").catch(() => []));
 
 let remoteCache: Promise<boolean> | null = null;
+document.addEventListener("orca-host-switch", () => {
+  remoteCache = null;
+});
 /** Folders of a remote host aren't on this computer. */
 export const isRemoteHost = () =>
   (remoteCache ??= invoke<{ is_remote: boolean }>("get_active_host").then((h) => h.is_remote, () => false));

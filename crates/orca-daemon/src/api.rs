@@ -172,6 +172,7 @@ pub async fn auth_middleware(
     // unauthenticated.
     let is_ws_exempt = path == "/api/v1/tunnel"
         || path == "/api/v1/k8s/enable-stream"
+        || path.starts_with("/api/v1/k8s/port-forward/")
         || (path.starts_with("/api/v1/containers/") && path.ends_with("/terminal"))
         || (path.starts_with("/api/v1/k8s/pods/") && path.ends_with("/terminal"));
     if is_ws_exempt {
@@ -3415,10 +3416,9 @@ async fn compose_deploy_path(
     // compose file in one, as `docker compose` itself would take them.
     let (validated, compose_file) = deploy_target(dir).map_err(|e| ApiError::bad_request(e.to_string()))?;
     let validated_str = validated.to_string_lossy().to_string();
-    let compose_file = compose_file.map(|f| f.to_string_lossy().to_string());
     // The compose project is named after the folder, as compose names it;
     // its remembered profiles apply.
-    let project = crate::folders::project_name(&validated);
+    let project = crate::folders::project_name(&validated).map_err(|e| ApiError::bad_request(e.to_string()))?;
     let output = crate::stack_profiles::up(&state, &project, &validated_str, compose_file.as_deref()).await?;
 
     // The stack's orca.yaml routes and links are applied by the gateway
@@ -4702,9 +4702,11 @@ pub(crate) const COMPOSE_FILE_NAMES: &[&str] = &[
     "docker-compose.yml",
 ];
 
-/// What `orca deploy <path>` runs: the project folder, and the compose file
-/// when the path names one.
-fn deploy_target(p: &str) -> anyhow::Result<(std::path::PathBuf, Option<std::path::PathBuf>)> {
+/// What `orca deploy <path>` runs: the project folder, and the compose
+/// files when they aren't the ones Compose finds by itself: a file the path
+/// names, or the `compose:` list in the folder's orca.yaml (comma-joined,
+/// as the stack's config files are).
+fn deploy_target(p: &str) -> anyhow::Result<(std::path::PathBuf, Option<String>)> {
     let path = std::path::Path::new(p);
     if !path.is_absolute() {
         anyhow::bail!("'{p}' is not an absolute path");
@@ -4721,12 +4723,28 @@ fn deploy_target(p: &str) -> anyhow::Result<(std::path::PathBuf, Option<std::pat
             .parent()
             .ok_or_else(|| anyhow::anyhow!("'{p}' has no folder"))?
             .to_path_buf();
-        return Ok((dir, Some(path)));
+        return Ok((dir, Some(path.to_string_lossy().to_string())));
+    }
+    if let Some(files) = orca_yaml_compose_files(&path)? {
+        return Ok((path, Some(files.join(","))));
     }
     if !COMPOSE_FILE_NAMES.iter().any(|f| path.join(f).is_file()) {
         anyhow::bail!("'{p}' has no compose file ({})", COMPOSE_FILE_NAMES.join(", "));
     }
     Ok((path, None))
+}
+
+/// The compose files a folder's orca.yaml lists under `compose:`, if any.
+pub(crate) fn orca_yaml_compose_files(dir: &std::path::Path) -> anyhow::Result<Option<Vec<String>>> {
+    let Some(list) = orca_core::dev::schema::OrcaYaml::load(dir)
+        .ok()
+        .and_then(|y| y.compose.map(|c| c.to_vec()))
+        .filter(|l| !l.is_empty())
+    else {
+        return Ok(None);
+    };
+    let files = crate::dev::ops::compose_files(dir, Some(list))?;
+    Ok(Some(files.iter().map(|f| f.to_string_lossy().to_string()).collect()))
 }
 
 fn validate_compose_path(p: &str) -> anyhow::Result<std::path::PathBuf> {
@@ -5981,6 +5999,7 @@ async fn ai_ask(
     let catalog: Vec<_> = orca_core::agent_tools::tool_catalog()
         .into_iter()
         .filter(|t| !local || crate::local_ai::LOCAL_TOOLS.contains(&t.name.as_str()))
+        .filter(|t| !deletes_data(&t.name))
         .collect();
     let anthropic_tools: Vec<serde_json::Value> = catalog
         .iter()
@@ -7178,7 +7197,7 @@ async fn call_anthropic_with_tools(
                     let tool_id = block["id"].as_str().unwrap_or("");
                     let tool_input = block["input"].clone();
 
-                    let result = match crate::agent::execute_tool(state, tool_name, tool_input).await {
+                    let result = match assistant_tool(state, tool_name, tool_input).await {
                         // Secrets in tool results stay on this machine.
                         Ok(v) => serde_json::json!({
                             "type": "tool_result",
@@ -7310,7 +7329,7 @@ async fn call_openai_with_tools(
                     .unwrap_or_default();
                 let tc_id = tc["id"].as_str().unwrap_or("");
 
-                let result = match crate::agent::execute_tool(state, fn_name, fn_args).await {
+                let result = match assistant_tool(state, fn_name, fn_args).await {
                     // Secrets in tool results stay on this machine.
                     Ok(v) => serde_json::to_string_pretty(&crate::agent::redact_secrets(&v)).unwrap_or_default(),
                     Err(e) => format!("Error: {e}"),
@@ -8241,7 +8260,48 @@ fn mcp_read_only(name: &str) -> bool {
         )
 }
 
+/// A tool call from the built-in assistant, which runs without asking: tools
+/// that delete data are refused even if the model names one it wasn't given.
+async fn assistant_tool(
+    state: &Arc<AppState>,
+    name: &str,
+    args: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if deletes_data(name) {
+        return Err(format!(
+            "{name} deletes data, so the built-in assistant can't run it. Ask the user to do it in Orca."
+        ));
+    }
+    crate::agent::execute_tool(state, name, args).await
+}
+
+/// Tools that change things but only add or start: nothing is lost.
+const MCP_ADDITIVE: &[&str] = &[
+    "start_container",
+    "restart_container",
+    "stack_restart",
+    "pull_image",
+    "stack_pull",
+    "create_network",
+    "compose_up",
+    "deploy_template",
+    "gateway_start",
+    "gateway_add_route",
+    "add_project",
+    "start_build",
+    "instance_up",
+    "k8s_restart_deployment",
+];
+
+/// Everything else that changes state may stop, overwrite or delete
+/// something, so clients should ask first.
 fn mcp_destructive(name: &str) -> bool {
+    !mcp_read_only(name) && !MCP_ADDITIVE.contains(&name)
+}
+
+/// Tools that delete data or work. The built-in assistant runs tools
+/// without asking, so it doesn't get these; MCP clients ask first.
+pub(crate) fn deletes_data(name: &str) -> bool {
     name.starts_with("remove_")
         || name.starts_with("prune_")
         || name.starts_with("k8s_delete")
@@ -8683,6 +8743,7 @@ async fn gateway_update_config(
     Json(req): Json<UpdateGatewayConfigRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut config = state.config.lock().await;
+    let previous = config.gateway.clone();
     config.gateway.domain = req.domain;
     config.gateway.http_port = req.http_port;
     config.gateway.https_port = req.https_port;
@@ -8703,7 +8764,24 @@ async fn gateway_update_config(
     let running = crate::gateway::is_running(&state).await.unwrap_or(false);
     if running {
         crate::gateway::stop(&state).await?;
-        crate::gateway::start(&state, &gateway).await?;
+        if let Err(e) = crate::gateway::start(&state, &gateway).await {
+            // Don't leave the gateway down: go back to the settings that worked.
+            {
+                let mut config = state.config.lock().await;
+                config.gateway = previous.clone();
+                let _ = config.save();
+            }
+            let restored = crate::gateway::start(&state, &previous).await.is_ok();
+            crate::gateway_sync::routes_changed();
+            return Err(ApiError::bad_request(format!(
+                "The gateway didn't start with the new settings ({e}), so they weren't kept{}.",
+                if restored {
+                    " and it runs with the previous ones"
+                } else {
+                    ""
+                }
+            )));
+        }
         crate::gateway_sync::routes_changed();
     }
     Ok(Json(serde_json::json!({ "saved": true, "restarted": running })))
@@ -9048,7 +9126,18 @@ mod tests {
         let file = dir.join("compose.yaml");
         assert_eq!(
             deploy_target(&file.to_string_lossy()).unwrap(),
-            (dir.clone(), Some(file))
+            (dir.clone(), Some(file.to_string_lossy().to_string()))
+        );
+        // orca.yaml's compose list wins over what Compose would find.
+        std::fs::create_dir_all(dir.join("docker")).unwrap();
+        std::fs::write(dir.join("docker/dev.yml"), "services: {}\n").unwrap();
+        std::fs::write(dir.join("orca.yaml"), "compose: [docker/dev.yml]\n").unwrap();
+        assert_eq!(
+            deploy_target(&p).unwrap(),
+            (
+                dir.clone(),
+                Some(dir.join("docker/dev.yml").to_string_lossy().to_string())
+            )
         );
         assert!(deploy_target("relative/path").is_err());
         std::fs::remove_dir_all(&dir).ok();

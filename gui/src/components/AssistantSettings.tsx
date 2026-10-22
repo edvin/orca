@@ -50,6 +50,11 @@ export default function AssistantSettings() {
   const [testing, setTesting] = createSignal(false);
   const [testResult, setTestResult] = createSignal<"success" | "error" | null>(null);
   const [showOther, setShowOther] = createSignal(false);
+  // "A server on another port?": its own fields, so a saved cloud model can't sneak in.
+  const [otherUrl, setOtherUrl] = createSignal("");
+  const [otherModel, setOtherModel] = createSignal("");
+  // The provider whose models `models()` holds: the saved one.
+  const [savedProvider, setSavedProvider] = createSignal<CloudProvider | null>(null);
 
   const savedLocal = () => provider() === "custom" && isLocalUrl(url());
   const hasKey = () => (provider() === "anthropic" ? hasAnthropicKey() : hasOpenaiKey());
@@ -69,6 +74,7 @@ export default function AssistantSettings() {
       }>("get_ai_settings");
       setKeyFromEnv(s.key_source === "env" ? s.key_env_var ?? null : null);
       setProvider(s.provider as CloudProvider);
+      setSavedProvider(s.provider as CloudProvider);
       setHasAnthropicKey(s.has_anthropic_key);
       setHasOpenaiKey(s.has_openai_key);
       setModel(s.provider === "anthropic" ? s.anthropic_model : s.openai_model);
@@ -155,7 +161,7 @@ export default function AssistantSettings() {
           name: "ollama",
           ports: ["11434:11434"],
           volumes: ["ollama-models:/root/.ollama"],
-          restart_policy: "unless-stopped",
+          restartPolicy: "unless-stopped",
           gpu: !!health?.gpu,
         });
       } catch (e) {
@@ -285,17 +291,21 @@ export default function AssistantSettings() {
               </div>
             </Show>
 
-            <button class="ai-connect-more" onClick={() => setShowOther(!showOther())}>
+            <button class="ai-connect-more" onClick={() => {
+              // Start from the local server in use, if that's one of these.
+              if (!showOther() && savedLocal()) { setOtherUrl(url()); setOtherModel(model()); }
+              setShowOther(!showOther());
+            }}>
               {showOther() ? "Hide" : "A server on another port?"}
             </button>
             <Show when={showOther()}>
               <div class="assistant-row">
-                <input class="form-input mono" placeholder="http://127.0.0.1:8000/v1" value={savedLocal() ? url() : ""}
-                  onChange={(e) => setUrl(e.currentTarget.value)} />
-                <input class="form-input mono" placeholder="model name" value={savedLocal() ? model() : ""}
-                  onChange={(e) => setModel(e.currentTarget.value)} />
-                <button class="btn btn-sm btn-primary" disabled={saving() || !url() || !model()}
-                  onClick={() => void save("custom", model(), url(), "").then((ok) => ok && showToast("Saved", "success"))}>
+                <input class="form-input mono" placeholder="http://127.0.0.1:8000/v1" value={otherUrl()}
+                  onInput={(e) => setOtherUrl(e.currentTarget.value)} />
+                <input class="form-input mono" placeholder="model name" value={otherModel()}
+                  onInput={(e) => setOtherModel(e.currentTarget.value)} />
+                <button class="btn btn-sm btn-primary" disabled={saving() || !/^https?:\/\/\S+$/.test(otherUrl().trim()) || !otherModel().trim()}
+                  onClick={() => void save("custom", otherModel().trim(), otherUrl().trim(), "").then((ok) => ok && showToast("Saved", "success"))}>
                   Use
                 </button>
               </div>
@@ -344,7 +354,7 @@ export default function AssistantSettings() {
             </div>
             <div class="form-group">
               <label class="form-label">Model</label>
-              <Show when={models().length > 0 && !savedLocal()} fallback={
+              <Show when={models().length > 0 && !savedLocal() && provider() === savedProvider()} fallback={
                 <input class="form-input mono" value={model()} onInput={(e) => setModel(e.currentTarget.value)} placeholder="Save the key to pick from a list" />
               }>
                 <Dropdown value={model()} options={models().map((m) => ({ value: m, label: m }))} onChange={setModel} />
