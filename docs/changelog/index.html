@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjxva5n">
+<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjxva5n" defer></script>
+<script src="/assets/site.js?v=mvjzklkf" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -41,7 +41,7 @@
   <div class="mm-head"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><button class="icon-btn" type="button" aria-label="Close menu" data-menu-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
   <div class="mm-body">
     <div class="mm-top"><a href="/docs/introduction/">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca">GitHub</a></div>
-    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">AI assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
+    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">Built-in assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
   </div>
 </div>
 <main id="main">
@@ -53,7 +53,61 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.50.0">
+<section class="container releases"><article class="release" id="v0.50.1">
+  <div class="release-meta"><a class="release-tag" href="#v0.50.1">v0.50.1</a><time datetime="2026-10-22T20:20:49Z">October 22, 2026</time></div>
+  <div class="release-body prose">
+    <h2 class="release-title">Run Orca from Claude</h2>
+    <h2 id="run-orca-from-claude-one-click-no-tokens"><a class="anchor" href="#run-orca-from-claude-one-click-no-tokens" aria-hidden="true" tabindex="-1">#</a>Run Orca from Claude: one click, no tokens</h2>
+<p>Orca is an MCP server, and connecting your AI tool to it now takes one click. Open <strong>Settings → AI &amp; Agents</strong> and press <strong>Connect</strong> next to Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex. Orca shows which of them are on your computer and adds itself to their config, leaving everything else in the file alone.</p>
+<p>Then just ask: <em>&quot;Start the project in ~/code/shop and give me its URL&quot;</em>, <em>&quot;Turn on the search profile&quot;</em>, <em>&quot;Why does the api container keep restarting?&quot;</em></p>
+<ul>
+<li><strong>No tokens to copy.</strong> The AI tool runs <code>orca mcp</code>, which reads Orca&#39;s token itself. Nothing secret ends up in an AI tool&#39;s config or a committed <code>.mcp.json</code>.</li>
+<li><strong>Uses the subscription you already have.</strong> No API key or per-token billing: Claude Pro/Max, ChatGPT, Cursor and Copilot plans all work.</li>
+<li><strong>Survives updates.</strong> Orca keeps its own copy of the CLI and refreshes it on start, so updating or moving the app doesn&#39;t break anything.</li>
+<li><strong>From a terminal too:</strong> <code>orca mcp install</code> connects every AI tool it finds, and <code>orca mcp status</code> shows where things stand.</li>
+<li><strong>Remote hosts:</strong> <code>orca mcp --host build-server</code> lets an AI tool manage a host from <strong>Remote Hosts</strong>.</li>
+<li>If one of your AI tools is installed but not connected, the dashboard invites you to connect it.</li>
+</ul>
+<h2 id="your-ai-can-now-do-almost-everything-you-can"><a class="anchor" href="#your-ai-can-now-do-almost-everything-you-can" aria-hidden="true" tabindex="-1">#</a>Your AI can now do (almost) everything you can</h2>
+<p>21 new tools, 69 in total, so an AI tool can manage projects from start to finish:</p>
+<ul>
+<li><strong>Projects:</strong> <code>deploy_project</code> starts a folder with a compose file or <code>orca.yaml</code>; <code>add_project</code> / <code>list_projects</code> / <code>remove_project</code> handle worktree projects.</li>
+<li><strong>Stacks:</strong> restart, pull, logs, switching compose profiles, and reading and writing <code>orca.yaml</code> (validated before it&#39;s saved).</li>
+<li><strong>Gateway:</strong> status, start, stop, and listing, adding and removing routes.</li>
+<li><strong>Builds:</strong> list targets, start a build, follow its status and log.</li>
+<li><strong>Volumes:</strong> remove one.</li>
+</ul>
+<p>They run through Orca&#39;s own API, so they validate exactly as the app does. Tools that delete or overwrite something are marked so your AI tool asks you first.</p>
+<h2 id="the-built-in-assistant-goes-local"><a class="anchor" href="#the-built-in-assistant-goes-local" aria-hidden="true" tabindex="-1">#</a>The built-in assistant goes local</h2>
+<p>The chat window behind ✦ is now optional and built for models on your own computer: free, private, and offline.</p>
+<ul>
+<li><strong>Finds your model servers.</strong> Orca looks for <strong>Ollama</strong>, <strong>LM Studio</strong> and <strong>llama.cpp</strong>&#39;s <code>llama-server</code>, and lists their models. Pick one and click <strong>Use</strong>. No key needed.</li>
+<li><strong>Made for small models.</strong> A local model gets a lean set of 19 tools and up to five minutes per answer.</li>
+<li><strong>Ollama in a container</strong> on Linux and Windows now pulls <code>qwen3:8b</code>. On a Mac, Orca suggests the Ollama or LM Studio app instead, since containers there can&#39;t use the GPU.</li>
+<li>Cloud API keys (Anthropic, OpenAI, Gemini, any OpenAI-compatible endpoint) are still there under <strong>Cloud API key</strong>, with current Claude models.</li>
+<li>When no model is set up, the assistant window offers to connect Claude instead, and <strong>Ask AI</strong> on a container or build gives you the question to paste.</li>
+</ul>
+<h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
+<p>Writing the new docs at <a href="https://orca-desktop.com/docs/">orca-desktop.com</a> turned up a list of things that didn&#39;t work as described. They do now:</p>
+<ul>
+<li><strong>Schedules</strong> run in your local time, not UTC.</li>
+<li><strong>Stacks with several compose files</strong> start with all of them, and the stack page lets you pick which files are used.</li>
+<li><strong>Kubernetes:</strong> enabling Orca&#39;s cluster no longer changes your kubeconfig&#39;s current context. Port-forwarding services works, jobs show their logs, deployments and services show their labels and selectors, and start, stop and reset work on macOS (Lima).</li>
+<li><strong>Auto-deploy webhooks:</strong> Docker Hub webhooks can authenticate with <code>?token=</code>, tag rules are enforced, and pulls use your saved registry credentials.</li>
+<li><strong>Cleanup</strong> only ever deletes Orca&#39;s own Lima VM.</li>
+<li><code>orca deploy</code> accepts a project folder or a compose file inside one.</li>
+<li>Saving gateway settings restarts the gateway so the change takes effect, and the landing page merges sections with the same name.</li>
+<li><code>dev.start: on-create</code> starts new worktrees as it should.</li>
+<li>The assistant blanks out secrets (passwords, tokens, <code>DATABASE_URL</code> and the like) in tool results before they reach the model.</li>
+<li>On macOS, <strong>Start Docker</strong> restarts the VM when the engine is down.</li>
+<li>Settings only offers GPU options when there&#39;s a GPU, and shows where an AI key comes from (setting or environment variable).</li>
+</ul>
+<p><strong>Full docs:</strong> <a href="https://orca-desktop.com/docs/agents/">AI agents and MCP</a> · <a href="https://orca-desktop.com/docs/ai-assistant/">Built-in assistant</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.50.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.50.0">
   <div class="release-meta"><a class="release-tag" href="#v0.50.0">v0.50.0</a><time datetime="2026-10-22T16:41:12Z">October 22, 2026</time></div>
   <div class="release-body prose">
     
@@ -334,15 +388,6 @@
     <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.14...v0.46.15" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.14...v0.46.15</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.15" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.46.14">
-  <div class="release-meta"><a class="release-tag" href="#v0.46.14">v0.46.14</a><time datetime="2026-05-29T12:31:35Z">May 29, 2026</time></div>
-  <div class="release-body prose">
-    
-    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.13...v0.46.14" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.13...v0.46.14</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.14" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 

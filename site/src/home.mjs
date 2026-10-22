@@ -290,6 +290,7 @@ hooks:
         ["What does Orca send over the network?", "No analytics or tracking. Orca checks GitHub for updates, pulls from the registries you use, and talks to an AI provider only if you set one up. <a href=\"/docs/security/\">Security and privacy</a> lists the details."],
         ["Which Macs are supported?", "The macOS build is for Apple Silicon."],
         ["Can my AI agent use it?", "Yes. Orca is an MCP server. Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex with one click in Settings, without copying a token. <a href=\"/docs/agents/\">Agents and MCP</a> shows how."],
+        ["Do I need an AI API key?", "No. Connected over MCP, Claude and the others use the subscription you already have. Orca's optional built-in assistant runs on a local model from Ollama, LM Studio or llama.cpp, for free; an API key is only needed if you want it to use a cloud model. See <a href=\"/docs/ai-assistant/\">Built-in assistant</a>."],
       ]
         .map(([q, a]) => `<details class="faq-item"><summary>${q}</summary><p>${a}</p></details>`)
         .join("")}

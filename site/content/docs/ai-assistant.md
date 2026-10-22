@@ -1,6 +1,6 @@
 ---
-title: AI assistant
-nav: AI assistant
+title: Built-in assistant
+nav: Built-in assistant
 description: Chat with Orca's optional built-in assistant, running on a local model (Ollama, LM Studio, llama.cpp) or a cloud API key.
 ---
 
