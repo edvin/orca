@@ -69,7 +69,7 @@ fn build_tasks() -> &'static tokio::sync::Mutex<HashMap<String, tokio::task::Joi
 /// tuple-like `ApiError(anyhow::Error)` construction sites are preserved
 /// through `From<anyhow::Error>`; callers that want a specific status
 /// code should use the helper constructors instead.
-struct ApiError {
+pub(crate) struct ApiError {
     status: StatusCode,
     err: anyhow::Error,
 }
@@ -83,7 +83,7 @@ fn ApiError(err: anyhow::Error) -> ApiError {
 }
 
 impl ApiError {
-    fn bad_request(msg: impl Into<String>) -> Self {
+    pub(crate) fn bad_request(msg: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
             err: anyhow::anyhow!(msg.into()),
@@ -283,6 +283,11 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/{name}/stop", post(stop_stack))
         .route("/stacks/{name}/restart", post(restart_stack))
         .route("/stacks/{name}/up", post(compose_up))
+        .route(
+            "/stacks/{name}/orca-yaml",
+            get(crate::stack_yaml::get).put(crate::stack_yaml::save),
+        )
+        .route("/orca-yaml/validate", post(crate::stack_yaml::validate))
         .route("/stacks/{name}/down", post(compose_down))
         .route("/stacks/deploy", post(compose_deploy_path))
         .route("/stacks/validate", post(validate_compose))
@@ -3347,7 +3352,7 @@ async fn restart_stack(
 // --- Compose CLI operations ---
 
 /// Resolve a stack by name and return its working_dir + config_file.
-async fn resolve_stack_dir(state: &AppState, name: &str) -> Result<(String, Option<String>), ApiError> {
+pub(crate) async fn resolve_stack_dir(state: &AppState, name: &str) -> Result<(String, Option<String>), ApiError> {
     let stacks = get_stacks(state).await?;
     let stack = stacks
         .into_iter()

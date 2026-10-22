@@ -16,6 +16,7 @@ mod dev;
 mod gateway;
 mod gateway_sync;
 mod project_config;
+mod stack_yaml;
 mod state;
 
 use state::AppState;

@@ -343,6 +343,41 @@ pub async fn container_stats(id: String) -> Result<serde_json::Value, String> {
     get_json(&format!("/containers/{}/stats", urlencoding::encode(&id))).await
 }
 
+/// A stack's orca.yaml: what Orca read and applied, or a starting file.
+#[tauri::command]
+pub async fn stack_orca_yaml(name: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/stacks/{}/orca-yaml", urlencoding::encode(&name))).await
+}
+
+/// Write a stack's orca.yaml next to its compose file.
+#[tauri::command]
+pub async fn save_stack_orca_yaml(name: String, text: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .put(format!("{base}/stacks/{}/orca-yaml", urlencoding::encode(&name)))
+        .json(&serde_json::json!({ "text": text }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
+/// Problems in orca.yaml text.
+#[tauri::command]
+pub async fn validate_orca_yaml(text: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .post(format!("{base}/orca-yaml/validate"))
+        .json(&serde_json::json!({ "text": text }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+}
+
 /// Stats of all running containers in one request.
 #[tauri::command]
 pub async fn all_container_stats() -> Result<serde_json::Value, String> {

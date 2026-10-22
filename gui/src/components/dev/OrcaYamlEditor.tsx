@@ -9,6 +9,9 @@ import Dropdown from "../Dropdown";
 import { devApi, instanceUrls } from "../../lib/dev";
 import type { DevConfigT, DevProject, PlanView, SetupAnalysis } from "../../lib/dev";
 import { showToast } from "../Toast";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
+
+const ORCA_YAML_REFERENCE = "https://github.com/edvin/orca/blob/main/docs/orca-yaml.md";
 import { DataSection, PresetsSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";
 
@@ -161,7 +164,14 @@ export default function OrcaYamlEditor(props: Props) {
             <div class="modal-title">orca.yaml</div>
             <div class="mono" style={{ "font-size": "11.5px", color: "#8b949e", "margin-top": "3px" }}>{analysis()?.orca_yaml.path}</div>
           </div>
-          <div class="dev-seg" style={{ "margin-left": "auto", "margin-right": "12px" }}>
+          <button
+            class="btn btn-sm"
+            style={{ "margin-left": "auto", "margin-right": "10px" }}
+            onClick={() => shellOpen(ORCA_YAML_REFERENCE).catch(() => window.open(ORCA_YAML_REFERENCE, "_blank", "noopener,noreferrer"))}
+          >
+            Reference
+          </button>
+          <div class="dev-seg" style={{ "margin-right": "12px" }}>
             <button classList={{ active: view() === "form" }} onClick={() => switchView("form")}>Form</button>
             <button classList={{ active: view() === "yaml" }} onClick={() => switchView("yaml")}>YAML</button>
           </div>

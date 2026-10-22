@@ -106,6 +106,10 @@ interface YamlEditorProps {
   onChange?: (value: string) => void;
   /** Extra CodeMirror extensions (completion, linting …). */
   extensions?: Extension[];
+  /** Save button text; default "Apply Changes". */
+  saveLabel?: string;
+  /** The value isn't saved anywhere yet (a new file), so saving it unchanged is allowed. */
+  unsaved?: boolean;
 }
 
 export default function YamlEditor(props: YamlEditorProps) {
@@ -233,10 +237,10 @@ export default function YamlEditor(props: YamlEditorProps) {
               <button
                 class="btn btn-sm btn-primary"
                 onClick={handleSave}
-                disabled={saving() || !modified()}
+                disabled={saving() || (!modified() && !props.unsaved)}
                 style={{ "font-size": "11px" }}
               >
-                {saving() ? "Applying..." : "Apply Changes"}
+                {saving() ? "Saving..." : props.saveLabel ?? "Apply Changes"}
               </button>
             </Show>
             <Show when={props.onClose}>

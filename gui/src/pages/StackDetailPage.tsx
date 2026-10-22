@@ -8,6 +8,7 @@ import LogViewer from "../components/LogViewer";
 import Spinner from "../components/Spinner";
 import Breadcrumb from "../components/Breadcrumb";
 import YamlEditor from "../components/YamlEditor";
+import StackOrcaYaml from "../components/StackOrcaYaml";
 import { logError } from "../lib/activityStore";
 import { confirmDanger } from "../components/ConfirmDialog";
 
@@ -17,7 +18,7 @@ interface StackDetailPageProps {
   onNavigate?: (target: string) => void;
 }
 
-type StackTab = "services" | "logs" | "compose";
+type StackTab = "services" | "logs" | "compose" | "orca";
 
 export default function StackDetailPage(props: StackDetailPageProps) {
   const [activeTab, setActiveTab] = createSignal<StackTab>("services");
@@ -248,6 +249,12 @@ export default function StackDetailPage(props: StackDetailPageProps) {
         >
           Compose File
         </button>
+        <button
+          class={`detail-tab-item ${activeTab() === "orca" ? "active" : ""}`}
+          onClick={() => setActiveTab("orca")}
+        >
+          orca.yaml
+        </button>
       </div>
 
       {/* Tab content */}
@@ -445,6 +452,10 @@ export default function StackDetailPage(props: StackDetailPageProps) {
               );
             }}
           </Show>
+        </Show>
+
+        <Show when={activeTab() === "orca"}>
+          <StackOrcaYaml stackName={props.stackName} />
         </Show>
 
         {/* Compose file tab */}
