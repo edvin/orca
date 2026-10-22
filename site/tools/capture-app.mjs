@@ -244,7 +244,7 @@ hooks:
     gateway_get_config: { domain: "localhost", enabled: true, http_port: 80, https_port: 443, tls_mode: "orca_ca", routes, custom_cert: null, custom_key: null },
     gateway_get_links: [], gateway_get_dismissed: [], gateway_check_ports: { conflicts: [] },
     gateway_traefik_status: { mode: "gateway_only", traefik_detected: false, traefik_reachable: false },
-    gateway_get_landing: { settings: { title: "Acme dev", subtitle: null, show_status: true, show_targets: true }, url: "https://localhost" },
+    gateway_get_landing: { settings: { title: "Acme dev", subtitle: null, show_status: true, show_targets: true, search: true, web_search: "google" }, url: "https://localhost" },
     stack_profiles: profilesReport,
     stack_orca_yaml: {
       path: `${HOME}/shop/orca.yaml`, exists: true, reference: "https://orca-desktop.com/docs/orca-yaml/", text: orcaYaml, local_override: false, error: null,
@@ -445,6 +445,15 @@ const SHOTS = {
     await page.waitForTimeout(800);
     const box = await page.locator(".command-palette").boundingBox();
     return { clip: { x: box.x - 40, y: box.y - 40, width: box.width + 80, height: box.height + 80 } };
+  },
+  async "landing-settings"(page) {
+    await nav(page, "Gateway");
+    await page.locator(".tab-item, .detail-tab-item, button", { hasText: /^Landing page$/ }).first().click();
+    await page.waitForTimeout(1200);
+    const card = page.locator(".landing-search-card");
+    await card.scrollIntoViewIfNeeded();
+    const box = await card.boundingBox();
+    return { clip: { x: box.x - 24, y: box.y - 24, width: box.width + 48, height: box.height + 48 } };
   },
   async kubernetes(page) {
     await nav(page, "Kubernetes");

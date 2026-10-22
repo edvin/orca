@@ -296,7 +296,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
                         cards
                             .iter()
                             .enumerate()
-                            .map(|(i, c)| card_html(c, i))
+                            .map(|(i, c)| card_html(c, i, name))
                             .collect::<String>()
                     )
                 })
@@ -361,11 +361,29 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
         .filter(|t| !t.trim().is_empty())
         .unwrap_or_else(|| format!("*.{domain}{port_suffix}"));
 
+    let search = if landing.search {
+        let web = landing.web_search_target();
+        let placeholder = match &web {
+            Some((name, _)) => format!("Find a service, or search {name}"),
+            None => "Find a service".to_string(),
+        };
+        let (engine, url) = web.unwrap_or_default();
+        format!(
+            r#"<div class="search" id="search" data-engine="{engine}" data-url="{url}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="{placeholder}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="{placeholder}" aria-describedby="hint" aria-controls="content"><kbd>/</kbd></div><p class="hint" id="hint" aria-live="polite"></p>"#,
+            engine = escape_html(&engine),
+            url = escape_html(&url),
+            placeholder = escape_html(&placeholder),
+        )
+    } else {
+        String::new()
+    };
+
     fill(
         PAGE,
         &[
             ("title", &escape_html(&title)),
             ("subtitle", &escape_html(&subtitle)),
+            ("search", &search),
             ("stats", &stats),
             ("tabs", &tabs),
             ("panels", &panels),
@@ -396,7 +414,7 @@ fn fill(template: &str, values: &[(&str, &str)]) -> String {
     out
 }
 
-fn card_html(c: &Card, i: usize) -> String {
+fn card_html(c: &Card, i: usize, group: &str) -> String {
     const ACCENTS: [&str; 6] = ["#58a6ff", "#3fb950", "#a371f7", "#d29922", "#f85149", "#79c0ff"];
     let accent = ACCENTS[i % ACCENTS.len()];
     let icon = match c
@@ -432,12 +450,31 @@ fn card_html(c: &Card, i: usize) -> String {
         title = escape_html(&c.title),
         url = escape_html(&c.display_url),
     );
+    // What the search box matches: everything the card shows, and its group.
+    let search = [
+        Some(c.title.as_str()),
+        Some(c.display_url.as_str()),
+        c.description.as_deref(),
+        c.target.as_deref(),
+        c.status.as_ref().map(|(_, label, _)| *label),
+        Some(group),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
+    .to_lowercase();
+    let data = format!(
+        r#" data-title="{}" data-q="{}""#,
+        escape_html(&c.title),
+        escape_html(&search)
+    );
     match &c.url {
         Some(url) => format!(
-            r#"<a class="card" href="{}" target="_blank" rel="noopener">{inner}</a>"#,
+            r#"<a class="card" href="{}" target="_blank" rel="noopener"{data}>{inner}</a>"#,
             escape_html(&sanitize_href(url))
         ),
-        None => format!(r#"<div class="card off">{inner}</div>"#),
+        None => format!(r#"<div class="card off"{data}>{inner}</div>"#),
     }
 }
 
@@ -536,13 +573,32 @@ a.card:focus-visible{outline:2px solid #58a6ff;outline-offset:2px}
 .empty h2{font-size:15px;color:#c9d1d9;margin-bottom:6px}.empty p{font-size:13px;color:#8b949e;line-height:1.6}
 code{font:12px "SF Mono",ui-monospace,Menlo,monospace;background:rgba(88,166,255,.1);color:#58a6ff;padding:1px 5px;border-radius:4px}
 footer{text-align:center;margin-top:44px;font-size:12px;color:#484f58}footer a{color:#6e7681;text-decoration:none}
+[hidden]{display:none!important}
+.search{position:relative;max-width:580px;margin:26px auto 0;display:flex;align-items:center;gap:10px;padding:0 14px 0 16px;height:52px;border-radius:16px;
+  background:rgba(13,17,23,.75);border:1px solid rgba(255,255,255,.09);box-shadow:0 10px 40px -12px rgba(0,0,0,.6);transition:border-color .15s,box-shadow .15s}
+.search:focus-within{border-color:rgba(88,166,255,.55);box-shadow:0 0 0 4px rgba(88,166,255,.12),0 10px 40px -12px rgba(0,0,0,.6)}
+.search svg{width:18px;height:18px;flex-shrink:0;fill:none;stroke:#6e7681;stroke-width:2;stroke-linecap:round}
+.search:focus-within svg{stroke:#58a6ff}
+.search input{flex:1;min-width:0;height:100%;background:none;border:0;outline:0;color:#e6edf3;font:16px inherit}
+.search input::placeholder{color:#6e7681}
+.search input::-webkit-search-cancel-button{-webkit-appearance:none}
+.search kbd,.hint kbd{font:11px "SF Mono",ui-monospace,Menlo,monospace;color:#8b949e;border:1px solid rgba(255,255,255,.12);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:rgba(255,255,255,.03)}
+.search:focus-within kbd,.search.typed kbd{display:none}
+.hint{min-height:20px;margin-top:10px;font-size:12.5px;color:#8b949e;display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+.hint span{display:inline-flex;align-items:center;gap:6px}.hint b{color:#e6edf3;font-weight:600}
+.card.sel{border-color:rgba(88,166,255,.7);box-shadow:0 0 0 3px rgba(88,166,255,.16);transform:translateY(-2px)}
+mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
+.nores{text-align:center;padding:40px 24px;border:1px dashed rgba(255,255,255,.08);border-radius:16px;color:#8b949e;font-size:13.5px;line-height:1.6}
+.nores b{color:#e6edf3}
+@media(pointer:coarse){.hint,.search kbd{display:none}}
 @media(max-width:640px){.shell{padding:36px 16px 28px}h1{font-size:24px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="shell">
-<header><h1>{title}</h1><p class="sub">{subtitle}</p><div class="stats" id="stats">{stats}</div></header>
+<header><h1>{title}</h1><p class="sub">{subtitle}</p>{search}<div class="stats" id="stats">{stats}</div></header>
 <main id="content">{tabs}{panels}</main>
+<div class="nores" id="nores" hidden></div>
 <footer>Served by <a href="https://orca-desktop.com">Orca Desktop</a></footer>
 </div>
 <script>
@@ -589,6 +645,107 @@ footer{text-align:center;margin-top:44px;font-size:12px;color:#484f58}footer a{c
       bind();
     }).catch(function(){});
   }
+  // The search box: narrows the cards as you type, Enter opens the best
+  // match, a hostname goes straight there, anything else searches the web
+  // when an engine is set. "/" or Ctrl/Cmd+K jumps to it.
+  var q=document.getElementById('q'),box=document.getElementById('search'),hint=document.getElementById('hint'),nores=document.getElementById('nores');
+  var engine=box?box.getAttribute('data-engine'):'',engineUrl=box?box.getAttribute('data-url'):'';
+  var matches=[],sel=-1;
+  function panel(){return document.querySelector('.panel:not([hidden])')||document.getElementById('content')}
+  function terms(){return q?q.value.toLowerCase().trim().split(/\s+/).filter(Boolean):[]}
+  function score(card,ts){
+    var hay=card.getAttribute('data-q')||'',title=(card.getAttribute('data-title')||'').toLowerCase(),total=0;
+    for(var i=0;i<ts.length;i++){
+      var t=ts[i];
+      if(hay.indexOf(t)<0)return -1;
+      total+=title.indexOf(t)===0?4:(' '+title).indexOf(' '+t)>=0?3:title.indexOf(t)>=0?2:1;
+    }
+    return total;
+  }
+  function mark(card,ts){
+    var name=card.querySelector('.name'),t=card.getAttribute('data-title');
+    if(!name||t===null)return;
+    var i=ts.length?t.toLowerCase().indexOf(ts[0]):-1;
+    name.textContent='';
+    if(i<0){name.textContent=t;return}
+    var m=document.createElement('mark');m.textContent=t.slice(i,i+ts[0].length);
+    name.appendChild(document.createTextNode(t.slice(0,i)));name.appendChild(m);name.appendChild(document.createTextNode(t.slice(i+ts[0].length)));
+  }
+  function isUrl(v){return /^https?:\/\/\S+$/i.test(v)||/^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?(\/\S*)?$/i.test(v)}
+  function action(web){
+    var v=q.value.trim();
+    if(!v)return null;
+    if(!web&&sel>=0&&matches[sel])return {href:matches[sel].href,label:'Open',what:matches[sel].getAttribute('data-title')};
+    if(!web&&isUrl(v))return {href:/^https?:\/\//i.test(v)?v:'https://'+v,label:'Go to',what:v};
+    if(engineUrl)return {href:engineUrl.split('{query}').join(encodeURIComponent(v)),label:'Search '+engine+' for',what:v};
+    return null;
+  }
+  function el(tag,text,cls){var e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e}
+  function line(keys,a){
+    var s=el('span');keys.forEach(function(k){s.appendChild(el('kbd',k))});
+    s.appendChild(document.createTextNode(' '+a.label+' '));s.appendChild(el('b',a.what));return s;
+  }
+  function apply(){
+    if(!q)return;
+    var ts=terms(),best=-1,bestScore=-1;
+    matches=[];
+    panel().querySelectorAll('.card').forEach(function(c){
+      var s=ts.length?score(c,ts):0;
+      c.hidden=s<0;c.classList.remove('sel');mark(c,ts);
+      if(s>=0&&ts.length&&c.tagName==='A'){matches.push(c);if(s>bestScore){bestScore=s;best=matches.length-1}}
+    });
+    panel().querySelectorAll('.group').forEach(function(g){g.hidden=!g.querySelector('.card:not([hidden])')});
+    sel=ts.length?best:-1;
+    box.classList.toggle('typed',!!q.value);
+    render();
+  }
+  function render(){
+    matches.forEach(function(c,i){c.classList.toggle('sel',i===sel)});
+    if(sel>=0&&matches[sel]&&matches[sel].scrollIntoView)matches[sel].scrollIntoView({block:'nearest'});
+    hint.textContent='';
+    var v=q.value.trim();
+    if(!v){
+      if(engineUrl){hint.appendChild(el('span','Type to find a service or search '+engine))}
+      nores.hidden=true;return;
+    }
+    var a=action(false),w=engineUrl?action(true):null;
+    if(a)hint.appendChild(line(['↵'],a));
+    if(w&&a&&a.href!==w.href)hint.appendChild(line(['⇧','↵'],w));
+    if(matches.length>1)hint.appendChild(el('span',matches.length+' services · ↑↓ to choose'));
+    nores.hidden=!!panel().querySelector('.card:not([hidden])');
+    if(!nores.hidden){
+      nores.textContent='';nores.appendChild(document.createTextNode('No service matches '));nores.appendChild(el('b','“'+v+'”'));
+      if(!a)nores.appendChild(document.createTextNode('. Clear the search with Esc.'));
+    }
+  }
+  if(q){
+    q.addEventListener('input',apply);
+    q.addEventListener('keydown',function(e){
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+        if(!matches.length)return;
+        e.preventDefault();
+        sel=(sel+(e.key==='ArrowDown'?1:-1)+matches.length)%matches.length;render();
+      }else if(e.key==='Enter'){
+        var a=action(e.shiftKey);
+        if(!a)return;
+        e.preventDefault();
+        if(e.metaKey||e.ctrlKey)window.open(a.href,'_blank','noopener');else location.href=a.href;
+      }else if(e.key==='Escape'){
+        if(q.value){q.value='';apply()}else q.blur();
+      }
+    });
+    document.addEventListener('keydown',function(e){
+      var typing=/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement&&document.activeElement.tagName);
+      if((e.key==='/'&&!typing)||(e.key==='k'&&(e.metaKey||e.ctrlKey))){e.preventDefault();q.focus();q.select()}
+    });
+    // Ready to type when the page opens, except on touch screens, where it
+    // would pop up the keyboard.
+    if(!(window.matchMedia&&matchMedia('(pointer:coarse)').matches))q.focus();
+    apply();
+  }
+  // The page swaps in fresh cards and tabs every 20 s: search them again.
+  var bound=bind;
+  bind=function(){bound();document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',apply)});apply()};
   bind();
   setInterval(refresh,20000);
   setInterval(function(){if(!document.hidden)uptimes()},60000);
@@ -762,6 +919,43 @@ mod tests {
         assert_eq!(local.matches("<h2>").count(), 1, "{local}");
     }
 
+    #[test]
+    fn search_box_and_card_search_text() {
+        let mut r = route("shop.localhost", "shop-web-1", 3000);
+        r.presentation.title = Some("Storefront".into());
+        r.presentation.description = Some("The customer-facing <shop>".into());
+        r.owner = Some("project:shop".into());
+        let mut c = config(vec![r]);
+        let states = HashMap::from([("shop-web-1".to_string(), running("2026-01-01T00:00:00Z", Some("shop")))]);
+
+        let page = render(&c, &states);
+        assert!(page.contains(r#"id="q""#), "search box on by default");
+        assert!(page.contains(r#"placeholder="Find a service""#));
+        assert!(page.contains(r#"data-url="""#), "no web search unless chosen");
+        // The card can be found by title, hostname, description, container, status and group.
+        assert!(
+            page.contains(
+                r#"data-q="storefront shop.localhost the customer-facing &lt;shop&gt; shop-web-1 :3000 running shop""#
+            ),
+            "{page}"
+        );
+
+        c.landing.web_search = Some("duckduckgo".into());
+        let page = render(&c, &states);
+        assert!(page.contains(r#"data-engine="DuckDuckGo" data-url="https://duckduckgo.com/?q={query}""#));
+        assert!(page.contains("or search DuckDuckGo"));
+
+        c.landing.web_search = Some("https://intranet.example/find?q={query}".into());
+        assert!(render(&c, &states).contains(r#"data-engine="intranet.example""#));
+
+        // Something that isn't a usable search URL is left out.
+        c.landing.web_search = Some("javascript:alert(1)//{query}".into());
+        assert!(render(&c, &states).contains(r#"data-url="""#));
+
+        c.landing.search = false;
+        assert!(!render(&c, &states).contains(r#"id="q""#));
+    }
+
     /// Writes a realistic demo page for the website's screenshots:
     /// `ORCA_LANDING_DEMO=/tmp/landing.html cargo test -p orca-daemon landing_demo -- --ignored`
     #[test]
@@ -849,6 +1043,7 @@ mod tests {
             ),
         ]);
         c.landing.title = Some("Acme dev".into());
+        c.landing.web_search = Some("google".into());
         c.stack_links = vec![StackLinkGroup {
             stack: "shop".into(),
             group: "Environments".into(),

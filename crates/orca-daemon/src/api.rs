@@ -8735,6 +8735,19 @@ async fn gateway_set_landing(
     };
     landing.title = clean(landing.title);
     landing.subtitle = clean(landing.subtitle);
+    landing.web_search = landing
+        .web_search
+        .map(|w| w.trim().to_string())
+        .filter(|w| !w.is_empty());
+    if let Some(w) = &landing.web_search {
+        let known = orca_core::config::WEB_SEARCH_ENGINES.iter().any(|(id, _, _)| id == w);
+        if !known && !orca_core::config::valid_search_url(w) {
+            return Err(ApiError::bad_request(
+                "A custom web search must be an http(s) URL with {query} where the search terms go, \
+                 like https://example.com/search?q={query}",
+            ));
+        }
+    }
     let gateway = {
         let mut config = state.config.lock().await;
         config.gateway.landing = landing;

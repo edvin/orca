@@ -92,7 +92,7 @@ hooks:
 <section class="hero">
   <div class="hero-bg" aria-hidden="true"><div class="hero-grid"></div><div class="hero-glow"></div></div>
   <div class="container hero-inner">
-    ${v ? `<a class="pill" href="/changelog/"><span class="pill-tag">New</span><span>${esc(v)}: One-click setup for Claude and other AI tools</span>${ICONS.arrow}</a>` : ""}
+    ${v ? `<a class="pill" href="/changelog/"><span class="pill-tag">New</span><span>${esc(v)}: Open any project folder, and ⌘K finds everything</span>${ICONS.arrow}</a>` : ""}
     <h1>Local development,<br><span class="grad">without the duct tape.</span></h1>
     <p class="hero-sub">Orca is a free, open source desktop app for containers, compose stacks and Kubernetes. It gives every service an HTTPS hostname, runs a full copy of your app for each git worktree, and lets your AI agents drive it all. One file in your repo sets it up for the whole team.</p>
     <div class="hero-ctas">
@@ -178,7 +178,7 @@ hooks:
         <li>Routes from <code>orca.yaml</code>, container labels, existing Traefik labels or one click</li>
         <li>Path routes, WebSockets, SSE and HTTP/2 on the same host</li>
         <li>The same names resolve inside containers, so OIDC and server-to-server calls just work</li>
-        <li>A live landing page lists every service with its status and uptime</li>
+        <li>A live landing page lists every service with its status, and its search box makes it a great start page</li>
       </ul>
       <a class="link-arrow" href="/docs/gateway/">How the gateway works ${ICONS.arrow}</a>
     </div>

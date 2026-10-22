@@ -274,6 +274,60 @@ pub struct LandingConfig {
     pub show_status: bool,
     /// Show the container and port behind each card.
     pub show_targets: bool,
+    /// A search box that narrows the cards as you type; Enter opens the
+    /// best match.
+    pub search: bool,
+    /// Where the search box searches the web when no service matches: an
+    /// engine from [`WEB_SEARCH_ENGINES`] or a URL with `{query}` in it.
+    /// Unset, the box only searches the page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web_search: Option<String>,
+}
+
+/// Web search engines the landing page knows by name: (id, name, URL).
+pub const WEB_SEARCH_ENGINES: &[(&str, &str, &str)] = &[
+    ("google", "Google", "https://www.google.com/search?q={query}"),
+    ("duckduckgo", "DuckDuckGo", "https://duckduckgo.com/?q={query}"),
+    ("bing", "Bing", "https://www.bing.com/search?q={query}"),
+    ("brave", "Brave Search", "https://search.brave.com/search?q={query}"),
+    ("kagi", "Kagi", "https://kagi.com/search?q={query}"),
+    ("ecosia", "Ecosia", "https://www.ecosia.org/search?q={query}"),
+    (
+        "startpage",
+        "Startpage",
+        "https://www.startpage.com/do/search?q={query}",
+    ),
+];
+
+impl LandingConfig {
+    /// The web search as (name, URL with `{query}`), when one is set and
+    /// valid. A custom URL is named after its host.
+    pub fn web_search_target(&self) -> Option<(String, String)> {
+        let spec = self.web_search.as_deref()?.trim();
+        if let Some((_, name, url)) = WEB_SEARCH_ENGINES.iter().find(|(id, _, _)| *id == spec) {
+            return Some((name.to_string(), url.to_string()));
+        }
+        valid_search_url(spec).then(|| {
+            let host = spec
+                .split("://")
+                .nth(1)
+                .unwrap_or(spec)
+                .split(['/', '?'])
+                .next()
+                .unwrap_or(spec);
+            (host.trim_start_matches("www.").to_string(), spec.to_string())
+        })
+    }
+}
+
+/// A custom web search: an http(s) URL with `{query}` where the search goes.
+pub fn valid_search_url(url: &str) -> bool {
+    (url.starts_with("https://") || url.starts_with("http://"))
+        && url.contains("{query}")
+        && url.len() <= 500
+        && !url
+            .chars()
+            .any(|c| c.is_whitespace() || c == '"' || c == '<' || c == '>')
 }
 
 impl Default for LandingConfig {
@@ -283,6 +337,8 @@ impl Default for LandingConfig {
             subtitle: None,
             show_status: true,
             show_targets: true,
+            search: true,
+            web_search: None,
         }
     }
 }

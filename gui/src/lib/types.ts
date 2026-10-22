@@ -608,6 +608,10 @@ export interface LandingSettings {
   subtitle?: string | null;
   show_status: boolean;
   show_targets: boolean;
+  /** A search box that narrows the cards; Enter opens the best match. */
+  search: boolean;
+  /** An engine id ("google", …) or a URL with {query}; none: the box only searches the page. */
+  web_search?: string | null;
 }
 
 export interface GatewayConfig {

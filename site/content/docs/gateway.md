@@ -188,6 +188,7 @@ Open it with **Open gateway** at the top of the Gateway page. Its settings are o
 - **Title** and **Subtitle** at the top of the page.
 - **Show status and uptime**.
 - **Show container and port** behind each card.
+- **Search box**, and where it searches the web (see below).
 
 Each card's title, description, group and icon come from the route:
 
@@ -201,6 +202,31 @@ Without a title, the card is named after the hostname. The group defaults to the
 
 > [!NOTE]
 > Anyone who can reach the gateway can see the landing page. It lists hostnames and, unless you switch it off, the container and port behind each one.
+
+### Search, and using it as your start page
+
+The landing page opens with the cursor in a search box. Type a few letters and the cards narrow down to the ones that match by name, hostname, description, project, container or status. Try `mail`, `admin` or `unhealthy`.
+
+| Key | What it does |
+|---|---|
+| <kbd>Enter</kbd> | Opens the highlighted service. When nothing matches, a hostname such as `github.com/acme/shop` opens directly, and anything else searches the web. |
+| <kbd>Shift</kbd>+<kbd>Enter</kbd> | Searches the web, even when a service matches. |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Enter</kbd> | Opens the service or search in a new tab. |
+| <kbd>↑</kbd> <kbd>↓</kbd> | Chooses between several matching services. |
+| <kbd>/</kbd> or <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> | Jumps to the search box from anywhere on the page. |
+| <kbd>Esc</kbd> | Clears the search. |
+
+Under the box, the page shows what Enter and Shift+Enter will do before you press them.
+
+**Search the web** on the **Landing page** tab picks where searches go: Google, DuckDuckGo, Bing, Brave Search, Kagi, Ecosia or Startpage. **Custom URL…** takes any search address with `{query}` where the search terms go, such as your company wiki, Jira, or GitHub code search:
+
+```text
+https://github.com/search?type=code&q={query}
+```
+
+With web search off, the box only finds services. Switch **Search box** off to hide it.
+
+With search on, the page works well as your browser's home page: set `https://localhost` (or your gateway's domain) as the home page. Safari can also open it in every new tab. Each time you open it, you can type the name of a service or a search straight away.
 
 ## Sleeping routes
 

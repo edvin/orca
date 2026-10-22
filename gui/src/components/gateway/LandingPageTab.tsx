@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import type { GatewayRoute, LandingSettings } from "../../lib/types";
 import { showToast } from "../Toast";
+import Dropdown from "../Dropdown";
 
 const REFERENCE = "https://orca-desktop.com/docs/gateway/#the-landing-page";
 
@@ -17,6 +18,21 @@ interface Props {
 }
 
 const muted = { color: "#8b949e", "font-size": "12px" } as const;
+
+/** The engines the page knows by name; anything else is a custom URL. Mirrors WEB_SEARCH_ENGINES in Rust. */
+const ENGINES = [
+  { value: "", label: "Off: only find services" },
+  { value: "google", label: "Google" },
+  { value: "duckduckgo", label: "DuckDuckGo" },
+  { value: "bing", label: "Bing" },
+  { value: "brave", label: "Brave Search" },
+  { value: "kagi", label: "Kagi" },
+  { value: "ecosia", label: "Ecosia" },
+  { value: "startpage", label: "Startpage" },
+  { value: "custom", label: "Custom URL…" },
+];
+const isEngine = (v: string | null | undefined) => !!v && ENGINES.some((e) => e.value === v && v !== "custom");
+const validCustom = (v: string) => /^https?:\/\/\S+$/.test(v) && v.includes("{query}");
 
 /** The section a route is shown under, as the page decides it. */
 function groupOf(r: GatewayRoute): string {
@@ -120,6 +136,24 @@ export default function LandingPageTab(props: Props) {
   // Draft text fields, saved on blur or Enter.
   const [title, setTitle] = createSignal<string | null>(null);
   const [subtitle, setSubtitle] = createSignal<string | null>(null);
+  const [customUrl, setCustomUrl] = createSignal<string | null>(null);
+  // "custom" chosen but no URL saved yet: show the field.
+  const [pickedCustom, setPickedCustom] = createSignal(false);
+  const engineChoice = (s: LandingSettings) =>
+    pickedCustom() ? "custom" : !s.web_search ? "" : isEngine(s.web_search) ? s.web_search : "custom";
+  const saveCustom = (s: LandingSettings) => {
+    const v = (customUrl() ?? s.web_search ?? "").trim();
+    setCustomUrl(null);
+    if (!v || v === s.web_search) return;
+    if (!validCustom(v)) {
+      showToast("Use an http(s) URL with {query} where the search terms go", "error");
+      return;
+    }
+    setPickedCustom(false);
+    void save({ web_search: v });
+  };
+  const copy = (text: string) =>
+    navigator.clipboard.writeText(text).then(() => showToast("Copied", "success"), () => {});
 
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "20px", "max-width": "960px" }}>
@@ -166,6 +200,73 @@ export default function LandingPageTab(props: Props) {
             <div class="settings-divider" />
             <Toggle on={s().show_targets} onChange={(on) => void save({ show_targets: on })} label="Show container and port"
               hint="The container and port behind each card, handy when debugging" />
+          </div>
+        )}
+      </Show>
+
+      <Show when={landing()?.settings}>
+        {(s) => (
+          <div class="card landing-search-card">
+            <div class="landing-search-head">
+              <div>
+                <div class="landing-search-title">Search box</div>
+                <div class="landing-search-sub">
+                  Type a few letters to find a service by name, hostname, project or status, and press Enter to open it. A hostname
+                  like <span class="mono">github.com</span> goes straight there. Press <kbd>/</kbd> to jump to the box.
+                </div>
+              </div>
+              <div class="settings-toggle" role="switch" aria-checked={s().search} tabIndex={0} aria-label="Search box"
+                onClick={() => void save({ search: !s().search })}
+                onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); void save({ search: !s().search }); } }}>
+                <div class={`toggle-track${s().search ? " toggle-on" : ""}`}><div class="toggle-thumb" /></div>
+              </div>
+            </div>
+            <Show when={s().search}>
+              <div class="settings-divider" />
+              <div class="settings-row">
+                <div class="settings-row-left">
+                  <span class="settings-label">Search the web</span>
+                  <span class="settings-description">When no service matches, Enter searches here. Shift+Enter always does.</span>
+                </div>
+                <Dropdown
+                  value={engineChoice(s())}
+                  options={ENGINES}
+                  style={{ width: "220px" }}
+                  onChange={(v) => {
+                    if (v === "custom") { setPickedCustom(true); return; }
+                    setPickedCustom(false);
+                    void save({ web_search: v || null });
+                  }}
+                />
+              </div>
+              <Show when={engineChoice(s()) === "custom"}>
+                <div class="landing-search-custom">
+                  <input class="form-input mono" placeholder="https://intranet.example.com/search?q={query}"
+                    value={customUrl() ?? (isEngine(s().web_search) ? "" : s().web_search ?? "")}
+                    onInput={(e) => setCustomUrl(e.currentTarget.value)}
+                    onBlur={() => saveCustom(s())}
+                    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} disabled={saving()} />
+                  <span class="landing-search-hint">
+                    <span class="mono">{"{query}"}</span> is replaced by what was typed: your company wiki, Jira, GitHub code search, anything with a search URL.
+                  </span>
+                </div>
+              </Show>
+            </Show>
+            <Show when={landing()?.url}>
+              {(url) => (
+                <div class="landing-start">
+                  <div class="landing-start-icon">★</div>
+                  <div class="landing-start-text">
+                    <b>Make it your browser's start page</b>
+                    <span>
+                      Set <span class="mono">{url()}</span> as your browser's home page (and in Safari, for new tabs too). It opens with
+                      the cursor in the search box, so you can type a service or a search right away.
+                    </span>
+                  </div>
+                  <button class="btn btn-sm" onClick={() => void copy(url())}>Copy address</button>
+                </div>
+              )}
+            </Show>
           </div>
         )}
       </Show>

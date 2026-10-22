@@ -4375,3 +4375,16 @@ tr.service-off td { opacity: 0.55; }
 .btn-danger-outline { color: #f85149; }
 .btn-danger-outline:hover:not(:disabled) { border-color: #f85149; background: rgba(248, 81, 73, 0.08); }
 .container-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* Gateway → Landing page: search box settings */
+.landing-search-card { padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+.landing-search-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+.landing-search-title { color: #e6edf3; font-size: 14px; font-weight: 600; }
+.landing-search-sub { color: #8b949e; font-size: 12.5px; line-height: 1.55; margin-top: 4px; max-width: 620px; }
+.landing-search-sub kbd { font: 11px 'JetBrains Mono', monospace; border: 1px solid #30363d; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: #c9d1d9; }
+.landing-search-custom { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 8px; }
+.landing-search-hint { color: #6e7681; font-size: 12px; }
+.landing-start { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(88, 166, 255, 0.25); background: linear-gradient(90deg, rgba(88, 166, 255, 0.07), rgba(163, 113, 247, 0.05)); }
+.landing-start-icon { color: #d29922; font-size: 18px; }
+.landing-start-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: #8b949e; line-height: 1.5; }
+.landing-start-text b { color: #e6edf3; font-size: 13px; }
