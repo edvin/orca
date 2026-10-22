@@ -7480,7 +7480,7 @@ async fn cleanup(
         #[cfg(target_os = "macos")]
         {
             use std::process::Stdio;
-            log.push("Stopping Lima VMs...".to_string());
+            log.push("Removing Orca's Lima VM...".to_string());
             let output = tokio::process::Command::new("limactl")
                 .args(["list", "--json"])
                 .stdout(Stdio::piped())
@@ -7490,8 +7490,10 @@ async fn cleanup(
             if let Ok(out) = output {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 for line in stdout.lines() {
+                    // Only Orca's own VM: other Lima VMs on this Mac aren't ours to delete.
                     if let Ok(vm) = serde_json::from_str::<serde_json::Value>(line)
                         && let Some(name) = vm.get("name").and_then(|n| n.as_str())
+                        && name == "orca"
                     {
                         log.push(format!("  Stopping VM '{name}'..."));
                         let _ = tokio::process::Command::new("limactl")
