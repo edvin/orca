@@ -140,7 +140,7 @@ export default function DashboardPage(props: DashboardPageProps) {
     document.addEventListener("orca-host-switch", handleHostSwitch);
     // Keep the metrics store bounded: prune any container ids we no longer
     // see as alive. Without this, short-lived containers accumulate in
-    // `metricsHistory` / `highCpuStreak` over a long session.
+    // `metricsHistory` / the CPU alert state over a long session.
     const pruneTimer = setInterval(() => {
       import("../lib/metricsStore").then(({ pruneMetricsExcept }) =>
         pruneMetricsExcept(containers().map((c) => c.id)),

@@ -45,7 +45,8 @@ function dropSeries(drop: (id: string) => boolean) {
     for (const k of Object.keys(lastAlertTime)) {
       if (k.split(":")[0] === id) delete lastAlertTime[k];
     }
-    delete highCpuStreak[id];
+    delete highCpuSince[id];
+    delete lastReadingAt[id];
   }
   if (changed) setIds([...series.keys()]);
 }
@@ -53,13 +54,19 @@ function dropSeries(drop: (id: string) => boolean) {
 // --- Resource usage alerts ---
 const MEMORY_THRESHOLD_PERCENT = 90;
 const CPU_THRESHOLD_PERCENT = 90;
-const CPU_CONSECUTIVE_READINGS = 3;
+// CPU alert: above the threshold for this long, measured between the readings
+// timestamps rather than by counting them, so it means the same at any poll rate.
+const CPU_SUSTAINED_MS = 10_000;
+// Readings further apart than this don't count as one stretch: the app was
+// hidden (polls slow down) or the Mac slept, and nobody knows what happened between.
+const MAX_READING_GAP_MS = 20_000;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 // Track last alert time per container+metric to avoid spam
 const lastAlertTime: Record<string, number> = {};
-// Track consecutive high-CPU readings per container
-const highCpuStreak: Record<string, number> = {};
+// Per container: when the current stretch of high-CPU readings began, and the last reading
+const highCpuSince: Record<string, number> = {};
+const lastReadingAt: Record<string, number> = {};
 
 function canAlert(key: string): boolean {
   const now = Date.now();
@@ -84,14 +91,19 @@ function evaluateAlerts(containerId: string, containerName: string, snapshot: Me
     }
   }
 
-  // CPU alert: must exceed threshold for N consecutive readings
-  if (snapshot.cpu > CPU_THRESHOLD_PERCENT) {
-    highCpuStreak[containerId] = (highCpuStreak[containerId] || 0) + 1;
-  } else {
-    highCpuStreak[containerId] = 0;
+  // CPU alert: above the threshold in every reading for CPU_SUSTAINED_MS, with no gap
+  const t = snapshot.timestamp;
+  const previous = lastReadingAt[containerId];
+  lastReadingAt[containerId] = t;
+  if (snapshot.cpu <= CPU_THRESHOLD_PERCENT) {
+    delete highCpuSince[containerId];
+    return;
+  }
+  if (highCpuSince[containerId] === undefined || previous === undefined || t - previous > MAX_READING_GAP_MS) {
+    highCpuSince[containerId] = t;
   }
 
-  if (highCpuStreak[containerId] >= CPU_CONSECUTIVE_READINGS) {
+  if (t - highCpuSince[containerId] >= CPU_SUSTAINED_MS) {
     const key = `${containerId}:cpu`;
     if (canAlert(key)) {
       showToast(

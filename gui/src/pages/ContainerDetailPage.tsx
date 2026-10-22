@@ -757,6 +757,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                       <div class="detail-stat-sparkline">
                         <Sparkline
                           data={getCpuHistory(props.containerId)}
+                          times={getMetricsHistory(props.containerId).map((m) => m.timestamp)}
                           width={120}
                           height={28}
                           color="#58a6ff"
@@ -798,6 +799,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                       <div class="detail-stat-sparkline">
                         <Sparkline
                           data={getMemoryHistory(props.containerId)}
+                          times={getMetricsHistory(props.containerId).map((m) => m.timestamp)}
                           width={120}
                           height={28}
                           color="#a371f7"

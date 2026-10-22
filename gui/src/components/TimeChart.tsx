@@ -13,6 +13,24 @@ export interface TimeChartProps {
   mini?: boolean;
 }
 
+// Readings further apart than this are drawn as a gap rather than joined. Polls
+// run at least once a minute even while the window is hidden, so a longer hole
+// means nothing was read (the Mac slept).
+export const MAX_JOIN_GAP_MS = 150_000;
+
+/** Index ranges [start, end] of runs of readings with no gap longer than MAX_JOIN_GAP_MS. */
+export function joinedRuns(times: number[]): Array<[number, number]> {
+  const runs: Array<[number, number]> = [];
+  let start = 0;
+  for (let i = 1; i <= times.length; i++) {
+    if (i === times.length || times[i] - times[i - 1] > MAX_JOIN_GAP_MS) {
+      if (times.length > 0) runs.push([start, i - 1]);
+      start = i;
+    }
+  }
+  return runs;
+}
+
 export default function TimeChart(props: TimeChartProps) {
   const [hoverIndex, setHoverIndex] = createSignal<number | null>(null);
   const [mouseX, setMouseX] = createSignal(0);
@@ -45,34 +63,46 @@ export default function TimeChart(props: TimeChartProps) {
     const ch = chartHeight();
     const pad = padding();
     const mv = maxVal();
-    const xScale = cw / Math.max(data.length - 1, 1);
-    return data.map((d, i) => ({
-      x: pad.left + i * xScale,
+    // x follows the timestamps, so readings taken further apart (a hidden
+    // window polls slower) take the room their time took
+    const t0 = data[0].time;
+    const span = Math.max(data[data.length - 1].time - t0, 1);
+    return data.map((d) => ({
+      x: pad.left + ((d.time - t0) / span) * cw,
       y: pad.top + ch - (Math.min(d.value, mv) / mv) * ch,
     }));
   });
 
-  const linePath = createMemo(() => {
-    const points = pts();
-    if (points.length < 2) return "";
-    let path = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
+  const runs = createMemo(() => joinedRuns(props.data.map((d) => d.time)));
+
+  const curve = (points: Array<{ x: number; y: number }>, from: number, to: number) => {
+    let path = `M ${points[from].x} ${points[from].y}`;
+    for (let i = from + 1; i <= to; i++) {
       const dx = points[i].x - points[i - 1].x;
       const cp1x = points[i - 1].x + dx / 3;
       const cp2x = points[i].x - dx / 3;
       path += ` C ${cp1x} ${points[i - 1].y}, ${cp2x} ${points[i].y}, ${points[i].x} ${points[i].y}`;
     }
     return path;
+  };
+
+  const linePath = createMemo(() => {
+    const points = pts();
+    if (points.length < 2) return "";
+    return runs()
+      .filter(([a, b]) => b > a)
+      .map(([a, b]) => curve(points, a, b))
+      .join(" ");
   });
 
   const areaPath = createMemo(() => {
-    const line = linePath();
-    if (!line) return "";
     const points = pts();
-    const lastX = points[points.length - 1].x;
-    const firstX = points[0].x;
+    if (points.length < 2) return "";
     const bottom = padding().top + chartHeight();
-    return `${line} L ${lastX} ${bottom} L ${firstX} ${bottom} Z`;
+    return runs()
+      .filter(([a, b]) => b > a)
+      .map(([a, b]) => `${curve(points, a, b)} L ${points[b].x} ${bottom} L ${points[a].x} ${bottom} Z`)
+      .join(" ");
   });
 
   const gradientId = () => `timechart-grad-${(props.color || "#58a6ff").replace("#", "")}`;
@@ -85,9 +115,11 @@ export default function TimeChart(props: TimeChartProps) {
   const timeLabel = (index: number) => {
     const data = props.data;
     if (data.length === 0) return "";
-    const now = data[data.length - 1].time;
-    const t = data[index].time;
-    const diffSec = Math.round((now - t) / 1000);
+    return agoLabel(data[data.length - 1].time - data[index].time);
+  };
+
+  const agoLabel = (ms: number) => {
+    const diffSec = Math.round(ms / 1000);
     if (diffSec <= 5) return "now";
     if (diffSec < 60) return `${diffSec}s ago`;
     const diffMin = Math.round(diffSec / 60);
@@ -100,15 +132,15 @@ export default function TimeChart(props: TimeChartProps) {
     const labels: Array<{ x: number; text: string }> = [];
     const pad = padding();
     const cw = chartWidth();
-    const xScale = cw / Math.max(data.length - 1, 1);
+    const span = data[data.length - 1].time - data[0].time;
 
-    // Show ~6 labels spread across the data
+    // ~6 labels at even steps of time, as the x axis is time
     const count = Math.min(6, data.length);
     for (let i = 0; i < count; i++) {
-      const idx = i === count - 1 ? data.length - 1 : Math.round((i / (count - 1)) * (data.length - 1));
+      const f = i / (count - 1);
       labels.push({
-        x: pad.left + idx * xScale,
-        text: timeLabel(idx),
+        x: pad.left + f * cw,
+        text: agoLabel((1 - f) * span),
       });
     }
     return labels;
@@ -130,13 +162,17 @@ export default function TimeChart(props: TimeChartProps) {
       setHoverIndex(null);
       return;
     }
-    const xScale = chartWidth() / Math.max(data.length - 1, 1);
-    const idx = Math.round((svgX - pad.left) / xScale);
-    if (idx >= 0 && idx < data.length) {
-      setHoverIndex(idx);
-    } else {
+    if (svgX < pad.left || svgX > WIDTH - pad.right) {
       setHoverIndex(null);
+      return;
     }
+    // the reading nearest to the pointer; points are spaced by time, not evenly
+    const points = pts();
+    let idx = 0;
+    for (let i = 1; i < points.length; i++) {
+      if (Math.abs(points[i].x - svgX) < Math.abs(points[idx].x - svgX)) idx = i;
+    }
+    setHoverIndex(idx);
   };
 
   const handleMouseLeave = () => {
