@@ -33,7 +33,7 @@ The runtime choice applies the next time the cluster is enabled or reset. To cha
 
 ### Start, stop and reset
 
-When the cluster is running, the **More actions** menu next to the cluster status has **Refresh**, **Traefik Info**, **Reset Cluster** and **Stop Kubernetes**. A stopped cluster shows **Start Kubernetes** and **Reset Kubernetes**.
+When the cluster is running, the **More actions** menu next to the cluster status has **Refresh**, **Traefik Info**, **Reset Cluster** and **Stop Kubernetes**. A stopped cluster shows **Start Kubernetes** and **Reset Kubernetes**. These act where k3s runs: on the host on Linux, in the Lima VM on macOS and in WSL2 on Windows.
 
 > [!WARNING]
 > Reset uninstalls k3s and deletes every workload, volume and setting in the cluster, then installs a fresh one.
@@ -51,23 +51,13 @@ orca k8s runtime containerd
 
 Orca names the cluster, user and context in its kubeconfig `orca`, so it never clashes with a `default` entry you already have. Orca itself never reads your current context: every `kubectl` call it makes passes `--context orca`, and every Helm call passes `--kube-context orca`. That keeps Orca from acting on a remote cluster you happen to have selected.
 
-On macOS and Windows, enabling the cluster merges the `orca` entries into `~/.kube/config` (`%USERPROFILE%\.kube\config` on Windows). Your other contexts stay as they are. The merge can set `current-context` to `orca`, so check it afterwards and switch back if you need to:
+Enabling the cluster adds the `orca` cluster, user and context to `~/.kube/config` (`%USERPROFILE%\.kube\config` on Windows), creating the file if you don't have one. On Linux, Orca merges in the kubeconfig k3s writes to `/etc/rancher/k3s/k3s.yaml`. Your other contexts and your current context stay as they are.
+
+If you enabled the cluster with an older version of Orca, your current context may have been switched to `orca`. Switch back with:
 
 ```bash
-kubectl config current-context
 kubectl config use-context <your-context>
 ```
-
-On Linux, k3s writes its kubeconfig to `/etc/rancher/k3s/k3s.yaml`, readable by all users. If you have no `~/.kube/config`, Orca uses that file directly. If you do have one, Orca looks for an `orca` context in it, so merge one in:
-
-```bash
-sed -e 's/: default$/: orca/' /etc/rancher/k3s/k3s.yaml > /tmp/orca-k3s.yaml
-KUBECONFIG=~/.kube/config:/tmp/orca-k3s.yaml kubectl config view --flatten > /tmp/kubeconfig.merged
-mv /tmp/kubeconfig.merged ~/.kube/config && chmod 600 ~/.kube/config
-rm /tmp/orca-k3s.yaml
-```
-
-Listing your existing file first keeps your current context.
 
 ## Use kubectl and Helm
 
@@ -78,7 +68,7 @@ kubectl --context orca get pods -A
 helm --kube-context orca list -A
 ```
 
-To reach a service from your machine, use `kubectl port-forward`:
+To reach a service from your machine, forward a port from the **Services** tab (see [Port forwarding](#port-forwarding)) or use `kubectl port-forward`:
 
 ```bash
 kubectl --context orca -n default port-forward svc/my-api 8080:80
@@ -95,7 +85,7 @@ The Kubernetes page has one tab per resource group. Use the **Namespace** dropdo
 | **DaemonSets** | Edit YAML, delete. |
 | **StatefulSets** | Scale, restart, edit YAML, delete. |
 | **ReplicaSets** | Edit YAML, delete. |
-| **Services** | See ports, **Expose** a service through an ingress, edit YAML. Network policies are listed here too. |
+| **Services** | See ports, forward them to your machine, **Expose** a service through an ingress, edit YAML. Network policies are listed here too. |
 | **Ingresses** | Create one with **+ Create Ingress**, with optional TLS. Edit YAML. |
 | **Storage** | Persistent volume claims, with **+ Create PVC** and delete. Persistent volumes and storage classes, read-only. |
 | **Events** | Recent cluster events with type, reason, object and count. |
@@ -106,6 +96,16 @@ The Kubernetes page has one tab per resource group. Use the **Namespace** dropdo
 | **Topology** | A map of services, deployments and pods. |
 
 The pod **Terminal** runs `sh` in the pod's default container. **Restart pod** deletes the pod, so its controller creates a new one.
+
+## Port forwarding
+
+The **Access** column of the **Services** tab has a button per service port, such as **:80**. Click it, enter the local port (it defaults to the service port) and click the play button or press <kbd>Enter</kbd>. The service is then reachable at `localhost:<local port>`, and the button shows a check mark. Click it again to stop forwarding.
+
+A service with more than one port shows a button such as **2 ports** instead. It opens a **Port Forward** dialog with a local port, a **Forward** or **Stop** button and an **Open in browser** link for each port.
+
+The daemon forwards each connection through the Kubernetes API to a ready pod behind the service, the same way `kubectl port-forward svc/...` does. That works when Orca manages a remote host too: the local port is on your machine, and the daemon on the remote host connects to its cluster. A port that isn't one of the service's ports is forwarded to that port on the pod. **Traefik Dashboard** uses this to reach Traefik's dashboard on port 9000 when there is no direct URL for it.
+
+Forwarding needs a service with a selector and at least one ready pod.
 
 ## Edit YAML and apply
 
@@ -144,7 +144,7 @@ The **Topology** tab draws each service with its deployments and their pods, the
 
 ![The Topology tab showing services connected to deployments and pods](/assets/screens/k8s-topology.webp)
 
-Orca links resources by name, not by label selector: a service and a deployment are linked when one name contains the other, and pods are linked to the deployment whose name they start with. Resources with unrelated names show up as separate groups.
+Orca links resources by label selector, the way Kubernetes routes traffic: a service is linked to the deployments whose pod labels its selector matches, and a deployment to the pods its selector matches. With an older daemon that doesn't send labels, it falls back to matching by name.
 
 ## Jobs and CronJobs
 
@@ -156,7 +156,7 @@ The **Jobs** tab has two sections.
 - **Suspend CronJob** or **Resume CronJob**
 - view its YAML, or delete it, which stops future runs
 
-**Jobs** shows status, completions, duration and start time, and lets you view YAML or delete a job together with its pods.
+**Jobs** shows status, completions, duration and start time. **View Logs** shows the logs of the job's newest pod. You can also view YAML or delete a job together with its pods.
 
 ## Ingress and Traefik
 

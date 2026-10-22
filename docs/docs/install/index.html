@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjuihlm">
+<link rel="stylesheet" href="/assets/site.css?v=mvjvhtmb">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjuihlm" defer></script>
+<script src="/assets/site.js?v=mvjvhtmb" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -115,6 +115,7 @@
 <span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">docker</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> context</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> rm</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> lima-orca</span></span></code></pre></div></li>
 <li>Delete <code>~/Library/Application Support/orca</code> to remove settings, the API token and the local CA.</li>
 </ol>
+<p>You can do steps 2 and 4 from the app before you quit it, in <strong>Settings</strong> &gt; <strong>About</strong> &gt; <strong>Cleanup</strong>: <strong>Stop &amp; Remove VMs</strong> stops and deletes the <code>orca</code> VM, and <strong>Reset All</strong> also deletes the settings folder. Other Lima VMs on the Mac are left alone.</p>
 <p>Homebrew and the packages setup installed (<code>lima</code>, <code>docker</code>, <code>docker-compose</code>, <code>docker-buildx</code>) stay. Remove them with <code>brew uninstall</code> if you don&#39;t need them.</p>
 <h3 id="windows-1"><a class="anchor" href="#windows-1" aria-hidden="true" tabindex="-1">#</a>Windows</h3>
 <p>Uninstall <strong>Orca Desktop</strong> from <strong>Settings</strong> &gt; <strong>Apps</strong> in Windows. The uninstaller removes the <code>orca://</code> link handler, its <code>PATH</code> entry, <code>%LOCALAPPDATA%\orca</code>, and the Docker TCP listener it added in WSL. It keeps your settings in <code>%APPDATA%\orca</code>; delete that folder to remove them too. Docker stays installed in your WSL distro.</p>

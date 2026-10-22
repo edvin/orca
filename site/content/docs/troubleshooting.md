@@ -14,7 +14,7 @@ Open **System Health** in the sidebar. Each check shows its status, and a failin
 |---|---|
 | **Set up Docker** | Runs first-start setup again for your platform. Shown when Orca can't reach Docker. |
 | **Recreate VM** | macOS only. Deletes the Lima VM and builds a fresh one on the current base. Containers, images and volumes in it are lost. |
-| **Restart Docker & Orca** | Stops the Orca daemon, starts the Docker service (in WSL2 on Windows, with `systemctl` on Linux), and starts the daemon again so it reconnects. On macOS the daemon starts the VM itself if it's stopped. |
+| **Restart Docker & Orca** | Restarts Docker, then restarts the Orca daemon so it reconnects. On macOS it stops and starts the Lima VM; on Windows it starts Docker in WSL2; on Linux it starts the Docker service with `systemctl`. |
 | **Diagnose** | Tries every way Orca knows to reach Docker and shows the log in **Connection Diagnostics**. If it finds a working connection, Orca switches to it without a restart. |
 | **Re-check** | Runs the checks again. |
 

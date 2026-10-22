@@ -47,7 +47,7 @@ The daemon listens on `127.0.0.1:9477` by default, so only programs on the same 
 
 You can change this with flags when you run `orca-daemon` yourself:
 
-- `--bind <ADDR>` listens on another address. Any address other than `127.0.0.1` makes the daemon log `WARNING: Daemon binding to <ADDR> — the API will be network-accessible!`.
+- `--bind <ADDR>` listens on another address: an IPv4 or IPv6 address, or `localhost`. Any address that isn't a loopback address (`127.0.0.1`, `localhost`, `::1`) makes the daemon log `WARNING: Daemon binding to <ADDR> — the API will be network-accessible!`.
 - `--socket <PATH>` listens on a Unix socket instead of TCP, created with mode `660`, so access follows file permissions. `--socket auto` uses `$XDG_RUNTIME_DIR/orca-daemon.sock`. The token is still required.
 
 The server package for [remote hosts](/docs/remote-hosts/) binds to `0.0.0.0` so the desktop app can connect.
@@ -103,11 +103,13 @@ What the provider receives:
 - for a container you ask about: its name, image, exit code, error text and the last 50 log lines
 - the results of any Orca tools the assistant calls while answering, such as inspecting a container or listing resources
 
-Tool results can include sensitive data. Inspecting a container returns its environment variables, and listing Kubernetes secrets returns their values. If that's a concern, use Ollama, or a provider whose data handling you accept.
+Secrets in tool results stay on your machine: before anything is sent, Orca blanks out values whose names look secret (passwords, tokens, API keys, `DATABASE_URL` and the like) in environment variables, labels and other fields, passwords inside URLs, and the data of Kubernetes Secrets. Other configuration and log lines are sent as they are, so don't ask the assistant about logs that print secrets, or use Ollama.
+
+The MCP endpoint and the other agent APIs return tool results unchanged: there, you run the agent and choose its provider.
 
 Log output is marked as untrusted when it's sent to the model, which makes it harder for text in a log to pose as instructions.
 
-API keys are saved in plain text in Orca's `config.json`, protected by the file's permissions, and are never returned by the API. You can set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GOOGLE_API_KEY` in the daemon's environment instead.
+API keys are saved in plain text in Orca's `config.json`, protected by the file's permissions, and are never returned by the API. You can set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GOOGLE_API_KEY` in the daemon's environment instead; a key there takes precedence over a saved one, and Settings shows which is in use.
 
 The agent APIs, including the MCP endpoint at `/api/v1/agent/mcp`, require the API token like every other route.
 

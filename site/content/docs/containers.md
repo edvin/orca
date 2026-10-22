@@ -136,19 +136,19 @@ Click **Add Schedule** and fill in:
 - **Cron Expression**.
 - **Enabled**, to pause a schedule without deleting it.
 
-Cron expressions have six fields, starting with seconds, and times are in UTC:
+Cron expressions use the standard five fields, and times are in the local time of the machine the daemon runs on (the server, for a [remote host](/docs/remote-hosts/)):
 
 ```text
-sec  min  hour  day-of-month  month  day-of-week
-0    0    3     *             *      Sun          every Sunday at 03:00 UTC
-0    0    18    *             *      Mon-Fri      weekdays at 18:00 UTC
-0    0    */6   *             *      *            every six hours
+min  hour  day-of-month  month  day-of-week
+0    3     *             *      0            every Sunday at 03:00
+0    18    *             *      1-5          weekdays at 18:00
+0    */6   *             *      *            every six hours
+0    0     1             *      *            the first of every month at midnight
 ```
 
-> [!NOTE]
-> Use day names such as `Sun` or `Mon-Fri` for the day of the week. In this format numbers start at `1` for Sunday, which differs from classic cron.
+For the day of the week, Sunday is `0` or `7`. Day names such as `Sun` or `Mon-Fri` work too. Six-field expressions that start with seconds, which earlier versions of Orca used, are still accepted; in those, Sunday is `1`.
 
-The daemon checks schedules every 60 seconds. The list shows each schedule as **Active** or **Paused**.
+The daemon checks schedules every minute. The list shows each schedule as **Active** or **Paused**.
 
 ## Volumes
 

@@ -76,7 +76,7 @@ dev:
 
 The [orca.yaml reference](/docs/orca-yaml/#dev-worktree-instances) lists every key with its default. On the Projects page, the **orca.yaml** button edits this section as a form or as YAML.
 
-Which services are shared, their data defaults, `idle_stop` and `max_running` are read from the main checkout. The rest (`dev.instance` and `dev.naming`) is read from each worktree's own `orca.yaml`, so a branch can add a service, an environment variable or a hook without touching the main branch. An `orca.local.yaml` next to it is merged on top, for settings that differ per machine.
+Which services are shared, their data defaults, `start`, `idle_stop` and `max_running` are read from the main checkout. The rest (`dev.instance` and `dev.naming`) is read from each worktree's own `orca.yaml`, so a branch can add a service, an environment variable or a hook without touching the main branch. An `orca.local.yaml` next to it is merged on top, for settings that differ per machine.
 
 ## Shared and per-instance services
 
@@ -212,6 +212,17 @@ A start runs these steps: read the compose files and `orca.yaml`, start the shar
 **Remove** deletes the instance's containers, volumes, images, own databases, gateway routes, host ports and `.orca` folder. Your code and the shared services are not touched.
 
 A project runs at most 6 instances at once. Starting one more fails with the names of the running ones; raise the limit with `dev.instance.max_running`.
+
+### Start new worktrees on their own
+
+With `dev.start: on-create` in the main checkout's `orca.yaml`, a worktree you create with `git worktree add` starts its instance on its own within a minute. Worktrees that already existed when Orca started, or when you added the project, are left alone, so a restart of Orca doesn't start a batch of old ones. The default is `manual`.
+
+```yaml title="orca.yaml"
+dev:
+  start: on-create
+```
+
+The instance card of such a worktree says "Started by Orca, as a new worktree".
 
 ### Stop unused instances
 

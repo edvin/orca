@@ -8,7 +8,7 @@ A stack is a Docker Compose project. Orca shows every compose project on the mac
 
 ## How stacks are found
 
-Docker Compose labels every container it creates with the project name, its working directory and its compose files. Orca groups containers by these labels, so any project you start with `docker compose up` shows up as a stack without extra setup.
+Docker Compose labels every container it creates with the project name, its working directory and its compose files. Orca groups containers by these labels, so any project you start with `docker compose up` shows up as a stack without extra setup. A project started from several compose files (`docker compose -f compose.yaml -f compose.dev.yaml up`) works the same way: Orca passes every file to Compose for every command it runs on the stack.
 
 Stacks appear as cards at the top of the **Containers** page. Each card shows the stack's services and lets you start, stop, restart, pull or delete the stack. Click the stack name to open its page.
 
@@ -30,7 +30,7 @@ The header shows the stack's working directory (**Copy path** copies it), how ma
 **Restart**, **Pull** and **Start** need the stack's working directory, which Compose records when it creates the containers.
 
 > [!TIP]
-> **Restart** reuses the existing containers. To pick up new images after **Pull**, or changes to the compose file, use **Stop** and then **Start** so Compose recreates the containers.
+> **Restart** reuses the existing containers. To pick up new images after **Pull**, use **Stop** and then **Start** so Compose recreates the containers. For changes to the compose file, use **Apply changes** on the [Compose File](#compose-file) tab.
 
 ### Services
 
@@ -44,10 +44,9 @@ If the compose file uses profiles, services whose profile is off are listed too,
 
 ### Compose File
 
-**Compose File** shows the path of the compose file and opens it in an editor. Click **Apply Changes** (or press Ctrl+S, Cmd+S on macOS) to save. Orca then reminds you that the stack needs to be started again for the changes to take effect.
+**Compose File** opens the stack's compose file in an editor, with its path above it. If the stack was started from several compose files, a picker above the editor switches between them. The editor works wherever the project lives, and for stacks on a [remote host](/docs/remote-hosts/) it edits the files on that host.
 
-> [!NOTE]
-> The editor can open and save compose files inside Orca's stacks folder, which is where stacks created in Orca and App Catalog deploys live: `~/.config/orca/stacks` on Linux and `~/Library/Application Support/orca/stacks` on macOS. For a project elsewhere, edit the compose file in your own editor.
+Click **Apply Changes** (or press Ctrl+S, Cmd+S on macOS) to save. Orca checks that the file is valid YAML and doesn't save it otherwise. After a save, a banner offers **Apply changes**: it runs `docker compose up`, which recreates the services whose definition changed and leaves the others running, then runs the stack's [setup commands](#setup-commands).
 
 ### orca.yaml
 

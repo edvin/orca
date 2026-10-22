@@ -30,7 +30,7 @@ To use names that resolve everywhere, pick a domain with a wildcard DNS record p
 orca gateway config --domain local.yourcompany.dev
 ```
 
-Routes from orca.yaml and labels follow the new domain. Routes you added by hand keep the full hostname they were given. Configuration changes are saved straight away; stop and start the gateway to apply them.
+Routes from orca.yaml and labels follow the new domain. Routes you added by hand keep the full hostname they were given. When you save the **Configuration** tab (domain, ports, TLS) or change it with `orca gateway config`, a running gateway restarts with the new settings, so they apply at once.
 
 ## Certificates
 
@@ -195,7 +195,7 @@ Each card's title, description, group and icon come from the route:
 | orca.yaml | `title`, `description`, `group`, `icon`, `hidden` on the gateway entry |
 | Labels | `orca.route.title`, `.description`, `.group`, `.icon`, `.hidden` (for a named route, `orca.route.<name>.title` and so on) |
 
-Without a title, the card is named after the hostname. The group defaults to the compose project. An icon is an image URL (`https:` or `data:image/`). A hidden route still routes; it's only left off the page.
+Without a title, the card is named after the hostname. The group defaults to the compose project. A group of [environment links](#environment-links) with the same name as a group of cards, such as the project's name, joins that section instead of showing as a second one. An icon is an image URL (`https:` or `data:image/`). A hidden route still routes; it's only left off the page.
 
 > [!NOTE]
 > Anyone who can reach the gateway can see the landing page. It lists hostnames and, unless you switch it off, the container and port behind each one.

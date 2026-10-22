@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjuihlm">
+<link rel="stylesheet" href="/assets/site.css?v=mvjvhtmb">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjuihlm" defer></script>
+<script src="/assets/site.js?v=mvjvhtmb" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -73,8 +73,8 @@
 <h2 id="api-keys"><a class="anchor" href="#api-keys" aria-hidden="true" tabindex="-1">#</a>API keys</h2>
 <p><strong>Get Key</strong> next to the key field opens the provider&#39;s key page (console.anthropic.com, platform.openai.com or aistudio.google.com). Keys are saved in Orca&#39;s local config file and are only sent to the provider you chose.</p>
 <p>Orca keeps two key slots: one for Anthropic, and one shared by OpenAI, Gemini, Ollama and Custom. Saving a key for one of those four replaces the saved key for the others.</p>
-<p>You can also give the daemon a key through an environment variable. When it&#39;s set, it takes precedence over the saved key:</p>
-<div class="table-wrap"><table><thead><tr><th>Provider</th><th>Environment variable</th></tr></thead><tbody><tr><td>Anthropic</td><td><code>ANTHROPIC_API_KEY</code></td></tr><tr><td>Gemini</td><td><code>GOOGLE_API_KEY</code></td></tr><tr><td>OpenAI, Ollama, Custom</td><td><code>OPENAI_API_KEY</code></td></tr></tbody></table></div><p>The variable must be set in the environment the daemon runs in. The assistant window stays disabled until a key is saved in <strong>Settings</strong>, so save one there even if you also use a variable.</p>
+<p>You can also give the daemon a key through an environment variable instead. When it&#39;s set, it takes precedence over the saved key:</p>
+<div class="table-wrap"><table><thead><tr><th>Provider</th><th>Environment variable</th></tr></thead><tbody><tr><td>Anthropic</td><td><code>ANTHROPIC_API_KEY</code></td></tr><tr><td>Gemini</td><td><code>GOOGLE_API_KEY</code></td></tr><tr><td>OpenAI, Ollama, Custom</td><td><code>OPENAI_API_KEY</code></td></tr></tbody></table></div><p>The variable must be set in the environment the daemon runs in. A key from a variable is enough to use the assistant; <strong>Settings</strong> then shows it as <strong>configured (from ANTHROPIC_API_KEY)</strong>, or whichever variable it came from. A custom endpoint such as Ollama needs no key at all.</p>
 <h2 id="run-a-local-model-with-ollama"><a class="anchor" href="#run-a-local-model-with-ollama" aria-hidden="true" tabindex="-1">#</a>Run a local model with Ollama</h2>
 <p>You can run the assistant without an API key or cloud provider:</p>
 <ol>
@@ -87,7 +87,7 @@
 <li>downloads the <code>qwen2.5:7b</code> model (about 4.7 GB, and about 8 GB of RAM to run);</li>
 <li>switches the assistant to Ollama with that model.</li>
 </ul>
-<p>The model runs on the CPU. If the download is still going when setup finishes, wait for it or run <code>docker exec ollama ollama pull qwen2.5:7b</code>.</p>
+<p>If the machine has an NVIDIA GPU, Orca gives it to the container, and the model runs on it. Otherwise the model runs on the CPU. If the download is still going when setup finishes, wait for it or run <code>docker exec ollama ollama pull qwen2.5:7b</code>.</p>
 <p>To use a different Ollama model, pull it into the container and pick it from <strong>Model</strong>.</p>
 <h2 id="what-the-assistant-can-do"><a class="anchor" href="#what-the-assistant-can-do" aria-hidden="true" tabindex="-1">#</a>What the assistant can do</h2>
 <p>The assistant has the same 48 tools that Orca offers to external agents, listed in the <a href="/docs/agents/#tool-reference">tool reference</a>. It uses them to get real data instead of guessing, for example:</p>
@@ -101,6 +101,7 @@
 <p>When you name a container or image by part of its name and there&#39;s exactly one match, the assistant acts on it directly. It asks only when several resources match.</p>
 <div class="callout callout-warning"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg><span>Warning</span></div><p>Tool calls run without a confirmation step, including ones that stop, remove or prune resources. Be explicit about what you want changed. Each message allows up to five rounds of tool calls.</p>
 </div><p>Logs and errors attached with <strong>Ask AI</strong> are passed to the model marked as untrusted data, and the model is told not to follow instructions inside them.</p>
+<p>Before a tool result goes to the provider, Orca blanks out secrets in it: values of keys and environment variables that look like passwords, tokens or keys, passwords in URLs, and the data of Kubernetes Secrets. See <a href="/docs/security/#the-ai-assistant">Security</a>.</p>
 <h2 id="ask-about-a-container"><a class="anchor" href="#ask-about-a-container" aria-hidden="true" tabindex="-1">#</a>Ask about a container</h2>
 <p>On the <strong>Containers</strong> page, click the sparkle icon in a container&#39;s row (<strong>Ask AI about this container</strong>). The assistant window opens with that container as context: its name, image and the last 50 log lines. A banner above the input shows the attached context; click × to remove it.</p>
 <p>Type your question, such as &quot;Why did this exit?&quot;, and send it.</p>

@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjuihlm">
+<link rel="stylesheet" href="/assets/site.css?v=mvjvhtmb">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjuihlm" defer></script>
+<script src="/assets/site.js?v=mvjvhtmb" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -73,7 +73,7 @@
 <p>The daemon listens on <code>127.0.0.1:9477</code> by default, so only programs on the same machine can reach it. The desktop app always starts it this way. The daemon speaks plain HTTP, which is fine on the loopback interface.</p>
 <p>You can change this with flags when you run <code>orca-daemon</code> yourself:</p>
 <ul>
-<li><code>--bind &lt;ADDR&gt;</code> listens on another address. Any address other than <code>127.0.0.1</code> makes the daemon log <code>WARNING: Daemon binding to &lt;ADDR&gt; — the API will be network-accessible!</code>.</li>
+<li><code>--bind &lt;ADDR&gt;</code> listens on another address: an IPv4 or IPv6 address, or <code>localhost</code>. Any address that isn&#39;t a loopback address (<code>127.0.0.1</code>, <code>localhost</code>, <code>::1</code>) makes the daemon log <code>WARNING: Daemon binding to &lt;ADDR&gt; — the API will be network-accessible!</code>.</li>
 <li><code>--socket &lt;PATH&gt;</code> listens on a Unix socket instead of TCP, created with mode <code>660</code>, so access follows file permissions. <code>--socket auto</code> uses <code>$XDG_RUNTIME_DIR/orca-daemon.sock</code>. The token is still required.</li>
 </ul>
 <p>The server package for <a href="/docs/remote-hosts/">remote hosts</a> binds to <code>0.0.0.0</code> so the desktop app can connect.</p>
@@ -103,9 +103,10 @@
 <li>for a container you ask about: its name, image, exit code, error text and the last 50 log lines</li>
 <li>the results of any Orca tools the assistant calls while answering, such as inspecting a container or listing resources</li>
 </ul>
-<p>Tool results can include sensitive data. Inspecting a container returns its environment variables, and listing Kubernetes secrets returns their values. If that&#39;s a concern, use Ollama, or a provider whose data handling you accept.</p>
+<p>Secrets in tool results stay on your machine: before anything is sent, Orca blanks out values whose names look secret (passwords, tokens, API keys, <code>DATABASE_URL</code> and the like) in environment variables, labels and other fields, passwords inside URLs, and the data of Kubernetes Secrets. Other configuration and log lines are sent as they are, so don&#39;t ask the assistant about logs that print secrets, or use Ollama.</p>
+<p>The MCP endpoint and the other agent APIs return tool results unchanged: there, you run the agent and choose its provider.</p>
 <p>Log output is marked as untrusted when it&#39;s sent to the model, which makes it harder for text in a log to pose as instructions.</p>
-<p>API keys are saved in plain text in Orca&#39;s <code>config.json</code>, protected by the file&#39;s permissions, and are never returned by the API. You can set <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code> or <code>GOOGLE_API_KEY</code> in the daemon&#39;s environment instead.</p>
+<p>API keys are saved in plain text in Orca&#39;s <code>config.json</code>, protected by the file&#39;s permissions, and are never returned by the API. You can set <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code> or <code>GOOGLE_API_KEY</code> in the daemon&#39;s environment instead; a key there takes precedence over a saved one, and Settings shows which is in use.</p>
 <p>The agent APIs, including the MCP endpoint at <code>/api/v1/agent/mcp</code>, require the API token like every other route.</p>
 <h2 id="report-a-vulnerability"><a class="anchor" href="#report-a-vulnerability" aria-hidden="true" tabindex="-1">#</a>Report a vulnerability</h2>
 <p>Report security issues privately through <a href="https://github.com/edvin/orca/security/advisories/new" target="_blank" rel="noopener">GitHub Security Advisories</a>, not as a public issue. Include:</p>

@@ -75,7 +75,7 @@ The daemon itself listens on `127.0.0.1:9477` by default. The packaged systemd u
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--bind <ADDR>` | `127.0.0.1` | Address to listen on in TCP mode. |
+| `--bind <ADDR>` | `127.0.0.1` | Address to listen on in TCP mode: an IPv4 or IPv6 address (`::1`, `::`), or `localhost`. |
 | `--port <PORT>` | `9477` | TCP port. |
 | `--socket <PATH>` | none | Listen on a Unix socket instead of TCP. `auto` uses `$XDG_RUNTIME_DIR/orca-daemon.sock`. |
 

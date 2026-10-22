@@ -165,7 +165,7 @@ Compose templates can also use these optional fields:
 
 | Type | Generates |
 |---|---|
-| `random_hex` | Random bytes as hex. `length` is the number of bytes (default 32), so the string is twice as long. |
+| `random_hex` | A random hex string. `length` is the number of hex characters (default 32). |
 | `random_base64` | Random bytes as base64. `length` is the number of bytes (default 32). |
 | `lan_ip` | The machine's LAN IP address. |
 | `user_input` | A field in the deploy dialog. Options: `label`, `placeholder`, `required`, `secret`. |

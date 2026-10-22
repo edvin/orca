@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjuihlm">
+<link rel="stylesheet" href="/assets/site.css?v=mvjvhtmb">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjuihlm" defer></script>
+<script src="/assets/site.js?v=mvjvhtmb" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -134,12 +134,13 @@
 <li><strong>Cron Expression</strong>.</li>
 <li><strong>Enabled</strong>, to pause a schedule without deleting it.</li>
 </ul>
-<p>Cron expressions have six fields, starting with seconds, and times are in UTC:</p>
-<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span>sec  min  hour  day-of-month  month  day-of-week</span></span>
-<span class="line"><span>0    0    3     *             *      Sun          every Sunday at 03:00 UTC</span></span>
-<span class="line"><span>0    0    18    *             *      Mon-Fri      weekdays at 18:00 UTC</span></span>
-<span class="line"><span>0    0    */6   *             *      *            every six hours</span></span></code></pre></div><div class="callout callout-note"><div class="callout-head"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span>Note</span></div><p>Use day names such as <code>Sun</code> or <code>Mon-Fri</code> for the day of the week. In this format numbers start at <code>1</code> for Sunday, which differs from classic cron.</p>
-</div><p>The daemon checks schedules every 60 seconds. The list shows each schedule as <strong>Active</strong> or <strong>Paused</strong>.</p>
+<p>Cron expressions use the standard five fields, and times are in the local time of the machine the daemon runs on (the server, for a <a href="/docs/remote-hosts/">remote host</a>):</p>
+<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span>min  hour  day-of-month  month  day-of-week</span></span>
+<span class="line"><span>0    3     *             *      0            every Sunday at 03:00</span></span>
+<span class="line"><span>0    18    *             *      1-5          weekdays at 18:00</span></span>
+<span class="line"><span>0    */6   *             *      *            every six hours</span></span>
+<span class="line"><span>0    0     1             *      *            the first of every month at midnight</span></span></code></pre></div><p>For the day of the week, Sunday is <code>0</code> or <code>7</code>. Day names such as <code>Sun</code> or <code>Mon-Fri</code> work too. Six-field expressions that start with seconds, which earlier versions of Orca used, are still accepted; in those, Sunday is <code>1</code>.</p>
+<p>The daemon checks schedules every minute. The list shows each schedule as <strong>Active</strong> or <strong>Paused</strong>.</p>
 <h2 id="volumes"><a class="anchor" href="#volumes" aria-hidden="true" tabindex="-1">#</a>Volumes</h2>
 <p>The <strong>Volumes</strong> page lists volumes with their driver, size and creation date. <strong>Create</strong> makes a new volume with a name, driver and optional labels.</p>
 <p>Click a volume to see its mount point and labels, which containers use it, and its files. <strong>Browse Volume Files</strong> reads the volume through a temporary Alpine container, so it works whether or not a container is using the volume.</p>

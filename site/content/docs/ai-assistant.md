@@ -40,7 +40,7 @@ Enter the **API Key**, click **Save**, then pick a **Model** from the dropdown, 
 
 Orca keeps two key slots: one for Anthropic, and one shared by OpenAI, Gemini, Ollama and Custom. Saving a key for one of those four replaces the saved key for the others.
 
-You can also give the daemon a key through an environment variable. When it's set, it takes precedence over the saved key:
+You can also give the daemon a key through an environment variable instead. When it's set, it takes precedence over the saved key:
 
 | Provider | Environment variable |
 |----------|----------------------|
@@ -48,7 +48,7 @@ You can also give the daemon a key through an environment variable. When it's se
 | Gemini | `GOOGLE_API_KEY` |
 | OpenAI, Ollama, Custom | `OPENAI_API_KEY` |
 
-The variable must be set in the environment the daemon runs in. The assistant window stays disabled until a key is saved in **Settings**, so save one there even if you also use a variable.
+The variable must be set in the environment the daemon runs in. A key from a variable is enough to use the assistant; **Settings** then shows it as **configured (from ANTHROPIC_API_KEY)**, or whichever variable it came from. A custom endpoint such as Ollama needs no key at all.
 
 ## Run a local model with Ollama
 
@@ -63,7 +63,7 @@ Orca then:
 - downloads the `qwen2.5:7b` model (about 4.7 GB, and about 8 GB of RAM to run);
 - switches the assistant to Ollama with that model.
 
-The model runs on the CPU. If the download is still going when setup finishes, wait for it or run `docker exec ollama ollama pull qwen2.5:7b`.
+If the machine has an NVIDIA GPU, Orca gives it to the container, and the model runs on it. Otherwise the model runs on the CPU. If the download is still going when setup finishes, wait for it or run `docker exec ollama ollama pull qwen2.5:7b`.
 
 To use a different Ollama model, pull it into the container and pick it from **Model**.
 
@@ -83,6 +83,8 @@ When you name a container or image by part of its name and there's exactly one m
 > Tool calls run without a confirmation step, including ones that stop, remove or prune resources. Be explicit about what you want changed. Each message allows up to five rounds of tool calls.
 
 Logs and errors attached with **Ask AI** are passed to the model marked as untrusted data, and the model is told not to follow instructions inside them.
+
+Before a tool result goes to the provider, Orca blanks out secrets in it: values of keys and environment variables that look like passwords, tokens or keys, passwords in URLs, and the data of Kubernetes Secrets. See [Security](/docs/security/#the-ai-assistant).
 
 ## Ask about a container
 

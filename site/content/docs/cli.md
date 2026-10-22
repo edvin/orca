@@ -170,7 +170,7 @@ orca deploy --template <ID>
 
 | Argument or flag | Meaning |
 |------------------|---------|
-| `PATH` | A stack folder to bring up with Compose. It must be inside Orca's stacks directory (`orca/stacks` in your config directory, for example `~/.config/orca/stacks/<name>` on Linux). |
+| `PATH` | A project folder with a compose file (`compose.yaml`, `compose.yml`, `docker-compose.yaml` or `docker-compose.yml`), or a `.yml` or `.yaml` compose file itself. A relative path is taken from the folder you run the command in. The stack is named after the folder. The daemon reads the files, so with `--daemon-url` pointing at a remote host, give an absolute path on that host. |
 | `--template <ID>` | Deploy an app template by ID instead. Find IDs with `orca templates list`. |
 
 ## Templates

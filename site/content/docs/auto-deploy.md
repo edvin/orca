@@ -18,7 +18,7 @@ The webhook endpoints are:
 | Source | Endpoint | Authentication |
 |---|---|---|
 | GitHub | `POST /api/v1/webhooks/github` | HMAC-SHA256 signature in `X-Hub-Signature-256` |
-| Docker Hub | `POST /api/v1/webhooks/dockerhub` | Shared secret in `X-Orca-Webhook-Token` |
+| Docker Hub | `POST /api/v1/webhooks/dockerhub` | Shared secret as `?token=<secret>` in the URL, or in an `X-Orca-Webhook-Token` header |
 
 These two paths are the only API routes that don't need the API token. They authenticate with the webhook secret instead.
 
@@ -29,13 +29,11 @@ These two paths are the only API routes that don't need the API token. They auth
 
 Open **Settings**, then the **Auto-Deploy** tab. Settings apply to the host that is currently selected, so switch to the server first.
 
-Enter a long random value in **Webhook Secret** and click **Save**. You'll paste the same value into GitHub. To generate one:
+Click **Generate** next to **Webhook Secret** to fill in a random secret and copy it to the clipboard, or enter your own long random value. Then click **Save**. You'll paste the same value into GitHub, or into the Docker Hub webhook URL.
 
-```bash
-openssl rand -hex 32
-```
+The secret is required: the daemon rejects every webhook until one is set. A GitHub request without a valid signature fails with `webhook rejected: invalid or missing signature`.
 
-The daemon rejects every webhook until a secret is set. A request without a valid signature fails with `webhook rejected: missing X-Hub-Signature-256 header` or `webhook rejected: signature did not match any configured secret`.
+The secret in **Settings** is the global secret, and a webhook that proves it can trigger every rule. A rule can also have its own secret, which only triggers that rule. The app has no field for per-rule secrets; set one with the `webhook_secret` field of `POST /api/v1/deploy/rules` (see the [REST API](/docs/api/)).
 
 The secret is stored in the daemon's `config.json` and is never sent back to the app, so the field stays empty when you return to the tab.
 
@@ -47,7 +45,7 @@ On the **Auto-Deploy** tab, click **Add Rule** and fill in the form:
 |---|---|
 | **Rule Name** | A label shown in the rules table and deploy history. |
 | **Image Pattern** | The image name without a tag, for example `ghcr.io/myorg/api`. |
-| **Tag Filter** | Which pushed tags trigger a deploy. See below. |
+| **Tag Filter** | Which pushed tags trigger a deploy, as one filter or a comma-separated list. See below. |
 | **Container Names** | Comma-separated container names to recreate, for example `api, worker`. Leave empty to recreate every container whose image contains the pattern. |
 | **Enabled** | Turn off to pause the rule without deleting it. |
 
@@ -59,7 +57,7 @@ The image from the webhook must equal **Image Pattern**, or equal it once the re
 
 ### Tag filters
 
-Each rule has one tag filter:
+A tag filter is one pattern or a comma-separated list of them, such as `latest, v*`. The rule deploys when the tag matches any of them:
 
 | Filter | Matches |
 |---|---|
@@ -68,7 +66,7 @@ Each rule has one tag filter:
 | `latest` | Only `latest` |
 | `main` | Only the tag `main` |
 
-A filter ending in `*` is a prefix match. Anything else must match the tag exactly. To deploy on both `latest` and version tags, create two rules.
+A pattern ending in `*` is a prefix match. Anything else must match the tag exactly.
 
 ### Test a rule
 
@@ -133,25 +131,21 @@ jobs:
 
 With this workflow, a rule with **Tag Filter** `v*` deploys releases, and a rule with `main` or `latest` deploys every commit to the default branch.
 
-The daemon pulls the new image without registry credentials, so the package must be public for push to deploy to work.
+For a private package, add a login for `ghcr.io` under **Settings → Registries** on the server. The daemon uses the saved credentials for the image's registry when it pulls.
 
 ## Connect Docker Hub
 
-Docker Hub doesn't sign its webhooks. The `/api/v1/webhooks/dockerhub` endpoint instead requires an `X-Orca-Webhook-Token` header whose value equals the webhook secret, compared in constant time.
+Docker Hub doesn't sign its webhooks, and its webhook settings only take a URL. Put the webhook secret in the URL as a `token` parameter:
 
-Docker Hub's webhook settings only take a URL, so put something in between that adds the header. With Caddy in front of the daemon, you can give Docker Hub a hard-to-guess path and add the header there:
-
-```text title="Caddyfile"
-orca.example.com {
-    handle /hooks/dockerhub-<random-string> {
-        rewrite * /api/v1/webhooks/dockerhub
-        reverse_proxy localhost:9477 {
-            header_up X-Orca-Webhook-Token "<your webhook secret>"
-        }
-    }
-    reverse_proxy localhost:9477
-}
+```text
+https://orca.example.com/api/v1/webhooks/dockerhub?token=<your webhook secret>
 ```
+
+Add a webhook with that URL in the repository's webhook settings on Docker Hub. The daemon compares the token with the secret in constant time. It also accepts the secret in an `X-Orca-Webhook-Token` header, for senders that can set headers.
+
+Because the secret is part of the URL, use HTTPS, and keep in mind that proxies in front of the daemon may log it.
+
+Private Docker Hub images need a Docker Hub login under **Settings → Registries**.
 
 The daemon reads the tag from `push_data.tag` and the image from `repository.repo_name`, as `docker.io/<repo>`. Official images with one-segment names become `docker.io/library/<repo>`.
 
@@ -188,9 +182,8 @@ A successful webhook returns `{"accepted":true,"matched_rules":N}`. That means t
 
 | Message | Cause |
 |---|---|
-| `webhook rejected: no signing secret configured` | No webhook secret is set on this host. |
-| `webhook rejected: signature did not match any configured secret` | The secret in GitHub differs from the one in Orca. |
-| `unauthorized webhook` | The Docker Hub request had no `X-Orca-Webhook-Token` header, or the wrong value. |
+| `webhook rejected: invalid or missing signature` | No webhook secret is set on this host, or the secret in GitHub differs from the one in Orca. |
+| `unauthorized webhook` | The Docker Hub request had no token, or the wrong one. |
 | `Not a container package event` | The package is not a container image. |
 | `webhook body too large` | The payload is over 1 MiB. |
 

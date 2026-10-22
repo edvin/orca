@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjuihlm">
+<link rel="stylesheet" href="/assets/site.css?v=mvjvhtmb">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjuihlm" defer></script>
+<script src="/assets/site.js?v=mvjvhtmb" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -59,7 +59,7 @@
     <div class="prose"><p>Most problems show up on the <strong>System Health</strong> page, and most of them have a button there that fixes them. This page explains those buttons, then covers specific symptoms. If nothing here helps, see <a href="#report-a-bug">Report a bug</a>.</p>
 <h2 id="start-with-system-health"><a class="anchor" href="#start-with-system-health" aria-hidden="true" tabindex="-1">#</a>Start with System Health</h2>
 <p>Open <strong>System Health</strong> in the sidebar. Each check shows its status, and a failing check has a <strong>Fix</strong> button that runs the repair and streams its output in a dialog. The buttons at the top:</p>
-<div class="table-wrap"><table><thead><tr><th>Button</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Set up Docker</strong></td><td>Runs first-start setup again for your platform. Shown when Orca can&#39;t reach Docker.</td></tr><tr><td><strong>Recreate VM</strong></td><td>macOS only. Deletes the Lima VM and builds a fresh one on the current base. Containers, images and volumes in it are lost.</td></tr><tr><td><strong>Restart Docker &amp; Orca</strong></td><td>Stops the Orca daemon, starts the Docker service (in WSL2 on Windows, with <code>systemctl</code> on Linux), and starts the daemon again so it reconnects. On macOS the daemon starts the VM itself if it&#39;s stopped.</td></tr><tr><td><strong>Diagnose</strong></td><td>Tries every way Orca knows to reach Docker and shows the log in <strong>Connection Diagnostics</strong>. If it finds a working connection, Orca switches to it without a restart.</td></tr><tr><td><strong>Re-check</strong></td><td>Runs the checks again.</td></tr></tbody></table></div><h2 id="orca-daemon-is-not-running"><a class="anchor" href="#orca-daemon-is-not-running" aria-hidden="true" tabindex="-1">#</a>Orca daemon is not running</h2>
+<div class="table-wrap"><table><thead><tr><th>Button</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Set up Docker</strong></td><td>Runs first-start setup again for your platform. Shown when Orca can&#39;t reach Docker.</td></tr><tr><td><strong>Recreate VM</strong></td><td>macOS only. Deletes the Lima VM and builds a fresh one on the current base. Containers, images and volumes in it are lost.</td></tr><tr><td><strong>Restart Docker &amp; Orca</strong></td><td>Restarts Docker, then restarts the Orca daemon so it reconnects. On macOS it stops and starts the Lima VM; on Windows it starts Docker in WSL2; on Linux it starts the Docker service with <code>systemctl</code>.</td></tr><tr><td><strong>Diagnose</strong></td><td>Tries every way Orca knows to reach Docker and shows the log in <strong>Connection Diagnostics</strong>. If it finds a working connection, Orca switches to it without a restart.</td></tr><tr><td><strong>Re-check</strong></td><td>Runs the checks again.</td></tr></tbody></table></div><h2 id="orca-daemon-is-not-running"><a class="anchor" href="#orca-daemon-is-not-running" aria-hidden="true" tabindex="-1">#</a>Orca daemon is not running</h2>
 <p>The app shows <strong>Orca daemon is not running</strong> when it can&#39;t reach the daemon on <code>127.0.0.1:9477</code>.</p>
 <ol>
 <li>Click <strong>Start Daemon</strong>, then <strong>Retry Connection</strong>.</li>

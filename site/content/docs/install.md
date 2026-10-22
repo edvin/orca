@@ -96,6 +96,8 @@ First quit Orca from the tray or menu bar icon with **Quit Orca**. Closing the w
    ```
 4. Delete `~/Library/Application Support/orca` to remove settings, the API token and the local CA.
 
+You can do steps 2 and 4 from the app before you quit it, in **Settings** > **About** > **Cleanup**: **Stop & Remove VMs** stops and deletes the `orca` VM, and **Reset All** also deletes the settings folder. Other Lima VMs on the Mac are left alone.
+
 Homebrew and the packages setup installed (`lima`, `docker`, `docker-compose`, `docker-buildx`) stay. Remove them with `brew uninstall` if you don't need them.
 
 ### Windows
