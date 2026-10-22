@@ -70,7 +70,7 @@ async fn report(state: &AppState, name: &str) -> Result<serde_json::Value, ApiEr
         .into_iter()
         .filter(|c| c.labels.get("com.docker.compose.project").map(String::as_str) == Some(name))
         .collect();
-    let services: Vec<String> = {
+    let service_names: Vec<String> = {
         let mut s: Vec<String> = containers
             .iter()
             .filter_map(|c| c.labels.get("com.docker.compose.service").cloned())
@@ -80,12 +80,16 @@ async fn report(state: &AppState, name: &str) -> Result<serde_json::Value, ApiEr
         s
     };
 
+    let services = describe_services(state, &containers).await;
+
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Ok(serde_json::json!({
             "path": path,
             "exists": false,
             "reference": REFERENCE_URL,
-            "suggestion": suggestion(state, name, &containers).await,
+            "suggestion": suggestion(name, &services),
+            "services": services,
+            "domain": state.config.lock().await.gateway.domain.clone(),
         }));
     };
 
@@ -122,7 +126,7 @@ async fn report(state: &AppState, name: &str) -> Result<serde_json::Value, ApiEr
                     "blocked",
                     format!("{} already uses it", c["taken_by"].as_str().unwrap_or("another route")),
                 ),
-                (None, None) if !services.contains(&r.service) => {
+                (None, None) if !service_names.contains(&r.service) => {
                     ("unknown", format!("This stack has no service '{}'", r.service))
                 }
                 (None, None) if !running => ("waiting", format!("Applied once '{}' runs", r.service)),
@@ -152,6 +156,8 @@ async fn report(state: &AppState, name: &str) -> Result<serde_json::Value, ApiEr
         "builds": yaml.builds.iter().map(|b| b.name.clone()).collect::<Vec<_>>(),
         "hooks": yaml.hooks.after_up,
         "has_dev": yaml.dev.is_some(),
+        "services": services,
+        "domain": domain,
     }))
 }
 
@@ -160,17 +166,23 @@ const WEB_PORTS: &[u16] = &[
     80, 8080, 3000, 5173, 8000, 4200, 5000, 8081, 3001, 8888, 9000, 4000, 1080, 8025, 8123, 15672, 9001,
 ];
 
-/// A first `orca.yaml` for a running stack: a route for each service that
-/// looks like a web app, and the other sections commented out as examples.
-async fn suggestion(state: &AppState, name: &str, containers: &[Container]) -> String {
+/// A service of the stack, for the editor's dropdowns.
+#[derive(serde::Serialize)]
+struct Service {
+    name: String,
+    image: String,
+    /// Ports it listens on inside its container: exposed or published.
+    ports: Vec<u16>,
+}
+
+async fn describe_services(state: &AppState, containers: &[Container]) -> Vec<Service> {
     let rt = state.rt().await;
-    let mut web: Vec<(String, u16)> = Vec::new();
-    let mut seen = std::collections::BTreeSet::new();
+    let mut out: Vec<Service> = Vec::new();
     for c in containers {
         let Some(service) = c.labels.get("com.docker.compose.service") else {
             continue;
         };
-        if !seen.insert(service.clone()) {
+        if out.iter().any(|s| &s.name == service) {
             continue;
         }
         let mut ports: Vec<u16> = c.ports.iter().map(|p| p.container_port).collect();
@@ -183,10 +195,34 @@ async fn suggestion(state: &AppState, name: &str, containers: &[Container]) -> S
                     .filter_map(|k| k.strip_suffix("/tcp")?.parse::<u16>().ok()),
             );
         }
-        if let Some(port) = WEB_PORTS.iter().find(|p| ports.contains(p)) {
-            web.push((service.clone(), *port));
-        }
+        ports.sort();
+        ports.dedup();
+        out.push(Service {
+            name: service.clone(),
+            image: c.image.clone(),
+            ports,
+        });
     }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
+/// Soketi (or another Pusher-protocol server) in the stack: browsers using
+/// Laravel Echo / pusher-js connect to `/app/<key>` on the page's own host.
+fn pusher_service(services: &[Service]) -> Option<&Service> {
+    services.iter().find(|s| s.image.contains("soketi"))
+}
+
+/// A first `orca.yaml` for a running stack: a route for each service that
+/// looks like a web app (and Soketi's `/app/*` under the main one), and the
+/// other sections commented out as examples.
+fn suggestion(name: &str, services: &[Service]) -> String {
+    let pusher = pusher_service(services);
+    let web: Vec<(String, u16)> = services
+        .iter()
+        .filter(|s| pusher.is_none_or(|p| p.name != s.name))
+        .filter_map(|s| Some((s.name.clone(), *WEB_PORTS.iter().find(|p| s.ports.contains(p))?)))
+        .collect();
     let slug = |s: &str| {
         s.to_lowercase()
             .chars()
@@ -211,6 +247,22 @@ async fn suggestion(state: &AppState, name: &str, containers: &[Container]) -> S
             };
             out.push_str(&format!(
                 "  - hostname: {host}\n    service: {service}\n    port: {port}\n"
+            ));
+        }
+        if let Some(p) = pusher {
+            let host = if web.len() == 1 {
+                slug(name)
+            } else {
+                format!("{}-{}", slug(&web[0].0), slug(name))
+            };
+            let port = if p.ports.contains(&6001) {
+                6001
+            } else {
+                p.ports.first().copied().unwrap_or(6001)
+            };
+            out.push_str(&format!(
+                "  # Pusher clients (Laravel Echo) connect to /app/ on the page's own host.\n  - hostname: {host}\n    service: {}\n    port: {port}\n    path: /app/*\n",
+                p.name
             ));
         }
         out
@@ -247,4 +299,45 @@ async fn suggestion(state: &AppState, name: &str, containers: &[Container]) -> S
         group = name,
         local = slug(name),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn svc(name: &str, image: &str, ports: &[u16]) -> Service {
+        Service {
+            name: name.into(),
+            image: image.into(),
+            ports: ports.to_vec(),
+        }
+    }
+
+    #[test]
+    fn suggestion_routes_pusher_path_on_the_app_host() {
+        let services = [
+            svc("soketi", "quay.io/soketi/soketi:1.6", &[6001, 9601]),
+            svc("web", "shop-web", &[80]),
+        ];
+        let text = suggestion("My Shop", &services);
+        let yaml = OrcaYaml::parse(&text).unwrap();
+        let routes: Vec<_> = yaml
+            .gateway
+            .iter()
+            .map(|r| (r.hostname.as_str(), r.service.as_str(), r.port, r.path.as_deref()))
+            .collect();
+        assert_eq!(
+            routes,
+            vec![
+                ("my-shop", "web", 80, None),
+                ("my-shop", "soketi", 6001, Some("/app/*"))
+            ]
+        );
+    }
+
+    #[test]
+    fn suggestion_without_web_service_is_all_comments() {
+        let text = suggestion("db", &[svc("postgres", "postgres:16", &[5432])]);
+        assert!(OrcaYaml::parse(&text).unwrap().gateway.is_empty());
+    }
 }

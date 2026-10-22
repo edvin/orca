@@ -12,6 +12,7 @@ import { showToast } from "../Toast";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 
 const ORCA_YAML_REFERENCE = "https://github.com/edvin/orca/blob/main/docs/orca-yaml.md";
+import OrcaYamlStudio from "../orcayaml/OrcaYamlStudio";
 import { DataSection, PresetsSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";
 
@@ -51,7 +52,7 @@ const KEYS: [string, string][] = [
   ["service", "The compose service a gateway route goes to"],
 ];
 
-function orcaCompletions(ctx: CompletionContext) {
+export function orcaCompletions(ctx: CompletionContext) {
   const word = ctx.matchBefore(/[a-z_]*/);
   if (!word || (word.from === word.to && !ctx.explicit)) return null;
   return {
@@ -60,9 +61,15 @@ function orcaCompletions(ctx: CompletionContext) {
   };
 }
 
+/** form: the dev: section; project: routes, links, hooks, builds; yaml: the file. */
+type View = "form" | "project" | "yaml";
+
 export default function OrcaYamlEditor(props: Props) {
   const [analysis, setAnalysis] = createSignal<SetupAnalysis | null>(null);
-  const [view, setView] = createSignal<"form" | "yaml">("form");
+  const [view, setView] = createSignal<View>("form");
+  // The text the routes/links editor starts from; set when it opens, so its
+  // own edits flowing back through `text` don't restart it.
+  const [studioSeed, setStudioSeed] = createSignal("");
   const [dev, setDev] = createStore<DevConfigT>({} as DevConfigT);
   const [text, setText] = createSignal("");
   const [yamlError, setYamlError] = createSignal<{ msg: string; line: number | null } | null>(null);
@@ -94,7 +101,7 @@ export default function OrcaYamlEditor(props: Props) {
   };
   const check = async () => {
     try {
-      const source = view() === "yaml" ? text() : (await devApi.writeYaml(props.project.id, { dev: unwrap(dev), dry_run: true })).text;
+      const source = view() !== "form" ? text() : (await devApi.writeYaml(props.project.id, { dev: unwrap(dev), dry_run: true })).text;
       const r = await devApi.validateYaml(props.project.id, source, dryInstance() || undefined);
       setYamlError(r.validation.ok ? null : { msg: r.validation.error ?? "invalid", line: r.validation.line });
       setDry(r.plan);
@@ -104,12 +111,15 @@ export default function OrcaYamlEditor(props: Props) {
     }
   };
 
-  const switchView = async (v: "form" | "yaml") => {
+  const switchView = async (v: View) => {
     if (v === view()) return;
-    if (v === "yaml") {
-      // Form → YAML: render the form's config (keeps other top-level keys).
-      const r = await devApi.writeYaml(props.project.id, { dev: unwrap(dev), dry_run: true });
-      setText(r.text);
+    if (v !== "form") {
+      // Form → text: render the form's config (keeps other top-level keys).
+      if (view() === "form") {
+        const r = await devApi.writeYaml(props.project.id, { dev: unwrap(dev), dry_run: true });
+        setText(r.text);
+      }
+      if (v === "project") setStudioSeed(text());
     } else {
       // YAML → form: only when the YAML parses.
       const r = await devApi.validateYaml(props.project.id, text());
@@ -126,7 +136,7 @@ export default function OrcaYamlEditor(props: Props) {
     setSaving(true);
     try {
       const r =
-        view() === "yaml"
+        view() !== "form"
           ? await devApi.writeYaml(props.project.id, { text: text() })
           : await devApi.writeYaml(props.project.id, { dev: unwrap(dev) });
       showToast(`Saved ${r.path.split("/").pop()}`, "success");
@@ -172,7 +182,8 @@ export default function OrcaYamlEditor(props: Props) {
             Reference
           </button>
           <div class="dev-seg" style={{ "margin-right": "12px" }}>
-            <button classList={{ active: view() === "form" }} onClick={() => switchView("form")}>Form</button>
+            <button classList={{ active: view() === "form" }} onClick={() => switchView("form")}>Worktrees</button>
+            <button classList={{ active: view() === "project" }} onClick={() => switchView("project")}>Routes, links…</button>
             <button classList={{ active: view() === "yaml" }} onClick={() => switchView("yaml")}>YAML</button>
           </div>
           <button class="modal-close" onClick={props.onClose}>×</button>
@@ -185,6 +196,24 @@ export default function OrcaYamlEditor(props: Props) {
                 <FormSection title="Data"><DataSection {...section()} /></FormSection>
                 <FormSection title="Reach"><ReachSection {...section()} /></FormSection>
                 <FormSection title="Presets and setup commands"><PresetsSection {...section()} /></FormSection>
+              </Show>
+              <Show when={view() === "project"}>
+                <p style={{ color: "#8b949e", "font-size": "12px", "margin": "0 0 12px", "line-height": "1.5" }}>
+                  For the project as it runs from its own folder. Worktree instances get their hostnames from the Worktrees view (Reach).
+                </p>
+                <OrcaYamlStudio
+                  noYamlTab
+                  text={studioSeed()}
+                  services={analysis()!.services.map((s) => ({ name: s.name, image: s.image, ports: s.ports.map((p) => p.target) }))}
+                  domain={analysis()!.hostnames.domain}
+                  projectName={props.project.root.split("/").filter(Boolean).pop() ?? props.project.id}
+                  height="calc(100vh - 340px)"
+                  onChange={(t) => {
+                    setText(t);
+                    setDirty(true);
+                    scheduleCheck();
+                  }}
+                />
               </Show>
               <Show when={view() === "yaml"}>
                 <div style={{ height: "calc(100% - 40px)", "min-height": "360px", display: "flex", "flex-direction": "column" }}>
@@ -256,7 +285,7 @@ export default function OrcaYamlEditor(props: Props) {
               <span style={{ "font-size": "12px", color: "#d29922", "margin-right": "auto" }}>Unsaved changes</span>
             </Show>
             <button class="btn" onClick={props.onClose}>Close</button>
-            <button class="btn btn-primary" disabled={saving() || !dirty() || (view() === "yaml" && !!yamlError())} onClick={save}>
+            <button class="btn btn-primary" disabled={saving() || !dirty() || (view() !== "form" && !!yamlError())} onClick={save}>
               Save
             </button>
           </div>

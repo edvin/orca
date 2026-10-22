@@ -30,7 +30,8 @@
     "@xterm/xterm": "^5.5.0",
     "codemirror": "^6.0.2",
     "dompurify": "^3.3.3",
-    "solid-js": "^1.9.0"
+    "solid-js": "^1.9.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

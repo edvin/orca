@@ -2,7 +2,7 @@
 
 `orca.yaml` tells Orca how to run a project. Put it next to the project's compose file and commit it: everyone who runs the project with Orca gets the same hostnames, links, build targets and setup commands.
 
-The quickest way to start one is the **orca.yaml** tab on a stack's page in Orca: **Create orca.yaml** writes a first version from the stack's running services. For worktree instances, add the project on the **Projects** page instead; its setup wizard writes the `dev:` section.
+The quickest way to start one is the **orca.yaml** tab on a stack's page in Orca: **Create orca.yaml** writes a first version from the stack's running services. The same tab edits it: routes, links, setup commands and builds as forms, with the stack's services and ports to pick from, or the file itself; both stay in step, and comments and sections the forms don't cover are kept. For worktree instances, add the project on the **Projects** page; its orca.yaml dialog has the `dev:` section as a form, and the same routes and links editor.
 
 ## When Orca reads it
 
@@ -95,6 +95,36 @@ Its title, subtitle, and whether it shows status and the container behind each c
 A hostname that a route added by hand on the Gateway page, or a worktree instance, already uses stays with that route. The orca.yaml tab and the Gateway page say which route has it.
 
 Every routed hostname also resolves inside containers that share a network with a routed container, to the gateway. A backend can call `https://auth.<domain>` the way the browser does, which OIDC issuer URLs need. With Orca's own certificate authority, the calling container has to trust it: `orca ca export` writes it out.
+
+### WebSockets
+
+WebSockets pass through every route as they are; hot reload, Laravel Reverb and GraphQL subscriptions need nothing extra.
+
+A Pusher-protocol server such as **Soketi** belongs in the project that uses it, routed on the app's own hostname. Laravel Echo and pusher-js connect to `/app/<key>` on the host they're given, so one path route sends that to Soketi and everything else keeps going to the app:
+
+```yaml
+gateway:
+  - hostname: shop
+    service: web
+    port: 80
+  - hostname: shop            # the same hostname
+    service: soketi
+    port: 6001
+    path: /app/*              # Pusher clients connect to /app/<key>
+```
+
+The app then uses its own hostname for the socket, so there is no separate WebSocket host to keep in sync, and nothing to exclude for other projects:
+
+```dotenv
+PUSHER_HOST=shop.localhost
+PUSHER_PORT=443
+PUSHER_SCHEME=https
+VITE_PUSHER_HOST="${PUSHER_HOST}"
+```
+
+The server side (`php artisan` broadcasting to `soketi:6001` inside the compose network) is unchanged. Orca's editor offers this route when the stack runs a Soketi image, and **Create orca.yaml** includes it.
+
+With worktree instances, each instance gets its own Soketi on its own hostname: `dev.instance.expose.soketi: {port: 6001, host: web, path: /app/*}` routes `/app/*` on the instance's `web` hostname to the instance's Soketi.
 
 **Instead of orca.yaml,** a container can ask for a route in its own labels:
 

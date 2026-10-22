@@ -4192,3 +4192,9 @@ select option {
   min-width: 48px;
   width: 48px;
 }
+
+/* orca.yaml editor: fields fill their grid cells. */
+.orca-studio .form-input,
+.orca-studio .custom-dropdown { width: 100%; box-sizing: border-box; min-width: 0; }
+.orca-studio label { min-width: 0; }
+.orca-studio .custom-dropdown-value { text-align: left; }
