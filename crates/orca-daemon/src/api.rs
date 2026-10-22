@@ -8194,11 +8194,14 @@ const MCP_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
 /// Shown to agents on connect, so they know when Orca is the right tool.
 const MCP_INSTRUCTIONS: &str = "Orca manages this machine's containers, compose stacks, Kubernetes and git worktree instances. \
-If you work in a git worktree of a project registered with Orca, use instance_up with your worktree path to run \
-this branch's code (its own URLs and ports, shared databases), instance_status or instance_env to find its URLs and \
-ports, instance_logs to debug, and instance_down when done. Ask for data={\"postgres\": \"own-database\"} before \
-running migrations or writing test data, so other worktrees are not affected. The other tools inspect and manage \
-containers, images, stacks and Kubernetes directly.";
+To start a project from a folder with a compose file or orca.yaml, use deploy_project with its path; then list_stacks, \
+stack_logs and gateway_routes show how it runs and which https://*.localhost URL serves it. stack_profiles and \
+set_stack_profiles switch optional services on and off; read_orca_yaml and write_orca_yaml edit a stack's Orca settings. \
+If you work in a git worktree of a project registered with Orca (list_projects, add_project), use instance_up with your \
+worktree path to run this branch's code (its own URLs and ports, shared databases), instance_status or instance_env to \
+find its URLs and ports, instance_logs to debug, and instance_down when done. Ask for data={\"postgres\": \"own-database\"} \
+before running migrations or writing test data, so other worktrees are not affected. Confirm with the user before \
+removing anything or stopping work they did not ask you to stop.";
 
 /// Tools that only read state, so clients may run them without asking.
 fn mcp_read_only(name: &str) -> bool {
@@ -8220,6 +8223,12 @@ fn mcp_read_only(name: &str) -> bool {
                 | "instance_status"
                 | "instance_logs"
                 | "instance_env"
+                | "stack_logs"
+                | "stack_profiles"
+                | "read_orca_yaml"
+                | "gateway_status"
+                | "gateway_routes"
+                | "build_status"
         )
 }
 
@@ -8227,7 +8236,10 @@ fn mcp_destructive(name: &str) -> bool {
     name.starts_with("remove_")
         || name.starts_with("prune_")
         || name.starts_with("k8s_delete")
-        || matches!(name, "instance_down" | "instance_db_reset" | "compose_down")
+        || matches!(
+            name,
+            "instance_down" | "instance_db_reset" | "compose_down" | "write_orca_yaml" | "gateway_remove_route"
+        )
 }
 
 /// MCP (Model Context Protocol) JSON-RPC endpoint.

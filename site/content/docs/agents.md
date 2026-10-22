@@ -1,21 +1,85 @@
 ---
 title: AI agents and MCP
 nav: Agents & MCP
-description: Connect Claude Code and other MCP clients to Orca, use the OpenAI-compatible and direct tool endpoints, and see every agent tool.
+description: Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex to Orca in one click, with no tokens to copy, and see every tool they get.
 ---
 
-Orca's daemon exposes its container, stack, Kubernetes and worktree operations as tools that AI agents can call. This page shows how to connect Claude Code or another MCP client, how to call the same tools over plain HTTP, and lists every tool.
+Orca is an MCP server. Connect Claude or another AI tool and it can do what you'd do in Orca: start a project from a folder, switch its profiles, read logs, add an HTTPS route, run a worktree instance of a branch and tell you its URL. You don't need an API key, and you don't copy any tokens.
 
-All agent endpoints live on the local daemon at `http://127.0.0.1:9477/api/v1/agent/` and need the daemon's API token.
+## Connect in one click
 
-## Get your API token
+Open **Settings → AI & Agents**. Under **Connect your AI tools**, Orca lists the AI tools it supports and shows which of them are on this computer:
 
-Open **Settings → AI & Agents** and scroll to **Agent Integration**. It shows:
+| Tool | Where Orca adds itself |
+|------|------------------------|
+| Claude Code | `claude mcp add --scope user`, or `~/.claude.json` |
+| Claude Desktop | `claude_desktop_config.json` in Claude's settings folder |
+| Cursor | `~/.cursor/mcp.json` |
+| VS Code (Copilot agent mode) | `mcp.json` in VS Code's user settings |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Codex | `~/.codex/config.toml` |
 
-- **MCP Server Config**: a ready-made JSON block. The copy button fills in your real token.
-- **OpenAI-Compatible Endpoint**: the endpoint URL and the **API Token**, with buttons to reveal and copy it.
+Click **Connect** next to a tool. Orca adds one entry named `orca` to that tool's config and leaves the rest of the file alone. Then:
 
-The token is created the first time the daemon starts and stored as `api_token` in Orca's config file:
+- **Claude Code** and **Codex**: start a new session. In Claude Code, `/mcp` lists Orca.
+- **Claude Desktop**: quit and reopen it.
+- **Cursor**, **VS Code** and **Windsurf**: Orca shows up in the tool's MCP settings.
+
+**Disconnect** removes that entry again.
+
+Then ask, for example:
+
+- *"Start the project in ~/code/shop and give me its URL."*
+- *"Why does the api container keep restarting?"*
+- *"Turn on the search profile for shop."*
+- *"Run my feature branch as its own instance, with its own database."*
+
+### Why there's no token
+
+The entry Orca adds runs `orca mcp`, the Orca CLI as a local MCP server over stdio:
+
+```json
+{
+  "mcpServers": {
+    "orca": { "command": "/Users/you/Library/Application Support/orca/bin/orca", "args": ["mcp"] }
+  }
+}
+```
+
+`orca mcp` reads the daemon's API token from Orca's own config file each time it starts, and passes your AI tool's requests on to the daemon. The token never appears in the AI tool's config, so there's nothing secret to commit or paste into a chat, and if you reset Orca's token, connected tools keep working.
+
+Orca keeps its own copy of the CLI in its data folder (`~/Library/Application Support/orca/bin` on macOS, `~/.local/share/orca/bin` on Linux, `%LOCALAPPDATA%\orca\bin` on Windows) and refreshes it whenever the app starts. Updating Orca or moving the app doesn't break your AI tools' configs.
+
+If Orca isn't running when your AI tool calls it, the tool gets a clear error saying so instead of hanging.
+
+## Connect from the terminal
+
+The same works from the CLI, for example on a server or in a dotfiles script:
+
+```bash
+orca mcp install            # connect every supported AI tool found on this machine
+orca mcp install cursor     # or just one: claude-code, claude-desktop, cursor, vscode, windsurf, codex
+orca mcp status             # which tools are found and connected
+orca mcp uninstall          # remove Orca from every tool it was added to
+```
+
+## Other MCP clients
+
+Any MCP client that starts stdio servers can run Orca. Give it the command `orca` with the argument `mcp`, the same as the JSON above. **Settings → AI & Agents → Another MCP client?** shows the block with the full path on your machine, ready to copy.
+
+## Manage a remote host
+
+If you've added a remote Orca host in **Remote Hosts**, an AI tool can manage that host instead of this computer. Add `--host` with the host's name to the arguments:
+
+```json
+{ "command": "orca", "args": ["mcp", "--host", "build-server"] }
+```
+
+`orca mcp --host` uses the URL, token and TLS setting Orca Desktop already stores for that host. Connect it under a second name, such as `orca-build-server`, to have both.
+
+## HTTP endpoint (advanced)
+
+The daemon also speaks MCP over HTTP at `http://127.0.0.1:9477/api/v1/agent/mcp`, for clients that can't start local commands. This one needs the API token as a Bearer header. **Settings → AI & Agents → HTTP endpoint (advanced)** shows and copies the token. Orca stores it as `api_token` in its config file:
 
 | Platform | Config file |
 |----------|-------------|
@@ -24,47 +88,21 @@ The token is created the first time the daemon starts and stored as `api_token` 
 | Windows | `%APPDATA%\orca\config.json` |
 
 ```bash
-# macOS
-python3 -c "import json,os; print(json.load(open(os.path.expanduser('~/Library/Application Support/orca/config.json')))['api_token'])"
-```
-
-> [!WARNING]
-> The token gives full control over your containers and clusters. Keep it out of files you commit, such as a shared `.mcp.json`.
-
-## Connect Claude Code
-
-Orca speaks MCP over HTTP at `http://127.0.0.1:9477/api/v1/agent/mcp`, with the token as a Bearer header. Add it with the `claude` CLI:
-
-```bash
 claude mcp add --transport http orca http://127.0.0.1:9477/api/v1/agent/mcp \
   --header "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 
-Add `--scope user` to make it available in every project instead of only the current one.
+> [!WARNING]
+> The token gives full control over your containers and clusters. Keep it out of files you commit, such as a shared `.mcp.json`. The one-click connection above avoids the problem.
 
-Or put the server in a `.mcp.json` file in your project. This is the same block that **Agent Integration** copies for you:
+The endpoint takes JSON-RPC over `POST` and supports `initialize`, `ping`, `tools/list` and `tools/call` (protocol versions `2025-06-18`, `2025-03-26` and `2024-11-05`).
 
-```json title=".mcp.json"
-{
-  "mcpServers": {
-    "orca": {
-      "type": "http",
-      "url": "http://127.0.0.1:9477/api/v1/agent/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_TOKEN_HERE"
-      }
-    }
-  }
-}
-```
+## What the agent is told
 
-When an agent connects, Orca sends instructions that tell it when to use the worktree tools. Each tool also carries hints: read-only tools (listing, logs, status) are marked `readOnlyHint`, and tools that delete things (`remove_*`, `prune_images`, `k8s_delete_pod`, `compose_down`, `instance_down`, `instance_db_reset`) are marked `destructiveHint`, so clients that respect these hints can ask before running them.
+When an AI tool connects, Orca sends instructions on when to use which tools: `deploy_project` for a folder that isn't running yet, the `instance_*` tools inside a git worktree, and to ask before removing anything. Each tool also carries hints that clients use to decide when to ask you first:
 
-## Other MCP clients
-
-Any MCP client that can connect to an HTTP server and send a custom header works with the same URL and `Authorization: Bearer <token>` header. The endpoint takes JSON-RPC over `POST` and supports `initialize`, `ping`, `tools/list` and `tools/call` (protocol versions `2025-06-18`, `2025-03-26` and `2024-11-05`).
-
-Clients that can only launch local stdio servers need a bridge that forwards to an HTTP server. Orca doesn't ship one.
+- Tools that only read (listings, logs, status, `read_orca_yaml`) are marked `readOnlyHint`, so clients may run them without asking.
+- Tools that delete or overwrite (`remove_*`, `prune_images`, `k8s_delete_pod`, `compose_down`, `instance_down`, `instance_db_reset`, `write_orca_yaml`, `gateway_remove_route`) are marked `destructiveHint`.
 
 ## Agents working in git worktrees
 
@@ -131,7 +169,7 @@ A successful call returns `{"result": ...}`. A failed one returns HTTP 400 with 
 
 ## Tool reference
 
-Orca has 48 agent tools. The same set is available over MCP, the OpenAI-compatible endpoint, direct execution, and to the built-in [AI assistant](/docs/ai-assistant/).
+Orca has 69 agent tools. The same set is available over MCP, the OpenAI-compatible endpoint, direct execution, and to the built-in [AI assistant](/docs/ai-assistant/).
 
 ### Containers
 
@@ -173,12 +211,32 @@ Orca has 48 agent tools. The same set is available over MCP, the OpenAI-compatib
 | `list_stacks` | List Compose stacks with their services and status. |
 | `compose_up` | Run `docker compose up` for a stack. |
 | `compose_down` | Run `docker compose down` for a stack. |
+| `deploy_project` | Start the compose project in a folder and apply its `orca.yaml` (routes, setup hooks). Takes `path`. |
+| `stack_restart` | Restart every service of a stack. |
+| `stack_pull` | Pull the latest images for a stack's services. Run `compose_up` afterwards to recreate what changed. |
+| `stack_logs` | Recent logs of a stack, all services or one `service` (`tail`, default 100). |
+| `stack_profiles` | A stack's compose profiles, which are on, and the state of every service. |
+| `set_stack_profiles` | Choose which profiles a stack runs. With `apply` (default true) and the stack running, starts and stops services to match. |
+| `read_orca_yaml` | A stack's `orca.yaml`: text, path, skipped entries and the state of each route, or a suggested first file. |
+| `write_orca_yaml` | Write a stack's `orca.yaml`. Validated first, applied at once. |
+
+### Gateway
+
+| Tool | What it does |
+|------|--------------|
+| `gateway_status` | Whether the HTTPS gateway runs, its domain, ports, certificate mode and route count. |
+| `gateway_start` | Start the gateway. |
+| `gateway_stop` | Stop the gateway. Routes stay configured. |
+| `gateway_routes` | Every route: hostname, path, container, port, and where it comes from. |
+| `gateway_add_route` | Route a hostname (and optional `path`) to a `container` and `port`. `shop` becomes `shop.localhost`. |
+| `gateway_remove_route` | Remove a route that was added by hand. |
 
 ### Storage and networking
 
 | Tool | What it does |
 |------|--------------|
 | `list_volumes` | List Docker volumes. |
+| `remove_volume` | Delete a volume and its data. It must not be in use. |
 | `list_networks` | List Docker networks. |
 | `create_network` | Create a Docker network (`driver`, default `bridge`). |
 
@@ -188,6 +246,14 @@ Orca has 48 agent tools. The same set is available over MCP, the OpenAI-compatib
 |------|--------------|
 | `list_templates` | List the one-click app templates. |
 | `deploy_template` | Deploy a template by ID, with optional name, port and env overrides. |
+
+### Builds
+
+| Tool | What it does |
+|------|--------------|
+| `list_build_targets` | Build targets from the `builds:` section of every project's `orca.yaml`. |
+| `start_build` | Build an image from a target. Returns a build id. |
+| `build_status` | A build's status, duration and the end of its log. |
 
 ### Kubernetes
 
@@ -210,9 +276,15 @@ Orca has 48 agent tools. The same set is available over MCP, the OpenAI-compatib
 | `k8s_delete_pod` | Delete a pod so its controller recreates it. |
 | `k8s_helm_list` | List installed Helm releases. |
 
-### Worktree instances
+### Worktree projects and instances
 
-Each of these takes `worktree`, the absolute path of the git worktree.
+| Tool | What it does |
+|------|--------------|
+| `list_projects` | Projects registered for worktree instances, with their shared services and one instance per worktree. |
+| `add_project` | Register a git repository (any folder inside it) so each worktree can run as its own instance. |
+| `remove_project` | Unregister a project. Nothing in the repository changes. |
+
+The instance tools each take `worktree`, the absolute path of the git worktree.
 
 | Tool | What it does |
 |------|--------------|

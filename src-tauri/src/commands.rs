@@ -394,6 +394,67 @@ pub async fn stack_orca_yaml(name: String) -> Result<serde_json::Value, String> 
     get_json(&format!("/stacks/{}/orca-yaml", urlencoding::encode(&name))).await
 }
 
+// --- AI tools (MCP) ---------------------------------------------------------
+
+/// The `orca` CLI that ships next to this app's executable.
+fn bundled_cli() -> Result<std::path::PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let name = if cfg!(windows) { "orca.exe" } else { "orca" };
+    let cli = exe.parent().map(|d| d.join(name)).ok_or("no app folder")?;
+    if cli.is_file() {
+        Ok(cli)
+    } else {
+        Err(format!("the orca command isn't next to the app ({})", cli.display()))
+    }
+}
+
+/// Which AI tools are installed here, and which have Orca connected.
+#[tauri::command]
+pub async fn mcp_clients() -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(|| serde_json::to_value(orca_core::mcp_clients::status()).map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Connect an AI tool: it runs `orca mcp`, which needs no token in its config.
+#[tauri::command]
+pub async fn mcp_connect(client: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let cli = orca_core::mcp_clients::install_cli(&bundled_cli()?).map_err(|e| e.to_string())?;
+        orca_core::mcp_clients::connect(&client, &cli, &["mcp"]).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mcp_disconnect(client: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || orca_core::mcp_clients::disconnect(&client).map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The command other MCP clients run, installed where it stays put.
+#[tauri::command]
+pub async fn mcp_command() -> Result<String, String> {
+    tokio::task::spawn_blocking(|| {
+        orca_core::mcp_clients::install_cli(&bundled_cli()?)
+            .map(|p| p.display().to_string())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Keep the installed copy current after an update, when AI tools use it.
+pub fn refresh_installed_cli() {
+    if orca_core::mcp_clients::stable_cli_path().exists()
+        && let Ok(cli) = bundled_cli()
+    {
+        let _ = orca_core::mcp_clients::install_cli(&cli);
+    }
+}
+
 /// A stack's compose files, as Compose recorded them.
 #[tauri::command]
 pub async fn stack_compose_files(name: String) -> Result<serde_json::Value, String> {

@@ -54,6 +54,10 @@ pub fn run() {
             commands::stack_orca_yaml,
             commands::save_stack_orca_yaml,
             commands::stack_profiles,
+            commands::mcp_clients,
+            commands::mcp_connect,
+            commands::mcp_disconnect,
+            commands::mcp_command,
             commands::k8s_job_logs,
             commands::stack_compose_files,
             commands::save_stack_compose_file,
@@ -274,6 +278,8 @@ pub fn run() {
         ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;
+            // AI tools run a copy of the orca command; bring it up to date.
+            std::thread::spawn(commands::refresh_installed_cli);
 
             // macOS: native rounded corners
             #[cfg(target_os = "macos")]

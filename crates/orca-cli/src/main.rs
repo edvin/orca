@@ -3,6 +3,7 @@ use serde::Serialize;
 
 mod client;
 mod dev;
+mod mcp;
 
 #[derive(Parser)]
 #[command(name = "orca", about = "Orca — open source container desktop")]
@@ -101,6 +102,16 @@ enum Commands {
 
     /// Print CLI and daemon version
     Version,
+
+    /// Orca's MCP server for AI tools (Claude Code, Claude Desktop, Cursor, VS Code, Codex).
+    /// Without a subcommand it serves MCP over stdio, which is what the AI tool runs.
+    Mcp {
+        #[command(subcommand)]
+        action: Option<McpAction>,
+        /// Manage a remote host from Orca Desktop's list instead of this machine
+        #[arg(long)]
+        host: Option<String>,
+    },
 
     /// Manage containers
     Containers {
@@ -402,9 +413,38 @@ struct RouteExport {
     enabled: bool,
 }
 
+#[derive(Subcommand)]
+enum McpAction {
+    /// Connect AI tools to Orca: the ones found on this machine, or the one named
+    Install {
+        /// claude-code, claude-desktop, cursor, vscode, windsurf or codex
+        client: Option<String>,
+    },
+    /// Remove Orca from AI tools
+    Uninstall { client: Option<String> },
+    /// Which AI tools are installed and connected
+    Status,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    // MCP speaks on stdout, so it runs before anything that could print there.
+    if let Commands::Mcp { action, host } = &cli.command {
+        return match action {
+            None => {
+                mcp::serve(mcp::Target::resolve(
+                    &cli.daemon_url,
+                    cli.token.clone(),
+                    host.as_deref(),
+                )?)
+                .await
+            }
+            Some(McpAction::Install { client }) => mcp::manage("install", client.as_deref()),
+            Some(McpAction::Uninstall { client }) => mcp::manage("uninstall", client.as_deref()),
+            Some(McpAction::Status) => mcp::manage("status", None),
+        };
+    }
     let client = client::DaemonClient::new(cli.daemon_url.trim_end_matches('/'), cli.token)?;
 
     match cli.command {
@@ -431,6 +471,7 @@ async fn main() -> anyhow::Result<()> {
         } => dev::run(&client, profiles, serve, down, no_up, cmd).await?,
         Commands::Projects { action } => dev::projects(&client, action).await?,
         Commands::Version => cmd_version(&client).await?,
+        Commands::Mcp { .. } => unreachable!("handled before the client is built"),
         Commands::Containers { action } => match action {
             ContainerAction::List => cmd_containers_list(&client).await?,
             ContainerAction::Start { id } => cmd_container_start(&client, &id).await?,

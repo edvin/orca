@@ -273,7 +273,7 @@ Coding agents that work in their own worktrees can start and test their own inst
 
 **From the shell**, agents use the same commands you do: `orca up`, `orca status`, `orca logs -f`, `eval $(orca env)` and `orca down`.
 
-**Over MCP**, Orca's MCP server (set up under **Settings → Agent Integration**) has tools that take the worktree path:
+**Over MCP**, Orca's MCP server (connect it under **Settings → AI & Agents**) has tools that take the worktree path:
 
 | Tool | |
 |---|---|

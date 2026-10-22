@@ -2,6 +2,7 @@ import { createSignal, createEffect, onMount, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { MachineInfo, RegistryCredential, RemoteHost } from "../lib/types";
 import { showToast } from "../components/Toast";
+import ConnectAiTools from "../components/ConnectAiTools";
 import { confirmDanger, confirm as confirmDialog } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, updateOllamaSetup } from "../lib/ollamaSetup";
@@ -1205,6 +1206,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === AI & Agents Tab === */}
         <Show when={tab() === "ai"}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
+            <ConnectAiTools />
+
             {/* AI Assistant */}
             <div class="settings-section">
               <h2 class="settings-section-title">AI Assistant</h2>
@@ -1399,9 +1402,9 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               </p>
             </div>
 
-            {/* Agent Integration */}
+            {/* Agent Integration: the HTTP endpoint, for clients that can't start a command */}
             <div class="settings-section">
-              <h2 class="settings-section-title">Agent Integration</h2>
+              <h2 class="settings-section-title">HTTP endpoint (advanced)</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
                   <div>

@@ -628,6 +628,186 @@ pub async fn execute_tool(
             .await
             .map_err(|e| format!("{e:#}")),
 
+        // === Stacks (through the API, so tools validate exactly as the app does) ===
+        "stack_restart" => {
+            api(
+                state,
+                "POST",
+                &format!("/stacks/{}/restart", seg(&arguments, "name")?),
+                None,
+            )
+            .await
+        }
+        "stack_pull" => {
+            api(
+                state,
+                "POST",
+                &format!("/stacks/{}/pull", seg(&arguments, "name")?),
+                None,
+            )
+            .await
+        }
+        "stack_logs" => {
+            let name = get_str(&arguments, "name")?;
+            let (dir, config) = resolve_stack_dir(state, name).await?;
+            let tail = arguments
+                .get("tail")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(100)
+                .min(2000)
+                .to_string();
+            let mut args = vec![
+                "-p".to_string(),
+                name.to_string(),
+                "logs".into(),
+                "--no-color".into(),
+                "--tail".into(),
+                tail,
+            ];
+            if let Some(svc) = arguments.get("service").and_then(|v| v.as_str()) {
+                args.push(svc.to_string());
+            }
+            let out = state
+                .rt()
+                .await
+                .compose_args(&dir, config.as_deref(), &args)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(json!({ "logs": out.stdout, "errors": out.stderr }))
+        }
+        "deploy_project" => {
+            api(
+                state,
+                "POST",
+                "/stacks/deploy",
+                Some(json!({ "path": get_str(&arguments, "path")? })),
+            )
+            .await
+        }
+        "stack_profiles" => {
+            api(
+                state,
+                "GET",
+                &format!("/stacks/{}/profiles", seg(&arguments, "name")?),
+                None,
+            )
+            .await
+        }
+        "set_stack_profiles" => {
+            let body = json!({
+                "profiles": arguments.get("profiles").cloned().unwrap_or(json!([])),
+                "apply": arguments.get("apply").and_then(|v| v.as_bool()).unwrap_or(true),
+            });
+            api(
+                state,
+                "PUT",
+                &format!("/stacks/{}/profiles", seg(&arguments, "name")?),
+                Some(body),
+            )
+            .await
+        }
+        "read_orca_yaml" => {
+            api(
+                state,
+                "GET",
+                &format!("/stacks/{}/orca-yaml", seg(&arguments, "name")?),
+                None,
+            )
+            .await
+        }
+        "write_orca_yaml" => {
+            let body = json!({ "text": get_str(&arguments, "text")? });
+            api(
+                state,
+                "PUT",
+                &format!("/stacks/{}/orca-yaml", seg(&arguments, "name")?),
+                Some(body),
+            )
+            .await
+        }
+
+        // === Gateway ===
+        "gateway_status" => api(state, "GET", "/gateway/status", None).await,
+        "gateway_start" => api(state, "POST", "/gateway/start", None).await,
+        "gateway_stop" => api(state, "POST", "/gateway/stop", None).await,
+        "gateway_routes" => api(state, "GET", "/gateway/routes", None).await,
+        "gateway_add_route" => {
+            let port = arguments.get("port").and_then(|v| v.as_u64()).ok_or("Missing 'port'")?;
+            let body = json!({
+                "hostname": get_str(&arguments, "hostname")?,
+                "container_name": get_str(&arguments, "container")?,
+                "port": port,
+                "path": arguments.get("path").and_then(|v| v.as_str()),
+            });
+            api(state, "POST", "/gateway/routes", Some(body)).await
+        }
+        "gateway_remove_route" => {
+            api(
+                state,
+                "DELETE",
+                &format!("/gateway/routes/{}", seg(&arguments, "hostname")?),
+                None,
+            )
+            .await
+        }
+
+        // === Projects ===
+        "list_projects" => api(state, "GET", "/dev/projects", None).await,
+        "add_project" => {
+            api(
+                state,
+                "POST",
+                "/dev/projects",
+                Some(json!({ "path": get_str(&arguments, "path")? })),
+            )
+            .await
+        }
+        "remove_project" => {
+            api(
+                state,
+                "DELETE",
+                &format!("/dev/projects/{}", seg(&arguments, "id")?),
+                None,
+            )
+            .await
+        }
+
+        // === Builds ===
+        "list_build_targets" => api(state, "GET", "/builds/targets", None).await,
+        "start_build" => {
+            api(
+                state,
+                "POST",
+                &format!("/builds/targets/{}", seg(&arguments, "target")?),
+                Some(json!({})),
+            )
+            .await
+        }
+        "build_status" => {
+            let id = seg(&arguments, "id")?;
+            let build = api(state, "GET", &format!("/builds/{id}"), None).await?;
+            let logs = api(state, "GET", &format!("/builds/{id}/logs"), None)
+                .await
+                .unwrap_or_default();
+            let tail = arguments.get("tail").and_then(|v| v.as_u64()).unwrap_or(60) as usize;
+            let lines: Vec<String> = match &logs {
+                serde_json::Value::Array(a) => a
+                    .iter()
+                    .map(|l| l.as_str().map(str::to_string).unwrap_or_else(|| l.to_string()))
+                    .collect(),
+                serde_json::Value::String(t) => t.lines().map(str::to_string).collect(),
+                other => other
+                    .get("logs")
+                    .and_then(|l| l.as_str())
+                    .map(|t| t.lines().map(str::to_string).collect())
+                    .unwrap_or_default(),
+            };
+            let start = lines.len().saturating_sub(tail);
+            Ok(json!({ "build": build, "log_tail": lines[start..] }))
+        }
+
+        "remove_volume" => api(state, "DELETE", &format!("/volumes/{}", seg(&arguments, "name")?), None).await,
+
         _ => Err(format!("Unknown tool: {tool_name}")),
     }
 }
@@ -932,5 +1112,50 @@ mod redact_tests {
         ] {
             assert!(r.contains(kept), "{kept} missing: {r}");
         }
+    }
+}
+
+/// A string argument made safe as one URL path segment.
+fn seg(args: &serde_json::Value, key: &str) -> Result<String, String> {
+    Ok(urlencoding::encode(get_str(args, key)?).into_owned())
+}
+
+/// Call one of the daemon's own API routes in-process, so a tool behaves and
+/// validates exactly like the app. Errors carry the API's message.
+async fn api(
+    state: &Arc<AppState>,
+    method: &str,
+    path: &str,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    use tower::ServiceExt;
+    let request = axum::http::Request::builder()
+        .method(method)
+        .uri(path)
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(body.map(|b| b.to_string()).unwrap_or_default()))
+        .map_err(|e| e.to_string())?;
+    let response = crate::api::routes()
+        .with_state(state.clone())
+        .oneshot(request)
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), 16 * 1024 * 1024)
+        .await
+        .map_err(|e| e.to_string())?;
+    let value: serde_json::Value = if bytes.is_empty() {
+        json!({ "ok": status.is_success() })
+    } else {
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| json!(String::from_utf8_lossy(&bytes)))
+    };
+    if status.is_success() {
+        Ok(value)
+    } else {
+        Err(value
+            .get("error")
+            .and_then(|e| e.as_str())
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{status}: {value}")))
     }
 }

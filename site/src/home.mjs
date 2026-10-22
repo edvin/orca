@@ -67,15 +67,21 @@ hooks:
   after_up:
     - "api: php artisan migrate --force"`;
 
-  const mcp = `{
-  "mcpServers": {
-    "orca": {
-      "type": "http",
-      "url": "http://127.0.0.1:9477/api/v1/agent/mcp",
-      "headers": { "Authorization": "Bearer <your token>" }
-    }
-  }
-}`;
+  const client = (color, letter, name, state, action) =>
+    `<div class="mcp-client${state === "Connected" ? " on" : ""}"><span class="mcp-tile" style="--c:${color}">${letter}</span><span class="mcp-name">${name}<small>${state}</small></span>${action}</div>`;
+  const connected = `<span class="mcp-check">✓</span>`;
+  const mcpPanel = `<div class="mcp-panel">
+      <div class="mcp-panel-head"><b>Connect your AI tools</b><span>No API keys or tokens</span></div>
+      ${client("#d97757", "C", "Claude Code", "Connected", connected)}
+      ${client("#d97757", "C", "Claude Desktop", "Connected", connected)}
+      ${client("#3b8eea", "VS", "VS Code", "Found on this computer", `<span class="mcp-btn">Connect</span>`)}
+      ${client("#94a3b8", "Cu", "Cursor", "Found on this computer", `<span class="mcp-btn">Connect</span>`)}
+    </div>`;
+  const chat = `<div class="mcp-chat">
+      <div class="mcp-msg you">Start ~/code/shop with the search profile and give me its URL</div>
+      <div class="mcp-calls"><span>orca · deploy_project</span><span>orca · set_stack_profiles</span><span>orca · gateway_routes</span></div>
+      <div class="mcp-msg ai">Shop is up with search on: <b>https://shop.localhost</b>, API on /api. All 5 services are healthy.</div>
+    </div>`;
 
   const card = (icon, title, text, href) =>
     `<a class="bento-card reveal" href="${href}"><span class="bento-icon">${icon}</span><h3>${title}</h3><p>${text}</p><span class="bento-more">Learn more ${ICONS.arrow}</span></a>`;
@@ -200,26 +206,22 @@ hooks:
   </div>
 </section>
 
-<section class="section feature alt">
+<section class="section feature alt" id="agents">
   <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.bot} Agents</span>
-      <h2>Built for AI agents</h2>
-      <p>Claude Code and other MCP clients can list and inspect containers, read logs, start stacks and spin up a worktree instance to test their own changes. Any OpenAI-compatible agent can use the same tools.</p>
+      <h2>Your AI runs Orca. One click to connect.</h2>
+      <p>Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex from Orca's settings. Then just ask: start a project from a folder, switch on a profile, find out why a container keeps restarting, or run a branch as its own instance and test against it.</p>
       <ul class="checks">
-        <li>MCP endpoint on the local daemon, authenticated with your token</li>
-        <li>Worktree tools so each agent tests in its own instance</li>
-        <li>A built-in assistant with Claude, GPT, Gemini or local Ollama</li>
+        <li>No tokens to copy: the AI tool runs <code>orca mcp</code>, which signs in by itself</li>
+        <li>69 tools: projects, stacks, profiles, gateway routes, builds, Kubernetes, worktrees</li>
+        <li>Works with the AI subscription you already have. No API key needed</li>
       </ul>
-      <a class="link-arrow" href="/docs/agents/">Connect your agent ${ICONS.arrow}</a>
+      <a class="link-arrow" href="/docs/agents/">Connect your AI tools ${ICONS.arrow}</a>
     </div>
-    <div class="feature-visual reveal">
-      ${ctx.codeBlock(mcp, "json", ".mcp.json")}
-      <div class="agent-log">
-        <div><span class="who">agent</span> instance_up <span class="arg">worktree: ../shop-fix-checkout</span></div>
-        <div class="ok">✓ Started fix-checkout · https://web-fix-checkout-shop.localhost</div>
-        <div><span class="who">agent</span> container_logs <span class="arg">service: api, tail: 50</span></div>
-      </div>
+    <div class="feature-visual reveal mcp-visual">
+      ${mcpPanel}
+      ${chat}
     </div>
   </div>
 </section>
@@ -287,7 +289,7 @@ hooks:
         ["Does it work with the compose files we already have?", "Yes. Any compose project you start shows up as a stack, and an <code>orca.yaml</code> is optional. Orca doesn't change your compose files; worktree instances use a generated override file instead."],
         ["What does Orca send over the network?", "No analytics or tracking. Orca checks GitHub for updates, pulls from the registries you use, and talks to an AI provider only if you set one up. <a href=\"/docs/security/\">Security and privacy</a> lists the details."],
         ["Which Macs are supported?", "The macOS build is for Apple Silicon."],
-        ["Can my AI agent use it?", "Yes. The daemon is an MCP server on your machine; Claude Code and other MCP clients connect with a token. <a href=\"/docs/agents/\">Agents and MCP</a> shows the setup."],
+        ["Can my AI agent use it?", "Yes. Orca is an MCP server. Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex with one click in Settings, without copying a token. <a href=\"/docs/agents/\">Agents and MCP</a> shows how."],
       ]
         .map(([q, a]) => `<details class="faq-item"><summary>${q}</summary><p>${a}</p></details>`)
         .join("")}

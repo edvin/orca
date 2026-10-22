@@ -4223,3 +4223,28 @@ select option {
 .link-btn:hover { text-decoration: underline; }
 .profile-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; color: #a5d6ff; background: rgba(56, 139, 253, 0.12); border: 1px solid rgba(56, 139, 253, 0.25); vertical-align: 1px; }
 tr.service-off td { opacity: 0.55; }
+
+/* Connect your AI tools */
+.ai-connect { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; border-radius: 12px; border: 1px solid rgba(217, 119, 87, 0.28); background: linear-gradient(135deg, rgba(217, 119, 87, 0.07), rgba(88, 166, 255, 0.05)); }
+.ai-connect-title { font-size: 15px; font-weight: 650; color: #e6edf3; }
+.ai-connect-sub { font-size: 12.5px; color: #8b949e; line-height: 1.55; margin-top: 4px; max-width: 640px; }
+.ai-connect-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.ai-connect-empty { color: #8b949e; font-size: 12px; }
+.ai-client { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid #21262d; background: rgba(13, 17, 23, 0.6); }
+.ai-client.connected { border-color: rgba(63, 185, 80, 0.4); background: rgba(63, 185, 80, 0.06); }
+.ai-client.missing { opacity: 0.55; }
+.ai-client-tile { width: 32px; height: 32px; flex-shrink: 0; display: grid; place-items: center; border-radius: 8px; border: 1px solid; font-weight: 700; font-size: 12px; }
+.ai-client-body { flex: 1; min-width: 0; }
+.ai-client-name { font-size: 13px; font-weight: 600; color: #e6edf3; }
+.ai-client-state { font-size: 11.5px; color: #8b949e; }
+.ai-client.connected .ai-client-state { color: #3fb950; }
+.ai-client-check { color: #3fb950; font-weight: 700; margin-right: 2px; }
+.ai-connect-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8b949e; margin-bottom: 6px; }
+.ai-prompts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-prompt { font-size: 12px; color: #c9d1d9; background: rgba(110, 118, 129, 0.12); border: 1px solid #30363d; border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.ai-prompt:hover { border-color: #58a6ff; color: #e6edf3; }
+.ai-connect-more { align-self: flex-start; background: none; border: none; padding: 0; color: #58a6ff; font-size: 12px; cursor: pointer; }
+.ai-connect-manual { font-size: 12px; color: #8b949e; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.ai-connect-manual p { margin: 0; }
+.ai-connect-manual pre { margin: 0; width: 100%; background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 10px 12px; color: #e6edf3; font-size: 11.5px; overflow: auto; }
+.ai-connect-note { color: #6e7681; }

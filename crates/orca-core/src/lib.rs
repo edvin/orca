@@ -9,6 +9,7 @@ pub mod event;
 pub mod image;
 pub mod kubernetes;
 pub mod machine;
+pub mod mcp_clients;
 pub mod network;
 pub mod runtime;
 pub mod templates;

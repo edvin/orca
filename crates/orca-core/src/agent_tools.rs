@@ -171,8 +171,140 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             parameters: json_schema(json!({ "name": { "type": "string" } })),
             category: "Stacks".into(),
         },
+        ToolDefinition {
+            name: "stack_restart".into(),
+            description: "Restart every service of a compose stack (stop and start the containers as they are).".into(),
+            parameters: json_schema(json!({ "name": { "type": "string", "description": "Stack (compose project) name" } })),
+            category: "Stacks".into(),
+        },
+        ToolDefinition {
+            name: "stack_pull".into(),
+            description: "Pull the latest images for a stack's services. Run compose_up afterwards to recreate the services that changed.".into(),
+            parameters: json_schema(json!({ "name": { "type": "string" } })),
+            category: "Stacks".into(),
+        },
+        ToolDefinition {
+            name: "stack_logs".into(),
+            description: "Recent logs of a stack, all services interleaved and prefixed with the service name, or one service.".into(),
+            parameters: json_schema(json!({ "name": { "type": "string" }, "service": { "type": "string", "description": "Only this service" }, "tail": { "type": "integer", "default": 100 } })),
+            category: "Stacks".into(),
+        },
+        ToolDefinition {
+            name: "deploy_project".into(),
+            description: "Start the compose project in a folder (docker compose up -d) and apply its orca.yaml: gateway routes, setup hooks. Use it to run a project that isn't a stack yet.".into(),
+            parameters: json_schema(json!({ "path": { "type": "string", "description": "Absolute path of the project folder, or of a compose file in it" } })),
+            category: "Stacks".into(),
+        },
+        ToolDefinition {
+            name: "stack_profiles".into(),
+            description: "A stack's compose profiles: which optional services each one holds, which are on, and the state of every service.".into(),
+            parameters: json_schema(json!({ "name": { "type": "string" } })),
+            category: "Stacks".into(),
+        },
+        ToolDefinition {
+            name: "set_stack_profiles".into(),
+            description: "Choose which compose profiles a stack runs. Remembered for every later start. With apply (default true) and the stack running, starts what the new set adds and stops and removes what it leaves out (volumes are kept).".into(),
+            parameters: json_schema(json!({ "name": { "type": "string" }, "profiles": { "type": "array", "items": { "type": "string" }, "description": "Profiles to run; [] for only the services without one" }, "apply": { "type": "boolean", "default": true } })),
+            category: "Stacks".into(),
+        },
+        ToolDefinition {
+            name: "read_orca_yaml".into(),
+            description: "A stack's orca.yaml: its text, path, whether it exists, entries Orca skipped and why, the state of each gateway route, and a suggested first file when there is none.".into(),
+            parameters: json_schema(json!({ "name": { "type": "string" } })),
+            category: "Stacks".into(),
+        },
+        ToolDefinition {
+            name: "write_orca_yaml".into(),
+            description: "Write a stack's orca.yaml (gateway routes, links, build targets, setup hooks, dev section). Validated first; Orca applies it at once. Read it with read_orca_yaml first and keep what you don't mean to change.".into(),
+            parameters: json_schema(json!({ "name": { "type": "string" }, "text": { "type": "string", "description": "The whole file" } })),
+            category: "Stacks".into(),
+        },
+
+        // === Gateway ===
+        ToolDefinition {
+            name: "gateway_status".into(),
+            description: "Whether the HTTPS gateway runs, its domain, ports, certificate mode and route count.".into(),
+            parameters: json_schema(json!({})),
+            category: "Gateway".into(),
+        },
+        ToolDefinition {
+            name: "gateway_start".into(),
+            description: "Start the HTTPS gateway (a managed Caddy container) so routes like https://shop.localhost work.".into(),
+            parameters: json_schema(json!({})),
+            category: "Gateway".into(),
+        },
+        ToolDefinition {
+            name: "gateway_stop".into(),
+            description: "Stop the HTTPS gateway. Routes stay configured.".into(),
+            parameters: json_schema(json!({})),
+            category: "Gateway".into(),
+        },
+        ToolDefinition {
+            name: "gateway_routes".into(),
+            description: "Every gateway route: hostname, path, container, port, whether it's enabled, and where it comes from (orca.yaml, labels, a worktree instance, or added by hand).".into(),
+            parameters: json_schema(json!({})),
+            category: "Gateway".into(),
+        },
+        ToolDefinition {
+            name: "gateway_add_route".into(),
+            description: "Route an HTTPS hostname (and optionally a path) to a container port through the gateway. A name without a dot gets the gateway's domain: 'shop' becomes shop.localhost. For a project, prefer gateway: entries in its orca.yaml so the team shares them.".into(),
+            parameters: json_schema(json!({ "hostname": { "type": "string" }, "container": { "type": "string", "description": "Container name" }, "port": { "type": "integer", "description": "Port inside the container" }, "path": { "type": "string", "description": "Only this path, such as /api/*" } })),
+            category: "Gateway".into(),
+        },
+        ToolDefinition {
+            name: "gateway_remove_route".into(),
+            description: "Remove a route that was added by hand (routes from orca.yaml, labels or worktree instances are managed there).".into(),
+            parameters: json_schema(json!({ "hostname": { "type": "string", "description": "Full hostname, such as shop.localhost" } })),
+            category: "Gateway".into(),
+        },
+
+        // === Projects (worktree instances) ===
+        ToolDefinition {
+            name: "list_projects".into(),
+            description: "Projects registered for worktree instances: each git repository with its shared services and one instance per worktree (status, URLs, ports, data modes).".into(),
+            parameters: json_schema(json!({})),
+            category: "Worktree instances".into(),
+        },
+        ToolDefinition {
+            name: "add_project".into(),
+            description: "Register a git repository so each of its worktrees can run as its own instance. Any folder inside the repository works. Its orca.yaml dev: section configures it; without one, Orca suggests a setup.".into(),
+            parameters: json_schema(json!({ "path": { "type": "string", "description": "Absolute path inside the repository" } })),
+            category: "Worktree instances".into(),
+        },
+        ToolDefinition {
+            name: "remove_project".into(),
+            description: "Unregister a project. Stop its instances first; nothing in the repository is changed.".into(),
+            parameters: json_schema(json!({ "id": { "type": "string", "description": "Project id from list_projects" } })),
+            category: "Worktree instances".into(),
+        },
+
+        // === Builds ===
+        ToolDefinition {
+            name: "list_build_targets".into(),
+            description: "Build targets from the builds: section of every project's orca.yaml.".into(),
+            parameters: json_schema(json!({})),
+            category: "Builds".into(),
+        },
+        ToolDefinition {
+            name: "start_build".into(),
+            description: "Build an image from a build target. Returns a build id; follow it with build_status.".into(),
+            parameters: json_schema(json!({ "target": { "type": "string", "description": "Build target name" } })),
+            category: "Builds".into(),
+        },
+        ToolDefinition {
+            name: "build_status".into(),
+            description: "A build's status, duration and the end of its log.".into(),
+            parameters: json_schema(json!({ "id": { "type": "string" }, "tail": { "type": "integer", "default": 60 } })),
+            category: "Builds".into(),
+        },
 
         // === Volumes & Networks ===
+        ToolDefinition {
+            name: "remove_volume".into(),
+            description: "Delete a volume and the data in it. It must not be in use.".into(),
+            parameters: json_schema(json!({ "name": { "type": "string" } })),
+            category: "Storage".into(),
+        },
         ToolDefinition {
             name: "list_volumes".into(),
             description: "List all Docker volumes.".into(),

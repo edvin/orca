@@ -132,6 +132,18 @@ orca run --serve web -- npm run dev
 
 Everything after `--` is the command and its arguments.
 
+## AI tools (MCP)
+
+`orca mcp` runs Orca as an MCP server over stdio for Claude Code, Claude Desktop, Cursor and other AI tools. It reads the token from Orca's config, so the AI tool's config holds none. See [AI agents and MCP](/docs/agents/).
+
+| Command | What it does |
+|---------|--------------|
+| `orca mcp` | Serve MCP on stdin/stdout for the local daemon. AI tools start this themselves. |
+| `orca mcp --host <name>` | The same for a remote host from Orca Desktop's **Remote Hosts**. |
+| `orca mcp install [tool]` | Add Orca to every supported AI tool found on this machine, or to one: `claude-code`, `claude-desktop`, `cursor`, `vscode`, `windsurf`, `codex`. |
+| `orca mcp uninstall [tool]` | Remove Orca from them again. |
+| `orca mcp status` | Which AI tools are found and which are connected. |
+
 ## Containers
 
 ```bash
