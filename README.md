@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://orca-desktop.com">Website</a> · <a href="https://github.com/edvin/orca/releases/latest">Download</a> · Open source. Built with Rust, Tauri, and SolidJS.
+  <a href="https://orca-desktop.com">Website</a> · <a href="https://orca-desktop.com/docs/introduction/">Documentation</a> · <a href="https://github.com/edvin/orca/releases/latest">Download</a> · Open source. Built with Rust, Tauri, and SolidJS.
 </p>
 
 ## Features

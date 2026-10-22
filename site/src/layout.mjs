@@ -158,6 +158,15 @@ function toc(doc) {
     .join("")}</ul></nav>`;
 }
 
+/** "On this page" above the article, for screens without the side column. */
+function mobileToc(doc) {
+  const items = doc.headings.filter((h) => h.depth === 2);
+  if (items.length < 3) return "";
+  return `<details class="toc-mobile"><summary>On this page</summary><ul>${items
+    .map((h) => `<li><a href="#${h.id}">${esc(h.text)}</a></li>`)
+    .join("")}</ul></details>`;
+}
+
 export function docPage(ctx, doc, prev, next) {
   const pager = `<nav class="pager" aria-label="Previous and next page">${
     prev
@@ -178,6 +187,7 @@ export function docPage(ctx, doc, prev, next) {
       <h1>${esc(doc.title)}</h1>
       ${doc.description ? `<p class="lede">${esc(doc.description)}</p>` : ""}
     </div>
+    ${mobileToc(doc)}
     <div class="prose">${doc.html}</div>
     <div class="doc-foot">
       <a class="edit" href="https://github.com/edvin/orca/edit/main/${doc.source}" target="_blank" rel="noopener">${ICONS.edit} Edit this page on GitHub</a>

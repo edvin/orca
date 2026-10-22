@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<link rel="stylesheet" href="/assets/site.css?v=mvjqxela">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjqae17" defer></script>
+<script src="/assets/site.js?v=mvjqxela" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -55,6 +55,7 @@
       <h1>How Orca runs on macOS, Windows and Linux</h1>
       <p class="lede">Where Docker runs on each platform (a Lima VM on macOS, WSL2 on Windows, natively on Linux), how to size it, and where Orca keeps its files.</p>
     </div>
+    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#the-daemon">The daemon</a></li><li><a href="#macos-a-lima-vm">macOS: a Lima VM</a></li><li><a href="#windows-wsl2">Windows: WSL2</a></li><li><a href="#linux-native">Linux: native</a></li><li><a href="#where-files-live">Where files live</a></li><li><a href="#related">Related</a></li></ul></details>
     <div class="prose"><p>Orca has the same three parts everywhere: the desktop app, the Orca daemon, and a Docker (or Podman) engine. What differs per platform is where that engine runs. Read this page when you want to know what Orca set up on your machine, change the VM&#39;s resources, or find a config file.</p>
 <h2 id="the-daemon"><a class="anchor" href="#the-daemon" aria-hidden="true" tabindex="-1">#</a>The daemon</h2>
 <p>The desktop app starts <code>orca-daemon</code> in the background and stops it when you quit with <strong>Quit Orca</strong>. The daemon serves a REST API on <code>http://127.0.0.1:9477/api/v1/</code>, only on the loopback interface. The app, the <code>orca</code> CLI and AI agents all go through it.</p>

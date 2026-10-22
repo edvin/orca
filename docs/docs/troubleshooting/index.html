@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<link rel="stylesheet" href="/assets/site.css?v=mvjqxela">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjqae17" defer></script>
+<script src="/assets/site.js?v=mvjqxela" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -55,6 +55,7 @@
       <h1>Troubleshooting</h1>
       <p class="lede">Fixes for common Orca problems: the daemon not starting, Docker not found, the macOS VM, gateway port conflicts, untrusted certificates, and where logs are.</p>
     </div>
+    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#start-with-system-health">Start with System Health</a></li><li><a href="#orca-daemon-is-not-running">Orca daemon is not running</a></li><li><a href="#another-orca-daemon-is-already-running">&quot;Another Orca daemon is already running&quot;</a></li><li><a href="#pages-show-401-unauthorized-on-first-start">Pages show 401 Unauthorized on first start</a></li><li><a href="#docker-not-found">Docker not found</a></li><li><a href="#macos-the-docker-vm-wont-come-up">macOS: the Docker VM won't come up</a></li><li><a href="#gateway-port-80-or-443-is-in-use">Gateway: port 80 or 443 is in use</a></li><li><a href="#browser-says-the-certificate-isnt-trusted">Browser says the certificate isn't trusted</a></li><li><a href="#logs">Logs</a></li><li><a href="#report-a-bug">Report a bug</a></li></ul></details>
     <div class="prose"><p>Most problems show up on the <strong>System Health</strong> page, and most of them have a button there that fixes them. This page explains those buttons, then covers specific symptoms. If nothing here helps, see <a href="#report-a-bug">Report a bug</a>.</p>
 <h2 id="start-with-system-health"><a class="anchor" href="#start-with-system-health" aria-hidden="true" tabindex="-1">#</a>Start with System Health</h2>
 <p>Open <strong>System Health</strong> in the sidebar. Each check shows its status, and a failing check has a <strong>Fix</strong> button that runs the repair and streams its output in a dialog. The buttons at the top:</p>

@@ -272,6 +272,29 @@ hooks:
   </div>
 </section>
 
+
+<section class="section faq-section">
+  <div class="container faq-grid">
+    <div class="section-head left reveal">
+      <span class="eyebrow">Questions</span>
+      <h2>Before you switch</h2>
+      <p>Anything else? Ask on <a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">GitHub</a>.</p>
+    </div>
+    <div class="faq reveal">
+      ${[
+        ["Is Orca free for my company?", "Yes. Orca is MIT licensed, for personal and commercial use, with no account and no seat limits."],
+        ["Do I still need Docker Desktop?", "No. On macOS Orca runs Docker in its own Lima VM, on Windows inside WSL2, and on Linux it uses Docker or Podman directly. See <a href=\"/docs/install/\">Install</a> for running it next to an existing Docker setup."],
+        ["Does it work with the compose files we already have?", "Yes. Any compose project you start shows up as a stack, and an <code>orca.yaml</code> is optional. Orca doesn't change your compose files; worktree instances use a generated override file instead."],
+        ["What does Orca send over the network?", "No analytics or tracking. Orca checks GitHub for updates, pulls from the registries you use, and talks to an AI provider only if you set one up. <a href=\"/docs/security/\">Security and privacy</a> lists the details."],
+        ["Which Macs are supported?", "The macOS build is for Apple Silicon."],
+        ["Can my AI agent use it?", "Yes. The daemon is an MCP server on your machine; Claude Code and other MCP clients connect with a token. <a href=\"/docs/agents/\">Agents and MCP</a> shows the setup."],
+      ]
+        .map(([q, a]) => `<details class="faq-item"><summary>${q}</summary><p>${a}</p></details>`)
+        .join("")}
+    </div>
+  </div>
+</section>
+
 <section class="cta-band">
   <div class="container cta-inner reveal">
     <h2>Set it up in five minutes</h2>

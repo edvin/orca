@@ -617,3 +617,28 @@ kbd {
 @media (max-width: 900px) {
   .feature-grid, .feature-grid.reverse { grid-template-columns: 1fr; gap: 40px; }
 }
+.releases { max-width: var(--maxw); }
+.release { grid-template-columns: 180px minmax(0, 780px); }
+.search-dialog { align-items: flex-start; }
+.toc-mobile { display: none; margin: 20px 0 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-soft); }
+.toc-mobile summary { cursor: pointer; padding: 11px 16px; font-size: 14px; font-weight: 600; color: var(--text); list-style: none; display: flex; align-items: center; justify-content: space-between; }
+.toc-mobile summary::-webkit-details-marker { display: none; }
+.toc-mobile summary::after { content: "+"; color: var(--muted); font-weight: 400; font-size: 18px; }
+.toc-mobile[open] summary::after { content: "–"; }
+.toc-mobile ul { list-style: none; margin: 0; padding: 0 16px 12px; }
+.toc-mobile li a { display: block; padding: 5px 0; font-size: 14px; color: var(--muted); }
+@media (max-width: 1180px) { .toc-mobile { display: block; } }
+
+/* FAQ */
+.faq-section { border-top: 1px solid var(--border); }
+.faq-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: 64px; align-items: start; }
+.section-head.left { text-align: left; margin: 0; }
+.faq { border-top: 1px solid var(--border); }
+.faq-item { border-bottom: 1px solid var(--border); }
+.faq-item summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 0; font-size: 17px; font-weight: 600; color: var(--text); }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: "+"; font-size: 22px; font-weight: 300; color: var(--muted); transition: transform 0.2s; }
+.faq-item[open] summary::after { transform: rotate(45deg); }
+.faq-item p { margin: -6px 0 22px; color: var(--muted); font-size: 15.5px; line-height: 1.65; max-width: 640px; }
+.faq-item code { font-family: var(--mono); font-size: 0.86em; padding: 0.1em 0.38em; border-radius: 6px; background: var(--inline-code-bg); border: 1px solid var(--border); color: var(--text); }
+@media (max-width: 900px) { .faq-grid { grid-template-columns: 1fr; gap: 28px; } }

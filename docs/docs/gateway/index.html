@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<link rel="stylesheet" href="/assets/site.css?v=mvjqxela">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjqae17" defer></script>
+<script src="/assets/site.js?v=mvjqxela" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -55,6 +55,7 @@
       <h1>Gateway and HTTPS hostnames</h1>
       <p class="lede">Give containers trusted HTTPS hostnames like shop.localhost through Orca's gateway, from the UI, orca.yaml, container labels or worktree instances.</p>
     </div>
+    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#how-it-works">How it works</a></li><li><a href="#hostnames">Hostnames</a></li><li><a href="#certificates">Certificates</a></li><li><a href="#where-routes-come-from">Where routes come from</a></li><li><a href="#when-two-routes-want-one-hostname">When two routes want one hostname</a></li><li><a href="#paths">Paths</a></li><li><a href="#websockets-and-streaming">WebSockets and streaming</a></li><li><a href="#hostnames-inside-containers">Hostnames inside containers</a></li><li><a href="#environment-links">Environment links</a></li><li><a href="#the-landing-page">The landing page</a></li><li><a href="#sleeping-routes">Sleeping routes</a></li><li><a href="#ports-80-and-443">Ports 80 and 443</a></li><li><a href="#cli-reference">CLI reference</a></li><li><a href="#related">Related</a></li></ul></details>
     <div class="prose"><p>The gateway gives your containers real HTTPS addresses, such as <code>https://shop.localhost</code>, instead of <code>http://localhost:8095</code>. This page covers how it works, where routes come from, certificates, custom domains and the landing page that lists everything you run.</p>
 <p><figure class="shot"><img src="/assets/screens/gateway.webp" alt="The Gateway page with routes to running containers" loading="lazy" decoding="async"></figure></p>
 <h2 id="how-it-works"><a class="anchor" href="#how-it-works" aria-hidden="true" tabindex="-1">#</a>How it works</h2>

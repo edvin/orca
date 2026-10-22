@@ -7,7 +7,7 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { StackProfilesReport } from "../lib/types";
 import ProfileCards from "./ProfileCards";
 
-export const PROFILES_DOC = "https://github.com/edvin/orca/blob/main/docs/profiles.md";
+export const PROFILES_DOC = "https://orca-desktop.com/docs/profiles/";
 
 const muted = { color: "#8b949e", "font-size": "12px" } as const;
 

@@ -80,6 +80,32 @@
     $$(`[data-os-card="${os}"]`).forEach((el) => el.classList.add("is-yours"));
   }
 
+  // --- Latest release ------------------------------------------------------
+  // The page is built at release time; if a newer release is out since,
+  // point download links at its files.
+  const assetLinks = $$("[data-asset], [data-os-href]");
+  if (assetLinks.length) {
+    fetch("https://api.github.com/repos/edvin/orca/releases/latest")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((rel) => {
+        if (!rel?.assets) return;
+        const find = (re) => rel.assets.find((a) => re.test(a.name));
+        $$("[data-asset]").forEach((el) => {
+          const a = find(new RegExp(el.dataset.asset));
+          if (!a) return;
+          el.href = a.browser_download_url;
+          const size = el.querySelector(".dl-size");
+          if (size) size.textContent = `${Math.round(a.size / 1048576)} MB`;
+        });
+        const pats = { mac: /aarch64\.dmg$/, windows: /x64-setup\.exe$/, linux: /amd64\.AppImage$/ };
+        if (os && pats[os]) {
+          const a = find(pats[os]);
+          if (a) $$("[data-os-href]").forEach((el) => (el.href = a.browser_download_url));
+        }
+      })
+      .catch(() => {});
+  }
+
   // --- Table of contents ---------------------------------------------------
   const tocLinks = $$(".toc a");
   if (tocLinks.length) {

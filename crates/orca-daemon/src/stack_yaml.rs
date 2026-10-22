@@ -14,7 +14,7 @@ use serde::Deserialize;
 use crate::api::ApiError;
 use crate::state::AppState;
 
-const REFERENCE_URL: &str = "https://github.com/edvin/orca/blob/main/docs/orca-yaml.md";
+const REFERENCE_URL: &str = "https://orca-desktop.com/docs/orca-yaml/";
 
 /// GET /stacks/{name}/orca-yaml
 pub async fn get(

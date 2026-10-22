@@ -15,8 +15,9 @@ export function downloadPage(ctx) {
   const appimage = find(/amd64\.AppImage$/);
   const deb = find(/amd64\.deb$/);
 
-  const fileBtn = (a, label, primary) =>
-    `<a class="btn ${primary ? "btn-primary" : ""}" href="${a?.url ?? releases}">${label}${a ? `<span class="dl-size">${mb(a.size)}</span>` : ""}</a>`;
+  // data-asset lets site.js point the link at the newest release when the page is older than it.
+  const fileBtn = (a, label, primary, pattern) =>
+    `<a class="btn ${primary ? "btn-primary" : ""}" href="${a?.url ?? releases}" data-asset="${pattern}">${label}<span class="dl-size">${a ? mb(a.size) : ""}</span></a>`;
 
   return `
 <section class="page-hero">
@@ -32,21 +33,21 @@ export function downloadPage(ctx) {
     <div class="platform-icon">${ICONS.apple}</div>
     <h2>macOS</h2>
     <p>Apple Silicon. Orca installs Lima and runs Docker in a lightweight Linux VM; no Docker Desktop needed.</p>
-    <div class="dl-actions">${fileBtn(mac, "Download .dmg", true)}</div>
+    <div class="dl-actions">${fileBtn(mac, "Download .dmg", true, "aarch64\\.dmg$")}</div>
     <span class="yours">Your platform</span>
   </div>
   <div class="dl-card" data-os-card="windows">
     <div class="platform-icon">${ICONS.windows}</div>
     <h2>Windows</h2>
     <p>64-bit installer. Orca runs Docker inside WSL2 and sets it up on first start.</p>
-    <div class="dl-actions">${fileBtn(win, "Download installer", true)}</div>
+    <div class="dl-actions">${fileBtn(win, "Download installer", true, "x64-setup\\.exe$")}</div>
     <span class="yours">Your platform</span>
   </div>
   <div class="dl-card" data-os-card="linux">
     <div class="platform-icon">${ICONS.linux}</div>
     <h2>Linux</h2>
     <p>x86-64. Talks to Docker or Podman directly. The AppImage updates itself.</p>
-    <div class="dl-actions">${fileBtn(appimage, "AppImage", true)}${fileBtn(deb, ".deb", false)}</div>
+    <div class="dl-actions">${fileBtn(appimage, "AppImage", true, "amd64\\.AppImage$")}${fileBtn(deb, ".deb", false, "amd64\\.deb$")}</div>
     <span class="yours">Your platform</span>
   </div>
 </section>

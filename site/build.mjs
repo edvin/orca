@@ -235,13 +235,29 @@ function searchEntries(doc) {
   return out;
 }
 
-async function fetchReleases() {
+/** GitHub's API through the `gh` CLI when it's signed in (no rate limit), else anonymously. */
+async function githubApi(endpoint, params = {}, { anonymous = false } = {}) {
   try {
-    const res = await fetch("https://api.github.com/repos/edvin/orca/releases?per_page=15", {
+    if (anonymous) throw new Error("anonymous");
+    const { execFileSync } = await import("node:child_process");
+    const args = ["api", "-X", "GET", endpoint, ...Object.entries(params).flatMap(([k, v]) => ["-f", `${k}=${v}`])];
+    return JSON.parse(execFileSync("gh", args, { encoding: "utf8", maxBuffer: 64 << 20 }));
+  } catch {
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`https://api.github.com/${endpoint}${qs ? `?${qs}` : ""}`, {
       headers: { Accept: "application/vnd.github+json", "User-Agent": "orca-site-build" },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const list = await res.json();
+    return res.json();
+  }
+}
+
+async function fetchReleases() {
+  try {
+    // The API now and then answers with an empty list; that's never true here.
+    let list = await githubApi("repos/edvin/orca/releases", { per_page: 15 });
+    if (!list?.length) list = await githubApi("repos/edvin/orca/releases", { per_page: 15 }, { anonymous: true });
+    if (!list?.length) throw new Error("empty release list");
     return list
       .filter((r) => !r.draft)
       .map((r) => ({
@@ -261,8 +277,7 @@ async function fetchReleases() {
 
 async function fetchStars() {
   try {
-    const res = await fetch("https://api.github.com/repos/edvin/orca", { headers: { "User-Agent": "orca-site-build" } });
-    const n = (await res.json()).stargazers_count;
+    const n = (await githubApi("repos/edvin/orca")).stargazers_count;
     return typeof n === "number" ? (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)) : null;
   } catch {
     return null;
@@ -321,7 +336,7 @@ async function build() {
   );
   write("robots.txt", `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
   write(".nojekyll", "");
-  console.log(`built ${docs.length} docs pages in ${Date.now() - t0} ms`);
+  console.log(`built ${docs.length} docs pages in ${Date.now() - t0} ms (latest ${latest?.tag ?? "none"}, ${latest?.assets?.length ?? 0} assets, ${stars ?? "?"} stars)`);
 }
 
 await build();

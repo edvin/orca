@@ -11,7 +11,7 @@ import type { DevConfigT, DevProject, PlanView, SetupAnalysis } from "../../lib/
 import { showToast } from "../Toast";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 
-const ORCA_YAML_REFERENCE = "https://github.com/edvin/orca/blob/main/docs/orca-yaml.md";
+const ORCA_YAML_REFERENCE = "https://orca-desktop.com/docs/orca-yaml/";
 import OrcaYamlStudio from "../orcayaml/OrcaYamlStudio";
 import { DataSection, ProfilesSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";

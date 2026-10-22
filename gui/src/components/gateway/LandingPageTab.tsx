@@ -8,7 +8,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import type { GatewayRoute, LandingSettings } from "../../lib/types";
 import { showToast } from "../Toast";
 
-const REFERENCE = "https://github.com/edvin/orca/blob/main/docs/orca-yaml.md#gateway";
+const REFERENCE = "https://orca-desktop.com/docs/gateway/#the-landing-page";
 
 interface Props {
   routes: GatewayRoute[];

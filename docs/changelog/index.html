@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<link rel="stylesheet" href="/assets/site.css?v=mvjqxela">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjqae17" defer></script>
+<script src="/assets/site.js?v=mvjqxela" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,264 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><p>Release notes are on <a href="https://github.com/edvin/orca/releases">GitHub</a>.</p></section>
+<section class="container releases"><article class="release" id="v0.49.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.49.0">v0.49.0</a><time datetime="2026-10-22T13:01:55Z">October 22, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="set-up-a-project-with-one-file"><a class="anchor" href="#set-up-a-project-with-one-file" aria-hidden="true" tabindex="-1">#</a>Set up a project with one file</h2>
+<p>Put an <code>orca.yaml</code> next to your compose file and commit it. Everyone who runs the project with Orca gets the same HTTPS hostnames, links to the other environments, build targets and setup commands, whether they start it from Orca or with <code>docker compose up</code> in a terminal.</p>
+<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">gateway</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hostname</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">        # https://shop.localhost</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    service</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">web</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    port</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">3000</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">links</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  Shop</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">    - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">name</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">Storefront</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      local</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      staging</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">https://staging.shop.example.com</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hooks</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  after_up</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">    - </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"web: npm run migrate"</span></span></code></pre></div><ul>
+<li><strong>Orca finds it on its own.</strong> Every compose project Orca can see gets its <code>orca.yaml</code> applied, and when you edit the file the change applies straight away. Routes exist while their service runs.</li>
+<li><strong>Create one in a click.</strong> The new <strong>orca.yaml</strong> tab on a stack&#39;s page writes a first version from the stack&#39;s running services, and checks it as you type. For a stack that already has one, the tab shows what Orca applied and why anything didn&#39;t apply, such as a hostname another route already uses or a service that isn&#39;t running.</li>
+<li><strong>One file for everything.</strong> Gateway routes, links, build targets, setup hooks and the <code>dev:</code> section for worktree instances all live together. An <code>orca.local.yaml</code> next to it holds settings that differ per machine. When Orca finds a repo whose <code>orca.yaml</code> is set up for worktrees, the Projects page offers to add it.</li>
+<li><strong>A full reference.</strong> Every key is described in the <a href="https://github.com/edvin/orca/blob/main/docs/orca-yaml.md" target="_blank" rel="noopener">orca.yaml reference</a>.</li>
+</ul>
+<h2 id="routes-from-container-labels"><a class="anchor" href="#routes-from-container-labels" aria-hidden="true" tabindex="-1">#</a>Routes from container labels</h2>
+<p>A container can now ask for its own hostname. Orca adds the route when the container starts and removes it when it stops.</p>
+<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">labels</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  orca.route</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span></span></code></pre></div><p>Traefik labels work too, so projects that already use <code>Host(...)</code> rules get routed with no changes. The Gateway page tags each route with where it comes from (labels, orca.yaml, a stack or a worktree) and points you to the right place to change it.</p>
+<h2 id="hostnames-work-inside-containers-too"><a class="anchor" href="#hostnames-work-inside-containers-too" aria-hidden="true" tabindex="-1">#</a>Hostnames work inside containers too</h2>
+<p>Every routed hostname now also resolves inside your containers, to the gateway. A backend can call <code>https://auth.localhost</code> the same way your browser does, which is what OIDC issuer URLs and server-to-server calls by public name need.</p>
+<h2 id="setup-commands-for-any-stack"><a class="anchor" href="#setup-commands-for-any-stack" aria-hidden="true" tabindex="-1">#</a>Setup commands for any stack</h2>
+<p><code>hooks.after_up</code> in a stack&#39;s <code>orca.yaml</code> runs commands after every start from Orca: migrations, creating buckets, registering search attributes. If one fails, the stack page shows its output and the rest still run.</p>
+<h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
+<ul>
+<li><strong>A brand-new install works on the first start.</strong> On some first starts, Orca&#39;s window opened before its background service had created its access key, and Orca kept going without it: every page failed with &quot;401 Unauthorized&quot; or stayed empty until Orca was restarted. Orca now picks up the key as soon as it exists.</li>
+<li><strong>Errors say what went wrong.</strong> A failed request used to leave pages loading forever, or report &quot;error decoding response body&quot;. Now the actual problem is shown, and System Health offers to try again.</li>
+<li><strong>Hostnames from templates work.</strong> A template route like <code>webmail</code> was registered as just <code>webmail</code>, which no browser asks for. It now becomes <code>webmail.localhost</code> (or your own domain).</li>
+</ul>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.48.1...v0.49.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.48.1...v0.49.0</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.49.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.48.1">
+  <div class="release-meta"><a class="release-tag" href="#v0.48.1">v0.48.1</a><time datetime="2026-10-21T13:46:31Z">October 21, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="helm-only-talks-to-orcas-cluster"><a class="anchor" href="#helm-only-talks-to-orcas-cluster" aria-hidden="true" tabindex="-1">#</a>Helm only talks to Orca&#39;s cluster</h2>
+<p>Orca&#39;s Helm features ran Helm against your kubeconfig&#39;s <strong>current context</strong> instead of Orca&#39;s own <code>orca</code> context, which <code>kubectl</code> already used. If your current context pointed at another cluster, for example a remote or production one:</p>
+<ul>
+<li>the Helm tab on the Kubernetes page listed <strong>that cluster&#39;s</strong> releases</li>
+<li>installing a chart from Orca would have installed it <strong>there</strong></li>
+<li>uninstalling a release from Orca would have removed it <strong>there</strong></li>
+</ul>
+<p>Every Helm command now targets Orca&#39;s cluster only. When Orca&#39;s cluster isn&#39;t running, the Helm tab shows no releases right away instead of waiting about 8 seconds.</p>
+<p>Please update if you use Orca&#39;s Kubernetes features and switch kubectl contexts.</p>
+<h2 id="faster"><a class="anchor" href="#faster" aria-hidden="true" tabindex="-1">#</a>Faster</h2>
+<ul>
+<li><strong>Volumes page:</strong> volume sizes reuse Orca&#39;s cached disk-usage scan instead of making Docker measure everything again (several CPU seconds) on every visit, and the list shows without waiting for the sizes. Refresh measures again.</li>
+<li><strong>System health checks</strong> use far less CPU, and free disk space now matches <code>df</code>.</li>
+<li><strong>Startup:</strong> Orca shows its window sooner. It notices the daemon is ready faster and skips a redundant environment check when Docker is already connected.</li>
+<li><strong>Projects page:</strong> with no projects yet, it no longer searches your Compose folders for suggestions every 5 seconds.</li>
+</ul>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.48.0...v0.48.1" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.48.0...v0.48.1</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.48.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.48.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.48.0">v0.48.0</a><time datetime="2026-10-21T10:09:57Z">October 21, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="orca-barely-touches-docker-while-youre-not-using-it"><a class="anchor" href="#orca-barely-touches-docker-while-youre-not-using-it" aria-hidden="true" tabindex="-1">#</a>Orca barely touches Docker while you&#39;re not using it</h2>
+<p>Orca&#39;s windows each fetched their own copy of the container and image lists every few seconds, even while the window was hidden. On a Mac with the containerd image store, listing 70 images costs Docker over a CPU second, and the sidebar did it every 5 seconds just to show a count.</p>
+<p>With the dashboard open, Docker in the VM used about <strong>150% of a core</strong> on v0.47.3. On v0.48.0 it uses about <strong>5%</strong>, about the same as with no dashboard open at all.</p>
+<ul>
+<li><strong>Lists are fetched once and shared</strong> by the sidebar, dashboard and pages, and refresh the moment a container or image changes instead of on a timer.</li>
+<li><strong>Nothing polls while the window is hidden.</strong> On macOS, closing the window keeps Orca in the menu bar; it now goes quiet there.</li>
+<li><strong>Container stats come in one request</strong> for all running containers instead of one per container.</li>
+<li><strong>Kubernetes and health checks no longer start processes</strong> on every refresh (kubectl, sysctl, vm_stat, df; PowerShell on Windows).</li>
+<li><strong>Faster to open and smoother to use:</strong> pages load when you first visit them, tables update only the rows that changed, and the always-on blur effects behind the sidebar, titlebar and cards are gone.</li>
+<li><strong>Following logs is cheap:</strong> log lines arrive in batches and only the lines on screen are drawn. Following a chatty container used to keep the window&#39;s main thread busy almost all the time; now it&#39;s about 5%.</li>
+</ul>
+<h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
+<ul>
+<li><strong>Container exit and out-of-memory notifications work.</strong> Docker&#39;s events never reached Orca, so these toasts never appeared.</li>
+<li><strong>Container CPU % shows current usage.</strong> It used to show the average since the Docker VM started. Memory now matches <code>docker stats</code> (page cache excluded).</li>
+<li><strong>Orca no longer opens a new Docker event stream on every launch.</strong> Each one stayed open until the daemon restarted.</li>
+</ul>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.3...v0.48.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.3...v0.48.0</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.48.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.47.3">
+  <div class="release-meta"><a class="release-tag" href="#v0.47.3">v0.47.3</a><time datetime="2026-10-20T21:03:57Z">October 20, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="docker-stays-quiet-while-orca-is-idle"><a class="anchor" href="#docker-stays-quiet-while-orca-is-idle" aria-hidden="true" tabindex="-1">#</a>Docker stays quiet while Orca is idle</h2>
+<p>Orca&#39;s health check asked Docker for its disk usage every few seconds, and the titlebar, status bar and dashboard each ran their own copy of that check. Working out disk usage means Docker walks every image, container, volume and build cache entry, so an idle Orca kept Docker noticeably busy.</p>
+<ul>
+<li><strong>Far less work for Docker</strong>: disk usage is now read at most every 10 minutes, and the whole window shares one health check. On a Mac with 39 running containers, Docker&#39;s CPU use with the dashboard open dropped from about 40% to 18% of a core, and on other pages from about 14% to 4%.</li>
+<li><strong>Figures still update when they should</strong>: deleting or pruning images, containers or volumes, stopping a stack, and running cleanup all refresh the numbers.</li>
+<li><strong>Health checks never wait for the disk scan</strong>, so the Docker status in the titlebar stays responsive even when Docker is slow to answer.</li>
+</ul>
+<p>Thanks to @diem2001 for finding this, measuring it and fixing it (#5).</p>
+<h2 id="installing-orca-on-a-remote-server"><a class="anchor" href="#installing-orca-on-a-remote-server" aria-hidden="true" tabindex="-1">#</a>Installing Orca on a remote server</h2>
+<ul>
+<li><strong>The install command works again.</strong> <code>curl -fsSL https://orca-desktop.com/install-daemon.sh | sudo sh</code> failed: the script wasn&#39;t published at that address, and on Debian and Ubuntu it stopped with <code>Illegal option -o pipefail</code>. Both are fixed, and it works with <code>sudo bash</code> too. Thanks to @erdincka for reporting it (#4).</li>
+<li><strong>The uninstall script removes Orca properly.</strong> It now uninstalls the <code>orca-daemon</code> package, including the <code>orca</code> command-line tool, and removes Orca&#39;s package repository. Before, it deleted the files but left the package registered as installed.</li>
+</ul>
+<p>Both scripts are served from orca-desktop.com, so these fixes already apply to new installs.</p>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.2...v0.47.3" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.2...v0.47.3</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.3" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.47.2">
+  <div class="release-meta"><a class="release-tag" href="#v0.47.2">v0.47.2</a><time datetime="2026-10-16T18:33:17Z">October 16, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="docker-no-longer-runs-out-of-memory"><a class="anchor" href="#docker-no-longer-runs-out-of-memory" aria-hidden="true" tabindex="-1">#</a>Docker no longer runs out of memory</h2>
+<p>Docker Engine versions before 29.9.1 leak a little memory every time something asks for their version, and Orca asked a lot. Over a couple of weeks the Docker VM ran out of memory and Docker was killed.</p>
+<ul>
+<li><strong>Orca asks far less often</strong>: the engine version is now fetched about once an hour, and health checks use a lightweight ping instead. That stops the growth even on older engines.</li>
+<li><strong>One-click Docker Engine update</strong>: if your Docker VM runs an affected version, you&#39;ll see a warning in the status bar. Click it and press <strong>Update</strong> on System Health. Orca updates Docker inside the VM, restarts it and starts your running containers again. Containers, images and volumes are kept.</li>
+</ul>
+<p>Thanks to Dominic for tracking this down.</p>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.1...v0.47.2" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.1...v0.47.2</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.2" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.47.1">
+  <div class="release-meta"><a class="release-tag" href="#v0.47.1">v0.47.1</a><time datetime="2026-10-14T18:33:37Z">October 14, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
+<ul>
+<li><strong>The app now restarts its daemon if it stops unexpectedly.</strong> Before, a crashed daemon left Orca showing RUNNING while nothing worked, until you relaunched. Now you see a &quot;reconnecting&quot; banner, the daemon comes back within a few seconds, and after repeated crashes Orca shows the connection screen instead of retrying forever.</li>
+<li><strong>Escape closes menus and dialogs</strong> throughout the app. A dropdown inside a dialog closes first, then the dialog.</li>
+<li><strong>Containers table:</strong> CPU and memory share one column, and containers inside a stack show their short name (<code>clickhouse</code> instead of <code>ai-platform-clickhouse</code>), so names fit at the default window size.</li>
+</ul>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.0...v0.47.1" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.0...v0.47.1</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.47.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.47.0">v0.47.0</a><time datetime="2026-10-14T15:02:41Z">October 14, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="worktree-instances"><a class="anchor" href="#worktree-instances" aria-hidden="true" tabindex="-1">#</a>Worktree instances</h2>
+<p>Every git worktree of a compose project can now run as its own instance, with its own URLs, ports and compose project. Databases and other infrastructure run once in a shared stack. Your compose files are never modified.</p>
+<ul>
+<li><strong>Projects</strong> page in the app, a Dashboard card, and running instances in the tray menu</li>
+<li>CLI: <code>orca up</code>, <code>down</code>, <code>status</code>, <code>logs</code>, <code>env</code>, <code>run</code> and <code>projects</code>, from inside any worktree</li>
+<li>MCP: <code>instance_*</code> tools for coding agents</li>
+<li>Per-instance data: shared (default), own database or own server, with reset</li>
+<li>Idle stop, with wake on the next request</li>
+<li>Host dev servers: <code>orca run --serve web -- npm run dev</code> routes the service&#39;s URL to a process on your machine</li>
+</ul>
+<h2 id="security"><a class="anchor" href="#security" aria-hidden="true" tabindex="-1">#</a>Security</h2>
+<ul>
+<li>The gateway no longer serves its certificates folder. Before this release, the TLS private keys could be fetched from every routed hostname. Update if you use the gateway.</li>
+</ul>
+<h2 id="other-changes"><a class="anchor" href="#other-changes" aria-hidden="true" tabindex="-1">#</a>Other changes</h2>
+<ul>
+<li>The gateway access log is now a rotated file (<code>ca/certs/access.log</code>) instead of container output</li>
+<li>macOS: <code>docker compose</code> now works when Orca is opened from Finder or the Dock</li>
+<li>macOS: the gateway can now reach dev servers running on the Mac</li>
+</ul>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.20...v0.47.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.20...v0.47.0</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.46.20">
+  <div class="release-meta"><a class="release-tag" href="#v0.46.20">v0.46.20</a><time datetime="2026-07-10T10:13:03Z">July 10, 2026</time></div>
+  <div class="release-body prose">
+    
+    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.19...v0.46.20" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.19...v0.46.20</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.20" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.46.19">
+  <div class="release-meta"><a class="release-tag" href="#v0.46.19">v0.46.19</a><time datetime="2026-07-09T19:28:45Z">July 9, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="whats-changed"><a class="anchor" href="#whats-changed" aria-hidden="true" tabindex="-1">#</a>What&#39;s Changed</h2>
+<ul>
+<li>Mask SME in VZ guests: video playback SIGILLs on Apple M4/M5 hosts by @diem2001 in <a href="https://github.com/edvin/orca/pull/1" target="_blank" rel="noopener">https://github.com/edvin/orca/pull/1</a></li>
+</ul>
+<h2 id="new-contributors"><a class="anchor" href="#new-contributors" aria-hidden="true" tabindex="-1">#</a>New Contributors</h2>
+<ul>
+<li>@diem2001 made their first contribution in <a href="https://github.com/edvin/orca/pull/1" target="_blank" rel="noopener">https://github.com/edvin/orca/pull/1</a></li>
+</ul>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.18...v0.46.19" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.18...v0.46.19</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.19" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.46.18">
+  <div class="release-meta"><a class="release-tag" href="#v0.46.18">v0.46.18</a><time datetime="2026-07-01T14:59:25Z">July 1, 2026</time></div>
+  <div class="release-body prose">
+    
+    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.17...v0.46.18" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.17...v0.46.18</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.18" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.46.17">
+  <div class="release-meta"><a class="release-tag" href="#v0.46.17">v0.46.17</a><time datetime="2026-06-26T12:32:09Z">June 26, 2026</time></div>
+  <div class="release-body prose">
+    
+    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.16...v0.46.17" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.16...v0.46.17</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.17" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.46.16">
+  <div class="release-meta"><a class="release-tag" href="#v0.46.16">v0.46.16</a><time datetime="2026-06-08T11:37:38Z">June 8, 2026</time></div>
+  <div class="release-body prose">
+    
+    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.15...v0.46.16" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.15...v0.46.16</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.16" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.46.15">
+  <div class="release-meta"><a class="release-tag" href="#v0.46.15">v0.46.15</a><time datetime="2026-06-04T12:31:21Z">June 4, 2026</time></div>
+  <div class="release-body prose">
+    
+    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.14...v0.46.15" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.14...v0.46.15</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.15" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.46.14">
+  <div class="release-meta"><a class="release-tag" href="#v0.46.14">v0.46.14</a><time datetime="2026-05-29T12:31:35Z">May 29, 2026</time></div>
+  <div class="release-body prose">
+    
+    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.13...v0.46.14" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.13...v0.46.14</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.14" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.46.13">
+  <div class="release-meta"><a class="release-tag" href="#v0.46.13">v0.46.13</a><time datetime="2026-05-29T11:51:01Z">May 29, 2026</time></div>
+  <div class="release-body prose">
+    
+    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.12...v0.46.13" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.12...v0.46.13</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.13" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article></section>
 
 </main>
 <footer class="site-footer">
