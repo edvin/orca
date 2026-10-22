@@ -6,7 +6,7 @@ description: Run a local k3s cluster from Orca, use it with kubectl and Helm thr
 
 Orca can install and run a single-node [k3s](https://k3s.io) cluster with Traefik ingress, and gives you a UI for the workloads in it. Use this page when you want a local Kubernetes cluster next to your containers, or want to know how Orca's cluster fits with your own `kubectl` setup.
 
-![The Kubernetes page listing pods with status, restarts and actions](/assets/screens/10-kubernetes.webp)
+![The Kubernetes page listing pods with status, restarts and actions](/assets/screens/kubernetes.webp)
 
 ## Enable the cluster
 
@@ -142,7 +142,7 @@ Use the delete button on a release to uninstall it. For upgrades and rollbacks, 
 
 The **Topology** tab draws each service with its deployments and their pods, then deployments without a service, then **Standalone Pods**. Click a card to jump to that resource's tab.
 
-![The Topology tab showing services connected to deployments and pods](/assets/screens/15-k8s-topology.webp)
+![The Topology tab showing services connected to deployments and pods](/assets/screens/k8s-topology.webp)
 
 Orca links resources by name, not by label selector: a service and a deployment are linked when one name contains the other, and pods are linked to the deployment whose name they start with. Resources with unrelated names show up as separate groups.
 

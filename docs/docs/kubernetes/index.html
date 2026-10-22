@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjqxela">
+<link rel="stylesheet" href="/assets/site.css?v=mvjr1zy4">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjqxela" defer></script>
+<script src="/assets/site.js?v=mvjr1zy4" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -57,7 +57,7 @@
     </div>
     <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#enable-the-cluster">Enable the cluster</a></li><li><a href="#the-orca-context">The orca context</a></li><li><a href="#use-kubectl-and-helm">Use kubectl and Helm</a></li><li><a href="#browse-resources">Browse resources</a></li><li><a href="#edit-yaml-and-apply">Edit YAML and apply</a></li><li><a href="#helm-releases">Helm releases</a></li><li><a href="#topology">Topology</a></li><li><a href="#jobs-and-cronjobs">Jobs and CronJobs</a></li><li><a href="#ingress-and-traefik">Ingress and Traefik</a></li></ul></details>
     <div class="prose"><p>Orca can install and run a single-node <a href="https://k3s.io" target="_blank" rel="noopener">k3s</a> cluster with Traefik ingress, and gives you a UI for the workloads in it. Use this page when you want a local Kubernetes cluster next to your containers, or want to know how Orca&#39;s cluster fits with your own <code>kubectl</code> setup.</p>
-<p><figure class="shot"><img src="/assets/screens/10-kubernetes.webp" alt="The Kubernetes page listing pods with status, restarts and actions" loading="lazy" decoding="async"></figure></p>
+<p><figure class="shot"><img src="/assets/screens/kubernetes.webp" alt="The Kubernetes page listing pods with status, restarts and actions" loading="lazy" decoding="async"></figure></p>
 <h2 id="enable-the-cluster"><a class="anchor" href="#enable-the-cluster" aria-hidden="true" tabindex="-1">#</a>Enable the cluster</h2>
 <p>Open <strong>Kubernetes</strong> in the sidebar. If k3s isn&#39;t installed yet, the page offers to set it up.</p>
 <ol>
@@ -110,7 +110,7 @@
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">helm</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> repo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> add</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> bitnami</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> https://charts.bitnami.com/bitnami</span></span></code></pre></div><p>Use the delete button on a release to uninstall it. For upgrades and rollbacks, use <code>helm --kube-context orca</code> directly.</p>
 <h2 id="topology"><a class="anchor" href="#topology" aria-hidden="true" tabindex="-1">#</a>Topology</h2>
 <p>The <strong>Topology</strong> tab draws each service with its deployments and their pods, then deployments without a service, then <strong>Standalone Pods</strong>. Click a card to jump to that resource&#39;s tab.</p>
-<p><figure class="shot"><img src="/assets/screens/15-k8s-topology.webp" alt="The Topology tab showing services connected to deployments and pods" loading="lazy" decoding="async"></figure></p>
+<p><figure class="shot"><img src="/assets/screens/k8s-topology.webp" alt="The Topology tab showing services connected to deployments and pods" loading="lazy" decoding="async"></figure></p>
 <p>Orca links resources by name, not by label selector: a service and a deployment are linked when one name contains the other, and pods are linked to the deployment whose name they start with. Resources with unrelated names show up as separate groups.</p>
 <h2 id="jobs-and-cronjobs"><a class="anchor" href="#jobs-and-cronjobs" aria-hidden="true" tabindex="-1">#</a>Jobs and CronJobs</h2>
 <p>The <strong>Jobs</strong> tab has two sections.</p>

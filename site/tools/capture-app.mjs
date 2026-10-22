@@ -239,7 +239,6 @@ hooks:
       system_resources: { cpu_count: 12, memory_total_bytes: 36 * 1024 ** 3, memory_available_bytes: 21 * 1024 ** 3, disk_total_bytes: 494e9, disk_free_bytes: 301e9, disk_usage_percent: 39 },
       warnings: [], os: "linux", arch: "arm64",
     },
-    k8s_status: { enabled: false, running: false, installed: false, version: null, node_name: null, node_status: null, pods_running: 0, pods_total: 0, traefik_dashboard: null, error: null },
     gateway_status: { running: true, container_id: "c4dd1e", routes_active: routes.length, domain: "localhost", http_port: 80, https_port: 443, tls_mode: "orca_ca", port_conflicts: [], stack_links: [], traefik_mode: "gateway_only" },
     gateway_list_routes: routes,
     gateway_get_config: { domain: "localhost", enabled: true, http_port: 80, https_port: 443, tls_mode: "orca_ca", routes, custom_cert: null, custom_key: null },
@@ -268,6 +267,35 @@ hooks:
       { id: "h2", name: "production", online: true, version: "0.50.0" }, { id: "h3", name: "build-runner", online: true, version: "0.50.0" },
     ],
     list_schedules: [], list_registries: [], list_deploy_rules: [], list_deploy_history: [], list_build_targets: [],
+  };
+
+  // A small k3s cluster running the shop.
+  const pod = (name, app, image, status = "Running", restarts = 0, age = "2d") => ({
+    name, namespace: "default", status, ready: status === "Running" ? "1/1" : "0/1", restarts, age, node: "orca", ip: `10.42.0.${10 + name.length}`,
+    containers: [{ name: app, image, ready: status === "Running", restart_count: restarts }],
+  });
+  const pods = [
+    pod("web-7c9d8f6b5-2xkqp", "web", "ghcr.io/acme/shop-web:1.42.0"), pod("web-7c9d8f6b5-h8zvn", "web", "ghcr.io/acme/shop-web:1.42.0"),
+    pod("api-5f7b9c8d4-mq2rt", "api", "ghcr.io/acme/shop-api:1.42.0"), pod("api-5f7b9c8d4-x7lpw", "api", "ghcr.io/acme/shop-api:1.42.0", "Running", 1),
+    pod("worker-6d8c7b5f9-9qkzt", "worker", "ghcr.io/acme/shop-api:1.42.0"), pod("postgres-0", "postgres", "postgres:17", "Running", 0, "6d"),
+    pod("redis-0", "redis", "redis:7-alpine", "Running", 0, "6d"), pod("migrate-29351840-8kq2v", "migrate", "ghcr.io/acme/shop-api:1.42.0", "Succeeded", 0, "41m"),
+  ];
+  const K8S = {
+    k8s_status: { enabled: true, running: true, installed: true, version: "v1.34.1+k3s1", node_name: "orca", node_status: "Ready", pods_running: 7, pods_total: 8, traefik_dashboard: null },
+    k8s_namespaces: ["shop", "default", "kube-system"].map((name) => ({ name, status: "Active", age: "6d" })),
+    k8s_pods: pods,
+    k8s_pod_metrics: pods.filter((p) => p.status === "Running").map((p, i) => ({ name: p.name, cpu: `${[12, 9, 31, 27, 6, 18, 3][i] ?? 4}m`, memory: `${[148, 151, 212, 207, 96, 184, 12][i] ?? 40}Mi` })),
+    k8s_deployments: [
+      { name: "web", namespace: "default", replicas_ready: 2, replicas_desired: 2, age: "2d", images: ["ghcr.io/acme/shop-web:1.42.0"] },
+      { name: "api", namespace: "default", replicas_ready: 2, replicas_desired: 2, age: "2d", images: ["ghcr.io/acme/shop-api:1.42.0"] },
+      { name: "worker", namespace: "default", replicas_ready: 1, replicas_desired: 1, age: "2d", images: ["ghcr.io/acme/shop-api:1.42.0"] },
+    ],
+    k8s_services: [
+      { name: "web", namespace: "default", service_type: "ClusterIP", cluster_ip: "10.43.18.204", external_ip: null, ports: [{ name: "http", port: 80, target_port: "3000", node_port: null, protocol: "TCP" }], age: "2d" },
+      { name: "api", namespace: "default", service_type: "ClusterIP", cluster_ip: "10.43.77.12", external_ip: null, ports: [{ name: "http", port: 80, target_port: "8080", node_port: null, protocol: "TCP" }], age: "2d" },
+      { name: "postgres", namespace: "default", service_type: "ClusterIP", cluster_ip: "None", external_ip: null, ports: [{ name: "pg", port: 5432, target_port: "5432", node_port: null, protocol: "TCP" }], age: "6d" },
+      { name: "redis", namespace: "default", service_type: "ClusterIP", cluster_ip: "None", external_ip: null, ports: [{ name: "redis", port: 6379, target_port: "6379", node_port: null, protocol: "TCP" }], age: "6d" },
+    ],
   };
   window.__DEMO = { project };
 
@@ -306,6 +334,7 @@ hooks:
           mounts: [{ source: "/Users/alex/code/shop", destination: "/app", mode: "rw", type: "bind" }], health_log: [] };
       }
       if (cmd in R) return R[cmd];
+      if (cmd in K8S) return K8S[cmd];
       if (cmd.startsWith("plugin:")) return null;
       if (cmd.startsWith("list_") || cmd.startsWith("k8s_")) return [];
       return {};
@@ -370,6 +399,18 @@ const SHOTS = {
     await nav(page, "Settings");
     await page.getByText("AI & Agents", { exact: true }).first().click().catch(() => {});
     await page.waitForTimeout(1500);
+    return { clip: content };
+  },
+  async kubernetes(page) {
+    await nav(page, "Kubernetes");
+    await page.waitForTimeout(2500);
+    return { clip: content };
+  },
+  async "k8s-topology"(page) {
+    await nav(page, "Kubernetes");
+    await page.waitForTimeout(2000);
+    await page.getByText("Topology", { exact: true }).first().click().catch(() => {});
+    await page.waitForTimeout(2500);
     return { clip: content };
   },
   async "start-dialog"(page) {

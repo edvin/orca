@@ -28,7 +28,8 @@ Opening paragraph (no H1: the title is rendered from front matter).
   Kinds: `NOTE`, `TIP`, `WARNING`.
 - Links to other docs pages: `/docs/<slug>/` (for example `/docs/gateway/`). Anchors: `/docs/orca-yaml/#hooks`.
 - Screenshots: `![Alt text describing what is shown](/assets/screens/<name>.webp)`. Available names:
-  `00-fleet 01-dashboard 02-containers 03-container-detail 04-container-logs 05-container-files 06-images 06b-image-scan 07-volumes 08-networks 09-network-topology 10-kubernetes 11-k8s-deployments 12-k8s-services 13-k8s-helm 14-k8s-jobs 15-k8s-topology 16-app-catalog 17-system-health 18-activity 19-settings 20-settings-ai 21-settings-maintenance 22-keyboard-shortcuts 23-command-palette 25-gateway`.
+  `dashboard containers container-detail images stack-profiles orca-yaml-editor gateway landing-page worktrees start-dialog kubernetes k8s-topology app-catalog fleet settings-ai`.
+  New ones come from `tools/capture-app.mjs` (the app with made-up demo data; no real names or paths), then `node tools/prep-images.mjs`.
   Use at most two per page, and only where they help.
 - Tables are fine for reference material (flags, keys, endpoints).
 
