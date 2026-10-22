@@ -95,7 +95,7 @@ export default function KeyboardShortcuts(props: KeyboardShortcutsProps) {
           "margin-bottom": "20px",
         }}>
           <h2 style={{ margin: "0", "font-size": "16px", "font-weight": "600", color: "#e6edf3" }}>
-            Keyboard Shortcuts
+            Keyboard shortcuts
           </h2>
           <button
             onClick={() => props.onClose()}

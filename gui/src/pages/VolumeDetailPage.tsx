@@ -118,7 +118,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
   const [removing, setRemoving] = createSignal(false);
   const doRemove = async () => {
     if (removing()) return;
-    if (!await confirmDanger("Remove Volume", `Remove volume "${props.volumeName}"? This will permanently delete the volume data.`)) return;
+    if (!await confirmDanger("Remove volume", `Remove volume "${props.volumeName}"? This will permanently delete the volume data.`)) return;
     setRemoving(true);
     try {
       await invoke("remove_volume", { name: props.volumeName });
@@ -236,7 +236,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                   onClick={exportFileListing}
                   title="Export file listing as text"
                 >
-                  Export Listing
+                  Export listing
                 </button>
                 <button
                   class="btn btn-sm btn-danger"
@@ -289,7 +289,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                   <div class="card-label">Driver</div>
                   <div class="card-value">{v().driver}</div>
 
-                  <div class="card-label">Mount Point</div>
+                  <div class="card-label">Mount point</div>
                   <div class="card-value" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
                     <span class="mono" style={{ "font-size": "12px" }}>{v().mountpoint}</span>
                     <CopyButton text={v().mountpoint} />
@@ -336,7 +336,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                       <th>Name</th>
                       <th>Image</th>
                       <th>State</th>
-                      <th>Mount Path</th>
+                      <th>Mount path</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -377,10 +377,10 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
           <div class="detail-section">
             <Show when={!fileBrowsingStarted()}>
               <div class="empty" style={{ padding: "40px 0" }}>
-                <p class="empty-title">Browse Volume Files</p>
+                <p class="empty-title">Browse volume files</p>
                 <p style={{ "margin-bottom": "16px" }}>File browsing uses a temporary Alpine container to read volume contents</p>
                 <button class="btn btn-primary" onClick={startBrowsing}>
-                  Browse Files
+                  Browse files
                 </button>
               </div>
             </Show>

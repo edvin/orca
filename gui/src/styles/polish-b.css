@@ -1,0 +1,65 @@
+/* Kubernetes page */
+
+.k8s-runtime-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #8b949e;
+}
+
+.k8s-runtime-picker .custom-dropdown {
+  min-width: 360px;
+  text-align: left;
+}
+
+/* Namespace label, picker and its create/delete buttons read as one control */
+.k8s-ns-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.k8s-ns-picker label {
+  color: #8b949e;
+  font-size: 13px;
+  margin-right: 4px;
+}
+
+.action-icon.k8s-ns-create:hover {
+  color: #3fb950;
+  background: #23883618;
+}
+
+/* Neutral until hovered, so a delete never shouts from every screen */
+.action-icon.k8s-quiet-delete {
+  color: #8b949e;
+}
+
+.action-icon.k8s-quiet-delete:hover {
+  color: #f85149;
+  background: #da363318;
+}
+
+.action-icon.k8s-row-menu-toggle {
+  color: #8b949e;
+}
+
+.action-icon.k8s-row-menu-toggle:hover {
+  color: #e6edf3;
+  background: #21262d;
+}
+
+.k8s-row-menu {
+  min-width: 180px;
+}
+
+/* Builds page */
+
+.builds-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

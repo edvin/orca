@@ -239,7 +239,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
     <div class="modal-overlay" data-own-escape onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
       <div class="modal-dialog">
         <div class="modal-header">
-          <h2 class="modal-title">Run Container</h2>
+          <h2 class="modal-title">Run container</h2>
           <Show when={stage() === "form" || stage() === "error"}>
             <button class="modal-close" onClick={() => props.onClose()}>{"\u00d7"}</button>
           </Show>
@@ -357,7 +357,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
               </div>
 
               <div class="form-group">
-                <label class="form-label">Port Mappings</label>
+                <label class="form-label">Port mappings</label>
                 <input
                   class="form-input mono"
                   type="text"
@@ -369,7 +369,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
               </div>
 
               <div class="form-group">
-                <label class="form-label">Environment Variables</label>
+                <label class="form-label">Environment variables</label>
                 <textarea
                   class="form-textarea mono"
                   placeholder={"KEY=value\nDATABASE_URL=postgres://..."}
@@ -385,12 +385,12 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                 onClick={() => setShowAdvanced(!showAdvanced())}
               >
                 <span class={`advanced-arrow ${showAdvanced() ? "expanded" : ""}`}>&#9654;</span>
-                Advanced Options
+                Advanced options
               </button>
 
               <Show when={showAdvanced()}>
                 <div class="form-group">
-                  <label class="form-label">Command Override</label>
+                  <label class="form-label">Command override</label>
                   <input
                     class="form-input mono"
                     type="text"
@@ -401,7 +401,7 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label">Volume Mounts</label>
+                  <label class="form-label">Volume mounts</label>
                   <textarea
                     class="form-textarea mono"
                     placeholder={"/host/path:/container/path"}
@@ -423,20 +423,20 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
 
                 <div class="form-row">
                   <div class="form-group" style={{ flex: 1 }}>
-                    <label class="form-label">Restart Policy</label>
+                    <label class="form-label">Restart policy</label>
                     <Dropdown
                       value={restartPolicy()}
                       options={[
                         { value: "no", label: "No" },
                         { value: "always", label: "Always" },
-                        { value: "unless-stopped", label: "Unless Stopped" },
-                        { value: "on-failure", label: "On Failure" },
+                        { value: "unless-stopped", label: "Unless stopped" },
+                        { value: "on-failure", label: "On failure" },
                       ]}
                       onChange={(v) => setRestartPolicy(v)}
                     />
                   </div>
                   <div class="form-group" style={{ flex: 1 }}>
-                    <label class="form-label">CPU Limit</label>
+                    <label class="form-label">CPU limit</label>
                     <input
                       class="form-input"
                       type="number"

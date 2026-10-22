@@ -11,7 +11,7 @@ Orca has an optional built-in assistant: a chat window that can look at your con
 
 ## Open the assistant
 
-Click the sparkle icon (**AI Assistant**) in the title bar. The assistant opens in its own window, **Orca Desktop AI**, so you can keep it next to the main window.
+Click the sparkle icon (**AI assistant**) in the title bar. The assistant opens in its own window, **Orca Desktop AI**, so you can keep it next to the main window.
 
 Until the assistant has a model, the window offers to connect the AI tools found on your computer instead. If you came from **Ask AI** on a container or build, it also offers the question ready to copy into Claude.
 
@@ -23,7 +23,7 @@ Each question is sent with the last 20 messages, so you can ask follow-ups.
 
 ## Use a local model
 
-Open **Settings → AI & Agents**. Under **Built-in assistant**, **Local model** lists the model servers running on this computer. Orca looks for:
+Open **Settings → AI & agents**. Under **Built-in assistant**, **Local model** lists the model servers running on this computer. Orca looks for:
 
 | Server | Where Orca looks |
 |--------|------------------|

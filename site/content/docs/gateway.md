@@ -12,9 +12,11 @@ The gateway gives your containers real HTTPS addresses, such as `https://shop.lo
 
 The gateway is a Caddy container (`caddy:2-alpine`, named `orca-gateway`) that Orca creates and configures for you. It listens on ports 80 and 443 of your machine, matches each request's hostname (and optionally its path) and forwards it to a port inside a container. Port 80 only redirects to HTTPS.
 
-Start it with **Start Gateway** on the **Gateway** page, or `orca gateway start`. The first start pulls the image. After that the container comes back when Docker restarts, until you stop it. Orca also starts the gateway on its own when a worktree instance needs it.
+Start it with **Start gateway** on the **Gateway** page, or `orca gateway start`. The first start pulls the image. After that the container comes back when Docker restarts, until you stop it with **Stop gateway**, which asks first because every gateway URL stops working until you start it again. Orca also starts the gateway on its own when a worktree instance needs it.
 
 The gateway forwards to the container's internal port, so the container doesn't need to publish anything on your machine. Orca connects the gateway to each routed container's networks for you.
+
+The Gateway page has three tabs: **Routes**, **Landing page** and **Settings**. **Settings** holds the whole configuration under four headings: **Domain and ports**, **HTTPS**, **Kubernetes integration** and **Suggestions**, where **Clear dismissed** brings back suggested routes you dismissed.
 
 ## Hostnames
 
@@ -24,22 +26,22 @@ Other programs (Safari, `curl`, scripts, test runners) use the system resolver, 
 
 ### Use your own domain
 
-To use names that resolve everywhere, pick a domain with a wildcard DNS record pointing at `127.0.0.1`, such as `*.local.yourcompany.dev`, and set it as the **Domain** on the **Configuration** tab of the Gateway page:
+To use names that resolve everywhere, pick a domain with a wildcard DNS record pointing at `127.0.0.1`, such as `*.local.yourcompany.dev`, and set it as the **Domain** on the Gateway page's **Settings** tab, under **Domain and ports**:
 
 ```bash
 orca gateway config --domain local.yourcompany.dev
 ```
 
-Routes from orca.yaml and labels follow the new domain. Routes you added by hand keep the full hostname they were given. When you save the **Configuration** tab (domain, ports, TLS) or change it with `orca gateway config`, a running gateway restarts with the new settings, so they apply at once.
+Routes from orca.yaml and labels follow the new domain. Routes you added by hand keep the full hostname they were given. When you click **Save settings** (domain, ports, TLS) or change them with `orca gateway config`, a running gateway restarts with the new settings, so they apply at once.
 
 ## Certificates
 
-The **TLS Mode** on the **Configuration** tab decides where certificates come from.
+The **TLS mode** under **HTTPS** on the **Settings** tab decides where certificates come from.
 
 | Mode | | |
 |---|---|---|
 | **Orca CA (automatic)** | `orca_ca` | The default. Orca runs its own certificate authority and issues a certificate for every routed hostname and for the domain itself. Works with any domain and any hostname depth. |
-| **Custom Certificate** | `custom` | You paste a certificate and private key in PEM format. Every route uses that one certificate, so it must cover all of your hostnames. |
+| **Custom certificate** | `custom` | You paste a certificate and private key in PEM format. Every route uses that one certificate, so it must cover all of your hostnames. |
 
 ### Trust the Orca CA
 
@@ -49,7 +51,7 @@ Browsers trust Orca's certificates once the Orca CA is in your system trust stor
 orca ca install
 ```
 
-This runs `sudo security add-trusted-cert` into the System keychain on macOS, copies it to `/usr/local/share/ca-certificates/` and runs `update-ca-certificates` on Linux, and uses `certutil` on Windows. You can also download it from **Settings → Certificates** with **Download CA Certificate**, which shows install instructions too. `orca ca info` prints its subject, expiry and fingerprint.
+This runs `sudo security add-trusted-cert` into the System keychain on macOS, copies it to `/usr/local/share/ca-certificates/` and runs `update-ca-certificates` on Linux, and uses `certutil` on Windows. You can also download it from **Settings → Certificates** with **Download CA certificate**, which shows install instructions too. `orca ca info` prints its subject, expiry and fingerprint.
 
 The CA is created on first use and stored in Orca's config folder, under `orca/ca/`.
 
@@ -78,7 +80,7 @@ A route maps a hostname, and optionally a path, to a container and a port. The *
 
 ### Added by hand
 
-On the Gateway page, **Add Route** asks for a hostname, an optional path, a container and the **Container Port** (the port the app listens on inside the container). On the **Containers** page and a container's detail page, **Expose via Gateway** does the same for that container. When the gateway runs, **Suggested Routes** lists containers with exposed ports that aren't routed yet.
+On the Gateway page, **Add route** asks for a hostname, an optional path, a container and the **Container port** (the port the app listens on inside the container). On the **Containers** page and a container's detail page, **Expose via gateway** does the same for that container. When the gateway runs, **Suggested routes** lists containers with exposed ports that aren't routed yet.
 
 From the command line, give the full hostname:
 
@@ -124,7 +126,7 @@ services:
 
 Traefik labels work as well. Each `traefik.http.routers.<name>.rule` with `Host(...)`, and optionally `PathPrefix(...)` or `Path(...)`, becomes a route to the router's `loadbalancer.server.port`. `traefik.enable=false` opts a container out. When neither the labels nor the image name a single port, Orca uses port 80.
 
-Routes from orca.yaml and labels are added when the container starts and removed when it stops. To change one, change its source; you can still pause it on the Gateway page.
+Routes from orca.yaml and labels are added when the container starts and removed when it stops. To change one, change its source; you can still pause it on the Gateway page. A route from an `orca.yaml` has an **Edit in orca.yaml** link that opens its stack's page, where the **orca.yaml** tab edits the file.
 
 ### Templates
 
@@ -175,13 +177,13 @@ This matters for OIDC issuer URLs and other server-to-server calls by public nam
 
 ## Environment links
 
-`links:` in a project's orca.yaml lists the project's addresses per environment, such as local, staging and production. The Gateway page shows them under **Environment Links**, with one tab per environment, and the landing page shows them too. A `local` link names a gateway hostname, optionally with a path; the others are full URLs. See [links](/docs/orca-yaml/#links).
+`links:` in a project's orca.yaml lists the project's addresses per environment, such as local, staging and production. The Gateway page shows them under **Environment links**, with one tab per environment, and the landing page shows them too. A `local` link names a gateway hostname, optionally with a path; the others are full URLs. See [links](/docs/orca-yaml/#links).
 
 ## The landing page
 
 The gateway's own address, `https://localhost` by default, is a page that lists every routed service as a card. Cards are grouped by project, and each shows whether the service runs and for how long: running, starting, unhealthy (from the container's healthcheck), sleeping or stopped. The page updates when containers start or stop and refreshes itself while it's open.
 
-Open it with **Open Gateway** at the top of the Gateway page. Its settings are on the **Landing page** tab:
+Open it with **Open gateway** at the top of the Gateway page. Its settings are on the **Landing page** tab:
 
 - **Title** and **Subtitle** at the top of the page.
 - **Show status and uptime**.
@@ -206,7 +208,7 @@ A worktree instance can stop itself after a period without use (`dev.instance.id
 
 ## Ports 80 and 443
 
-The gateway needs ports 80 and 443 on your machine. If another program holds one of them, the Gateway page shows **Port Conflict Detected** with the port. Stop that program, or move the gateway to other ports in **HTTP Port** and **HTTPS Port** on the Configuration tab. **Check Ports** tests them first.
+The gateway needs ports 80 and 443 on your machine. If another program holds one of them, the Gateway page shows **Port conflict detected** with the port. Stop that program, or move the gateway to other ports in **HTTP port** and **HTTPS port** on the **Settings** tab. **Check ports** tests them first.
 
 ```bash
 orca gateway config --http-port 8080 --https-port 8443
@@ -216,7 +218,7 @@ With another HTTPS port, URLs carry it, such as `https://shop.localhost:8443`. O
 
 ### Kubernetes ingress
 
-When Kubernetes runs with Traefik, the **Kubernetes Integration** section of the Configuration tab decides how the two share the machine: **Gateway Only** (independent), **Separate Ports** (Traefik moves to its own ports) or **Gateway Proxies Traefik** (one entry point; ingress hostnames are routed through the gateway).
+When Kubernetes runs with Traefik, the **Kubernetes integration** section of the **Settings** tab decides how the two share the machine: **Gateway only** (independent), **Separate ports** (Traefik moves to its own ports) or **Gateway proxies Traefik** (one entry point; ingress hostnames are routed through the gateway). Click **Apply changes** to switch.
 
 ## CLI reference
 

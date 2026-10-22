@@ -48,9 +48,10 @@ export function confirmDanger(
   message?: string,
 ): Promise<boolean> {
   if (typeof arg1 === "string") {
-    return confirm({ title: arg1, message: message ?? "", confirmLabel: "Delete", danger: true });
+    // The button names the action, as the title does: "Stop all containers", not "Delete".
+    return confirm({ title: arg1, message: message ?? "", confirmLabel: arg1, danger: true });
   }
-  return confirm({ confirmLabel: "Delete", ...arg1, danger: true });
+  return confirm({ confirmLabel: arg1.title, ...arg1, danger: true });
 }
 
 function handleResult(result: boolean) {

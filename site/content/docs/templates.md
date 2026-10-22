@@ -10,15 +10,15 @@ The **App Catalog** deploys ready-made apps, from a single database container to
 
 ![The App Catalog with templates grouped by category](/assets/screens/app-catalog.webp)
 
-Open **App Catalog** in the sidebar. The **Curated** view lists the catalog's templates by category; use the category tabs or **Search templates...** to narrow it down. Click a template to open its deploy dialog.
+Open **App Catalog** in the sidebar, or click **Start from the catalog** on a fresh dashboard. The **Curated** view lists the catalog's templates by category; use the category tabs or **Search templates...** to narrow it down. Click a template to open its deploy dialog.
 
-For a single-container app, the dialog shows the **Container Name**, the image, and the port mappings, environment variables and volumes from the template. Change any of them before you deploy. When you deploy, Orca checks that the host ports are free and pulls the image before it creates the container.
+For a single-container app, the dialog shows the **Container name**, the image, and the port mappings, environment variables and volumes from the template. Change any of them before you deploy. When you deploy, Orca checks that the host ports are free and pulls the image before it creates the container.
 
-For a compose stack, the dialog shows the **Stack Name** and the **Compose YAML**, which you can edit before you deploy. If the template asks for values, such as an admin email address, they appear under **Configuration**.
+For a compose stack, the dialog shows the **Stack name** and the **Compose YAML**, which you can edit before you deploy. If the template asks for values, such as an admin email address, they appear under **Configuration**.
 
-Click **Deploy** (or **Deploy Stack**). A single container opens on its detail page afterwards. A stack opens its setup guide if it has one.
+Click **Deploy** (or **Deploy stack**). A single container opens on its detail page afterwards. A stack opens its setup guide if it has one.
 
-If you have set up [remote hosts](/docs/remote-hosts/) under **Settings** > **Remote Hosts**, a **Deploy to** row lets you pick one or more hosts to deploy to.
+If you have set up [remote hosts](/docs/remote-hosts/) under **Settings** > **Remote hosts**, a **Deploy to** row lets you pick one or more hosts to deploy to.
 
 The **Docker Hub** view searches Docker Hub instead. Click **Pull** on a result to pull the image, then run it from the **Images** page.
 
@@ -44,7 +44,7 @@ Compose stacks from the catalog are saved in Orca's stacks folder, one folder pe
 
 Some apps need a TLS certificate, for example a mail server. A template can ask for one with the `self_signed_cert` and `self_signed_key` generators. Orca issues the certificate from its own local certificate authority, the same CA that signs the gateway's HTTPS certificates. The certificate is valid for one year, for the name the template asks for (`localhost` by default) plus `localhost` and `127.0.0.1`.
 
-To make your browser and tools trust these certificates, install Orca's CA once. Go to **Settings** > **Certificates**, click **Download CA Certificate** and run the install command shown for your system, or run:
+To make your browser and tools trust these certificates, install Orca's CA once. Go to **Settings** > **Certificates**, click **Download CA certificate** and run the install command shown for your system, or run:
 
 ```bash
 orca ca install
@@ -70,7 +70,7 @@ If the template declares gateway routes, Orca registers them during deploy and s
 
 ## Create your own templates
 
-Click **Create Template** to save an app you deploy often. Fill in an **Icon**, **Name**, **Category**, **Description** and **Docker Image**, plus port mappings, environment variables, volumes and notes. Use `changeme` for passwords so Orca generates one on each deploy.
+Click **Create template** to save an app you deploy often. Fill in an **Icon**, **Name**, **Category**, **Description** and **Docker image**, plus port mappings, environment variables, volumes and notes. Use `changeme` for passwords so Orca generates one on each deploy.
 
 Your templates appear in the catalog next to the community ones, with buttons to edit and delete them. They are single-container templates and are stored on your machine in `templates.json` in Orca's config folder (`~/.config/orca/` on Linux, `~/Library/Application Support/orca/` on macOS).
 
@@ -216,7 +216,7 @@ To try a template before you submit it, add it to your own `templates.json` in O
 > [!WARNING]
 > If your local `templates.json` isn't valid JSON, Orca ignores the whole file and none of your own templates show up.
 
-If you'd rather not write JSON, click **Contribute Template** in the App Catalog. It opens a GitHub issue form where you describe the app, and a maintainer adds it. `CONTRIBUTING.md` in the repository has more guidance on icons, categories and gateway routes.
+If you'd rather not write JSON, click **Contribute template** in the App Catalog. It opens a GitHub issue form where you describe the app, and a maintainer adds it. `CONTRIBUTING.md` in the repository has more guidance on icons, categories and gateway routes.
 
 ## Related
 

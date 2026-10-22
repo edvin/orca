@@ -14,6 +14,7 @@ mod api;
 mod build_manager;
 mod cron_expr;
 mod dev;
+mod folders;
 mod gateway;
 mod gateway_sync;
 mod landing;

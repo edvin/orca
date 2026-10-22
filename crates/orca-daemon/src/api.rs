@@ -298,6 +298,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/orca-yaml/validate", post(crate::stack_yaml::validate))
         .route("/stacks/{name}/down", post(compose_down))
         .route("/stacks/deploy", post(compose_deploy_path))
+        .route("/folders/inspect", post(crate::folders::inspect))
+        .route("/folders/compose", post(crate::folders::create_compose))
         .route("/stacks/validate", post(validate_compose))
         .route("/stacks/{name}/pull", post(compose_pull))
         .route("/stacks/{name}/env", patch(update_stack_env))
@@ -3416,13 +3418,7 @@ async fn compose_deploy_path(
     let compose_file = compose_file.map(|f| f.to_string_lossy().to_string());
     // The compose project is named after the folder, as compose names it;
     // its remembered profiles apply.
-    let project: String = validated
-        .file_name()
-        .map(|n| n.to_string_lossy().to_lowercase())
-        .unwrap_or_default()
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
+    let project = crate::folders::project_name(&validated);
     let output = crate::stack_profiles::up(&state, &project, &validated_str, compose_file.as_deref()).await?;
 
     // The stack's orca.yaml routes and links are applied by the gateway
@@ -4699,7 +4695,7 @@ fn stacks_base_dir() -> std::path::PathBuf {
 /// an authenticated API caller could invoke compose against arbitrary
 /// compose files anywhere the daemon user can read.
 /// File names `docker compose` looks for in a folder, in its order.
-const COMPOSE_FILE_NAMES: &[&str] = &[
+pub(crate) const COMPOSE_FILE_NAMES: &[&str] = &[
     "compose.yaml",
     "compose.yml",
     "docker-compose.yaml",

@@ -451,7 +451,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("20 - Settings AI", async ({ page }) => {
     await navigateTo(page, "Settings");
-    const tab = page.locator("button", { hasText: "AI & Agents" }).first();
+    const tab = page.locator("button", { hasText: "AI & agents" }).first();
     if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tab.click();
       await waitForPageLoad(page);

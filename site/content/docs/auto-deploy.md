@@ -27,9 +27,9 @@ These two paths are the only API routes that don't need the API token. They auth
 
 ## Set the webhook secret
 
-Open **Settings**, then the **Auto-Deploy** tab. Settings apply to the host that is currently selected, so switch to the server first.
+Open **Settings**, then the **Auto-deploy** tab. **Auto-deploy on new image…** in a container's **More actions** menu on the **Containers** page opens the same tab. Settings apply to the host that is currently selected, so switch to the server first.
 
-Click **Generate** next to **Webhook Secret** to fill in a random secret and copy it to the clipboard, or enter your own long random value. Then click **Save**. You'll paste the same value into GitHub, or into the Docker Hub webhook URL.
+Click **Generate** next to **Webhook secret** to fill in a random secret and copy it to the clipboard, or enter your own long random value. Then click **Save**. You'll paste the same value into GitHub, or into the Docker Hub webhook URL.
 
 The secret is required: the daemon rejects every webhook until one is set. A GitHub request without a valid signature fails with `webhook rejected: invalid or missing signature`.
 
@@ -39,21 +39,21 @@ The secret is stored in the daemon's `config.json` and is never sent back to the
 
 ## Create a deploy rule
 
-On the **Auto-Deploy** tab, click **Add Rule** and fill in the form:
+On the **Auto-deploy** tab, click **Add rule** and fill in the form:
 
 | Field | What it does |
 |---|---|
-| **Rule Name** | A label shown in the rules table and deploy history. |
-| **Image Pattern** | The image name without a tag, for example `ghcr.io/myorg/api`. |
-| **Tag Filter** | Which pushed tags trigger a deploy, as one filter or a comma-separated list. See below. |
-| **Container Names** | Comma-separated container names to recreate, for example `api, worker`. Leave empty to recreate every container whose image contains the pattern. |
+| **Rule name** | A label shown in the rules table and deploy history. |
+| **Image pattern** | The image name without a tag, for example `ghcr.io/myorg/api`. |
+| **Tag filter** | Which pushed tags trigger a deploy, as one filter or a comma-separated list. See below. |
+| **Container names** | Comma-separated container names to recreate, for example `api, worker`. Leave empty to recreate every container whose image contains the pattern. |
 | **Enabled** | Turn off to pause the rule without deleting it. |
 
 Click **Save**. The rule appears in the table with its status, **Active** or **Paused**, and you can edit or delete it from the **Actions** column.
 
 ### Image matching
 
-The image from the webhook must equal **Image Pattern**, or equal it once the registry host is removed. `myorg/api` and `ghcr.io/myorg/api` both match an image pushed as `ghcr.io/myorg/api`. A partial name such as `api` does not.
+The image from the webhook must equal **Image pattern**, or equal it once the registry host is removed. `myorg/api` and `ghcr.io/myorg/api` both match an image pushed as `ghcr.io/myorg/api`. A partial name such as `api` does not.
 
 ### Tag filters
 
@@ -76,7 +76,7 @@ Under the webhook URL, enter an image and a tag and click **Test**. Orca shows w
 
 GitHub sends a **Packages** event when a new container image version is published to `ghcr.io`.
 
-1. On the **Auto-Deploy** tab, click **Copy** next to **Webhook URL**. It points at the selected host, ending in `/api/v1/webhooks/github`.
+1. On the **Auto-deploy** tab, click **Copy** next to **Webhook URL**. It points at the selected host, ending in `/api/v1/webhooks/github`.
 2. In your GitHub repository, open **Settings**, **Webhooks**, **Add webhook**.
 3. Set **Payload URL** to the copied URL and **Content type** to `application/json`.
 4. Set **Secret** to the same value as your Orca webhook secret.
@@ -129,7 +129,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 ```
 
-With this workflow, a rule with **Tag Filter** `v*` deploys releases, and a rule with `main` or `latest` deploys every commit to the default branch.
+With this workflow, a rule with **Tag filter** `v*` deploys releases, and a rule with `main` or `latest` deploys every commit to the default branch.
 
 For a private package, add a login for `ghcr.io` under **Settings → Registries** on the server. The daemon uses the saved credentials for the image's registry when it pulls.
 
@@ -166,7 +166,7 @@ Other settings are not copied, including extra networks beyond the primary netwo
 
 ## Deploy history
 
-The **Deploy History** section at the bottom of the **Auto-Deploy** tab lists recent deploys with **Time**, **Rule**, **Image**, **Container** and **Status**. Failed deploys show the error under the status. A failed pull is recorded once per rule with the container shown as `N/A`.
+The **Deploy history** section at the bottom of the **Auto-deploy** tab lists recent deploys with **Time**, **Rule**, **Image**, **Container** and **Status**. Failed deploys show the error under the status. A failed pull is recorded once per rule with the container shown as `N/A`.
 
 The daemon keeps the last 100 records in its `config.json` and the tab shows the most recent 20. It loads when you open the page, so reopen it to see new entries.
 

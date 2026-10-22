@@ -1,4 +1,5 @@
 import { createSignal, createEffect, onMount, Show, For } from "solid-js";
+import { takeContainerTab } from "../lib/containerTab";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
@@ -33,7 +34,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const [container, setContainer] = createSignal<Container | null>(null);
   const [stats, setStats] = createSignal<ContainerStats | null>(null);
   const [inspectData, setInspectData] = createSignal<any>(null);
-  const [activeTab, setActiveTab] = createSignal<DetailTab>("overview");
+  const [activeTab, setActiveTab] = createSignal<DetailTab>((takeContainerTab() as DetailTab | null) ?? "overview");
   const [_loading, setLoading] = createSignal(false);
   const [actionInProgress, setActionInProgress] = createSignal(false);
   const [dockerRunCmd, setDockerRunCmd] = createSignal<string | null>(null);
@@ -450,7 +451,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   const doRemove = async () => {
     const c = container();
     if (!c) return;
-    if (!await confirmDanger("Remove Container", `Remove container '${c.name}'? This cannot be undone.`)) return;
+    if (!await confirmDanger("Remove container", `Remove container '${c.name}'? This cannot be undone.`)) return;
     setActionInProgress(true);
     try {
       await invoke("remove_container", { id: props.containerId });
@@ -611,64 +612,36 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                 {c().state}
               </span>
 
-              <div class={`detail-page-actions action-icons ${actionInProgress() ? "loading" : ""}`}>
+              <div class="detail-page-actions container-actions">
                 <Show when={actionInProgress()}>
-                  <div class="action-spinner"><Spinner size={14} /></div>
+                  <Spinner size={14} />
                 </Show>
                 <Show when={c().state !== "Running"}>
-                  <button
-                    class="action-icon action-icon-start"
-                    onClick={() => doAction("start_container")}
-                    disabled={actionInProgress()}
-                    title="Start"
-                  >
-                    &#9654;
+                  <button class="btn btn-sm btn-primary" onClick={() => doAction("start_container")} disabled={actionInProgress()}>
+                    ▶ Start
                   </button>
                 </Show>
                 <Show when={c().state === "Running"}>
-                  <button
-                    class="action-icon action-icon-stop"
-                    onClick={() => doAction("stop_container")}
-                    disabled={actionInProgress()}
-                    title="Stop"
-                  >
-                    &#9632;
+                  <button class="btn btn-sm" onClick={() => doAction("stop_container")} disabled={actionInProgress()}>
+                    ■ Stop
                   </button>
-                  <button
-                    class="action-icon"
-                    onClick={doRestart}
-                    disabled={actionInProgress()}
-                    title="Restart"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                  <button class="btn btn-sm" onClick={doRestart} disabled={actionInProgress()}>
+                    ⟳ Restart
                   </button>
                 </Show>
+                <button class="btn btn-sm" onClick={openExposeDialog} disabled={actionInProgress()}
+                  title="Give this container an https://….localhost address through the gateway">
+                  Expose via gateway
+                </button>
+                <button class="btn btn-sm" onClick={() => setShowCommitDialog(true)} disabled={actionInProgress()}
+                  title="Save the container's current file system as a new image">
+                  Save as image
+                </button>
                 <Show when={c().state !== "Running"}>
-                  <button
-                    class="action-icon action-icon-delete"
-                    onClick={doRemove}
-                    disabled={actionInProgress()}
-                    title="Remove container"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                  <button class="btn btn-sm btn-danger-outline" onClick={doRemove} disabled={actionInProgress()}>
+                    Remove
                   </button>
                 </Show>
-                <button
-                  class="action-icon"
-                  onClick={() => setShowCommitDialog(true)}
-                  disabled={actionInProgress()}
-                  title="Save as Image"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                </button>
-                <button
-                  class="action-icon"
-                  onClick={openExposeDialog}
-                  disabled={actionInProgress()}
-                  title="Expose via Gateway"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                </button>
               </div>
             </>
           )}
@@ -846,7 +819,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
             <Show when={container()?.state === "Running" && getMetricsHistory(props.containerId).length > 2}>
               <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "16px", "margin-bottom": "20px" }}>
                 <div class="card" style={{ padding: "16px" }}>
-                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px", "font-weight": 500 }}>CPU Usage</div>
+                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px", "font-weight": 500 }}>CPU usage</div>
                   <TimeChart
                     data={getMetricsHistory(props.containerId).map((s) => ({ time: s.timestamp, value: s.cpu }))}
                     height={120}
@@ -855,7 +828,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   />
                 </div>
                 <div class="card" style={{ padding: "16px" }}>
-                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px", "font-weight": 500 }}>Memory Usage</div>
+                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px", "font-weight": 500 }}>Memory usage</div>
                   <TimeChart
                     data={getMetricsHistory(props.containerId).map((s) => ({ time: s.timestamp, value: s.memory }))}
                     height={120}
@@ -870,7 +843,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
             <Show when={container()}>
               {(c) => (<>
                 <div class="detail-info-section">
-                  <h3 class="detail-section-title">Container Info</h3>
+                  <h3 class="detail-section-title">Container info</h3>
                   <div class="card-grid">
                     <div class="card-label">Container ID</div>
                     <div class="card-value mono" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
@@ -894,7 +867,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                       {getContainerCommand().join(" ") || "-"}
                     </div>
 
-                    <div class="card-label">Port Mappings</div>
+                    <div class="card-label">Port mappings</div>
                     <div class="card-value">
                       <Show when={c().ports.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
                         <For each={deduplicatePorts(c().ports)}>
@@ -1005,7 +978,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                               <thead>
                                 <tr style={{ "border-bottom": "1px solid rgba(255,255,255,0.06)" }}>
                                   <th style={{ padding: "6px 10px", "text-align": "left", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Time</th>
-                                  <th style={{ padding: "6px 10px", "text-align": "center", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Exit Code</th>
+                                  <th style={{ padding: "6px 10px", "text-align": "center", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Exit code</th>
                                   <th style={{ padding: "6px 10px", "text-align": "left", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Output</th>
                                 </tr>
                               </thead>
@@ -1086,7 +1059,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
               {(c) => (
                 <div class="detail-info-section">
                   {/* Environment variables */}
-                  <h3 class="detail-section-title">Environment Variables</h3>
+                  <h3 class="detail-section-title">Environment variables</h3>
                   <Show when={getContainerEnv().length > 0} fallback={
                     <div style={{ color: "#8b949e", padding: "8px 0" }}>Not available</div>
                   }>
@@ -1107,7 +1080,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   </Show>
 
                   {/* Ports */}
-                  <h3 class="detail-section-title" style={{ "margin-top": "24px" }}>Port Mappings</h3>
+                  <h3 class="detail-section-title" style={{ "margin-top": "24px" }}>Port mappings</h3>
                   <Show when={c().ports.length > 0} fallback={
                     <div style={{ color: "#8b949e", padding: "8px 0" }}>No ports exposed</div>
                   }>
@@ -1216,7 +1189,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     <div style={{ background: "#da363311", border: "1px solid #da363333", "border-radius": "8px", padding: "14px", "font-size": "13px" }}>
                       <Show when={inspectData()?.exit_code !== undefined && inspectData()?.exit_code !== null}>
                         <div>
-                          <span style={{ color: "#8b949e" }}>Exit Code:</span>{" "}
+                          <span style={{ color: "#8b949e" }}>Exit code:</span>{" "}
                           <span class="mono" style={{ color: inspectData()?.exit_code === 0 ? "#3fb950" : "#f85149" }}>
                             {inspectData()?.exit_code}
                           </span>
@@ -1262,7 +1235,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
         <Show when={activeTab() === "volumes"}>
           <div class="detail-overview">
             <div class="detail-info-section">
-              <h3 class="detail-section-title">Mounts & Volumes</h3>
+              <h3 class="detail-section-title">Mounts & volumes</h3>
               <Show when={getContainerMounts().length > 0} fallback={
                 <div style={{ color: "#8b949e", padding: "8px 0" }}>No mounts configured for this container.</div>
               }>
@@ -1319,7 +1292,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                                 style={{ "font-size": "12px" }}
                               >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0021 19V5"/><path d="M3 12A9 3 0 0021 12"/></svg>
-                                View Volume
+                                View volume
                               </button>
                               <button
                                 class="btn btn-sm"
@@ -1327,7 +1300,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                                 style={{ "font-size": "12px" }}
                               >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7v10c0 1.1.9 2 2 2h12a2 2 0 002-2V7"/><path d="M7 4h10a2 2 0 012 2v1H5V6a2 2 0 012-2z"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-                                Browse Files
+                                Browse files
                               </button>
                             </div>
                           </Show>
@@ -1345,7 +1318,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
         <Show when={activeTab() === "resources"}>
           <div class="detail-overview">
             <div class="detail-info-section">
-              <h3 class="detail-section-title">Resource Limits</h3>
+              <h3 class="detail-section-title">Resource limits</h3>
               <p style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "16px" }}>
                 Configure memory and CPU limits for this container. Changes apply immediately to the running container.
               </p>
@@ -1359,7 +1332,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   padding: "16px",
                 }}>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "8px" }}>
-                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>Memory Limit</label>
+                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>Memory limit</label>
                     <Show when={inspectData()?.memory_limit}>
                       <span style={{ color: "#8b949e", "font-size": "12px" }}>
                         Current: {formatBytes(inspectData()?.memory_limit || 0)}
@@ -1390,7 +1363,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   padding: "16px",
                 }}>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "8px" }}>
-                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>CPU Limit</label>
+                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>CPU limit</label>
                     <Show when={inspectData()?.cpu_limit}>
                       <span style={{ color: "#8b949e", "font-size": "12px" }}>
                         Current: {inspectData()?.cpu_limit?.toFixed(2)} cores
@@ -1421,7 +1394,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   padding: "16px",
                 }}>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "8px" }}>
-                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>Restart Policy</label>
+                    <label style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "500" }}>Restart policy</label>
                     <Show when={inspectData()?.restart_policy}>
                       <span style={{ color: "#8b949e", "font-size": "12px" }}>
                         Current: {inspectData()?.restart_policy}
@@ -1433,8 +1406,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     options={[
                       { value: "no", label: "No" },
                       { value: "always", label: "Always" },
-                      { value: "unless-stopped", label: "Unless Stopped" },
-                      { value: "on-failure", label: "On Failure" },
+                      { value: "unless-stopped", label: "Unless stopped" },
+                      { value: "on-failure", label: "On failure" },
                     ]}
                     onChange={(v) => setEditRestart(v)}
                   />
@@ -1450,7 +1423,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     onClick={saveResources}
                     disabled={resourceSaving()}
                   >
-                    {resourceSaving() ? "Saving..." : "Apply Changes"}
+                    {resourceSaving() ? "Saving..." : "Apply changes"}
                   </button>
                   <button
                     class="btn"
@@ -1581,7 +1554,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
         <Show when={activeTab() === "export"}>
           <div class="detail-export">
             <div class="detail-info-section">
-              <h3 class="detail-section-title">Docker Run Command</h3>
+              <h3 class="detail-section-title">Docker run command</h3>
               <Show when={dockerRunCmd()} fallback={
                 <div style={{ color: "#8b949e", padding: "8px 0" }}>Loading...</div>
               }>
@@ -1614,7 +1587,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   </div>
                 )}
               </Show>
-              <h3 class="detail-section-title" style={{ "margin-top": "24px" }}>Export Filesystem to Tar</h3>
+              <h3 class="detail-section-title" style={{ "margin-top": "24px" }}>Export filesystem to tar</h3>
               <p style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "12px" }}>
                 Export the container's filesystem as a tar archive. This captures the current state of all files in the container.
               </p>
@@ -1650,7 +1623,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
         >
           <div class="modal-dialog" style={{ "max-width": "460px" }}>
             <div class="modal-header">
-              <span class="modal-title">Save as Image</span>
+              <span class="modal-title">Save as image</span>
               <button class="modal-close" onClick={() => setShowCommitDialog(false)}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1680,7 +1653,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
               <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
                 <button class="btn" onClick={() => setShowCommitDialog(false)} disabled={committing()}>Cancel</button>
                 <button class="btn btn-primary" onClick={doCommit} disabled={committing() || !commitRepo().trim()}>
-                  {committing() ? "Saving..." : "Save as Image"}
+                  {committing() ? "Saving..." : "Save as image"}
                 </button>
               </div>
             </div>
@@ -1688,14 +1661,14 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
         </div>
       </Show>
 
-      {/* Expose via Gateway Dialog */}
+      {/* Expose via gateway Dialog */}
       <Show when={showExposeDialog()}>
         <div class="modal-overlay"
           onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowExposeDialog(false); }}>
           <div class="modal-dialog">
             <div class="modal-header">
-              <h2 class="modal-title">{existingRoute() ? "Gateway Route" : "Expose via Gateway"}</h2>
+              <h2 class="modal-title">{existingRoute() ? "Gateway route" : "Expose via gateway"}</h2>
               <button class="modal-close" onClick={() => setShowExposeDialog(false)}>{"\u00d7"}</button>
             </div>
             <Show when={existingRoute()} fallback={
@@ -1757,7 +1730,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
                     <button class="btn" onClick={() => setShowExposeDialog(false)}>Close</button>
                     <button class="btn" style={{ color: "#f85149", "border-color": "#f85149" }} onClick={handleUnexpose}>
-                      Remove Route
+                      Remove route
                     </button>
                   </div>
                 </div>

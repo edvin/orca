@@ -64,7 +64,7 @@ export default function VolumesPage(props: VolumesPageProps) {
 
   const removeVolume = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!await confirmDanger("Remove Volume", `Remove volume "${name}"? This will permanently delete the volume data.`)) return;
+    if (!await confirmDanger("Remove volume", `Remove volume "${name}"? This will permanently delete the volume data.`)) return;
     setDeletingName(name);
     try {
       await invoke("remove_volume", { name });
@@ -106,7 +106,7 @@ export default function VolumesPage(props: VolumesPageProps) {
           </span>
         </h1>
         <div class="page-actions">
-          <button class="btn btn-primary" onClick={() => setShowCreate(true)}>Create</button>
+          <button class="btn btn-primary" onClick={() => setShowCreate(true)}>Create volume</button>
           <button class="btn" onClick={() => refresh(true)}>Refresh</button>
         </div>
       </div>
@@ -127,8 +127,13 @@ export default function VolumesPage(props: VolumesPageProps) {
         }>
           <div class="empty">
             <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
-            <p class="empty-title">No volumes</p>
-            <p>Volumes are created automatically when containers need persistent storage, or create one manually above.</p>
+            <p class="empty-title">No volumes yet</p>
+            <p>A volume keeps a container's data, such as a database's files, when the container is restarted or recreated. Compose projects create the volumes they need automatically.</p>
+            <div class="empty-actions">
+              <button class="btn btn-primary" onClick={() => setShowCreate(true)}>
+                Create volume
+              </button>
+            </div>
           </div>
         </Show>
       }>
@@ -184,7 +189,7 @@ export default function VolumesPage(props: VolumesPageProps) {
         <div class="modal-overlay" onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }} onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowCreate(false); (e.currentTarget as any).__mdOverlay = false; }}>
           <div class="modal-dialog">
             <div class="modal-header">
-              <h2 class="modal-title">Create Volume</h2>
+              <h2 class="modal-title">Create volume</h2>
               <button class="modal-close" onClick={() => setShowCreate(false)}>{"\u00d7"}</button>
             </div>
             <form onSubmit={handleCreate}>

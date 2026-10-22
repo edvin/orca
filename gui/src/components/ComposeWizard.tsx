@@ -310,7 +310,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
       const dir = `${await getStacksDir()}/${name}`;
       const filePath = `${dir}/docker-compose.yml`;
       const yamlContent = generatedYaml();
-      await invoke("save_compose_file", { path: filePath, content: yamlContent });
+      await invoke("save_compose_file", { path: filePath, content: yamlContent, createNew: true });
       showToast(`Stack "${name}" saved`, "success");
       props.onClose();
       props.onDeployed?.();
@@ -328,7 +328,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
       const dir = `${await getStacksDir()}/${name}`;
       const filePath = `${dir}/docker-compose.yml`;
       const yamlContent = generatedYaml();
-      await invoke("save_compose_file", { path: filePath, content: yamlContent });
+      await invoke("save_compose_file", { path: filePath, content: yamlContent, createNew: true });
       await invoke("compose_deploy_path", { path: dir });
       showToast(`Stack "${name}" deployed!`, "success");
       props.onClose();
@@ -368,8 +368,8 @@ export default function ComposeWizard(props: ComposeWizardProps) {
   const restartOptions = [
     { value: "no", label: "No" },
     { value: "always", label: "Always" },
-    { value: "unless-stopped", label: "Unless Stopped" },
-    { value: "on-failure", label: "On Failure" },
+    { value: "unless-stopped", label: "Unless stopped" },
+    { value: "on-failure", label: "On failure" },
   ];
 
   return (
@@ -379,9 +379,9 @@ export default function ComposeWizard(props: ComposeWizardProps) {
       <div class="modal-dialog" style={{ "max-width": "900px", height: "85vh", display: "flex", "flex-direction": "column" }}>
         <div class="modal-header">
           <h2 class="modal-title">
-            {step() === 1 && "Create Compose Stack — Name"}
-            {step() === 2 && "Create Compose Stack — Services"}
-            {step() === 3 && "Create Compose Stack — Review & Deploy"}
+            {step() === 1 && "Create compose stack — Name"}
+            {step() === 2 && "Create compose stack — Services"}
+            {step() === 3 && "Create compose stack — Review & Deploy"}
           </h2>
           <button class="modal-close" onClick={() => { if (!deploying() && !saving()) props.onClose(); }}>{"\u00d7"}</button>
         </div>
@@ -406,7 +406,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
           <Show when={step() === 1}>
             <div style={{ "max-width": "500px", margin: "40px auto", width: "100%" }}>
               <div class="form-group">
-                <label class="form-label">Stack Name</label>
+                <label class="form-label">Stack name</label>
                 <input
                   class="form-input"
                   type="text"
@@ -494,7 +494,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
                           {/* Name & Image row */}
                           <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
                             <div class="form-group">
-                              <label class="form-label">Service Name</label>
+                              <label class="form-label">Service name</label>
                               <input
                                 class="form-input"
                                 type="text"
@@ -597,7 +597,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
                           {/* Environment Variables */}
                           <div class="form-group">
                             <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
-                              <label class="form-label" style={{ margin: "0" }}>Environment Variables</label>
+                              <label class="form-label" style={{ margin: "0" }}>Environment variables</label>
                               <button class="btn btn-sm" onClick={() => addEnv(svc.id)} style={{ "font-size": "11px" }}>+ Add Variable</button>
                             </div>
                             <For each={svc.env}>
@@ -673,7 +673,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
                           {/* Depends On */}
                           <Show when={otherServiceNames().length > 0}>
                             <div class="form-group">
-                              <label class="form-label">Depends On</label>
+                              <label class="form-label">Depends on</label>
                               <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
                                 <For each={otherServiceNames()}>
                                   {(depName) => {
@@ -695,7 +695,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
 
                           {/* Restart Policy */}
                           <div class="form-group">
-                            <label class="form-label">Restart Policy</label>
+                            <label class="form-label">Restart policy</label>
                             <Dropdown
                               value={svc.restart}
                               options={restartOptions}
@@ -784,7 +784,7 @@ export default function ComposeWizard(props: ComposeWizardProps) {
           </Show>
           <Show when={step() === 3}>
             <button class="btn" onClick={handleSaveOnly} disabled={deploying() || saving()}>
-              {saving() ? <><Spinner size={12} />{" Saving..."}</> : "Save Only"}
+              {saving() ? <><Spinner size={12} />{" Saving..."}</> : "Save only"}
             </button>
             <button class="btn btn-primary" onClick={handleDeploy} disabled={deploying() || saving()}>
               {deploying() ? <><Spinner size={12} />{" Deploying..."}</> : "Deploy"}

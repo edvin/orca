@@ -57,7 +57,7 @@ The server package for [remote hosts](/docs/remote-hosts/) binds to `0.0.0.0` so
 
 ### Remote host connections
 
-Each remote host has its own token, saved in plain text in the desktop app's `config.json` and sent only to that host. **Verify TLS Certificate** is on by default for `https://` hosts. Turn it off only for a self-signed certificate you trust.
+Each remote host has its own token, saved in plain text in the desktop app's `config.json` and sent only to that host. **Verify TLS certificate** is on by default for `https://` hosts. Turn it off only for a self-signed certificate you trust.
 
 ## Local certificate authority
 
@@ -65,7 +65,7 @@ The [gateway](/docs/gateway/) serves your containers over HTTPS with certificate
 
 - The CA certificate and key are stored in `orca/ca/` inside the config directory, for example `~/.config/orca/ca/` on Linux. The key is written with mode `600` and isn't encrypted.
 - The CA is valid for 10 years. Certificates for gateway hostnames are stored in `orca/ca/certs/` and are valid for one year.
-- Orca never adds the CA to your system's trust store by itself. You do that from **Settings**, **Certificates**, with **Download CA Certificate** and the command shown for your system, or with `orca ca install`, which runs that command with `sudo`.
+- Orca never adds the CA to your system's trust store by itself. You do that from **Settings**, **Certificates**, with **Download CA certificate** and the command shown for your system, or with `orca ca install`, which runs that command with `sudo`.
 
 Because a trusted CA can sign a certificate for any hostname, treat `ca-key.pem` like a password. To stop trusting the CA, remove "Orca Desktop CA" from your system's trust store. Deleting the files alone doesn't do that.
 
@@ -93,7 +93,7 @@ Orca connects to these places, besides the hosts you add:
 
 ## The AI assistant
 
-The built-in AI assistant is optional and does nothing until you choose a model under **Settings → AI & Agents → Built-in assistant**: a local model server (Ollama, LM Studio, llama.cpp), or a cloud API key for Anthropic, OpenAI, Google Gemini or another OpenAI-compatible endpoint.
+The built-in AI assistant is optional and does nothing until you choose a model under **Settings → AI & agents → Built-in assistant**: a local model server (Ollama, LM Studio, llama.cpp), or a cloud API key for Anthropic, OpenAI, Google Gemini or another OpenAI-compatible endpoint.
 
 Requests go straight from the daemon to the provider you chose, never through an Orca server. With a local model, nothing leaves your machine. On Linux and Windows, Orca can set Ollama up for you as a container.
 

@@ -13,6 +13,8 @@ import { useContainerStats } from "../lib/statsStore";
 
 import TimeChart from "../components/TimeChart";
 import AiNudge from "../components/AiNudge";
+import AppsOverview from "../components/AppsOverview";
+import { openFolderDialog } from "../lib/openFolder";
 import LastUpdated from "../components/LastUpdated";
 
 /** Wrap an invoke call with a timeout (ms). Rejects on timeout. */
@@ -201,13 +203,16 @@ export default function DashboardPage(props: DashboardPageProps) {
   const memPercent = (s: ContainerStats) =>
     s.memory_limit_bytes > 0 ? (s.memory_usage_bytes / s.memory_limit_bytes) * 100 : 0;
 
+  // Scaled to what containers use, so the line moves; the machine's total
+  // is in the title instead.
   const memoryMax = () => {
-    const h = health();
-    if (h?.system_resources) return h.system_resources.memory_total_bytes;
     const hist = getDashboardMemHistory();
-    if (hist.length === 0) return 1;
-    return Math.max(...hist.map(d => d.value)) * 1.5;
+    const peak = hist.length ? Math.max(...hist.map((d) => d.value)) : 0;
+    const total = health()?.system_resources?.memory_total_bytes;
+    const max = Math.max(peak * 1.5, 512 * 1024 * 1024);
+    return total ? Math.min(max, total) : max;
   };
+  const memoryTotal = () => health()?.system_resources?.memory_total_bytes;
 
   return (
     <div>
@@ -216,27 +221,18 @@ export default function DashboardPage(props: DashboardPageProps) {
           Dashboard
           <LastUpdated timestamp={lastUpdated()} />
         </h1>
+        <div class="page-actions">
+          <button class="btn btn-primary" onClick={() => openFolderDialog()}>Open folder</button>
+        </div>
       </div>
 
-      {/* Empty state — shown when all cards resolved but nothing exists */}
-      <Show when={
-        containersState() === "ready" && imagesState() === "ready" && stacksState() === "ready"
-        && containers().length === 0 && images().length === 0 && stacks().length === 0
-      }>
-        <div class="empty">
-          <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
-          <p class="empty-title">Welcome to Orca Desktop</p>
-          <p>Get started by pulling an image, deploying a template, or running docker compose</p>
-          <div class="empty-actions">
-            <button class="btn btn-primary" onClick={() => props.onNavigate?.("templates")}>
-              Browse App Catalog
-            </button>
-            <button class="btn" onClick={() => props.onNavigate?.("images")}>
-              Pull Image
-            </button>
-          </div>
-        </div>
-      </Show>
+      <AppsOverview
+        stacks={stacks()}
+        routes={gatewayRoutes()}
+        loaded={stacksState() === "ready" && devProjects() !== null}
+        hasProjects={(devProjects() ?? []).length > 0}
+        onNavigate={props.onNavigate}
+      />
 
       <AiNudge onNavigate={props.onNavigate} />
 
@@ -414,7 +410,7 @@ export default function DashboardPage(props: DashboardPageProps) {
         <div class="dashboard-chart-card">
           <div style={{ padding: "16px" }}>
             <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "12px" }}>
-              <span style={{ color: "#8b949e", "font-size": "13px" }}>CPU Usage</span>
+              <span style={{ color: "#8b949e", "font-size": "13px" }}>CPU used by containers</span>
               <span style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>{totalCpu().toFixed(1)}%</span>
             </div>
             <TimeChart
@@ -432,7 +428,10 @@ export default function DashboardPage(props: DashboardPageProps) {
         <div class="dashboard-chart-card">
           <div style={{ padding: "16px" }}>
             <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "12px" }}>
-              <span style={{ color: "#8b949e", "font-size": "13px" }}>Memory Usage</span>
+              <span style={{ color: "#8b949e", "font-size": "13px" }}>
+                Memory used by containers
+                <Show when={memoryTotal()}>{(t) => <span style={{ color: "#6e7681" }}> · of {formatBytes(t())}</span>}</Show>
+              </span>
               <span style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>{formatBytes(totalMemory())}</span>
             </div>
             <TimeChart
@@ -451,7 +450,7 @@ export default function DashboardPage(props: DashboardPageProps) {
       {/* Top consumers */}
       <div class="consumers-grid">
         <div class="consumer-card">
-          <div class="consumer-title">Top CPU Consumers</div>
+          <div class="consumer-title">Top CPU consumers</div>
           <Show when={topCpu().length > 0} fallback={
             <div style={{ color: "#484f58", "font-size": "12px" }}>No running containers. Start a container to see resource usage here.</div>
           }>
@@ -482,7 +481,6 @@ export default function DashboardPage(props: DashboardPageProps) {
                           height={40}
                           color="#58a6ff"
                           fillColor="#58a6ff"
-                          maxValue={100}
                           mini
                         />
                       </td>
@@ -495,7 +493,7 @@ export default function DashboardPage(props: DashboardPageProps) {
         </div>
 
         <div class="consumer-card">
-          <div class="consumer-title">Top Memory Consumers</div>
+          <div class="consumer-title">Top memory consumers</div>
           <Show when={topMemory().length > 0} fallback={
             <div style={{ color: "#484f58", "font-size": "12px" }}>No running containers. Start a container to see resource usage here.</div>
           }>

@@ -5,6 +5,8 @@ import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { SkeletonRow } from "../components/Skeleton";
+import { requestIntent } from "../lib/pageIntent";
+import "../styles/polish-b.css";
 
 interface BuildsPageProps {
   onNavigate?: (target: string) => void;
@@ -145,7 +147,7 @@ export default function BuildsPage(props: BuildsPageProps) {
 
   const deleteBuild = async (id: string, e?: MouseEvent) => {
     e?.stopPropagation();
-    if (!await confirmDanger("Delete Build", "Delete this build record and its logs?")) return;
+    if (!await confirmDanger("Delete build", "Delete this build record and its logs?")) return;
     try {
       await invoke("delete_build", { id });
       showToast("Build deleted", "success");
@@ -157,6 +159,12 @@ export default function BuildsPage(props: BuildsPageProps) {
     } catch (err) {
       showToast(`Failed to delete build: ${err}`, "error");
     }
+  };
+
+  // Builds start from the Images page's build dialog.
+  const startBuild = () => {
+    requestIntent("images", "build");
+    props.onNavigate?.("images");
   };
 
   const rebuild = async (_record: BuildRecord) => {
@@ -348,7 +356,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             {/* Most built images + avg duration */}
             <div>
               <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "10px", "font-weight": "500" }}>
-                Most Built Images
+                Most built images
               </div>
               <Show when={(s.most_built || []).length > 0} fallback={
                 <div style={{ color: "#484f58", "font-size": "13px" }}>No data</div>
@@ -457,7 +465,7 @@ export default function BuildsPage(props: BuildsPageProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "20px" }}>
-            <h2 style={{ margin: "0", "font-size": "18px" }}>Build Comparison</h2>
+            <h2 style={{ margin: "0", "font-size": "18px" }}>Build comparison</h2>
             <button class="btn btn-ghost" onClick={closeComparison} style={{ "font-size": "18px", padding: "4px 8px" }}>
               {"\u00d7"}
             </button>
@@ -509,7 +517,7 @@ export default function BuildsPage(props: BuildsPageProps) {
           {/* Build args diff */}
           <Show when={comp.args_diff.length > 0}>
             <div style={{ "margin-bottom": "16px" }}>
-              <div style={{ "font-weight": "600", "font-size": "14px", "margin-bottom": "10px" }}>Build Args Changes</div>
+              <div style={{ "font-weight": "600", "font-size": "14px", "margin-bottom": "10px" }}>Build args changes</div>
               <div style={{
                 background: "#0d1117",
                 border: "1px solid #21262d",
@@ -555,7 +563,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               disabled={compareLogsLoading()}
               style={{ "font-size": "13px" }}
             >
-              {compareLogsLoading() ? "Loading logs..." : "View Both Logs"}
+              {compareLogsLoading() ? "Loading logs..." : "View both logs"}
             </button>
           </Show>
           <Show when={compareLogs()}>
@@ -767,7 +775,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               <div>{sourceLabel(detail.source)}</div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Context Path</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Context path</div>
               <div style={{ "word-break": "break-all", "font-size": "13px" }}>{detail.context_path}</div>
             </div>
             <div>
@@ -782,7 +790,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             </Show>
             <Show when={Object.keys(detail.build_args).length > 0}>
               <div>
-                <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Build Args</div>
+                <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Build args</div>
                 <div style={{ "font-size": "13px" }}>
                   <For each={Object.entries(detail.build_args)}>
                     {([k, v]) => <div><span style={{ color: "#58a6ff" }}>{k}</span>={v}</div>}
@@ -801,7 +809,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             const color = cacheColor(ca);
             return (
               <div class="card" style={{ padding: "16px", "margin-bottom": "16px" }}>
-                <div style={{ "font-weight": "600", "margin-bottom": "10px" }}>Cache Insights</div>
+                <div style={{ "font-weight": "600", "margin-bottom": "10px" }}>Cache insights</div>
                 <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
                   <div style={{
                     flex: "1",
@@ -830,7 +838,7 @@ export default function BuildsPage(props: BuildsPageProps) {
         {/* Build log */}
         <div class="card" style={{ padding: "16px" }}>
           <div style={{ "font-weight": "600", "margin-bottom": "12px", display: "flex", "align-items": "center", gap: "8px" }}>
-            Build Log
+            Build log
             <Show when={detail.log_lines > 0}>
               <span style={{ color: "#8b949e", "font-weight": "400", "font-size": "12px" }}>
                 ({detail.log_lines} lines)
@@ -882,11 +890,11 @@ export default function BuildsPage(props: BuildsPageProps) {
             "flex-wrap": "wrap",
           }}>
             <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Total Builds</div>
+              <div style={{ color: "#8b949e", "font-size": "12px" }}>Total builds</div>
               <div style={{ "font-size": "20px", "font-weight": "600" }}>{s().total_builds}</div>
             </div>
             <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Success Rate</div>
+              <div style={{ color: "#8b949e", "font-size": "12px" }}>Success rate</div>
               <div style={{ "font-size": "20px", "font-weight": "600", color: "#3fb950" }}>{successRate()}</div>
             </div>
             <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
@@ -894,7 +902,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               <div style={{ "font-size": "20px", "font-weight": "600", color: s().failure_count > 0 ? "#f85149" : undefined }}>{s().failure_count}</div>
             </div>
             <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Avg Duration</div>
+              <div style={{ color: "#8b949e", "font-size": "12px" }}>Avg duration</div>
               <div style={{ "font-size": "20px", "font-weight": "600" }}>{formatDuration(s().avg_duration_secs)}</div>
             </div>
           </div>
@@ -913,7 +921,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               onClick={() => setFilter(tab)}
               style={{ padding: "6px 14px", "font-size": "13px" }}
             >
-              {tab === "all" ? "All" : tab === "in_progress" ? "In Progress" : tab === "success" ? "Success" : "Failed"}
+              {tab === "all" ? "All" : tab === "in_progress" ? "In progress" : tab === "success" ? "Success" : "Failed"}
             </button>
           )}
         </For>
@@ -925,7 +933,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               disabled={compareLoading()}
               style={{ "font-size": "13px", padding: "6px 14px" }}
             >
-              {compareLoading() ? "Comparing..." : "Compare Selected"}
+              {compareLoading() ? "Comparing..." : "Compare selected"}
             </button>
           </Show>
           <Show when={compareMode() && compareSelected().length < 2 && compareSelected().length > 0}>
@@ -938,7 +946,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             onClick={() => compareMode() ? exitCompareMode() : setCompareMode(true)}
             style={{ "font-size": "13px", padding: "6px 14px" }}
           >
-            {compareMode() ? "Cancel Compare" : "Compare"}
+            {compareMode() ? "Cancel compare" : "Compare"}
           </button>
         </div>
       </div>
@@ -960,9 +968,14 @@ export default function BuildsPage(props: BuildsPageProps) {
             </table>
           </div>
         }>
-          <div class="card" style={{ padding: "40px", "text-align": "center", color: "#8b949e" }}>
-            <div style={{ "font-size": "16px", "margin-bottom": "8px" }}>No builds yet</div>
-            <div style={{ "font-size": "13px" }}>Build an image from the Images page or use the CLI.</div>
+          <div class="empty">
+            <p class="empty-title">No builds yet</p>
+            <p>Build an image from a Dockerfile and its history, logs and timings show up here. Builds started with the CLI appear too.</p>
+            <div class="empty-actions">
+              <button class="btn btn-primary" onClick={startBuild}>
+                Build an image
+              </button>
+            </div>
           </div>
         </Show>
       }>
@@ -1099,13 +1112,13 @@ export default function BuildsPage(props: BuildsPageProps) {
     <Show when={buildTargets().length > 0}>
       <div style={{ "margin-bottom": "16px" }}>
         <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "12px" }}>
-          <h2 style={{ "font-size": "16px", "font-weight": "600", margin: "0" }}>Build Targets</h2>
+          <h2 style={{ "font-size": "16px", "font-weight": "600", margin: "0" }}>Build targets</h2>
           <button
             class="btn btn-primary btn-sm"
             onClick={buildAllTargets}
             disabled={buildingAll()}
           >
-            {buildingAll() ? "Building..." : "Build All"}
+            {buildingAll() ? "Building..." : "Build all"}
           </button>
         </div>
         <div class="card" style={{ overflow: "hidden" }}>
@@ -1152,9 +1165,12 @@ export default function BuildsPage(props: BuildsPageProps) {
     <div class="page-container">
       <div class="page-header">
         <h1>Builds</h1>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div class="builds-header-actions">
           <button class="btn" onClick={() => setShowUrlDialog(true)}>
             Build from URL
+          </button>
+          <button class="btn btn-primary" onClick={startBuild}>
+            Build an image
           </button>
         </div>
       </div>

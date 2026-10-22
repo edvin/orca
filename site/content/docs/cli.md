@@ -139,7 +139,7 @@ Everything after `--` is the command and its arguments.
 | Command | What it does |
 |---------|--------------|
 | `orca mcp` | Serve MCP on stdin/stdout for the local daemon. AI tools start this themselves. |
-| `orca mcp --host <name>` | The same for a remote host from Orca Desktop's **Remote Hosts**. |
+| `orca mcp --host <name>` | The same for a remote host from Orca Desktop's **Remote hosts**. |
 | `orca mcp install [tool]` | Add Orca to every supported AI tool found on this machine, or to one: `claude-code`, `claude-desktop`, `cursor`, `vscode`, `windsurf`, `codex`. |
 | `orca mcp uninstall [tool]` | Remove Orca from them again. |
 | `orca mcp status` | Which AI tools are found and which are connected. |

@@ -15,7 +15,7 @@ Open **System Health** in the sidebar. Each check shows its status, and a failin
 | **Set up Docker** | Runs first-start setup again for your platform. Shown when Orca can't reach Docker. |
 | **Recreate VM** | macOS only. Deletes the Lima VM and builds a fresh one on the current base. Containers, images and volumes in it are lost. |
 | **Restart Docker & Orca** | Restarts Docker, then restarts the Orca daemon so it reconnects. On macOS it stops and starts the Lima VM; on Windows it starts Docker in WSL2; on Linux it starts the Docker service with `systemctl`. |
-| **Diagnose** | Tries every way Orca knows to reach Docker and shows the log in **Connection Diagnostics**. If it finds a working connection, Orca switches to it without a restart. |
+| **Diagnose** | Tries every way Orca knows to reach Docker and shows the log in **Connection diagnostics**. If it finds a working connection, Orca switches to it without a restart. |
 | **Re-check** | Runs the checks again. |
 
 
@@ -23,7 +23,7 @@ Open **System Health** in the sidebar. Each check shows its status, and a failin
 
 The app shows **Orca daemon is not running** when it can't reach the daemon on `127.0.0.1:9477`.
 
-1. Click **Start Daemon**, then **Retry Connection**.
+1. Click **Start daemon**, then **Retry connection**.
 2. If it doesn't start, read the daemon log (see [Logs](#logs)). The screen also shows where the app looked for the `orca-daemon` binary.
 3. Check whether something else holds port 9477. On macOS and Linux:
    ```bash
@@ -47,6 +47,12 @@ To run your own daemon instead, quit the app with **Quit Orca** from the tray or
 In versions before 0.49.0, the very first start could leave the app without the daemon's API token: pages stayed empty, **System Health** kept loading, and **Projects** showed `401 Unauthorized`. This is fixed in 0.49.0.
 
 If you're on an older version, quit Orca fully with **Quit Orca** from the tray or menu bar icon and open it again; the token is read on the next start. Then update to the latest release.
+
+## "Can't reach Docker" on Containers or Images
+
+When Orca can't get the list of containers or images from Docker, the **Containers** and **Images** pages show a **Can't reach Docker** banner with the error, instead of a list that never loads. If Orca had a list before, the banner says it may be out of date. Usually Docker or Orca's VM is stopped or still starting.
+
+Click **Open System Health** in the banner. The failing check there says what's wrong, and its **Fix** button can usually repair it.
 
 ## Docker not found
 
@@ -85,19 +91,19 @@ If System Health shows **Docker Engine Update**, the Docker Engine in the VM has
 
 ## Gateway: port 80 or 443 is in use
 
-The gateway needs ports 80 and 443 on your machine. If another program already uses one, the **Gateway** page shows **Port Conflict Detected** with `Port 80 (HTTP) is already in use` or `Port 443 (HTTPS) is already in use`.
+The gateway needs ports 80 and 443 on your machine. If another program already uses one, the **Gateway** page shows **Port conflict detected** with `Port 80 (HTTP) is already in use` or `Port 443 (HTTPS) is already in use`.
 
 Either stop the other program, or move the gateway to other ports:
 
-1. On **Gateway** > **Configuration**, change **HTTP Port** and **HTTPS Port** (for example `8080` and `8443`). **Check Ports** tells you whether they're free.
-2. Click **Save Configuration**.
-3. Click **Stop Gateway**, then **Start Gateway**, so the gateway container is created with the new ports.
+1. On **Gateway** > **Settings**, under **Domain and ports**, change **HTTP port** and **HTTPS port** (for example `8080` and `8443`). **Check ports** tells you whether they're free.
+2. Click **Save settings**. A running gateway restarts with the new ports.
+3. If the gateway wasn't running, click **Start gateway**.
 
 From a terminal, `orca gateway config --http-port 8080 --https-port 8443` saves the same setting.
 
 With a non-standard HTTPS port, URLs include it: `https://myapp.localhost:8443`.
 
-If starting fails with **Failed to Start Gateway** and a message about `caddy:2-alpine`, Orca couldn't download the gateway image. Check your internet connection and try again.
+If starting fails with **Failed to start gateway** and a message about `caddy:2-alpine`, Orca couldn't download the gateway image. Check your internet connection and try again.
 
 ## Browser says the certificate isn't trusted
 
@@ -109,7 +115,7 @@ Run:
 orca ca install
 ```
 
-It needs the `orca` CLI on your `PATH` (the Windows installer adds it) and asks for your password on macOS and Linux. Without the CLI, go to **Settings** > **Certificates**, click **Download CA Certificate** and run the command shown there for your platform.
+It needs the `orca` CLI on your `PATH` (the Windows installer adds it) and asks for your password on macOS and Linux. Without the CLI, go to **Settings** > **Certificates**, click **Download CA certificate** and run the command shown there for your platform.
 
 `orca ca info` shows the CA's subject, expiry and fingerprint, the same details as the **Certificates** tab, so you can check you trusted the right one.
 

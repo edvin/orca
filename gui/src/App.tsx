@@ -4,6 +4,7 @@ import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { onOrcaEvent } from "./lib/events";
 import { addEvent } from "./lib/activityStore";
 import { lazy } from "solid-js";
+import { openFolderDialog, openFolderTarget } from "./lib/openFolder";
 const AiWindow = lazy(() => import("./components/AiWindow"));
 // Pages load on first visit: together with xterm and CodeMirror they made
 // one 1.6 MB bundle that was parsed before the first paint.
@@ -24,6 +25,7 @@ const FleetPage = lazy(() => import("./pages/FleetPage"));
 const TemplatesPage = lazy(() => import("./pages/TemplatesPage"));
 const BuildsPage = lazy(() => import("./pages/BuildsPage"));
 const ComposeWizard = lazy(() => import("./components/ComposeWizard"));
+const OpenFolderDialog = lazy(() => import("./components/OpenFolderDialog"));
 import Titlebar from "./components/Titlebar";
 import StatusBar from "./components/StatusBar";
 import Sidebar from "./components/Sidebar";
@@ -329,6 +331,8 @@ export default function App() {
     } else if (target === "images:pull") {
       setDetailId("pull"); // Signal to ImagesPage to open pull dialog
       setPage("images");
+    } else if (target === "open-folder") {
+      openFolderDialog();
     } else if (target === "compose:wizard") {
       setShowComposeWizard(true);
     } else if (target.startsWith("settings:")) {
@@ -382,6 +386,16 @@ export default function App() {
       .then((u) => { unlistenNavigate = u; })
       .catch(() => {});
     onCleanup(() => unlistenNavigate?.());
+
+    // A folder (or compose file) dropped onto the window opens it as a project.
+    let unlistenDrop: (() => void) | null = null;
+    import("@tauri-apps/api/webview")
+      .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((e) => {
+        if (e.payload.type === "drop" && e.payload.paths.length > 0) openFolderDialog(e.payload.paths[0]);
+      }))
+      .then((u) => { unlistenDrop = u; })
+      .catch(() => {});
+    onCleanup(() => unlistenDrop?.());
 
     // Listen for deep link URLs (orca:// protocol). Guard against the
     // unmount-before-subscribe race: if the component has been cleaned up
@@ -603,8 +617,12 @@ export default function App() {
               onClose={() => setShowCommandPalette(false)}
               onNavigate={(p) => navigate(p)}
               onOpenComposeWizard={() => setShowComposeWizard(true)}
+              onShowShortcuts={() => setShowShortcuts(true)}
             />
           )}
+          <Show when={openFolderTarget() !== undefined}>
+            <OpenFolderDialog onNavigate={(p) => navigate(p)} />
+          </Show>
           <Show when={showComposeWizard()}>
             <ComposeWizard
               onClose={() => setShowComposeWizard(false)}

@@ -41,7 +41,8 @@
 - **Restart count** — badge showing how many times a container has restarted
 - **Container file browser** — explore filesystem of running containers
 - **Export to tar** — save container filesystem or image to tar file
-- **Save as Image** — commit container state to a new image
+- **Save as image** — commit container state to a new image
+- **Open shell** — jump from a container or stack service straight to its terminal
 - **AI-powered diagnostics** — click the AI button on any container to analyze logs and troubleshoot
 - **Copy as `docker run`** / **Export as `docker-compose.yml`** for any running container
 - Real-time event streaming (instant UI updates on container state changes)
@@ -73,8 +74,9 @@
 ### Compose Stacks
 
 - **Auto-detection** from container labels — no config file needed
-- **Compose editor** — create new docker-compose.yml with YAML editor and deploy from the UI
-- **Compose validation** — validates via `docker compose config` before deploy, errors shown inline
+- **Open a project folder** — pick (or drop) a folder, see its compose files, services, profiles and orca.yaml, and start it as a stack; a folder without a compose file gets a starter `compose.yaml`
+- **Open in your tools** — open a stack's folder in your editor (VS Code, Cursor, Zed, Windsurf, IntelliJ IDEA, PhpStorm), terminal or file manager
+- **Stack wizard** — build a new docker-compose.yml service by service and deploy it from the UI
 - Service health dots with stack status rollup (Running / Partial / Stopped)
 - **Compose up / down / pull** — runs the actual `docker compose` CLI
 - Per-service logs, start/stop, restart within expanded stack view
@@ -369,10 +371,10 @@ After that, every project they deploy auto-configures with the team domain, rout
 - Health checks with fix buttons and detailed diagnostics
 - Coexistence with existing Docker installations
 
-### Remote Port Forwarding
+### Remote Port forwarding
 
 - **WebSocket TCP tunnel** — access any service on a remote host as if it were local
-- Click "Port Forward" on a K8s service → `localhost:8080` connects to the remote service
+- Click "Port forward" on a K8s service → `localhost:8080` connects to the remote service
 - Works through any firewall/NAT — tunnels over the existing authenticated HTTPS connection
 - No VPN, no SSH, no extra tooling — just the Orca daemon you already have installed
 - Multiple concurrent tunnels supported
@@ -382,7 +384,7 @@ After that, every project they deploy auto-configures with the team domain, rout
 Your browser → localhost:8080 → [WebSocket tunnel] → Remote daemon → K8s service:80
 ```
 
-### Auto-Deploy (GitHub Webhooks)
+### Auto-deploy (GitHub Webhooks)
 
 - **Push-to-deploy** — push code to GitHub, containers update automatically
 - GitHub Actions builds image → pushes to ghcr.io → webhook → daemon pulls + redeploys
@@ -411,7 +413,7 @@ git push → GitHub Actions → ghcr.io → Webhook → Orca daemon → Pull + R
 - **System tray** — close to tray, not quit
 - **Auto-updates** with signature verification and seamless daemon restart
 - Notification bell with activity feed
-- **Command palette** (Ctrl+K) — fuzzy search pages, resources, and actions
+- **Command palette** (Cmd+K / Ctrl+K) — search stacks, gateway URLs, projects, containers and images, and run actions such as opening a project folder
 - **Keyboard shortcuts** — `?` to show all shortcuts, `Ctrl+R` to refresh
 - **Network topology** — visual diagram of networks and connected containers
 - Toast notifications with actions
@@ -470,7 +472,7 @@ On every startup, the Orca daemon checks the Lima VM config and automatically ap
 | ![Network Topology](screenshots/09-network-topology.png) | ![App Catalog](screenshots/16-app-catalog.png) |
 | **Network Topology** — Visual network diagram | **App Catalog** — One-click templates |
 | ![Settings AI](screenshots/20-settings-ai.png) | ![System Health](screenshots/17-system-health.png) |
-| **AI & Agents** — 5 providers, MCP server | **System Health** — Diagnostics and setup |
+| **AI & agents** — 5 providers, MCP server | **System Health** — Diagnostics and setup |
 
 </details>
 
@@ -513,7 +515,9 @@ Just download and launch Orca Desktop — it handles everything else:
 | **macOS** | Installs Homebrew → Lima → creates a Linux VM with Docker |
 | **Windows** | Enables WSL2 if needed → installs Docker in your default WSL distro (install Ubuntu from the Microsoft Store first if you have none) |
 
-No manual setup required. The Environment page guides you through any needed steps with one-click fix buttons.
+No manual setup required. The System Health page guides you through any needed steps with one-click fix buttons.
+
+4. **Open a project folder**: click **Open folder** on the dashboard (or drop a folder onto the window), pick a folder with a `compose.yaml`, and click **Start**. Orca runs it as a stack and shows its URLs.
 
 ### Manage Remote Servers
 
@@ -530,7 +534,7 @@ This installs the daemon as a systemd service that:
 - **Generates an API token** at `/etc/orca/config.json`
 - **Prints connection details** (URL + token) after install
 
-Then in Orca Desktop: **Settings → Remote Hosts → Add Host** — paste the URL and token.
+Then in Orca Desktop: **Settings → Remote hosts → Add host** — paste the URL and token.
 
 **TLS for production:** Put a reverse proxy in front of the daemon:
 
@@ -592,7 +596,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 export OPENAI_API_KEY="sk-..."
 
 # Option 2: Configure in the GUI
-# Open Settings → AI Assistant → enter your key and choose provider
+# Open Settings → AI & agents → Built-in assistant → enter your key and choose provider
 ```
 
 ### Test with curl
@@ -671,7 +675,7 @@ Add this to your MCP configuration file:
 ```
 
 Replace `YOUR_TOKEN_HERE` with your API token. The easiest way to get it is
-the desktop app: **Settings → Agent Integration** shows the full config with a
+the desktop app: **Settings → AI & agents → HTTP endpoint (advanced)** shows the full config with a
 reveal/copy button, and copying the block substitutes your real token
 automatically. If you'd rather read it from disk, the config file location is
 platform-specific (see the table under [Run the daemon](#run-the-daemon-development)).

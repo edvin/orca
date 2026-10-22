@@ -160,28 +160,30 @@ Then add the host in the app as `http://localhost:9477`. Use a different local p
 
 ## Add the host in Orca Desktop
 
-1. Open **Settings** and select the **Remote Hosts** tab.
-2. Click **Add Host**.
+1. Open **Settings** and select the **Remote hosts** tab.
+2. Click **Add host**. The form is titled **Add remote host**.
 3. Fill in the form:
-   - **Display Name**: how the host appears in the app, for example `Production Server`.
+   - **Display name**: how the host appears in the app, for example `Production Server`.
    - **Daemon URL**: for example `https://orca.example.com`. A trailing `/api/v1` is optional.
    - **API Token**: the token from `/etc/orca/config.json`.
-   - **Verify TLS Certificate**: on by default for `https://` URLs. Turn it off only for a self-signed certificate.
+   - **Verify TLS certificate**: on by default for `https://` URLs. Turn it off only for a self-signed certificate.
    - **Tags**: optional, comma-separated, for example `production, eu-west`.
-4. Click **Test Connection**. Orca checks that the daemon answers and that the token is accepted.
+4. Click **Test connection**. Orca checks that the daemon answers and that the token is accepted.
 5. Click **Save**.
 
 Hosts are saved in the desktop app's own config file, together with their tokens. To change or remove one, use **Edit host** or **Remove host** in the **Actions** column.
 
 ## Switch hosts
 
-The host selector sits in the titlebar and shows the name of the active host. Open it to choose **Local** or any remote host, or **Manage Hosts...** to go to the **Remote Hosts** tab.
+The host selector sits in the titlebar and shows the name of the active host. Open it to choose **Local** or any remote host, or **Manage hosts...** to go to the **Remote hosts** tab.
 
 Orca shows one host at a time. After you switch, every page, from containers to Kubernetes and settings such as [push to deploy](/docs/auto-deploy/) rules, talks to the selected daemon.
 
+A few things work differently on a remote host, because its folders aren't on your computer. [Open a project folder](/docs/stacks/#open-a-project-folder) asks you to type the folder's path on the server instead of picking it, and the buttons that open a stack's folder in your editor, terminal or file manager are hidden.
+
 ## Fleet page
 
-**Fleet** appears in the sidebar once you've added a remote host. It shows a card for each host, with the local daemon first. Each card shows:
+**Fleet** appears in the sidebar, under **Platform**, once you've added a remote host. It shows a card for each host, with the local daemon first. Each card shows:
 
 - online or offline status, and how long ago an offline host was last seen
 - the daemon version, and a note if Docker is disconnected
@@ -189,7 +191,7 @@ Orca shows one host at a time. After you switch, every page, from containers to 
 - disk usage, which turns yellow above 75% and red above 90%
 - running and total containers, and the number of images
 
-The page checks every host again every 30 seconds. Click **Test All** to check now, or click a card to switch to that host and open its dashboard.
+The page checks every host again every 30 seconds. Click **Test all** to check now, or click a card to switch to that host and open its dashboard.
 
 If hosts run different daemon versions, the page shows a **Version mismatch detected** banner.
 
@@ -199,7 +201,7 @@ Tags come from the **Tags** field on each host. On the Fleet page, click a tag p
 
 ### Compare and remove hosts
 
-Click **Select** to pick hosts. With exactly two selected, **Compare** opens a side-by-side view of their resources, containers and images, and marks the items only one host has. **Remove Selected** removes the hosts from the app. It doesn't stop or uninstall the remote daemons.
+Click **Select** to pick hosts. With exactly two selected, **Compare** opens a side-by-side view of their resources, containers and images, and marks the items only one host has. **Remove selected** removes the hosts from the app. It doesn't stop or uninstall the remote daemons.
 
 ## Update the daemon
 
@@ -227,8 +229,8 @@ sudo rm -rf /etc/orca
 
 ## Troubleshooting
 
-- **Test Connection fails**: run `curl http://localhost:9477/api/v1/health` on the server, then check your firewall and proxy.
-- **Connected, but authentication failed**: the token in the app doesn't match `api_token` in `/etc/orca/config.json`.
+- **Test connection fails**: run `curl http://localhost:9477/api/v1/health` on the server, then check your firewall and proxy.
+- **Connected to daemon v…, but authentication failed**: the token in the app doesn't match `api_token` in `/etc/orca/config.json`.
 - **Daemon won't start**: read `journalctl -u orca-daemon -e --no-pager`. Common causes are Docker not running or port 9477 already in use (`sudo ss -tlnp | grep 9477`).
 
 ## Related

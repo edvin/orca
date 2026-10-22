@@ -413,7 +413,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
         >
           <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={{ "font-weight": "600", color: "#e6edf3", "font-size": "14px" }}>
-              Combined Logs
+              Combined logs
             </span>
             <span style={{ "font-size": "12px", color: "#8b949e" }}>
               {filteredEntries().length} lines from {props.containers.length} containers

@@ -439,7 +439,7 @@ export default function EnvironmentPage() {
                 </div>
                 <div style={{ flex: "1" }}>
                   <div style={{ "font-size": "20px", "font-weight": "700", color: "#e6edf3", "margin-bottom": "4px" }}>
-                    All Systems Operational
+                    All systems operational
                   </div>
                   <div style={{ "font-size": "14px", color: "#8b949e", "line-height": "1.5" }}>
                     {platformLabel(s().platform)} {"\u2022"} Runtime: {
@@ -465,7 +465,7 @@ export default function EnvironmentPage() {
                   padding: "28px 32px",
                 }}>
                   <div style={{ "font-size": "16px", "font-weight": "700", color: "#e6edf3", "margin-bottom": "8px" }}>
-                    Switch to Orca Runtime
+                    Switch to Orca runtime
                   </div>
                   <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6", "margin-bottom": "20px" }}>
                     You're currently using Docker Desktop's daemon. Orca can run Docker with its own lightweight runtime — less memory, no license required, zero telemetry.
@@ -488,7 +488,7 @@ export default function EnvironmentPage() {
                       border: "1px solid rgba(63, 185, 80, 0.15)",
                       "border-radius": "8px", padding: "14px 16px",
                     }}>
-                      <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3", "margin-bottom": "10px" }}>Orca Runtime</div>
+                      <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3", "margin-bottom": "10px" }}>Orca runtime</div>
                       <div style={{ "font-size": "12px", color: "#3fb950", "line-height": "1.8" }}>
                         ~200 MB RAM<br/>Free forever<br/>Open source<br/>Zero telemetry
                       </div>
@@ -520,10 +520,10 @@ export default function EnvironmentPage() {
                       disabled={migrating()}
                       onClick={runMigration}
                     >
-                      {migrating() ? "Switching..." : "Switch to Orca Runtime"}
+                      {migrating() ? "Switching..." : "Switch to Orca runtime"}
                     </button>
                     <button class="btn" onClick={() => setMigrationDismissed(true)}>
-                      Maybe Later
+                      Maybe later
                     </button>
                   </div>
                 </div>
@@ -625,7 +625,7 @@ export default function EnvironmentPage() {
             <Show when={s().ready && (machine() || health())}>
               <div style={{ "margin-top": "24px" }}>
                 <div style={{ "font-size": "13px", "font-weight": "600", color: "#8b949e", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "12px" }}>
-                  System Info
+                  System info
                 </div>
                 <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
                   <Show when={machine()}>
@@ -681,7 +681,7 @@ export default function EnvironmentPage() {
                 padding: "32px",
               }}>
                 <div style={{ "font-size": "24px", "font-weight": "700", "margin-bottom": "8px", color: "var(--text-primary)" }}>
-                  {s().ready ? "Docker Connection Issue" : "Container Runtime Setup"}
+                  {s().ready ? "Docker connection issue" : "Container runtime setup"}
                 </div>
                 <div style={{ "font-size": "14px", color: "var(--text-muted)", "margin-bottom": "24px", "line-height": "1.5" }}>
                   {s().ready
@@ -757,7 +757,7 @@ export default function EnvironmentPage() {
               <span class="modal-title">
                 <Show when={diagnoseRunning()} fallback={
                   <Show when={diagnoseResult()} fallback={
-                    <Show when={diagnoseResult() === false} fallback={<span>Connection Diagnostics</span>}>
+                    <Show when={diagnoseResult() === false} fallback={<span>Connection diagnostics</span>}>
                       <span style={{ color: "#f85149" }}>Connection failed</span>
                     </Show>
                   }>

@@ -43,10 +43,43 @@ The same daemon can run on a Linux server, and the app can switch between your m
 
 **Agents.** The daemon is an MCP server. Claude Code and other agents can list containers, read logs, start stacks and run their own worktree instance to test a change. See [Agents and MCP](/docs/agents/).
 
+## Find your way around
+
+### The sidebar
+
+The sidebar starts with the **Dashboard** and ends with **Settings**. In between, pages are grouped by what you're doing:
+
+| Group | Pages |
+|---|---|
+| **Develop** | **Projects**, **Containers**, **Gateway**, **App Catalog** |
+| **Resources** | **Images**, **Builds**, **Volumes**, **Networks** |
+| **Platform** | **Kubernetes**, and **Fleet** once you've added a [remote host](/docs/remote-hosts/) |
+| **System** | **System Health**, **Activity** |
+
+While Kubernetes is turned off, its entry is marked **off**.
+
+The **Dashboard** opens with **Your apps**: a card for each stack with its HTTPS URLs, and **Start** on the stopped ones. Below them are counts of containers, images, stacks and worktree instances, the gateway's state, and charts of **CPU used by containers** and **Memory used by containers** (with the machine's total memory). Before you've run anything, it shows three ways to start instead: **Open a project folder**, **Add a git repository** and **Start from the catalog**.
+
+### The command palette
+
+Press Cmd+K on macOS or Ctrl+K on Windows and Linux, or click **Search or run a command…** in the title bar. Start typing to search everything on the active host at once, and the matching actions and pages:
+
+- stacks, and the gateway URLs (opening one opens it in your browser),
+- projects, containers and images,
+- **Shell in** followed by a running container's name, which opens that container's terminal.
+
+![The command palette with "shop" typed, listing matching stacks and gateway URLs](/assets/screens/palette.webp)
+
+With nothing typed, the palette lists actions and pages. The actions include **Open a project folder…**, **Run a container…**, **Pull an image…**, **Build an image…**, **Add a gateway route…**, **Create a stack from scratch…**, **Connect Claude or another AI tool**, **Start the gateway**, **Stop the gateway**, **Stop all containers** and **Keyboard shortcuts**. Under **Go to** are the pages, plus direct links to tabs such as **Settings → AI & agents**. Use the arrow keys and Enter, or click.
+
+### Drop a folder on the window
+
+Drag a project folder, or a compose file, from your file manager onto Orca's window. Orca opens the **Open a project folder** dialog on it, ready to start. See [Open a project folder](/docs/stacks/#open-a-project-folder).
+
 ## Where to start
 
 1. [Install Orca](/docs/install/) for your platform.
-2. Follow the [quickstart](/docs/quickstart/): run something, give it a hostname, and add an `orca.yaml`.
+2. Follow the [quickstart](/docs/quickstart/): open a project folder, give it a hostname, and add an `orca.yaml`.
 3. If you work on several branches at once, set up [worktree instances](/docs/worktrees/).
 4. If you use an AI coding agent, [connect it](/docs/agents/).
 

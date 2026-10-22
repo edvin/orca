@@ -8,7 +8,7 @@ Orca is an MCP server. Connect Claude or another AI tool and it can do what you'
 
 ## Connect in one click
 
-Open **Settings → AI & Agents**. Under **Connect your AI tools**, Orca lists the AI tools it supports and shows which of them are on this computer:
+Open **Settings → AI & agents**. Under **Connect your AI tools**, Orca lists the AI tools it supports and shows which of them are on this computer:
 
 | Tool | Where Orca adds itself |
 |------|------------------------|
@@ -67,11 +67,11 @@ orca mcp uninstall          # remove Orca from every tool it was added to
 
 ## Other MCP clients
 
-Any MCP client that starts stdio servers can run Orca. Give it the command `orca` with the argument `mcp`, the same as the JSON above. **Settings → AI & Agents → Another MCP client?** shows the block with the full path on your machine, ready to copy.
+Any MCP client that starts stdio servers can run Orca. Give it the command `orca` with the argument `mcp`, the same as the JSON above. **Settings → AI & agents → Another MCP client?** shows the block with the full path on your machine, ready to copy.
 
 ## Manage a remote host
 
-If you've added a remote Orca host in **Remote Hosts**, an AI tool can manage that host instead of this computer. Add `--host` with the host's name to the arguments:
+If you've added a remote Orca host in **Remote hosts**, an AI tool can manage that host instead of this computer. Add `--host` with the host's name to the arguments:
 
 ```json
 { "command": "orca", "args": ["mcp", "--host", "build-server"] }
@@ -81,7 +81,7 @@ If you've added a remote Orca host in **Remote Hosts**, an AI tool can manage th
 
 ## HTTP endpoint (advanced)
 
-The daemon also speaks MCP over HTTP at `http://127.0.0.1:9477/api/v1/agent/mcp`, for clients that can't start local commands. This one needs the API token as a Bearer header. **Settings → AI & Agents → HTTP endpoint (advanced)** shows and copies the token. Orca stores it as `api_token` in its config file:
+The daemon also speaks MCP over HTTP at `http://127.0.0.1:9477/api/v1/agent/mcp`, for clients that can't start local commands. This one needs the API token as a Bearer header. **Settings → AI & agents → HTTP endpoint (advanced)** shows and copies the token. Orca stores it as `api_token` in its config file:
 
 | Platform | Config file |
 |----------|-------------|

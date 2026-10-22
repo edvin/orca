@@ -71,26 +71,20 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
               Failed to start daemon
             </div>
             <div style={{ "margin-bottom": "8px" }}>{error()}</div>
-            <div style={{ "margin-top": "8px", "line-height": "1.8", "font-size": "12px" }}>
-              <p style={{ "margin-bottom": "8px" }}>The daemon binary (<code>orca-daemon</code>) was not found. To fix this:</p>
-              <ol style={{ margin: "0", "padding-left": "18px" }}>
-                <li>
-                  <a href="https://github.com/edvin/orca/actions" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>
-                    Download orca-daemon
-                  </a>{" "}
-                  from GitHub Actions artifacts
-                </li>
-                <li>
-                  Place it in your PATH or next to the Orca Desktop app
-                </li>
-                <li>
-                  Click <strong>Retry Connection</strong> below
-                </li>
-              </ol>
-              <p style={{ "margin-top": "8px", color: "#8b949e" }}>
-                Or start it manually: <code>orca-daemon</code>
-              </p>
-            </div>
+            <Show when={/not found|no such file|cannot find|os error 2\b/i.test(error() ?? "")} fallback={
+              <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
+                <p>Click <strong>Retry connection</strong>. If it keeps failing, another program may be using port 9477,
+                  or an older Orca daemon may still be running: quit Orca completely and open it again.</p>
+              </div>
+            }>
+              <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
+                <p style={{ "margin-bottom": "6px" }}>Orca's daemon (<code>orca-daemon</code>) is missing from this installation. To fix it:</p>
+                <ol style={{ margin: "0", "padding-left": "18px" }}>
+                  <li>Download Orca again from <a href="https://orca-desktop.com/download/" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>orca-desktop.com/download</a> and reinstall it.</li>
+                  <li>Then click <strong>Retry connection</strong>.</li>
+                </ol>
+              </div>
+            </Show>
           </div>
         </Show>
 
@@ -100,10 +94,10 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
             onClick={startDaemon}
             disabled={starting()}
           >
-            {starting() ? "Starting..." : "Start Daemon"}
+            {starting() ? "Starting..." : "Start daemon"}
           </button>
           <button class="btn" onClick={() => props.onRetry()}>
-            Retry Connection
+            Retry connection
           </button>
         </div>
 

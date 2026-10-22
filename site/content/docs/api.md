@@ -24,7 +24,7 @@ Every request needs the daemon's API token as a Bearer header:
 Authorization: Bearer <token>
 ```
 
-Find the token in **Settings → AI & Agents → HTTP endpoint (advanced)**, or as `api_token` in the config file (`~/Library/Application Support/orca/config.json` on macOS, `~/.config/orca/config.json` on Linux, `%APPDATA%\orca\config.json` on Windows). A missing or wrong token returns `401`.
+Find the token in **Settings → AI & agents → HTTP endpoint (advanced)**, or as `api_token` in the config file (`~/Library/Application Support/orca/config.json` on macOS, `~/.config/orca/config.json` on Linux, `%APPDATA%\orca\config.json` on Windows). A missing or wrong token returns `401`.
 
 Exceptions:
 

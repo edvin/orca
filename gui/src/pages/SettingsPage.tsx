@@ -67,7 +67,7 @@ function CertificateAuthoritySection() {
 
   return (
     <div class="settings-section">
-      <h2 class="settings-section-title">Orca Certificate Authority</h2>
+      <h2 class="settings-section-title">Orca certificate authority</h2>
       <div class="card">
         <p style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.6" }}>
           Orca generates a local CA to sign TLS certificates for deployed app templates.
@@ -101,7 +101,7 @@ function CertificateAuthoritySection() {
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Download CA Certificate
+          Download CA certificate
         </button>
 
         <div style={{ "border-top": "1px solid #21262d", "padding-top": "16px" }}>
@@ -323,7 +323,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   };
 
   const removeReg = async (server: string) => {
-    if (!await confirmDanger("Remove Registry", `Remove registry '${server}'?`)) return;
+    if (!await confirmDanger("Remove registry", `Remove registry '${server}'?`)) return;
     try {
       await invoke("remove_registry", { server });
       showToast("Registry removed", "success");
@@ -480,7 +480,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
   };
 
   const removeHost = async (host: RemoteHost) => {
-    if (!await confirmDanger("Remove Host", `Remove remote host '${host.name}'?`)) return;
+    if (!await confirmDanger("Remove host", `Remove remote host '${host.name}'?`)) return;
     try {
       await invoke("remove_remote_host", { id: host.id });
       showToast("Host removed", "success");
@@ -772,14 +772,14 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
       {/* Tabs */}
       <div class="tab-bar" style={{"margin-bottom":"24px"}}>
         <button class={`tab-item ${tab() === "general" ? "active" : ""}`} onClick={() => setTab("general")}>General</button>
-        <button class={`tab-item ${tab() === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>AI & Agents</button>
+        <button class={`tab-item ${tab() === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>AI & agents</button>
         <button class={`tab-item ${tab() === "registries" ? "active" : ""}`} onClick={() => setTab("registries")}>Registries</button>
-        <button class={`tab-item ${tab() === "remote-hosts" ? "active" : ""}`} onClick={() => setTab("remote-hosts")}>Remote Hosts</button>
-        <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>Auto-Deploy</button>
+        <button class={`tab-item ${tab() === "remote-hosts" ? "active" : ""}`} onClick={() => setTab("remote-hosts")}>Remote hosts</button>
+        <button class={`tab-item ${tab() === "auto-deploy" ? "active" : ""}`} onClick={() => setTab("auto-deploy")}>Auto-deploy</button>
         <button class={`tab-item ${tab() === "schedules" ? "active" : ""}`} onClick={() => setTab("schedules")}>Schedules</button>
         <button class={`tab-item ${tab() === "maintenance" ? "active" : ""}`} onClick={() => setTab("maintenance")}>Maintenance</button>
         <button class={`tab-item ${tab() === "certificates" ? "active" : ""}`} onClick={() => setTab("certificates")}>Certificates</button>
-        <button class={`tab-item ${tab() === "privacy" ? "active" : ""}`} onClick={() => setTab("privacy")}>Privacy & Security</button>
+        <button class={`tab-item ${tab() === "privacy" ? "active" : ""}`} onClick={() => setTab("privacy")}>Privacy & security</button>
         <button class={`tab-item ${tab() === "about" ? "active" : ""}`} onClick={() => setTab("about")}>About</button>
       </div>
 
@@ -814,7 +814,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 <div class="settings-divider" />
                 <div class="settings-row" style={{ opacity: daemonConnected() ? 1 : 0.5 }}>
                   <div class="settings-row-left">
-                    <span class="settings-label">Show Tray Icon</span>
+                    <span class="settings-label">Show tray icon</span>
                     <span class="settings-description">Display Orca Desktop in the system tray</span>
                   </div>
                   <div
@@ -846,10 +846,10 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               </div>
             </div>
 
-            {/* WSL2 Resources — Windows only */}
+            {/* WSL2 resources — Windows only */}
             <Show when={isWindows}>
               <div class="settings-section">
-                <h2 class="settings-section-title">WSL2 Resources</h2>
+                <h2 class="settings-section-title">WSL2 resources</h2>
                 <div class="card" style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "12px" }}>
                   <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
                     <label style={{ width: "90px", "font-size": "13px", color: "#c9d1d9" }}>Memory</label>
@@ -899,7 +899,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             {/* Lima VM Resources — macOS only */}
             <Show when={isMac && limaAvailable()}>
               <div class="settings-section">
-                <h2 class="settings-section-title">Virtual Machine</h2>
+                <h2 class="settings-section-title">Virtual machine</h2>
                 <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 10px" }}>Lima VM resources for Docker</p>
                 <div class="card" style={{ padding: "16px", display: "flex", "flex-direction": "column", gap: "14px" }}>
                   <div style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "13px" }}>
@@ -1006,7 +1006,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       onClick={saveLimaSettings}
                       disabled={!limaHasChanges() || limaSaving()}
                     >
-                      {limaSaving() ? "Restarting VM..." : "Apply Changes"}
+                      {limaSaving() ? "Restarting VM..." : "Apply changes"}
                     </button>
                   </div>
                 </div>
@@ -1092,7 +1092,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         background: "#161b22", border: "1px solid #21262d", "border-radius": "6px", padding: "8px 12px",
                       }}>
                         <div>
-                          <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>API Token</div>
+                          <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>API token</div>
                           <span class="mono" style={{ "font-size": "11px", color: tokenRevealed() && tokenError() ? "#f85149" : "#e6edf3" }}>{tokenRevealed() ? (apiToken() || (tokenError() ? "No token — is the daemon running?" : "Loading...")) : TOKEN_MASK}</span>
                         </div>
                         <div style={{ display: "flex", "align-items": "center", gap: "4px", "flex-shrink": "0" }}>
@@ -1133,7 +1133,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Registries Tab === */}
         <Show when={tab() === "registries"}>
           <div class="settings-section">
-            <h2 class="settings-section-title">Container Registries</h2>
+            <h2 class="settings-section-title">Container registries</h2>
             <div class="card">
               <Show when={registries().length > 0} fallback={
                 <div style={{ padding: "8px 0", color: "#8b949e" }}>No registries configured. Add credentials for private image registries.</div>
@@ -1168,7 +1168,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
               <div style={{ "margin-top": "12px" }}>
                 <Show when={!showAddRegistry()}>
-                  <button class="btn btn-primary" onClick={() => setShowAddRegistry(true)}>Add Registry</button>
+                  <button class="btn btn-primary" onClick={() => setShowAddRegistry(true)}>Add registry</button>
                 </Show>
               </div>
 
@@ -1193,8 +1193,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       <input class="form-input" type="text" placeholder="https://ghcr.io" value={regServer()} onInput={(e) => setRegServer(e.currentTarget.value)} />
                     </div>
                     <div class="form-group">
-                      <label class="form-label">Display Name</label>
-                      <input class="form-input" type="text" placeholder="GitHub Container Registry" value={regName()} onInput={(e) => setRegName(e.currentTarget.value)} />
+                      <label class="form-label">Display name</label>
+                      <input class="form-input" type="text" placeholder="GitHub container registry" value={regName()} onInput={(e) => setRegName(e.currentTarget.value)} />
                     </div>
                     <div class="form-row">
                       <div class="form-group" style={{ flex: 1 }}>
@@ -1220,7 +1220,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Remote Hosts Tab === */}
         <Show when={tab() === "remote-hosts"}>
           <div class="settings-section">
-            <h2 class="settings-section-title">Remote Hosts</h2>
+            <h2 class="settings-section-title">Remote hosts</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
               Connect to remote servers running the orca-daemon. Switch between hosts from the titlebar dropdown.
             </p>
@@ -1296,7 +1296,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             <div style={{ "margin-top": "12px" }}>
               <Show when={!showAddHost()}>
-                <button class="btn btn-primary" onClick={() => { resetHostForm(); setShowAddHost(true); }}>Add Host</button>
+                <button class="btn btn-primary" onClick={() => { resetHostForm(); setShowAddHost(true); }}>Add host</button>
               </Show>
             </div>
             <div class="card">
@@ -1304,12 +1304,12 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <Show when={showAddHost()}>
                 <div style={{ "margin-top": "12px", "border-top": "1px solid #21262d", "padding-top": "12px" }}>
                   <h3 style={{ "font-size": "14px", "font-weight": 600, "margin-bottom": "12px", color: "#e6edf3" }}>
-                    {editingHost() ? `Edit "${editingHost()!.name}"` : "Add Remote Host"}
+                    {editingHost() ? `Edit "${editingHost()!.name}"` : "Add remote host"}
                   </h3>
                   <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                     <div class="form-group">
-                      <label class="form-label">Display Name</label>
-                      <input class="form-input" type="text" placeholder="Production Server" value={hostName()} onInput={(e) => setHostName(e.currentTarget.value)} />
+                      <label class="form-label">Display name</label>
+                      <input class="form-input" type="text" placeholder="Production server" value={hostName()} onInput={(e) => setHostName(e.currentTarget.value)} />
                     </div>
                     <div class="form-group">
                       <label class="form-label">Daemon URL</label>
@@ -1333,7 +1333,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     <Show when={!hostUrl().trim().toLowerCase().startsWith("http://")}>
                       <div class="settings-row" style={{ padding: "4px 0" }}>
                         <div class="settings-row-left">
-                          <span class="settings-label" style={{ "font-size": "13px" }}>Verify TLS Certificate</span>
+                          <span class="settings-label" style={{ "font-size": "13px" }}>Verify TLS certificate</span>
                           <span class="settings-description">Disable for self-signed certificates</span>
                         </div>
                         <label class="toggle">
@@ -1368,7 +1368,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         {editingHost() ? "Update" : "Save"}
                       </button>
                       <button class="btn" onClick={() => { testHost(); }} disabled={hostTesting() || !hostUrl().trim()}>
-                        {hostTesting() ? "Testing..." : "Test Connection"}
+                        {hostTesting() ? "Testing..." : "Test connection"}
                       </button>
                       <button class="btn" onClick={() => { setShowAddHost(false); resetHostForm(); }}>Cancel</button>
                     </div>
@@ -1394,7 +1394,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Auto-Deploy Tab === */}
         <Show when={tab() === "auto-deploy"}>
           <div class="settings-section">
-            <h2 class="settings-section-title">Auto-Deploy</h2>
+            <h2 class="settings-section-title">Auto-deploy</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
               Push code to GitHub and your containers update automatically. Orca receives a webhook when a new image is pushed, pulls it, and redeploys matching containers with the same configuration.
             </p>
@@ -1457,7 +1457,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             <div style={{ background: "#0d1117", "border-radius": "8px", padding: "14px 16px", "margin-bottom": "16px" }}>
               <div class="form-group" style={{ margin: 0 }}>
                 <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-                  <label class="form-label" style={{ margin: 0 }}>Webhook Secret</label>
+                  <label class="form-label" style={{ margin: 0 }}>Webhook secret</label>
                   <button class="btn btn-sm" style={{ "font-size": "11px", padding: "2px 8px" }}
                     onClick={async () => {
                       try {
@@ -1520,8 +1520,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 <thead>
                   <tr>
                     <th>Name</th>
-                    <th>Image Pattern</th>
-                    <th>Tag Filter</th>
+                    <th>Image pattern</th>
+                    <th>Tag filter</th>
                     <th>Containers</th>
                     <th style={{ width: "60px" }}>Status</th>
                     <th style={{ "text-align": "right", width: "80px" }}>Actions</th>
@@ -1567,33 +1567,33 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             <div style={{ "margin-top": "12px" }}>
               <Show when={!showAddRule()}>
-                <button class="btn btn-primary" onClick={() => { resetRuleForm(); setShowAddRule(true); }}>Add Rule</button>
+                <button class="btn btn-primary" onClick={() => { resetRuleForm(); setShowAddRule(true); }}>Add rule</button>
               </Show>
             </div>
 
             <Show when={showAddRule()}>
               <div class="card" style={{ "margin-top": "12px" }}>
                 <h3 style={{ "font-size": "14px", "font-weight": 600, "margin-bottom": "12px", color: "#e6edf3" }}>
-                  {editingRule() ? `Edit "${editingRule().name}"` : "Add Deploy Rule"}
+                  {editingRule() ? `Edit "${editingRule().name}"` : "Add deploy rule"}
                 </h3>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                   <div class="form-group">
-                    <label class="form-label">Rule Name</label>
+                    <label class="form-label">Rule name</label>
                     <input class="form-input" type="text" placeholder="Production API" value={ruleName()} onInput={(e) => setRuleName(e.currentTarget.value)} />
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Image Pattern</label>
+                    <label class="form-label">Image pattern</label>
                     <input class="form-input mono" type="text" placeholder="ghcr.io/myorg/myapp" value={ruleImage()} onInput={(e) => setRuleImage(e.currentTarget.value)} />
                     <span class="form-hint">The full image name without tag, e.g. ghcr.io/myorg/api. It must match the pushed image exactly; the registry host may be left out (myorg/api).</span>
                   </div>
                   <div class="form-row">
                     <div class="form-group" style={{ flex: 1 }}>
-                      <label class="form-label">Tag Filter</label>
+                      <label class="form-label">Tag filter</label>
                       <input class="form-input mono" type="text" placeholder="latest, v*, main" value={ruleTagFilter()} onInput={(e) => setRuleTagFilter(e.currentTarget.value)} />
                       <span class="form-hint">One or more, separated by commas: * = any tag, v* = version tags (v1.0, v2.3.1), latest, main</span>
                     </div>
                     <div class="form-group" style={{ flex: 1 }}>
-                      <label class="form-label">Container Names</label>
+                      <label class="form-label">Container names</label>
                       <input class="form-input" type="text" placeholder="Leave empty to match by image" value={ruleContainers()} onInput={(e) => setRuleContainers(e.currentTarget.value)} />
                       <span class="form-hint">e.g. api, worker. Leave empty to redeploy any container using this image.</span>
                     </div>
@@ -1621,7 +1621,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
           <Show when={deployHistory().length > 0}>
             <div class="settings-section" style={{ "margin-top": "24px" }}>
-              <h2 class="settings-section-title">Deploy History</h2>
+              <h2 class="settings-section-title">Deploy history</h2>
               <table class="table">
                 <thead>
                   <tr>
@@ -1664,7 +1664,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Schedules Tab === */}
         <Show when={tab() === "schedules"}>
           <div class="settings-section">
-            <h2 class="settings-section-title">Scheduled Actions</h2>
+            <h2 class="settings-section-title">Scheduled actions</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
               Schedule container actions to run automatically, with standard cron expressions in this computer's local time. The daemon checks every minute.
             </p>
@@ -1731,14 +1731,14 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             <div style={{ "margin-top": "12px" }}>
               <Show when={!showAddSchedule()}>
-                <button class="btn btn-primary" onClick={() => { resetSchedForm(); setShowAddSchedule(true); }}>Add Schedule</button>
+                <button class="btn btn-primary" onClick={() => { resetSchedForm(); setShowAddSchedule(true); }}>Add schedule</button>
               </Show>
             </div>
 
             <Show when={showAddSchedule()}>
               <div class="card" style={{ "margin-top": "12px" }}>
                 <h3 style={{ "font-size": "14px", "font-weight": 600, "margin-bottom": "12px", color: "#e6edf3" }}>
-                  {editingSchedule() ? `Edit "${editingSchedule().name}"` : "Add Schedule"}
+                  {editingSchedule() ? `Edit "${editingSchedule().name}"` : "Add schedule"}
                 </h3>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                   <div class="form-row">
@@ -1767,7 +1767,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <Show when={schedAction() === "build"}>
                     <div class="form-row">
                       <div class="form-group" style={{ flex: 1 }}>
-                        <label class="form-label">Build Target</label>
+                        <label class="form-label">Build target</label>
                         <Show when={schedBuildTargets().length > 0} fallback={
                           <input class="form-input" type="text" placeholder="Build target name from orca.yaml" value={schedBuildTarget()} onInput={(e) => setSchedBuildTarget(e.currentTarget.value)} />
                         }>
@@ -1783,7 +1783,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </Show>
                   <div class="form-row">
                     <div class="form-group" style={{ flex: 2 }}>
-                      <label class="form-label">Cron Expression</label>
+                      <label class="form-label">Cron expression</label>
                       <input class="form-input mono" type="text" placeholder="0 3 * * 0" value={schedCron()} onInput={(e) => setSchedCron(e.currentTarget.value)} />
                       <span class="form-hint">
                         Examples: <code>0 3 * * 0</code> (Sun 3am), <code>0 18 * * 1-5</code> (weekdays 6pm), <code>0 */6 * * *</code> (every 6h), <code>0 0 1 * *</code> (1st of month). Minute, hour, day, month, weekday, in this computer's time.
@@ -1816,7 +1816,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <Show when={tab() === "maintenance"}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
             <div class="settings-section">
-              <h2 class="settings-section-title">System Cleanup</h2>
+              <h2 class="settings-section-title">System cleanup</h2>
               <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
                 Remove unused Docker resources to free up disk space. Select what to clean up and click "Run Cleanup".
               </p>
@@ -1842,7 +1842,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <div style={{ flex: "1" }}>
                     <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
-                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Stopped Containers</span>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Stopped containers</span>
                       <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#3fb95020", color: "#3fb950" }}>Safe</span>
                     </div>
                     <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all stopped containers (exited, dead, created)</div>
@@ -1868,7 +1868,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <div style={{ flex: "1" }}>
                     <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
-                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Dangling Images</span>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Dangling images</span>
                       <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#3fb95020", color: "#3fb950" }}>Safe</span>
                     </div>
                     <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove images not tagged and not referenced by any container</div>
@@ -1894,7 +1894,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <div style={{ flex: "1" }}>
                     <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d29922" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="M12 8v4M5.5 16.5l4-7M18.5 16.5l-4-7"/></svg>
-                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Unused Networks</span>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Unused networks</span>
                       <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#d2992220", color: "#d29922" }}>Moderate</span>
                     </div>
                     <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all custom networks not used by any container</div>
@@ -1920,7 +1920,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <div style={{ flex: "1" }}>
                     <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20M5 20V8l7-5 7 5v12"/><path d="M9 20v-6h6v6"/></svg>
-                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Build Cache</span>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Build cache</span>
                       <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#3fb95020", color: "#3fb950" }}>Safe</span>
                     </div>
                     <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove Docker build cache to free disk space</div>
@@ -1947,7 +1947,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <div style={{ flex: "1" }}>
                     <div style={{ display: "flex", "align-items": "center", gap: "8px", "margin-bottom": "4px" }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
-                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Unused Volumes</span>
+                      <span style={{ "font-size": "13px", "font-weight": "600", color: "#e6edf3" }}>Unused volumes</span>
                       <span style={{ "font-size": "11px", padding: "1px 6px", "border-radius": "10px", background: "#f8514920", color: "#f85149" }}>Dangerous</span>
                     </div>
                     <div style={{ "font-size": "12px", color: "#f85149" }}>Remove all volumes not used by any container. This will permanently delete data!</div>
@@ -1963,7 +1963,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     disabled={pruneRunning() || (!pruneContainers() && !pruneImages() && !pruneVolumes() && !pruneNetworks() && !pruneBuildCache())}
                     onClick={() => setPruneShowConfirm(true)}
                   >
-                    Run Cleanup
+                    Run cleanup
                   </button>
                 </Show>
                 <Show when={pruneShowConfirm()}>
@@ -2053,7 +2053,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   "border-radius": "8px",
                   padding: "12px 16px",
                 }}>
-                  <div style={{ "font-size": "13px", "font-weight": "600", color: "#3fb950", "margin-bottom": "8px" }}>Cleanup Results</div>
+                  <div style={{ "font-size": "13px", "font-weight": "600", color: "#3fb950", "margin-bottom": "8px" }}>Cleanup results</div>
                   <For each={pruneResults()}>
                     {(line) => (
                       <div style={{ "font-size": "12px", color: "#8b949e", padding: "2px 0" }} class="mono">{line}</div>
@@ -2081,13 +2081,13 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             {/* Zero Telemetry Banner */}
             <div style={{ background: "linear-gradient(135deg, rgba(63, 185, 80, 0.08) 0%, rgba(88, 166, 255, 0.08) 100%)", border: "1px solid rgba(63, 185, 80, 0.15)", "border-radius": "12px", padding: "24px 28px", "text-align": "center" }}>
-              <div style={{ "font-size": "28px", "font-weight": "800", "letter-spacing": "-1px", "margin-bottom": "6px", background: "linear-gradient(135deg, #3fb950, #58a6ff)", "-webkit-background-clip": "text", "-webkit-text-fill-color": "transparent", "background-clip": "text" }}>Zero Telemetry</div>
+              <div style={{ "font-size": "28px", "font-weight": "800", "letter-spacing": "-1px", "margin-bottom": "6px", background: "linear-gradient(135deg, #3fb950, #58a6ff)", "-webkit-background-clip": "text", "-webkit-text-fill-color": "transparent", "background-clip": "text" }}>Zero telemetry</div>
               <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6" }}>Orca Desktop collects no analytics, no crash reports and no usage data.</div>
             </div>
 
             {/* Network Connections */}
             <div class="settings-section">
-              <h2 class="settings-section-title">Network Connections</h2>
+              <h2 class="settings-section-title">Network connections</h2>
               <div class="card">
                 <p style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "12px" }}>The services Orca connects to, besides the ones your containers use.</p>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "0" }}>
@@ -2140,7 +2140,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             {/* Certificate Authority — moved to Certificates tab */}
             <div class="settings-section">
-              <h2 class="settings-section-title">Certificate Authority</h2>
+              <h2 class="settings-section-title">Certificate authority</h2>
               <div class="card">
                 <p style={{ "font-size": "12px", color: "#8b949e", "line-height": "1.6" }}>
                   Certificate management has moved to the{" "}
@@ -2157,7 +2157,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
 
             {/* AI Privacy */}
             <div class="settings-section">
-              <h2 class="settings-section-title">AI Privacy</h2>
+              <h2 class="settings-section-title">AI privacy</h2>
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "10px", "font-size": "13px", color: "#c9d1d9", "line-height": "1.6" }}>
                   <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
@@ -2181,7 +2181,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             </div>
 
             <div style={{ "text-align": "center", "font-size": "12px", color: "#484f58", "padding-top": "8px" }}>
-              Full details: <a href="https://orca-desktop.com/docs/security/" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security and privacy</a> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security Policy</a>
+              Full details: <a href="https://orca-desktop.com/docs/security/" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security and privacy</a> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security policy</a>
             </div>
           </div>
         </Show>
@@ -2190,7 +2190,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         <Show when={tab() === "about"}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
             <div class="settings-section">
-              <h2 class="settings-section-title">Container Runtime</h2>
+              <h2 class="settings-section-title">Container runtime</h2>
               <div class="card">
                 <Show when={machine()} fallback={
                   <div style={{ padding: "8px 0", color: "#8b949e" }}>
@@ -2205,7 +2205,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       <span class="card-value">{m().backend}</span>
                       <span class="card-label">State</span>
                       <span class={`state-badge ${m().state === "Running" ? "state-running" : "state-stopped"}`}>{m().state}</span>
-                      <span class="card-label">Socket Path</span>
+                      <span class="card-label">Socket path</span>
                       <span class="card-value mono">
                         {m().config.runtime === "Docker" ? "/var/run/docker.sock" : `/run/user/${1000}/podman/podman.sock`}
                       </span>
@@ -2256,11 +2256,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
                     <div>
-                      <div style={{ "font-size": "13px", "font-weight": "500" }}>Remove User Templates</div>
+                      <div style={{ "font-size": "13px", "font-weight": "500" }}>Remove user templates</div>
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Delete custom templates you've created</div>
                     </div>
                     <button class="btn btn-sm" onClick={async () => {
-                      if (!await confirmDanger("Remove Templates", "Remove all user-created templates?")) return;
+                      if (!await confirmDanger("Remove templates", "Remove all user-created templates?")) return;
                       try {
                         await invoke("cleanup", { scope: "templates" });
                         showToast("User templates removed", "success");
@@ -2269,11 +2269,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0", "border-bottom": "1px solid #21262d" }}>
                     <div>
-                      <div style={{ "font-size": "13px", "font-weight": "500" }}>Stop & Remove VMs</div>
+                      <div style={{ "font-size": "13px", "font-weight": "500" }}>Stop & remove VMs</div>
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Stop Lima VMs (macOS) or remove Docker TCP config (Windows)</div>
                     </div>
                     <button class="btn btn-sm" onClick={async () => {
-                      if (!await confirmDanger("Stop & Remove VMs", "Stop and remove all Orca Desktop-managed VMs and runtime config?")) return;
+                      if (!await confirmDanger("Stop & remove VMs", "Stop and remove all Orca Desktop-managed VMs and runtime config?")) return;
                       try {
                         const result = (await invoke("cleanup", { scope: "vms" })) as { log: string[] };
                         showToast(result.log.join(". ") || "Cleanup done", "success");
@@ -2282,16 +2282,16 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </div>
                   <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "8px 0" }}>
                     <div>
-                      <div style={{ "font-size": "13px", "font-weight": "500", color: "#f85149" }}>Reset Everything</div>
+                      <div style={{ "font-size": "13px", "font-weight": "500", color: "#f85149" }}>Reset everything</div>
                       <div style={{ "font-size": "12px", color: "#8b949e" }}>Remove all config, templates, VMs, and data — like a fresh install</div>
                     </div>
                     <button class="btn btn-sm" style={{ color: "#f85149", "border-color": "#da363380" }} onClick={async () => {
-                      if (!await confirmDanger("Reset Everything", "This will remove ALL Orca Desktop data including config, API keys, templates, and VMs.\n\nThis cannot be undone. Continue?")) return;
+                      if (!await confirmDanger("Reset everything", "This will remove ALL Orca Desktop data including config, API keys, templates, and VMs.\n\nThis cannot be undone. Continue?")) return;
                       try {
                         await invoke("cleanup", { scope: "all" });
                         showToast("Orca Desktop has been fully reset. Restart the app.", "success");
                       } catch (e) { logError(`Failed to reset everything: ${e}`); showToast(`Failed: ${e}`, "error"); }
-                    }}>Reset All</button>
+                    }}>Reset all</button>
                   </div>
                 </div>
               </div>

@@ -10,6 +10,8 @@ export const SHOTS = {
   worktrees: "feature-worktrees",
   profiles: "feature-profiles",
   editor: "feature-editor",
+  openFolder: "open-folder",
+  palette: "palette",
 };
 
 const shot = (name, alt, cls = "") =>
@@ -126,7 +128,7 @@ hooks:
       <div class="step reveal">
         <div class="step-num">1</div>
         <h3>Start your project</h3>
-        <p>From Orca, or the way you always do. Orca picks it up as a stack.</p>
+        <p>Open the folder in Orca, drop it on the window, or start it the way you always do. Orca picks it up as a stack.</p>
         ${ctx.codeBlock("git clone git@github.com:acme/shop.git\ncd shop && docker compose up -d", "bash")}
       </div>
       <div class="step reveal">
@@ -142,6 +144,26 @@ hooks:
         <div class="browser-pill"><span class="lock">${F.lock}</span><span>https://<b>shop</b>.localhost</span><span class="ok-dot"></span></div>
         <div class="step-note">Running · up 2 min · web:3000</div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
+    <div class="feature-copy reveal">
+      <span class="eyebrow">${F.rocket} Get going</span>
+      <h2>Open a folder. It's running.</h2>
+      <p>Point Orca at a project and it shows what's inside before it starts anything: the compose file, its services and profiles, the <code>orca.yaml</code>, and whether it's a git repository you can run per worktree.</p>
+      <ul class="checks">
+        <li>Open a folder, or drop it on Orca's window. No compose file yet? Orca writes a first one</li>
+        <li>Jump to the code: open any stack in VS Code, Cursor or your terminal, or a shell in any service</li>
+        <li>Press <kbd>⌘K</kbd> to find any stack, container, image or URL and run any action</li>
+      </ul>
+      <a class="link-arrow" href="/docs/quickstart/">Start your first project ${ICONS.arrow}</a>
+    </div>
+    <div class="feature-visual reveal stacked-shots">
+      ${windowFrame(shot(SHOTS.openFolder, "Opening a project folder: Orca lists its compose file, services, profiles and orca.yaml before starting it"), "Orca — Open a project folder")}
+      ${windowFrame(shot(SHOTS.palette, "The command palette finding the shop stack and its URLs"), "⌘K")}
     </div>
   </div>
 </section>

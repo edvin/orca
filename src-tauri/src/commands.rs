@@ -3813,8 +3813,16 @@ pub async fn read_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn save_compose_file(path: String, content: String) -> Result<(), String> {
+pub async fn save_compose_file(path: String, content: String, create_new: Option<bool>) -> Result<(), String> {
     let pb = validate_compose_path(&path)?;
+    if create_new.unwrap_or(false) && pb.exists() {
+        let stack = pb
+            .parent()
+            .and_then(|d| d.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        return Err(format!("A stack named '{stack}' already exists. Choose another name."));
+    }
     // Basic validation: content must not be empty and must be bounded.
     if content.trim().is_empty() {
         return Err("Content cannot be empty".to_string());
@@ -4784,11 +4792,34 @@ pub async fn dev_api(
     if !path.starts_with("/dev/") || path.contains("..") {
         return Err("invalid dev API path".into());
     }
+    daemon_call(&method, &path, body).await
+}
+
+/// What Orca would start from a folder: compose files, services, profiles,
+/// orca.yaml, git, and the stack already running from it.
+#[tauri::command]
+pub async fn inspect_folder(path: String) -> Result<serde_json::Value, String> {
+    daemon_call("POST", "/folders/inspect", Some(serde_json::json!({ "path": path }))).await
+}
+
+/// Write a first compose.yaml into a folder that has none. Never overwrites.
+#[tauri::command]
+pub async fn create_compose_in_folder(path: String, content: String) -> Result<serde_json::Value, String> {
+    daemon_call(
+        "POST",
+        "/folders/compose",
+        Some(serde_json::json!({ "path": path, "content": content })),
+    )
+    .await
+}
+
+/// One request to the daemon API with a JSON body; errors carry its message.
+async fn daemon_call(method: &str, path: &str, body: Option<serde_json::Value>) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     let url = format!("{base}{path}");
     // Long timeout: plans run `docker compose config`, which can be slow.
     let c = authed_client_with_timeout(120);
-    let req = match method.as_str() {
+    let req = match method {
         "GET" => c.get(&url),
         "POST" => c.post(&url),
         "PUT" => c.put(&url),
@@ -4834,6 +4865,154 @@ pub async fn pick_folder(app: tauri::AppHandle, title: Option<String>) -> Result
     Ok(picked
         .and_then(|p| p.into_path().ok())
         .map(|p| p.to_string_lossy().to_string()))
+}
+
+/// A terminal or editor that can open a folder, found on this computer.
+#[derive(serde::Serialize)]
+pub struct FolderApp {
+    id: &'static str,
+    label: &'static str,
+    kind: &'static str,
+}
+
+/// (id, label, kind, macOS app name, command on PATH)
+const FOLDER_APPS: &[(&str, &str, &str, &str, &str)] = &[
+    ("vscode", "VS Code", "editor", "Visual Studio Code", "code"),
+    ("cursor", "Cursor", "editor", "Cursor", "cursor"),
+    ("zed", "Zed", "editor", "Zed", "zed"),
+    ("windsurf", "Windsurf", "editor", "Windsurf", "windsurf"),
+    ("idea", "IntelliJ IDEA", "editor", "IntelliJ IDEA", "idea"),
+    ("phpstorm", "PhpStorm", "editor", "PhpStorm", "phpstorm"),
+    ("ghostty", "Ghostty", "terminal", "Ghostty", "ghostty"),
+    ("iterm", "iTerm", "terminal", "iTerm", ""),
+    ("warp", "Warp", "terminal", "Warp", ""),
+    ("terminal", "Terminal", "terminal", "Terminal", ""),
+];
+
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn on_path(cmd: &str) -> bool {
+    if cmd.is_empty() {
+        return false;
+    }
+    let names: Vec<String> = if cfg!(windows) {
+        vec![format!("{cmd}.cmd"), format!("{cmd}.exe")]
+    } else {
+        vec![cmd.to_string()]
+    };
+    std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).any(|d| names.iter().any(|n| d.join(n).is_file())))
+        .unwrap_or(false)
+}
+
+/// Whether an app from FOLDER_APPS is installed.
+#[cfg(target_os = "macos")]
+fn installed(mac_name: &str, _cmd: &str) -> bool {
+    let name = mac_name;
+    let home = std::env::var("HOME").unwrap_or_default();
+    [
+        format!("/Applications/{name}.app"),
+        format!("/System/Applications/Utilities/{name}.app"),
+        format!("{home}/Applications/{name}.app"),
+    ]
+    .iter()
+    .any(|p| std::path::Path::new(p).exists())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn installed(_mac_name: &str, cmd: &str) -> bool {
+    on_path(cmd)
+}
+
+/// Editors and terminals on this computer that can open a project folder.
+#[tauri::command]
+pub async fn folder_apps() -> Vec<FolderApp> {
+    #[allow(unused_mut)]
+    let mut out: Vec<FolderApp> = FOLDER_APPS
+        .iter()
+        .filter(|(_, _, _, app, cmd)| installed(app, cmd))
+        .map(|(id, label, kind, _, _)| FolderApp { id, label, kind })
+        .collect();
+    // Every Linux and Windows desktop has some terminal.
+    #[cfg(not(target_os = "macos"))]
+    if !out.iter().any(|a| a.kind == "terminal") {
+        out.push(FolderApp {
+            id: "terminal",
+            label: "Terminal",
+            kind: "terminal",
+        });
+    }
+    out
+}
+
+/// Open a project folder in an editor or terminal from `folder_apps`.
+#[tauri::command]
+pub async fn open_folder_in(path: String, app: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.is_absolute() || !p.is_dir() {
+        return Err(format!("{path} is not a folder on this computer"));
+    }
+    let (_, label, kind, mac_name, cmd) = FOLDER_APPS
+        .iter()
+        .find(|a| a.0 == app)
+        .copied()
+        .ok_or_else(|| format!("unknown app {app}"))?;
+    let fail = |e: std::io::Error| format!("Could not open {label}: {e}");
+    #[cfg(target_os = "macos")]
+    {
+        let _ = (kind, cmd);
+        std::process::Command::new("open")
+            .args(["-a", mac_name])
+            .arg(p)
+            .spawn()
+            .map_err(fail)?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = mac_name;
+        if kind == "terminal" {
+            if on_path("wt") {
+                std::process::Command::new("wt")
+                    .arg("-d")
+                    .arg(p)
+                    .spawn()
+                    .map_err(fail)?;
+            } else {
+                std::process::Command::new("cmd")
+                    .args(["/C", "start", "cmd", "/K", "cd", "/d"])
+                    .arg(p)
+                    .spawn()
+                    .map_err(fail)?;
+            }
+        } else {
+            std::process::Command::new("cmd")
+                .args(["/C", cmd])
+                .arg(p)
+                .spawn()
+                .map_err(fail)?;
+        }
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = mac_name;
+        if kind == "terminal" && app == "terminal" {
+            // The desktop's own terminal, started in the folder.
+            let candidates = [
+                "x-terminal-emulator",
+                "gnome-terminal",
+                "konsole",
+                "kitty",
+                "alacritty",
+                "xterm",
+            ];
+            let term = candidates.iter().find(|c| on_path(c)).ok_or("No terminal found")?;
+            std::process::Command::new(term).current_dir(p).spawn().map_err(fail)?;
+        } else if kind == "terminal" {
+            std::process::Command::new(cmd).current_dir(p).spawn().map_err(fail)?;
+        } else {
+            std::process::Command::new(cmd).arg(p).spawn().map_err(fail)?;
+        }
+    }
+    Ok(())
 }
 
 /// Open a folder in the system file manager.

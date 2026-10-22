@@ -24,6 +24,8 @@ The app reaches shared services by their usual names: Orca connects the shared c
 
 On the **Projects** page, choose **Add project**, then pick any folder inside the repository or paste its path. Orca finds the main checkout and all of its worktrees. Repositories that already have compose stacks running on your machine are listed under **Found on this machine**.
 
+You can get there in other ways too: the **Add a git repository** card on a fresh dashboard, or **Add a git repository for worktrees** in the command palette (Cmd+K, Ctrl+K elsewhere). When you [open a project folder](/docs/stacks/#open-a-project-folder) that is a git repository, **Also add it to Projects** adds it as a project as well as starting it.
+
 From the command line, inside the repository:
 
 ```bash
@@ -273,7 +275,7 @@ Coding agents that work in their own worktrees can start and test their own inst
 
 **From the shell**, agents use the same commands you do: `orca up`, `orca status`, `orca logs -f`, `eval $(orca env)` and `orca down`.
 
-**Over MCP**, Orca's MCP server (connect it under **Settings → AI & Agents**) has tools that take the worktree path:
+**Over MCP**, Orca's MCP server (connect it under **Settings → AI & agents**) has tools that take the worktree path:
 
 | Tool | |
 |---|---|

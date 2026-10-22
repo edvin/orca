@@ -109,7 +109,7 @@ export default function ExecTerminal(props: ExecTerminalProps) {
             disabled={history().length === 0}
             title="Copy last command output"
           >
-            Copy Output
+            Copy output
           </button>
           <button class="btn btn-sm" onClick={() => props.onClose()}>
             Close

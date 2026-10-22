@@ -15,6 +15,10 @@ import type { StackProfilesReport } from "../lib/types";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { logError } from "../lib/activityStore";
 import { confirmDanger } from "../components/ConfirmDialog";
+import FolderActions from "../components/FolderActions";
+import { stackUrls } from "../lib/stackUrls";
+import { openContainerOn } from "../lib/containerTab";
+import type { GatewayRoute } from "../lib/types";
 
 interface StackDetailPageProps {
   stackName: string;
@@ -42,6 +46,10 @@ export default function StackDetailPage(props: StackDetailPageProps) {
 
   // Compose profiles: the optional parts of the stack. Read from the compose
   // file, so fetched on open and after changes, not on every event.
+  // The gateway's routes, for the stack's URLs in the header.
+  const [routes] = createResource(() =>
+    invoke<GatewayRoute[]>("gateway_list_routes").catch(() => [] as GatewayRoute[]),
+  );
   const [profiles, { mutate: setProfiles, refetch: refetchProfiles }] = createResource(
     () => props.stackName,
     (name) => invoke<StackProfilesReport>("stack_profiles", { name }),
@@ -170,7 +178,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
   };
 
   const breadcrumbItems = () => [
-    { label: "Stacks", onClick: () => props.onBack() },
+    { label: "Containers", onClick: () => props.onBack() },
     { label: props.stackName },
   ];
 
@@ -218,6 +226,17 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                     </span>
                   </Show>
                 </div>
+                <div class="stack-quick">
+                  <For each={stackUrls(s(), routes() ?? []).slice(0, 3)}>
+                    {(u) => (
+                      <button class="app-url" title={`Open ${u.url} (${u.label})`}
+                        onClick={() => shellOpen(u.url).catch(() => window.open(u.url, "_blank", "noopener,noreferrer"))}>
+                        {u.url.replace(/^https:\/\//, "")} ↗
+                      </button>
+                    )}
+                  </For>
+                  <Show when={s().working_dir}>{(dir) => <FolderActions path={dir()} compact />}</Show>
+                </div>
               </div>
 
               <span class={`state-badge ${statusConfig(s().status).class}`}>
@@ -233,7 +252,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                     class="btn btn-sm"
                     onClick={async () => {
                       const ok = await confirmDanger({
-                        title: "Compose Down",
+                        title: "Compose down",
                         message: "This will stop and remove the stack's containers. Continue?",
                         confirmLabel: "Down",
                       });
@@ -301,7 +320,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
             if (!composeContent()) fetchComposeFile();
           }}
         >
-          Compose File
+          Compose file
         </button>
         <button
           class={`detail-tab-item ${activeTab() === "orca" ? "active" : ""}`}
@@ -390,6 +409,12 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                           >
                             Logs
                           </button>
+                          <Show when={svc.state === "Running"}>
+                            <button class="btn btn-sm" title={`Open a shell in ${svc.container_name}`}
+                              onClick={() => { openContainerOn("terminal"); props.onNavigate?.(`container:${svc.container_id},stack:${props.stackName}`); }}>
+                              Shell
+                            </button>
+                          </Show>
                           <Show when={serviceLoading() === svc.container_id}>
                             <Spinner />
                           </Show>

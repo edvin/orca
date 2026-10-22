@@ -268,6 +268,10 @@ hooks:
       { id: "codex", name: "Codex", detected: false, connected: false, config_path: "", after_connect: null },
     ],
     mcp_command: "/Users/you/Library/Application Support/orca/bin/orca",
+    pick_folder: "/Users/alex/code/storefront",
+    inspect_folder: { path: "/Users/alex/code/storefront", name: "storefront", compose_files: ["compose.yaml"], orca_yaml: true, git: true,
+      services: ["web", "api", "worker", "postgres", "redis", "meilisearch"], profiles: ["search"], stack: null, error: null },
+    folder_apps: [{ id: "vscode", label: "VS Code", kind: "editor" }, { id: "ghostty", label: "Ghostty", kind: "terminal" }],
     get_api_token: "orca_6f1d9c2e8b7a4f03a9d5c1e7b2f8a6d4", list_ai_models: { models: ["qwen3:8b", "qwen3-coder:30b", "gemma3:12b"] },
     list_remote_hosts: [
       { id: "h1", name: "staging", url: "https://orca.staging.acme.dev/api/v1", tls_verify: true, tags: ["staging", "eu-west"] },
@@ -410,19 +414,37 @@ const SHOTS = {
   },
   async "settings-ai"(page) {
     await nav(page, "Settings");
-    await page.getByText("AI & Agents", { exact: true }).first().click().catch(() => {});
+    await page.getByText("AI & agents", { exact: true }).first().click().catch(() => {});
     await page.waitForTimeout(1500);
     return { clip: content };
   },
   async "settings-assistant"(page) {
     await nav(page, "Settings");
-    await page.getByText("AI & Agents", { exact: true }).first().click().catch(() => {});
+    await page.getByText("AI & agents", { exact: true }).first().click().catch(() => {});
     await page.waitForTimeout(1500);
     const card = page.locator(".assistant-card");
     await card.scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
     const box = await card.boundingBox();
     return { clip: { x: box.x - 24, y: box.y - 64, width: box.width + 48, height: box.height + 96 } };
+  },
+  async "open-folder"(page) {
+    await nav(page, "Dashboard");
+    await page.locator(".page-actions button", { hasText: "Open folder" }).click();
+    await page.waitForTimeout(500);
+    await page.locator(".open-folder-pick button", { hasText: "Choose a folder" }).click();
+    await page.waitForTimeout(1200);
+    const box = await page.locator(".modal-dialog.open-folder").boundingBox();
+    return { clip: { x: box.x - 40, y: box.y - 40, width: box.width + 80, height: box.height + 80 } };
+  },
+  async palette(page) {
+    await nav(page, "Dashboard");
+    await page.locator(".titlebar-search").first().click();
+    await page.waitForTimeout(400);
+    await page.keyboard.type("shop");
+    await page.waitForTimeout(800);
+    const box = await page.locator(".command-palette").boundingBox();
+    return { clip: { x: box.x - 40, y: box.y - 40, width: box.width + 80, height: box.height + 80 } };
   },
   async kubernetes(page) {
     await nav(page, "Kubernetes");
@@ -456,7 +478,7 @@ async function nav(page, label) {
 }
 async function openStack(page) {
   await nav(page, "Containers");
-  await page.getByText("shop", { exact: true }).first().click();
+  await page.locator(".stack-link", { hasText: /^shop›?$/ }).first().click();
   await page.waitForTimeout(2200);
 }
 

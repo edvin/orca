@@ -87,8 +87,10 @@ export default function TimeChart(props: TimeChartProps) {
     if (data.length === 0) return "";
     const now = data[data.length - 1].time;
     const t = data[index].time;
-    const diffSec = Math.round((now - t) / 1000);
-    if (diffSec <= 5) return "now";
+    // Only the newest reading is "now": a short history (a few seconds)
+    // would otherwise label every tick "now".
+    if (index === data.length - 1) return "now";
+    const diffSec = Math.max(1, Math.round((now - t) / 1000));
     if (diffSec < 60) return `${diffSec}s ago`;
     const diffMin = Math.round(diffSec / 60);
     return `${diffMin}m ago`;
@@ -102,13 +104,23 @@ export default function TimeChart(props: TimeChartProps) {
     const cw = chartWidth();
     const xScale = cw / Math.max(data.length - 1, 1);
 
-    // Show ~6 labels spread across the data
+    // Show ~6 labels spread across the data, skipping any that would repeat
+    // a neighbour's text (e.g. two ticks that both round to "2m ago").
     const count = Math.min(6, data.length);
+    let lastIdx = -1;
     for (let i = 0; i < count; i++) {
       const idx = i === count - 1 ? data.length - 1 : Math.round((i / (count - 1)) * (data.length - 1));
+      if (idx === lastIdx) continue;
+      lastIdx = idx;
+      const text = timeLabel(idx);
+      if (labels.length > 0 && labels[labels.length - 1].text === text) {
+        // Keep the later tick so "now" always stays on the right edge.
+        labels[labels.length - 1] = { x: pad.left + idx * xScale, text };
+        continue;
+      }
       labels.push({
         x: pad.left + idx * xScale,
-        text: timeLabel(idx),
+        text,
       });
     }
     return labels;

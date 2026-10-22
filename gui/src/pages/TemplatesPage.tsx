@@ -9,6 +9,7 @@ import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { logError, logInfo } from "../lib/activityStore";
 import { sanitizeSvg } from "../lib/sanitize";
+import "../styles/polish-a.css";
 
 // Categories are derived dynamically from loaded templates
 
@@ -416,7 +417,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               const gwStatus = (await invoke("gateway_status")) as any;
               if (gwStatus?.running) {
                 showToast("Expose this stack via the Gateway?", "info", {
-                  label: "Open Gateway",
+                  label: "Open gateway",
                   onClick: () => props.onNavigate?.("gateway"),
                 });
               }
@@ -598,7 +599,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const PortEditor = (props: { ports: () => PortEntry[]; update: typeof updatePort; add: typeof addPort; remove: typeof removePort }) => (
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-        <label class="form-label" style={{ margin: 0 }}>Port Mappings</label>
+        <label class="form-label" style={{ margin: 0 }}>Port mappings</label>
         <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.ports().length > 0} fallback={
@@ -606,8 +607,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       }>
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>
-            <span style={{ flex: "1" }}>Host Port</span>
-            <span style={{ flex: "1" }}>Container Port</span>
+            <span style={{ flex: "1" }}>Host port</span>
+            <span style={{ flex: "1" }}>Container port</span>
             <span style={{ width: "28px" }} />
           </div>
           <Index each={props.ports()}>
@@ -628,7 +629,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const EnvEditor = (props: { env: () => EnvEntry[]; update: typeof updateEnv; add: typeof addEnv; remove: typeof removeEnv; showWarning?: boolean }) => (
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-        <label class="form-label" style={{ margin: 0 }}>Environment Variables</label>
+        <label class="form-label" style={{ margin: 0 }}>Environment variables</label>
         <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
       </div>
       <Show when={props.env().length > 0} fallback={
@@ -672,7 +673,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>
             <span style={{ flex: "1" }}>Host Path / Volume</span>
-            <span style={{ flex: "1" }}>Container Path</span>
+            <span style={{ flex: "1" }}>Container path</span>
             <span style={{ width: "28px" }} />
           </div>
           <Index each={props.volumes()}>
@@ -746,10 +747,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             }} title="Refresh community catalog">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
-            <button class="btn btn-primary" onClick={openCreateTemplate}>Create Template</button>
+            <button class="btn btn-primary" onClick={openCreateTemplate}>Create template</button>
             <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener noreferrer"
               class="btn" style={{ "font-size": "12px", "text-decoration": "none" }}>
-              Contribute Template
+              Contribute template
             </a>
           </div>
         </Show>
@@ -776,12 +777,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
       {/* Curated tab content */}
       <Show when={activeTab() === "curated"}>
-        {/* Category filter tabs */}
-        <div class="tab-bar" style={{"margin-bottom":"24px"}}>
+        {/* Category filter chips: one row that wraps, never a label */}
+        <div class="category-chips" role="group" aria-label="Categories">
           <For each={categories()}>
             {(cat) => (
               <button
-                class={`tab-item ${category() === cat ? "active" : ""}`}
+                class={`category-chip ${category() === cat ? "active" : ""}`}
+                aria-pressed={category() === cat}
                 onClick={() => setCategory(cat)}
               >
                 {cat}
@@ -951,7 +953,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                   </div>
                 </Show>
                 <div class="form-group">
-                  <label class="form-label">{deployComposeYaml() ? "Stack Name" : "Container Name"}</label>
+                  <label class="form-label">{deployComposeYaml() ? "Stack name" : "Container name"}</label>
                   <input
                     class="form-input"
                     value={deployName()}
@@ -1058,7 +1060,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 </Show>
                 <button class="btn" onClick={() => closeDeploy()} disabled={deploying()}>Cancel</button>
                 <button class="btn btn-primary" onClick={() => doDeploy()} disabled={deploying()}>
-                  {deploying() ? "Deploying..." : (deployComposeYaml() ? "Deploy Stack" : "Deploy")}
+                  {deploying() ? "Deploying..." : (deployComposeYaml() ? "Deploy stack" : "Deploy")}
                 </button>
               </div>
             </div>
@@ -1071,7 +1073,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleEditorOverlayClick}>
           <div class="modal-dialog" style={{ "max-width": "620px" }}>
             <div class="modal-header">
-              <span class="modal-title">{editorIsNew() ? "Create Template" : `Edit ${editorName()}`}</span>
+              <span class="modal-title">{editorIsNew() ? "Create template" : `Edit ${editorName()}`}</span>
               <button class="modal-close" onClick={() => setEditorOpen(false)}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1082,7 +1084,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 </div>
                 <div class="form-group" style={{ flex: "1" }}>
                   <label class="form-label">Name <span style={{ color: "#f85149" }}>*</span></label>
-                  <input class="form-input" value={editorName()} onInput={(e) => setEditorName(e.currentTarget.value)} placeholder="My Template" />
+                  <input class="form-input" value={editorName()} onInput={(e) => setEditorName(e.currentTarget.value)} placeholder="My template" />
                 </div>
                 <div class="form-group" style={{ width: "150px", "flex-shrink": "0" }}>
                   <label class="form-label">Category</label>
@@ -1100,7 +1102,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               </div>
 
               <div class="form-group">
-                <label class="form-label">Docker Image <span style={{ color: "#f85149" }}>*</span></label>
+                <label class="form-label">Docker image <span style={{ color: "#f85149" }}>*</span></label>
                 <input class="form-input" value={editorImage()} onInput={(e) => setEditorImage(e.currentTarget.value)} placeholder="nginx:alpine" style={{ "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} />
               </div>
 
@@ -1199,7 +1201,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                               toggleStep();
                             }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                              View Logs
+                              View logs
                             </button>
                           </Show>
 
@@ -1306,7 +1308,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                               toggleStep();
                             }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                              Open Terminal
+                              Open terminal
                             </button>
                           </Show>
 

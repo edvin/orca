@@ -1,0 +1,97 @@
+/* ==================== App catalog: category chips ==================== */
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 24px;
+}
+
+.category-chip {
+  padding: 4px 12px;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  background: #0d1117;
+  color: #8b949e;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.category-chip:hover {
+  border-color: #484f58;
+  color: #e6edf3;
+}
+
+.category-chip.active {
+  background: rgba(88, 166, 255, 0.12);
+  border-color: #58a6ff;
+  color: #58a6ff;
+}
+
+.category-chip:focus-visible {
+  outline: 2px solid #58a6ff;
+  outline-offset: 2px;
+}
+
+/* ==================== Gateway: settings tab ==================== */
+.gw-settings-section {
+  margin-top: 28px;
+}
+
+.gw-settings-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+  margin: 24px 0 12px;
+}
+
+.gw-settings-section > .gw-settings-heading,
+.gw-settings-heading-first {
+  margin-top: 0;
+}
+
+.gw-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+}
+
+.gw-settings-row-title {
+  color: #e6edf3;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.gw-settings-row-hint {
+  color: #8b949e;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* ==================== Gateway: route owner hints ==================== */
+.gw-owner-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-right: 10px;
+  color: #58a6ff;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gw-owner-link:hover {
+  text-decoration: underline;
+}
+
+.gw-owner-note {
+  margin-right: 10px;
+  color: #8b949e;
+  font-size: 12px;
+  cursor: help;
+  white-space: nowrap;
+}

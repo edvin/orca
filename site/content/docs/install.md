@@ -24,7 +24,7 @@ Each download bundles the Orca daemon (`orca-daemon`) and the `orca` CLI. The ap
 
 ## First start
 
-When Orca starts, it looks for a working container runtime. If it finds one, you go straight to the app. If not, it opens **System Health** with a **Container Runtime Setup** list: each missing piece has an **Install** button, and the setup log streams in a dialog while it runs.
+When Orca starts, it looks for a working container runtime. If it finds one, you go straight to the app. If not, it opens **System Health** with a **Container runtime setup** list: each missing piece has an **Install** button, and the setup log streams in a dialog while it runs.
 
 
 ### macOS
@@ -67,7 +67,7 @@ What the release builds and setup need:
 
 You don't have to uninstall Docker Desktop first.
 
-- **macOS**: if Docker Desktop's engine is the active Docker context, Orca connects to it. System Health then shows a **Switch to Orca Runtime** card. **Switch to Orca Runtime** sets up the Lima VM if needed, switches the Docker context to `lima-orca` and restarts the Orca daemon. Tick **Also stop Docker Desktop to free resources** to quit Docker Desktop at the same time. Images and containers from Docker Desktop are not copied into the VM: you pull or rebuild them there.
+- **macOS**: if Docker Desktop's engine is the active Docker context, Orca connects to it. System Health then shows a **Switch to Orca runtime** card. **Switch to Orca runtime** sets up the Lima VM if needed, switches the Docker context to `lima-orca` and restarts the Orca daemon. Tick **Also stop Docker Desktop to free resources** to quit Docker Desktop at the same time. Images and containers from Docker Desktop are not copied into the VM: you pull or rebuild them there.
 - **Windows**: Orca connects to Docker Desktop's engine when it is running, and otherwise to Docker in WSL2.
 - **Linux**: Orca uses the first runtime socket that responds, starting with `DOCKER_HOST` and the active Docker context.
 
@@ -75,7 +75,7 @@ You don't have to uninstall Docker Desktop first.
 
 Orca checks for a new version 5 seconds after it starts and then every hour. When one is available, the status bar at the bottom shows **Update available: v…**. Click it, confirm with **Update**, and Orca downloads the release, stops its daemon, installs the update and restarts. Updates are signed, and the app verifies the signature before installing.
 
-**Settings** > **Privacy & Security** > **Network Connections** lists the update check along with every other connection Orca makes.
+**Settings** > **Privacy & security** > **Network connections** lists the update check along with every other connection Orca makes.
 
 ## Uninstall
 
@@ -96,7 +96,7 @@ First quit Orca from the tray or menu bar icon with **Quit Orca**. Closing the w
    ```
 4. Delete `~/Library/Application Support/orca` to remove settings, the API token and the local CA.
 
-You can do steps 2 and 4 from the app before you quit it, in **Settings** > **About** > **Cleanup**: **Stop & Remove VMs** stops and deletes the `orca` VM, and **Reset All** also deletes the settings folder. Other Lima VMs on the Mac are left alone.
+You can do steps 2 and 4 from the app before you quit it, in **Settings** > **About** > **Cleanup**: **Stop & remove VMs** stops and deletes the `orca` VM, and **Reset all** also deletes the settings folder. Other Lima VMs on the Mac are left alone.
 
 Homebrew and the packages setup installed (`lima`, `docker`, `docker-compose`, `docker-buildx`) stay. Remove them with `brew uninstall` if you don't need them.
 
@@ -118,7 +118,7 @@ To manage a Linux server from Orca Desktop, install only the daemon there. On De
 curl -fsSL https://orca-desktop.com/install-daemon.sh | sudo sh
 ```
 
-It adds Orca's apt repository, installs `orca-daemon` as a systemd service and prints the URL and API token to paste into **Settings** > **Remote Hosts**. To remove it:
+It adds Orca's apt repository, installs `orca-daemon` as a systemd service and prints the URL and API token to paste into **Settings** > **Remote hosts**. To remove it:
 
 ```bash
 curl -fsSL https://orca-desktop.com/uninstall-daemon.sh | sudo sh
@@ -128,6 +128,6 @@ See [Remote hosts](/docs/remote-hosts/) for connecting to it and putting TLS in 
 
 ## Next steps
 
-- [Quickstart](/docs/quickstart/): run a container and give it an HTTPS hostname.
+- [Quickstart](/docs/quickstart/): open a project folder and give it an HTTPS hostname.
 - [How Orca runs on each platform](/docs/platforms/)
 - [Troubleshooting](/docs/troubleshooting/)

@@ -240,7 +240,7 @@ export default function YamlEditor(props: YamlEditorProps) {
                 disabled={saving() || (!modified() && !props.unsaved)}
                 style={{ "font-size": "11px" }}
               >
-                {saving() ? "Saving..." : props.saveLabel ?? "Apply Changes"}
+                {saving() ? "Saving..." : props.saveLabel ?? "Apply changes"}
               </button>
             </Show>
             <Show when={props.onClose}>

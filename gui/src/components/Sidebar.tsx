@@ -136,19 +136,35 @@ const icons: Record<string, () => JSX.Element> = {
   ),
 };
 
-const mainNavItems: { id: Page; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "projects", label: "Projects" },
-  { id: "containers", label: "Containers" },
-  { id: "images", label: "Images" },
-  { id: "builds", label: "Builds" },
-  { id: "volumes", label: "Volumes" },
-  { id: "networks", label: "Networks" },
-  { id: "gateway", label: "Gateway" },
-  { id: "kubernetes", label: "Kubernetes" },
-  { id: "templates", label: "App Catalog" },
-  { id: "environment", label: "System Health" },
-  { id: "activity", label: "Activity" },
+/** The sidebar in groups; a group's title shows when the sidebar is wide. */
+const navGroups: { title: string | null; items: { id: Page; label: string }[] }[] = [
+  { title: null, items: [{ id: "dashboard", label: "Dashboard" }] },
+  {
+    title: "Develop",
+    items: [
+      { id: "projects", label: "Projects" },
+      { id: "containers", label: "Containers" },
+      { id: "gateway", label: "Gateway" },
+      { id: "templates", label: "App Catalog" },
+    ],
+  },
+  {
+    title: "Resources",
+    items: [
+      { id: "images", label: "Images" },
+      { id: "builds", label: "Builds" },
+      { id: "volumes", label: "Volumes" },
+      { id: "networks", label: "Networks" },
+    ],
+  },
+  { title: "Platform", items: [{ id: "kubernetes", label: "Kubernetes" }] },
+  {
+    title: "System",
+    items: [
+      { id: "environment", label: "System Health" },
+      { id: "activity", label: "Activity" },
+    ],
+  },
 ];
 
 // Persist collapsed state across navigations
@@ -163,6 +179,7 @@ export default function Sidebar(props: SidebarProps) {
   const containerCount = () => containerList().length;
   const imageCount = () => imageList().length;
   const [hasRemoteHosts, setHasRemoteHosts] = createSignal(false);
+  const [k8sOff, setK8sOff] = createSignal(false);
 
   // Remote hosts only change in Settings or on the Fleet page: re-read them
   // on navigation and refresh instead of polling.
@@ -170,6 +187,10 @@ export default function Sidebar(props: SidebarProps) {
     try {
       const remotes = (await invoke("list_remote_hosts")) as RemoteHost[];
       setHasRemoteHosts(remotes.length > 0);
+    } catch { /* ignore */ }
+    try {
+      const k = (await invoke("k8s_status")) as { enabled?: boolean };
+      setK8sOff(k.enabled === false);
     } catch { /* ignore */ }
   };
   createEffect(on(() => props.currentPage, loadRemoteHosts));
@@ -198,30 +219,43 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <aside class={`sidebar ${collapsed() ? "sidebar-collapsed" : ""}`}>
       <nav class="sidebar-nav">
-        <Show when={hasRemoteHosts()}>
-          <button
-            class={`nav-item ${props.currentPage === "fleet" ? "active" : ""}`}
-            onClick={() => props.onNavigate("fleet" as Page)}
-            title={collapsed() ? "Fleet" : undefined}
-          >
-            <span class="nav-icon">{icons.fleet()}</span>
-            <span class="nav-label">Fleet</span>
-          </button>
-          <div class="nav-separator" />
-        </Show>
-        <For each={mainNavItems}>
-          {(item) => (
-            <button
-              class={`nav-item ${props.currentPage === item.id ? "active" : ""}`}
-              onClick={() => props.onNavigate(item.id)}
-              title={collapsed() ? item.label : undefined}
-            >
-              <span class="nav-icon">{icons[item.id]?.()}</span>
-              <span class="nav-label">{item.label}</span>
-              <Show when={!collapsed() && badgeFor(item.id)}>
-                {(count) => <span class="nav-badge">{count()}</span>}
+        <For each={navGroups}>
+          {(group) => (
+            <div class="nav-group">
+              <Show when={group.title}>
+                <div class="nav-group-title">{group.title}</div>
               </Show>
-            </button>
+              <For each={group.items}>
+                {(item) => (
+                  <button
+                    class={`nav-item ${props.currentPage === item.id ? "active" : ""}`}
+                    classList={{ "nav-item-off": item.id === "kubernetes" && k8sOff() }}
+                    onClick={() => props.onNavigate(item.id)}
+                    title={collapsed() ? item.label : item.id === "kubernetes" && k8sOff() ? "Kubernetes is off. Turn it on from this page." : undefined}
+                  >
+                    <span class="nav-icon">{icons[item.id]?.()}</span>
+                    <span class="nav-label">{item.label}</span>
+                    <Show when={!collapsed() && item.id === "kubernetes" && k8sOff()}>
+                      <span class="nav-off">off</span>
+                    </Show>
+                    <Show when={!collapsed() && badgeFor(item.id)}>
+                      {(count) => <span class="nav-badge">{count()}</span>}
+                    </Show>
+                  </button>
+                )}
+              </For>
+              {/* Remote hosts live with the platform pieces, once there are any. */}
+              <Show when={group.title === "Platform" && hasRemoteHosts()}>
+                <button
+                  class={`nav-item ${props.currentPage === "fleet" ? "active" : ""}`}
+                  onClick={() => props.onNavigate("fleet" as Page)}
+                  title={collapsed() ? "Fleet" : undefined}
+                >
+                  <span class="nav-icon">{icons.fleet()}</span>
+                  <span class="nav-label">Fleet</span>
+                </button>
+              </Show>
+            </div>
           )}
         </For>
 

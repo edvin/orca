@@ -63,7 +63,7 @@ If the VM is stopped when the daemon starts, the daemon starts it. If it doesn't
 
 ### VM resources
 
-Change CPUs, memory and disk in **Settings** > **General** > **Virtual Machine**, then click **Apply Changes**. This restarts the VM and stops running containers. Memory must be at least 2 GB and no more than your Mac has; disk must be at least 10 GB.
+Change CPUs, memory and disk in **Settings** > **General** > **Virtual machine**, then click **Apply changes**. This restarts the VM and stops running containers. Memory must be at least 2 GB and no more than your Mac has; disk must be at least 10 GB.
 
 ## Windows: WSL2
 
@@ -77,7 +77,7 @@ The TCP listener is bound to `127.0.0.1` inside WSL. Uninstalling Orca removes t
 
 ### WSL2 resources
 
-WSL2's limits apply to all your distros, not only Docker. Set them in **Settings** > **General** > **WSL2 Resources**: **Memory**, **Processors** and **Swap** (for example `8GB`, `4`, `0`). Orca writes them to the `[wsl2]` section of `%USERPROFILE%\.wslconfig` and keeps your other settings in that file.
+WSL2's limits apply to all your distros, not only Docker. Set them in **Settings** > **General** > **WSL2 resources**: **Memory**, **Processors** and **Swap** (for example `8GB`, `4`, `0`). Orca writes them to the `[wsl2]` section of `%USERPROFILE%\.wslconfig` and keeps your other settings in that file.
 
 Changes take effect after WSL restarts:
 

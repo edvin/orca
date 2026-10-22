@@ -12,7 +12,7 @@ Orca can install and run a single-node [k3s](https://k3s.io) cluster with Traefi
 
 Open **Kubernetes** in the sidebar. If k3s isn't installed yet, the page offers to set it up.
 
-1. Pick a **Container runtime**:
+1. Pick a **Container runtime** from the dropdown:
    - **Docker** (default) runs k3s on Docker, so images you build locally are usable in the cluster with no push or import.
    - **containerd** is the upstream Kubernetes default.
 2. Click **Enable Kubernetes**.
@@ -33,7 +33,7 @@ The runtime choice applies the next time the cluster is enabled or reset. To cha
 
 ### Start, stop and reset
 
-When the cluster is running, the **More actions** menu next to the cluster status has **Refresh**, **Traefik Info**, **Reset Cluster** and **Stop Kubernetes**. A stopped cluster shows **Start Kubernetes** and **Reset Kubernetes**. These act where k3s runs: on the host on Linux, in the Lima VM on macOS and in WSL2 on Windows.
+When the cluster is running, the **More actions** menu next to the cluster status has **Refresh**, **Traefik info** (when Traefik runs), **Reset Kubernetes** and **Stop Kubernetes**. **Stop Kubernetes** asks first; stopping deletes nothing, and workloads come back when you start it again. A stopped cluster shows **Start Kubernetes** and **Reset Kubernetes**. These act where k3s runs: on the host on Linux, in the Lima VM on macOS and in WSL2 on Windows.
 
 > [!WARNING]
 > Reset uninstalls k3s and deletes every workload, volume and setting in the cluster, then installs a fresh one.
@@ -80,7 +80,7 @@ The Kubernetes page has one tab per resource group. Use the **Namespace** dropdo
 
 | Tab | What you can do |
 |---|---|
-| **Pods** | See status, restarts, age and IP. View logs, open a **Terminal**, edit YAML, restart or delete a pod. |
+| **Pods** | See status, restarts, age and IP. View logs, open a shell, edit YAML, restart or delete a pod. |
 | **Deployments** | **Scale**, restart, view **Rollout history** and roll back to an earlier revision. Create and delete autoscalers with **+ Create HPA**. |
 | **DaemonSets** | Edit YAML, delete. |
 | **StatefulSets** | Scale, restart, edit YAML, delete. |
@@ -95,21 +95,21 @@ The Kubernetes page has one tab per resource group. Use the **Namespace** dropdo
 | **CRDs** | Installed custom resource definitions, read-only. |
 | **Topology** | A map of services, deployments and pods. |
 
-The pod **Terminal** runs `sh` in the pod's default container. **Restart pod** deletes the pod, so its controller creates a new one.
+Each pod row has two buttons, for its logs and for a shell, and a "…" menu with **Restart pod**, **View/edit YAML** and **Delete pod**. The shell runs `sh` in the pod's default container. **Restart pod** asks first, then deletes the pod so its controller creates a new one. On the other tabs, too, deleting a resource is in its row's "…" menu.
 
 ## Port forwarding
 
 The **Access** column of the **Services** tab has a button per service port, such as **:80**. Click it, enter the local port (it defaults to the service port) and click the play button or press <kbd>Enter</kbd>. The service is then reachable at `localhost:<local port>`, and the button shows a check mark. Click it again to stop forwarding.
 
-A service with more than one port shows a button such as **2 ports** instead. It opens a **Port Forward** dialog with a local port, a **Forward** or **Stop** button and an **Open in browser** link for each port.
+A service with more than one port shows a button such as **2 ports** instead. It opens a **Port forward** dialog with a local port, a **Forward** or **Stop** button and an **Open in browser** link for each port.
 
-The daemon forwards each connection through the Kubernetes API to a ready pod behind the service, the same way `kubectl port-forward svc/...` does. That works when Orca manages a remote host too: the local port is on your machine, and the daemon on the remote host connects to its cluster. A port that isn't one of the service's ports is forwarded to that port on the pod. **Traefik Dashboard** uses this to reach Traefik's dashboard on port 9000 when there is no direct URL for it.
+The daemon forwards each connection through the Kubernetes API to a ready pod behind the service, the same way `kubectl port-forward svc/...` does. That works when Orca manages a remote host too: the local port is on your machine, and the daemon on the remote host connects to its cluster. A port that isn't one of the service's ports is forwarded to that port on the pod. **Traefik dashboard** uses this to reach Traefik's dashboard on port 9000 when there is no direct URL for it.
 
 Forwarding needs a service with a selector and at least one ready pod.
 
 ## Edit YAML and apply
 
-Every resource has a **View/Edit YAML** button. It opens the resource's live YAML in an editor. Change it and click **Apply Changes**, or press <kbd>Cmd</kbd>+<kbd>S</kbd> (<kbd>Ctrl</kbd>+<kbd>S</kbd> on Windows and Linux).
+Every resource has a **View/edit YAML** action, as a button or in its "…" menu. It opens the resource's live YAML in an editor. Change it and click **Apply changes**, or press <kbd>Cmd</kbd>+<kbd>S</kbd> (<kbd>Ctrl</kbd>+<kbd>S</kbd> on Windows and Linux).
 
 To create something new, click **+ Deploy** (**Deploy from YAML**). The editor starts with an example Pod that you can replace. A file can hold several documents separated by `---`.
 
@@ -128,7 +128,7 @@ Anything else, such as a ClusterRole or a CustomResourceDefinition, is rejected.
 
 The **Helm** tab lists releases in all namespaces, with chart, status, revision and update time. It needs the `helm` binary. If Orca can't find it, the tab shows an **Install Helm** button.
 
-To install a chart, click **Install Chart** and fill in **Release Name**, **Chart** and **Namespace**. Add `key=value` overrides under **Set Values (optional)**. Orca runs `helm install` with `--create-namespace`, so the namespace doesn't have to exist.
+To install a chart, click **Install chart** and fill in **Release name**, **Chart** and **Namespace**. Add `key=value` overrides under **Set values (optional)**. Orca runs `helm install` with `--create-namespace`, so the namespace doesn't have to exist.
 
 Charts from a repository need that repository added first:
 
@@ -136,11 +136,11 @@ Charts from a repository need that repository added first:
 helm repo add bitnami https://charts.bitnami.com/bitnami
 ```
 
-Use the delete button on a release to uninstall it. For upgrades and rollbacks, use `helm --kube-context orca` directly.
+To uninstall a release, choose **Uninstall Helm release** in its "…" menu. For upgrades and rollbacks, use `helm --kube-context orca` directly.
 
 ## Topology
 
-The **Topology** tab draws each service with its deployments and their pods, then deployments without a service, then **Standalone Pods**. Click a card to jump to that resource's tab.
+The **Topology** tab draws each service with its deployments and their pods, then deployments without a service, then **Standalone pods**. Click a card to jump to that resource's tab.
 
 ![The Topology tab showing services connected to deployments and pods](/assets/screens/k8s-topology.webp)
 
@@ -156,8 +156,8 @@ The **Jobs** tab has two sections.
 - **Suspend CronJob** or **Resume CronJob**
 - view its YAML, or delete it, which stops future runs
 
-**Jobs** shows status, completions, duration and start time. **View Logs** shows the logs of the job's newest pod. You can also view YAML or delete a job together with its pods.
+**Jobs** shows status, completions, duration and start time. **View logs** shows the logs of the job's newest pod. You can also view YAML or delete a job together with its pods.
 
 ## Ingress and Traefik
 
-k3s ships with Traefik as its ingress controller. Ingresses you create from Orca, with **+ Create Ingress** or a service's **Expose** button, are served by Traefik. The status bar shows how Traefik is wired up, which you configure on the [Gateway](/docs/gateway/) page, and **Traefik Dashboard** opens Traefik's own dashboard.
+k3s ships with Traefik as its ingress controller. Ingresses you create from Orca, with **+ Create Ingress** or a service's **Expose** button, are served by Traefik. The status bar shows how Traefik is wired up, which you configure on the [Gateway](/docs/gateway/) page, and **Traefik dashboard** opens Traefik's own dashboard.

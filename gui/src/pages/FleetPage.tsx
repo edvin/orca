@@ -237,7 +237,7 @@ export default function FleetPage(props: FleetPageProps) {
       return;
     }
     const ok = await confirmDanger(
-      "Remove Selected Hosts",
+      "Remove selected hosts",
       `Remove ${toRemove.length} host${toRemove.length !== 1 ? "s" : ""} from fleet? This only removes the configuration — it does not stop remote daemons.`
     );
     if (!ok) return;
@@ -372,7 +372,7 @@ export default function FleetPage(props: FleetPageProps) {
               color: "#e6edf3", cursor: "pointer",
             }}
           >
-            {selectMode() ? "Cancel Select" : "Select"}
+            {selectMode() ? "Cancel select" : "Select"}
           </button>
           <button
             onClick={probeAll}
@@ -384,7 +384,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: probeProgress() ? "0.5" : "1",
             }}
           >
-            Test All
+            Test all
           </button>
         </div>
       </div>
@@ -407,7 +407,7 @@ export default function FleetPage(props: FleetPageProps) {
               color: "#e6edf3", cursor: "pointer",
             }}
           >
-            Select All
+            Select all
           </button>
           <button
             onClick={deselectAll}
@@ -417,7 +417,7 @@ export default function FleetPage(props: FleetPageProps) {
               color: "#e6edf3", cursor: "pointer",
             }}
           >
-            Deselect All
+            Deselect all
           </button>
           <div style={{ flex: "1" }} />
           <button
@@ -430,7 +430,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: selectedHosts().size === 0 ? "0.5" : "1",
             }}
           >
-            Test Selected
+            Test selected
           </button>
           <button
             onClick={openCompare}
@@ -455,7 +455,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: selectedHosts().size === 0 ? "0.5" : "1",
             }}
           >
-            Remove Selected
+            Remove selected
           </button>
         </div>
       </Show>
@@ -837,7 +837,7 @@ function CompareModal(props: CompareModalProps) {
           padding: "16px 24px", "border-bottom": "1px solid #21262d",
         }}>
           <h2 style={{ margin: 0, "font-size": "16px", "font-weight": 600, color: "#e6edf3" }}>
-            Host Comparison
+            Host comparison
           </h2>
           <button
             onClick={() => props.onClose()}

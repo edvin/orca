@@ -1,10 +1,14 @@
 import { createSignal, createEffect, on, onMount, onCleanup, For, Show, createMemo } from "solid-js";
+import { openContainerOn } from "../lib/containerTab";
+import DockerUnreachable from "../components/DockerUnreachable";
+import { onIntent } from "../lib/pageIntent";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, ContainerStats, ComposeProject } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { usePoller } from "../lib/poller";
 import { containersStore, stacksStore } from "../lib/dockerStore";
 import { formatBytes } from "../lib/format";
+import { openFolderDialog } from "../lib/openFolder";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import RunContainerDialog from "../components/RunContainerDialog";
@@ -44,6 +48,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [actionInProgress, setActionInProgress] = createSignal<string | null>(null);
   const [stackActionInProgress, setStackActionInProgress] = createSignal<string | null>(null);
   const [showRunDialog, setShowRunDialog] = createSignal(false);
+  onIntent("containers", (a) => { if (a === "run") setShowRunDialog(true); });
   // Stats of all running containers, shared with the dashboard.
   const { stats: inlineStats } = useContainerStats();
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set(["__standalone__"]));
@@ -60,12 +65,6 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [selected, setSelected] = createSignal<Set<string>>(new Set());
   const [batchDeleteProgress, setBatchDeleteProgress] = createSignal<{ done: number; total: number } | null>(null);
   const [showMultiLog, setShowMultiLog] = createSignal(false);
-  const [showComposeEditor, setShowComposeEditor] = createSignal(false);
-  const [composePath, setComposePath] = createSignal("");
-  const [composeContent, setComposeContent] = createSignal("");
-  const [composeDeploying, setComposeDeploying] = createSignal(false);
-  const [composeValidating, setComposeValidating] = createSignal(false);
-  const [composeError, setComposeError] = createSignal("");
 
   // Gateway expose state
   const [exposeContainer, setExposeContainer] = createSignal<Container | null>(null);
@@ -230,7 +229,7 @@ export default function ContainersPage(props: ContainersPageProps) {
   };
 
   const deleteStack = async (name: string) => {
-    if (!await confirmDanger("Delete Stack", `Delete stack "${name}"? This will stop and remove all containers in the stack.`)) return;
+    if (!await confirmDanger("Delete stack", `Delete stack "${name}"? This will stop and remove all containers in the stack.`)) return;
     setStackActionInProgress(name);
     try {
       await invoke("compose_down", { name });
@@ -448,7 +447,7 @@ export default function ContainersPage(props: ContainersPageProps) {
     if (ids.length === 0) return;
     const count = ids.length;
     if (!await confirmDanger(
-      "Delete Containers",
+      "Delete containers",
       `Delete ${count} selected container${count !== 1 ? "s" : ""}? This cannot be undone.`
     )) return;
     setBatchDeleteProgress({ done: 0, total: count });
@@ -745,9 +744,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                 class="action-icon action-icon-stop"
                 onClick={(e) => doAction("stop_container", c.id, e)}
                 disabled={loading()}
-                title="Stop"
+                title={`Stop ${c.name}`}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
               </button>
             </Show>
             <Show when={c.state !== "Running"}>
@@ -755,7 +754,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 class="action-icon action-icon-start"
                 onClick={(e) => doAction("start_container", c.id, e)}
                 disabled={loading()}
-                title="Start"
+                title={`Start ${c.name}`}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               </button>
@@ -804,25 +803,43 @@ export default function ContainersPage(props: ContainersPageProps) {
                   >
                     <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Logs</span>
                   </button>
+                  <Show when={c.state === "Running"}>
+                    <button
+                      class="dropdown-item"
+                      onClick={() => {
+                        openContainerOn("terminal");
+                        props.onNavigate?.(stackName ? `container:${c.id},stack:${stackName}` : `container:${c.id}`);
+                        setContainerMenuOpen(null);
+                      }}
+                    >
+                      <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg> Open shell</span>
+                    </button>
+                  </Show>
                   <button
                     class="dropdown-item"
                     onClick={() => { openExposeDialog(c); setContainerMenuOpen(null); }}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle", "margin-right": "4px" }}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    {" "}Expose via Gateway
+                    {" "}Expose via gateway
+                  </button>
+                  <button class="dropdown-item" onClick={() => { props.onNavigate?.("settings:schedules"); setContainerMenuOpen(null); }}>
+                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Schedule restarts…</span>
+                  </button>
+                  <button class="dropdown-item" onClick={() => { props.onNavigate?.("settings:auto-deploy"); setContainerMenuOpen(null); }}>
+                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Auto-deploy on new image…</span>
                   </button>
                   <div class="dropdown-divider" />
                   <button
                     class="dropdown-item dropdown-item-danger"
                     onClick={async () => {
-                      if (await confirmDanger("Remove Container", `Remove container '${c.name}'? This cannot be undone.`)) {
+                      if (await confirmDanger("Remove container", `Remove container '${c.name}'? This cannot be undone.`)) {
                         doAction("remove_container", c.id, new MouseEvent("click"));
                       }
                       setContainerMenuOpen(null);
                     }}
                     disabled={loading() || c.state === "Running"}
                   >
-                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete</span>
+                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Remove container</span>
                   </button>
                 </div>
               </Show>
@@ -886,13 +903,13 @@ export default function ContainersPage(props: ContainersPageProps) {
           </div>
           <Show when={runningContainers().length >= 2}>
             <button class="btn" onClick={() => setShowMultiLog(true)}>
-              Combined Logs
+              Combined logs
             </button>
           </Show>
           <Show when={runningContainers().length > 0}>
-            <button class="btn" style={{ color: "#f85149" }} onClick={async () => {
+            <button class="btn" onClick={async () => {
               const running = runningContainers();
-              if (!await confirmDanger("Stop All Containers", `Stop all ${running.length} running containers?`)) return;
+              if (!await confirmDanger("Stop all containers", `Stop all ${running.length} running containers?`)) return;
               let stopped = 0;
               for (const c of running) {
                 try {
@@ -905,16 +922,11 @@ export default function ContainersPage(props: ContainersPageProps) {
               showToast(`Stopped ${stopped} container${stopped !== 1 ? "s" : ""}`, "success");
               await refresh();
             }}>
-              Stop All
+              Stop all
             </button>
           </Show>
-          <button class="btn" onClick={() => {
-            setComposePath("");
-            setComposeContent(`version: "3.8"\n\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped\n`);
-            setComposeError("");
-            setShowComposeEditor(true);
-          }}>
-            Compose
+          <button class="btn" onClick={() => openFolderDialog()} title="Start a project from a folder with a compose file">
+            Open folder
           </button>
           <button class="btn btn-primary" onClick={() => setShowRunDialog(true)}>
             Run
@@ -922,10 +934,12 @@ export default function ContainersPage(props: ContainersPageProps) {
         </div>
       </div>
 
+      <DockerUnreachable error={containerList.error()} stale={lastUpdated() !== null} onNavigate={props.onNavigate} />
+
       <Show
         when={totalCount() > 0}
         fallback={
-          <Show when={lastUpdated() !== null} fallback={
+          <Show when={lastUpdated() !== null || !!containerList.error()} fallback={
             <table class="table">
               <thead>
                 <tr><th>Name</th><th>Image</th><th>Status</th><th>Ports</th><th>Actions</th></tr>
@@ -942,13 +956,16 @@ export default function ContainersPage(props: ContainersPageProps) {
             <div class="empty">
               <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg></div>
               <p class="empty-title">No containers yet</p>
-              <p>Deploy a pre-configured app from the catalog, or click Run Container to start any Docker image with custom settings.</p>
+              <p>Open a project folder with a compose file, start an app from the catalog, or run any image.</p>
               <div class="empty-actions">
-                <button class="btn btn-primary" onClick={() => props.onNavigate?.("templates")}>
-                  Browse App Catalog
+                <button class="btn btn-primary" onClick={() => openFolderDialog()}>
+                  Open a project folder
                 </button>
-                <button class="btn" onClick={() => props.onNavigate?.("images")}>
-                  Go to Images
+                <button class="btn" onClick={() => props.onNavigate?.("templates")}>
+                  Browse the catalog
+                </button>
+                <button class="btn" onClick={() => setShowRunDialog(true)}>
+                  Run a container
                 </button>
               </div>
             </div>
@@ -978,15 +995,16 @@ export default function ContainersPage(props: ContainersPageProps) {
                       />
                       <div>
                         <div class="stack-name">
-                          <span
-                            style={{ cursor: "pointer" }}
+                          <button
+                            class="stack-link"
+                            title={`Open ${group.name}: profiles, logs, compose file and orca.yaml`}
                             onClick={(e: MouseEvent) => {
                               e.stopPropagation();
                               props.onNavigate?.(`stack:${group.name}`);
                             }}
                           >
-                            {group.name}
-                          </span>
+                            {group.name}<span class="stack-link-chevron">›</span>
+                          </button>
                           <span class="service-dots" style={{ "margin-left": "10px", display: "inline-flex" }}>
                             <For each={group.containers}>
                               {(c) => (
@@ -1010,6 +1028,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                       </div>
                     </div>
                     <div class="stack-header-right">
+                      <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); props.onNavigate?.(`stack:${group.name}`); }}>
+                        Open stack
+                      </button>
                       <div class={`action-icons ${isLoading() ? "loading" : ""}`} style={{ "margin-right": "4px" }}>
                         <Show when={isLoading()}>
                           <div class="action-spinner"><Spinner size={14} /></div>
@@ -1024,7 +1045,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                             disabled={isLoading()}
                             title="Stop stack"
                           >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
                           </button>
                         </Show>
                         <Show when={!allRunning()}>
@@ -1055,9 +1076,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                           <Show when={menuOpen() === group.name}>
                             <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>
                               <button class="dropdown-item" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { restartStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Restart</button>
-                              <button class="dropdown-item" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { pullStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Pull Images</button>
+                              <button class="dropdown-item" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { pullStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Pull images</button>
                               <div class="dropdown-divider" />
-                              <button class="dropdown-item dropdown-item-danger" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { deleteStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete Stack</button>
+                              <button class="dropdown-item dropdown-item-danger" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { deleteStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete stack</button>
                             </div>
                           </Show>
                         </div>
@@ -1205,11 +1226,11 @@ export default function ContainersPage(props: ContainersPageProps) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Selected
           </button>
           <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStop} disabled={!!batchDeleteProgress()}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> Stop Selected
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg> Stop Selected
           </button>
           <button class="btn btn-sm btn-danger" onClick={batchDelete} disabled={!!batchDeleteProgress()} style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            {batchDeleteProgress() ? "Deleting..." : "Delete Selected"}
+            {batchDeleteProgress() ? "Deleting..." : "Delete selected"}
           </button>
           <button class="btn btn-sm" onClick={() => setSelected(new Set<string>())} disabled={!!batchDeleteProgress()}>
             Clear
@@ -1231,121 +1252,14 @@ export default function ContainersPage(props: ContainersPageProps) {
         />
       </Show>
 
-      {/* Compose Editor Dialog */}
-      <Show when={showComposeEditor()}>
-        <div class="modal-overlay"
-          onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
-          onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay") && !composeDeploying()) setShowComposeEditor(false); }}>
-          <div class="modal-dialog" style={{ "max-width": "800px", height: "80vh", display: "flex", "flex-direction": "column" }}>
-            <div class="modal-header">
-              <h2 class="modal-title">Deploy Compose Stack</h2>
-              <button class="modal-close" onClick={() => { if (!composeDeploying()) setShowComposeEditor(false); }}>{"\u00d7"}</button>
-            </div>
-            <div class="modal-body" style={{ flex: "1", display: "flex", "flex-direction": "column", gap: "12px", overflow: "hidden" }}>
-              <div class="form-group">
-                <label class="form-label">Directory Path</label>
-                <input class="form-input mono" type="text"
-                  placeholder="/path/to/project (docker-compose.yml will be saved here)"
-                  value={composePath()}
-                  onInput={(e) => setComposePath(e.currentTarget.value)}
-                />
-                <span class="form-hint">The directory where docker-compose.yml will be created. Must be an absolute path.</span>
-              </div>
-              <div style={{ flex: "1", "min-height": "0", border: "1px solid #30363d", "border-radius": "8px", overflow: "hidden" }}>
-                <textarea class="form-textarea mono" style={{
-                  width: "100%", height: "100%", resize: "none",
-                  background: "#0d1117", color: "#e6edf3", border: "none",
-                  "font-size": "13px", padding: "12px", "line-height": "1.5",
-                  "box-sizing": "border-box",
-                }}
-                  value={composeContent()}
-                  onInput={(e) => setComposeContent(e.currentTarget.value)}
-                  spellcheck={false}
-                />
-              </div>
-              <Show when={composeError()}>
-                <div style={{
-                  background: "rgba(248, 81, 73, 0.1)",
-                  border: "1px solid #f85149",
-                  "border-radius": "8px",
-                  padding: "10px 12px",
-                  color: "#f85149",
-                  "font-size": "12px",
-                  "font-family": "'JetBrains Mono', monospace",
-                  "white-space": "pre-wrap",
-                  "max-height": "120px",
-                  "overflow-y": "auto",
-                }}>{composeError()}</div>
-              </Show>
-            </div>
-            <div class="modal-footer">
-              <button class="btn" onClick={() => setShowComposeEditor(false)} disabled={composeDeploying() || composeValidating()}>Cancel</button>
-              <button class="btn" disabled={composeValidating() || composeDeploying() || !composePath().trim() || !composeContent().trim()}
-                onClick={async () => {
-                  const dir = composePath().trim();
-                  if (!dir) return;
-                  setComposeValidating(true);
-                  setComposeError("");
-                  try {
-                    const filePath = dir.endsWith("/") ? `${dir}docker-compose.yml` : `${dir}/docker-compose.yml`;
-                    await invoke("save_compose_file", { path: filePath, content: composeContent() });
-                    const result = await invoke("validate_compose", { path: filePath }) as { valid: boolean; error?: string };
-                    if (result.valid) {
-                      showToast("Compose file is valid", "success");
-                    } else {
-                      setComposeError(result.error || "Validation failed");
-                    }
-                  } catch (e) {
-                    setComposeError(`${e}`);
-                  }
-                  setComposeValidating(false);
-                }}
-              >
-                {composeValidating() ? (<><Spinner size={12} />{" Validating..."}</>) : "Validate"}
-              </button>
-              <button class="btn btn-primary" disabled={composeDeploying() || composeValidating() || !composePath().trim() || !composeContent().trim()}
-                onClick={async () => {
-                  const dir = composePath().trim();
-                  if (!dir) return;
-                  setComposeDeploying(true);
-                  setComposeError("");
-                  try {
-                    // Save the compose file
-                    const filePath = dir.endsWith("/") ? `${dir}docker-compose.yml` : `${dir}/docker-compose.yml`;
-                    await invoke("save_compose_file", { path: filePath, content: composeContent() });
-                    // Validate before deploying
-                    const result = await invoke("validate_compose", { path: filePath }) as { valid: boolean; error?: string };
-                    if (!result.valid) {
-                      setComposeError(result.error || "Validation failed");
-                      setComposeDeploying(false);
-                      return;
-                    }
-                    // Run compose up from the directory
-                    await invoke("compose_deploy_path", { path: dir });
-                    showToast("Stack deployed!", "success");
-                    setShowComposeEditor(false);
-                    refresh();
-                  } catch (e) {
-                    showToast(`Deploy failed: ${e}`, "error");
-                  }
-                  setComposeDeploying(false);
-                }}
-              >
-                {composeDeploying() ? (<><Spinner size={12} />{" Deploying..."}</>) : "Deploy"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Show>
-
-      {/* Expose via Gateway Dialog */}
+      {/* Expose via gateway Dialog */}
       <Show when={exposeContainer()}>
         <div class="modal-overlay"
           onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setExposeContainer(null); }}>
           <div class="modal-dialog">
             <div class="modal-header">
-              <h2 class="modal-title">Expose via Gateway</h2>
+              <h2 class="modal-title">Expose via gateway</h2>
               <button class="modal-close" onClick={() => setExposeContainer(null)}>{"\u00d7"}</button>
             </div>
             <form onSubmit={handleExpose}>
@@ -1353,7 +1267,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 {/* Existing routes for this container */}
                 <Show when={exposeExistingRoutes().length > 0}>
                   <div style={{ "margin-bottom": "16px" }}>
-                    <label class="form-label">Active Routes</label>
+                    <label class="form-label">Active routes</label>
                     <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
                       <For each={exposeExistingRoutes()}>
                         {(route) => (
@@ -1374,7 +1288,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 {/* Add new route form */}
                 <Show when={exposeExistingRoutes().length > 0}>
                   <div style={{ "border-top": "1px solid #21262d", "padding-top": "16px", "margin-bottom": "8px" }}>
-                    <label class="form-label" style={{ "font-size": "13px", "font-weight": "600" }}>Add Another Route</label>
+                    <label class="form-label" style={{ "font-size": "13px", "font-weight": "600" }}>Add another route</label>
                   </div>
                 </Show>
                 <div class="form-group">
@@ -1393,7 +1307,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Container Port <span style={{ color: "#f85149" }}>*</span></label>
+                  <label class="form-label">Container port <span style={{ color: "#f85149" }}>*</span></label>
                   <Show when={exposeContainer()!.ports.length > 0}>
                     <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "margin-bottom": "8px" }}>
                       <For each={[...new Set(exposeContainer()!.ports.map((p) => p.container_port))]}>
@@ -1439,7 +1353,7 @@ export default function ContainersPage(props: ContainersPageProps) {
               <div class="modal-footer">
                 <button type="button" class="btn" onClick={() => setExposeContainer(null)} disabled={exposing()}>Close</button>
                 <button type="submit" class="btn btn-primary" disabled={exposing() || !exposeHostname().trim()}>
-                  {exposing() ? "Exposing..." : "Add Route"}
+                  {exposing() ? "Exposing..." : "Add route"}
                 </button>
               </div>
             </form>

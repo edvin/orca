@@ -124,7 +124,7 @@ export default function ActivityPage() {
           "font-weight": "600",
           color: "#8b949e",
         }}>
-          <span>Daemon Log</span>
+          <span>Daemon log</span>
           <button class="btn btn-sm" onClick={fetchDaemonLog} disabled={logLoading()} style={{ "font-size": "11px", padding: "2px 8px" }}>
             Refresh
           </button>

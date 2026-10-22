@@ -17,7 +17,12 @@ use crate::api::{ApiError, resolve_stack_dir};
 use crate::state::AppState;
 
 /// The compose file with every profile enabled, so all services are listed.
-async fn load_model(state: &AppState, name: &str, dir: &str, config: Option<&str>) -> anyhow::Result<ComposeModel> {
+pub(crate) async fn load_model(
+    state: &AppState,
+    name: &str,
+    dir: &str,
+    config: Option<&str>,
+) -> anyhow::Result<ComposeModel> {
     let args: Vec<String> = ["-p", name, "--profile", "*", "config", "--format", "json"]
         .iter()
         .map(|s| s.to_string())

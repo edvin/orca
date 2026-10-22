@@ -69,7 +69,7 @@ export default function NetworksPage() {
 
   const removeNetwork = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!await confirmDanger("Remove Network", `Remove network "${name}"?`)) return;
+    if (!await confirmDanger("Remove network", `Remove network "${name}"?`)) return;
     try {
       await invoke("remove_network", { name });
       showToast(`Network "${name}" removed`, "success");
@@ -189,7 +189,7 @@ export default function NetworksPage() {
             Topology
           </button>
           <button class="btn btn-primary" onClick={() => setShowCreate(true)}>
-            Create
+            Create network
           </button>
           <button class="btn" onClick={() => { refresh(); if (topologyView()) refreshTopology(); }}>Refresh</button>
         </div>
@@ -217,7 +217,7 @@ export default function NetworksPage() {
                 <p class="empty-title">No custom networks</p>
                 <p>Default networks are managed by Docker. Create a custom network for container isolation.</p>
                 <div class="empty-actions">
-                  <button class="btn btn-primary" onClick={() => setShowCreate(true)}>Create Network</button>
+                  <button class="btn btn-primary" onClick={() => setShowCreate(true)}>Create network</button>
                 </div>
               </div>
             </Show>
@@ -435,7 +435,7 @@ export default function NetworksPage() {
         <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
           <div class="modal-dialog">
             <div class="modal-header">
-              <h2 class="modal-title">Create Network</h2>
+              <h2 class="modal-title">Create network</h2>
               <button class="modal-close" onClick={() => setShowCreate(false)}>
                 {"\u00d7"}
               </button>

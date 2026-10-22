@@ -1,4 +1,6 @@
 import { createSignal, createEffect, onMount, onCleanup, For, Index, Show, untrack } from "solid-js";
+import DockerUnreachable from "../components/DockerUnreachable";
+import { onIntent } from "../lib/pageIntent";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Image, ImageSearchResult, ScanResult } from "../lib/types";
@@ -37,6 +39,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [batchDeleteProgress, setBatchDeleteProgress] = createSignal<{ done: number; total: number } | null>(null);
   let pullInputRef: HTMLInputElement | undefined;
   const [showBuild, setShowBuild] = createSignal(false);
+  onIntent("images", (a) => { if (a === "build") setShowBuild(true); });
   const [buildPath, setBuildPath] = createSignal("");
   const [buildDockerfile, setBuildDockerfile] = createSignal("");
   const [buildTag, setBuildTag] = createSignal("");
@@ -101,12 +104,15 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [saveTarPath, setSaveTarPath] = createSignal("");
   const [savingTar, setSavingTar] = createSignal(false);
 
+  const [listError, setListError] = createSignal<string | null>(null);
   const refresh = async () => {
     try {
       const result = (await invoke("list_images")) as Image[];
       setImages(result);
       setLastUpdated(new Date());
-    } catch {
+      setListError(null);
+    } catch (e) {
+      setListError(String(e) || "list_images failed");
     }
   };
 
@@ -231,7 +237,7 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   const removeImage = async (id: string, tag: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!await confirmDanger("Remove Image", `Remove image '${tag}'?`)) return;
+    if (!await confirmDanger("Remove image", `Remove image '${tag}'?`)) return;
     setDeletingImageId(id);
     try {
       await invoke("remove_image", { id });
@@ -259,7 +265,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     if (ids.length === 0) return;
     const count = ids.length;
     if (!await confirmDanger(
-      "Delete Images",
+      "Delete images",
       `Delete ${count} selected image${count !== 1 ? "s" : ""}? This cannot be undone.`
     )) return;
 
@@ -757,7 +763,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Severity</th><th>CVE</th><th>Package</th><th>Installed</th><th>Fixed In</th><th>Title</th></tr></thead>
+      <thead><tr><th>Severity</th><th>CVE</th><th>Package</th><th>Installed</th><th>Fixed in</th><th>Title</th></tr></thead>
       <tbody>${vulnRows}</tbody>
     </table>
   </div>
@@ -855,7 +861,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       {/* Build panel */}
       <Show when={showBuild()}>
         <div class="card" style={{ "margin-bottom": "16px" }}>
-          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Build Image</div>
+          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Build image</div>
           <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div class="form-group">
               <label class="form-label">Context path (directory with Dockerfile)</label>
@@ -950,7 +956,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               </button>
               <Show when={buildOutput().length > 0 && !building()}>
                 <button class="btn" onClick={() => setBuildOutput([])}>
-                  Clear Output
+                  Clear output
                 </button>
               </Show>
             </div>
@@ -1058,7 +1064,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           </Show>
           <button class="btn btn-sm btn-danger" onClick={batchDelete} disabled={!!batchDeleteProgress()} style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            {batchDeleteProgress() ? "Deleting..." : "Delete Selected"}
+            {batchDeleteProgress() ? "Deleting..." : "Delete selected"}
           </button>
           <button class="btn btn-sm" onClick={() => setSelected(new Set())} disabled={!!batchDeleteProgress()}>
             Clear
@@ -1066,10 +1072,12 @@ export default function ImagesPage(props: ImagesPageProps) {
         </div>
       </Show>
 
+      <DockerUnreachable error={listError()} stale={lastUpdated() !== null} onNavigate={props.onNavigate} />
+
       <Show
         when={filtered().length > 0}
         fallback={
-          <Show when={lastUpdated() !== null} fallback={
+          <Show when={lastUpdated() !== null || !!listError()} fallback={
             <table class="table">
               <thead>
                 <tr><th /><th>Repository / Tag</th><th>ID</th><th>Size</th><th>Created</th><th>Actions</th></tr>
@@ -1087,7 +1095,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               <p class="empty-title">No images found</p>
               <p>Pull an image from Docker Hub using the Pull button above.</p>
               <div class="empty-actions">
-                <button class="btn btn-primary" onClick={() => setShowPull(true)}>Pull Image</button>
+                <button class="btn btn-primary" onClick={() => setShowPull(true)}>Pull image</button>
               </div>
             </div>
           </Show>
@@ -1268,7 +1276,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                     <Show when={layerCount > 0}>
                                       <button class="btn btn-sm" style={{ "font-size": "11px", padding: "1px 8px" }}
                                         onClick={(e) => { e.stopPropagation(); setLayersDialogImage(img); }}>
-                                        View Layers
+                                        View layers
                                       </button>
                                     </Show>
                                   </div>
@@ -1276,7 +1284,7 @@ export default function ImagesPage(props: ImagesPageProps) {
 
                                 <div style={{ "margin-top": "12px", display: "flex", gap: "8px", "align-items": "center", "flex-wrap": "wrap" }}>
                                   <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); openFileBrowser(img.id); }}>
-                                    Browse Files
+                                    Browse files
                                   </button>
                                   <button
                                     class="btn btn-sm"
@@ -1285,7 +1293,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                   >
                                     {scanning() && scanImageId() === img.id
                                       ? (<><Spinner size={12} />{" Scanning..."}</>)
-                                      : "Scan for Vulnerabilities"}
+                                      : "Scan for vulnerabilities"}
                                   </button>
                                 </div>
                                 <Show when={scanImageId() === img.id && scanResult()}>
@@ -1387,7 +1395,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                           style={{ "margin-left": "auto" }}
                                           onClick={(e) => { e.stopPropagation(); exportScanReport(img, scanResult()!); }}
                                         >
-                                          Export Report
+                                          Export report
                                         </button>
                                       </div>
                                       {/* Detailed vulnerability report */}
@@ -1406,7 +1414,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                                 <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>CVE</th>
                                                 <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Package</th>
                                                 <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Installed</th>
-                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Fixed In</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Fixed in</th>
                                                 <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Title</th>
                                               </tr>
                                             </thead>
@@ -1503,7 +1511,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ "max-width": "500px" }}>
             <div class="modal-header">
-              <span class="modal-title">Tag Image</span>
+              <span class="modal-title">Tag image</span>
               <button class="modal-close" onClick={() => { if (!tagging()) setShowTagDialog(false); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1610,7 +1618,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ "max-width": "460px" }}>
             <div class="modal-header">
-              <span class="modal-title">Prune Unused Images</span>
+              <span class="modal-title">Prune unused images</span>
               <button class="modal-close" onClick={() => setShowPruneConfirm(false)}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1626,7 +1634,7 @@ export default function ImagesPage(props: ImagesPageProps) {
             <div class="modal-footer">
               <button class="btn" onClick={() => setShowPruneConfirm(false)} disabled={pruning()}>Cancel</button>
               <button class="btn" style={{ background: "#da3633", color: "#fff" }} onClick={pruneUnused} disabled={pruning()}>
-                {pruning() ? "Pruning..." : "Prune Images"}
+                {pruning() ? "Pruning..." : "Prune images"}
               </button>
             </div>
           </div>
@@ -1641,7 +1649,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "min-height": "500px", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
-              <span class="modal-title">Pull Image</span>
+              <span class="modal-title">Pull image</span>
               <button class="modal-close" onClick={() => { setShowPull(false); setPulling(false); setPullStatus(""); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1937,7 +1945,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setReportPath(null); }}>
           <div class="modal-dialog" style={{ "max-width": "520px" }}>
             <div class="modal-header">
-              <span class="modal-title">Report Downloaded</span>
+              <span class="modal-title">Report downloaded</span>
               <button class="modal-close" onClick={() => setReportPath(null)}>{"\u00d7"}</button>
             </div>
             <div class="modal-body" style={{ "text-align": "center", padding: "24px" }}>
