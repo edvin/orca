@@ -138,9 +138,6 @@ fn active_api_token() -> Option<String> {
     load_api_token()
 }
 
-/// Cached API token — loaded once from config, reused for local requests.
-static API_TOKEN: OnceLock<Option<String>> = OnceLock::new();
-
 /// Build a reqwest client with the API auth token pre-configured.
 /// Uses active_api_token() which returns the remote token when a remote host is selected.
 fn authed_client() -> reqwest::Client {
@@ -155,11 +152,13 @@ fn authed_client() -> reqwest::Client {
 /// share a connection pool: a fresh client per call meant a new TCP (and for
 /// a remote host, TLS) connection for every poll.
 fn authed_client_with_timeout(timeout_secs: u64) -> reqwest::Client {
-    type Key = (u64, Option<(String, String, bool)>);
+    type Key = (u64, Option<(String, String, bool)>, Option<String>);
     static CLIENTS: OnceLock<Mutex<HashMap<u64, (Key, reqwest::Client)>>> = OnceLock::new();
 
     let host = DAEMON_URL_OVERRIDE.read().ok().and_then(|g| g.clone());
-    let key: Key = (timeout_secs, host);
+    // The token is part of the key: a client built before it existed (first
+    // start) or before it changed must not be reused.
+    let key: Key = (timeout_secs, host, active_api_token());
     let clients = CLIENTS.get_or_init(Default::default);
     if let Ok(map) = clients.lock()
         && let Some((cached_key, client)) = map.get(&timeout_secs)
@@ -202,11 +201,62 @@ fn build_authed_client(timeout_secs: u64) -> reqwest::Client {
         .unwrap_or_else(|_| reqwest::Client::new())
 }
 
-/// Read the API token from the Orca config file (cached after first read).
+/// The local daemon's API token, from Orca's config file. Read again
+/// whenever the file changes, and on every call while there is none: on a
+/// first start the file only exists once the daemon has written it, and the
+/// GUI asks for things before that. A missing token must not stick, or every
+/// request goes out unauthenticated until Orca restarts.
 fn load_api_token() -> Option<String> {
-    API_TOKEN
-        .get_or_init(|| orca_core::config::OrcaConfig::load().ok()?.api_token)
-        .clone()
+    type Cached = (Option<std::time::SystemTime>, String);
+    static CACHE: Mutex<Option<Cached>> = Mutex::new(None);
+
+    let mtime = std::fs::metadata(orca_core::config::OrcaConfig::config_path())
+        .and_then(|m| m.modified())
+        .ok();
+    if let Ok(cache) = CACHE.lock()
+        && let Some((seen, token)) = cache.as_ref()
+        && *seen == mtime
+    {
+        return Some(token.clone());
+    }
+    let token = orca_core::config::OrcaConfig::load().ok()?.api_token?;
+    if let Ok(mut cache) = CACHE.lock() {
+        *cache = Some((mtime, token.clone()));
+    }
+    Some(token)
+}
+
+/// What to show for a failed daemon request: the daemon's own message, or
+/// the status when it sent none (a 401 has an empty body, and an empty error
+/// left pages loading forever).
+async fn daemon_error(resp: reqwest::Response) -> String {
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return "Orca could not sign in to its background service (401 Unauthorized). \
+                Quit and reopen Orca; if this keeps happening, the API token in Orca's config may have changed."
+            .to_string();
+    }
+    let body = body.trim();
+    if body.is_empty() {
+        format!("Request failed ({status})")
+    } else {
+        body.to_string()
+    }
+}
+
+/// The daemon's JSON on success, its error message otherwise.
+trait DaemonResponse {
+    async fn daemon_json<T: serde::de::DeserializeOwned>(self) -> Result<T, String>;
+}
+
+impl DaemonResponse for reqwest::Response {
+    async fn daemon_json<T: serde::de::DeserializeOwned>(self) -> Result<T, String> {
+        if !self.status().is_success() {
+            return Err(daemon_error(self).await);
+        }
+        self.json().await.map_err(|e| format!("Invalid response: {e}"))
+    }
 }
 
 fn client() -> reqwest::Client {
@@ -222,8 +272,7 @@ async fn get_json<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, String>
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
 
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
 
     resp.json::<T>().await.map_err(|e| format!("Invalid response: {e}"))
@@ -240,8 +289,7 @@ async fn post_empty(path: &str) -> Result<(), String> {
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -254,11 +302,10 @@ async fn post_json(path: &str) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
 
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
 
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 async fn patch_json(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -271,11 +318,10 @@ async fn patch_json(path: &str, body: &serde_json::Value) -> Result<serde_json::
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
 
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
 
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 async fn delete(path: &str) -> Result<(), String> {
@@ -289,8 +335,7 @@ async fn delete(path: &str) -> Result<(), String> {
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -303,8 +348,7 @@ async fn get_text(path: &str) -> Result<String, String> {
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
 
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
 
     resp.text().await.map_err(|e| format!("Invalid response: {e}"))
@@ -362,7 +406,7 @@ pub async fn save_stack_orca_yaml(name: String, text: String) -> Result<serde_js
     if !resp.status().is_success() {
         return Err(resp.text().await.unwrap_or_default());
     }
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 /// Problems in orca.yaml text.
@@ -375,7 +419,7 @@ pub async fn validate_orca_yaml(text: String) -> Result<serde_json::Value, Strin
         .send()
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 /// Stats of all running containers in one request.
@@ -410,9 +454,8 @@ pub async fn exec_container(
         .send()
         .await
         .map_err(|e| format!("Exec failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -433,8 +476,7 @@ pub async fn rename_container(id: String, name: String) -> Result<(), String> {
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -467,8 +509,7 @@ pub async fn update_container(
     if resp.status().is_success() {
         resp.json().await.map_err(|e| format!("{e}"))
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -813,8 +854,7 @@ pub async fn add_registry(server: String, name: String, username: String, passwo
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -956,9 +996,8 @@ pub async fn batch_delete_images(ids: Vec<String>, force: bool) -> Result<serde_
         .send()
         .await
         .map_err(|e| format!("Batch delete failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -1069,11 +1108,10 @@ pub async fn build_from_url(source_url: String, tag: Option<String>) -> Result<s
         .map_err(|e| format!("Build from URL failed: {e}"))?;
 
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
 
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 #[tauri::command]
@@ -1088,11 +1126,10 @@ pub async fn compare_builds(id1: String, id2: String) -> Result<serde_json::Valu
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
 
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
 
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 // --- Build Targets ---
@@ -1136,9 +1173,8 @@ pub async fn create_volume(
         .send()
         .await
         .map_err(|e| format!("Failed to create volume: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 // --- Volume File Browsing ---
@@ -1276,7 +1312,7 @@ pub async fn export_container_tar(id: String, path: String) -> Result<serde_json
         return Err(format!("Export failed: {body}"));
     }
 
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 // --- Image Save (tar) ---
@@ -1298,7 +1334,7 @@ pub async fn save_image_tar(id: String, path: String) -> Result<serde_json::Valu
         return Err(format!("Save failed: {body}"));
     }
 
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 // --- Image Scanning ---
@@ -1343,9 +1379,8 @@ pub async fn create_network(name: String, driver: Option<String>) -> Result<serd
         .send()
         .await
         .map_err(|e| format!("Failed to create network: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -1548,9 +1583,8 @@ pub async fn k8s_enable() -> Result<serde_json::Value, String> {
         .send()
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -1673,8 +1707,7 @@ pub async fn k8s_scale_deployment(namespace: String, name: String, replicas: u32
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -1731,9 +1764,8 @@ pub async fn k8s_apply_yaml(yaml: String) -> Result<serde_json::Value, String> {
         .send()
         .await
         .map_err(|e| format!("Apply failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 fn validate_k8s_name(name: &str) -> Result<(), String> {
@@ -1852,8 +1884,7 @@ pub async fn k8s_get_yaml(kind: String, name: String, namespace: String) -> Resu
         .map_err(|e| format!("Failed to get YAML: {e}"))?;
 
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
 
     resp.text().await.map_err(|e| format!("Failed to read response: {e}"))
@@ -1879,8 +1910,7 @@ pub async fn k8s_create_namespace(name: String) -> Result<(), String> {
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -1921,8 +1951,7 @@ pub async fn k8s_create_secret(
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -1956,8 +1985,7 @@ pub async fn k8s_update_secret(namespace: String, name: String, data: serde_json
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -1986,8 +2014,7 @@ pub async fn k8s_create_pvc(
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -2030,9 +2057,8 @@ pub async fn k8s_rollout_undo(
         .send()
         .await
         .map_err(|e| format!("Rollback failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 // --- K8s DaemonSets / StatefulSets / ReplicaSets ---
@@ -2073,8 +2099,7 @@ pub async fn k8s_scale_statefulset(namespace: String, name: String, replicas: u3
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -2159,9 +2184,8 @@ pub async fn k8s_create_hpa(
         .send()
         .await
         .map_err(|e| format!("Create HPA failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -2232,9 +2256,8 @@ pub async fn k8s_trigger_cronjob(namespace: String, name: String) -> Result<serd
         .send()
         .await
         .map_err(|e| format!("Trigger failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -2276,9 +2299,8 @@ pub async fn k8s_suspend_cronjob(namespace: String, name: String, suspend: bool)
         .send()
         .await
         .map_err(|e| format!("Suspend failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -2297,9 +2319,8 @@ pub async fn k8s_helm_uninstall(name: String, namespace: String) -> Result<serde
         .send()
         .await
         .map_err(|e| format!("Helm uninstall failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -2353,9 +2374,8 @@ pub async fn k8s_helm_install(
         .send()
         .await
         .map_err(|e| format!("Helm install failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 // --- K8s Port Forwarding (WebSocket tunnel) ---
@@ -2567,9 +2587,8 @@ pub async fn env_fix(action: String) -> Result<serde_json::Value, String> {
         .send()
         .await
         .map_err(|e| format!("Fix action failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 /// Streaming fix action — emits "env-fix-line" events via Tauri as each line arrives.
@@ -2698,7 +2717,7 @@ pub async fn deploy_template(
         return Err(msg);
     }
 
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 /// Build an authed reqwest client for a specific host (does NOT use the global override).
@@ -2878,9 +2897,8 @@ pub async fn save_user_template(template: serde_json::Value) -> Result<serde_jso
         .send()
         .await
         .map_err(|e| format!("Save failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -2892,9 +2910,8 @@ pub async fn delete_user_template(id: String) -> Result<serde_json::Value, Strin
         .send()
         .await
         .map_err(|e| format!("Delete failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 // --- AI Assistant ---
@@ -2942,7 +2959,7 @@ pub async fn ai_ask(
         return Err(format!("AI error: {body}"));
     }
 
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 // --- WSL2 Config (Windows) ---
@@ -3127,8 +3144,7 @@ pub async fn save_general_settings(
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -3154,9 +3170,8 @@ pub async fn save_lima_settings(
         .send()
         .await
         .map_err(|e| format!("Lima settings failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -3182,8 +3197,7 @@ pub async fn save_ai_settings(
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -3478,9 +3492,8 @@ pub async fn reconnect_runtime() -> Result<serde_json::Value, String> {
         .send()
         .await
         .map_err(|e| format!("Reconnect failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 #[tauri::command]
@@ -3496,9 +3509,8 @@ pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
         .send()
         .await
         .map_err(|e| format!("Cleanup failed: {e}"))?
-        .json()
+        .daemon_json()
         .await
-        .map_err(|e| format!("Invalid response: {e}"))
 }
 
 /// The only directory the frontend is allowed to read from / write to via
@@ -3872,7 +3884,7 @@ pub async fn test_remote_host(url: String, token: String, tls_verify: bool) -> R
         .send()
         .await
         .map_err(|e| format!("Connection failed: {e}"))?;
-    let health: serde_json::Value = health_resp.json().await.map_err(|e| format!("Invalid response: {e}"))?;
+    let health: serde_json::Value = health_resp.daemon_json().await?;
 
     // Test authentication (containers endpoint — requires valid token)
     let auth_resp = client
@@ -4415,10 +4427,9 @@ pub async fn gateway_start() -> Result<serde_json::Value, String> {
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 #[tauri::command]
@@ -4451,10 +4462,9 @@ pub async fn gateway_add_route(
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(body);
+        return Err(daemon_error(resp).await);
     }
-    resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+    resp.daemon_json().await
 }
 
 #[tauri::command]
@@ -4483,8 +4493,7 @@ pub async fn gateway_update_route(
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -4526,8 +4535,7 @@ pub async fn gateway_update_config(
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -4548,8 +4556,7 @@ pub async fn gateway_update_links(links: serde_json::Value) -> Result<(), String
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -4565,8 +4572,7 @@ pub async fn gateway_dismiss_suggestion(key: String) -> Result<(), String> {
     if resp.status().is_success() {
         Ok(())
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 
@@ -4603,10 +4609,9 @@ pub async fn gateway_set_traefik_mode(
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
     if resp.status().is_success() {
-        resp.json().await.map_err(|e| format!("Invalid response: {e}"))
+        resp.daemon_json().await
     } else {
-        let body = resp.text().await.unwrap_or_default();
-        Err(body)
+        Err(daemon_error(resp).await)
     }
 }
 

@@ -24,7 +24,7 @@ function fetchHealth(refresh: boolean): Promise<void> {
       .catch((e) => { clearTimeout(t); reject(e); });
   })
     .then((h) => batch(() => { setHealth(h); setHealthError(null); }))
-    .catch((e) => { setHealthError(String(e)); });
+    .catch((e) => { setHealthError(String(e) || "system_health failed"); });
 }
 
 /**

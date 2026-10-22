@@ -60,7 +60,8 @@ function createShared<T>(opts: {
         setUpdatedAt(Date.now());
       });
     } catch (e) {
-      if (my === seq) setError(String(e));
+      // An empty message would read as "no error" and leave pages loading.
+      if (my === seq) setError(String(e) || `${opts.command} failed`);
     }
   };
 

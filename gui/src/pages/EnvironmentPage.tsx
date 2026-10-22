@@ -10,6 +10,8 @@ import { logError } from "../lib/activityStore";
 
 export default function EnvironmentPage() {
   const [status, setStatus] = createSignal<EnvironmentStatus | null>(null);
+  // Why the checks couldn't load, so the page says so instead of loading forever.
+  const [statusError, setStatusError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [machine, setMachine] = createSignal<MachineInfo | null>(null);
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
@@ -58,7 +60,12 @@ export default function EnvironmentPage() {
         invoke("system_health"),
         isMacOS() ? invoke("docker_desktop_status") : Promise.resolve(null),
       ]);
-      if (envRes.status === "fulfilled") setStatus(envRes.value as EnvironmentStatus);
+      if (envRes.status === "fulfilled") {
+        setStatus(envRes.value as EnvironmentStatus);
+        setStatusError(null);
+      } else {
+        setStatusError(String(envRes.reason) || "The environment checks did not load.");
+      }
       if (machineRes.status === "fulfilled") setMachine(machineRes.value as MachineInfo);
       if (healthRes.status === "fulfilled") setHealth(healthRes.value as SystemHealth);
       if (ddRes.status === "fulfilled" && ddRes.value) setDdStatus(ddRes.value as DockerDesktopStatus);
@@ -385,10 +392,17 @@ export default function EnvironmentPage() {
         </div>
       </div>
 
+      <Show when={!status() && statusError()}>
+        <div class="card" style={{ "max-width": "800px", "margin-bottom": "16px", "border-color": "rgba(248,81,73,0.4)" }}>
+          <div style={{ color: "#f85149", "font-weight": "600", "font-size": "14px", "margin-bottom": "6px" }}>System Health could not load</div>
+          <div style={{ color: "#c9d1d9", "font-size": "13px" }}>{statusError()}</div>
+          <button class="btn btn-sm" style={{ "margin-top": "10px" }} onClick={() => void refresh()}>Try again</button>
+        </div>
+      </Show>
       <Show
         when={status()}
         fallback={
-          <div style={{ display: "flex", "flex-direction": "column", gap: "16px", "max-width": "800px" }}>
+          <div style={{ display: statusError() ? "none" : "flex", "flex-direction": "column", gap: "16px", "max-width": "800px" }}>
             <div class="skeleton-card" style={{ height: "120px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line" /><div class="skeleton-line skeleton-line-medium" /></div>
             <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px" }}>
               <div class="skeleton-card" style={{ height: "80px" }}><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></div>
