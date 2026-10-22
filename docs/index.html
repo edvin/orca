@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjvhtmb">
+<link rel="stylesheet" href="/assets/site.css?v=mvjxva5n">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjvhtmb" defer></script>
+<script src="/assets/site.js?v=mvjxva5n" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -180,34 +180,32 @@
   </div>
 </section>
 
-<section class="section feature alt">
+<section class="section feature alt" id="agents">
   <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
       <span class="eyebrow"><svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg> Agents</span>
-      <h2>Built for AI agents</h2>
-      <p>Claude Code and other MCP clients can list and inspect containers, read logs, start stacks and spin up a worktree instance to test their own changes. Any OpenAI-compatible agent can use the same tools.</p>
+      <h2>Your AI runs Orca. One click to connect.</h2>
+      <p>Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex from Orca's settings. Then just ask: start a project from a folder, switch on a profile, find out why a container keeps restarting, or run a branch as its own instance and test against it.</p>
       <ul class="checks">
-        <li>MCP endpoint on the local daemon, authenticated with your token</li>
-        <li>Worktree tools so each agent tests in its own instance</li>
-        <li>A built-in assistant with Claude, GPT, Gemini or local Ollama</li>
+        <li>No tokens to copy: the AI tool runs <code>orca mcp</code>, which signs in by itself</li>
+        <li>69 tools: projects, stacks, profiles, gateway routes, builds, Kubernetes, worktrees</li>
+        <li>Works with the AI subscription you already have. No API key needed</li>
       </ul>
-      <a class="link-arrow" href="/docs/agents/">Connect your agent <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      <a class="link-arrow" href="/docs/agents/">Connect your AI tools <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
     </div>
-    <div class="feature-visual reveal">
-      <div class="code has-title"><div class="code-title"><span>.mcp.json</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">{</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  "mcpServers"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: {</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    "orca"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: {</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      "type"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"http"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">,</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      "url"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"http://127.0.0.1:9477/api/v1/agent/mcp"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">,</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      "headers"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: { </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">"Authorization"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"Bearer &#x3C;your token>"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3"> }</span></span>
-<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">    }</span></span>
-<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  }</span></span>
-<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">}</span></span></code></pre></div>
-      <div class="agent-log">
-        <div><span class="who">agent</span> instance_up <span class="arg">worktree: ../shop-fix-checkout</span></div>
-        <div class="ok">✓ Started fix-checkout · https://web-fix-checkout-shop.localhost</div>
-        <div><span class="who">agent</span> container_logs <span class="arg">service: api, tail: 50</span></div>
-      </div>
+    <div class="feature-visual reveal mcp-visual">
+      <div class="mcp-panel">
+      <div class="mcp-panel-head"><b>Connect your AI tools</b><span>No API keys or tokens</span></div>
+      <div class="mcp-client on"><span class="mcp-tile" style="--c:#d97757">C</span><span class="mcp-name">Claude Code<small>Connected</small></span><span class="mcp-check">✓</span></div>
+      <div class="mcp-client on"><span class="mcp-tile" style="--c:#d97757">C</span><span class="mcp-name">Claude Desktop<small>Connected</small></span><span class="mcp-check">✓</span></div>
+      <div class="mcp-client"><span class="mcp-tile" style="--c:#3b8eea">VS</span><span class="mcp-name">VS Code<small>Found on this computer</small></span><span class="mcp-btn">Connect</span></div>
+      <div class="mcp-client"><span class="mcp-tile" style="--c:#94a3b8">Cu</span><span class="mcp-name">Cursor<small>Found on this computer</small></span><span class="mcp-btn">Connect</span></div>
+    </div>
+      <div class="mcp-chat">
+      <div class="mcp-msg you">Start ~/code/shop with the search profile and give me its URL</div>
+      <div class="mcp-calls"><span>orca · deploy_project</span><span>orca · set_stack_profiles</span><span>orca · gateway_routes</span></div>
+      <div class="mcp-msg ai">Shop is up with search on: <b>https://shop.localhost</b>, API on /api. All 5 services are healthy.</div>
+    </div>
     </div>
   </div>
 </section>
@@ -269,7 +267,7 @@
       <p>Anything else? Ask on <a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">GitHub</a>.</p>
     </div>
     <div class="faq reveal">
-      <details class="faq-item"><summary>Is Orca free for my company?</summary><p>Yes. Orca is MIT licensed, for personal and commercial use, with no account and no seat limits.</p></details><details class="faq-item"><summary>Do I still need Docker Desktop?</summary><p>No. On macOS Orca runs Docker in its own Lima VM, on Windows inside WSL2, and on Linux it uses Docker or Podman directly. See <a href="/docs/install/">Install</a> for running it next to an existing Docker setup.</p></details><details class="faq-item"><summary>Does it work with the compose files we already have?</summary><p>Yes. Any compose project you start shows up as a stack, and an <code>orca.yaml</code> is optional. Orca doesn't change your compose files; worktree instances use a generated override file instead.</p></details><details class="faq-item"><summary>What does Orca send over the network?</summary><p>No analytics or tracking. Orca checks GitHub for updates, pulls from the registries you use, and talks to an AI provider only if you set one up. <a href="/docs/security/">Security and privacy</a> lists the details.</p></details><details class="faq-item"><summary>Which Macs are supported?</summary><p>The macOS build is for Apple Silicon.</p></details><details class="faq-item"><summary>Can my AI agent use it?</summary><p>Yes. The daemon is an MCP server on your machine; Claude Code and other MCP clients connect with a token. <a href="/docs/agents/">Agents and MCP</a> shows the setup.</p></details>
+      <details class="faq-item"><summary>Is Orca free for my company?</summary><p>Yes. Orca is MIT licensed, for personal and commercial use, with no account and no seat limits.</p></details><details class="faq-item"><summary>Do I still need Docker Desktop?</summary><p>No. On macOS Orca runs Docker in its own Lima VM, on Windows inside WSL2, and on Linux it uses Docker or Podman directly. See <a href="/docs/install/">Install</a> for running it next to an existing Docker setup.</p></details><details class="faq-item"><summary>Does it work with the compose files we already have?</summary><p>Yes. Any compose project you start shows up as a stack, and an <code>orca.yaml</code> is optional. Orca doesn't change your compose files; worktree instances use a generated override file instead.</p></details><details class="faq-item"><summary>What does Orca send over the network?</summary><p>No analytics or tracking. Orca checks GitHub for updates, pulls from the registries you use, and talks to an AI provider only if you set one up. <a href="/docs/security/">Security and privacy</a> lists the details.</p></details><details class="faq-item"><summary>Which Macs are supported?</summary><p>The macOS build is for Apple Silicon.</p></details><details class="faq-item"><summary>Can my AI agent use it?</summary><p>Yes. Orca is an MCP server. Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex with one click in Settings, without copying a token. <a href="/docs/agents/">Agents and MCP</a> shows how.</p></details>
     </div>
   </div>
 </section>

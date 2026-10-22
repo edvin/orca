@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjvhtmb">
+<link rel="stylesheet" href="/assets/site.css?v=mvjxva5n">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjvhtmb" defer></script>
+<script src="/assets/site.js?v=mvjxva5n" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -197,7 +197,7 @@
 <h2 id="ai-agents"><a class="anchor" href="#ai-agents" aria-hidden="true" tabindex="-1">#</a>AI agents</h2>
 <p>Coding agents that work in their own worktrees can start and test their own instance.</p>
 <p><strong>From the shell</strong>, agents use the same commands you do: <code>orca up</code>, <code>orca status</code>, <code>orca logs -f</code>, <code>eval $(orca env)</code> and <code>orca down</code>.</p>
-<p><strong>Over MCP</strong>, Orca&#39;s MCP server (set up under <strong>Settings → Agent Integration</strong>) has tools that take the worktree path:</p>
+<p><strong>Over MCP</strong>, Orca&#39;s MCP server (connect it under <strong>Settings → AI &amp; Agents</strong>) has tools that take the worktree path:</p>
 <div class="table-wrap"><table><thead><tr><th>Tool</th><th></th></tr></thead><tbody><tr><td><code>instance_status</code></td><td>Whether the instance runs, its URLs, host ports, services and shared services, and where its <code>.orca/env</code> is.</td></tr><tr><td><code>instance_up</code></td><td>Start or rebuild the instance and wait until it&#39;s up. Takes <code>profiles</code>, <code>rebuild</code> and <code>data</code> (a data mode per shared service). Returns URLs, host ports and the env file, or the error with a log tail.</td></tr><tr><td><code>instance_down</code></td><td>Stop the instance. With <code>remove: true</code>, also delete its volumes, images, own databases and generated files.</td></tr><tr><td><code>instance_logs</code></td><td>Recent logs, all services or one.</td></tr><tr><td><code>instance_env</code></td><td>The contents of <code>.orca/env</code> as key/value pairs.</td></tr><tr><td><code>instance_db_reset</code></td><td>Reset the instance&#39;s own database in a shared service to a fresh copy.</td></tr></tbody></table></div><p>The instance card says who started it last, such as &quot;Started by an agent&quot; or &quot;Started by the CLI&quot;.</p>
 <h3 id="tell-agents-about-it"><a class="anchor" href="#tell-agents-about-it" aria-hidden="true" tabindex="-1">#</a>Tell agents about it</h3>
 <p>The setup wizard can add a short section to <code>CLAUDE.md</code>, or to <code>AGENTS.md</code> when there&#39;s no <code>CLAUDE.md</code> (it creates <code>AGENTS.md</code> if neither exists). The section sits between <code>&lt;!-- orca:dev --&gt;</code> markers, and Orca replaces it in place when it writes it again:</p>

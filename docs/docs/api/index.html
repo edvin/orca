@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjvhtmb">
+<link rel="stylesheet" href="/assets/site.css?v=mvjxva5n">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjvhtmb" defer></script>
+<script src="/assets/site.js?v=mvjxva5n" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -62,7 +62,7 @@
 <div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span>http://127.0.0.1:9477/api/v1</span></span></code></pre></div><p>The daemon listens on the loopback address only, unless it was started with a different <code>--bind</code> address.</p>
 <h2 id="authentication"><a class="anchor" href="#authentication" aria-hidden="true" tabindex="-1">#</a>Authentication</h2>
 <p>Every request needs the daemon&#39;s API token as a Bearer header:</p>
-<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span>Authorization: Bearer &#x3C;token></span></span></code></pre></div><p>Find the token in <strong>Settings → AI &amp; Agents → Agent Integration</strong>, or as <code>api_token</code> in the config file (<code>~/Library/Application Support/orca/config.json</code> on macOS, <code>~/.config/orca/config.json</code> on Linux, <code>%APPDATA%\orca\config.json</code> on Windows). A missing or wrong token returns <code>401</code>.</p>
+<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span>Authorization: Bearer &#x3C;token></span></span></code></pre></div><p>Find the token in <strong>Settings → AI &amp; Agents → HTTP endpoint (advanced)</strong>, or as <code>api_token</code> in the config file (<code>~/Library/Application Support/orca/config.json</code> on macOS, <code>~/.config/orca/config.json</code> on Linux, <code>%APPDATA%\orca\config.json</code> on Windows). A missing or wrong token returns <code>401</code>.</p>
 <p>Exceptions:</p>
 <ul>
 <li><code>GET /health</code> and <code>GET /ca/certificate</code> need no token.</li>
