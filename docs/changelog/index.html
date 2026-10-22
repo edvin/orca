@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjr1zy4">
+<link rel="stylesheet" href="/assets/site.css?v=mvjrvu5o">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjr1zy4" defer></script>
+<script src="/assets/site.js?v=mvjrvu5o" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,50 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.49.0">
+<section class="container releases"><article class="release" id="v0.50.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.50.0">v0.50.0</a><time datetime="2026-10-22T16:41:12Z">October 22, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="run-only-the-parts-of-a-project-you-need"><a class="anchor" href="#run-only-the-parts-of-a-project-you-need" aria-hidden="true" tabindex="-1">#</a>Run only the parts of a project you need</h2>
+<p>Not everyone needs search, mail catchers and admin tools running all day. Orca now uses Docker Compose&#39;s own <strong>profiles</strong> for this, so there&#39;s nothing Orca-specific to write down: give optional services a profile in your compose file, and switch them on and off in Orca.</p>
+<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">services</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  search</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    image</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">elasticsearch:8</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    profiles</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: [</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">search</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">]</span></span></code></pre></div><ul>
+<li><strong>Profiles as cards.</strong> A stack&#39;s page shows its profiles above its services, with the services in each and which of them run. Switch them and Orca shows what will start and what will be stopped before you press <strong>Apply</strong>.</li>
+<li><strong>Your choice sticks.</strong> Orca remembers the set for each stack on your machine and starts the same set every time, from the stack page, <code>orca deploy</code> or an AI agent. Teammates each pick their own, and nothing is committed.</li>
+<li><strong>No surprises.</strong> If a service you switch on needs one whose profile is off, Orca says so and offers to switch it on. Services that are off are still listed, with a button to bring them back. Setup commands for services that don&#39;t run are skipped instead of failing.</li>
+<li><strong>Worktrees too.</strong> The Start dialog has the same cards, and each worktree remembers its own choice: <code>orca up --profile search</code>.</li>
+</ul>
+<p>Presets (<code>dev.instance.presets</code>) are retired in favour of profiles. Orca ignores them in existing files and the editor tells you so. See <a href="https://github.com/edvin/orca/blob/main/docs/profiles.md" target="_blank" rel="noopener">Running only the services you need</a>.</p>
+<h2 id="an-editor-for-orcayaml"><a class="anchor" href="#an-editor-for-orcayaml" aria-hidden="true" tabindex="-1">#</a>An editor for orca.yaml</h2>
+<p>The <strong>orca.yaml</strong> tab on a stack&#39;s page is now a proper editor: routes, links, setup commands and build targets as forms, next to the file itself, and both stay in step.</p>
+<ul>
+<li>Pick the service and port from what the stack actually runs, and see the URL each route gives and whether it&#39;s active.</li>
+<li>One click adds a route for a web service that doesn&#39;t have one yet.</li>
+<li>Your comments, the <code>dev:</code> section and anything the forms don&#39;t cover are kept exactly as they are.</li>
+<li>Checked as you type; Save waits until the file is valid.</li>
+</ul>
+<p>The Projects page&#39;s orca.yaml dialog has the same editor next to the worktree settings.</p>
+<h2 id="websockets-per-project"><a class="anchor" href="#websockets-per-project" aria-hidden="true" tabindex="-1">#</a>WebSockets, per project</h2>
+<p>WebSockets pass through every route as they are. For Pusher-protocol servers like <strong>Soketi</strong>, put it in the project that uses it and route <code>/app/*</code> on the app&#39;s own hostname: Laravel Echo and pusher-js then use the page&#39;s own host, with no shared socket server and no list of exceptions. When a stack runs Soketi, the editor offers this route, and <strong>Create orca.yaml</strong> includes it. The <a href="https://github.com/edvin/orca/blob/main/docs/orca-yaml.md#websockets" target="_blank" rel="noopener">orca.yaml reference</a> has the recipe.</p>
+<h2 id="a-landing-page-thats-alive"><a class="anchor" href="#a-landing-page-thats-alive" aria-hidden="true" tabindex="-1">#</a>A landing page that&#39;s alive</h2>
+<p>The gateway&#39;s own address lists every routed service, and now shows whether each one runs and for how long: running, starting, unhealthy, sleeping or stopped. It updates whenever a container starts or stops and refreshes itself while open.</p>
+<ul>
+<li>Give it a title and subtitle, and choose whether it shows status and the container behind each card, on the new <strong>Landing page</strong> tab of the Gateway page.</li>
+<li>Each route can have a title, description, group and icon, from <code>orca.yaml</code>, <code>orca.route.*</code> labels or the Gateway page. Hide the ones nobody needs to see.</li>
+<li>Worktree instances read nicely, such as &quot;Web · feature-x&quot;.</li>
+</ul>
+<h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
+<ul>
+<li><strong>Worktrees see optional services.</strong> Services behind a compose profile were invisible to worktree instances, because <code>docker compose config</code> leaves them out unless asked. Orca now reads them all and lets you pick.</li>
+</ul>
+<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.49.0...v0.50.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.49.0...v0.50.0</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.50.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.49.0">
   <div class="release-meta"><a class="release-tag" href="#v0.49.0">v0.49.0</a><time datetime="2026-10-22T13:01:55Z">October 22, 2026</time></div>
   <div class="release-body prose">
     
@@ -300,15 +343,6 @@
     <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.13...v0.46.14" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.13...v0.46.14</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.14" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.46.13">
-  <div class="release-meta"><a class="release-tag" href="#v0.46.13">v0.46.13</a><time datetime="2026-05-29T11:51:01Z">May 29, 2026</time></div>
-  <div class="release-body prose">
-    
-    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.12...v0.46.13" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.12...v0.46.13</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.13" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
