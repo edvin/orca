@@ -15,6 +15,7 @@ mod build_manager;
 mod dev;
 mod gateway;
 mod gateway_sync;
+mod project_config;
 mod state;
 
 use state::AppState;

@@ -12,16 +12,16 @@
 //!
 //! Runs on container start/stop events and whenever routes change.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
 use bollard::models::EndpointSettings;
 use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
-use orca_core::config::GatewayRoute;
+use orca_core::config::{EnvironmentLink, GatewayRoute, StackLinkGroup};
 use orca_core::event::EventKind;
-use orca_core::runtime::ContainerRuntime;
+use orca_core::runtime::{ContainerRuntime, ContainerState};
 use tokio::sync::Notify;
 use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 
@@ -32,11 +32,11 @@ pub const LABEL_OWNER_PREFIX: &str = "label:";
 
 static ROUTES_CHANGED: Notify = Notify::const_new();
 
-/// Label routes left out because their hostname was taken, for the Gateway
-/// page: (container, hostname with path, who has it).
+/// Routes from labels or orca.yaml left out because their hostname was
+/// taken, for the Gateway page: (who asked, hostname with path, who has it).
 static CONFLICTS: std::sync::Mutex<Vec<(String, String, String)>> = std::sync::Mutex::new(Vec::new());
 
-/// Containers whose labels ask for a hostname another route already uses.
+/// Labels and orca.yaml files asking for a hostname another route already uses.
 pub fn label_conflicts() -> Vec<serde_json::Value> {
     CONFLICTS
         .lock()
@@ -46,11 +46,6 @@ pub fn label_conflicts() -> Vec<serde_json::Value> {
             serde_json::json!({ "container": container, "hostname": hostname, "taken_by": taken_by })
         })
         .collect()
-}
-
-/// The container a label route comes from, or `None` for other routes.
-pub fn label_route_container(r: &GatewayRoute) -> Option<&str> {
-    r.owner.as_deref()?.strip_prefix(LABEL_OWNER_PREFIX)
 }
 
 /// Ask for a sync after the gateway's routes changed.
@@ -95,18 +90,58 @@ async fn sync(state: &AppState) -> Result<()> {
     sync_networks(state).await
 }
 
-fn is_label_route(r: &GatewayRoute) -> bool {
-    r.owner.as_deref().is_some_and(|o| o.starts_with(LABEL_OWNER_PREFIX))
+/// Owner prefix of routes from a compose project's `orca.yaml`.
+pub const PROJECT_OWNER_PREFIX: &str = "project:";
+
+/// Routes this sync keeps current: from labels and from `orca.yaml`.
+fn is_synced_route(r: &GatewayRoute) -> bool {
+    r.owner
+        .as_deref()
+        .is_some_and(|o| o.starts_with(LABEL_OWNER_PREFIX) || o.starts_with(PROJECT_OWNER_PREFIX))
+}
+
+/// Where a route this sync manages comes from, to tell people where to
+/// change it; `None` for routes managed elsewhere or added by hand.
+pub fn managed_source(r: &GatewayRoute) -> Option<String> {
+    let owner = r.owner.as_deref()?;
+    if let Some(c) = owner.strip_prefix(LABEL_OWNER_PREFIX) {
+        Some(format!("the labels on {c}"))
+    } else {
+        owner
+            .strip_prefix(PROJECT_OWNER_PREFIX)
+            .map(|p| format!("the orca.yaml of compose project {p}"))
+    }
 }
 
 async fn sync_label_routes(state: &AppState) -> Result<()> {
     let rt = state.rt().await;
-    let mut running = rt.list_containers(false).await?;
-    running.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut all = rt.list_containers(true).await?;
+    all.sort_by(|a, b| a.name.cmp(&b.name));
     let domain = state.config.lock().await.gateway.domain.clone();
+    let projects = crate::project_config::discover(&all);
 
+    // From each running project's orca.yaml, then from labels.
     let mut wanted: Vec<GatewayRoute> = Vec::new();
-    for c in &running {
+    for p in projects.iter().filter(|p| p.running()) {
+        for r in &p.yaml.gateway {
+            let Some(c) = p
+                .container_of(&r.service)
+                .filter(|c| c.state == ContainerState::Running)
+            else {
+                continue;
+            };
+            wanted.push(GatewayRoute {
+                hostname: crate::project_config::qualify_hostname(&r.hostname, &domain),
+                container_name: c.name.clone(),
+                port: r.port,
+                enabled: true,
+                path: r.path.clone(),
+                owner: Some(format!("{PROJECT_OWNER_PREFIX}{}", p.name)),
+                sleeping: false,
+            });
+        }
+    }
+    for c in all.iter().filter(|c| c.state == ContainerState::Running) {
         // Worktree instances get their routes from `orca.yaml`, and their
         // compose labels are copied into every instance; the gateway is ours.
         if c.labels.contains_key(orca_core::dev::LABEL_PROJECT) || c.labels.contains_key("orca.role") {
@@ -134,15 +169,52 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
         }
     }
 
+    // Links from each project's orca.yaml, running or not.
+    let wanted_links: Vec<StackLinkGroup> = projects
+        .iter()
+        .flat_map(|p| {
+            p.yaml.links.iter().map(|g| StackLinkGroup {
+                stack: p.name.clone(),
+                group: g.group.clone(),
+                links: g
+                    .links
+                    .iter()
+                    .map(|l| EnvironmentLink {
+                        name: l.name.clone(),
+                        urls: l.urls.clone().into_iter().collect(),
+                    })
+                    .collect(),
+            })
+        })
+        .collect();
+    let with_links: HashSet<&str> = projects
+        .iter()
+        .filter(|p| !p.yaml.links.is_empty())
+        .map(|p| p.name.as_str())
+        .collect();
+    // Routes an earlier deploy registered from the same orca.yaml give way.
+    let superseded: HashSet<String> = projects
+        .iter()
+        .filter(|p| !p.yaml.gateway.is_empty())
+        .map(|p| format!("stack:{}", p.name))
+        .collect();
+
     let changed = {
         let mut cfg = state.config.lock().await;
-        // Routes added by hand, by stacks or by worktree instances win; of
-        // two containers asking for the same hostname, the first by name does.
+        let mut dirty = false;
+        let before = cfg.gateway.routes.len();
+        cfg.gateway
+            .routes
+            .retain(|r| !r.owner.as_ref().is_some_and(|o| superseded.contains(o)));
+        dirty |= cfg.gateway.routes.len() != before;
+
+        // Routes added by hand, by stacks or by worktree instances win; then
+        // orca.yaml over labels, and of two asking for one hostname the first.
         let mut taken: HashMap<(String, Option<String>), String> = cfg
             .gateway
             .routes
             .iter()
-            .filter(|r| !is_label_route(r))
+            .filter(|r| !is_synced_route(r))
             .map(|r| {
                 let by = match r.owner.as_deref() {
                     Some(o) if o.starts_with("dev:") => "a worktree instance".to_string(),
@@ -155,42 +227,83 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
         let mut conflicts = Vec::new();
         wanted.retain(|r| {
             let key = (r.hostname.clone(), r.path.clone());
+            let source = managed_source(r).unwrap_or_default();
+            let asker = match r.owner.as_deref().and_then(|o| o.strip_prefix(PROJECT_OWNER_PREFIX)) {
+                Some(p) => format!("orca.yaml of {p}"),
+                None => r.container_name.clone(),
+            };
             if let Some(by) = taken.get(&key) {
                 let host = format!("{}{}", r.hostname, r.path.as_deref().unwrap_or(""));
-                conflicts.push((r.container_name.clone(), host, by.clone()));
+                conflicts.push((asker, host, by.clone()));
                 return false;
             }
-            taken.insert(key, format!("labels on {}", r.container_name));
+            taken.insert(key, source);
             true
         });
         *CONFLICTS.lock().unwrap() = conflicts;
-        // A label route paused on the Gateway page stays paused.
+        // A route paused on the Gateway page stays paused.
         for r in &mut wanted {
-            if let Some(old) = cfg.gateway.routes.iter().find(|o| {
-                is_label_route(o)
-                    && o.hostname == r.hostname
-                    && o.path == r.path
-                    && o.container_name == r.container_name
-            }) {
+            if let Some(old) = cfg
+                .gateway
+                .routes
+                .iter()
+                .find(|o| is_synced_route(o) && o.owner == r.owner && o.hostname == r.hostname && o.path == r.path)
+            {
                 r.enabled = old.enabled;
             }
         }
-        let key = |r: &GatewayRoute| (r.hostname.clone(), r.path.clone(), r.container_name.clone(), r.port);
+        let key = |r: &GatewayRoute| {
+            (
+                r.hostname.clone(),
+                r.path.clone(),
+                r.container_name.clone(),
+                r.port,
+                r.owner.clone(),
+            )
+        };
         let have: Vec<_> = cfg
             .gateway
             .routes
             .iter()
-            .filter(|r| is_label_route(r))
+            .filter(|r| is_synced_route(r))
             .map(key)
             .collect();
-        if have == wanted.iter().map(key).collect::<Vec<_>>() {
-            None
-        } else {
-            tracing::info!("Routes from container labels: {}", wanted.len());
-            cfg.gateway.routes.retain(|r| !is_label_route(r));
+        if have != wanted.iter().map(key).collect::<Vec<_>>() {
+            tracing::info!("Routes from labels and orca.yaml: {}", wanted.len());
+            cfg.gateway.routes.retain(|r| !is_synced_route(r));
             cfg.gateway.routes.extend(wanted);
+            dirty = true;
+        }
+
+        let have_links: Vec<&StackLinkGroup> = cfg
+            .gateway
+            .stack_links
+            .iter()
+            .filter(|g| with_links.contains(g.stack.as_str()))
+            .collect();
+        let same_links = have_links.len() == wanted_links.len()
+            && have_links.iter().zip(&wanted_links).all(|(a, b)| {
+                a.stack == b.stack
+                    && a.group == b.group
+                    && a.links.len() == b.links.len()
+                    && a.links
+                        .iter()
+                        .zip(&b.links)
+                        .all(|(x, y)| x.name == y.name && x.urls == y.urls)
+            });
+        if !same_links {
+            cfg.gateway
+                .stack_links
+                .retain(|g| !with_links.contains(g.stack.as_str()));
+            cfg.gateway.stack_links.extend(wanted_links);
+            dirty = true;
+        }
+
+        if dirty {
             cfg.save()?;
             Some(cfg.gateway.clone())
+        } else {
+            None
         }
     };
     if let Some(gw) = changed

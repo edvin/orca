@@ -387,10 +387,13 @@ async fn candidates(State(state): State<Arc<AppState>>) -> R<impl IntoResponse> 
             continue;
         }
         seen.push(root.clone());
+        // An orca.yaml with a `dev:` section is ready for worktree instances.
+        let has_dev = OrcaYaml::load(&root).is_ok_and(|y| y.dev.is_some());
         out.push(serde_json::json!({
             "root": root,
             "name": root.file_name().map(|n| n.to_string_lossy().to_string()),
             "stacks": stacks,
+            "has_dev": has_dev,
         }));
     }
     Ok(Json(out))

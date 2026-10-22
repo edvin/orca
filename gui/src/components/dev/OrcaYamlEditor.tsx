@@ -34,7 +34,7 @@ const KEYS: [string, string][] = [
   ["env", "Extra environment per service; values can use {url.web}, {db.postgres}, {port.api.9229}"],
   ["expose", "Services opened in a browser through the gateway: web: 3000"],
   ["host_ports", "Container ports published on a free host port per worktree"],
-  ["hooks", "Commands run in the instance's containers"],
+  ["hooks", "Commands run in containers: under dev.instance for worktrees, at the top for the stack"],
   ["after_up", '"service: command" lines run after every start'],
   ["after_own_database", '"service: command" lines run when a worktree gets its own database'],
   ["presets", "Named sets of services to start"],
@@ -42,6 +42,10 @@ const KEYS: [string, string][] = [
   ["limits", "memory and cpus limits per service"],
   ["compose", "Compose file(s) to use"],
   ["project", "Project name (defaults to the folder name)"],
+  ["gateway", "Routes for the stack: - {hostname: app, service: web, port: 3000, path: /api/*}"],
+  ["links", "Environment links by group: Storefront: [{name: Web, local: app, staging: https://…}]"],
+  ["builds", "Build targets: - {name, context, dockerfile, tag, args}"],
+  ["service", "The compose service a gateway route goes to"],
 ];
 
 function orcaCompletions(ctx: CompletionContext) {

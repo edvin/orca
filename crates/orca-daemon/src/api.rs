@@ -3395,21 +3395,22 @@ async fn compose_deploy_path(
     let validated_str = validated.to_string_lossy().to_string();
     let output = state.rt().await.compose_up(&validated_str, None).await?;
 
-    // Auto-register gateway routes from orca.yaml if present
-    let dir_path = validated.as_path();
-    let gateway_routes = parse_orca_yaml_gateway_routes(dir_path);
-    let registered_routes = if let Some(routes) = gateway_routes {
-        // Derive stack name from directory name (same convention as compose)
-        let stack_name = dir_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
-        auto_register_gateway_routes(&state, stack_name, &routes).await
-    } else {
-        Vec::new()
-    };
-
-    // Auto-register environment links from orca.yaml if present
-    if let Some(link_groups) = parse_orca_yaml_links(dir_path) {
-        auto_register_stack_links(&state, dir_path, &link_groups).await;
-    }
+    // The stack's orca.yaml routes and links are applied by the gateway
+    // sync, as for any compose project; show which hostnames it asks for.
+    let domain = state.config.lock().await.gateway.domain.clone();
+    let registered_routes: Vec<serde_json::Value> = parse_orca_yaml_gateway_routes(validated.as_path())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "hostname": crate::project_config::qualify_hostname(&r.hostname, &domain),
+                "service": r.service,
+                "port": r.port,
+                "path": r.path,
+            })
+        })
+        .collect();
+    crate::gateway_sync::routes_changed();
 
     let hooks = if output.success {
         run_stack_hooks(&state, &validated_str, None).await
@@ -4675,16 +4676,6 @@ fn validate_compose_path(p: &str) -> anyhow::Result<std::path::PathBuf> {
     Ok(canonical)
 }
 
-/// Parse the orca.yaml file in a directory into a serde_yaml::Value.
-fn parse_orca_yaml(dir: &std::path::Path) -> Option<serde_yaml::Value> {
-    let yaml_path = dir.join("orca.yaml");
-    if !yaml_path.exists() {
-        return None;
-    }
-    let content = std::fs::read_to_string(&yaml_path).ok()?;
-    serde_yaml::from_str(&content).ok()
-}
-
 /// Hooks from a stack's orca.yaml, run after every `up`:
 /// ```yaml
 /// hooks:
@@ -4694,13 +4685,8 @@ fn parse_orca_yaml(dir: &std::path::Path) -> Option<serde_yaml::Value> {
 /// Each is `"service: command"`, run with `sh -c` in that service, so make
 /// them safe to repeat.
 fn parse_orca_yaml_hooks(dir: &std::path::Path) -> Vec<String> {
-    let Some(yaml) = parse_orca_yaml(dir) else {
-        return Vec::new();
-    };
-    yaml.get("hooks")
-        .and_then(|h| h.get("after_up"))
-        .and_then(|h| h.as_sequence())
-        .map(|items| items.iter().filter_map(|i| i.as_str().map(str::to_string)).collect())
+    orca_core::dev::OrcaYaml::load(dir)
+        .map(|y| y.hooks.after_up)
         .unwrap_or_default()
 }
 
@@ -4745,26 +4731,7 @@ pub(crate) async fn run_stack_hooks(state: &AppState, dir: &str, config: Option<
 ///     port: 3000
 /// ```
 fn parse_orca_yaml_gateway_routes(dir: &std::path::Path) -> Option<Vec<orca_core::templates::GatewayRouteTemplate>> {
-    let yaml = parse_orca_yaml(dir)?;
-    let gateway = yaml.get("gateway")?;
-    let items = gateway.as_sequence()?;
-
-    let mut routes = Vec::new();
-    for item in items {
-        let hostname = item.get("hostname").and_then(|v| v.as_str());
-        let service = item.get("service").and_then(|v| v.as_str());
-        let port = item.get("port").and_then(|v| v.as_u64()).map(|p| p as u16);
-        let path = item.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
-        if let (Some(h), Some(s), Some(p)) = (hostname, service, port) {
-            routes.push(orca_core::templates::GatewayRouteTemplate {
-                hostname: h.to_string(),
-                service: s.to_string(),
-                port: p,
-                path,
-            });
-        }
-    }
-
+    let routes = orca_core::dev::OrcaYaml::load(dir).ok()?.gateway;
     if routes.is_empty() { None } else { Some(routes) }
 }
 
@@ -4782,47 +4749,28 @@ fn parse_orca_yaml_gateway_routes(dir: &std::path::Path) -> Option<Vec<orca_core
 ///       production: https://admin.example.com
 /// ```
 fn parse_orca_yaml_links(dir: &std::path::Path) -> Option<Vec<orca_core::config::StackLinkGroup>> {
-    let yaml = parse_orca_yaml(dir)?;
-    let links = yaml.get("links")?;
-    let mapping = links.as_mapping()?;
-
     let stack_name = dir
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
         .to_string();
-
-    let mut groups = Vec::new();
-    for (group_key, group_val) in mapping {
-        let group_name = group_key.as_str()?;
-        let items = group_val.as_sequence()?;
-        let mut env_links = Vec::new();
-        for item in items {
-            let item_map = item.as_mapping()?;
-            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let mut urls = std::collections::BTreeMap::new();
-            for (k, v) in item_map {
-                let key = k.as_str().unwrap_or("");
-                if key == "name" {
-                    continue;
-                }
-                if let Some(val) = v.as_str() {
-                    urls.insert(key.to_string(), val.to_string());
-                }
-            }
-            if !name.is_empty() && !urls.is_empty() {
-                env_links.push(orca_core::config::EnvironmentLink { name, urls });
-            }
-        }
-        if !env_links.is_empty() {
-            groups.push(orca_core::config::StackLinkGroup {
-                stack: stack_name.clone(),
-                group: group_name.to_string(),
-                links: env_links,
-            });
-        }
-    }
-
+    let groups: Vec<_> = orca_core::dev::OrcaYaml::load(dir)
+        .ok()?
+        .links
+        .into_iter()
+        .map(|g| orca_core::config::StackLinkGroup {
+            stack: stack_name.clone(),
+            group: g.group,
+            links: g
+                .links
+                .into_iter()
+                .map(|l| orca_core::config::EnvironmentLink {
+                    name: l.name,
+                    urls: l.urls,
+                })
+                .collect(),
+        })
+        .collect();
     if groups.is_empty() { None } else { Some(groups) }
 }
 
@@ -4838,62 +4786,47 @@ fn parse_orca_yaml_links(dir: &std::path::Path) -> Option<Vec<orca_core::config:
 ///       NODE_ENV: development
 /// ```
 fn parse_orca_yaml_build_targets(dir: &std::path::Path) -> Option<Vec<orca_core::build::BuildTarget>> {
-    let yaml = parse_orca_yaml(dir)?;
-    let builds = yaml.get("builds")?;
-    let items = builds.as_sequence()?;
-
     let dir_str = dir.to_string_lossy().to_string();
-
-    let mut targets = Vec::new();
-    for item in items {
-        let name = item.get("name").and_then(|v| v.as_str());
-        let context = item.get("context").and_then(|v| v.as_str());
-        let tag = item.get("tag").and_then(|v| v.as_str());
-        let dockerfile = item.get("dockerfile").and_then(|v| v.as_str()).unwrap_or("Dockerfile");
-
-        if let (Some(n), Some(ctx), Some(t)) = (name, context, tag) {
-            let mut args = std::collections::HashMap::new();
-            if let Some(args_map) = item.get("args").and_then(|v| v.as_mapping()) {
-                for (k, v) in args_map {
-                    if let (Some(key), Some(val)) = (k.as_str(), v.as_str()) {
-                        args.insert(key.to_string(), val.to_string());
-                    }
-                }
-            }
-            targets.push(orca_core::build::BuildTarget {
-                name: n.to_string(),
-                context: ctx.to_string(),
-                dockerfile: dockerfile.to_string(),
-                tag: t.to_string(),
-                args,
-                stack_dir: dir_str.clone(),
-            });
-        }
-    }
-
+    let targets: Vec<_> = orca_core::dev::OrcaYaml::load(dir)
+        .ok()?
+        .builds
+        .into_iter()
+        .map(|b| orca_core::build::BuildTarget {
+            name: b.name,
+            context: b.context,
+            dockerfile: b.dockerfile,
+            tag: b.tag,
+            args: b.args.into_iter().collect(),
+            stack_dir: dir_str.clone(),
+        })
+        .collect();
     if targets.is_empty() { None } else { Some(targets) }
 }
 
-/// Scan all stack directories for orca.yaml build targets.
-fn scan_all_build_targets() -> Vec<orca_core::build::BuildTarget> {
-    let base = stacks_base_dir();
-    let mut all_targets = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&base) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir()
-                && let Some(targets) = parse_orca_yaml_build_targets(&path)
-            {
-                all_targets.extend(targets);
-            }
-        }
+/// Build targets from every orca.yaml Orca knows: compose projects it can
+/// see (wherever they were started from), registered worktree projects and
+/// its own stacks folder.
+async fn scan_all_build_targets(state: &AppState) -> Vec<orca_core::build::BuildTarget> {
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(stacks_base_dir()) {
+        dirs.extend(entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()));
     }
-    all_targets
+    if let Ok(containers) = state.rt().await.list_containers(true).await {
+        dirs.extend(crate::project_config::discover(&containers).into_iter().map(|p| p.dir));
+    }
+    dirs.extend(state.config.lock().await.dev_projects.iter().map(|p| p.root.clone()));
+
+    let mut seen = std::collections::HashSet::new();
+    dirs.into_iter()
+        .filter(|d| seen.insert(d.canonicalize().unwrap_or_else(|_| d.clone())))
+        .filter_map(|d| parse_orca_yaml_build_targets(&d))
+        .flatten()
+        .collect()
 }
 
 /// GET /builds/targets — list all orca.yaml build targets from stack directories.
-async fn list_build_targets() -> Result<impl IntoResponse, ApiError> {
-    let targets = scan_all_build_targets();
+async fn list_build_targets(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let targets = scan_all_build_targets(&state).await;
     Ok(Json(targets))
 }
 
@@ -4902,7 +4835,7 @@ async fn start_build_from_target(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let targets = scan_all_build_targets();
+    let targets = scan_all_build_targets(&state).await;
     let target = targets
         .iter()
         .find(|t| t.name == name)
@@ -5020,11 +4953,14 @@ async fn auto_register_gateway_routes(
     let mut registered = Vec::new();
     {
         let mut config = state.config.lock().await;
+        let domain = config.gateway.domain.clone();
         for route in routes {
             let container_name = format!("{}-{}-1", stack_name, route.service);
             let owner = format!("stack:{stack_name}");
+            // `webmail` means webmail.<domain>: the browser never asks for a bare name.
+            let hostname = crate::project_config::qualify_hostname(&route.hostname, &domain);
             let gw_route = orca_core::config::GatewayRoute {
-                hostname: route.hostname.clone(),
+                hostname: hostname.clone(),
                 container_name: container_name.clone(),
                 port: route.port,
                 enabled: true,
@@ -5039,7 +4975,7 @@ async fn auto_register_gateway_routes(
                 .gateway
                 .routes
                 .iter()
-                .position(|r| r.hostname == route.hostname && r.path == route.path)
+                .position(|r| r.hostname == hostname && r.path == route.path)
             {
                 Some(i) if config.gateway.routes[i].owner.as_deref() == Some(owner.as_str()) => {
                     config.gateway.routes[i] = gw_route.clone();
@@ -5048,7 +4984,7 @@ async fn auto_register_gateway_routes(
                 Some(i) => {
                     tracing::warn!(
                         "orca.yaml route {} for stack '{stack_name}' not registered: hostname already routed to {}",
-                        route.hostname,
+                        hostname,
                         config.gateway.routes[i].container_name
                     );
                 }
@@ -8382,10 +8318,10 @@ async fn gateway_remove_route(
         .routes
         .iter()
         .filter(|r| r.hostname == hostname)
-        .find_map(crate::gateway_sync::label_route_container)
+        .find_map(crate::gateway_sync::managed_source)
     {
         return Err(ApiError::bad_request(format!(
-            "{hostname} comes from the labels on {container}. Remove its orca.route (or Traefik) labels instead."
+            "{hostname} comes from {container}. Remove it there instead."
         )));
     }
     let before = config.gateway.routes.len();
@@ -8430,11 +8366,11 @@ async fn gateway_update_route(
         .ok_or_else(|| anyhow::anyhow!("Route for hostname '{}' not found", hostname))?;
 
     // Routes from labels can be paused here, but their target comes from the labels.
-    if let Some(container) = crate::gateway_sync::label_route_container(route)
+    if let Some(source) = crate::gateway_sync::managed_source(route)
         && (route.container_name != req.container_name || route.port != req.port)
     {
         return Err(ApiError::bad_request(format!(
-            "{hostname} comes from the labels on {container}. Change its orca.route (or Traefik) labels instead."
+            "{hostname} comes from {source}. Change it there instead."
         )));
     }
     route.container_name = req.container_name;
@@ -9033,31 +8969,5 @@ links:
         assert!(groups[0].links[0].urls.contains_key("local"));
         assert!(groups[0].links[0].urls.contains_key("staging"));
         assert!(groups[0].links[0].urls.contains_key("production"));
-    }
-
-    // ---- parse_orca_yaml tests ----
-
-    #[test]
-    fn test_parse_orca_yaml_valid() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join("orca.yaml"),
-            r#"
-key: value
-nested:
-  inner: 42
-"#,
-        )
-        .unwrap();
-
-        let yaml = parse_orca_yaml(dir.path()).unwrap();
-        assert_eq!(yaml["key"].as_str().unwrap(), "value");
-        assert_eq!(yaml["nested"]["inner"].as_u64().unwrap(), 42);
-    }
-
-    #[test]
-    fn test_parse_orca_yaml_missing_file() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(parse_orca_yaml(dir.path()).is_none());
     }
 }

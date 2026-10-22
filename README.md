@@ -266,11 +266,15 @@ links:
       local: api/docs
 ```
 
-When any team member deploys this stack through Orca:
-- Gateway routes auto-register (`https://app.localhost`, `https://api.localhost`)
+Orca reads `orca.yaml` from every compose project it can see, however it was started — from Orca, or with plain `docker compose up` in a checkout — and applies changes as soon as the file changes:
+- Gateway routes appear while the services run (`https://app.localhost`, `https://api.localhost`); a hostname without a dot gets the gateway's domain
 - Environment links appear in the Gateway dashboard with tabs for Local / Staging / Production
 - `local` values reference gateway hostnames — auto-resolved to full URLs
 - Other environments are direct links (not proxied)
+- `builds:` targets show up on the Builds page
+- An `orca.local.yaml` next to it (keep it out of git) overrides values per machine
+
+The same file holds `dev:` for worktree instances (one running copy of the app per git worktree); when Orca finds a repo whose `orca.yaml` has one, the Projects page offers to add it.
 
 A stack can also run setup commands after every `up` (database migrations, creating buckets, registering search attributes). Each is `"service: command"`, run in that service with `sh -c`, so make them safe to repeat:
 

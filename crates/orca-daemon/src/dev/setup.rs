@@ -577,10 +577,14 @@ pub fn validate(text: &str) -> Validation {
                 ok: error.is_none(),
                 error,
                 line: None,
-                warnings: if y.dev.is_some() {
-                    hostnames::pattern_warnings(&pattern)
-                } else {
-                    Vec::new()
+                warnings: {
+                    let mut w = if y.dev.is_some() {
+                        hostnames::pattern_warnings(&pattern)
+                    } else {
+                        Vec::new()
+                    };
+                    w.extend(orca_core::dev::schema::project_warnings(text));
+                    w
                 },
                 dev: y.dev,
             }

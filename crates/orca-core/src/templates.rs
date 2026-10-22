@@ -47,7 +47,7 @@ pub struct TemplateLinkGroup {
 }
 
 /// A gateway route declared in a template or orca.yaml.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GatewayRouteTemplate {
     pub hostname: String,
     pub service: String,

@@ -251,6 +251,8 @@ export interface Candidate {
   root: string;
   name: string | null;
   stacks: string[];
+  /** Its orca.yaml already has a `dev:` section. */
+  has_dev?: boolean;
 }
 
 function call<T>(method: string, path: string, body?: unknown): Promise<T> {

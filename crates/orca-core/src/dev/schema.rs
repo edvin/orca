@@ -1,7 +1,9 @@
-//! The `dev:` section of `orca.yaml`.
+//! `orca.yaml`: a project's Orca configuration, next to its compose file.
 //!
-//! Every field is optional. Unknown keys elsewhere in `orca.yaml` (such as
-//! the existing `gateway:`, `links:` and build targets) are ignored here.
+//! `gateway:`, `links:`, `builds:` and `hooks:` apply to the project as a
+//! compose stack, wherever it was started from; `dev:` configures worktree
+//! instances. Every field is optional, and an entry that doesn't parse is
+//! skipped rather than failing the whole file.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -11,7 +13,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// certificate covers every instance; see [`super::hostnames`]).
 pub const DEFAULT_HOSTNAME_TEMPLATE: &str = super::hostnames::FLAT;
 
-/// The parts of `orca.yaml` this module cares about.
+/// `orca.yaml`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct OrcaYaml {
@@ -20,6 +22,158 @@ pub struct OrcaYaml {
     /// Compose file(s); defaults to compose's own discovery.
     pub compose: Option<ComposeFiles>,
     pub dev: Option<DevConfig>,
+    /// Gateway routes to the project's services:
+    /// `- {hostname: app, service: web, port: 3000, path: /api/*}`.
+    /// A hostname without a dot gets the gateway's domain.
+    #[serde(deserialize_with = "lenient_list", skip_serializing_if = "Vec::is_empty")]
+    pub gateway: Vec<crate::templates::GatewayRouteTemplate>,
+    /// Environment links by group:
+    /// `Storefront: [{name: Web App, local: app, staging: https://…}]`.
+    #[serde(
+        deserialize_with = "lenient_links",
+        serialize_with = "serialize_links",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub links: Vec<LinkGroup>,
+    /// Build targets: `- {name, context, dockerfile, tag, args}`.
+    #[serde(deserialize_with = "lenient_list", skip_serializing_if = "Vec::is_empty")]
+    pub builds: Vec<BuildSpec>,
+    /// Commands run after the stack comes up.
+    #[serde(skip_serializing_if = "ProjectHooks::is_empty")]
+    pub hooks: ProjectHooks,
+}
+
+/// A group of environment links (`links:` in `orca.yaml`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LinkGroup {
+    pub group: String,
+    pub links: Vec<Link>,
+}
+
+/// One link: a name and a URL per environment. `local` names a gateway
+/// hostname; the others are full URLs.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Link {
+    pub name: String,
+    pub urls: BTreeMap<String, String>,
+}
+
+/// A build target in `orca.yaml`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct BuildSpec {
+    pub name: String,
+    pub context: String,
+    #[serde(default = "default_dockerfile")]
+    pub dockerfile: String,
+    pub tag: String,
+    /// Build args; numbers and booleans are taken as text.
+    #[serde(default, deserialize_with = "scalar_map")]
+    pub args: BTreeMap<String, String>,
+}
+
+fn default_dockerfile() -> String {
+    "Dockerfile".into()
+}
+
+/// `hooks:` at the top of `orca.yaml`, for the stack itself.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ProjectHooks {
+    /// `"service: command"` entries run after every `up` started from Orca.
+    pub after_up: Vec<String>,
+}
+
+impl ProjectHooks {
+    fn is_empty(&self) -> bool {
+        self.after_up.is_empty()
+    }
+}
+
+/// A list whose entries that don't parse are left out.
+fn lenient_list<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value = serde_yaml::Value::deserialize(d)?;
+    Ok(value
+        .as_sequence()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|i| serde_yaml::from_value(i.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// `links:` keeps the file's group order; links without a name or any URL
+/// are left out, and so are groups left empty.
+fn lenient_links<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<LinkGroup>, D::Error> {
+    let value = serde_yaml::Value::deserialize(d)?;
+    let Some(groups) = value.as_mapping() else {
+        return Ok(Vec::new());
+    };
+    Ok(groups
+        .iter()
+        .filter_map(|(group, items)| {
+            let links: Vec<Link> = items
+                .as_sequence()?
+                .iter()
+                .filter_map(|item| {
+                    let map = item.as_mapping()?;
+                    let name = item.get("name")?.as_str()?.to_string();
+                    let urls: BTreeMap<String, String> = map
+                        .iter()
+                        .filter_map(|(k, v)| Some((k.as_str()?.to_string(), v.as_str()?.to_string())))
+                        .filter(|(k, _)| k != "name")
+                        .collect();
+                    (!name.is_empty() && !urls.is_empty()).then_some(Link { name, urls })
+                })
+                .collect();
+            let group = group.as_str()?.to_string();
+            (!links.is_empty()).then_some(LinkGroup { group, links })
+        })
+        .collect())
+}
+
+fn serialize_links<S: serde::Serializer>(groups: &[LinkGroup], s: S) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeMap;
+    let mut map = s.serialize_map(Some(groups.len()))?;
+    for g in groups {
+        let links: Vec<BTreeMap<&str, &str>> = g
+            .links
+            .iter()
+            .map(|l| {
+                let mut m: BTreeMap<&str, &str> = l.urls.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+                m.insert("name", &l.name);
+                m
+            })
+            .collect();
+        map.serialize_entry(&g.group, &links)?;
+    }
+    map.end()
+}
+
+/// A map whose scalar values (text, numbers, booleans) are kept as text.
+fn scalar_map<'de, D: Deserializer<'de>>(d: D) -> Result<BTreeMap<String, String>, D::Error> {
+    let value = serde_yaml::Value::deserialize(d)?;
+    Ok(value
+        .as_mapping()
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| {
+                    let v = match v {
+                        serde_yaml::Value::String(s) => s.clone(),
+                        serde_yaml::Value::Number(n) => n.to_string(),
+                        serde_yaml::Value::Bool(b) => b.to_string(),
+                        _ => return None,
+                    };
+                    Some((k.as_str()?.to_string(), v))
+                })
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 /// `compose: a.yaml` or `compose: [a.yaml, b.yaml]`.
@@ -310,6 +464,74 @@ impl OrcaYaml {
     }
 }
 
+/// Entries in `gateway:`, `builds:`, `links:` and `hooks:` that would be
+/// skipped, one message each, for the editor: reading the file leaves them
+/// out instead of failing.
+pub fn project_warnings(text: &str) -> Vec<String> {
+    let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(text) else {
+        return Vec::new();
+    };
+    let mut warnings = Vec::new();
+    let items = |key: &str| {
+        value
+            .get(key)
+            .and_then(|v| v.as_sequence())
+            .cloned()
+            .unwrap_or_default()
+    };
+    for (i, item) in items("gateway").into_iter().enumerate() {
+        if let Err(e) = serde_yaml::from_value::<crate::templates::GatewayRouteTemplate>(item) {
+            warnings.push(format!(
+                "gateway entry {} is skipped: {e} (needs hostname, service and port)",
+                i + 1
+            ));
+        }
+    }
+    for (i, item) in items("builds").into_iter().enumerate() {
+        if let Err(e) = serde_yaml::from_value::<BuildSpec>(item) {
+            warnings.push(format!(
+                "builds entry {} is skipped: {e} (needs name, context and tag)",
+                i + 1
+            ));
+        }
+    }
+    if let Some(groups) = value.get("links").and_then(|v| v.as_mapping()) {
+        for (group, links) in groups {
+            let group = group.as_str().unwrap_or("?");
+            for (i, link) in links.as_sequence().into_iter().flatten().enumerate() {
+                let named = link.get("name").and_then(|n| n.as_str()).is_some_and(|n| !n.is_empty());
+                let urls = link.as_mapping().is_some_and(|m| {
+                    m.iter()
+                        .any(|(k, v)| k.as_str() != Some("name") && v.as_str().is_some())
+                });
+                if !named || !urls {
+                    warnings.push(format!(
+                        "links.{group} entry {} is skipped: it needs a name and at least one URL",
+                        i + 1
+                    ));
+                }
+            }
+        }
+    }
+    let hooks = value
+        .get("hooks")
+        .and_then(|h| h.get("after_up"))
+        .and_then(|v| v.as_sequence())
+        .cloned()
+        .unwrap_or_default();
+    for hook in hooks {
+        match hook.as_str() {
+            Some(h) => {
+                if let Err(e) = parse_hook(h) {
+                    warnings.push(format!("hooks.after_up: {e}"));
+                }
+            }
+            None => warnings.push("hooks.after_up entries must be text like \"service: command\"".to_string()),
+        }
+    }
+    warnings
+}
+
 fn read_yaml_value(path: &std::path::Path) -> anyhow::Result<Option<serde_yaml::Value>> {
     if !path.exists() {
         return Ok(None);
@@ -422,6 +644,49 @@ pub fn render_template(template: &str, vars: &BTreeMap<String, String>) -> anyho
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn project_keys_read_leniently_and_warn() {
+        let text = r#"
+gateway:
+  - {hostname: app, service: web, port: 3000}
+  - {hostname: broken, service: web}
+links:
+  Storefront:
+    - {name: Web, local: app, staging: "https://staging.test"}
+    - {local: app}
+builds:
+  - {name: web, context: ., tag: "web:dev", args: {NODE: 20, DEBUG: true}}
+hooks:
+  after_up: ["web: npm run migrate", "no colon here"]
+dev: {}
+"#;
+        let y = OrcaYaml::parse(text).unwrap();
+        assert_eq!(y.gateway.len(), 1);
+        assert_eq!(y.links[0].group, "Storefront");
+        assert_eq!(y.links[0].links.len(), 1);
+        assert_eq!(y.links[0].links[0].urls["staging"], "https://staging.test");
+        assert_eq!(y.builds[0].args["NODE"], "20");
+        assert_eq!(y.builds[0].dockerfile, "Dockerfile");
+        assert_eq!(y.hooks.after_up.len(), 2);
+        assert!(y.dev.is_some());
+
+        let w = project_warnings(text);
+        assert_eq!(w.len(), 3, "{w:?}");
+        assert!(w[0].starts_with("gateway entry 2"));
+        assert!(w[1].starts_with("links.Storefront entry 2"));
+        assert!(w[2].starts_with("hooks.after_up"));
+    }
+
+    #[test]
+    fn project_keys_survive_a_round_trip() {
+        let text = "links:\n  B: [{name: x, local: b}]\n  A: [{name: y, local: a}]\n";
+        let y = OrcaYaml::parse(text).unwrap();
+        let again = OrcaYaml::parse(&serde_yaml::to_string(&y).unwrap()).unwrap();
+        assert_eq!(y, again);
+        assert_eq!(again.links[0].group, "B", "group order is kept");
+    }
+
     use super::*;
 
     const FULL: &str = r#"

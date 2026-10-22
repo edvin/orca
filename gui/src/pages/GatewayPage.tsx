@@ -452,6 +452,8 @@ export default function GatewayPage(props: GatewayPageProps) {
     const owner = route.owner ?? "";
     if (owner.startsWith("label:"))
       return { label: "labels", title: `From the labels on ${owner.slice(6)}: change or remove its orca.route (or Traefik) labels to edit it. Pausing works here.` };
+    if (owner.startsWith("project:"))
+      return { label: "orca.yaml", title: `From the orca.yaml of ${owner.slice(8)}: change it there. Pausing works here.` };
     if (owner.startsWith("dev:")) return { label: "worktree", title: `Managed by worktree instance ${owner.slice(4).replace(":", " / ")}` };
     if (owner.startsWith("stack:")) return { label: "stack", title: `From the orca.yaml of stack ${owner.slice(6)}` };
     return null;
@@ -949,8 +951,8 @@ export default function GatewayPage(props: GatewayPageProps) {
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                         </button>
-                        {/* A route from labels follows the container: change the labels to edit or remove it. */}
-                        <Show when={!route.owner?.startsWith("label:")}>
+                        {/* Routes from labels or orca.yaml follow their source: change it there. */}
+                        <Show when={!route.owner?.startsWith("label:") && !route.owner?.startsWith("project:")}>
                           <button
                             class="action-icon"
                             title="Edit route"

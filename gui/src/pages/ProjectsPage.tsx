@@ -75,6 +75,7 @@ export default function ProjectsPage(props: Props) {
   };
 
   let candidatesLoaded = false;
+  const readyCandidates = () => candidates().filter((c) => c.has_dev);
   const refresh = async () => {
     try {
       const list = await devApi.listProjects(true);
@@ -87,7 +88,7 @@ export default function ProjectsPage(props: Props) {
         }
       }
       // Suggestions run git in every compose folder, so look once, not every poll.
-      if (list.length === 0 && !candidatesLoaded) {
+      if (!candidatesLoaded) {
         candidatesLoaded = true;
         devApi.candidates().then(setCandidates).catch(() => {});
       }
@@ -294,6 +295,25 @@ export default function ProjectsPage(props: Props) {
           </div>
         </Show>
       </div>
+
+      {/* Repos already running here whose orca.yaml is set up for worktrees. */}
+      <Show when={(projects()?.length ?? 0) > 0 && readyCandidates().length > 0}>
+        <div class="dev-candidates" style={{ "margin-bottom": "16px" }}>
+          <For each={readyCandidates()}>
+            {(c) => (
+              <div class="dev-candidate">
+                <div style={{ flex: 1, "min-width": 0 }}>
+                  <div style={{ color: "#e6edf3", "font-weight": 500, "font-size": "13px" }}>
+                    {c.name ?? c.root} has an orca.yaml set up for worktrees
+                  </div>
+                  <div class="mono" style={{ color: "#8b949e", "font-size": "11px" }}>{tildify(c.root)}</div>
+                </div>
+                <button class="btn btn-sm btn-primary" disabled={adding()} onClick={() => addProject(c.root)}>Add</button>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
 
       <Show when={loadError() && (projects()?.length ?? 0) === 0}>
         <div class="dev-error" style={{ "margin-bottom": "16px" }}>{loadError()}</div>
@@ -612,11 +632,16 @@ function EmptyState(props: {
       <Show when={props.candidates.length > 0}>
         <div class="dev-candidates">
           <div class="dev-section-title">Found on this machine</div>
-          <For each={props.candidates}>
+          <For each={[...props.candidates].sort((a, b) => Number(!!b.has_dev) - Number(!!a.has_dev))}>
             {(c) => (
               <div class="dev-candidate">
                 <div style={{ flex: 1, "min-width": 0 }}>
-                  <div style={{ color: "#e6edf3", "font-weight": 500, "font-size": "13px" }}>{c.name ?? c.root}</div>
+                  <div style={{ color: "#e6edf3", "font-weight": 500, "font-size": "13px" }}>
+                    {c.name ?? c.root}
+                    <Show when={c.has_dev}>
+                      <span title="Its orca.yaml already has a dev: section" style={{ "margin-left": "8px", "font-size": "10px", "font-weight": 600, "text-transform": "uppercase", "letter-spacing": "0.04em", color: "#3fb950", border: "1px solid #238636", "border-radius": "4px", padding: "1px 5px" }}>orca.yaml ready</span>
+                    </Show>
+                  </div>
                   <div class="mono" style={{ color: "#8b949e", "font-size": "11px" }}>
                     {tildify(c.root)} · running as {c.stacks.join(", ")}
                   </div>
