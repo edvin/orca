@@ -90,7 +90,7 @@ hooks:
 <section class="hero">
   <div class="hero-bg" aria-hidden="true"><div class="hero-grid"></div><div class="hero-glow"></div></div>
   <div class="container hero-inner">
-    ${v ? `<a class="pill" href="/changelog/"><span class="pill-tag">New</span><span>${esc(v)}: Compose profiles and an orca.yaml editor</span>${ICONS.arrow}</a>` : ""}
+    ${v ? `<a class="pill" href="/changelog/"><span class="pill-tag">New</span><span>${esc(v)}: One-click setup for Claude and other AI tools</span>${ICONS.arrow}</a>` : ""}
     <h1>Local development,<br><span class="grad">without the duct tape.</span></h1>
     <p class="hero-sub">Orca is a free, open source desktop app for containers, compose stacks and Kubernetes. It gives every service an HTTPS hostname, runs a full copy of your app for each git worktree, and lets your AI agents drive it all. One file in your repo sets it up for the whole team.</p>
     <div class="hero-ctas">
