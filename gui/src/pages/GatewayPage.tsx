@@ -447,6 +447,16 @@ export default function GatewayPage(props: GatewayPageProps) {
     setEditSaving(false);
   };
 
+  /** Where a route comes from, for a tag next to its hostname. Routes added here have none. */
+  const routeSource = (route: GatewayRoute): { label: string; title: string } | null => {
+    const owner = route.owner ?? "";
+    if (owner.startsWith("label:"))
+      return { label: "labels", title: `From the labels on ${owner.slice(6)}: change or remove its orca.route (or Traefik) labels to edit it. Pausing works here.` };
+    if (owner.startsWith("dev:")) return { label: "worktree", title: `Managed by worktree instance ${owner.slice(4).replace(":", " / ")}` };
+    if (owner.startsWith("stack:")) return { label: "stack", title: `From the orca.yaml of stack ${owner.slice(6)}` };
+    return null;
+  };
+
   const handleToggleRoute = async (route: GatewayRoute) => {
     try {
       await invoke("gateway_update_route", {
@@ -849,6 +859,17 @@ export default function GatewayPage(props: GatewayPageProps) {
             </div>
           }
         >
+          <Show when={(status()?.label_conflicts ?? []).length > 0}>
+            <div style={{ padding: "10px 14px", "margin-bottom": "12px", background: "rgba(210,153,34,0.08)", border: "1px solid rgba(210,153,34,0.35)", "border-radius": "8px", "font-size": "12px", color: "#e6edf3", display: "flex", "flex-direction": "column", gap: "4px" }}>
+              <For each={status()?.label_conflicts ?? []}>
+                {(c) => (
+                  <span>
+                    <span class="mono">{c.container}</span> asks for <span class="mono">{c.hostname}</span> in its labels, but {c.taken_by} already uses it.
+                  </span>
+                )}
+              </For>
+            </div>
+          </Show>
           <Show
             when={routes().length > 0}
             fallback={
@@ -861,7 +882,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                   </svg>
                 </div>
                 <p class="empty-title">No routes configured</p>
-                <p>Add a route to map a hostname to a running container.</p>
+                <p>Add a route to map a hostname to a running container, or give the container an <span class="mono">orca.route</span> label.</p>
                 <button class="btn btn-primary" onClick={openAddDialog} style={{ "margin-top": "12px" }}>
                   Add Route
                 </button>
@@ -891,6 +912,13 @@ export default function GatewayPage(props: GatewayPageProps) {
                         >
                           {route.hostname}{route.path || ""}
                         </button>
+                        <Show when={routeSource(route)}>
+                          {(src) => (
+                            <span title={src().title} style={{ "margin-left": "8px", "font-size": "10px", "font-weight": "600", "text-transform": "uppercase", "letter-spacing": "0.04em", color: "#8b949e", border: "1px solid #30363d", "border-radius": "4px", padding: "1px 5px", "white-space": "nowrap" }}>
+                              {src().label}
+                            </span>
+                          )}
+                        </Show>
                       </td>
                       <td class="mono" style={{ color: "#c9d1d9", "word-break": "break-all" }}>{route.container_name}</td>
                       <td class="mono">{route.port}</td>
@@ -921,28 +949,34 @@ export default function GatewayPage(props: GatewayPageProps) {
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                         </button>
-                        <button
-                          class="action-icon"
-                          title="Edit route"
-                          onClick={() => openEditRoute(route)}
-                          style={{ "margin-right": "4px" }}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        </button>
-                        <button
-                          class="action-icon action-icon-delete"
-                          title="Remove route"
-                          onClick={() => handleRemoveRoute(route.hostname)}
-                          style={{ color: "#f85149" }}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                        </button>
+                        {/* A route from labels follows the container: change the labels to edit or remove it. */}
+                        <Show when={!route.owner?.startsWith("label:")}>
+                          <button
+                            class="action-icon"
+                            title="Edit route"
+                            onClick={() => openEditRoute(route)}
+                            style={{ "margin-right": "4px" }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </button>
+                          <button
+                            class="action-icon action-icon-delete"
+                            title="Remove route"
+                            onClick={() => handleRemoveRoute(route.hostname)}
+                            style={{ color: "#f85149" }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                          </button>
+                        </Show>
                       </td>
                     </tr>
                   )}
                 </For>
               </tbody>
             </table>
+            <p style={{ color: "#6e7681", "font-size": "12px", "margin-top": "8px" }}>
+              These hostnames also work from inside containers that share a network with a routed container: a backend can call <span class="mono">https://{routes()[0]?.hostname}</span> through the gateway, as the browser does.
+            </p>
           </Show>
         </Show>
 

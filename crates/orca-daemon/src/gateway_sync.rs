@@ -12,7 +12,7 @@
 //!
 //! Runs on container start/stop events and whenever routes change.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -31,6 +31,27 @@ use crate::state::AppState;
 pub const LABEL_OWNER_PREFIX: &str = "label:";
 
 static ROUTES_CHANGED: Notify = Notify::const_new();
+
+/// Label routes left out because their hostname was taken, for the Gateway
+/// page: (container, hostname with path, who has it).
+static CONFLICTS: std::sync::Mutex<Vec<(String, String, String)>> = std::sync::Mutex::new(Vec::new());
+
+/// Containers whose labels ask for a hostname another route already uses.
+pub fn label_conflicts() -> Vec<serde_json::Value> {
+    CONFLICTS
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(container, hostname, taken_by)| {
+            serde_json::json!({ "container": container, "hostname": hostname, "taken_by": taken_by })
+        })
+        .collect()
+}
+
+/// The container a label route comes from, or `None` for other routes.
+pub fn label_route_container(r: &GatewayRoute) -> Option<&str> {
+    r.owner.as_deref()?.strip_prefix(LABEL_OWNER_PREFIX)
+}
 
 /// Ask for a sync after the gateway's routes changed.
 pub fn routes_changed() {
@@ -117,24 +138,43 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
         let mut cfg = state.config.lock().await;
         // Routes added by hand, by stacks or by worktree instances win; of
         // two containers asking for the same hostname, the first by name does.
-        let mut taken: HashSet<(String, Option<String>)> = cfg
+        let mut taken: HashMap<(String, Option<String>), String> = cfg
             .gateway
             .routes
             .iter()
             .filter(|r| !is_label_route(r))
-            .map(|r| (r.hostname.clone(), r.path.clone()))
+            .map(|r| {
+                let by = match r.owner.as_deref() {
+                    Some(o) if o.starts_with("dev:") => "a worktree instance".to_string(),
+                    Some(o) if o.starts_with("stack:") => format!("stack {}", &o["stack:".len()..]),
+                    _ => format!("a route to {}", r.container_name),
+                };
+                ((r.hostname.clone(), r.path.clone()), by)
+            })
             .collect();
+        let mut conflicts = Vec::new();
         wanted.retain(|r| {
-            let free = taken.insert((r.hostname.clone(), r.path.clone()));
-            if !free {
-                tracing::debug!(
-                    "{} asks for {} in its labels, but it is taken",
-                    r.container_name,
-                    r.hostname
-                );
+            let key = (r.hostname.clone(), r.path.clone());
+            if let Some(by) = taken.get(&key) {
+                let host = format!("{}{}", r.hostname, r.path.as_deref().unwrap_or(""));
+                conflicts.push((r.container_name.clone(), host, by.clone()));
+                return false;
             }
-            free
+            taken.insert(key, format!("labels on {}", r.container_name));
+            true
         });
+        *CONFLICTS.lock().unwrap() = conflicts;
+        // A label route paused on the Gateway page stays paused.
+        for r in &mut wanted {
+            if let Some(old) = cfg.gateway.routes.iter().find(|o| {
+                is_label_route(o)
+                    && o.hostname == r.hostname
+                    && o.path == r.path
+                    && o.container_name == r.container_name
+            }) {
+                r.enabled = old.enabled;
+            }
+        }
         let key = |r: &GatewayRoute| (r.hostname.clone(), r.path.clone(), r.container_name.clone(), r.port);
         let have: Vec<_> = cfg
             .gateway

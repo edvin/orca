@@ -559,6 +559,8 @@ export interface GatewayStatus {
   traefik_detected?: boolean;
   traefik_reachable?: boolean;
   k8s_ingress_routes?: Array<{ hostname: string; namespace: string; ingress_name: string }>;
+  /** Containers whose labels ask for a hostname another route already uses. */
+  label_conflicts?: Array<{ container: string; hostname: string; taken_by: string }>;
 }
 
 export interface TraefikStatus {
@@ -578,6 +580,8 @@ export interface GatewayRoute {
   enabled: boolean;
   url?: string;
   path?: string;
+  /** Who manages the route: `label:<container>`, `dev:<project>:<instance>`, `stack:<name>`; none when added by hand. */
+  owner?: string;
 }
 
 export interface GatewayConfig {

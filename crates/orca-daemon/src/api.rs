@@ -8193,6 +8193,7 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         "port_conflicts": port_conflicts,
         "stack_links": gw.stack_links,
         "traefik_mode": gw.traefik_mode,
+        "label_conflicts": crate::gateway_sync::label_conflicts(),
     })))
 }
 
@@ -8258,6 +8259,7 @@ async fn gateway_list_routes(State(state): State<Arc<AppState>>) -> Result<impl 
                 "enabled": r.enabled,
                 "url": url,
                 "path": r.path,
+                "owner": r.owner,
             })
         })
         .collect();
@@ -8375,6 +8377,17 @@ async fn gateway_remove_route(
     Path(hostname): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut config = state.config.lock().await;
+    if let Some(container) = config
+        .gateway
+        .routes
+        .iter()
+        .filter(|r| r.hostname == hostname)
+        .find_map(crate::gateway_sync::label_route_container)
+    {
+        return Err(ApiError::bad_request(format!(
+            "{hostname} comes from the labels on {container}. Remove its orca.route (or Traefik) labels instead."
+        )));
+    }
     let before = config.gateway.routes.len();
     config.gateway.routes.retain(|r| r.hostname != hostname);
     if config.gateway.routes.len() == before {
@@ -8416,6 +8429,14 @@ async fn gateway_update_route(
         .find(|r| r.hostname == hostname)
         .ok_or_else(|| anyhow::anyhow!("Route for hostname '{}' not found", hostname))?;
 
+    // Routes from labels can be paused here, but their target comes from the labels.
+    if let Some(container) = crate::gateway_sync::label_route_container(route)
+        && (route.container_name != req.container_name || route.port != req.port)
+    {
+        return Err(ApiError::bad_request(format!(
+            "{hostname} comes from the labels on {container}. Change its orca.route (or Traefik) labels instead."
+        )));
+    }
     route.container_name = req.container_name;
     route.port = req.port;
     route.enabled = req.enabled;
