@@ -276,7 +276,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             // "Services" (routes with no project) goes last.
             let rest = by_group.remove("Services");
             for (name, mut cards) in by_group.into_iter().chain(rest.map(|c| ("Services".to_string(), c))) {
-                cards.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+                cards.sort_by_key(|a| a.title.to_lowercase());
                 sections.push((name, cards));
             }
         }

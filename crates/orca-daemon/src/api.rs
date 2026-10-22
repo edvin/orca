@@ -7320,19 +7320,19 @@ async fn cleanup(
             if let Ok(out) = output {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 for line in stdout.lines() {
-                    if let Ok(vm) = serde_json::from_str::<serde_json::Value>(line) {
-                        if let Some(name) = vm.get("name").and_then(|n| n.as_str()) {
-                            log.push(format!("  Stopping VM '{name}'..."));
-                            let _ = tokio::process::Command::new("limactl")
-                                .args(["stop", name])
-                                .output()
-                                .await;
-                            log.push(format!("  Deleting VM '{name}'..."));
-                            let _ = tokio::process::Command::new("limactl")
-                                .args(["delete", name])
-                                .output()
-                                .await;
-                        }
+                    if let Ok(vm) = serde_json::from_str::<serde_json::Value>(line)
+                        && let Some(name) = vm.get("name").and_then(|n| n.as_str())
+                    {
+                        log.push(format!("  Stopping VM '{name}'..."));
+                        let _ = tokio::process::Command::new("limactl")
+                            .args(["stop", name])
+                            .output()
+                            .await;
+                        log.push(format!("  Deleting VM '{name}'..."));
+                        let _ = tokio::process::Command::new("limactl")
+                            .args(["delete", name])
+                            .output()
+                            .await;
                     }
                 }
             }
@@ -7669,21 +7669,21 @@ async fn reconnect_runtime(State(state): State<Arc<AppState>>) -> Result<impl In
                                     // Wait for socket to appear
                                     let socket = format!("{home}/.lima/{name}/sock/docker.sock");
                                     for attempt in 1..=15 {
-                                        if std::path::Path::new(&socket).exists() {
-                                            if let Some(docker_client) = try_socket_ping(&socket).await {
-                                                log.push(format!("  Socket ready \u{2713} \u{2192} Docker responds \u{2713} (attempt {attempt})"));
-                                                connected_method = Some(format!("Lima VM '{name}' ({socket})"));
-                                                connected_docker = Some(docker_client);
-                                                connected_socket = Some(socket.clone());
-                                                break;
-                                            }
+                                        if std::path::Path::new(&socket).exists()
+                                            && let Some(docker_client) = try_socket_ping(&socket).await
+                                        {
+                                            log.push(format!("  Socket ready \u{2713} \u{2192} Docker responds \u{2713} (attempt {attempt})"));
+                                            connected_method = Some(format!("Lima VM '{name}' ({socket})"));
+                                            connected_docker = Some(docker_client);
+                                            connected_socket = Some(socket.clone());
+                                            break;
                                         }
                                         if attempt <= 14 {
                                             tokio::time::sleep(Duration::from_secs(2)).await;
                                         }
                                     }
                                     if connected_method.is_none() {
-                                        log.push(format!("  Socket not available after 30s"));
+                                        log.push("  Socket not available after 30s".to_string());
                                     }
                                 }
                                 Ok(r) => {
