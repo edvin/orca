@@ -12,6 +12,7 @@ import { getDashboardCpuHistory, getDashboardMemHistory, getCpuChartHistory, get
 import { useContainerStats } from "../lib/statsStore";
 
 import TimeChart from "../components/TimeChart";
+import AiNudge from "../components/AiNudge";
 import LastUpdated from "../components/LastUpdated";
 
 /** Wrap an invoke call with a timeout (ms). Rejects on timeout. */
@@ -236,6 +237,8 @@ export default function DashboardPage(props: DashboardPageProps) {
           </div>
         </div>
       </Show>
+
+      <AiNudge onNavigate={props.onNavigate} />
 
       {/* Summary cards — each resolves independently */}
       <div class="dashboard-grid">

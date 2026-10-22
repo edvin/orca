@@ -213,6 +213,7 @@ pub fn run() {
             commands::save_ai_settings,
             commands::get_ai_settings,
             commands::list_ai_models,
+            commands::ai_local_servers,
             commands::start_daemon,
             commands::stop_daemon,
             commands::get_daemon_info,

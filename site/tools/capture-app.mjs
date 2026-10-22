@@ -254,8 +254,21 @@ hooks:
     },
     validate_orca_yaml: { ok: true, error: null, line: null, warnings: [] },
     get_activity: [], get_daemon_log: "", list_templates: templates,
-    get_ai_settings: { provider: "anthropic", anthropic_model: "claude-sonnet-5-5", has_anthropic_key: true, has_openai_key: false, openai_model: "gpt-5", openai_url: "" },
-    get_api_token: "orca_6f1d9c2e8b7a4f03a9d5c1e7b2f8a6d4", list_ai_models: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"],
+    get_ai_settings: { provider: "custom", anthropic_model: "claude-sonnet-5-5", has_anthropic_key: false, has_openai_key: false, openai_model: "qwen3:8b", openai_url: "http://127.0.0.1:11434/v1", ready: true },
+    ai_local_servers: { servers: [
+      { kind: "ollama", name: "Ollama", url: "http://127.0.0.1:11434/v1", models: ["qwen3:8b", "qwen3-coder:30b", "gemma3:12b"] },
+      { kind: "lmstudio", name: "LM Studio", url: "http://127.0.0.1:1234/v1", models: ["openai/gpt-oss-20b"] },
+    ] },
+    mcp_clients: [
+      { id: "claude-code", name: "Claude Code", detected: true, connected: true, config_path: "~/.claude.json", after_connect: null },
+      { id: "claude-desktop", name: "Claude Desktop", detected: true, connected: true, config_path: "claude_desktop_config.json", after_connect: null },
+      { id: "cursor", name: "Cursor", detected: true, connected: false, config_path: "~/.cursor/mcp.json", after_connect: null },
+      { id: "vscode", name: "VS Code", detected: true, connected: false, config_path: "mcp.json", after_connect: null },
+      { id: "windsurf", name: "Windsurf", detected: false, connected: false, config_path: "", after_connect: null },
+      { id: "codex", name: "Codex", detected: false, connected: false, config_path: "", after_connect: null },
+    ],
+    mcp_command: "/Users/you/Library/Application Support/orca/bin/orca",
+    get_api_token: "orca_6f1d9c2e8b7a4f03a9d5c1e7b2f8a6d4", list_ai_models: { models: ["qwen3:8b", "qwen3-coder:30b", "gemma3:12b"] },
     list_remote_hosts: [
       { id: "h1", name: "staging", url: "https://orca.staging.acme.dev/api/v1", tls_verify: true, tags: ["staging", "eu-west"] },
       { id: "h2", name: "production", url: "https://orca.acme.dev/api/v1", tls_verify: true, tags: ["production", "eu-west"] },
@@ -400,6 +413,16 @@ const SHOTS = {
     await page.getByText("AI & Agents", { exact: true }).first().click().catch(() => {});
     await page.waitForTimeout(1500);
     return { clip: content };
+  },
+  async "settings-assistant"(page) {
+    await nav(page, "Settings");
+    await page.getByText("AI & Agents", { exact: true }).first().click().catch(() => {});
+    await page.waitForTimeout(1500);
+    const card = page.locator(".assistant-card");
+    await card.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    const box = await card.boundingBox();
+    return { clip: { x: box.x - 24, y: box.y - 64, width: box.width + 48, height: box.height + 96 } };
   },
   async kubernetes(page) {
     await nav(page, "Kubernetes");

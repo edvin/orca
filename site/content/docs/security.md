@@ -93,9 +93,9 @@ Orca connects to these places, besides the hosts you add:
 
 ## The AI assistant
 
-The AI assistant is optional and does nothing until you configure a provider and key under **Settings**, **AI & Agents**. Choose **Anthropic (Claude)**, **OpenAI (GPT)**, **Google (Gemini)**, **Ollama (Local)** or **Custom**, for any OpenAI-compatible endpoint.
+The built-in AI assistant is optional and does nothing until you choose a model under **Settings → AI & Agents → Built-in assistant**: a local model server (Ollama, LM Studio, llama.cpp), or a cloud API key for Anthropic, OpenAI, Google Gemini or another OpenAI-compatible endpoint.
 
-Requests go straight from the daemon to the provider you chose, never through an Orca server. With Ollama running on your own machine, nothing leaves it. Orca can set Ollama up for you as a container.
+Requests go straight from the daemon to the provider you chose, never through an Orca server. With a local model, nothing leaves your machine. On Linux and Windows, Orca can set Ollama up for you as a container.
 
 What the provider receives:
 
@@ -103,7 +103,7 @@ What the provider receives:
 - for a container you ask about: its name, image, exit code, error text and the last 50 log lines
 - the results of any Orca tools the assistant calls while answering, such as inspecting a container or listing resources
 
-Secrets in tool results stay on your machine: before anything is sent, Orca blanks out values whose names look secret (passwords, tokens, API keys, `DATABASE_URL` and the like) in environment variables, labels and other fields, passwords inside URLs, and the data of Kubernetes Secrets. Other configuration and log lines are sent as they are, so don't ask the assistant about logs that print secrets, or use Ollama.
+Secrets in tool results stay on your machine: before anything is sent, Orca blanks out values whose names look secret (passwords, tokens, API keys, `DATABASE_URL` and the like) in environment variables, labels and other fields, passwords inside URLs, and the data of Kubernetes Secrets. Other configuration and log lines are sent as they are, so don't ask the assistant about logs that print secrets, or use a local model.
 
 The MCP endpoint and the other agent APIs return tool results unchanged: there, you run the agent and choose its provider.
 

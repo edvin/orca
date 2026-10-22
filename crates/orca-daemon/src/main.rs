@@ -17,6 +17,7 @@ mod dev;
 mod gateway;
 mod gateway_sync;
 mod landing;
+mod local_ai;
 mod project_config;
 mod stack_files;
 mod stack_profiles;

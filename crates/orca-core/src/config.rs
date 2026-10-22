@@ -147,7 +147,7 @@ pub struct OrcaConfig {
     /// OpenAI-compatible model to use (default: gpt-4o)
     #[serde(default = "default_openai_model")]
     pub openai_model: String,
-    /// Anthropic model to use (default: claude-sonnet-4-20250514)
+    /// Anthropic model to use (default: claude-sonnet-5-5)
     #[serde(default = "default_anthropic_model")]
     pub anthropic_model: String,
     /// Remote orca-daemon hosts.
@@ -552,7 +552,7 @@ fn default_openai_model() -> String {
     "gpt-4o".into()
 }
 fn default_anthropic_model() -> String {
-    "claude-sonnet-4-20250514".into()
+    "claude-sonnet-5-5".into()
 }
 
 /// Generate a 32-character hex token using the OS cryptographic RNG.

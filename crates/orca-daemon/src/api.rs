@@ -414,6 +414,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/settings/ai", post(save_ai_settings))
         .route("/settings/ai", get(get_ai_settings))
         .route("/settings/ai/models", get(list_ai_models))
+        .route("/ai/local-servers", get(ai_local_servers))
         .route("/settings/cleanup", post(cleanup))
         .route("/settings/reconnect", post(reconnect_runtime))
         .route("/settings/lima", get(get_lima_settings).post(save_lima_settings))
@@ -5817,8 +5818,11 @@ async fn ai_ask(
         api_key.is_some()
     );
 
+    // A model on this machine (Ollama, LM Studio, llama.cpp) needs no key.
+    let local = provider == "custom" && crate::local_ai::is_local(&openai_url);
     let api_key = match api_key {
         Some(key) if !key.is_empty() => key,
+        _ if local => "local".to_string(),
         _ => {
             let provider_name = match provider.as_str() {
                 "anthropic" => "Anthropic",
@@ -5971,13 +5975,17 @@ async fn ai_ask(
     // Bound every AI request to 60s so a hostile or misconfigured provider
     // URL can't pin an Axum worker indefinitely across multi-round tool
     // calling.
+    // A local model on a CPU can take minutes for its first answer.
     let http_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(std::time::Duration::from_secs(if local { 300 } else { 60 }))
         .build()
         .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {e}"))?;
 
-    // Build tool definitions for the LLM
-    let catalog = orca_core::agent_tools::tool_catalog();
+    // Build tool definitions for the LLM. A small local model gets a lean set.
+    let catalog: Vec<_> = orca_core::agent_tools::tool_catalog()
+        .into_iter()
+        .filter(|t| !local || crate::local_ai::LOCAL_TOOLS.contains(&t.name.as_str()))
+        .collect();
     let anthropic_tools: Vec<serde_json::Value> = catalog
         .iter()
         .map(|t| {
@@ -7330,6 +7338,11 @@ async fn call_openai_with_tools(
 }
 
 /// List available models for the current AI provider
+/// Local model servers (Ollama, LM Studio, llama.cpp) running on this machine.
+async fn ai_local_servers() -> impl IntoResponse {
+    Json(serde_json::json!({ "servers": crate::local_ai::detect().await }))
+}
+
 async fn list_ai_models(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let (provider, api_key, base_url) = {
         let config = state.config.lock().await;
@@ -7347,6 +7360,7 @@ async fn list_ai_models(State(state): State<Arc<AppState>>) -> Result<impl IntoR
 
     let api_key = match api_key {
         Some(k) if !k.is_empty() => k,
+        _ if provider == "custom" && crate::local_ai::is_local(&base_url) => "local".to_string(),
         _ => return Ok(Json(serde_json::json!({ "models": Vec::<String>::new() }))),
     };
 
@@ -7359,11 +7373,10 @@ async fn list_ai_models(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         "anthropic" => {
             // Anthropic doesn't have a models list endpoint — return known models
             vec![
-                "claude-sonnet-4-20250514".into(),
-                "claude-opus-4-20250514".into(),
-                "claude-haiku-4-20250414".into(),
-                "claude-3-5-sonnet-20241022".into(),
-                "claude-3-5-haiku-20241022".into(),
+                "claude-sonnet-5-5".into(),
+                "claude-opus-5-5".into(),
+                "claude-haiku-5-5".into(),
+                "claude-fable-5-1".into(),
             ]
         }
         _ => {

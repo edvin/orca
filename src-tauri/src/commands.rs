@@ -3350,6 +3350,12 @@ pub async fn list_ai_models() -> Result<serde_json::Value, String> {
     get_json("/settings/ai/models").await
 }
 
+/// Ollama, LM Studio and llama.cpp servers running on this machine.
+#[tauri::command]
+pub async fn ai_local_servers() -> Result<serde_json::Value, String> {
+    get_json("/ai/local-servers").await
+}
+
 #[tauri::command]
 pub async fn start_daemon(app: tauri::AppHandle) -> Result<String, String> {
     let dm = app.state::<Arc<daemon::DaemonManager>>();

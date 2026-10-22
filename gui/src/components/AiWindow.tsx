@@ -2,6 +2,7 @@ import { createSignal, For, Show, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import DOMPurify from "dompurify";
 import type { AiResponse, AiContext } from "../lib/types";
+import ConnectAiTools from "./ConnectAiTools";
 
 /** Standalone AI chat window — rendered when the app loads with #ai hash */
 
@@ -16,6 +17,25 @@ export default function AiWindow() {
   const [loading, setLoading] = createSignal(false);
   const [hasCredentials, setHasCredentials] = createSignal<boolean | null>(null);
   const [pendingContext, setPendingContext] = createSignal<AiContext | null>(null);
+  const [copied, setCopied] = createSignal(false);
+
+  /** The pending "ask about" as a question for an MCP client, which looks things up itself. */
+  const claudeQuestion = () => {
+    const ctx = pendingContext();
+    if (!ctx?.container_name) return null;
+    return ctx.container_name.startsWith("Build: ")
+      ? `My Orca build ${ctx.container_name.slice(7)} failed with: ${ctx.error ?? "an error"}. Use Orca to find out why and how to fix it.`
+      : `Use Orca to find out what's wrong with the container ${ctx.container_name} and how to fix it.`;
+  };
+
+  const openSettings = async () => {
+    const { emit } = await import("@tauri-apps/api/event");
+    await emit("orca-navigate", "settings:ai");
+    try {
+      const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+      await (await WebviewWindow.getByLabel("main"))?.setFocus();
+    } catch {}
+  };
   let messagesEnd: HTMLDivElement | undefined;
   let inputRef: HTMLTextAreaElement | undefined;
 
@@ -124,6 +144,7 @@ export default function AiWindow() {
               container_logs: logs || undefined,
             };
             setPendingContext(context);
+            setCopied(false);
             setInput("");
             inputRef?.focus();
           },
@@ -142,6 +163,7 @@ export default function AiWindow() {
               container_logs: logTail || undefined,
             };
             setPendingContext(context);
+            setCopied(false);
             const prompt = `My Docker build for "${tag}" failed with this error:\n\n${error}\n\nHere are the last lines of the build log:\n\n${logTail}\n\nWhat went wrong and how can I fix it?`;
             setInput(prompt);
             inputRef?.focus();
@@ -233,17 +255,25 @@ export default function AiWindow() {
       {/* Messages */}
       <div class="ai-window-messages">
         <Show when={hasCredentials() === false}>
-          <div class="ai-window-empty">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style={{ opacity: 0.3 }}>
-              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/>
-              <path d="M4 3v2"/><path d="M3 4h2"/>
-              <path d="M20 19v2"/><path d="M19 20h2"/>
-            </svg>
-            <div style={{ "font-size": "15px", "font-weight": "600", "margin-top": "12px" }}>Configure AI Provider</div>
-            <div style={{ "font-size": "13px", color: "#6e7681", "margin-top": "6px", "line-height": "1.5" }}>
-              Set up an API key in Settings, or deploy
-              <br /><strong style={{ color: "#e6edf3" }}>Ollama</strong> from the App Catalog to run AI locally — no API key needed.
+          <div class="ai-window-onboard">
+            <div class="ai-window-onboard-title">Ask Claude about Orca</div>
+            <div class="ai-window-onboard-sub">
+              Connect the AI tool you already use. It can then see and manage everything here: no API key, no token.
             </div>
+            <Show when={claudeQuestion()}>
+              {(q) => (
+                <div class="ai-window-question">
+                  <div>{q()}</div>
+                  <button class="btn btn-sm btn-primary" onClick={() => {
+                    navigator.clipboard.writeText(q()).then(() => setCopied(true), () => {});
+                  }}>{copied() ? "Copied. Paste it in Claude" : "Copy this question"}</button>
+                </div>
+              )}
+            </Show>
+            <ConnectAiTools compact />
+            <button class="ai-connect-more" onClick={() => void openSettings()}>
+              Or chat right here with a model on this computer →
+            </button>
           </div>
         </Show>
 

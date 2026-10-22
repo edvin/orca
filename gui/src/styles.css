@@ -4248,3 +4248,47 @@ tr.service-off td { opacity: 0.55; }
 .ai-connect-manual p { margin: 0; }
 .ai-connect-manual pre { margin: 0; width: 100%; background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 10px 12px; color: #e6edf3; font-size: 11.5px; overflow: auto; }
 .ai-connect-note { color: #6e7681; }
+
+/* Built-in assistant settings */
+.assistant-card { display: flex; flex-direction: column; gap: 14px; }
+.assistant-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.assistant-sub { font-size: 12.5px; color: #8b949e; line-height: 1.55; max-width: 560px; }
+.assistant-status { flex: none; font-size: 11.5px; padding: 3px 9px; border-radius: 999px; border: 1px solid #30363d; color: #8b949e; white-space: nowrap; }
+.assistant-status.on { color: #3fb950; border-color: rgba(63, 185, 80, 0.35); background: rgba(63, 185, 80, 0.08); }
+.segmented { display: inline-flex; align-self: flex-start; padding: 3px; border-radius: 8px; background: #0d1117; border: 1px solid #21262d; }
+.segmented button { background: none; border: none; color: #8b949e; font-size: 12.5px; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+.segmented button.active { background: #21262d; color: #e6edf3; }
+.local-servers, .assistant-cloud { display: flex; flex-direction: column; gap: 10px; }
+.local-servers-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #8b949e; }
+.local-server { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-radius: 8px; border: 1px solid #21262d; background: #0d1117; }
+.local-server.active { border-color: rgba(63, 185, 80, 0.4); background: rgba(63, 185, 80, 0.05); }
+.local-server-name { display: flex; flex-direction: column; font-weight: 600; font-size: 13px; }
+.local-server-name small { font-weight: 400; color: #8b949e; font-size: 11.5px; }
+.local-server-pick { display: flex; gap: 8px; align-items: center; min-width: 260px; }
+.local-server-pick > :first-child { flex: 1; }
+.local-empty { font-size: 12.5px; color: #c9d1d9; padding: 10px 12px; border-radius: 8px; border: 1px dashed #30363d; line-height: 1.6; display: flex; flex-direction: column; gap: 4px; }
+.local-empty p, .local-empty ul { margin: 0; }
+.local-empty ul { padding-left: 18px; }
+.local-note { font-size: 11.5px; color: #6e7681; line-height: 1.5; }
+.local-container { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid #21262d; font-size: 12.5px; }
+.assistant-row { display: flex; gap: 8px; align-items: center; }
+.assistant-row.wrap { flex-wrap: wrap; }
+.assistant-row > .form-input { flex: 1; }
+.assistant-key-ok { color: #3fb950; font-size: 11.5px; margin-left: 8px; }
+.assistant-test { padding-top: 10px; border-top: 1px solid #21262d; flex-wrap: wrap; }
+
+/* AI window: connect an AI tool when the built-in assistant isn't set up */
+.ai-window-onboard { display: flex; flex-direction: column; gap: 12px; padding: 18px 16px; }
+.ai-window-onboard-title { font-size: 16px; font-weight: 600; }
+.ai-window-onboard-sub { font-size: 12.5px; color: #8b949e; line-height: 1.5; margin-top: -6px; }
+.ai-window-onboard .ai-connect { padding: 0; border: none; background: none; }
+.ai-window-onboard .ai-connect-head { display: none; }
+.ai-window-question { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(88, 166, 255, 0.3); background: rgba(88, 166, 255, 0.06); font-size: 12.5px; line-height: 1.5; }
+
+/* Dashboard: invitation to connect an AI tool */
+.ai-nudge { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 10px 12px 10px 14px; border-radius: 10px; border: 1px solid rgba(88, 166, 255, 0.25); background: linear-gradient(90deg, rgba(88, 166, 255, 0.08), rgba(167, 139, 250, 0.06)); }
+.ai-nudge-icon { color: #a78bfa; font-size: 16px; }
+.ai-nudge-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12.5px; }
+.ai-nudge-text span { color: #8b949e; }
+.ai-nudge-close { background: none; border: none; color: #6e7681; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }
+.ai-nudge-close:hover { color: #e6edf3; }

@@ -19,13 +19,15 @@ Open **Settings → AI & Agents**. Under **Connect your AI tools**, Orca lists t
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | Codex | `~/.codex/config.toml` |
 
+![Connect your AI tools in Settings: Claude Code and Claude Desktop connected, Cursor and VS Code ready to connect](/assets/screens/settings-ai.webp)
+
 Click **Connect** next to a tool. Orca adds one entry named `orca` to that tool's config and leaves the rest of the file alone. Then:
 
 - **Claude Code** and **Codex**: start a new session. In Claude Code, `/mcp` lists Orca.
 - **Claude Desktop**: quit and reopen it.
 - **Cursor**, **VS Code** and **Windsurf**: Orca shows up in the tool's MCP settings.
 
-**Disconnect** removes that entry again.
+**Disconnect** removes that entry again. While none of your AI tools has Orca, the dashboard shows a one-line invitation to connect the ones it found.
 
 Then ask, for example:
 

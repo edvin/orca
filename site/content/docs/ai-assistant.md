@@ -1,16 +1,19 @@
 ---
 title: AI assistant
 nav: AI assistant
-description: Chat with Orca's built-in AI assistant about your containers and builds, using Anthropic, OpenAI, Gemini, a local Ollama model or any OpenAI-compatible API.
+description: Chat with Orca's optional built-in assistant, running on a local model (Ollama, LM Studio, llama.cpp) or a cloud API key.
 ---
 
-Orca has a built-in AI assistant that can look at your containers, images, stacks and Kubernetes cluster and act on them. This page covers choosing a provider, adding an API key, running a local model with Ollama, and asking about a specific container or failed build.
+Orca has an optional built-in assistant: a chat window that can look at your containers, images, stacks and Kubernetes cluster and act on them. It's meant for a model running on your own computer, so it's free, private and works offline.
 
-To connect an external agent such as Claude Code instead, see [AI agents and MCP](/docs/agents/).
+> [!TIP]
+> Already use Claude, ChatGPT/Codex, Cursor or Copilot? [Connect it to Orca](/docs/agents/) instead. It uses the subscription you already have, gets all of Orca's tools, and you don't need an API key. Until the built-in assistant is set up, its window offers exactly that.
 
 ## Open the assistant
 
 Click the sparkle icon (**AI Assistant**) in the title bar. The assistant opens in its own window, **Orca Desktop AI**, so you can keep it next to the main window.
+
+Until the assistant has a model, the window offers to connect the AI tools found on your computer instead. If you came from **Ask AI** on a container or build, it also offers the question ready to copy into Claude.
 
 - Press Enter to send, Shift+Enter for a new line.
 - **Compact conversation history** replaces a long conversation (six messages or more) with a short summary.
@@ -18,58 +21,79 @@ Click the sparkle icon (**AI Assistant**) in the title bar. The assistant opens 
 
 Each question is sent with the last 20 messages, so you can ask follow-ups.
 
-## Choose a provider
+## Use a local model
 
-Open **Settings → AI & Agents**. Under **AI Assistant**, pick a **Provider**:
+Open **Settings → AI & Agents**. Under **Built-in assistant**, **Local model** lists the model servers running on this computer. Orca looks for:
+
+| Server | Where Orca looks |
+|--------|------------------|
+| [Ollama](https://ollama.com) | `http://127.0.0.1:11434/v1` |
+| [LM Studio](https://lmstudio.ai) (its server started) | `http://127.0.0.1:1234/v1` |
+| llama.cpp's `llama-server` | `http://127.0.0.1:8080/v1` |
+
+Pick a model next to a server and click **Use**. The assistant switches to it right away. **Look again** searches once more after you start a server. For a server on another port, click **A server on another port?** and enter its OpenAI-compatible URL and a model name.
+
+![The built-in assistant in Settings, using a model from Ollama](/assets/screens/settings-assistant.webp)
+
+If nothing is running yet, the easiest start is Ollama:
+
+```bash
+ollama pull qwen3:8b
+```
+
+`qwen3:8b` (about 5 GB) handles Orca's tools well on a laptop. Bigger models answer better if your machine has the memory. With llama.cpp: `llama-server -hf Qwen/Qwen3-8B-GGUF`.
+
+> [!NOTE]
+> On a Mac, install Ollama or LM Studio as an app rather than running it in a container: containers can't use the Mac's GPU, so a model in one runs on the CPU only.
+
+### Ollama in a container
+
+On Linux and Windows, **Or run Ollama in a container → Set up** does it for you. Orca:
+
+- pulls `ollama/ollama:latest` and starts a container named `ollama` on port 11434, with models in the `ollama-models` volume and restart policy `unless-stopped`;
+- downloads `qwen3:8b` (about 5 GB, and about 8 GB of memory to run);
+- switches the assistant to it.
+
+If the machine has an NVIDIA GPU, Orca gives it to the container. Without one, the model runs on the CPU, which works but is slow.
+
+### What changes with a local model
+
+A small model does better with fewer tools to choose from, so a local model gets a lean set of 19 tools: containers (list, inspect, logs, stats, diagnose, start, stop, restart), ports, system health, stacks (list, logs, up, down, restart), gateway routes, images, and worktree instance status and logs. It also gets up to five minutes per answer instead of one, since a model on a CPU can be slow to start.
+
+Nothing you ask a local model leaves your computer.
+
+## Use a cloud API key
+
+Choose **Cloud API key** to use a provider's API instead:
 
 | Provider | Endpoint used | Default model |
 |----------|---------------|---------------|
-| **Anthropic (Claude)** | Anthropic Messages API | `claude-sonnet-4-20250514` |
-| **OpenAI (GPT)** | `https://api.openai.com/v1` | `gpt-4o` |
-| **Google (Gemini)** | Gemini's OpenAI-compatible API | `gemini-2.0-flash` |
-| **Ollama (Local)** | `http://localhost:11434/v1` | `qwen2.5:7b` |
-| **Custom** | Any **API Base URL** that supports `/chat/completions` | none |
+| **Anthropic (Claude)** | Anthropic Messages API | `claude-sonnet-5-5` |
+| **OpenAI** | `https://api.openai.com/v1` | `gpt-4o` |
+| **Google Gemini** | Gemini's OpenAI-compatible API | `gemini-2.0-flash` |
+| **Other endpoint** | Any **API base URL** that supports `/chat/completions` | none |
 
-Enter the **API Key**, click **Save**, then pick a **Model** from the dropdown, which loads once a key is saved. **Test Connection** checks that the provider answers.
+API use is billed per token by the provider. A Claude or ChatGPT subscription doesn't cover it; [connecting the app you subscribe to](/docs/agents/) does.
 
-![The AI & Agents tab in Settings, with provider buttons, API key and model fields](/assets/screens/settings-ai.webp)
+Enter the **API key** and click **Save**. The **Model** list loads once a key is saved. **Get a key** opens the provider's key page. Keys are saved in Orca's local config file and only sent to the provider you chose.
 
-## API keys
+Orca keeps two key slots: one for Anthropic, and one shared by OpenAI, Gemini and other endpoints. Saving a key for one of those replaces the saved key for the others.
 
-**Get Key** next to the key field opens the provider's key page (console.anthropic.com, platform.openai.com or aistudio.google.com). Keys are saved in Orca's local config file and are only sent to the provider you chose.
-
-Orca keeps two key slots: one for Anthropic, and one shared by OpenAI, Gemini, Ollama and Custom. Saving a key for one of those four replaces the saved key for the others.
-
-You can also give the daemon a key through an environment variable instead. When it's set, it takes precedence over the saved key:
+You can also give the daemon a key through an environment variable. When it's set, it takes precedence over the saved key:
 
 | Provider | Environment variable |
 |----------|----------------------|
 | Anthropic | `ANTHROPIC_API_KEY` |
 | Gemini | `GOOGLE_API_KEY` |
-| OpenAI, Ollama, Custom | `OPENAI_API_KEY` |
+| OpenAI, other endpoints | `OPENAI_API_KEY` |
 
-The variable must be set in the environment the daemon runs in. A key from a variable is enough to use the assistant; **Settings** then shows it as **configured (from ANTHROPIC_API_KEY)**, or whichever variable it came from. A custom endpoint such as Ollama needs no key at all.
+The variable must be set in the environment the daemon runs in. **Settings** then shows the key as **set (from ANTHROPIC_API_KEY)**, or whichever variable it came from.
 
-## Run a local model with Ollama
-
-You can run the assistant without an API key or cloud provider:
-
-1. In **Settings → AI & Agents**, click **Ollama (Local)**.
-2. In the **Run AI Locally with Ollama** box, click **Set up Ollama**.
-
-Orca then:
-
-- pulls `ollama/ollama:latest` and starts a container named `ollama` on port 11434, with models stored in the `ollama-models` volume and restart policy `unless-stopped`;
-- downloads the `qwen2.5:7b` model (about 4.7 GB, and about 8 GB of RAM to run);
-- switches the assistant to Ollama with that model.
-
-If the machine has an NVIDIA GPU, Orca gives it to the container, and the model runs on it. Otherwise the model runs on the CPU. If the download is still going when setup finishes, wait for it or run `docker exec ollama ollama pull qwen2.5:7b`.
-
-To use a different Ollama model, pull it into the container and pick it from **Model**.
+Once the assistant is set up, **Test the assistant** checks that the model answers.
 
 ## What the assistant can do
 
-The assistant has the same 48 tools that Orca offers to external agents, listed in the [tool reference](/docs/agents/#tool-reference). It uses them to get real data instead of guessing, for example:
+With a cloud provider, the assistant has the same 69 tools that Orca offers to external agents (a local model gets the 19 above), listed in the [tool reference](/docs/agents/#tool-reference). It uses them to get real data instead of guessing, for example:
 
 - "Why does the api container keep restarting?" (it runs `diagnose_container` and reads the logs)
 - "Which container is using port 5432?"
@@ -84,7 +108,7 @@ When you name a container or image by part of its name and there's exactly one m
 
 Logs and errors attached with **Ask AI** are passed to the model marked as untrusted data, and the model is told not to follow instructions inside them.
 
-Before a tool result goes to the provider, Orca blanks out secrets in it: values of keys and environment variables that look like passwords, tokens or keys, passwords in URLs, and the data of Kubernetes Secrets. See [Security](/docs/security/#the-ai-assistant).
+Before a tool result goes to the model, Orca blanks out secrets in it: values of keys and environment variables that look like passwords, tokens or keys, passwords in URLs, and the data of Kubernetes Secrets. See [Security](/docs/security/#the-ai-assistant).
 
 ## Ask about a container
 

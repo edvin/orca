@@ -375,6 +375,14 @@ export default function App() {
     // for the single daemon event subscription.
     if (isAiWindow) return;
 
+    // The AI window asks the main window to show a page (e.g. Settings → AI).
+    let unlistenNavigate: (() => void) | null = null;
+    import("@tauri-apps/api/event")
+      .then(({ listen }) => listen<string>("orca-navigate", (e) => navigate(e.payload)))
+      .then((u) => { unlistenNavigate = u; })
+      .catch(() => {});
+    onCleanup(() => unlistenNavigate?.());
+
     // Listen for deep link URLs (orca:// protocol). Guard against the
     // unmount-before-subscribe race: if the component has been cleaned up
     // before onOpenUrl resolves, we immediately unsubscribe and drop the
