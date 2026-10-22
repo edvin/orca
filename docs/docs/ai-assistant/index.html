@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvk4ato7">
+<link rel="stylesheet" href="/assets/site.css?v=mvk51606">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvk4ato7" defer></script>
+<script src="/assets/site.js?v=mvk51606" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -103,7 +103,7 @@
 <li>&quot;Start my worktree instance at /Users/me/src/shop-feature&quot;</li>
 </ul>
 <p>When you name a container or image by part of its name and there&#39;s exactly one match, the assistant acts on it directly. It asks only when several resources match.</p>
-<div class="callout callout-warning"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg><span>Warning</span></div><p>Tool calls run without a confirmation step, including ones that stop, remove or prune resources. Be explicit about what you want changed. Each message allows up to five rounds of tool calls.</p>
+<div class="callout callout-warning"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg><span>Warning</span></div><p>Tool calls run without a confirmation step, including ones that stop or restart containers. Tools that delete data or work (removing containers, images, volumes, routes or projects, pruning, <code>compose down</code>, resetting a worktree&#39;s database, overwriting <code>orca.yaml</code>) are not available to the built-in assistant at all: do those in Orca, or from an AI tool connected over MCP, which asks you first. Each message allows up to five rounds of tool calls.</p>
 </div><p>Logs and errors attached with <strong>Ask AI</strong> are passed to the model marked as untrusted data, and the model is told not to follow instructions inside them.</p>
 <p>Before a tool result goes to the model, Orca blanks out secrets in it: values of keys and environment variables that look like passwords, tokens or keys, passwords in URLs, and the data of Kubernetes Secrets. See <a href="/docs/security/#the-ai-assistant">Security</a>.</p>
 <h2 id="ask-about-a-container"><a class="anchor" href="#ask-about-a-container" aria-hidden="true" tabindex="-1">#</a>Ask about a container</h2>
