@@ -2936,14 +2936,15 @@ pub async fn get_system_resources() -> Option<SystemResources> {
 /// reported them. On Unix one `statvfs` of `/`: listing every disk (as
 /// sysinfo does) took most of a health check's CPU.
 #[cfg(unix)]
+#[allow(clippy::useless_conversion)] // the field widths differ by platform
 fn system_disk_space() -> (u64, u64) {
     let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
     // SAFETY: a NUL-terminated path and a zeroed struct for the kernel to fill.
     if unsafe { libc::statvfs(c"/".as_ptr(), &mut st) } != 0 {
         return (0, 0);
     }
-    let fragment = st.f_frsize as u64;
-    (st.f_blocks as u64 * fragment, st.f_bavail as u64 * fragment)
+    let fragment = u64::from(st.f_frsize);
+    (u64::from(st.f_blocks) * fragment, u64::from(st.f_bavail) * fragment)
 }
 
 #[cfg(not(unix))]
