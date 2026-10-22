@@ -349,7 +349,14 @@ pub async fn execute_tool(
                 orca_core::compose::ComposeRunner::compose_up(state.rt().await.as_ref(), &dir, config.as_deref())
                     .await
                     .map_err(|e| e.to_string())?;
-            Ok(serde_json::to_value(output).unwrap_or_default())
+            let hooks = if output.success {
+                crate::api::run_stack_hooks(state, &dir, config.as_deref()).await
+            } else {
+                Vec::new()
+            };
+            let mut body = serde_json::to_value(output).unwrap_or_default();
+            body["hooks"] = serde_json::json!(hooks);
+            Ok(body)
         }
 
         "compose_down" => {

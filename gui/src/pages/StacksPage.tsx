@@ -169,6 +169,19 @@ export default function StacksPage(props: StacksPageProps) {
                 {co().output.stderr}
               </pre>
             </Show>
+            {/* after_up hooks from the stack's orca.yaml */}
+            <For each={(co().output.hooks ?? []) as Array<{ hook: string; success: boolean; output: string }>}>
+              {(h) => (
+                <div style={{ "margin-top": "8px" }}>
+                  <div style={{ "font-size": "12px", "font-weight": "600", color: h.success ? "#3fb950" : "#f85149" }}>
+                    Hook {h.success ? "ran" : "failed"}: <span class="mono">{h.hook}</span>
+                  </div>
+                  <Show when={!h.success && h.output}>
+                    <pre class="mono" style={{ color: "#f85149", "white-space": "pre-wrap", "margin-top": "4px" }}>{h.output}</pre>
+                  </Show>
+                </div>
+              )}
+            </For>
           </div>
         )}
       </Show>

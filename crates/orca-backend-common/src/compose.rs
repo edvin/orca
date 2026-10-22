@@ -24,6 +24,26 @@ impl ComposeRunner for BollardRuntime {
     }
 }
 
+impl BollardRuntime {
+    /// Run `sh -c <command>` in a running service of a compose project
+    /// (`compose exec -T`), e.g. a stack's setup hook.
+    pub async fn compose_exec(
+        &self,
+        working_dir: &str,
+        config_file: Option<&str>,
+        service: &str,
+        command: &str,
+    ) -> anyhow::Result<ComposeOutput> {
+        run_compose(
+            self,
+            working_dir,
+            config_file,
+            &["exec", "-T", service, "sh", "-c", command],
+        )
+        .await
+    }
+}
+
 async fn run_compose(
     backend: &BollardRuntime,
     working_dir: &str,

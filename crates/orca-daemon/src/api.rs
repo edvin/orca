@@ -3367,7 +3367,14 @@ async fn compose_up(
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
     let output = state.rt().await.compose_up(&dir, config.as_deref()).await?;
-    Ok(Json(output))
+    let hooks = if output.success {
+        run_stack_hooks(&state, &dir, config.as_deref()).await
+    } else {
+        Vec::new()
+    };
+    let mut body = serde_json::to_value(&output).map_err(anyhow::Error::from)?;
+    body["hooks"] = serde_json::json!(hooks);
+    Ok(Json(body))
 }
 
 /// Deploy a compose stack from a directory path (for new stacks not yet running).
@@ -3404,11 +3411,18 @@ async fn compose_deploy_path(
         auto_register_stack_links(&state, dir_path, &link_groups).await;
     }
 
+    let hooks = if output.success {
+        run_stack_hooks(&state, &validated_str, None).await
+    } else {
+        Vec::new()
+    };
+
     Ok(Json(serde_json::json!({
         "stdout": output.stdout,
         "stderr": output.stderr,
         "exit_code": output.exit_code,
         "gateway_routes": registered_routes,
+        "hooks": hooks,
     })))
 }
 
@@ -4669,6 +4683,57 @@ fn parse_orca_yaml(dir: &std::path::Path) -> Option<serde_yaml::Value> {
     }
     let content = std::fs::read_to_string(&yaml_path).ok()?;
     serde_yaml::from_str(&content).ok()
+}
+
+/// Hooks from a stack's orca.yaml, run after every `up`:
+/// ```yaml
+/// hooks:
+///   after_up:
+///     - "temporal: temporal operator search-attribute create --name tenant --type Keyword"
+/// ```
+/// Each is `"service: command"`, run with `sh -c` in that service, so make
+/// them safe to repeat.
+fn parse_orca_yaml_hooks(dir: &std::path::Path) -> Vec<String> {
+    let Some(yaml) = parse_orca_yaml(dir) else {
+        return Vec::new();
+    };
+    yaml.get("hooks")
+        .and_then(|h| h.get("after_up"))
+        .and_then(|h| h.as_sequence())
+        .map(|items| items.iter().filter_map(|i| i.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
+}
+
+/// Run a stack's `after_up` hooks in order. A failing hook is reported and
+/// the rest still run: the stack itself is up.
+pub(crate) async fn run_stack_hooks(state: &AppState, dir: &str, config: Option<&str>) -> Vec<serde_json::Value> {
+    let hooks = parse_orca_yaml_hooks(std::path::Path::new(dir));
+    let rt = state.rt().await;
+    let mut results = Vec::new();
+    for hook in hooks {
+        let result = match orca_core::dev::schema::parse_hook(&hook) {
+            Ok((service, command)) => rt.compose_exec(dir, config, &service, &command).await,
+            Err(e) => Err(e),
+        };
+        let (success, output) = match result {
+            Ok(out) => (out.success, format!("{}{}", out.stdout, out.stderr)),
+            Err(e) => (false, format!("{e:#}")),
+        };
+        if !success {
+            tracing::warn!("stack hook '{hook}' failed: {}", output.lines().last().unwrap_or(""));
+        }
+        // Keep the end of the output: that's where errors are.
+        let tail: String = output
+            .chars()
+            .rev()
+            .take(4000)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        results.push(serde_json::json!({ "hook": hook, "success": success, "output": tail }));
+    }
+    results
 }
 
 /// Parse gateway routes from an orca.yaml file in the given directory.

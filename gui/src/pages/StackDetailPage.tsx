@@ -52,8 +52,12 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       const result = await invoke(action, { name: props.stackName });
       if (result && typeof result === "object") {
         const output = result as any;
+        const failedHooks = ((output.hooks ?? []) as Array<{ hook: string; success: boolean; output: string }>).filter((h) => !h.success);
         if (!output.success) {
           showToast(`${action.replace(/_/g, " ")} failed: ${output.stderr || "Unknown error"}`, "error");
+        } else if (failedHooks.length > 0) {
+          for (const h of failedHooks) logError(`Stack hook failed: ${h.hook}`, h.output);
+          showToast(`Stack is up, but ${failedHooks.length} hook(s) from orca.yaml failed. See Activity for the output.`, "error");
         } else {
           showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
         }

@@ -119,6 +119,8 @@
 - **Per-container "Expose" button** — one click from any container detail page to register a hostname
 - **Environment links** — group URLs by section and environment (Local/Staging/Production) in `orca.yaml`
 - **`orca.yaml`** — projects declare gateway routes, path overlays, and environment links in their repo
+- **Routes from container labels** — `orca.route: app` in a compose file, or existing Traefik `Host(...)` rules, route a container while it runs
+- **Hostnames work inside containers too** — a backend reaches `https://oidc.<domain>` through the gateway, as the browser does (OIDC issuers, server-to-server calls)
 
 ### AI Assistant
 
@@ -269,6 +271,34 @@ When any team member deploys this stack through Orca:
 - Environment links appear in the Gateway dashboard with tabs for Local / Staging / Production
 - `local` values reference gateway hostnames — auto-resolved to full URLs
 - Other environments are direct links (not proxied)
+
+A stack can also run setup commands after every `up` (database migrations, creating buckets, registering search attributes). Each is `"service: command"`, run in that service with `sh -c`, so make them safe to repeat:
+
+```yaml
+hooks:
+  after_up:
+    - "app: php artisan migrate --force"
+    - "temporal: temporal operator search-attribute create --name tenant --type Keyword || true"
+```
+
+#### Routes from container labels
+
+Instead of listing routes in `orca.yaml`, a container can ask for them in its own labels. Orca adds the routes while the container runs and removes them when it stops — plain `docker compose up` is enough:
+
+```yaml
+services:
+  web:
+    labels:
+      orca.route: app              # https://app.<domain>, on the port the image exposes
+      orca.route.port: "8080"      # when it exposes none or several
+      orca.route.api: api.{domain} # more routes, each with its own name
+      orca.route.api.port: "3000"
+      orca.route.api.path: /v1*
+```
+
+Traefik labels work too: each `traefik.http.routers.<name>.rule` with `Host(...)` (and an optional `PathPrefix(...)`) becomes a route to its service's `loadbalancer.server.port`. `traefik.enable=false` opts out. A hostname that a manual, stack or worktree route already uses stays with that route.
+
+Every routed hostname also resolves inside the containers' networks, to the gateway, so a backend can call `https://oidc.<domain>` like the browser does. With Orca's own CA the container still has to trust that CA (`orca ca export` writes it out).
 
 #### Custom team domain
 
