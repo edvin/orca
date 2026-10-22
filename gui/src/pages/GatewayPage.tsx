@@ -120,7 +120,7 @@ export default function GatewayPage(props: GatewayPageProps) {
   const saveConfig = async () => {
     setCfgSaving(true);
     try {
-      await invoke("gateway_update_config", {
+      const r = await invoke<{ restarted?: boolean }>("gateway_update_config", {
         domain: cfgDomain(),
         httpPort: parseInt(cfgHttpPort(), 10) || 80,
         httpsPort: parseInt(cfgHttpsPort(), 10) || 443,
@@ -128,7 +128,7 @@ export default function GatewayPage(props: GatewayPageProps) {
         customCert: cfgCustomCert() || null,
         customKey: cfgCustomKey() || null,
       });
-      showToast("Gateway configuration saved", "success");
+      showToast(r?.restarted ? "Saved, and the gateway restarted with it" : "Gateway configuration saved", "success");
     } catch (e) {
       showToast(`Failed to save: ${e}`, "error");
     }

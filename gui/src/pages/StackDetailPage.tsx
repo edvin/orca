@@ -9,6 +9,7 @@ import Spinner from "../components/Spinner";
 import Breadcrumb from "../components/Breadcrumb";
 import YamlEditor from "../components/YamlEditor";
 import StackOrcaYaml from "../components/StackOrcaYaml";
+import Dropdown from "../components/Dropdown";
 import StackProfiles, { PROFILES_DOC } from "../components/StackProfiles";
 import type { StackProfilesReport } from "../lib/types";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -77,14 +78,25 @@ export default function StackDetailPage(props: StackDetailPageProps) {
     setProfilesBusy(false);
   };
 
+  // The stack's compose files, as Compose recorded them; one is edited at a time.
+  const [composeFiles, setComposeFiles] = createSignal<{ path: string; text?: string; error?: string }[]>([]);
+  const [composeIndex, setComposeIndex] = createSignal(0);
+  const [composeError, setComposeError] = createSignal<string | null>(null);
+  const composePath = () => composeFiles()[composeIndex()]?.path ?? null;
+  const showComposeFile = (i: number) => {
+    setComposeIndex(i);
+    const f = composeFiles()[i];
+    setComposeContent(f?.text ?? null);
+    setComposeError(f?.error ?? null);
+  };
   const fetchComposeFile = async () => {
-    const s = stack();
-    if (!s?.config_file) return;
     try {
-      const content = await invoke("read_file", { path: s.config_file }) as string;
-      setComposeContent(content);
-    } catch {
+      const r = await invoke<{ files: { path: string; text?: string; error?: string }[] }>("stack_compose_files", { name: props.stackName });
+      setComposeFiles(r.files);
+      showComposeFile(Math.min(composeIndex(), Math.max(0, r.files.length - 1)));
+    } catch (e) {
       setComposeContent(null);
+      setComposeError(String(e));
     }
   };
 
@@ -540,17 +552,18 @@ export default function StackDetailPage(props: StackDetailPageProps) {
         {/* Compose file tab */}
         <Show when={activeTab() === "compose"}>
           <div class="detail-overview">
-            <Show when={stack()?.config_file}>
-              <div class="detail-info-section" style={{ "margin-bottom": "12px" }}>
-                <code
-                  class="mono"
-                  style={{
-                    color: "#8b949e",
-                    "font-size": "12px",
-                    "word-break": "break-all",
-                  }}
-                >
-                  {stack()!.config_file}
+            <Show when={composePath()}>
+              <div class="detail-info-section" style={{ "margin-bottom": "12px", display: "flex", gap: "10px", "align-items": "center", "flex-wrap": "wrap" }}>
+                <Show when={composeFiles().length > 1}>
+                  <Dropdown
+                    value={String(composeIndex())}
+                    options={composeFiles().map((f, i) => ({ value: String(i), label: f.path.split("/").pop() ?? f.path }))}
+                    onChange={(v) => showComposeFile(Number(v))}
+                    style={{ width: "240px" }}
+                  />
+                </Show>
+                <code class="mono" style={{ color: "#8b949e", "font-size": "12px", "word-break": "break-all" }}>
+                  {composePath()}
                 </code>
               </div>
             </Show>
@@ -582,16 +595,16 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   "margin-bottom": "8px",
                 }}
               >
-                <span>Compose file has been modified. Restart the stack to apply changes.</span>
+                <span>The compose file changed. Apply it to recreate the services whose definition changed; the others keep running.</span>
                 <button
                   class="btn btn-sm btn-primary"
                   onClick={() => {
-                    doStackAction("restart_stack");
+                    doStackAction("compose_up");
                     setSavedSinceLastRestart(false);
                   }}
                   disabled={actionInProgress()}
                 >
-                  Restart Stack
+                  Apply changes
                 </button>
               </div>
             </Show>
@@ -601,16 +614,17 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                 <YamlEditor
                   value={composeContent()!}
                   readOnly={false}
-                  title={`${props.stackName} — docker-compose.yml`}
+                  title={`${props.stackName} — ${composePath()?.split("/").pop() ?? "compose file"}`}
                   // eslint-disable-next-line solid/reactivity -- async event handler, reactivity not needed
                   onSave={async (content: string) => {
-                    const configFile = stack()?.config_file;
-                    if (!configFile) {
+                    const path = composePath();
+                    if (!path) {
                       showToast("No compose file path available", "error");
                       return;
                     }
                     try {
-                      await invoke("save_compose_file", { path: configFile, content });
+                      await invoke("save_stack_compose_file", { name: props.stackName, path, text: content });
+                      setComposeFiles((fs) => fs.map((f) => (f.path === path ? { ...f, text: content } : f)));
                       setComposeContent(content);
                       setSavedSinceLastRestart(true);
                       showToast("Compose file saved", "success");
@@ -631,8 +645,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   "margin-top": "8px",
                 }}
               >
-                Could not read compose file contents. The file may not be
-                accessible.
+                Could not read the compose file{composeError() ? `: ${composeError()}` : "."}
               </div>
             </Show>
           </div>

@@ -260,13 +260,13 @@ export default function EnvironmentPage() {
     try {
       showToast("Restarting Docker and Orca daemon...", "info");
 
-      // Stop the Orca daemon first
+      // Restart Docker through the daemon while it still runs: the Lima VM
+      // on macOS, Docker in WSL2 on Windows, the docker service on Linux.
+      try { await invoke("env_fix", { action: "start_docker" }); } catch (e) { logError(`Restarting Docker: ${e}`); }
+
+      // Then restart the Orca daemon so it connects to the fresh Docker.
       try { await invoke("stop_daemon"); } catch {}
       await new Promise(r => setTimeout(r, 1000));
-
-      // Restart Docker (uses the env_fix "start_docker" action which configures TCP on Windows)
-      try { await invoke("env_fix", { action: "start_docker" }); } catch {}
-      await new Promise(r => setTimeout(r, 3000));
 
       // Start the Orca daemon (it will connect to the fresh Docker)
       try { await invoke("start_daemon"); } catch {}

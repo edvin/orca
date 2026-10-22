@@ -26,10 +26,11 @@ export default function AiWindow() {
   const checkCredentials = async () => {
     try {
       const settings = (await invoke("get_ai_settings")) as {
+        ready?: boolean;
         has_anthropic_key: boolean;
         has_openai_key: boolean;
       };
-      setHasCredentials(settings.has_anthropic_key || settings.has_openai_key);
+      setHasCredentials(settings.ready ?? (settings.has_anthropic_key || settings.has_openai_key));
     } catch {
       setHasCredentials(false);
     }

@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::machine::MachineConfig;
 
 /// A remote orca-daemon host.
-/// Tokens are stored as base64-encoded strings in the config file (same security as registry passwords).
+/// The token is stored as is in the config file, which only its owner can
+/// read (mode 0600), like the daemon's own API token.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteHost {
     /// Unique identifier (hex timestamp-based).
@@ -16,7 +17,7 @@ pub struct RemoteHost {
     pub name: String,
     /// Full API URL (e.g., "https://prod.example.com:9477/api/v1").
     pub url: String,
-    /// API bearer token (base64-encoded for storage).
+    /// API bearer token of that daemon.
     pub token: String,
     /// Whether to verify TLS certificates (default true).
     #[serde(default = "default_true")]
@@ -516,15 +517,20 @@ impl OrcaConfig {
                 }
 
                 // Tag filter: empty or "*" matches any, "prefix*" glob, else exact.
+                // Comma-separated patterns: "*" any, "prefix*" glob, else exact.
                 let filter = r.tag_filter.trim();
-                if filter.is_empty() || filter == "*" {
+                if filter.is_empty() {
                     return true;
                 }
-                if let Some(prefix) = filter.strip_suffix('*') {
-                    tag.starts_with(prefix)
-                } else {
-                    tag == filter
-                }
+                filter.split(',').map(str::trim).filter(|f| !f.is_empty()).any(|f| {
+                    if f == "*" {
+                        true
+                    } else if let Some(prefix) = f.strip_suffix('*') {
+                        tag.starts_with(prefix)
+                    } else {
+                        tag == f
+                    }
+                })
             })
             .collect()
     }
@@ -1166,6 +1172,24 @@ mod tests {
         });
         assert_eq!(config.find_matching_rules("ghcr.io/user/app", "v1.2.3").len(), 1);
         assert_eq!(config.find_matching_rules("ghcr.io/user/app", "latest").len(), 0);
+    }
+
+    #[test]
+    fn test_find_matching_rules_tag_list() {
+        let mut config = OrcaConfig::default();
+        config.deploy_rules.push(DeployRule {
+            id: "1".to_string(),
+            name: "Test".to_string(),
+            image_pattern: "ghcr.io/user/app".to_string(),
+            tag_filter: "latest, v*, main".to_string(),
+            container_names: vec![],
+            webhook_secret: None,
+            enabled: true,
+        });
+        for tag in ["latest", "v2.0.1", "main"] {
+            assert_eq!(config.find_matching_rules("ghcr.io/user/app", tag).len(), 1, "{tag}");
+        }
+        assert!(config.find_matching_rules("ghcr.io/user/app", "dev").is_empty());
     }
 
     #[test]

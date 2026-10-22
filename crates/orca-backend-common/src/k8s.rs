@@ -49,6 +49,39 @@ fn k3s_server_args(runtime: KubernetesRuntime) -> Vec<&'static str> {
     args
 }
 
+/// The Lima VM k3s runs in on macOS: Orca's `orca` VM, or the only one there is.
+#[cfg(target_os = "macos")]
+async fn lima_vm() -> anyhow::Result<String> {
+    let list = crate::environment::run_cmd("limactl", &["list", "--format", "{{.Name}}"])
+        .await
+        .map_err(|e| anyhow::anyhow!("limactl list failed: {e}"))?;
+    let names: Vec<&str> = list.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    names
+        .iter()
+        .find(|n| **n == "orca")
+        .or(names.first())
+        .map(|n| n.to_string())
+        .ok_or_else(|| anyhow::anyhow!("there is no Lima VM; set up Docker on the System Health page first"))
+}
+
+/// Run `script` as root where k3s runs: inside the Lima VM on macOS, in WSL
+/// on Windows, and on this machine on Linux.
+async fn k3s_host_sh(script: &str) -> anyhow::Result<std::process::Output> {
+    #[cfg(target_os = "macos")]
+    let out = Command::new("limactl")
+        .args(["shell", &lima_vm().await?, "sudo", "sh", "-c", script])
+        .output()
+        .await?;
+    #[cfg(target_os = "windows")]
+    let out = Command::new("wsl")
+        .args(["-u", "root", "--", "sh", "-c", script])
+        .output()
+        .await?;
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let out = Command::new("sh").args(["-c", script]).output().await?;
+    Ok(out)
+}
+
 /// Information about the Traefik Kubernetes service.
 #[derive(Debug, Clone, Serialize)]
 pub struct TraefikServiceInfo {
@@ -188,6 +221,16 @@ fn rename_kubeconfig_default_to_orca(yaml: &str) -> anyhow::Result<String> {
 /// what the three `enable_*` code paths (Linux host, macOS Lima, Windows
 /// WSL) now use — previously they each duplicated a `kubectl config set
 /// ... --client-key-data=<b64>` pattern that leaked private keys.
+/// `kubeconfig` with its `current-context` set to `ctx`.
+fn set_current_context(kubeconfig: &[u8], ctx: &str) -> anyhow::Result<Vec<u8>> {
+    let mut v: serde_yaml::Value =
+        serde_yaml::from_slice(kubeconfig).map_err(|e| anyhow::anyhow!("merged kubeconfig is not YAML: {e}"))?;
+    if let Some(m) = v.as_mapping_mut() {
+        m.insert("current-context".into(), ctx.into());
+    }
+    Ok(serde_yaml::to_string(&v)?.into_bytes())
+}
+
 fn merge_k3s_kubeconfig_safely(
     source_yaml: &str,
     dest_dir: &std::path::Path,
@@ -211,6 +254,14 @@ fn merge_k3s_kubeconfig_safely(
         let _ = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600));
     }
     std::fs::write(&tmp_path, &renamed).map_err(|e| anyhow::anyhow!("write temp kubeconfig: {e}"))?;
+
+    // The context the user had chosen stays chosen: merging puts Orca's file
+    // first, which would otherwise make `orca` the current context.
+    let previous_context = std::fs::read_to_string(&dest_file)
+        .ok()
+        .and_then(|t| serde_yaml::from_str::<serde_yaml::Value>(&t).ok())
+        .and_then(|v| v.get("current-context")?.as_str().map(str::to_string))
+        .filter(|c| !c.is_empty());
 
     let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
     let merge_env = if dest_file.exists() {
@@ -236,8 +287,13 @@ fn merge_k3s_kubeconfig_safely(
         );
     }
 
+    let merged = match previous_context {
+        Some(ctx) => set_current_context(&out.stdout, &ctx)?,
+        None => out.stdout,
+    };
+
     let new_file = dest_dir.join(".config.orca-new");
-    std::fs::write(&new_file, &out.stdout).map_err(|e| anyhow::anyhow!("write merged kubeconfig: {e}"))?;
+    std::fs::write(&new_file, &merged).map_err(|e| anyhow::anyhow!("write merged kubeconfig: {e}"))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -652,6 +708,13 @@ impl K3sManager {
         // Try native k3s first
         if Self::k3s_on_path() {
             return true;
+        }
+        // On macOS, check inside the Lima VM.
+        #[cfg(target_os = "macos")]
+        {
+            if k3s_host_sh("command -v k3s").await.is_ok_and(|o| o.status.success()) {
+                return true;
+            }
         }
         // On Windows, check inside WSL2
         #[cfg(target_os = "windows")]
@@ -1205,8 +1268,22 @@ impl K3sManager {
 
         // Step 3: Wait for cluster readiness
         send(">>> Waiting for cluster to become ready...".into()).await;
+        let mut merged = false;
         for i in 0..120 {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            // Add the `orca` context to ~/.kube/config once k3s has written its
+            // kubeconfig, so kubectl --context orca works like on other platforms.
+            if !merged && std::path::Path::new("/etc/rancher/k3s/k3s.yaml").exists() {
+                match tokio::task::spawn_blocking(Self::merge_kubeconfig_context).await {
+                    Ok(Ok(())) => {
+                        merged = true;
+                        send("    Added the 'orca' context to ~/.kube/config".into()).await;
+                    }
+                    Ok(Err(e)) if i % 10 == 9 => tracing::warn!("kubeconfig merge failed: {e}"),
+                    _ => {}
+                }
+            }
 
             if !self.kubeconfig_path().exists() {
                 if i % 5 == 4 {
@@ -1595,6 +1672,10 @@ impl K8sManager for K3sManager {
 
         #[cfg(not(target_os = "windows"))]
         {
+            // On macOS k3s runs in the Lima VM; the host commands below are no-ops there.
+            #[cfg(target_os = "macos")]
+            let _ =
+                k3s_host_sh("systemctl disable --now k3s; /usr/local/bin/k3s-killall.sh >/dev/null 2>&1 || true").await;
             // Disable prevents systemd from restarting and from starting on boot
             let _ = Command::new("systemctl")
                 .args(["disable", "--now", "k3s"])
@@ -1647,7 +1728,20 @@ impl K8sManager for K3sManager {
             return Ok(());
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "macos")]
+        {
+            let _ = runtime;
+            let out = k3s_host_sh("systemctl enable --now k3s").await?;
+            if !out.status.success() {
+                anyhow::bail!(
+                    "Failed to start k3s in the Lima VM: {}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+            }
+            Ok(())
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             let systemd_result = Command::new("systemctl")
                 .args(["enable", "--now", "k3s"])
@@ -1670,18 +1764,24 @@ impl K8sManager for K3sManager {
         let _forget = self.forget_status();
         self.disable().await?;
 
-        // k3s-uninstall.sh removes everything
-        let output = Command::new("sh")
-            .args(["-c", "/usr/local/bin/k3s-uninstall.sh 2>/dev/null || true"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await?;
-
+        // k3s-uninstall.sh removes everything, wherever k3s runs.
+        let output = k3s_host_sh("/usr/local/bin/k3s-uninstall.sh 2>/dev/null || true").await?;
         tracing::info!("k3s reset: {}", String::from_utf8_lossy(&output.stderr));
 
-        // Re-enable
-        self.enable(runtime).await
+        // Re-enable. In a VM or WSL that takes the same path as Enable.
+        if cfg!(any(target_os = "macos", target_os = "windows")) {
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(64);
+            let drain = tokio::spawn(async move {
+                while let Some(line) = rx.recv().await {
+                    tracing::info!("k3s reset: {line}")
+                }
+            });
+            let result = self.enable_streaming(runtime, tx).await;
+            let _ = drain.await;
+            result
+        } else {
+            self.enable(runtime).await
+        }
     }
 
     /// Cluster status, reused for [`STATUS_TTL`]; concurrent callers share one
@@ -1823,6 +1923,7 @@ impl K8sManager for K3sManager {
                         node: p["spec"]["nodeName"].as_str().map(|s: &str| s.to_string()),
                         ip: p["status"]["podIP"].as_str().map(|s: &str| s.to_string()),
                         containers,
+                        labels: json_labels(&p["metadata"]["labels"]),
                     }
                 })
                 .collect());
@@ -1865,6 +1966,8 @@ impl K8sManager for K3sManager {
                         replicas_desired,
                         age,
                         images,
+                        selector: json_labels(&d["spec"]["selector"]["matchLabels"]),
+                        pod_labels: json_labels(&d["spec"]["template"]["metadata"]["labels"]),
                     }
                 })
                 .collect());
@@ -1892,6 +1995,7 @@ impl K8sManager for K3sManager {
                         .map(|spec| spec.containers.iter().filter_map(|c| c.image.clone()).collect())
                         .unwrap_or_default();
 
+                    let spec = d.spec.as_ref();
                     Deployment {
                         name,
                         namespace: namespace.to_string(),
@@ -1899,6 +2003,11 @@ impl K8sManager for K3sManager {
                         replicas_desired,
                         age,
                         images,
+                        selector: spec.and_then(|s| s.selector.match_labels.clone()).unwrap_or_default(),
+                        pod_labels: spec
+                            .and_then(|s| s.template.metadata.as_ref())
+                            .and_then(|m| m.labels.clone())
+                            .unwrap_or_default(),
                     }
                 })
                 .collect())
@@ -1945,6 +2054,7 @@ impl K8sManager for K3sManager {
                         external_ip,
                         ports,
                         age: svc["metadata"]["creationTimestamp"].as_str().unwrap_or("").to_string(),
+                        selector: json_labels(&svc["spec"]["selector"]),
                     }
                 })
                 .collect());
@@ -2004,6 +2114,7 @@ impl K8sManager for K3sManager {
                             .and_then(|i| i.ip.clone()),
                         ports,
                         age: format_k8s_age(&s.metadata.creation_timestamp),
+                        selector: spec.and_then(|sp| sp.selector.clone()).unwrap_or_default(),
                     }
                 })
                 .collect())
@@ -4988,7 +5099,20 @@ fn k8s_pod_to_pod(p: &k8s_openapi::api::core::v1::Pod, namespace: &str) -> Pod {
         node: spec.and_then(|s| s.node_name.clone()),
         ip: status.and_then(|s| s.pod_ip.clone()),
         containers,
+        labels: p.metadata.labels.clone().unwrap_or_default(),
     }
+}
+
+/// A JSON object of string values (labels, selectors) as a map.
+#[allow(dead_code)]
+fn json_labels(v: &serde_json::Value) -> std::collections::BTreeMap<String, String> {
+    v.as_object()
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn format_k8s_age(timestamp: &Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time>) -> String {
@@ -5113,9 +5237,111 @@ fn format_duration_since(start: &str) -> String {
     format_chrono_duration(chrono::Utc::now().signed_duration_since(s))
 }
 
+impl K3sManager {
+    /// The newest pod a Job created (its pods carry a `job-name` label).
+    pub async fn job_pod(&self, namespace: &str, job: &str) -> anyhow::Result<String> {
+        use k8s_openapi::api::core::v1::Pod;
+        validate_k8s_name(namespace)?;
+        validate_k8s_name(job)?;
+        let pods = Api::<Pod>::namespaced(self.get_client().await?, namespace);
+        let list = pods
+            .list(&ListParams::default().labels(&format!("job-name={job}")))
+            .await?;
+        list.items
+            .into_iter()
+            .max_by_key(|p| p.metadata.creation_timestamp.as_ref().map(|t| t.0))
+            .and_then(|p| p.metadata.name)
+            .ok_or_else(|| anyhow::anyhow!("job '{job}' has no pods (they may have been cleaned up)"))
+    }
+
+    /// A byte stream to `port` of a Kubernetes service, through the API
+    /// server's port-forward (what `kubectl port-forward svc/…` does): the
+    /// service's selector picks a ready pod and its port maps to the pod's.
+    /// Works from the host, where cluster IPs and `*.svc.cluster.local`
+    /// don't resolve.
+    pub async fn service_port_stream(
+        &self,
+        namespace: &str,
+        service: &str,
+        port: u16,
+    ) -> anyhow::Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + use<>> {
+        use k8s_openapi::api::core::v1::{Pod, Service};
+        use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
+
+        validate_k8s_name(namespace)?;
+        validate_k8s_name(service)?;
+        let client = self.get_client().await?;
+        let svc = Api::<Service>::namespaced(client.clone(), namespace)
+            .get(service)
+            .await
+            .map_err(|e| anyhow::anyhow!("service '{service}' not found in '{namespace}': {e}"))?;
+        let spec = svc.spec.unwrap_or_default();
+        let selector = spec
+            .selector
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("service '{service}' has no selector, so no pod to forward to"))?;
+        let target = spec
+            .ports
+            .unwrap_or_default()
+            .into_iter()
+            .find(|p| p.port == i32::from(port))
+            .and_then(|p| p.target_port)
+            // Not a service port: a port of the pods behind it (Traefik's
+            // dashboard on 9000 is one).
+            .unwrap_or(IntOrString::Int(i32::from(port)));
+
+        let labels = selector
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let pods = Api::<Pod>::namespaced(client, namespace);
+        let list = pods.list(&ListParams::default().labels(&labels)).await?;
+        let ready = |p: &Pod| {
+            p.status.as_ref().is_some_and(|s| {
+                s.phase.as_deref() == Some("Running")
+                    && s.conditions
+                        .iter()
+                        .flatten()
+                        .any(|c| c.type_ == "Ready" && c.status == "True")
+            })
+        };
+        let pod = list
+            .items
+            .into_iter()
+            .find(ready)
+            .ok_or_else(|| anyhow::anyhow!("no ready pod behind service '{service}'"))?;
+        let pod_port: u16 = match target {
+            IntOrString::Int(n) => u16::try_from(n)?,
+            // A named port: look it up on the pod's containers.
+            IntOrString::String(name) => pod
+                .spec
+                .iter()
+                .flat_map(|s| s.containers.iter())
+                .flat_map(|c| c.ports.iter().flatten())
+                .find(|p| p.name.as_deref() == Some(name.as_str()))
+                .and_then(|p| u16::try_from(p.container_port).ok())
+                .ok_or_else(|| anyhow::anyhow!("pod has no port named '{name}'"))?,
+        };
+        let pod_name = pod.metadata.name.unwrap_or_default();
+        let mut forwarder = pods.portforward(&pod_name, &[pod_port]).await?;
+        forwarder
+            .take_stream(pod_port)
+            .ok_or_else(|| anyhow::anyhow!("port-forward to {pod_name}:{pod_port} gave no stream"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn merging_keeps_the_users_current_context() {
+        let merged = b"apiVersion: v1\nkind: Config\ncurrent-context: orca\ncontexts:\n- name: orca\n- name: prod\n";
+        let out = String::from_utf8(set_current_context(merged, "prod").unwrap()).unwrap();
+        assert!(out.contains("current-context: prod"), "{out}");
+        assert!(out.contains("name: orca"));
+    }
 
     #[test]
     fn quantities_parse_to_nanos() {

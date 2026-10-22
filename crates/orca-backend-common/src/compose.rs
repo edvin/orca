@@ -78,8 +78,12 @@ async fn run_compose(
         cmd.arg(arg);
     }
 
-    if let Some(file) = config_file {
-        cmd.arg("-f").arg(file);
+    // Compose records a project started from several files as a
+    // comma-separated list; each needs its own -f.
+    if let Some(files) = config_file {
+        for file in files.split(',').map(str::trim).filter(|f| !f.is_empty()) {
+            cmd.arg("-f").arg(file);
+        }
     }
 
     for arg in args {

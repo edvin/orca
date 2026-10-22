@@ -112,6 +112,7 @@ export interface Pod {
   node: string | null;
   ip: string | null;
   containers: PodContainer[];
+  labels?: Record<string, string>;
 }
 
 export interface PodContainer {
@@ -129,6 +130,10 @@ export interface Deployment {
   replicas_desired: number;
   age: string;
   images: string[];
+  /** `spec.selector.matchLabels`. */
+  selector?: Record<string, string>;
+  /** Labels of the pods it creates. */
+  pod_labels?: Record<string, string>;
 }
 
 export interface K8sService {
@@ -139,6 +144,8 @@ export interface K8sService {
   external_ip: string | null;
   ports: ServicePort[];
   age: string;
+  /** `spec.selector`: the pods it sends traffic to. */
+  selector?: Record<string, string>;
 }
 
 export interface ServicePort {

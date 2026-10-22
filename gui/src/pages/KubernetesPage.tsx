@@ -43,6 +43,12 @@ import type {
 
 type Tab = "pods" | "deployments" | "daemonsets" | "statefulsets" | "replicasets" | "services" | "ingresses" | "storage" | "events" | "config" | "helm" | "jobs" | "crds" | "topology";
 
+/** Whether a label selector matches a set of labels (an empty selector matches nothing). */
+function selects(selector: Record<string, string>, labels: Record<string, string>): boolean {
+  const entries = Object.entries(selector);
+  return entries.length > 0 && entries.every(([k, v]) => labels[k] === v);
+}
+
 export default function KubernetesPage() {
   const [status, setStatus] = createSignal<ClusterStatus | null>(null);
   const [namespaces, setNamespaces] = createSignal<Namespace[]>([]);
@@ -2865,8 +2871,8 @@ spec:
                               setLogPod(job.name);
                               setLogLines([]);
                               setLogFollow(false);
-                              invoke("k8s_pod_logs", { namespace: job.namespace, name: job.name, tail: logTail() })
-                                .then((lines) => setLogLines(lines as string[]))
+                              invoke<{ pod: string; lines: string[] }>("k8s_job_logs", { namespace: job.namespace, name: job.name, tail: logTail() })
+                                .then((r) => { setLogPod(r.pod); setLogLines(r.lines); })
                                 .catch((e) => showToast(`Failed to get logs: ${e}`, "error"));
                             }}
                           >
@@ -2982,8 +2988,12 @@ spec:
             <div style={{ padding: "12px 0" }}>
               <For each={services()}>
                 {(svc) => {
+                  // By label selector, as Kubernetes routes; by name only when an older
+                  // daemon sends no labels.
                   const matchedDeps = () => deployments().filter((d) =>
-                    svc.name.includes(d.name) || d.name.includes(svc.name) || svc.name === d.name
+                    svc.selector && d.pod_labels
+                      ? selects(svc.selector, d.pod_labels)
+                      : svc.name.includes(d.name) || d.name.includes(svc.name)
                   );
                   const svcKey = `svc-${svc.name}`;
                   const isHighlighted = (key: string) => {
@@ -3049,7 +3059,9 @@ spec:
 
                       <For each={matchedDeps()}>
                         {(dep) => {
-                          const depPods = () => pods().filter((p) => p.name.startsWith(dep.name));
+                          const depPods = () => pods().filter((p) =>
+                            dep.selector && p.labels ? selects(dep.selector, p.labels) : p.name.startsWith(dep.name)
+                          );
                           const depKey = `dep-${dep.name}`;
                           const depHealthy = dep.replicas_ready === dep.replicas_desired && dep.replicas_desired > 0;
                           const depDegraded = dep.replicas_ready > 0 && dep.replicas_ready < dep.replicas_desired;

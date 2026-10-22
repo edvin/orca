@@ -12,11 +12,13 @@ use tracing_subscriber::EnvFilter;
 mod agent;
 mod api;
 mod build_manager;
+mod cron_expr;
 mod dev;
 mod gateway;
 mod gateway_sync;
 mod landing;
 mod project_config;
+mod stack_files;
 mod stack_profiles;
 mod stack_yaml;
 mod state;
@@ -79,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
     let api_token = token;
 
     // Warn if binding to a non-loopback address
-    if args.bind != "127.0.0.1" && args.bind != "localhost" {
+    if !bind_addr(&args.bind, args.port).is_ok_and(|a| a.ip().is_loopback()) {
         tracing::warn!(
             "WARNING: Daemon binding to {} — the API will be network-accessible!",
             args.bind
@@ -173,7 +175,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // TCP mode (default, works on all platforms)
-    let addr: SocketAddr = format!("{}:{}", args.bind, args.port).parse()?;
+    let addr = bind_addr(&args.bind, args.port)?;
     tracing::info!("Orca daemon listening on {addr}");
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
@@ -1019,9 +1021,6 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
 /// Background scheduler that runs scheduled container actions.
 /// Checks every 60 seconds if any schedule is due.
 async fn run_scheduler(state: Arc<state::AppState>) {
-    use cron::Schedule;
-    use std::str::FromStr;
-
     tracing::info!("Scheduler started");
 
     // Track schedules whose build tasks are still running so we don't spawn
@@ -1039,14 +1038,15 @@ async fn run_scheduler(state: Arc<state::AppState>) {
         // schedules other handlers are mutating through `state.config`.
         let schedules = state.config.lock().await.schedules.clone();
 
-        let now = chrono::Utc::now();
+        // Schedules are in the machine's local time, as people write them.
+        let now = chrono::Local::now();
 
         for schedule in &schedules {
             if !schedule.enabled {
                 continue;
             }
 
-            let cron_schedule = match Schedule::from_str(&schedule.cron) {
+            let cron_schedule = match cron_expr::parse(&schedule.cron) {
                 Ok(s) => s,
                 Err(e) => {
                     tracing::warn!(
@@ -1061,7 +1061,8 @@ async fn run_scheduler(state: Arc<state::AppState>) {
             // Check if the schedule should have fired in the last 60 seconds
             let last_run = schedule
                 .last_run
-                .map(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts as i64, 0).unwrap_or_default());
+                .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts as i64, 0))
+                .map(|t| t.with_timezone(&chrono::Local));
 
             let should_run = cron_schedule
                 .after(&(now - chrono::Duration::seconds(61)))
@@ -1293,5 +1294,32 @@ async fn run_scheduler(state: Arc<state::AppState>) {
                 }
             }
         }
+    }
+}
+
+/// The address `--bind` names: an IPv4 or IPv6 address (brackets optional)
+/// or `localhost`.
+fn bind_addr(bind: &str, port: u16) -> anyhow::Result<SocketAddr> {
+    let host = bind.trim().trim_start_matches('[').trim_end_matches(']');
+    let ip: std::net::IpAddr = if host.eq_ignore_ascii_case("localhost") {
+        std::net::Ipv4Addr::LOCALHOST.into()
+    } else {
+        host.parse()
+            .map_err(|_| anyhow::anyhow!("--bind '{bind}' is not an IP address or localhost"))?
+    };
+    Ok(SocketAddr::new(ip, port))
+}
+
+#[cfg(test)]
+mod bind_tests {
+    use super::bind_addr;
+
+    #[test]
+    fn bind_accepts_localhost_and_ipv6() {
+        assert_eq!(bind_addr("localhost", 9477).unwrap().to_string(), "127.0.0.1:9477");
+        assert_eq!(bind_addr("::1", 9477).unwrap().to_string(), "[::1]:9477");
+        assert_eq!(bind_addr("[::]", 9477).unwrap().to_string(), "[::]:9477");
+        assert_eq!(bind_addr("0.0.0.0", 1).unwrap().to_string(), "0.0.0.0:1");
+        assert!(bind_addr("example.com", 1).is_err());
     }
 }

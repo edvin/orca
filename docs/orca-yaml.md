@@ -168,6 +168,7 @@ With a `dev:` section, every git worktree of the project can run as its own copy
 |---|---|---|
 | `dev.naming.instance` | `branch` | Name instances after the branch or the folder. |
 | `dev.naming.hostname` | `{service}-{instance}-{project}.{domain}` | Hostname pattern. Also available: `{worktree}`. The nested form `{service}.{instance}.{project}.{domain}` gives each instance its own cookies. |
+| `dev.start` | `manual` | `on-create` starts a new worktree's instance on its own, within a minute of `git worktree add`. Worktrees that already existed when Orca started are left alone. |
 | `dev.shared_project` | `<project>-shared` | Compose project name of the shared stack. Use an existing project's name to keep its data volumes. |
 | `dev.shared.<service>.data` | `shared` | `shared`, `own-database` (a database per instance in the shared server) or `own-server` (a private copy of the service). |
 | `dev.shared.<service>.database` | | The database the app uses. |

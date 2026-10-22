@@ -8,7 +8,7 @@
 | Previous release | Security fixes only |
 | Older releases | No |
 
-We recommend always running the latest version. Orca Desktop includes a built-in updater that checks for new versions on startup.
+We recommend always running the latest version. Orca Desktop includes a built-in updater that checks for new versions on startup and every hour.
 
 ## Reporting a Vulnerability
 
@@ -32,45 +32,38 @@ Please use [GitHub Security Advisories](https://github.com/edvin/orca/security/a
 
 ### Daemon Security
 
-- The Orca daemon binds to `127.0.0.1:9477` — **localhost only**, not accessible from the network
-- All API endpoints (except `/api/v1/health`) require a bearer token
-- The API token is generated randomly on first start and stored in the local config file
-- The daemon runs with the same permissions as the current user — no root/admin escalation
+- The desktop daemon binds to `127.0.0.1:9477`, so only programs on the same machine can reach it. The server package binds to `0.0.0.0` so the desktop app can connect; put TLS in front of it.
+- Every API endpoint requires the bearer token except `/api/v1/health`, `/api/v1/ca/certificate` (the public CA certificate) and the webhook endpoints, which require the webhook secret.
+- The API token is 16 random bytes generated on first start, stored in the config file (mode 600), and compared in constant time.
 
 ### Remote Host Security
 
-- Remote host connections support TLS with certificate verification
-- Each remote host uses its own API token
-- Tokens are stored locally and transmitted only to the configured host
-- TLS verification can be configured per-host (enabled by default)
+- Remote host connections support TLS with certificate verification, on by default and configurable per host
+- Each remote host uses its own API token, stored in the local config file (mode 600) and sent only to that host
 
 ### Webhook Security
 
-- Incoming webhooks (GitHub, Docker Hub) are validated using HMAC-SHA256 signatures
-- Webhook secrets are generated locally and never transmitted
-- Webhook endpoints only trigger pre-configured deploy rules — arbitrary commands cannot be executed
+- Webhooks are refused until a webhook secret is set
+- GitHub webhooks are verified with HMAC-SHA256 signatures; Docker Hub, which can't sign, sends the secret as a token
+- A deploy rule's own secret can only trigger that rule
+- Webhooks only trigger configured deploy rules; they can't run commands
 
 ### AI Assistant Security
 
-- AI is entirely optional and disabled by default
-- API keys are stored locally, never shared with Orca or any third party
-- Only visible container context (logs, errors) is sent to the AI provider — never credentials, tokens, or config files
-- Ollama support enables fully air-gapped AI with no external network access
+- AI is optional and does nothing until you configure a provider
+- API keys are stored in the local config file and sent only to the provider you chose
+- The assistant sends your question and what its tools read (container details, logs, configuration) to that provider. Values that look secret, such as passwords, tokens and keys in environment variables, passwords in URLs and Kubernetes Secret data, are blanked out first. Log lines are sent as they are.
+- With Ollama, nothing leaves your machine
 
 ### Code Signing
 
-All official releases are code-signed:
-
-- **macOS**: Signed with Developer ID and notarized by Apple
-- **Windows**: Signed with an EV code certificate via SSL.com
-- **Linux**: Distributed as `.deb` and `.AppImage`
+- **macOS**: signed with a Developer ID and notarized by Apple
+- **Updates** on every platform are signed, and the updater refuses a download whose signature doesn't match the key built into the app
 
 ### Supply Chain
 
-- All dependencies are managed through Cargo (Rust) and npm (TypeScript)
-- CI builds are reproducible via GitHub Actions
-- Release artifacts are built in GitHub's hosted runners, not on developer machines
-- The Tauri updater verifies release signatures before applying updates
+- Dependencies are managed through Cargo (Rust) and npm (TypeScript), with lockfiles
+- Release artifacts are built on GitHub's hosted runners, not on developer machines
 
 ## Dependency Updates
 
@@ -98,7 +91,7 @@ The following are **out of scope**:
 For enterprise deployments, we recommend:
 
 1. **Use TLS for remote hosts** — Always enable TLS verification when connecting to remote Orca daemons
-2. **Rotate API tokens** — Regenerate tokens periodically via Settings > About > Reset
+2. **Rotate API tokens** — Remove `api_token` from the daemon's `config.json` and restart it; a new one is generated
 3. **Use Ollama for AI** — Keep all AI processing local and air-gapped
 4. **Review webhook rules** — Audit auto-deploy rules regularly
 5. **Network segmentation** — Run Orca daemon behind your firewall; it should never be exposed to the public internet

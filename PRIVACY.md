@@ -1,91 +1,48 @@
 # Privacy Statement
 
-**Last updated: March 31, 2026**
+**Last updated: October 22, 2026**
 
-Orca Desktop is open source software that runs entirely on your machine. We believe container management tools should never phone home, collect telemetry, or require accounts. This document describes every network connection the app makes.
+Orca Desktop is open source software that runs on your machine. It has no telemetry, no accounts and no Orca server. This document lists what it connects to and what it sends.
 
-## TL;DR
+## Summary
 
-- **No telemetry.** No analytics. No crash reporting. No tracking.
-- **No accounts.** No sign-up. No login. No cloud service.
-- **No data leaves your machine** unless you explicitly initiate it (e.g., pulling an image or asking the AI assistant a question).
-- **All source code is open** — verify any claim yourself at [github.com/edvin/orca](https://github.com/edvin/orca).
+- **No telemetry.** No analytics, no crash reporting, no tracking.
+- **No accounts.** No sign-up, no login, no cloud service.
+- **Data leaves your machine only for things you use:** checking for updates, pulling images, setting up tools, and the AI assistant if you configure one.
+- **The source is open:** check any claim at [github.com/edvin/orca](https://github.com/edvin/orca).
 
-## Network Connections
+## Network connections
 
-Orca Desktop makes the following network connections. Every single one is listed here — there are no hidden calls.
+Besides the remote hosts you add and the services your own containers use, Orca connects to:
 
-### Automatic
+| Destination | When | What is sent |
+|---|---|---|
+| `github.com` | Update check, shortly after start and every hour | A request for the latest release |
+| `orca-desktop.com/templates.json` | When you open the App Catalog (cached for an hour) | A plain request |
+| `hub.docker.com` | When you search for images or open an image's tags | Your search |
+| Container registries | When you pull an image, and the Trivy image and database when you scan one | The image reference, and your registry login if you saved one |
+| `github.com`, `raw.githubusercontent.com`, `get.docker.com`, `get.k3s.io` | When you ask Orca to set up Docker, Lima, Helm or Kubernetes | Requests for the installers |
+| Your AI provider | When you use the AI assistant | See below |
+| GitHub, Docker Hub (inbound) | Webhooks you configure for push to deploy | — |
 
-| Connection | Destination | Purpose | Data Sent |
-|---|---|---|---|
-| **Update check** | `github.com` | Check for new app versions | App version (via GitHub Releases API) |
-| **Template catalog** | `orca-desktop.com/templates.json` | Fetch community app templates | None (plain GET request) |
+## The AI assistant
 
-The template catalog is fetched once per hour and cached locally. If you're offline, the cached version is used. The update check uses Tauri's built-in updater and can be disabled in settings.
+The assistant is optional and does nothing until you configure a provider (Anthropic, OpenAI, Google, Ollama or any OpenAI-compatible endpoint). Requests go straight from your machine to that provider, never through an Orca server. With Ollama, nothing leaves your machine.
 
-### User-Initiated Only
+The provider receives your question, the conversation so far, and the results of the tools the assistant uses to answer, such as a container's details or recent log lines. Before anything is sent, Orca blanks out values that look secret: passwords, tokens and API keys in environment variables and other fields, passwords in URLs, and the data of Kubernetes Secrets. Log lines are sent as they are.
 
-These connections are **only made when you explicitly perform an action**:
+API keys are stored in Orca's config file and sent only to the provider you chose.
 
-| Connection | Destination | Purpose | When |
-|---|---|---|---|
-| **Image search** | `hub.docker.com` | Search Docker Hub for images | You type in the image search box |
-| **Tag lookup** | `hub.docker.com` | Fetch available tags for an image | You open the tag dropdown |
-| **Image pull** | Container registries | Download container images | You click "Pull" |
-| **AI assistant** | Your configured AI provider | Send container context to AI | You click "Ask AI" |
-| **Remote hosts** | Your configured Orca daemons | Manage containers on remote machines | You add a remote host |
+## Local data
 
-### AI Assistant — Your Keys, Your Choice
-
-The AI assistant is **entirely optional** and **off by default**. When enabled:
-
-- You provide your own API key — we never see it
-- You choose the provider: Anthropic, OpenAI, Google, Ollama (local), or any OpenAI-compatible endpoint
-- Context sent to the AI includes only what you see on screen (container logs, error messages, your question)
-- Use Ollama for **fully offline, private AI** — no data leaves your machine
-- API keys are stored locally in your Orca config file, never transmitted anywhere except to the provider you chose
-
-### What We Never Do
-
-- Collect usage analytics or behavioral data
-- Track which features you use
-- Report crashes or errors to any service
-- Fingerprint your system
-- Phone home to any Orca-operated server (we don't have one)
-- Access your containers, images, or files beyond what you see in the UI
-- Store or transmit registry credentials anywhere except your local config file
-
-## Local Data Storage
-
-All data is stored locally on your machine:
+Everything Orca stores is on your machine:
 
 | Data | Location |
 |---|---|
-| Configuration | `~/.config/orca/config.json` (Linux), `~/Library/Application Support/orca/config.json` (macOS), `%APPDATA%/orca/config.json` (Windows) |
-| Daemon log | `~/.config/orca/daemon.log` |
-| Stack files | `~/.config/orca/stacks/` |
-| CA certificate & key | `~/.config/orca/ca/` |
-| Gateway TLS certs | `~/.config/orca/ca/certs/` |
-| API token | Generated locally, stored in config file |
+| Configuration, API token, registry logins, AI keys | `config.json` in `~/.config/orca/` (Linux), `~/Library/Application Support/orca/` (macOS) or `%APPDATA%\orca\` (Windows), readable only by you |
+| Stack files | `orca/stacks/` in the same folder |
+| Local certificate authority and gateway certificates | `orca/ca/` in the same folder |
 
-Registry credentials are stored **base64-encoded** (not encrypted) in the config file, consistent with how Docker itself stores credentials in `~/.docker/config.json`.
+Registry passwords are stored base64-encoded, not encrypted, like Docker's own `~/.docker/config.json`.
 
-## Network Security
-
-- The daemon API listens on `127.0.0.1:9477` only — it is not accessible from the network
-- All API calls (except health check) require a locally-generated bearer token
-- Remote host connections support TLS verification
-- Webhook endpoints use HMAC-SHA256 signature validation
-
-## Open Source Guarantee
-
-Orca Desktop is [MIT licensed](LICENSE). The complete source code is available on GitHub. You can:
-
-- Audit every network call in the codebase
-- Build from source to verify the published binaries match
-- Fork and modify for your organization's needs
-
-## Contact
-
-Questions about privacy? [Open an issue](https://github.com/edvin/orca/issues).
+More detail: [Security and privacy](https://orca-desktop.com/docs/security/).

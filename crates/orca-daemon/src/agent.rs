@@ -821,3 +821,116 @@ async fn resolve_stack_dir(state: &AppState, name: &str) -> Result<(String, Opti
         .ok_or_else(|| format!("Stack '{name}' has no working directory"))?;
     Ok((working_dir, stack.config_file))
 }
+
+/// A copy of a tool result with secrets blanked out, for the built-in AI
+/// assistant: values of secret-looking keys and `KEY=value` env entries,
+/// passwords in URLs, and the data of Kubernetes Secrets. What the provider
+/// still sees is enough to diagnose with.
+pub fn redact_secrets(v: &serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    const MASK: &str = "[redacted]";
+    let secretish = |name: &str| {
+        let n = name.to_ascii_lowercase();
+        [
+            "pass",
+            "secret",
+            "token",
+            "api_key",
+            "apikey",
+            "private_key",
+            "credential",
+            "auth",
+            "dsn",
+            "database_url",
+            "session_key",
+            "signing_key",
+        ]
+        .iter()
+        .any(|w| n.contains(w))
+    };
+    // scheme://user:password@host → scheme://user:[redacted]@host
+    let strip_url_password = |s: &str| -> String {
+        let Some(scheme_end) = s.find("://") else {
+            return s.to_string();
+        };
+        let rest = &s[scheme_end + 3..];
+        let Some(at) = rest.find('@') else { return s.to_string() };
+        let userinfo = &rest[..at];
+        if userinfo.contains('/') {
+            return s.to_string();
+        }
+        match userinfo.split_once(':') {
+            Some((user, _)) => format!("{}{user}:{MASK}{}", &s[..scheme_end + 3], &rest[at..]),
+            None => s.to_string(),
+        }
+    };
+    match v {
+        Value::Object(map) => {
+            let is_k8s_secret = map
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|t| t == "Opaque" || t.starts_with("kubernetes.io/"))
+                && map.contains_key("data");
+            Value::Object(
+                map.iter()
+                    .map(|(k, val)| {
+                        let out = match val {
+                            Value::String(_) if secretish(k) => Value::String(MASK.into()),
+                            Value::Object(data) if is_k8s_secret && k == "data" => {
+                                Value::Object(data.keys().map(|dk| (dk.clone(), Value::String(MASK.into()))).collect())
+                            }
+                            other => redact_secrets(other),
+                        };
+                        (k.clone(), out)
+                    })
+                    .collect(),
+            )
+        }
+        Value::Array(items) => Value::Array(items.iter().map(redact_secrets).collect()),
+        Value::String(s) => match s.split_once('=') {
+            Some((key, _)) if !key.is_empty() && !key.contains(' ') && secretish(key) => {
+                Value::String(format!("{key}={MASK}"))
+            }
+            _ => Value::String(strip_url_password(s)),
+        },
+        other => other.clone(),
+    }
+}
+
+#[cfg(test)]
+mod redact_tests {
+    use super::redact_secrets;
+    use serde_json::json;
+
+    #[test]
+    fn secrets_are_blanked_and_the_rest_kept() {
+        let v = json!({
+            "name": "shop-api-1",
+            "env": ["APP_ENV=local", "DB_PASSWORD=hunter2", "STRIPE_API_KEY=sk_live_x", "DATABASE_URL=postgres://app:pw@db/shop"],
+            "labels": { "auth_token": "abc", "team": "web" },
+            "url": "redis://:s3cret@redis:6379/0",
+            "secret": { "type": "Opaque", "data": { "password": "aHVudGVyMg==", "user": "YWRtaW4=" } },
+        });
+        let r = redact_secrets(&v).to_string();
+        for leaked in [
+            "hunter2",
+            "sk_live_x",
+            "pw@",
+            "abc",
+            "s3cret",
+            "aHVudGVyMg==",
+            "YWRtaW4=",
+        ] {
+            assert!(!r.contains(leaked), "{leaked} leaked: {r}");
+        }
+        for kept in [
+            "shop-api-1",
+            "APP_ENV=local",
+            "DB_PASSWORD=[redacted]",
+            "\"team\":\"web\"",
+            "@redis:6379/0",
+        ] {
+            assert!(r.contains(kept), "{kept} missing: {r}");
+        }
+    }
+}

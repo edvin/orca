@@ -152,7 +152,7 @@ enum Commands {
 
     /// Deploy a compose file or template
     Deploy {
-        /// Path to a docker-compose file
+        /// A project folder with a compose file, or the compose file itself
         #[arg(required_unless_present = "template")]
         path: Option<String>,
 
@@ -1061,6 +1061,10 @@ async fn cmd_deploy(
         client.deploy_template(&template_id).await?;
         println!("Template deployed.");
     } else if let Some(path) = path {
+        // The daemon resolves nothing relative to where you are.
+        let path = std::fs::canonicalize(&path)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or(path);
         println!("Deploying from '{path}'...");
         client.deploy_stack(&path).await?;
         println!("Stack deployed.");

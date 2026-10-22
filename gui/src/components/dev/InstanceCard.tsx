@@ -49,7 +49,7 @@ export default function InstanceCard(props: Props) {
   const who = () => {
     const i = props.inst;
     if (!i.last_started) return i.configured ? "Configured, never started" : "Not started yet";
-    const by = i.started_by === "mcp" ? "an agent" : i.started_by === "cli" ? "the CLI" : "you";
+    const by = i.started_by === "mcp" ? "an agent" : i.started_by === "cli" ? "the CLI" : i.started_by === "auto" ? "Orca, as a new worktree" : "you";
     return `Started by ${by} · ${ago(i.last_started)}`;
   };
 

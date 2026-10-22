@@ -2284,7 +2284,21 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                     ))?;
                 Ok("Docker started in WSL2 with TCP listener.\n\nRestart Orca Desktop to connect.".to_string())
             }
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(target_os = "macos")]
+            {
+                // Docker runs in Orca's Lima VM: restart the VM.
+                let (vm, _) = find_lima_vm_for_repair()
+                    .await
+                    .ok_or_else(|| anyhow::anyhow!("There is no Docker VM yet. Use Set up Docker first."))?;
+                let _ = run_cmd("limactl", &["stop", &vm]).await;
+                run_cmd("limactl", &["start", &vm]).await.map_err(|e| {
+                    anyhow::anyhow!(
+                        "The Docker VM '{vm}' did not start again.\n\nTry Repair on this page.\n\nError: {e}"
+                    )
+                })?;
+                Ok(format!("Docker VM '{vm}' restarted."))
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             {
                 let output = run_cmd("sudo", &["systemctl", "start", "docker"]).await.map_err(|e| {
                     anyhow::anyhow!(

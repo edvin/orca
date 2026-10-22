@@ -129,7 +129,7 @@
 
 - **Separate floating window** — drag anywhere, resize, pin to another monitor
 - **5 providers** — Claude (Anthropic), GPT (OpenAI), Gemini (Google), Ollama (local), or any custom OpenAI-compatible endpoint
-- **One-click Ollama setup** — local AI with GPU acceleration, no API keys needed
+- **One-click Ollama setup** — local AI, no API keys needed; uses an NVIDIA GPU when the machine has one
 - **Tool calling** — AI can list containers, inspect, and manage resources
 - **Context-aware** — click the AI button on any container to chat about it with logs pre-loaded
 - **Model picker** — dropdown fetched from provider's API
@@ -139,7 +139,7 @@
 
 - **MCP server** for Claude Code and Claude Desktop integration
 - **OpenAI-compatible function calling** endpoint
-- **43 tools** across 8 categories (containers, images, compose, k8s, volumes, networks, system, diagnostics)
+- **Tools** for containers, images, compose, Kubernetes, volumes, networks, worktree instances and diagnostics ([full list](https://orca-desktop.com/docs/agents/#tool-reference))
 - Direct tool execution endpoint for custom agents
 - Compound diagnostic tools (inspect + logs + stats in one call)
 
@@ -435,7 +435,7 @@ When you first launch Orca on macOS, the setup wizard installs (via Homebrew):
 - **Lima** — lightweight VM manager using Apple's Virtualization.framework
 - **Docker CLI** + **Docker Compose** + **Docker Buildx** — the standard Docker tools
 - A Linux VM named "orca" with auto-sized RAM, 4 CPUs, VirtioFS mounts, and port forwarding
-- **HWE kernel (6.17)** — upgraded from Ubuntu's default 6.8 for full VirtioFS permission support
+- **Ubuntu 26.04** in the VM, whose kernel supports idmapped mounts, so bind-mount permissions work (older VMs on Ubuntu 24.04 get the HWE kernel for the same reason); SSH and the Docker socket travel over vsock, so mesh VPNs can't break them
 
 ### Port forwarding
 
@@ -443,7 +443,7 @@ Container ports are automatically forwarded to your Mac. If you run `docker run 
 
 ### Bind mount permissions
 
-**Bind mount permissions just work.** Orca provisions a modern Linux kernel (6.17) in the Lima VM, which resolves VirtioFS permission issues that affect older kernels. With the HWE kernel:
+**Bind mount permissions just work.** The VM's kernel supports idmapped mounts, which resolves the VirtioFS permission issues older kernels have. So:
 
 - **chmod/chown** work on bind-mounted host directories
 - **Root and non-root containers** can read/write bind mounts
@@ -504,14 +504,14 @@ The daemon talks to Docker/Podman via the standard API (bollard). On macOS it ma
 Just download and launch Orca Desktop — it handles everything else:
 
 1. **Download** from [Releases](https://github.com/edvin/orca/releases)
-2. **Run** the installer (Windows: exe/msi, macOS: dmg, Linux: AppImage/deb)
+2. **Run** the installer (Windows: setup .exe, macOS: .dmg for Apple Silicon, Linux: AppImage or .deb)
 3. **Orca Desktop checks your environment** and installs anything missing:
 
 | Platform | What Orca Desktop sets up for you |
 |----------|--------------------------|
 | **Linux** | Installs Docker or Podman if not found |
 | **macOS** | Installs Homebrew → Lima → creates a Linux VM with Docker |
-| **Windows** | Enables WSL2 → installs Ubuntu → installs Docker inside it |
+| **Windows** | Enables WSL2 if needed → installs Docker in your default WSL distro (install Ubuntu from the Microsoft Store first if you have none) |
 
 No manual setup required. The Environment page guides you through any needed steps with one-click fix buttons.
 
@@ -698,10 +698,10 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   http://127.0.0.1:9477/api/v1/agent/execute \
-  -d '{"tool": "list_containers", "args": {}}'
+  -d '{"tool": "list_containers", "arguments": {}}'
 ```
 
-### Available Tools (43 tools, 8 categories)
+### Available Tools
 
 | Category | Tools |
 |----------|-------|
@@ -842,7 +842,7 @@ git push && git push --tags
 This triggers the release workflow which:
 
 1. Creates a draft GitHub Release with auto-generated release notes
-2. Builds signed Tauri apps for **Linux** (AppImage, deb), **macOS** (dmg), and **Windows** (exe, msi) in parallel
+2. Builds Tauri apps for **Linux** (AppImage, deb), **macOS** (dmg, Apple Silicon, signed and notarized), and **Windows** (setup exe) in parallel
 3. Bundles the daemon binary as a sidecar inside each app
 4. Signs all update artifacts with the project's signing key
 5. Uploads `latest.json` for the Tauri auto-updater
@@ -856,7 +856,7 @@ This triggers the release workflow which:
 |----------|-----------|-------------|
 | Linux | `.AppImage`, `.deb` | AppImage self-updates |
 | macOS | `.dmg` | App bundle updates |
-| Windows | `.exe` (NSIS), `.msi` | Exe self-updates |
+| Windows | `.exe` (NSIS) | Exe self-updates |
 
 ## Contributing
 

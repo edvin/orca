@@ -572,6 +572,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
     }
   };
 
+  // The environment variable the active key comes from, when it does.
+  const [keyFromEnv, setKeyFromEnv] = createSignal<string | null>(null);
   const refreshAiSettings = async () => {
     try {
       const settings = (await invoke("get_ai_settings")) as {
@@ -581,7 +583,10 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         anthropic_model: string;
         openai_model: string;
         openai_url: string;
+        key_source?: "env" | "settings" | null;
+        key_env_var?: string;
       };
+      setKeyFromEnv(settings.key_source === "env" ? settings.key_env_var ?? null : null);
       // Detect Ollama: custom provider with 11434 URL
       const isOllama = settings.provider === "custom" && (settings.openai_url || "").includes("11434");
       setAiProvider(isOllama ? "ollama" : settings.provider as AiProviderType);
@@ -660,6 +665,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
       await invoke("pull_image", { reference: "ollama/ollama:latest" });
 
       updateOllamaSetup("running", "Creating Ollama container...");
+      // Hand Ollama the NVIDIA GPU when there is one; without one, Docker refuses the request.
+      const health = await invoke<{ gpu?: unknown }>("system_health", { refresh: false }).catch(() => null);
       try {
         await invoke("create_and_run_container", {
           image: "ollama/ollama:latest",
@@ -667,7 +674,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
           ports: ["11434:11434"],
           volumes: ["ollama-models:/root/.ollama"],
           restart_policy: "unless-stopped",
-          gpu: true,
+          gpu: !!health?.gpu,
         });
       } catch (e) {
         const err = String(e);
@@ -1295,7 +1302,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                         (aiProvider() === "anthropic" && hasAnthropicKey()) ||
                         (aiProvider() !== "anthropic" && hasOpenaiKey())
                       }>
-                        <span style={{ color: "#3fb950", "font-size": "11px", "margin-left": "8px" }}>{"\u2713"} configured</span>
+                        <span style={{ color: "#3fb950", "font-size": "11px", "margin-left": "8px" }}>{"\u2713"} configured{keyFromEnv() ? ` (from ${keyFromEnv()})` : ""}</span>
                       </Show>
                     </label>
                     <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
@@ -1819,7 +1826,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                 {webhookUrl() || "Loading..."}
               </code>
               <div style={{ color: "#6e7681", "margin-top": "8px", "font-size": "11px" }}>
-                Event: <strong style={{ color: "#8b949e" }}>Packages</strong> &middot; Content type: <strong style={{ color: "#8b949e" }}>application/json</strong> &middot; For Docker Hub use <code style={{ color: "#6e7681" }}>/webhooks/dockerhub</code>
+                Event: <strong style={{ color: "#8b949e" }}>Packages</strong> &middot; Content type: <strong style={{ color: "#8b949e" }}>application/json</strong> &middot; For Docker Hub use <code style={{ color: "#6e7681" }}>/webhooks/dockerhub?token=&lt;webhook secret&gt;</code>
               </div>
             </div>
 
@@ -1837,11 +1844,21 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     }}
                   >Save</button>
                 </div>
+                <div style={{ display: "flex", gap: "8px" }}>
                 <input class="form-input mono" type="password" placeholder="Same secret you set in GitHub webhook settings"
                   value={webhookSecret()} onInput={(e) => setWebhookSecret(e.currentTarget.value)}
-                  style={{ "font-size": "12px" }}
+                  style={{ "font-size": "12px", flex: "1" }}
                 />
-                <span class="form-hint">GitHub signs webhook payloads with this secret (HMAC-SHA256). Leave empty to accept all webhooks without signature validation.</span>
+                <button class="btn btn-sm" title="Fill in a random secret, then Save and paste it into GitHub"
+                  onClick={async () => {
+                    const bytes = crypto.getRandomValues(new Uint8Array(24));
+                    const secret = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+                    setWebhookSecret(secret);
+                    try { await navigator.clipboard.writeText(secret); showToast("Secret generated and copied. Save it, then paste it into GitHub.", "info"); } catch {}
+                  }}
+                >Generate</button>
+                </div>
+                <span class="form-hint">Required: Orca refuses every webhook until a secret is set. GitHub signs its payloads with it (HMAC-SHA256); Docker Hub sends it as <code>?token=</code> in the webhook URL.</span>
               </div>
             </div>
 
@@ -1944,13 +1961,13 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <div class="form-group">
                     <label class="form-label">Image Pattern</label>
                     <input class="form-input mono" type="text" placeholder="ghcr.io/myorg/myapp" value={ruleImage()} onInput={(e) => setRuleImage(e.currentTarget.value)} />
-                    <span class="form-hint">The full image name without tag, e.g. ghcr.io/myorg/api. Matches any pushed image containing this text.</span>
+                    <span class="form-hint">The full image name without tag, e.g. ghcr.io/myorg/api. It must match the pushed image exactly; the registry host may be left out (myorg/api).</span>
                   </div>
                   <div class="form-row">
                     <div class="form-group" style={{ flex: 1 }}>
                       <label class="form-label">Tag Filter</label>
                       <input class="form-input mono" type="text" placeholder="latest, v*, main" value={ruleTagFilter()} onInput={(e) => setRuleTagFilter(e.currentTarget.value)} />
-                      <span class="form-hint">* = any tag, v* = version tags (v1.0, v2.3.1), latest = only latest, main = branch</span>
+                      <span class="form-hint">One or more, separated by commas: * = any tag, v* = version tags (v1.0, v2.3.1), latest, main</span>
                     </div>
                     <div class="form-group" style={{ flex: 1 }}>
                       <label class="form-label">Container Names</label>
@@ -2026,7 +2043,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
           <div class="settings-section">
             <h2 class="settings-section-title">Scheduled Actions</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
-              Schedule container actions to run automatically. Uses standard cron expressions. The daemon checks every 60 seconds.
+              Schedule container actions to run automatically, with standard cron expressions in this computer's local time. The daemon checks every minute.
             </p>
 
             <Show when={schedules().length > 0}>
@@ -2146,7 +2163,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       <label class="form-label">Cron Expression</label>
                       <input class="form-input mono" type="text" placeholder="0 3 * * 0" value={schedCron()} onInput={(e) => setSchedCron(e.currentTarget.value)} />
                       <span class="form-hint">
-                        Examples: <code>0 3 * * 0</code> (Sun 3am), <code>0 18 * * 1-5</code> (weekdays 6pm), <code>0 */6 * * *</code> (every 6h), <code>0 0 1 * *</code> (1st of month)
+                        Examples: <code>0 3 * * 0</code> (Sun 3am), <code>0 18 * * 1-5</code> (weekdays 6pm), <code>0 */6 * * *</code> (every 6h), <code>0 0 1 * *</code> (1st of month). Minute, hour, day, month, weekday, in this computer's time.
                       </span>
                     </div>
                   </div>
@@ -2442,20 +2459,21 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             {/* Zero Telemetry Banner */}
             <div style={{ background: "linear-gradient(135deg, rgba(63, 185, 80, 0.08) 0%, rgba(88, 166, 255, 0.08) 100%)", border: "1px solid rgba(63, 185, 80, 0.15)", "border-radius": "12px", padding: "24px 28px", "text-align": "center" }}>
               <div style={{ "font-size": "28px", "font-weight": "800", "letter-spacing": "-1px", "margin-bottom": "6px", background: "linear-gradient(135deg, #3fb950, #58a6ff)", "-webkit-background-clip": "text", "-webkit-text-fill-color": "transparent", "background-clip": "text" }}>Zero Telemetry</div>
-              <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6" }}>Orca Desktop collects no analytics, no crash reports, and no usage data. Ever.</div>
+              <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6" }}>Orca Desktop collects no analytics, no crash reports and no usage data.</div>
             </div>
 
             {/* Network Connections */}
             <div class="settings-section">
               <h2 class="settings-section-title">Network Connections</h2>
               <div class="card">
-                <p style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "12px" }}>Every network connection Orca makes — there are no hidden calls.</p>
+                <p style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "12px" }}>The services Orca connects to, besides the ones your containers use.</p>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "0" }}>
                   <For each={[
-                    ["AUTO", "#d29922", "Update check", "github.com", "Checks for new versions on startup", "No user data"],
+                    ["AUTO", "#d29922", "Update check", "github.com", "On startup and every hour", "No user data"],
                     ["AUTO", "#d29922", "Template catalog", "orca-desktop.com", "Fetches app templates (cached hourly)", "No user data"],
                     ["USER", "#58a6ff", "Docker Hub search", "hub.docker.com", "When you search for images", "Search query only"],
-                    ["USER", "#58a6ff", "AI assistant", "Your provider", "When you click 'Ask AI'", "Context you see on screen"],
+                    ["USER", "#58a6ff", "AI assistant", "Your provider", "When you ask the assistant", "Your question and what its tools read, secrets blanked"],
+                    ["USER", "#58a6ff", "Installers", "github.com", "When you set up Docker, Lima or Helm", "No user data"],
                     ["USER", "#58a6ff", "Image pull", "Your registries", "When you click 'Pull'", "Image reference"],
                     ["USER", "#58a6ff", "Remote hosts", "Your Orca daemons", "When you add a remote host", "API token (yours)"],
                   ] as [string, string, string, string, string, string][]}>{([type, color, name, dest, when, data]) => (
@@ -2478,11 +2496,11 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
               <div class="card">
                 <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
                   <For each={[
-                    ["Localhost only", "The daemon binds to 127.0.0.1:9477 — not accessible from the network"],
+                    ["Localhost only", "The desktop daemon binds to 127.0.0.1:9477, out of reach of the network"],
                     ["Token auth", "All API calls require a locally-generated bearer token"],
-                    ["Code signed", "macOS releases are Apple notarized, Windows releases are EV code signed"],
+                    ["Signed updates", "The updater checks every download against a key built into the app"],
                     ["TLS support", "Remote host connections support TLS with certificate verification"],
-                    ["Webhook HMAC", "Incoming webhooks are validated with HMAC-SHA256 signatures"],
+                    ["Webhook secrets", "Webhooks are refused until a secret is set; GitHub's are checked with HMAC-SHA256, Docker Hub's by token"],
                     ["Open source", "MIT licensed — audit every line of code on GitHub"],
                   ] as [string, string][]}>{([title, desc]) => (
                     <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
@@ -2529,18 +2547,18 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   </div>
                   <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
                     <span style={{ color: "#a371f7", "flex-shrink": "0", "margin-top": "2px" }}>&#10003;</span>
-                    <span>Only visible context (logs, errors, your question) is sent — never credentials or config</span>
+                    <span>The assistant sends your question and what its tools read (containers, logs, configuration). Passwords, tokens and keys in that, such as secret env vars and Kubernetes Secrets, are blanked out first</span>
                   </div>
                   <div style={{ display: "flex", "align-items": "flex-start", gap: "10px" }}>
                     <span style={{ color: "#a371f7", "flex-shrink": "0", "margin-top": "2px" }}>&#10003;</span>
-                    <span>Use <strong>Ollama</strong> for fully offline, air-gapped AI — zero network traffic</span>
+                    <span>Use <strong>Ollama</strong> to keep everything on your machine: nothing leaves it</span>
                   </div>
                 </div>
               </div>
             </div>
 
             <div style={{ "text-align": "center", "font-size": "12px", color: "#484f58", "padding-top": "8px" }}>
-              Full details: <a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Privacy Statement</a> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security Policy</a>
+              Full details: <a href="https://orca-desktop.com/docs/security/" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security and privacy</a> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security Policy</a>
             </div>
           </div>
         </Show>

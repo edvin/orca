@@ -277,7 +277,11 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             let rest = by_group.remove("Services");
             for (name, mut cards) in by_group.into_iter().chain(rest.map(|c| ("Services".to_string(), c))) {
                 cards.sort_by_key(|a| a.title.to_lowercase());
-                sections.push((name, cards));
+                // A project whose links group has its name shows as one section.
+                match sections.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case(&name)) {
+                    Some((_, existing)) => existing.extend(cards),
+                    None => sections.push((name, cards)),
+                }
             }
         }
         let body = if sections.is_empty() {
@@ -729,6 +733,33 @@ mod tests {
         let html = render(&config(vec![r]), &HashMap::new());
         assert!(!html.contains("<script>alert"));
         assert!(!html.contains("javascript:"));
+    }
+
+    #[test]
+    fn a_links_group_named_like_the_project_is_one_section() {
+        let mut shop = route("admin.localhost", "shop-admin-1", 8080);
+        shop.owner = Some("project:shop".into());
+        let mut c = config(vec![shop]);
+        c.stack_links = vec![StackLinkGroup {
+            stack: "shop".into(),
+            group: "Shop".into(),
+            links: vec![EnvironmentLink {
+                name: "Docs".into(),
+                urls: [("staging", "https://docs.example.com")]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            }],
+        }];
+        let html = render(&c, &HashMap::new());
+        let local = html
+            .split(r#"<div class="panel" data-env="local""#)
+            .nth(1)
+            .unwrap()
+            .split(r#"<div class="panel""#)
+            .next()
+            .unwrap();
+        assert_eq!(local.matches("<h2>").count(), 1, "{local}");
     }
 
     /// Writes a realistic demo page for the website's screenshots:

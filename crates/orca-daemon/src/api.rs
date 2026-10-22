@@ -284,6 +284,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/{name}/restart", post(restart_stack))
         .route("/stacks/{name}/up", post(compose_up))
         .route(
+            "/stacks/{name}/compose-files",
+            get(crate::stack_files::get).put(crate::stack_files::save),
+        )
+        .route(
             "/stacks/{name}/profiles",
             get(crate::stack_profiles::get).put(crate::stack_profiles::set),
         )
@@ -318,11 +322,16 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/k8s/deployments/{namespace}/{name}/restart", post(k8s_restart))
         .route("/k8s/pvcs/{namespace}/{name}", delete(k8s_delete_pvc))
         .route("/k8s/pods/{namespace}/{name}/logs", get(k8s_pod_logs))
+        .route("/k8s/jobs/{namespace}/{name}/logs", get(k8s_job_logs))
         .route("/k8s/apply", post(k8s_apply))
         .route("/k8s/yaml/{kind}/{namespace}/{name}", get(k8s_get_yaml))
         .route("/k8s/events/{namespace}", get(k8s_events))
         // TCP tunnel (WebSocket-based port forwarding for remote hosts)
         .route("/tunnel", get(tunnel_ws))
+        .route(
+            "/k8s/port-forward/{namespace}/{service}/{port}",
+            get(k8s_port_forward_ws),
+        )
         // Webhooks (HMAC-authenticated, no bearer token)
         .route("/webhooks/github", post(webhook_github))
         .route("/webhooks/dockerhub", post(webhook_dockerhub))
@@ -674,6 +683,9 @@ struct CreateContainerRequest {
     /// Run as specific user (e.g., "1000:1000"). Maps to Docker's --user flag.
     #[serde(default)]
     user: Option<String>,
+    /// Give the container the host's NVIDIA GPUs (`--gpus all`).
+    #[serde(default)]
+    gpu: bool,
 }
 
 /// Parse a human-readable memory string (e.g. "512m", "1g", "256k") into bytes.
@@ -736,7 +748,7 @@ async fn create_container(
         cpu_limit: body.cpu_limit,
         memory_limit,
         memory_swap: None,
-        gpu: false,
+        gpu: body.gpu,
         user: body.user,
         extra_hosts: vec![],
     };
@@ -3396,13 +3408,11 @@ async fn compose_deploy_path(
         .get("path")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing 'path' field"))?;
-    // Guard against traversal: refuse any path that doesn't canonicalize
-    // inside the user's stacks directory. Without this, an authenticated
-    // caller could point `docker compose -f` at a compose file anywhere
-    // on disk.
-    let validated =
-        validate_compose_path(dir).map_err(|e| ApiError::bad_request(format!("invalid compose path: {e}")))?;
+    // A project folder (with a compose file Compose finds by itself), or a
+    // compose file in one, as `docker compose` itself would take them.
+    let (validated, compose_file) = deploy_target(dir).map_err(|e| ApiError::bad_request(e.to_string()))?;
     let validated_str = validated.to_string_lossy().to_string();
+    let compose_file = compose_file.map(|f| f.to_string_lossy().to_string());
     // The compose project is named after the folder, as compose names it;
     // its remembered profiles apply.
     let project: String = validated
@@ -3412,7 +3422,7 @@ async fn compose_deploy_path(
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .collect();
-    let output = crate::stack_profiles::up(&state, &project, &validated_str, None).await?;
+    let output = crate::stack_profiles::up(&state, &project, &validated_str, compose_file.as_deref()).await?;
 
     // The stack's orca.yaml routes and links are applied by the gateway
     // sync, as for any compose project; show which hostnames it asks for.
@@ -3432,7 +3442,7 @@ async fn compose_deploy_path(
     crate::gateway_sync::routes_changed();
 
     let hooks = if output.success {
-        run_stack_hooks(&state, &validated_str, None).await
+        run_stack_hooks(&state, &validated_str, compose_file.as_deref()).await
     } else {
         Vec::new()
     };
@@ -3735,6 +3745,20 @@ async fn k8s_pod_logs(
         .pod_logs(&namespace, &name, query.container.as_deref(), query.tail)
         .await?;
     Ok(Json(logs))
+}
+
+/// Logs of the newest pod of a Job.
+async fn k8s_job_logs(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, name)): Path<(String, String)>,
+    Query(query): Query<PodLogsQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let pod = state.k8s.job_pod(&namespace, &name).await?;
+    let logs = state
+        .k8s
+        .pod_logs(&namespace, &pod, query.container.as_deref(), query.tail)
+        .await?;
+    Ok(Json(serde_json::json!({ "pod": pod, "lines": logs })))
 }
 
 #[derive(Deserialize)]
@@ -4673,6 +4697,41 @@ fn stacks_base_dir() -> std::path::PathBuf {
 /// pass `path` straight to `docker compose -f <path>`; without this,
 /// an authenticated API caller could invoke compose against arbitrary
 /// compose files anywhere the daemon user can read.
+/// File names `docker compose` looks for in a folder, in its order.
+const COMPOSE_FILE_NAMES: &[&str] = &[
+    "compose.yaml",
+    "compose.yml",
+    "docker-compose.yaml",
+    "docker-compose.yml",
+];
+
+/// What `orca deploy <path>` runs: the project folder, and the compose file
+/// when the path names one.
+fn deploy_target(p: &str) -> anyhow::Result<(std::path::PathBuf, Option<std::path::PathBuf>)> {
+    let path = std::path::Path::new(p);
+    if !path.is_absolute() {
+        anyhow::bail!("'{p}' is not an absolute path");
+    }
+    let path = path
+        .canonicalize()
+        .map_err(|e| anyhow::anyhow!("'{p}' can't be read: {e}"))?;
+    if path.is_file() {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "yml" && ext != "yaml" {
+            anyhow::bail!("'{p}' is not a compose file (.yml or .yaml)");
+        }
+        let dir = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("'{p}' has no folder"))?
+            .to_path_buf();
+        return Ok((dir, Some(path)));
+    }
+    if !COMPOSE_FILE_NAMES.iter().any(|f| path.join(f).is_file()) {
+        anyhow::bail!("'{p}' has no compose file ({})", COMPOSE_FILE_NAMES.join(", "));
+    }
+    Ok((path, None))
+}
+
 fn validate_compose_path(p: &str) -> anyhow::Result<std::path::PathBuf> {
     if p.is_empty() {
         anyhow::bail!("path must not be empty");
@@ -5098,9 +5157,12 @@ fn generate_random_bytes(len: usize) -> Vec<u8> {
 }
 
 /// Generate a random hex string of the given byte length.
-fn generate_random_hex(byte_len: usize) -> String {
-    let bytes = generate_random_bytes(byte_len);
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+/// A random hex string of `len` characters (`len / 2` bytes, rounded up).
+fn generate_random_hex(len: usize) -> String {
+    let bytes = generate_random_bytes(len.div_ceil(2));
+    let mut hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    hex.truncate(len);
+    hex
 }
 
 /// Generate a random base64 string of the given byte length.
@@ -6336,6 +6398,68 @@ async fn handle_tunnel(socket: WebSocket, host: String, resolved: Vec<std::net::
     tracing::info!("Tunnel: closed connection to {host}:{port}");
 }
 
+/// GET /k8s/port-forward/{namespace}/{service}/{port}?token=…: one TCP
+/// connection to a Kubernetes service, through the API server's
+/// port-forward. The desktop app opens one per connection to its local port.
+async fn k8s_port_forward_ws(
+    State(state): State<Arc<AppState>>,
+    Path((namespace, service, port)): Path<(String, String, u16)>,
+    Query(params): Query<HashMap<String, String>>,
+    ws: WebSocketUpgrade,
+) -> Result<impl IntoResponse, StatusCode> {
+    use subtle::ConstantTimeEq;
+    let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
+    if state.api_token.is_empty()
+        || state.api_token.len() != token.len()
+        || state.api_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1
+    {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let stream = state
+        .k8s
+        .service_port_stream(&namespace, &service, port)
+        .await
+        .map_err(|e| {
+            tracing::warn!("Port forward to {namespace}/{service}:{port}: {e:#}");
+            StatusCode::BAD_GATEWAY
+        })?;
+    Ok(ws.on_upgrade(move |socket| async move {
+        let (mut read, mut write) = tokio::io::split(stream);
+        let (mut ws_sender, mut ws_receiver) = socket.split();
+        let to_ws = tokio::spawn(async move {
+            let mut buf = vec![0u8; 32768];
+            loop {
+                match read.read(&mut buf).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if ws_sender.send(Message::Binary(buf[..n].to_vec().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            let _ = ws_sender.close().await;
+        });
+        let from_ws = tokio::spawn(async move {
+            while let Some(Ok(msg)) = ws_receiver.next().await {
+                match msg {
+                    Message::Binary(data) => {
+                        if write.write_all(&data).await.is_err() {
+                            break;
+                        }
+                    }
+                    Message::Close(_) => break,
+                    _ => {}
+                }
+            }
+        });
+        tokio::select! {
+            _ = to_ws => {},
+            _ = from_ws => {},
+        }
+    }))
+}
+
 // --- Webhooks & Auto-Deploy ---
 
 async fn webhook_github(
@@ -6351,28 +6475,13 @@ async fn webhook_github(
 
     let config = state.config.lock().await.clone();
 
-    // Collect every configured secret: the global one plus any per-rule
-    // secrets. `require_valid_signature` rejects if the list is empty, so an
-    // unconfigured daemon never accepts an unsigned webhook.
-    let mut secrets: Vec<&str> = Vec::new();
-    if let Some(ref s) = config.webhook_secret
-        && !s.is_empty()
-    {
-        secrets.push(s.as_str());
-    }
-    for r in &config.deploy_rules {
-        if let Some(ref s) = r.webhook_secret
-            && !s.is_empty()
-        {
-            secrets.push(s.as_str());
-        }
-    }
-
     let sig_header = headers.get("x-hub-signature-256").and_then(|v| v.to_str().ok());
-    if let Err(msg) = orca_core::webhook::require_valid_signature(&secrets, &body, sig_header) {
-        tracing::warn!("{msg}");
-        return Err(anyhow::anyhow!("{msg}").into());
-    }
+    let Some(allowed) = webhook_authorized_rules(&config, |secret| {
+        orca_core::webhook::require_valid_signature(&[secret], &body, sig_header).is_ok()
+    }) else {
+        tracing::warn!("GitHub webhook rejected: no configured secret signed it");
+        return Err(anyhow::anyhow!("webhook rejected: invalid or missing signature").into());
+    };
 
     let event_type = headers
         .get("x-github-event")
@@ -6395,7 +6504,7 @@ async fn webhook_github(
         ));
     }
 
-    let rules = config.find_matching_rules(&payload.image, &payload.tag);
+    let rules = allowed.filter(config.find_matching_rules(&payload.image, &payload.tag));
     let matched = rules.len();
 
     if matched > 0 {
@@ -6421,6 +6530,7 @@ async fn webhook_github(
 async fn webhook_dockerhub(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
     body: axum::body::Bytes,
 ) -> Result<impl IntoResponse, ApiError> {
     // Bound request size.
@@ -6430,36 +6540,24 @@ async fn webhook_dockerhub(
 
     let config = state.config.lock().await.clone();
 
-    // Docker Hub webhooks do not carry an HMAC signature, so we require a
-    // shared token in the `X-Orca-Webhook-Token` header. Any configured
-    // webhook_secret or per-rule secret is accepted.
-    let provided = headers.get("x-orca-webhook-token").and_then(|v| v.to_str().ok());
-    let mut candidates: Vec<&str> = Vec::new();
-    if let Some(ref s) = config.webhook_secret
-        && !s.is_empty()
-    {
-        candidates.push(s.as_str());
-    }
-    for r in &config.deploy_rules {
-        if let Some(ref s) = r.webhook_secret
-            && !s.is_empty()
-        {
-            candidates.push(s.as_str());
-        }
-    }
-
-    let authed = candidates
-        .iter()
-        .any(|expected| orca_core::webhook::validate_dockerhub_token(expected, provided));
-    if !authed {
-        tracing::warn!("Docker Hub webhook rejected: missing/invalid X-Orca-Webhook-Token");
+    // Docker Hub webhooks carry no signature, so the secret comes as a
+    // shared token: the `X-Orca-Webhook-Token` header, or `?token=` in the
+    // webhook URL, which is all Docker Hub can send.
+    let provided = headers
+        .get("x-orca-webhook-token")
+        .and_then(|v| v.to_str().ok())
+        .or(query.get("token").map(String::as_str));
+    let Some(allowed) = webhook_authorized_rules(&config, |secret| {
+        orca_core::webhook::validate_dockerhub_token(secret, provided)
+    }) else {
+        tracing::warn!("Docker Hub webhook rejected: missing or invalid token");
         return Err(anyhow::anyhow!("unauthorized webhook").into());
-    }
+    };
 
     let payload = orca_core::webhook::parse_dockerhub_event(&body)
         .map_err(|e| anyhow::anyhow!("Failed to parse Docker Hub webhook: {e}"))?;
 
-    let rules = config.find_matching_rules(&payload.image, &payload.tag);
+    let rules = allowed.filter(config.find_matching_rules(&payload.image, &payload.tag));
     let matched = rules.len();
 
     if matched > 0 {
@@ -6480,6 +6578,44 @@ async fn webhook_dockerhub(
     Ok(Json(serde_json::json!({ "accepted": true, "matched_rules": matched })))
 }
 
+/// Which deploy rules a webhook may fire, by the secret it proved: the
+/// global secret allows every rule, a rule's own secret only that rule.
+enum AllowedRules {
+    All,
+    Only(Vec<String>),
+}
+
+impl AllowedRules {
+    fn filter<'a>(&self, rules: Vec<&'a orca_core::config::DeployRule>) -> Vec<&'a orca_core::config::DeployRule> {
+        match self {
+            AllowedRules::All => rules,
+            AllowedRules::Only(ids) => rules.into_iter().filter(|r| ids.contains(&r.id)).collect(),
+        }
+    }
+}
+
+/// `None` when no configured secret is proven (or none is configured), so
+/// an unconfigured daemon never accepts a webhook.
+fn webhook_authorized_rules(
+    config: &orca_core::config::OrcaConfig,
+    proves: impl Fn(&str) -> bool,
+) -> Option<AllowedRules> {
+    if config
+        .webhook_secret
+        .as_deref()
+        .is_some_and(|s| !s.is_empty() && proves(s))
+    {
+        return Some(AllowedRules::All);
+    }
+    let ids: Vec<String> = config
+        .deploy_rules
+        .iter()
+        .filter(|r| r.webhook_secret.as_deref().is_some_and(|s| !s.is_empty() && proves(s)))
+        .map(|r| r.id.clone())
+        .collect();
+    (!ids.is_empty()).then_some(AllowedRules::Only(ids))
+}
+
 /// Execute auto-deploy for matched rules: pull image, stop old container, start new one.
 async fn execute_auto_deploy(state: &Arc<AppState>, image_ref: &str, rules: &[orca_core::config::DeployRule]) {
     use bollard::container::ListContainersOptions;
@@ -6497,7 +6633,16 @@ async fn execute_auto_deploy(state: &Arc<AppState>, image_ref: &str, rules: &[or
 
     // Pull the new image
     tracing::info!("Auto-deploy: pulling {image_ref}...");
-    if let Err(e) = pull_image_blocking(&state.rt().await.docker, image_ref).await {
+    // A private image needs the registry login saved in Settings → Registries.
+    let credentials = state.config.lock().await.find_credentials(image_ref).and_then(|c| {
+        Some(bollard::auth::DockerCredentials {
+            username: Some(c.username.clone()),
+            password: Some(c.password().ok()?),
+            serveraddress: Some(c.server.clone()),
+            ..Default::default()
+        })
+    });
+    if let Err(e) = pull_image_blocking(&state.rt().await.docker, image_ref, credentials).await {
         tracing::error!("Auto-deploy: failed to pull {image_ref}: {e}");
         // Record failure for all rules
         {
@@ -6640,14 +6785,18 @@ async fn execute_auto_deploy(state: &Arc<AppState>, image_ref: &str, rules: &[or
 }
 
 /// Pull an image and wait for completion.
-async fn pull_image_blocking(docker: &bollard::Docker, image_ref: &str) -> anyhow::Result<()> {
+async fn pull_image_blocking(
+    docker: &bollard::Docker,
+    image_ref: &str,
+    credentials: Option<bollard::auth::DockerCredentials>,
+) -> anyhow::Result<()> {
     use bollard::image::CreateImageOptions;
 
     let options = CreateImageOptions {
         from_image: image_ref,
         ..Default::default()
     };
-    let stream = docker.create_image(Some(options), None, None);
+    let stream = docker.create_image(Some(options), None, credentials);
     let items: Vec<_> = tokio_stream::StreamExt::collect(stream).await;
     for item in items {
         item.map_err(|e| anyhow::anyhow!("Pull error: {e}"))?;
@@ -6905,8 +7054,7 @@ async fn save_schedule(
     Json(body): Json<SaveScheduleRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate cron expression
-    use std::str::FromStr;
-    cron::Schedule::from_str(&body.cron).map_err(|e| anyhow::anyhow!("Invalid cron expression: {e}"))?;
+    crate::cron_expr::parse(&body.cron).map_err(|e| ApiError::bad_request(format!("Invalid schedule: {e}")))?;
 
     let mut config = state.config.lock().await;
     let id = body.id.unwrap_or_else(|| {
@@ -7027,10 +7175,11 @@ async fn call_anthropic_with_tools(
                     let tool_input = block["input"].clone();
 
                     let result = match crate::agent::execute_tool(state, tool_name, tool_input).await {
+                        // Secrets in tool results stay on this machine.
                         Ok(v) => serde_json::json!({
                             "type": "tool_result",
                             "tool_use_id": tool_id,
-                            "content": serde_json::to_string_pretty(&v).unwrap_or_default(),
+                            "content": serde_json::to_string_pretty(&crate::agent::redact_secrets(&v)).unwrap_or_default(),
                         }),
                         Err(e) => serde_json::json!({
                             "type": "tool_result",
@@ -7158,7 +7307,8 @@ async fn call_openai_with_tools(
                 let tc_id = tc["id"].as_str().unwrap_or("");
 
                 let result = match crate::agent::execute_tool(state, fn_name, fn_args).await {
-                    Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+                    // Secrets in tool results stay on this machine.
+                    Ok(v) => serde_json::to_string_pretty(&crate::agent::redact_secrets(&v)).unwrap_or_default(),
                     Err(e) => format!("Error: {e}"),
                 };
 
@@ -7278,10 +7428,30 @@ async fn save_ai_settings(
 
 async fn get_ai_settings(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let config = state.config.lock().await;
+    let saved = |k: &Option<String>| k.as_ref().is_some_and(|k| !k.is_empty());
+    let env = |name: &str| std::env::var(name).is_ok_and(|v| !v.is_empty());
+    // Where the active provider's key comes from; the environment wins, as in ai_ask.
+    let (env_var, saved_key) = match config.ai_provider.as_str() {
+        "anthropic" => ("ANTHROPIC_API_KEY", saved(&config.anthropic_api_key)),
+        "gemini" => ("GOOGLE_API_KEY", saved(&config.openai_api_key)),
+        _ => ("OPENAI_API_KEY", saved(&config.openai_api_key)),
+    };
+    let key_source = if env(env_var) {
+        Some("env")
+    } else if saved_key {
+        Some("settings")
+    } else {
+        None
+    };
+    // A custom endpoint (Ollama, a local server) may need no key at all.
+    let ready = key_source.is_some() || (config.ai_provider == "custom" && !config.openai_url.is_empty());
     Ok(Json(serde_json::json!({
         "provider": config.ai_provider,
-        "has_anthropic_key": config.anthropic_api_key.as_ref().map(|k| !k.is_empty()).unwrap_or(false),
-        "has_openai_key": config.openai_api_key.as_ref().map(|k| !k.is_empty()).unwrap_or(false),
+        "ready": ready,
+        "key_source": key_source,
+        "key_env_var": env_var,
+        "has_anthropic_key": saved(&config.anthropic_api_key) || env("ANTHROPIC_API_KEY"),
+        "has_openai_key": saved(&config.openai_api_key) || env("OPENAI_API_KEY") || env("GOOGLE_API_KEY"),
         "anthropic_model": config.anthropic_model,
         "openai_model": config.openai_model,
         "openai_url": config.openai_url,
@@ -8502,7 +8672,18 @@ async fn gateway_update_config(
     config
         .save()
         .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
-    Ok(Json(serde_json::json!({ "saved": true })))
+    let gateway = config.gateway.clone();
+    drop(config);
+
+    // A running gateway is recreated with the new domain, ports and
+    // certificates, so the change applies now.
+    let running = crate::gateway::is_running(&state).await.unwrap_or(false);
+    if running {
+        crate::gateway::stop(&state).await?;
+        crate::gateway::start(&state, &gateway).await?;
+        crate::gateway_sync::routes_changed();
+    }
+    Ok(Json(serde_json::json!({ "saved": true, "restarted": running })))
 }
 
 /// GET /gateway/landing: the landing page's settings and address.

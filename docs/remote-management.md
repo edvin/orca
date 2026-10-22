@@ -4,7 +4,7 @@ Orca can manage Docker containers on remote Linux servers via the Orca daemon (`
 
 ## Prerequisites
 
-- A Linux server (Ubuntu 22.04+, Debian 12+, or Fedora 39+)
+- A Debian or Ubuntu server (Ubuntu 22.04+, Debian 12+): the installer uses apt. On other distributions, run the `orca-daemon` binary from the release page yourself.
 - Docker installed on the remote server
 - Network access from your desktop to the server on port 9477
 - TLS termination (reverse proxy or VPN) for production use

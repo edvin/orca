@@ -4,6 +4,7 @@
 //! or when someone runs Orca commands for it (UI, CLI, MCP). Projects that
 //! set `idle_stop` in orca.yaml have instances stopped after that long
 //! without use; nothing is deleted and a start brings them back as they were.
+//! Projects with `start: on-create` get new worktrees started on their own.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
@@ -62,8 +63,62 @@ pub fn spawn(state: Arc<AppState>) {
             if let Err(e) = stop_idle(&state).await {
                 tracing::warn!("idle stop: {e:#}");
             }
+            start_new_worktrees(&state).await;
         }
     });
+}
+
+/// Start worktrees that appeared since Orca last looked, for projects with
+/// `dev.start: on-create`. Worktrees already there when Orca first sees a
+/// project are left alone, so a restart never starts a pile of old ones.
+async fn start_new_worktrees(state: &Arc<AppState>) {
+    static SEEN: OnceLock<Mutex<HashMap<String, HashSet<std::path::PathBuf>>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashMap::new()));
+    let ids: Vec<String> = state
+        .config
+        .lock()
+        .await
+        .dev_projects
+        .iter()
+        .map(|p| p.id.clone())
+        .collect();
+    for id in ids {
+        let Ok(ctx) = ProjectCtx::load(state, &id).await else {
+            continue;
+        };
+        let current: HashSet<std::path::PathBuf> = ctx
+            .worktrees
+            .iter()
+            .filter(|w| !w.prunable)
+            .map(|w| w.path.clone())
+            .collect();
+        let new: Vec<std::path::PathBuf> = {
+            let mut seen = seen.lock().await;
+            let Some(known) = seen.get_mut(&id) else {
+                seen.insert(id.clone(), current);
+                continue;
+            };
+            let new = current.difference(known).cloned().collect();
+            *known = current;
+            new
+        };
+        if ctx.dev.start != orca_core::dev::schema::StartPolicy::OnCreate {
+            continue;
+        }
+        for path in new {
+            let Some(name) = ctx.names.iter().find(|(p, _)| *p == path).map(|(_, n)| n.clone()) else {
+                continue;
+            };
+            let opts = deploy::UpOptions {
+                source: Some("auto".into()),
+                ..Default::default()
+            };
+            match deploy::up(state.clone(), id.clone(), name.clone(), opts).await {
+                Ok(_) => tracing::info!("Started new worktree '{name}' of '{id}' (start: on-create)"),
+                Err(e) => tracing::warn!("Could not start new worktree '{name}' of '{id}': {e:#}"),
+            }
+        }
+    }
 }
 
 /// Count requests per instance from the gateway's access log since `since`.

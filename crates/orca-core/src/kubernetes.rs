@@ -38,6 +38,9 @@ pub struct Pod {
     pub node: Option<String>,
     pub ip: Option<String>,
     pub containers: Vec<PodContainer>,
+    /// The pod's labels, which service and deployment selectors match.
+    #[serde(default)]
+    pub labels: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +61,12 @@ pub struct Deployment {
     pub replicas_desired: u32,
     pub age: String,
     pub images: Vec<String>,
+    /// `spec.selector.matchLabels`: the pods this deployment owns.
+    #[serde(default)]
+    pub selector: std::collections::BTreeMap<String, String>,
+    /// Labels of the pods it creates, which service selectors match.
+    #[serde(default)]
+    pub pod_labels: std::collections::BTreeMap<String, String>,
 }
 
 /// A Kubernetes service.
@@ -70,6 +79,9 @@ pub struct Service {
     pub external_ip: Option<String>,
     pub ports: Vec<ServicePort>,
     pub age: String,
+    /// `spec.selector`: the pods the service sends traffic to.
+    #[serde(default)]
+    pub selector: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

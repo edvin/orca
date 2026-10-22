@@ -66,7 +66,8 @@ impl rustls::client::danger::ServerCertVerifier for DangerousNoopCertVerifier {
 
 /// Active port-forward tunnels, keyed by "namespace/service/port".
 /// Each entry holds a tokio task handle that is aborted on drop.
-struct TunnelHandle(tokio::task::JoinHandle<()>);
+/// A port forward's listener task, and the local port it listens on.
+struct TunnelHandle(tokio::task::JoinHandle<()>, u16);
 
 impl Drop for TunnelHandle {
     fn drop(&mut self) {
@@ -391,6 +392,25 @@ pub async fn container_stats(id: String) -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn stack_orca_yaml(name: String) -> Result<serde_json::Value, String> {
     get_json(&format!("/stacks/{}/orca-yaml", urlencoding::encode(&name))).await
+}
+
+/// A stack's compose files, as Compose recorded them.
+#[tauri::command]
+pub async fn stack_compose_files(name: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/stacks/{}/compose-files", urlencoding::encode(&name))).await
+}
+
+/// Write one of a stack's compose files.
+#[tauri::command]
+pub async fn save_stack_compose_file(name: String, path: String, text: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .put(format!("{base}/stacks/{}/compose-files", urlencoding::encode(&name)))
+        .json(&serde_json::json!({ "path": path, "text": text }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    resp.daemon_json().await
 }
 
 /// A stack's compose profiles: which optional services run.
@@ -1763,6 +1783,20 @@ pub async fn k8s_restart_deployment(namespace: String, name: String) -> Result<(
     .await
 }
 
+/// Logs of the newest pod of a Job.
+#[tauri::command]
+pub async fn k8s_job_logs(namespace: String, name: String, tail: Option<u32>) -> Result<serde_json::Value, String> {
+    validate_k8s_name(&namespace)?;
+    validate_k8s_name(&name)?;
+    let tail = tail.map(|t| format!("?tail={t}")).unwrap_or_default();
+    get_json(&format!(
+        "/k8s/jobs/{}/{}/logs{tail}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&name)
+    ))
+    .await
+}
+
 #[tauri::command]
 pub async fn k8s_pod_logs(
     namespace: String,
@@ -2431,7 +2465,8 @@ pub async fn k8s_port_forward(
     validate_k8s_name(&namespace)?;
     validate_k8s_name(&service)?;
     let local = local_port.unwrap_or(port);
-    let key = format!("{namespace}/{service}/{local}");
+    // Keyed by the service port, as the UI looks forwards up.
+    let key = format!("{namespace}/{service}/{port}");
     let address: &str = if expose.unwrap_or(false) {
         "0.0.0.0"
     } else {
@@ -2449,7 +2484,14 @@ pub async fn k8s_port_forward(
     let base_url = daemon_url();
     let token = active_api_token().unwrap_or_default();
     let ws_base = base_url.replace("https://", "wss://").replace("http://", "ws://");
-    let target_host = format!("{service}.{namespace}.svc.cluster.local");
+    // The daemon forwards through the Kubernetes API to a pod behind the
+    // service; cluster IPs and *.svc.cluster.local don't work from the host.
+    let target = format!(
+        "{ws_base}/k8s/port-forward/{}/{}/{port}?token={}",
+        urlencoding::encode(&namespace),
+        urlencoding::encode(&service),
+        urlencoding::encode(&token),
+    );
 
     let tls_verify = DAEMON_URL_OVERRIDE
         .read()
@@ -2467,12 +2509,7 @@ pub async fn k8s_port_forward(
                 Ok(conn) => conn,
                 Err(_) => break,
             };
-            let url = format!(
-                "{ws_base}/tunnel?host={}&port={}&token={}",
-                urlencoding::encode(&target_host),
-                port,
-                urlencoding::encode(&token),
-            );
+            let url = target.clone();
             let tls_v = tls_verify;
             tokio::spawn(async move {
                 if let Err(e) = proxy_tcp_to_ws(tcp_stream, &url, tls_v).await {
@@ -2485,7 +2522,7 @@ pub async fn k8s_port_forward(
     port_forward_map()
         .lock()
         .map_err(|e| format!("{e}"))?
-        .insert(key, TunnelHandle(task));
+        .insert(key, TunnelHandle(task, local));
 
     Ok(serde_json::json!({ "status": "started", "port": local, "mode": "tunnel" }))
 }
@@ -2578,13 +2615,14 @@ pub async fn k8s_stop_port_forward(namespace: String, service: String, port: u16
 pub async fn k8s_list_port_forwards() -> Result<serde_json::Value, String> {
     let map = port_forward_map().lock().map_err(|e| format!("{e}"))?;
     let forwards: Vec<serde_json::Value> = map
-        .keys()
-        .map(|k| {
+        .iter()
+        .map(|(k, h)| {
             let parts: Vec<&str> = k.split('/').collect();
             serde_json::json!({
                 "namespace": parts.first().unwrap_or(&""),
                 "service": parts.get(1).unwrap_or(&""),
                 "port": parts.get(2).unwrap_or(&""),
+                "local_port": h.1,
             })
         })
         .collect();
@@ -3539,7 +3577,17 @@ pub async fn reconnect_runtime() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn cleanup(scope: String) -> Result<serde_json::Value, String> {
     let base = daemon_url();
-    const ALLOWED_SCOPES: &[&str] = &["containers", "images", "volumes", "networks", "build_cache", "all"];
+    const ALLOWED_SCOPES: &[&str] = &[
+        "containers",
+        "images",
+        "volumes",
+        "networks",
+        "build_cache",
+        "templates",
+        "vms",
+        "config",
+        "all",
+    ];
     if !ALLOWED_SCOPES.contains(&scope.as_str()) {
         return Err(format!("Invalid cleanup scope: {scope}"));
     }
@@ -4561,9 +4609,10 @@ pub async fn gateway_update_config(
     tls_mode: String,
     custom_cert: Option<String>,
     custom_key: Option<String>,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     let base = daemon_url();
-    let resp = client()
+    // Saving recreates a running gateway, which can take a moment.
+    let resp = authed_client_with_timeout(120)
         .put(format!("{base}/gateway/config"))
         .json(&serde_json::json!({
             "domain": domain,
@@ -4576,11 +4625,7 @@ pub async fn gateway_update_config(
         .send()
         .await
         .map_err(|e| format!("Daemon connection failed: {e}"))?;
-    if resp.status().is_success() {
-        Ok(())
-    } else {
-        Err(daemon_error(resp).await)
-    }
+    resp.daemon_json().await
 }
 
 #[tauri::command]

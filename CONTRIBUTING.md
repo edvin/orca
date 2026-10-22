@@ -155,6 +155,10 @@ Available types:
 | `random_base64` | Random base64 string. `length` = number of bytes (default: 32) |
 | `lan_ip` | Auto-detect the machine's LAN IP address |
 | `user_input` | Prompt the user during deploy. Fields: `label`, `placeholder`, `required`, `secret` |
+| `self_signed_cert` | A PEM certificate signed by Orca's CA. Optional `subject` sets the name (default `localhost`) |
+| `self_signed_key` | The private key that matches `self_signed_cert` |
+
+The same types work in `generated_files`, which writes each value to a file next to the stack (a path relative to it) instead of an environment variable; use it for certificates and keys.
 
 #### Post-deploy setup guide
 
