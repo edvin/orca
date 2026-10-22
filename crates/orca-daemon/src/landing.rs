@@ -730,4 +730,144 @@ mod tests {
         assert!(!html.contains("<script>alert"));
         assert!(!html.contains("javascript:"));
     }
+
+    /// Writes a realistic demo page for the website's screenshots:
+    /// `ORCA_LANDING_DEMO=/tmp/landing.html cargo test -p orca-daemon landing_demo -- --ignored`
+    #[test]
+    #[ignore]
+    fn landing_demo() {
+        let Ok(out) = std::env::var("ORCA_LANDING_DEMO") else {
+            return;
+        };
+        let ago = |mins: i64| (chrono::Utc::now() - chrono::Duration::minutes(mins)).to_rfc3339();
+        let r = |host: &str, container: &str, port: u16, owner: &str, title: Option<&str>, desc: Option<&str>| {
+            let mut x = route(host, container, port);
+            x.owner = Some(owner.into());
+            x.presentation.title = title.map(Into::into);
+            x.presentation.description = desc.map(Into::into);
+            x
+        };
+        let mut feat = r(
+            "web-feature-checkout-shop.localhost",
+            "shop-feature-checkout-web-1",
+            3000,
+            "dev:shop:feature-checkout",
+            None,
+            None,
+        );
+        feat.sleeping = false;
+        let mut idle = r(
+            "web-fix-tax-shop.localhost",
+            "shop-fix-tax-web-1",
+            3000,
+            "dev:shop:fix-tax",
+            None,
+            None,
+        );
+        idle.sleeping = true;
+        let mut c = config(vec![
+            r(
+                "shop.localhost",
+                "shop-web-1",
+                3000,
+                "project:shop",
+                Some("Storefront"),
+                Some("The customer-facing shop"),
+            ),
+            r(
+                "admin.localhost",
+                "shop-admin-1",
+                8080,
+                "project:shop",
+                Some("Admin"),
+                Some("Orders, products and customers"),
+            ),
+            r(
+                "mail.localhost",
+                "shop-mailpit-1",
+                8025,
+                "project:shop",
+                Some("Mailpit"),
+                Some("Every email the shop sends"),
+            ),
+            feat,
+            idle,
+            r(
+                "website.localhost",
+                "website-wordpress-1",
+                80,
+                "stack:website",
+                Some("Website"),
+                Some("The marketing site, on WordPress"),
+            ),
+            r(
+                "grafana.localhost",
+                "telemetry-grafana-1",
+                3000,
+                "label:telemetry-grafana-1",
+                Some("Grafana"),
+                Some("Dashboards and alerts"),
+            ),
+            r(
+                "sso.localhost",
+                "sso-keycloak-1",
+                8080,
+                "project:sso",
+                Some("Keycloak"),
+                Some("Single sign-on for every app"),
+            ),
+        ]);
+        c.landing.title = Some("Acme dev".into());
+        c.stack_links = vec![StackLinkGroup {
+            stack: "shop".into(),
+            group: "Environments".into(),
+            links: vec![
+                EnvironmentLink {
+                    name: "Storefront".into(),
+                    urls: [
+                        ("local", "shop"),
+                        ("staging", "https://staging.shop.example.com"),
+                        ("production", "https://shop.example.com"),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+                },
+                EnvironmentLink {
+                    name: "API docs".into(),
+                    urls: [
+                        ("local", "shop/api/docs"),
+                        ("staging", "https://staging.shop.example.com/api/docs"),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+                },
+            ],
+        }];
+        let unhealthy = ServiceState {
+            status: Status::Unhealthy,
+            started_at: Some(ago(12)),
+            project: Some("sso".into()),
+        };
+        let states = HashMap::from([
+            ("shop-web-1".to_string(), running(&ago(185), Some("shop"))),
+            ("shop-admin-1".to_string(), running(&ago(185), Some("shop"))),
+            ("shop-mailpit-1".to_string(), running(&ago(185), Some("shop"))),
+            (
+                "shop-feature-checkout-web-1".to_string(),
+                running(&ago(42), Some("shop-feature-checkout")),
+            ),
+            (
+                "website-wordpress-1".to_string(),
+                running(&ago(60 * 26), Some("website")),
+            ),
+            (
+                "telemetry-grafana-1".to_string(),
+                running(&ago(60 * 74), Some("telemetry")),
+            ),
+            ("sso-keycloak-1".to_string(), unhealthy),
+        ]);
+        std::fs::write(out, render(&c, &states)).unwrap();
+    }
 }

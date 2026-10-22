@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en" data-page="docs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How Orca runs on macOS, Windows and Linux — Orca docs</title>
+<meta name="description" content="Where Docker runs on each platform (a Lima VM on macOS, WSL2 on Windows, natively on Linux), how to size it, and where Orca keeps its files.">
+<link rel="canonical" href="https://orca-desktop.com/docs/platforms/">
+<meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Orca">
+<meta property="og:title" content="How Orca runs on macOS, Windows and Linux — Orca docs">
+<meta property="og:description" content="Where Docker runs on each platform (a Lima VM on macOS, WSL2 on Windows, natively on Linux), how to size it, and where Orca keeps its files.">
+<meta property="og:url" content="https://orca-desktop.com/docs/platforms/">
+<meta property="og:image" content="https://orca-desktop.com/assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
+<script src="/assets/site.js?v=mvjqae17" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a>
+    <nav class="top-nav" aria-label="Main"><a href="/docs/introduction/" aria-current="page">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="search-trigger" type="button" data-search-open aria-label="Search the docs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search docs</span><kbd>⌘K</kbd></button>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode"><span class="when-dark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="when-light"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span></button>
+      <a class="icon-btn gh-btn" href="https://github.com/edvin/orca" target="_blank" rel="noopener" aria-label="Orca on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span class="gh-stars">26</span></a>
+      <a class="btn btn-primary btn-sm header-cta" href="/download/">Download</a>
+      <button class="icon-btn menu-btn" type="button" aria-label="Open menu" aria-expanded="false" data-menu-open><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+</header>
+<div class="mobile-menu" hidden>
+  <div class="mm-head"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><button class="icon-btn" type="button" aria-label="Close menu" data-menu-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="mm-body">
+    <div class="mm-top"><a href="/docs/introduction/">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca">GitHub</a></div>
+    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">AI assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
+  </div>
+</div>
+<main id="main">
+<div class="docs-shell">
+  <aside class="docs-sidebar" aria-label="Documentation">
+    <div class="sb-inner"><div class="sb-section"><div class="sb-title">Getting started</div><ul><li><a href="/docs/introduction/">Introduction</a></li><li><a href="/docs/install/">Install</a></li><li><a href="/docs/quickstart/">Quickstart</a></li><li><a href="/docs/platforms/" aria-current="page">Platforms</a></li></ul></div><div class="sb-section"><div class="sb-title">Local development</div><ul><li><a href="/docs/gateway/">Gateway</a></li><li><a href="/docs/orca-yaml/">orca.yaml</a></li><li><a href="/docs/profiles/">Profiles</a></li><li><a href="/docs/worktrees/">Worktree instances</a></li></ul></div><div class="sb-section"><div class="sb-title">Working with Orca</div><ul><li><a href="/docs/containers/">Containers</a></li><li><a href="/docs/stacks/">Stacks</a></li><li><a href="/docs/images-and-builds/">Images &amp; builds</a></li><li><a href="/docs/templates/">App Catalog</a></li><li><a href="/docs/kubernetes/">Kubernetes</a></li></ul></div><div class="sb-section"><div class="sb-title">AI and automation</div><ul><li><a href="/docs/agents/">Agents &amp; MCP</a></li><li><a href="/docs/ai-assistant/">AI assistant</a></li><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/api/">REST API</a></li><li><a href="/docs/auto-deploy/">Push to deploy</a></li></ul></div><div class="sb-section"><div class="sb-title">Servers and teams</div><ul><li><a href="/docs/remote-hosts/">Remote hosts</a></li><li><a href="/docs/security/">Security &amp; privacy</a></li></ul></div><div class="sb-section"><div class="sb-title">Help</div><ul><li><a href="/docs/troubleshooting/">Troubleshooting</a></li></ul></div></div>
+  </aside>
+  <article class="doc">
+    <div class="doc-head">
+      <div class="crumbs"><a href="/docs/introduction/">Docs</a><span>/</span><span>Getting started</span></div>
+      <h1>How Orca runs on macOS, Windows and Linux</h1>
+      <p class="lede">Where Docker runs on each platform (a Lima VM on macOS, WSL2 on Windows, natively on Linux), how to size it, and where Orca keeps its files.</p>
+    </div>
+    <div class="prose"><p>Orca has the same three parts everywhere: the desktop app, the Orca daemon, and a Docker (or Podman) engine. What differs per platform is where that engine runs. Read this page when you want to know what Orca set up on your machine, change the VM&#39;s resources, or find a config file.</p>
+<h2 id="the-daemon"><a class="anchor" href="#the-daemon" aria-hidden="true" tabindex="-1">#</a>The daemon</h2>
+<p>The desktop app starts <code>orca-daemon</code> in the background and stops it when you quit with <strong>Quit Orca</strong>. The daemon serves a REST API on <code>http://127.0.0.1:9477/api/v1/</code>, only on the loopback interface. The app, the <code>orca</code> CLI and AI agents all go through it.</p>
+<ul>
+<li>Every request needs the API token from <code>config.json</code> as <code>Authorization: Bearer &lt;token&gt;</code>, except <code>GET /api/v1/health</code>.</li>
+<li>The daemon creates the token on its first start.</li>
+<li>If the daemon exits unexpectedly, the app restarts it, up to 3 times in 10 minutes.</li>
+<li>If a daemon of a different version is already running when the app starts (for example after an update), the app replaces it with its own.</li>
+</ul>
+<p>Check that it&#39;s up and which version it runs:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">curl</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -s</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> http://127.0.0.1:9477/api/v1/health</span></span></code></pre></div><div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">{</span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">"status"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"ok"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">,</span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">"version"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"0.50.0"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">}</span></span></code></pre></div><h2 id="macos-a-lima-vm"><a class="anchor" href="#macos-a-lima-vm" aria-hidden="true" tabindex="-1">#</a>macOS: a Lima VM</h2>
+<p>Containers need a Linux kernel, so on macOS Docker runs in a VM named <code>orca</code>, managed by <a href="https://lima-vm.io" target="_blank" rel="noopener">Lima</a>. Orca creates it during first-start setup (see <a href="/docs/install/#macos">Install</a>).</p>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>Hypervisor</td><td>Apple Virtualization.framework (<code>vmType: vz</code>)</td></tr><tr><td>Guest</td><td>Ubuntu 26.04 LTS, Docker from Lima&#39;s <code>docker</code> template</td></tr><tr><td>x86 images</td><td>Rosetta is enabled, so <code>linux/amd64</code> images run on Apple Silicon</td></tr><tr><td>File sharing</td><td>VirtioFS. Your home folder, <code>/Volumes</code> and <code>/private</code> are mounted writable</td></tr><tr><td>CPUs and memory</td><td>4 CPUs; memory is half your Mac&#39;s RAM, between 4 and 16 GiB</td></tr><tr><td>Host to guest</td><td>SSH and the Docker socket travel over vsock</td></tr><tr><td>Docker socket</td><td><code>~/.lima/orca/sock/docker.sock</code>, Docker context <code>lima-orca</code></td></tr></tbody></table></div><h3 id="ports"><a class="anchor" href="#ports" aria-hidden="true" tabindex="-1">#</a>Ports</h3>
+<p>Any container port published on <code>0.0.0.0</code> in the VM is forwarded to <code>127.0.0.1</code> on your Mac, for all TCP ports. <code>docker run -p 8080:80 nginx</code> is reachable at <code>http://localhost:8080</code>, as with Docker Desktop.</p>
+<h3 id="bind-mounts-and-file-ownership"><a class="anchor" href="#bind-mounts-and-file-ownership" aria-hidden="true" tabindex="-1">#</a>Bind mounts and file ownership</h3>
+<p>The Ubuntu 26.04 kernel supports idmapped mounts natively, which is what lets <code>chmod</code>, <code>chown</code> and non-root containers work on bind-mounted folders from your Mac. VMs created by older Orca versions run Ubuntu 24.04, where Orca installs the newer HWE kernel for the same reason.</p>
+<h3 id="why-vsock"><a class="anchor" href="#why-vsock" aria-hidden="true" tabindex="-1">#</a>Why vsock</h3>
+<p>Lima normally reaches the VM over a virtual network. Behind a mesh VPN (NetBird, Tailscale, WireGuard), that path can break and the VM never becomes reachable. The current VM carries SSH and the Docker socket over vsock, a channel between the hypervisor and the guest that a VPN can&#39;t intercept, and gives the guest a fixed network address instead of asking for one over DHCP.</p>
+<p>If System Health shows <strong>Docker VM Base</strong>, your VM was built on the older Ubuntu 24.04 base without vsock. It keeps working without a VPN. To move to the current base, use <strong>Recreate VM</strong> on System Health. Recreating deletes the VM, so containers, images and volumes in it are lost and you re-pull or rebuild them.</p>
+<h3 id="auto-reconciliation"><a class="anchor" href="#auto-reconciliation" aria-hidden="true" tabindex="-1">#</a>Auto-reconciliation</h3>
+<p>Every time the daemon starts, it reads <code>~/.lima/orca/lima.yaml</code> and adds anything an older Orca version didn&#39;t set: the port forwarding rule, the <code>/Volumes</code> and <code>/private</code> mounts, vsock SSH (or the HWE kernel on older VMs), and a fix for Apple M4 and M5 chips. If something is missing, Orca stops the VM, applies it with <code>limactl edit</code> and starts it again. Upgrading Orca doesn&#39;t require recreating the VM.</p>
+<p>On a running VM the daemon also makes sure IPv4 forwarding is on, so <code>docker compose up</code> networking works after a reboot.</p>
+<p>If the VM is stopped when the daemon starts, the daemon starts it. If it doesn&#39;t come up, the daemon force-stops it, clears Lima&#39;s stale lock and socket files and tries again.</p>
+<h3 id="vm-resources"><a class="anchor" href="#vm-resources" aria-hidden="true" tabindex="-1">#</a>VM resources</h3>
+<p>Change CPUs, memory and disk in <strong>Settings</strong> &gt; <strong>General</strong> &gt; <strong>Virtual Machine</strong>, then click <strong>Apply Changes</strong>. This restarts the VM and stops running containers. Memory must be at least 2 GB and no more than your Mac has; disk must be at least 10 GB.</p>
+<h2 id="windows-wsl2"><a class="anchor" href="#windows-wsl2" aria-hidden="true" tabindex="-1">#</a>Windows: WSL2</h2>
+<p>On Windows, Docker runs in your default WSL2 distro.</p>
+<ul>
+<li>First-start setup installs Docker in that distro and adds a systemd override so <code>dockerd</code> listens on its normal socket and on <code>tcp://127.0.0.1:2375</code>.</li>
+<li>The daemon connects to Docker Desktop&#39;s named pipe first if Docker Desktop is running, and otherwise to <code>localhost:2375</code>.</li>
+<li>If neither answers when the daemon starts, it starts Docker in WSL and retries for about 15 seconds.</li>
+</ul>
+<p>The TCP listener is bound to <code>127.0.0.1</code> inside WSL. Uninstalling Orca removes the override.</p>
+<h3 id="wsl2-resources"><a class="anchor" href="#wsl2-resources" aria-hidden="true" tabindex="-1">#</a>WSL2 resources</h3>
+<p>WSL2&#39;s limits apply to all your distros, not only Docker. Set them in <strong>Settings</strong> &gt; <strong>General</strong> &gt; <strong>WSL2 Resources</strong>: <strong>Memory</strong>, <strong>Processors</strong> and <strong>Swap</strong> (for example <code>8GB</code>, <code>4</code>, <code>0</code>). Orca writes them to the <code>[wsl2]</code> section of <code>%USERPROFILE%\.wslconfig</code> and keeps your other settings in that file.</p>
+<p>Changes take effect after WSL restarts:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">wsl</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> --shutdown</span></span></code></pre></div><h2 id="linux-native"><a class="anchor" href="#linux-native" aria-hidden="true" tabindex="-1">#</a>Linux: native</h2>
+<p>On Linux there&#39;s no VM. Orca talks to the Docker or Podman socket on your machine, and container ports are on your host directly.</p>
+<p>The daemon uses the first socket that responds, in this order:</p>
+<ol>
+<li><code>DOCKER_HOST</code>, when it&#39;s a <code>unix://</code> path</li>
+<li>The active Docker context</li>
+<li><code>/var/run/docker.sock</code></li>
+<li>Rootless Podman at <code>/run/user/&lt;uid&gt;/podman/podman.sock</code>, then <code>/run/podman/podman.sock</code></li>
+</ol>
+<p>On macOS the same search also finds Docker Desktop, Colima and other Lima VMs, which is how Orca can work with an engine you already have.</p>
+<h2 id="where-files-live"><a class="anchor" href="#where-files-live" aria-hidden="true" tabindex="-1">#</a>Where files live</h2>
+<div class="table-wrap"><table><thead><tr><th></th><th>macOS</th><th>Windows</th><th>Linux</th></tr></thead><tbody><tr><td>Config and API token</td><td><code>~/Library/Application Support/orca/config.json</code></td><td><code>%APPDATA%\orca\config.json</code></td><td><code>~/.config/orca/config.json</code></td></tr><tr><td>Daemon log</td><td><code>~/Library/Application Support/orca/daemon.log</code></td><td><code>%APPDATA%\orca\daemon.log</code></td><td><code>~/.config/orca/daemon.log</code></td></tr><tr><td>Data</td><td><code>~/Library/Application Support/orca/</code></td><td><code>%APPDATA%\orca\</code></td><td><code>~/.local/share/orca/</code></td></tr></tbody></table></div><p>The daemon log is written when the desktop app starts the daemon. The log from the previous run is kept next to it as <code>daemon.prev.log</code>, so after a crash you can still read why. <strong>Settings</strong> &gt; <strong>About</strong> &gt; <strong>Paths</strong> shows these paths with a copy button.</p>
+<p>On a Linux server where the daemon was installed as a service, the config is <code>/etc/orca/config.json</code> and logs go to the journal (<code>journalctl -u orca-daemon</code>). If <code>/etc/orca/config.json</code> exists, the daemon uses it instead of the per-user file.</p>
+<p>Read your token, for example on Linux:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">python3</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -c</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> "import json; print(json.load(open('</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">$HOME</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">/.config/orca/config.json'))['api_token'])"</span></span></code></pre></div><h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>
+<ul>
+<li><a href="/docs/install/">Install Orca</a></li>
+<li><a href="/docs/troubleshooting/">Troubleshooting</a></li>
+<li><a href="/docs/remote-hosts/">Remote hosts</a></li>
+</ul>
+</div>
+    <div class="doc-foot">
+      <a class="edit" href="https://github.com/edvin/orca/edit/main/site/content/docs/platforms.md" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg> Edit this page on GitHub</a>
+    </div>
+    <nav class="pager" aria-label="Previous and next page"><a class="pager-prev" href="/docs/quickstart/"><span class="pager-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Previous</span><span class="pager-title">Quickstart</span></a><a class="pager-next" href="/docs/gateway/"><span class="pager-label">Next <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="pager-title">Gateway</span></a></nav>
+  </article>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#the-daemon">The daemon</a></li><li class="d2"><a href="#macos-a-lima-vm">macOS: a Lima VM</a></li><li class="d3"><a href="#ports">Ports</a></li><li class="d3"><a href="#bind-mounts-and-file-ownership">Bind mounts and file ownership</a></li><li class="d3"><a href="#why-vsock">Why vsock</a></li><li class="d3"><a href="#auto-reconciliation">Auto-reconciliation</a></li><li class="d3"><a href="#vm-resources">VM resources</a></li><li class="d2"><a href="#windows-wsl2">Windows: WSL2</a></li><li class="d3"><a href="#wsl2-resources">WSL2 resources</a></li><li class="d2"><a href="#linux-native">Linux: native</a></li><li class="d2"><a href="#where-files-live">Where files live</a></li><li class="d2"><a href="#related">Related</a></li></ul></nav></aside>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="f-brand"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><p>The open source container platform for local development. Free, MIT licensed, no telemetry.</p></div>
+    <div class="f-col"><div class="f-title">Product</div><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="/docs/templates/">App Catalog</a><a href="https://github.com/edvin/orca/releases" target="_blank" rel="noopener">Releases</a></div>
+    <div class="f-col"><div class="f-title">Docs</div><a href="/docs/quickstart/">Quickstart</a><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/agents/">Agents & MCP</a><a href="/docs/cli/">CLI</a></div>
+    <div class="f-col"><div class="f-title">Community</div><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">Issues</a><a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a><a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener">Add a template</a></div>
+    <div class="f-col"><div class="f-title">Trust</div><a href="/docs/security/">Security</a><a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a><a href="https://github.com/edvin/orca/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a></div>
+  </div>
+  <div class="footer-bottom"><span>© 2026 Orca contributors</span><span>Packages hosted by <a href="https://cloudsmith.com" target="_blank" rel="noopener">Cloudsmith</a></span></div>
+</footer>
+<div class="search-dialog" hidden role="dialog" aria-modal="true" aria-label="Search the docs">
+  <div class="search-panel">
+    <div class="search-input"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Search the docs" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <div class="search-results" role="listbox"></div>
+    <div class="search-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span></div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en" data-page="docs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quickstart — Orca docs</title>
+<meta name="description" content="A ten-minute walkthrough after installing Orca: run a container, start a compose stack, give it an HTTPS hostname and add an orca.yaml.">
+<link rel="canonical" href="https://orca-desktop.com/docs/quickstart/">
+<meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Orca">
+<meta property="og:title" content="Quickstart — Orca docs">
+<meta property="og:description" content="A ten-minute walkthrough after installing Orca: run a container, start a compose stack, give it an HTTPS hostname and add an orca.yaml.">
+<meta property="og:url" content="https://orca-desktop.com/docs/quickstart/">
+<meta property="og:image" content="https://orca-desktop.com/assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
+<script src="/assets/site.js?v=mvjqae17" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a>
+    <nav class="top-nav" aria-label="Main"><a href="/docs/introduction/" aria-current="page">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="search-trigger" type="button" data-search-open aria-label="Search the docs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search docs</span><kbd>⌘K</kbd></button>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode"><span class="when-dark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="when-light"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span></button>
+      <a class="icon-btn gh-btn" href="https://github.com/edvin/orca" target="_blank" rel="noopener" aria-label="Orca on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span class="gh-stars">26</span></a>
+      <a class="btn btn-primary btn-sm header-cta" href="/download/">Download</a>
+      <button class="icon-btn menu-btn" type="button" aria-label="Open menu" aria-expanded="false" data-menu-open><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+</header>
+<div class="mobile-menu" hidden>
+  <div class="mm-head"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><button class="icon-btn" type="button" aria-label="Close menu" data-menu-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="mm-body">
+    <div class="mm-top"><a href="/docs/introduction/">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca">GitHub</a></div>
+    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">AI assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
+  </div>
+</div>
+<main id="main">
+<div class="docs-shell">
+  <aside class="docs-sidebar" aria-label="Documentation">
+    <div class="sb-inner"><div class="sb-section"><div class="sb-title">Getting started</div><ul><li><a href="/docs/introduction/">Introduction</a></li><li><a href="/docs/install/">Install</a></li><li><a href="/docs/quickstart/" aria-current="page">Quickstart</a></li><li><a href="/docs/platforms/">Platforms</a></li></ul></div><div class="sb-section"><div class="sb-title">Local development</div><ul><li><a href="/docs/gateway/">Gateway</a></li><li><a href="/docs/orca-yaml/">orca.yaml</a></li><li><a href="/docs/profiles/">Profiles</a></li><li><a href="/docs/worktrees/">Worktree instances</a></li></ul></div><div class="sb-section"><div class="sb-title">Working with Orca</div><ul><li><a href="/docs/containers/">Containers</a></li><li><a href="/docs/stacks/">Stacks</a></li><li><a href="/docs/images-and-builds/">Images &amp; builds</a></li><li><a href="/docs/templates/">App Catalog</a></li><li><a href="/docs/kubernetes/">Kubernetes</a></li></ul></div><div class="sb-section"><div class="sb-title">AI and automation</div><ul><li><a href="/docs/agents/">Agents &amp; MCP</a></li><li><a href="/docs/ai-assistant/">AI assistant</a></li><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/api/">REST API</a></li><li><a href="/docs/auto-deploy/">Push to deploy</a></li></ul></div><div class="sb-section"><div class="sb-title">Servers and teams</div><ul><li><a href="/docs/remote-hosts/">Remote hosts</a></li><li><a href="/docs/security/">Security &amp; privacy</a></li></ul></div><div class="sb-section"><div class="sb-title">Help</div><ul><li><a href="/docs/troubleshooting/">Troubleshooting</a></li></ul></div></div>
+  </aside>
+  <article class="doc">
+    <div class="doc-head">
+      <div class="crumbs"><a href="/docs/introduction/">Docs</a><span>/</span><span>Getting started</span></div>
+      <h1>Quickstart</h1>
+      <p class="lede">A ten-minute walkthrough after installing Orca: run a container, start a compose stack, give it an HTTPS hostname and add an orca.yaml.</p>
+    </div>
+    <div class="prose"><p>This walkthrough takes you from a fresh install to a compose app served at <code>https://&lt;name&gt;.localhost</code> with a trusted certificate. It assumes Orca is installed and has finished its first-start setup. If not, start with <a href="/docs/install/">Install Orca</a>.</p>
+<h2 id="1-check-the-runtime"><a class="anchor" href="#1-check-the-runtime" aria-hidden="true" tabindex="-1">#</a>1. Check the runtime</h2>
+<p>Open <strong>System Health</strong> in the sidebar. When everything is in place it says <strong>All Systems Operational</strong>, with your platform and runtime underneath. If a check is red, click its <strong>Fix</strong> button, or see <a href="/docs/troubleshooting/">Troubleshooting</a>.</p>
+<p>The status bar at the bottom shows a green <strong>Docker</strong> dot while Orca is connected to the engine.</p>
+<h2 id="2-run-a-container"><a class="anchor" href="#2-run-a-container" aria-hidden="true" tabindex="-1">#</a>2. Run a container</h2>
+<ol>
+<li>Go to <strong>Containers</strong> and click <strong>Run</strong>.</li>
+<li>In the <strong>Run Container</strong> dialog, set <strong>Image</strong> to <code>nginx:alpine</code> and <strong>Port Mappings</strong> to <code>8080:80</code>.</li>
+<li>Click <strong>Run</strong>.</li>
+</ol>
+<p>Orca pulls the image if needed and starts the container. Open <code>http://localhost:8080</code> to see the nginx welcome page. On macOS this works because Orca forwards the VM&#39;s ports to your Mac.</p>
+<p>Prefer a ready-made app? Open <strong>App Catalog</strong>, click a template, review the settings in the <strong>Deploy</strong> dialog and click <strong>Deploy</strong>.</p>
+<p><figure class="shot"><img src="/assets/screens/app-catalog.webp" alt="App Catalog with templates grouped by category" loading="lazy" decoding="async"></figure></p>
+<h2 id="3-start-a-compose-stack"><a class="anchor" href="#3-start-a-compose-stack" aria-hidden="true" tabindex="-1">#</a>3. Start a compose stack</h2>
+<p>Orca shows every compose project it can see, however it was started. You have two ways to start one.</p>
+<p><strong>From a terminal.</strong> In a folder with a <code>compose.yaml</code> (or <code>docker-compose.yml</code>), run:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">docker</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> compose</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> up</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -d</span></span></code></pre></div><p>On macOS, first-start setup pointed the <code>docker</code> command at Orca&#39;s VM, and on Linux it talks to the same engine as Orca.</p>
+<p><strong>From Orca.</strong> On <strong>Containers</strong>, click <strong>Compose</strong>. In <strong>Deploy Compose Stack</strong>, enter an absolute <strong>Directory Path</strong> where Orca should save <code>docker-compose.yml</code>, edit the YAML, then click <strong>Validate</strong> and <strong>Deploy</strong>.</p>
+<p>The stack appears on <strong>Containers</strong> as a group with its services. Click the stack&#39;s name to open its page, with <strong>Services</strong>, <strong>Logs</strong>, <strong>Compose File</strong> and <strong>orca.yaml</strong> tabs.</p>
+<h2 id="4-give-it-an-https-hostname"><a class="anchor" href="#4-give-it-an-https-hostname" aria-hidden="true" tabindex="-1">#</a>4. Give it an HTTPS hostname</h2>
+<p>The gateway is a reverse proxy, running as a container, that serves your containers at <code>https://&lt;name&gt;.localhost</code> on ports 80 and 443. <code>.localhost</code> names resolve to your own machine in browsers, so there&#39;s nothing to add to a hosts file.</p>
+<ol>
+<li>Open <strong>Gateway</strong> and click <strong>Start Gateway</strong>. The first start pulls <code>caddy:2-alpine</code>.</li>
+<li>Go back to <strong>Containers</strong>. On the container you want to expose, open <strong>More actions</strong> (the menu at the end of the row) and choose <strong>Expose via Gateway</strong>.</li>
+<li>Enter a <strong>Hostname</strong>, for example <code>myapp</code>, and the <strong>Container Port</strong> your app listens on inside the container (for nginx, <code>80</code>). A name without a dot gets <code>.localhost</code> added.</li>
+<li>Click <strong>Add Route</strong>.</li>
+</ol>
+<p>Open <code>https://myapp.localhost</code>. The route also shows on the container&#39;s row and on the <strong>Gateway</strong> page under <strong>Routes</strong>, where <strong>Add Route</strong> works too.</p>
+<p>The <a href="/docs/gateway/">Gateway</a> page covers paths, custom domains and the landing page.</p>
+<h2 id="5-trust-orcas-certificate"><a class="anchor" href="#5-trust-orcas-certificate" aria-hidden="true" tabindex="-1">#</a>5. Trust Orca&#39;s certificate</h2>
+<p>Orca signs a certificate for each hostname with its own local certificate authority. Until your system trusts that CA, the browser shows a certificate warning.</p>
+<p>Go to <strong>Settings</strong> &gt; <strong>Certificates</strong> and click <strong>Download CA Certificate</strong>. It saves <code>orca-ca.pem</code> to your Downloads folder, and the page shows the command to install it on your platform. On macOS that is:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> security</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> add-trusted-cert</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -d</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -r</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> trustRoot</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -k</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> /Library/Keychains/System.keychain</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ~/Downloads/orca-ca.pem</span></span></code></pre></div><p>If the <code>orca</code> CLI is on your <code>PATH</code>, this does the same in one step for macOS, Windows and Linux:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> install</span></span></code></pre></div><p>Reload <code>https://myapp.localhost</code>: the warning is gone. You only do this once per machine.</p>
+<h2 id="6-add-an-orcayaml"><a class="anchor" href="#6-add-an-orcayaml" aria-hidden="true" tabindex="-1">#</a>6. Add an orca.yaml</h2>
+<p>Routes you click together live in Orca&#39;s own config. To share them with your team, put them in an <code>orca.yaml</code> next to the compose file and commit it. Anyone who runs the project with Orca then gets the same hostnames.</p>
+<ol>
+<li>Open the stack&#39;s page and the <strong>orca.yaml</strong> tab.</li>
+<li>Click <strong>Create orca.yaml</strong>. Orca drafts a file from the stack&#39;s running services; nothing is saved yet.</li>
+<li>Adjust the routes in the form or in the YAML, then click <strong>Create orca.yaml</strong> to save it.</li>
+</ol>
+<p>A minimal file routes one service:</p>
+<div class="code has-title"><div class="code-title"><span>orca.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">gateway</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hostname</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">      # https://shop.localhost</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    service</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">web</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">        # the compose service</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    port</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">3000</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">          # the port it listens on inside the container</span></span></code></pre></div><p>Orca picks up changes to the file straight away. The <a href="/docs/orca-yaml/">orca.yaml reference</a> covers links, builds, hooks and worktree instances.</p>
+<h2 id="next-steps"><a class="anchor" href="#next-steps" aria-hidden="true" tabindex="-1">#</a>Next steps</h2>
+<ul>
+<li><a href="/docs/orca-yaml/">orca.yaml reference</a>: links, build targets, setup hooks and per-worktree instances.</li>
+<li><a href="/docs/gateway/">Gateway</a>: custom domains, path routes and routes from container labels.</li>
+<li><a href="/docs/platforms/">How Orca runs on your platform</a>: the VM, ports and where files live.</li>
+<li><a href="/docs/remote-hosts/">Remote hosts</a>: manage a Linux server from the same app.</li>
+</ul>
+</div>
+    <div class="doc-foot">
+      <a class="edit" href="https://github.com/edvin/orca/edit/main/site/content/docs/quickstart.md" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg> Edit this page on GitHub</a>
+    </div>
+    <nav class="pager" aria-label="Previous and next page"><a class="pager-prev" href="/docs/install/"><span class="pager-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Previous</span><span class="pager-title">Install</span></a><a class="pager-next" href="/docs/platforms/"><span class="pager-label">Next <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="pager-title">Platforms</span></a></nav>
+  </article>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-check-the-runtime">1. Check the runtime</a></li><li class="d2"><a href="#2-run-a-container">2. Run a container</a></li><li class="d2"><a href="#3-start-a-compose-stack">3. Start a compose stack</a></li><li class="d2"><a href="#4-give-it-an-https-hostname">4. Give it an HTTPS hostname</a></li><li class="d2"><a href="#5-trust-orcas-certificate">5. Trust Orca's certificate</a></li><li class="d2"><a href="#6-add-an-orcayaml">6. Add an orca.yaml</a></li><li class="d2"><a href="#next-steps">Next steps</a></li></ul></nav></aside>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="f-brand"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><p>The open source container platform for local development. Free, MIT licensed, no telemetry.</p></div>
+    <div class="f-col"><div class="f-title">Product</div><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="/docs/templates/">App Catalog</a><a href="https://github.com/edvin/orca/releases" target="_blank" rel="noopener">Releases</a></div>
+    <div class="f-col"><div class="f-title">Docs</div><a href="/docs/quickstart/">Quickstart</a><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/agents/">Agents & MCP</a><a href="/docs/cli/">CLI</a></div>
+    <div class="f-col"><div class="f-title">Community</div><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">Issues</a><a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a><a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener">Add a template</a></div>
+    <div class="f-col"><div class="f-title">Trust</div><a href="/docs/security/">Security</a><a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a><a href="https://github.com/edvin/orca/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a></div>
+  </div>
+  <div class="footer-bottom"><span>© 2026 Orca contributors</span><span>Packages hosted by <a href="https://cloudsmith.com" target="_blank" rel="noopener">Cloudsmith</a></span></div>
+</footer>
+<div class="search-dialog" hidden role="dialog" aria-modal="true" aria-label="Search the docs">
+  <div class="search-panel">
+    <div class="search-input"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Search the docs" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <div class="search-results" role="listbox"></div>
+    <div class="search-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span></div>
+  </div>
+</div>
+</body>
+</html>

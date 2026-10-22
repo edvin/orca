@@ -1,0 +1,17 @@
+{
+  "name": "orca-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch"
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "marked": "^15.0.12",
+    "sharp": "^0.34.5",
+    "shiki": "^3.23.0",
+    "yaml": "^2.9.1"
+  }
+}

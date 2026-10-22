@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en" data-page="docs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Troubleshooting — Orca docs</title>
+<meta name="description" content="Fixes for common Orca problems: the daemon not starting, Docker not found, the macOS VM, gateway port conflicts, untrusted certificates, and where logs are.">
+<link rel="canonical" href="https://orca-desktop.com/docs/troubleshooting/">
+<meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Orca">
+<meta property="og:title" content="Troubleshooting — Orca docs">
+<meta property="og:description" content="Fixes for common Orca problems: the daemon not starting, Docker not found, the macOS VM, gateway port conflicts, untrusted certificates, and where logs are.">
+<meta property="og:url" content="https://orca-desktop.com/docs/troubleshooting/">
+<meta property="og:image" content="https://orca-desktop.com/assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
+<script src="/assets/site.js?v=mvjqae17" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a>
+    <nav class="top-nav" aria-label="Main"><a href="/docs/introduction/" aria-current="page">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="search-trigger" type="button" data-search-open aria-label="Search the docs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search docs</span><kbd>⌘K</kbd></button>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode"><span class="when-dark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="when-light"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span></button>
+      <a class="icon-btn gh-btn" href="https://github.com/edvin/orca" target="_blank" rel="noopener" aria-label="Orca on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span class="gh-stars">26</span></a>
+      <a class="btn btn-primary btn-sm header-cta" href="/download/">Download</a>
+      <button class="icon-btn menu-btn" type="button" aria-label="Open menu" aria-expanded="false" data-menu-open><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+</header>
+<div class="mobile-menu" hidden>
+  <div class="mm-head"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><button class="icon-btn" type="button" aria-label="Close menu" data-menu-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="mm-body">
+    <div class="mm-top"><a href="/docs/introduction/">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca">GitHub</a></div>
+    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">AI assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
+  </div>
+</div>
+<main id="main">
+<div class="docs-shell">
+  <aside class="docs-sidebar" aria-label="Documentation">
+    <div class="sb-inner"><div class="sb-section"><div class="sb-title">Getting started</div><ul><li><a href="/docs/introduction/">Introduction</a></li><li><a href="/docs/install/">Install</a></li><li><a href="/docs/quickstart/">Quickstart</a></li><li><a href="/docs/platforms/">Platforms</a></li></ul></div><div class="sb-section"><div class="sb-title">Local development</div><ul><li><a href="/docs/gateway/">Gateway</a></li><li><a href="/docs/orca-yaml/">orca.yaml</a></li><li><a href="/docs/profiles/">Profiles</a></li><li><a href="/docs/worktrees/">Worktree instances</a></li></ul></div><div class="sb-section"><div class="sb-title">Working with Orca</div><ul><li><a href="/docs/containers/">Containers</a></li><li><a href="/docs/stacks/">Stacks</a></li><li><a href="/docs/images-and-builds/">Images &amp; builds</a></li><li><a href="/docs/templates/">App Catalog</a></li><li><a href="/docs/kubernetes/">Kubernetes</a></li></ul></div><div class="sb-section"><div class="sb-title">AI and automation</div><ul><li><a href="/docs/agents/">Agents &amp; MCP</a></li><li><a href="/docs/ai-assistant/">AI assistant</a></li><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/api/">REST API</a></li><li><a href="/docs/auto-deploy/">Push to deploy</a></li></ul></div><div class="sb-section"><div class="sb-title">Servers and teams</div><ul><li><a href="/docs/remote-hosts/">Remote hosts</a></li><li><a href="/docs/security/">Security &amp; privacy</a></li></ul></div><div class="sb-section"><div class="sb-title">Help</div><ul><li><a href="/docs/troubleshooting/" aria-current="page">Troubleshooting</a></li></ul></div></div>
+  </aside>
+  <article class="doc">
+    <div class="doc-head">
+      <div class="crumbs"><a href="/docs/introduction/">Docs</a><span>/</span><span>Help</span></div>
+      <h1>Troubleshooting</h1>
+      <p class="lede">Fixes for common Orca problems: the daemon not starting, Docker not found, the macOS VM, gateway port conflicts, untrusted certificates, and where logs are.</p>
+    </div>
+    <div class="prose"><p>Most problems show up on the <strong>System Health</strong> page, and most of them have a button there that fixes them. This page explains those buttons, then covers specific symptoms. If nothing here helps, see <a href="#report-a-bug">Report a bug</a>.</p>
+<h2 id="start-with-system-health"><a class="anchor" href="#start-with-system-health" aria-hidden="true" tabindex="-1">#</a>Start with System Health</h2>
+<p>Open <strong>System Health</strong> in the sidebar. Each check shows its status, and a failing check has a <strong>Fix</strong> button that runs the repair and streams its output in a dialog. The buttons at the top:</p>
+<div class="table-wrap"><table><thead><tr><th>Button</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Set up Docker</strong></td><td>Runs first-start setup again for your platform. Shown when Orca can&#39;t reach Docker.</td></tr><tr><td><strong>Recreate VM</strong></td><td>macOS only. Deletes the Lima VM and builds a fresh one on the current base. Containers, images and volumes in it are lost.</td></tr><tr><td><strong>Restart Docker &amp; Orca</strong></td><td>Stops the Orca daemon, starts the Docker service (in WSL2 on Windows, with <code>systemctl</code> on Linux), and starts the daemon again so it reconnects. On macOS the daemon starts the VM itself if it&#39;s stopped.</td></tr><tr><td><strong>Diagnose</strong></td><td>Tries every way Orca knows to reach Docker and shows the log in <strong>Connection Diagnostics</strong>. If it finds a working connection, Orca switches to it without a restart.</td></tr><tr><td><strong>Re-check</strong></td><td>Runs the checks again.</td></tr></tbody></table></div><h2 id="orca-daemon-is-not-running"><a class="anchor" href="#orca-daemon-is-not-running" aria-hidden="true" tabindex="-1">#</a>Orca daemon is not running</h2>
+<p>The app shows <strong>Orca daemon is not running</strong> when it can&#39;t reach the daemon on <code>127.0.0.1:9477</code>.</p>
+<ol>
+<li>Click <strong>Start Daemon</strong>, then <strong>Retry Connection</strong>.</li>
+<li>If it doesn&#39;t start, read the daemon log (see <a href="#logs">Logs</a>). The screen also shows where the app looked for the <code>orca-daemon</code> binary.</li>
+<li>Check whether something else holds port 9477. On macOS and Linux:<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">lsof</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -i</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> :9477</span></span></code></pre></div>If it&#39;s another program, stop it. The daemon reports <code>Port 127.0.0.1:9477 is already in use by another process</code> in that case.</li>
+</ol>
+<p>The app restarts a crashed daemon by itself, up to 3 times in 10 minutes. After that it leaves it to you, so a daemon that keeps crashing ends up on this screen.</p>
+<h2 id="another-orca-daemon-is-already-running"><a class="anchor" href="#another-orca-daemon-is-already-running" aria-hidden="true" tabindex="-1">#</a>&quot;Another Orca daemon is already running&quot;</h2>
+<p>You see this when you start <code>orca-daemon</code> by hand while one is already serving on port 9477, usually the one the desktop app started. The new process exits and the running daemon keeps serving, so nothing is broken.</p>
+<p>To run your own daemon instead, quit the app with <strong>Quit Orca</strong> from the tray or menu bar icon first. Closing the window isn&#39;t enough: it only hides it, and the daemon keeps running. Then check that the port is free with <code>lsof -i :9477</code> before starting yours.</p>
+<div class="callout callout-tip"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg><span>Tip</span></div><p>To see which version is answering, run <code>curl -s http://127.0.0.1:9477/api/v1/health</code>. When the app starts and finds a daemon of a different version, it replaces it with its own.</p>
+</div><h2 id="pages-show-401-unauthorized-on-first-start"><a class="anchor" href="#pages-show-401-unauthorized-on-first-start" aria-hidden="true" tabindex="-1">#</a>Pages show 401 Unauthorized on first start</h2>
+<p>In versions before 0.49.0, the very first start could leave the app without the daemon&#39;s API token: pages stayed empty, <strong>System Health</strong> kept loading, and <strong>Projects</strong> showed <code>401 Unauthorized</code>. This is fixed in 0.49.0.</p>
+<p>If you&#39;re on an older version, quit Orca fully with <strong>Quit Orca</strong> from the tray or menu bar icon and open it again; the token is read on the next start. Then update to the latest release.</p>
+<h2 id="docker-not-found"><a class="anchor" href="#docker-not-found" aria-hidden="true" tabindex="-1">#</a>Docker not found</h2>
+<p>System Health shows <strong>Docker Runtime</strong> failing with <strong>No container runtime found</strong> (Linux), <strong>Docker not found in WSL2</strong> (Windows) or <strong>Docker is not running</strong> (macOS, before setup). Click <strong>Install</strong> or <strong>Fix</strong> to run setup for your platform. What it does is described in <a href="/docs/install/#first-start">Install Orca</a>.</p>
+<p>Platform-specific cases:</p>
+<ul>
+<li><strong>Linux, sudo asks for a password.</strong> Orca can&#39;t enter it, so setup stops and prints the commands. Run them in a terminal, then restart Orca:<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">curl</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -fsSL</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> https://get.docker.com</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72"> |</span><span style="--shiki-light:#953800;--shiki-dark:#FFA657"> sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> sh</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> usermod</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -aG</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> docker</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3"> $USER</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> systemctl</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> start</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> docker</span></span></code></pre></div></li>
+<li><strong>Linux, Docker Group check fails.</strong> After <strong>Fix</strong> adds you to the <code>docker</code> group, log out and back in for it to apply.</li>
+<li><strong>Windows, no WSL distro.</strong> Install Ubuntu from the Microsoft Store and launch it once to create your Linux user, then click <strong>Re-check</strong>.</li>
+<li><strong>Windows, WSL2 not enabled.</strong> <strong>Fix</strong> runs <code>wsl --install</code>. Restart Windows when it asks you to.</li>
+<li><strong>Windows, Docker Service not running.</strong> <strong>Fix</strong> starts Docker in WSL2 with the TCP listener Orca uses.</li>
+</ul>
+<h2 id="macos-the-docker-vm-wont-come-up"><a class="anchor" href="#macos-the-docker-vm-wont-come-up" aria-hidden="true" tabindex="-1">#</a>macOS: the Docker VM won&#39;t come up</h2>
+<p>If the VM exists but Docker is unreachable, <strong>Docker Runtime</strong> shows <code>Lima VM &#39;orca&#39; is … Docker is unreachable</code> with a <strong>Fix</strong> button. It repairs the VM: force-stops it, removes Lima&#39;s stale lock and socket files, starts it again and waits for Docker. Your containers and images are kept.</p>
+<p>If repair doesn&#39;t help, <strong>Recreate VM</strong> builds a new one. It deletes everything in the old VM.</p>
+<h3 id="behind-a-vpn"><a class="anchor" href="#behind-a-vpn" aria-hidden="true" tabindex="-1">#</a>Behind a VPN</h3>
+<p>If setup or a restart ends with &quot;The VM started but its network never came up&quot;, a mesh VPN (NetBird, Tailscale, WireGuard) or a content filter is in the way.</p>
+<ul>
+<li>Disconnect the VPN, start Orca so the VM boots, then reconnect.</li>
+<li>If System Health shows <strong>Docker VM Base</strong>, the VM predates the vsock base that avoids this problem. Use <strong>Recreate VM</strong> to rebuild it. See <a href="/docs/platforms/#why-vsock">Why vsock</a>.</li>
+<li>On a managed Mac, security software can block the VM&#39;s network. List system extensions with <code>systemextensionsctl list</code> and ask IT to allow Lima and Virtualization.framework.</li>
+</ul>
+<h3 id="docker-engine-update"><a class="anchor" href="#docker-engine-update" aria-hidden="true" tabindex="-1">#</a>Docker Engine Update</h3>
+<p>If System Health shows <strong>Docker Engine Update</strong>, the Docker Engine in the VM has a memory leak that eventually gets Docker killed. Click <strong>Update</strong>: Orca updates Docker in the VM, restarts it and starts the containers that were running. Containers, images and volumes are kept.</p>
+<h2 id="gateway-port-80-or-443-is-in-use"><a class="anchor" href="#gateway-port-80-or-443-is-in-use" aria-hidden="true" tabindex="-1">#</a>Gateway: port 80 or 443 is in use</h2>
+<p>The gateway needs ports 80 and 443 on your machine. If another program already uses one, the <strong>Gateway</strong> page shows <strong>Port Conflict Detected</strong> with <code>Port 80 (HTTP) is already in use</code> or <code>Port 443 (HTTPS) is already in use</code>.</p>
+<p>Either stop the other program, or move the gateway to other ports:</p>
+<ol>
+<li>On <strong>Gateway</strong> &gt; <strong>Configuration</strong>, change <strong>HTTP Port</strong> and <strong>HTTPS Port</strong> (for example <code>8080</code> and <code>8443</code>). <strong>Check Ports</strong> tells you whether they&#39;re free.</li>
+<li>Click <strong>Save Configuration</strong>.</li>
+<li>Click <strong>Stop Gateway</strong>, then <strong>Start Gateway</strong>, so the gateway container is created with the new ports.</li>
+</ol>
+<p>From a terminal, <code>orca gateway config --http-port 8080 --https-port 8443</code> saves the same setting.</p>
+<p>With a non-standard HTTPS port, URLs include it: <code>https://myapp.localhost:8443</code>.</p>
+<p>If starting fails with <strong>Failed to Start Gateway</strong> and a message about <code>caddy:2-alpine</code>, Orca couldn&#39;t download the gateway image. Check your internet connection and try again.</p>
+<h2 id="browser-says-the-certificate-isnt-trusted"><a class="anchor" href="#browser-says-the-certificate-isnt-trusted" aria-hidden="true" tabindex="-1">#</a>Browser says the certificate isn&#39;t trusted</h2>
+<p>Gateway hostnames use certificates from Orca&#39;s local certificate authority. Your system has to trust that CA once.</p>
+<p>Run:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> install</span></span></code></pre></div><p>It needs the <code>orca</code> CLI on your <code>PATH</code> (the Windows installer adds it) and asks for your password on macOS and Linux. Without the CLI, go to <strong>Settings</strong> &gt; <strong>Certificates</strong>, click <strong>Download CA Certificate</strong> and run the command shown there for your platform.</p>
+<p><code>orca ca info</code> shows the CA&#39;s subject, expiry and fingerprint, the same details as the <strong>Certificates</strong> tab, so you can check you trusted the right one.</p>
+<h2 id="logs"><a class="anchor" href="#logs" aria-hidden="true" tabindex="-1">#</a>Logs</h2>
+<div class="table-wrap"><table><thead><tr><th>Platform</th><th>Daemon log</th></tr></thead><tbody><tr><td>macOS</td><td><code>~/Library/Application Support/orca/daemon.log</code></td></tr><tr><td>Windows</td><td><code>%APPDATA%\orca\daemon.log</code></td></tr><tr><td>Linux</td><td><code>~/.config/orca/daemon.log</code></td></tr></tbody></table></div><p>The log is recreated each time the app starts the daemon. The previous run&#39;s log is kept as <code>daemon.prev.log</code> in the same folder, which is the one to read after a crash. <strong>Settings</strong> &gt; <strong>About</strong> &gt; <strong>Paths</strong> shows the exact path with a copy button.</p>
+<p>For a daemon installed as a service on a Linux server:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">journalctl</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -u</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> orca-daemon</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -f</span></span></code></pre></div><p>Errors from actions in the app also appear on the <strong>Activity</strong> page.</p>
+<h2 id="report-a-bug"><a class="anchor" href="#report-a-bug" aria-hidden="true" tabindex="-1">#</a>Report a bug</h2>
+<p>Open an issue at <a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">github.com/edvin/orca/issues</a>. Include:</p>
+<ul>
+<li>Your platform and Orca version (shown at the right of the status bar, or run <code>orca version</code>, which prints both the CLI and daemon versions).</li>
+<li>What you did, what you expected, and what happened.</li>
+<li>The relevant part of <code>daemon.log</code> or <code>daemon.prev.log</code>, and the output of <strong>Diagnose</strong> if the problem is connecting to Docker.</li>
+</ul>
+<p>The log can contain container names and paths, so look it over before posting. Report security problems privately through <a href="https://github.com/edvin/orca/security/advisories/new" target="_blank" rel="noopener">GitHub Security Advisories</a> instead.</p>
+</div>
+    <div class="doc-foot">
+      <a class="edit" href="https://github.com/edvin/orca/edit/main/site/content/docs/troubleshooting.md" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg> Edit this page on GitHub</a>
+    </div>
+    <nav class="pager" aria-label="Previous and next page"><a class="pager-prev" href="/docs/security/"><span class="pager-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Previous</span><span class="pager-title">Security &amp; privacy</span></a><span></span></nav>
+  </article>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#start-with-system-health">Start with System Health</a></li><li class="d2"><a href="#orca-daemon-is-not-running">Orca daemon is not running</a></li><li class="d2"><a href="#another-orca-daemon-is-already-running">&quot;Another Orca daemon is already running&quot;</a></li><li class="d2"><a href="#pages-show-401-unauthorized-on-first-start">Pages show 401 Unauthorized on first start</a></li><li class="d2"><a href="#docker-not-found">Docker not found</a></li><li class="d2"><a href="#macos-the-docker-vm-wont-come-up">macOS: the Docker VM won't come up</a></li><li class="d3"><a href="#behind-a-vpn">Behind a VPN</a></li><li class="d3"><a href="#docker-engine-update">Docker Engine Update</a></li><li class="d2"><a href="#gateway-port-80-or-443-is-in-use">Gateway: port 80 or 443 is in use</a></li><li class="d2"><a href="#browser-says-the-certificate-isnt-trusted">Browser says the certificate isn't trusted</a></li><li class="d2"><a href="#logs">Logs</a></li><li class="d2"><a href="#report-a-bug">Report a bug</a></li></ul></nav></aside>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="f-brand"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><p>The open source container platform for local development. Free, MIT licensed, no telemetry.</p></div>
+    <div class="f-col"><div class="f-title">Product</div><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="/docs/templates/">App Catalog</a><a href="https://github.com/edvin/orca/releases" target="_blank" rel="noopener">Releases</a></div>
+    <div class="f-col"><div class="f-title">Docs</div><a href="/docs/quickstart/">Quickstart</a><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/agents/">Agents & MCP</a><a href="/docs/cli/">CLI</a></div>
+    <div class="f-col"><div class="f-title">Community</div><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">Issues</a><a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a><a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener">Add a template</a></div>
+    <div class="f-col"><div class="f-title">Trust</div><a href="/docs/security/">Security</a><a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a><a href="https://github.com/edvin/orca/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a></div>
+  </div>
+  <div class="footer-bottom"><span>© 2026 Orca contributors</span><span>Packages hosted by <a href="https://cloudsmith.com" target="_blank" rel="noopener">Cloudsmith</a></span></div>
+</footer>
+<div class="search-dialog" hidden role="dialog" aria-modal="true" aria-label="Search the docs">
+  <div class="search-panel">
+    <div class="search-input"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Search the docs" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <div class="search-results" role="listbox"></div>
+    <div class="search-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span></div>
+  </div>
+</div>
+</body>
+</html>

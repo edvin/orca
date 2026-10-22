@@ -1,1973 +1,293 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-page="home">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Orca Desktop — Open Source Container Management App</title>
-  <meta name="description" content="Open source container management desktop app with built-in AI. Manage Docker, Podman, Compose, and Kubernetes from one place.">
-  <meta property="og:title" content="Orca Desktop — Container Management Desktop App">
-  <meta property="og:description" content="Open source container management app with built-in AI assistant and agent APIs.">
-  <meta property="og:image" content="https://raw.githubusercontent.com/edvin/orca/main/screenshots/01-dashboard.png">
-  <meta property="og:url" content="https://orca-desktop.com">
-  <link rel="icon" href="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-icon-whale.png">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      background: #0a0e14;
-      color: #e6edf3;
-      -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
-    }
-
-    a { color: #58a6ff; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    /* Hero */
-    .hero {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 80px 20px 60px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    /* Animated gradient orbs */
-    .hero::before {
-      content: '';
-      position: absolute;
-      top: -20%;
-      left: 40%;
-      width: 800px;
-      height: 800px;
-      background: radial-gradient(circle, rgba(31, 111, 235, 0.15) 0%, rgba(139, 92, 246, 0.08) 30%, transparent 60%);
-      pointer-events: none;
-      animation: orb-drift 12s ease-in-out infinite alternate;
-      filter: blur(40px);
-    }
-
-    .hero::after {
-      content: '';
-      position: absolute;
-      bottom: -10%;
-      right: 20%;
-      width: 700px;
-      height: 700px;
-      background: radial-gradient(circle, rgba(63, 185, 80, 0.1) 0%, rgba(88, 166, 255, 0.05) 40%, transparent 60%);
-      pointer-events: none;
-      animation: orb-drift 15s ease-in-out infinite alternate-reverse;
-      filter: blur(40px);
-    }
-
-    @keyframes orb-drift {
-      0% { transform: translate(0, 0) scale(1); }
-      100% { transform: translate(-60px, 40px) scale(1.1); }
-    }
-
-    /* Glass panel behind hero content */
-    .hero-content {
-      position: relative;
-      z-index: 1;
-      background: rgba(14, 18, 24, 0.4);
-      backdrop-filter: blur(20px) saturate(150%);
-      -webkit-backdrop-filter: blur(20px) saturate(150%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 24px;
-      padding: 56px 80px 48px;
-      max-width: 1060px;
-      width: 100%;
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    }
-
-    .hero-pills {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 28px;
-    }
-
-    .hero-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 14px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 500;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      color: #8b949e;
-      letter-spacing: 0.2px;
-    }
-
-    .hero-pill-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .hero-stats {
-      display: flex;
-      justify-content: center;
-      gap: 40px;
-      margin-top: 32px;
-      padding-top: 28px;
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
-      flex-wrap: wrap;
-    }
-
-    .hero-stat {
-      text-align: center;
-    }
-
-    .hero-stat-value {
-      font-size: 24px;
-      font-weight: 700;
-      color: #e6edf3;
-      letter-spacing: -0.5px;
-    }
-
-    .hero-stat-label {
-      font-size: 12px;
-      color: #6e7681;
-      margin-top: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .hero-logo {
-      width: 100px;
-      height: auto;
-      margin-bottom: 24px;
-      filter: drop-shadow(0 8px 24px rgba(31, 111, 235, 0.3));
-      animation: logo-float 6s ease-in-out infinite;
-      border-radius: 22px;
-    }
-
-    @keyframes logo-float {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-8px); }
-    }
-
-    .hero h1 {
-      font-size: 56px;
-      font-weight: 800;
-      letter-spacing: -2px;
-      margin-bottom: 16px;
-      background: linear-gradient(135deg, #ffffff 0%, #58a6ff 50%, #a371f7 100%);
-      background-size: 200% auto;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: gradient-shift 8s ease-in-out infinite;
-    }
-
-    @keyframes gradient-shift {
-      0%, 100% { background-position: 0% center; }
-      50% { background-position: 100% center; }
-    }
-
-    .hero-tagline {
-      font-size: 18px;
-      color: #8b949e;
-      max-width: 520px;
-      line-height: 1.6;
-      margin: 0 auto 36px;
-    }
-
-    .hero-buttons {
-      display: flex;
-      gap: 14px;
-      margin-bottom: 24px;
-      position: relative;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .btn {
-      padding: 14px 32px;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: none;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #2da44e, #238636);
-      color: #fff;
-      padding: 16px 40px;
-      font-size: 16px;
-      border-radius: 14px;
-      box-shadow: 0 4px 24px rgba(45, 164, 78, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      position: relative;
-      overflow: hidden;
-    }
-    .btn-primary::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-      transition: left 0.5s;
-    }
-    .btn-primary:hover::after {
-      left: 100%;
-    }
-    .btn-primary:hover {
-      box-shadow: 0 8px 40px rgba(63, 185, 80, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-      transform: translateY(-2px);
-      text-decoration: none;
-    }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.06);
-      color: #e6edf3;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(8px);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    }
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: rgba(255, 255, 255, 0.2);
-      transform: translateY(-2px);
-      text-decoration: none;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    }
-
-    .download-links {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      margin-bottom: 32px;
-      position: relative;
-    }
-
-    .download-links a {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #e6edf3;
-      font-size: 14px;
-      font-weight: 500;
-      text-decoration: none;
-      padding: 10px 20px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      transition: all 0.2s;
-    }
-
-    .download-links a:hover {
-      color: #e6edf3;
-      text-decoration: none;
-      background: rgba(88, 166, 255, 0.1);
-      border-color: rgba(88, 166, 255, 0.3);
-      transform: translateY(-2px);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-    }
-
-    .dl-size {
-      font-size: 11px;
-      color: #6e7681;
-      font-weight: 400;
-    }
-
-    .dl-meta {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      margin-bottom: 16px;
-      font-size: 13px;
-      color: #6e7681;
-    }
-
-    .dl-meta span {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .dl-meta .dl-version {
-      color: #58a6ff;
-      font-weight: 500;
-    }
-
-    .download-links a.dl-recommended {
-      background: rgba(88, 166, 255, 0.12);
-      border-color: rgba(88, 166, 255, 0.4);
-      order: -1;
-    }
-
-    .download-links a.dl-recommended::after {
-      content: 'Recommended';
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #58a6ff;
-      background: rgba(88, 166, 255, 0.15);
-      padding: 2px 6px;
-      border-radius: 4px;
-      margin-left: 4px;
-    }
-
-    .hero-badges {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      position: relative;
-    }
-
-    /* Section headers */
-    .section-header {
-      text-align: center;
-      margin-bottom: 60px;
-    }
-
-    .section-header h2 {
-      font-size: 40px;
-      font-weight: 700;
-      letter-spacing: -1px;
-      margin-bottom: 12px;
-      background: linear-gradient(135deg, #f0f6fc 0%, #8b949e 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    /* Feature table rows */
-    .ft-row {
-      display: grid;
-      grid-template-columns: 1fr 48px;
-      padding: 12px 24px;
-      font-size: 14px;
-      color: #c9d1d9;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-      transition: background 0.12s;
-      align-items: center;
-    }
-
-    .ft-row:hover {
-      background: rgba(255, 255, 255, 0.03);
-    }
-
-    .ft-row strong {
-      color: #e6edf3;
-    }
-
-    .ft-row code {
-      background: rgba(255, 255, 255, 0.06);
-      padding: 1px 5px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-
-    .ft-check {
-      text-align: center;
-      color: #3fb950;
-      font-size: 14px;
-      font-weight: 600;
-    }
-
-    .ft-unique {
-      color: #a371f7;
-      text-shadow: 0 0 8px rgba(163, 113, 247, 0.3);
-    }
-
-    .section-header p {
-      color: #6e7681;
-      font-size: 18px;
-      max-width: 500px;
-      margin: 0 auto;
-    }
-
-    /* Features */
-    .features {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 40px 20px 40px;
-    }
-
-    .feature-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-    }
-
-    .feature-card {
-      background: rgba(22, 27, 34, 0.5);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 14px;
-      padding: 28px;
-      transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-    }
-
-    .feature-card:hover {
-      border-color: rgba(255, 255, 255, 0.12);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      transform: translateY(-2px);
-    }
-
-    .feature-icon {
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(255, 255, 255, 0.04);
-      border-radius: 10px;
-      margin-bottom: 16px;
-      color: #58a6ff;
-    }
-
-    .feature-card h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 8px;
-      color: #e6edf3;
-    }
-
-    .feature-card p {
-      font-size: 13px;
-      color: #8b949e;
-      line-height: 1.6;
-    }
-
-    /* Highlights — full-width alternating sections */
-    .highlights {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 40px 20px 80px;
-    }
-
-    .highlight-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 48px;
-      align-items: center;
-      margin-bottom: 80px;
-    }
-
-    .highlight-row:last-child {
-      margin-bottom: 0;
-    }
-
-    .highlight-text h3 {
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      margin-bottom: 12px;
-    }
-
-    .highlight-text p {
-      color: #8b949e;
-      font-size: 15px;
-      line-height: 1.7;
-      margin-bottom: 16px;
-    }
-
-    .highlight-text ul {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .highlight-text li {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 14px;
-      color: #c9d1d9;
-    }
-
-    .highlight-text li::before {
-      content: '';
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #3fb950;
-      flex-shrink: 0;
-    }
-
-    .highlight-visual {
-      background: rgba(22, 27, 34, 0.6);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 14px;
-      padding: 24px;
-      font-family: "SFMono-Regular", "Menlo", monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      color: #c9d1d9;
-      overflow-x: auto;
-      white-space: pre-wrap;
-    }
-
-    /* Agent */
-    .agent {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 40px 20px 80px;
-    }
-
-    .code-block {
-      background: rgba(22, 27, 34, 0.6);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 12px;
-      padding: 24px;
-      font-family: "SFMono-Regular", "Menlo", monospace;
-      font-size: 13px;
-      line-height: 1.7;
-      overflow-x: auto;
-      color: #c9d1d9;
-    }
-
-    /* Tech */
-    .tech {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 40px 20px 80px;
-      text-align: center;
-    }
-
-    .tech-logos {
-      display: flex;
-      justify-content: center;
-      gap: 32px;
-      flex-wrap: wrap;
-    }
-
-    .tech-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-      color: #6e7681;
-      font-size: 12px;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .tech-item span {
-      width: 48px;
-      height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 12px;
-      transition: border-color 0.2s, transform 0.2s;
-    }
-
-    .tech-item:hover span {
-      border-color: rgba(255, 255, 255, 0.15);
-      transform: translateY(-2px);
-    }
-
-    /* CTA */
-    .cta {
-      text-align: center;
-      padding: 80px 20px;
-      position: relative;
-    }
-
-    .cta::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 600px;
-      height: 300px;
-      background: radial-gradient(circle, rgba(31, 111, 235, 0.06) 0%, transparent 60%);
-      pointer-events: none;
-    }
-
-    .cta h2 {
-      font-size: 36px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      margin-bottom: 12px;
-      position: relative;
-    }
-
-    .cta p {
-      color: #6e7681;
-      font-size: 18px;
-      margin-bottom: 32px;
-      position: relative;
-    }
-
-    /* Footer */
-    .footer {
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
-      padding: 40px 20px;
-      text-align: center;
-      color: #484f58;
-      font-size: 13px;
-    }
-
-    .footer a { color: #6e7681; }
-    .footer a:hover { color: #8b949e; }
-
-    /* Screenshot showcase */
-    .showcase {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 40px 20px 80px;
-    }
-
-    .hero-screenshot {
-      max-width: 1060px;
-      margin: 0 auto 0;
-      padding: 0 20px;
-      position: relative;
-    }
-
-    .hero-screenshot img {
-      width: 100%;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
-    }
-
-    .hero-screenshot::after {
-      content: '';
-      position: absolute;
-      bottom: -40px;
-      left: 10%;
-      right: 10%;
-      height: 40px;
-      background: radial-gradient(ellipse at center, rgba(88, 166, 255, 0.08) 0%, transparent 70%);
-      pointer-events: none;
-    }
-
-    .screenshot-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-    }
-
-    .screenshot-card {
-      position: relative;
-      border-radius: 10px;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
-      cursor: pointer;
-      background: #0d1117;
-    }
-
-    .screenshot-card:hover {
-      transform: translateY(-4px) scale(1.02);
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(88, 166, 255, 0.2);
-      border-color: rgba(88, 166, 255, 0.3);
-      z-index: 2;
-    }
-
-    .screenshot-card img {
-      width: 100%;
-      display: block;
-    }
-
-    .screenshot-card .screenshot-label {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      padding: 24px 12px 10px;
-      background: linear-gradient(transparent, rgba(10, 14, 20, 0.95));
-      font-size: 12px;
-      font-weight: 600;
-      color: #e6edf3;
-      letter-spacing: 0.3px;
-    }
-
-    .screenshot-card .screenshot-label span {
-      color: #8b949e;
-      font-weight: 400;
-      display: block;
-      font-size: 11px;
-      margin-top: 2px;
-    }
-
-    /* Fullscreen lightbox */
-    .lightbox {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.92);
-      backdrop-filter: blur(12px);
-      z-index: 1000;
-      justify-content: center;
-      align-items: center;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .lightbox.active { display: flex; opacity: 1; }
-
-    .lightbox img {
-      max-width: 85vw;
-      max-height: 80vh;
-      border-radius: 12px;
-      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
-      transition: opacity 0.2s;
-    }
-
-    .lightbox-close {
-      position: absolute;
-      top: 20px; right: 24px;
-      background: none; border: none;
-      color: #8b949e; font-size: 32px;
-      cursor: pointer; z-index: 1001;
-      transition: color 0.2s;
-    }
-    .lightbox-close:hover { color: #e6edf3; }
-
-    .lightbox-counter {
-      position: absolute;
-      top: 24px; left: 50%;
-      transform: translateX(-50%);
-      color: #6e7681;
-      font-size: 13px;
-      font-weight: 500;
-      letter-spacing: 1px;
-      z-index: 1001;
-    }
-
-    .lightbox-prev, .lightbox-next {
-      position: absolute;
-      top: 50%; transform: translateY(-50%);
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: #e6edf3;
-      font-size: 28px;
-      width: 48px; height: 48px;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: background 0.2s, transform 0.2s;
-      z-index: 1001;
-      backdrop-filter: blur(8px);
-    }
-    .lightbox-prev { left: 20px; }
-    .lightbox-next { right: 20px; }
-    .lightbox-prev:hover, .lightbox-next:hover {
-      background: rgba(255,255,255,0.12);
-      transform: translateY(-50%) scale(1.1);
-    }
-
-    .lightbox-caption {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      padding: 20px 32px;
-      background: linear-gradient(transparent, rgba(0,0,0,0.8));
-      backdrop-filter: blur(8px);
-      text-align: center;
-      z-index: 1001;
-    }
-    .lightbox-caption strong {
-      color: #e6edf3;
-      font-size: 16px;
-      display: block;
-      margin-bottom: 4px;
-    }
-    .lightbox-caption span {
-      color: #8b949e;
-      font-size: 13px;
-    }
-
-    .highlight-screenshot {
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
-      overflow: hidden;
-      cursor: pointer;
-    }
-
-    .highlight-screenshot img {
-      width: 100%;
-      display: block;
-    }
-
-    /* Collapsible feature categories */
-    .ft-category {
-      padding: 12px 24px;
-      background: rgba(255,255,255,0.02);
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      color: #e6edf3;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      user-select: none;
-      transition: background 0.15s;
-      border-bottom: 1px solid rgba(255,255,255,0.03);
-    }
-    .ft-category:hover { background: rgba(255,255,255,0.04); }
-    .ft-category-left {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .ft-count {
-      font-size: 10px;
-      font-weight: 600;
-      color: #58a6ff;
-      background: rgba(88, 166, 255, 0.1);
-      border: 1px solid rgba(88, 166, 255, 0.2);
-      padding: 1px 8px;
-      border-radius: 10px;
-      letter-spacing: 0;
-      text-transform: none;
-    }
-    .ft-chevron {
-      font-size: 10px;
-      transition: transform 0.2s;
-      color: #484f58;
-    }
-    .ft-category.collapsed .ft-chevron { transform: rotate(-90deg); }
-    .ft-category-rows { overflow: hidden; transition: max-height 0.3s ease; }
-    .ft-category.collapsed + .ft-category-rows { max-height: 0 !important; }
-    .ft-toggle-all {
-      color: #484f58;
-      font-size: 12px;
-      cursor: pointer;
-      transition: color 0.2s;
-    }
-    .ft-toggle-all:hover { color: #8b949e; text-decoration: underline; }
-
-    /* Responsive */
-    @media (max-width: 900px) {
-      .feature-grid { grid-template-columns: 1fr 1fr; }
-      .highlight-row { grid-template-columns: 1fr; gap: 24px; }
-      .screenshot-grid { grid-template-columns: 1fr 1fr; }
-    }
-
-    @media (max-width: 600px) {
-      .hero h1 { font-size: 40px; }
-      .ft-row { font-size: 13px; padding: 10px 16px; }
-      .hero-tagline { font-size: 17px; }
-      .hero-content { padding: 40px 24px; margin: 0 12px; }
-      .feature-grid { grid-template-columns: 1fr; }
-      .section-header h2 { font-size: 30px; }
-      .screenshot-grid { grid-template-columns: 1fr; }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orca — the open source container platform for local development</title>
+<meta name="description" content="Free, open source desktop app for Docker containers, compose stacks and Kubernetes, with HTTPS hostnames for every service, a running copy of your app per git worktree, and APIs for AI agents.">
+<link rel="canonical" href="https://orca-desktop.com/">
+<meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Orca">
+<meta property="og:title" content="Orca — the open source container platform for local development">
+<meta property="og:description" content="Free, open source desktop app for Docker containers, compose stacks and Kubernetes, with HTTPS hostnames for every service, a running copy of your app per git worktree, and APIs for AI agents.">
+<meta property="og:url" content="https://orca-desktop.com/">
+<meta property="og:image" content="https://orca-desktop.com/assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
+<script src="/assets/site.js?v=mvjqae17" defer></script>
 </head>
 <body>
-
-<section class="hero" id="top">
-  <div class="hero-content">
-    <div class="hero-pills">
-      <span class="hero-pill"><span class="hero-pill-dot" style="background: #3fb950;"></span> Free &amp; Open Source</span>
-      <span class="hero-pill"><span class="hero-pill-dot" style="background: #58a6ff;"></span> Built-in AI</span>
-      <span class="hero-pill"><span class="hero-pill-dot" style="background: #a371f7;"></span> MCP Agent APIs</span>
-      <span class="hero-pill"><span class="hero-pill-dot" style="background: #d29922;"></span> Cross-Platform</span>
-      <span class="hero-pill"><span class="hero-pill-dot" style="background: #f85149;"></span> GPU Accelerated</span>
-      <span class="hero-pill"><span class="hero-pill-dot" style="background: #3fb950;"></span> Zero Telemetry</span>
-    </div>
-    <img src="https://raw.githubusercontent.com/edvin/orca/main/assets/orca-logo-full.png" alt="Orca Desktop" class="hero-logo">
-    <h1>Orca Desktop</h1>
-    <p class="hero-tagline">
-      The open source container management app with built-in AI.
-      Manage Docker, Kubernetes, Helm, and GPU-accelerated AI workloads — from a single, beautiful interface.
-    </p>
-    <div class="hero-buttons">
-      <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download
-      </a>
-      <a href="https://github.com/edvin/orca" class="btn btn-secondary">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-        GitHub
-      </a>
-    </div>
-
-    <div class="dl-meta" id="dl-meta" style="display: none;">
-      <span class="dl-version" id="dl-version"></span>
-      <span id="dl-date"></span>
-    </div>
-    <div class="download-links" id="download-buttons">
-    <a href="https://github.com/edvin/orca/releases/latest" title="Windows" id="dl-windows">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.45H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.45L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
-      <span>Windows</span>
-      <span class="dl-size" id="dl-windows-size"></span>
-    </a>
-    <a href="https://github.com/edvin/orca/releases/latest" title="macOS" id="dl-macos">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-      <span>macOS</span>
-      <span class="dl-size" id="dl-macos-size"></span>
-    </a>
-    <a href="https://github.com/edvin/orca/releases/latest" title="Linux" id="dl-linux">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M8 11c-2 1-4 4-4 7h16c0-3-2-6-4-7"/><path d="M9 6.5h0"/><path d="M15 6.5h0"/></svg>
-      <span>Linux</span>
-      <span class="dl-size" id="dl-linux-size"></span>
-    </a>
-  </div>
-
-    <div class="hero-stats">
-      <div class="hero-stat">
-        <div class="hero-stat-value">43</div>
-        <div class="hero-stat-label">AI Agent Tools</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-value">5</div>
-        <div class="hero-stat-label">AI Providers</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-value">3</div>
-        <div class="hero-stat-label">Platforms</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-value">20+</div>
-        <div class="hero-stat-label">K8s Resource Types</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-value">~15MB</div>
-        <div class="hero-stat-label">Installer</div>
-      </div>
-    </div>
-
-    <div class="hero-badges" style="margin-top: 24px;">
-      <img src="https://github.com/edvin/orca/actions/workflows/build.yml/badge.svg" alt="Build">
-      <img src="https://img.shields.io/github/license/edvin/orca" alt="License">
-      <img src="https://img.shields.io/github/stars/edvin/orca" alt="Stars">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a>
+    <nav class="top-nav" aria-label="Main"><a href="/docs/introduction/">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="search-trigger" type="button" data-search-open aria-label="Search the docs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search docs</span><kbd>⌘K</kbd></button>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode"><span class="when-dark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="when-light"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span></button>
+      <a class="icon-btn gh-btn" href="https://github.com/edvin/orca" target="_blank" rel="noopener" aria-label="Orca on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span class="gh-stars">26</span></a>
+      <a class="btn btn-primary btn-sm header-cta" href="/download/">Download</a>
+      <button class="icon-btn menu-btn" type="button" aria-label="Open menu" aria-expanded="false" data-menu-open><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     </div>
   </div>
-</section>
-
-<!-- Hero screenshot -->
-<div class="hero-screenshot">
-  <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/01-dashboard.png" alt="Orca Desktop Dashboard" loading="lazy">
-</div>
-
-<section class="features" id="features">
-  <div class="section-header">
-    <h2>Why Orca Desktop</h2>
-    <p>Free forever. Lightweight. Open source. Containers and Kubernetes.</p>
-  </div>
-
-  <!-- Punchy value props -->
-  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1100px; margin: 0 auto 48px; padding: 0 20px;">
-    <div style="background: rgba(63, 185, 80, 0.06); border: 1px solid rgba(63, 185, 80, 0.12); border-radius: 14px; padding: 24px; text-align: center;">
-      <div style="font-size: 32px; font-weight: 800; color: #3fb950; letter-spacing: -1px;">Free</div>
-      <div style="font-size: 13px; color: #8b949e; margin-top: 4px;">Open source. MIT licensed. Forever.</div>
-    </div>
-    <div style="background: rgba(88, 166, 255, 0.06); border: 1px solid rgba(88, 166, 255, 0.12); border-radius: 14px; padding: 24px; text-align: center;">
-      <div style="font-size: 32px; font-weight: 800; color: #58a6ff; letter-spacing: -1px;">~30 MB</div>
-      <div style="font-size: 13px; color: #8b949e; margin-top: 4px;">RAM usage. Lightweight by design.</div>
-    </div>
-    <div style="background: rgba(163, 113, 247, 0.06); border: 1px solid rgba(163, 113, 247, 0.12); border-radius: 14px; padding: 24px; text-align: center;">
-      <div style="font-size: 32px; font-weight: 800; color: #a371f7; letter-spacing: -1px;">&lt; 2s</div>
-      <div style="font-size: 13px; color: #8b949e; margin-top: 4px;">Startup time. Instant.</div>
-    </div>
-  </div>
-
-  <!-- Feature table -->
-  <div style="max-width: 900px; margin: 0 auto; padding: 0 20px;">
-    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; overflow: hidden;">
-
-      <!-- Legend + Table header -->
-      <div style="padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; color: #484f58; display: flex; justify-content: space-between; align-items: center;">
-        <span style="text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: #6e7681;">Features</span>
-        <span style="display: flex; align-items: center; gap: 16px;">
-          <span class="ft-toggle-all" onclick="toggleAllCategories(false)" id="ft-toggle-link">Collapse All</span>
-          <span><span class="ft-unique" style="display: inline;">&#10003;</span> = unique to Orca Desktop</span>
-        </span>
-      </div>
-
-      <!-- Category: Container Management -->
-      <div class="ft-category" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Containers</span><span class="ft-count">18</span></span>
-        <span class="ft-chevron">&#9662;</span>
-      </div>
-      <div class="ft-category-rows">
-      <div class="ft-row"><span>Full container lifecycle (create, start, stop, restart, kill, remove)</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Live resource monitoring (CPU, memory, network I/O)</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Live resource editing</strong> — change memory, CPU, restart policy on running containers</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span>Interactive terminal (exec shell)</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Log viewer</strong> — regex search, match highlighting, case-sensitive filter</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Multi-container logs</strong> — combined, color-coded log view across containers</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Health checks</strong> — live status indicator, health history, check output</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Restart policy</strong> — display, edit, and restart count tracking</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>AI-powered diagnostics</strong> — click to analyze any container with logs</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Container file browser</strong> — explore filesystem of running containers</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Save as Image</strong> — commit container state to a new image</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Export as <code>docker run</code> / <code>docker-compose.yml</code></span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Docker Hub browser</strong> — search and pull images directly from Docker Hub</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Container rename</strong> — inline rename from the detail page</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Per-container charts</strong> — CPU and memory history per container</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Stop all containers</strong> — one-click stop with confirmation</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Live log streaming</strong> — SSE-based real-time logs, no polling</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>App Catalog</strong> — curated templates with auto-generated passwords</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Compose stack templates</strong> — multi-service apps deployed as stacks</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Post-deploy setup guides</strong> — step-by-step wizard with interactive actions</span><span class="ft-check ft-unique">&#10003;</span></div>
-      </div>
-
-      <!-- Category: Images -->
-      <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Images, Builds &amp; Security</span><span class="ft-count">18</span></span>
-        <span class="ft-chevron">&#9662;</span>
-      </div>
-      <div class="ft-category-rows">
-      <div class="ft-row"><span>Pull with Docker Hub search dialog</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Build with live output</strong> — streaming logs, build args, Dockerfile selection</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Image layer visualization</strong> — stacked bar chart with Dockerfile instructions</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Vulnerability scanning</strong> — one-click CVE scan with Trivy</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>HTML vulnerability report</strong> — exportable, opens in browser</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Distinct severity colors</strong> — Critical, High, Medium, Low at a glance</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Image file browser</strong> — explore filesystem without running</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Import from tar</strong> — load images from tar archives</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Image tagging</strong> — tag images with custom repository and version</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Streaming pull</strong> — per-layer progress bars during image download</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Tag autocomplete</strong> — search tags from Docker Hub when pulling</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span>Private registry auth (Docker Hub, GitHub, GitLab, ECR)</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Build dashboard</strong> — build history with persistent logs, status tracking, duration</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Build from URL</strong> — paste a git repo or Dockerfile URL to build</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Build cache insights</strong> — cache hit rate visualization per build</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Build comparison</strong> — side-by-side diff of two builds</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>AI build debugging</strong> — "Ask AI" on failed builds with error context</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Build targets</strong> — define builds in <code>orca.yaml</code>, trigger from UI or schedule</span><span class="ft-check ft-unique">&#10003;</span></div>
-      </div>
-
-      <!-- Category: Orchestration -->
-      <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Orchestration</span><span class="ft-count">33</span></span>
-        <span class="ft-chevron">&#9662;</span>
-      </div>
-      <div class="ft-category-rows">
-      <div class="ft-row"><span><strong>Compose stacks</strong> — auto-detect, up/down/pull, inline YAML editing with restart</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>One-click Kubernetes (k3s) with Traefik ingress</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Pods</strong> — CPU/memory metrics, logs with follow mode, in-browser terminal</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Deployments</strong> — scale dialog, restart, rollback history, HPA autoscaling</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>DaemonSets</strong> — node-level workload management</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>StatefulSets</strong> — scale, restart, ordered pod management</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>ReplicaSets</strong> — owner tracking, replica status</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Services</strong> — per-port forwarding, network policies</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Events timeline</strong> — color-coded warnings and errors</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>ConfigMaps &amp; Secrets</strong> — full CRUD, reveal toggle, type selection (Opaque, TLS, Docker)</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Create Ingress</strong> — service/port dropdowns, hostname, TLS toggle</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>PVC provisioning</strong> — storage class, size, access modes</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Storage Classes</strong> — provisioner, reclaim policy, default class indicator</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>HPA autoscaling</strong> — create, monitor, target CPU with min/max replicas</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Network Policies</strong> — pod selector, ingress/egress rules</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>CRD browser</strong> — list all Custom Resource Definitions with group, kind, scope</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Traefik dashboard</strong> — auto-detection with one-click access</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Deploy from YAML</strong> — Monaco editor with syntax highlighting</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Helm management</strong> — list releases, install charts, uninstall</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Visual topology</strong> — Service &rarr; Deployment &rarr; Pods relationship map</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Jobs &amp; CronJobs</strong> — manage, trigger manually, suspend/resume, view logs</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Namespace management</strong> — create, delete, switch between namespaces</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>YAML editor for all resources</strong> — syntax highlighted, apply changes live</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Volume management with file browser and export</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Network topology</strong> — visual diagram of networks and connected containers</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Network selection</strong> — choose network when creating containers</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Gateway reverse proxy</strong> — managed Caddy with automatic TLS, hostname routing to containers</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>.localhost domains</strong> — <code>app.localhost</code> works in all browsers, no DNS config</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Custom domains</strong> — configurable base domain with wildcard cert support</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Path-based routing</strong> — overlay <code>/api/*</code>, <code>/ws/*</code> on the same hostname for different services</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>One-click expose</strong> — register any container with the gateway from its detail page</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>orca.yaml</strong> — projects declare gateway routes in their repo, auto-registered on deploy</span><span class="ft-check ft-unique">&#10003;</span></div>
-      </div>
-
-      <!-- Category: AI -->
-      <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>AI &amp; Automation</span><span class="ft-count">11</span></span>
-        <span class="ft-chevron">&#9662;</span>
-      </div>
-      <div class="ft-category-rows">
-      <div class="ft-row"><span><strong>AI assistant</strong> — floating window, drag to any monitor</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>5 AI providers</strong> — Claude, GPT, Gemini, Ollama (local), custom OpenAI-compatible</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>One-click Ollama setup</strong> — local AI with GPU acceleration</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Tool calling</strong> — AI can list containers, inspect, and manage resources</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Conversation history</strong> — sliding window context for multi-turn sessions</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>MCP server</strong> — 43 tools for Claude Code / Claude Desktop</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>OpenAI-compatible endpoint</strong> — works with any agent framework</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>App templates</strong> — one-click deploy + create your own</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Full CLI</strong> — <code>orca</code> command for scripting, CI/CD, and team automation</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Config export/import</strong> — share team config as YAML, secrets excluded by default</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Team workflows</strong> — <code>orca.yaml</code> in repos + shared domain + wildcard cert</span><span class="ft-check ft-unique">&#10003;</span></div>
-      </div>
-
-      <!-- Category: Platform -->
-      <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Platform</span><span class="ft-count">21</span></span>
-        <span class="ft-chevron">&#9662;</span>
-      </div>
-      <div class="ft-category-rows">
-      <div class="ft-row"><span>Linux, macOS, Windows — native on all platforms</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Guided setup wizard with streaming progress</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Signed auto-updates with tamper-proof upgrade manifests</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Code signed</strong> — Apple notarized (macOS), EV signed (Windows)</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Startup progress</strong> — real-time feedback during daemon and environment checks</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Built-in CA</strong> — persistent local Certificate Authority signs TLS certs for deployed templates</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span>macOS: Apple Virtualization.framework + VirtioFS + proxy passthrough</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>NVIDIA GPU detection</strong> — Container Toolkit auto-install</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>GPU VRAM monitoring</strong> — dashboard and status bar display</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>WSL2 resource management</strong> — configure memory, CPU, and swap</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Docker auto-start</strong> — automatic startup on Windows reboot</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>JetBrains Mono Nerd Font</strong> — in terminal and log viewers</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Resource history charts</strong> — CPU and memory time-series with hover tooltips</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Keyboard shortcuts</strong> — <code>Ctrl+K</code> palette, <code>Ctrl+R</code> refresh, <code>?</code> shortcut guide</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>System cleanup</strong> — prune containers, images, volumes, networks, build cache</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Resource usage alerts</strong> — toast when containers exceed 90% memory or sustained CPU</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Container export</strong> — save container filesystem or image to tar file</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Scheduled actions</strong> — built-in cron to restart, stop, or start containers on a schedule</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Command palette</strong> — fuzzy search pages, resources, and actions</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span>Glassmorphism UI — frosted glass, smooth animations</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row" style="border: none;"><span><strong>Open source</strong> — MIT licensed, free forever, no telemetry</span><span class="ft-check ft-unique">&#10003;</span></div>
-      </div>
-    </div>
-
-      <!-- Category: Fleet -->
-      <div class="ft-category collapsed" onclick="toggleCategory(this)">
-        <span class="ft-category-left"><span>Fleet Management</span><span class="ft-count">17</span></span>
-        <span class="ft-chevron">&#9662;</span>
-      </div>
-      <div class="ft-category-rows">
-      <div class="ft-row"><span><strong>Fleet dashboard</strong> — grid overview of all hosts with status, CPU, memory, disk, containers</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Host groups &amp; tags</strong> — label hosts (production, staging, eu-west), filter fleet by tag</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Bulk operations</strong> — select mode, test selected, remove selected, test all</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>OS &amp; architecture detection</strong> — auto-detect Linux distro and CPU arch per host</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Deploy to any host</strong> — choose target server when deploying from App Catalog</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Health alerts</strong> — background polling with debounce, toast on host offline/online</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Staggered probing</strong> — batch-probe hosts in groups of 3, incremental status updates</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Version mismatch warning</strong> — alerts when hosts run different daemon versions</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Host selector</strong> — switch between local and remote in the titlebar, status bar indicator</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>One-liner server install</strong> — <code>apt install orca-daemon</code> via Cloudsmith</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Hot-swap reconnect</strong> — Diagnose button finds Docker and reconnects instantly</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>TLS ready</strong> — Caddy/nginx reverse proxy examples, bearer token auth</span><span class="ft-check">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Remote port forwarding</strong> — WebSocket TCP tunnel to any service on any host, no VPN needed</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Auto-deploy</strong> — GitHub/Docker Hub webhook triggers pull + redeploy with config preservation</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Tag filters</strong> — deploy on v* (versions), latest, branch names, or any push</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row"><span><strong>Host comparison</strong> — side-by-side compare of containers, images, and resources across hosts</span><span class="ft-check ft-unique">&#10003;</span></div>
-      <div class="ft-row" style="border: none;"><span><strong>Multi-host deploy</strong> — deploy templates to multiple hosts simultaneously</span><span class="ft-check ft-unique">&#10003;</span></div>
-      </div>
-
-  </div>
-</section>
-
-<section class="highlights" id="highlights">
-  <div class="highlight-row" id="gateway">
-    <div class="highlight-text">
-      <h3>Built-in Gateway</h3>
-      <p>Orca Gateway is a managed Caddy reverse proxy that gives every container a clean hostname with automatic HTTPS. Deploy an app and access it at <code>myapp.localhost</code> — no port numbers, no config files.</p>
-      <ul>
-        <li><code>*.localhost</code> works in all browsers — zero DNS config needed</li>
-        <li>Custom domains for teams (e.g., <code>*.dev.example.com</code>)</li>
-        <li>Path-based routing — overlay <code>/api/*</code> and <code>/ws/*</code> on the same hostname</li>
-        <li>TLS certificates signed by the Orca CA — or bring your own wildcard cert</li>
-        <li>One-click "Expose" from any container detail page</li>
-        <li><code>orca.yaml</code> in project repos — gateway routes auto-register on deploy</li>
-        <li>WebSocket, SSE, and HTTP/2 proxied transparently</li>
-      </ul>
-    </div>
-    <div class="highlight-visual">
-<span style="color:#6e7681"># orca.yaml — path-based routing</span>
-<span style="color:#ff7b72">gateway</span>:
-  - <span style="color:#ff7b72">hostname</span>: <span style="color:#a5d6ff">app</span>
-    <span style="color:#ff7b72">service</span>: <span style="color:#a5d6ff">frontend</span>
-    <span style="color:#ff7b72">port</span>: <span style="color:#79c0ff">3000</span>
-  - <span style="color:#ff7b72">hostname</span>: <span style="color:#a5d6ff">app</span>
-    <span style="color:#ff7b72">path</span>: <span style="color:#a5d6ff">/api/*</span>
-    <span style="color:#ff7b72">service</span>: <span style="color:#a5d6ff">backend</span>
-    <span style="color:#ff7b72">port</span>: <span style="color:#79c0ff">8080</span>
-  - <span style="color:#ff7b72">hostname</span>: <span style="color:#a5d6ff">app</span>
-    <span style="color:#ff7b72">path</span>: <span style="color:#a5d6ff">/ws/*</span>
-    <span style="color:#ff7b72">service</span>: <span style="color:#a5d6ff">reverb</span>
-    <span style="color:#ff7b72">port</span>: <span style="color:#79c0ff">6001</span>
-
-<span style="color:#6e7681"># app.localhost → frontend</span>
-<span style="color:#6e7681"># app.localhost/api/* → backend</span>
-<span style="color:#6e7681"># app.localhost/ws/* → reverb</span>
-    </div>
-  </div>
-
-  <div class="highlight-row" style="direction: rtl;" id="environments">
-    <div class="highlight-text" style="direction: ltr;">
-      <h3>Environment links &amp; developer portal</h3>
-      <p>Turn the Gateway dashboard into a developer portal. Each project's <code>orca.yaml</code> can define links grouped by section and environment — local, staging, production, or any custom environment your team uses.</p>
-      <ul>
-        <li>Links organized by group (Storefront, Admin, Backend, Infrastructure)</li>
-        <li>Environment tabs — switch between Local, Staging, Production</li>
-        <li><code>local</code> values auto-resolve to gateway hostnames</li>
-        <li>Non-local environments are direct URL bookmarks — no proxying</li>
-        <li>Shared via git — every team member sees the same links</li>
-        <li>Gateway landing page shows all apps across all environments</li>
-      </ul>
-    </div>
-    <div class="highlight-visual" style="direction: ltr; text-align: left;">
-<span style="color:#6e7681"># orca.yaml — environment links</span>
-<span style="color:#ff7b72">links</span>:
-  <span style="color:#a5d6ff">Storefront</span>:
-    - <span style="color:#ff7b72">name</span>: <span style="color:#a5d6ff">Web App</span>
-      <span style="color:#ff7b72">local</span>: <span style="color:#a5d6ff">app</span>
-      <span style="color:#ff7b72">staging</span>: <span style="color:#a5d6ff">https://staging.example.com</span>
-      <span style="color:#ff7b72">production</span>: <span style="color:#a5d6ff">https://www.example.com</span>
-
-  <span style="color:#a5d6ff">Admin</span>:
-    - <span style="color:#ff7b72">name</span>: <span style="color:#a5d6ff">Admin Panel</span>
-      <span style="color:#ff7b72">local</span>: <span style="color:#a5d6ff">admin</span>
-      <span style="color:#ff7b72">staging</span>: <span style="color:#a5d6ff">https://staging-admin.example.com</span>
-    </div>
-  </div>
-
-  <div class="highlight-row" id="kubernetes">
-    <div class="highlight-text">
-      <h3>Full Kubernetes management</h3>
-      <p>Orca Desktop gives you a complete Kubernetes dashboard without the complexity. Visualize your cluster topology, manage Helm releases, and edit any resource with a syntax-highlighted YAML editor — all from one window.</p>
-      <ul>
-        <li>Visual topology map — Service, Deployment, and Pods at a glance</li>
-        <li>Helm chart management — install, upgrade, and uninstall releases</li>
-        <li>Monaco YAML editor with live apply for all K8s resources</li>
-        <li>Scale deployments, rollback, and port-forward services instantly</li>
-        <li>Jobs and CronJobs — trigger, suspend, view logs and status</li>
-        <li>Events timeline, ConfigMaps, Secrets, and namespace management</li>
-      </ul>
-    </div>
-    <div class="highlight-screenshot">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/10-kubernetes.png" alt="Kubernetes management" loading="lazy">
-    </div>
-  </div>
-
-  <div class="highlight-row" style="direction: rtl;" id="ai">
-    <div class="highlight-text" style="direction: ltr;">
-      <h3>AI assistant with local GPU power</h3>
-      <p>Get AI-powered container diagnostics and management with your choice of provider. Run Ollama locally with GPU acceleration for private, zero-latency AI — or connect to Claude, GPT, or Gemini for cloud intelligence.</p>
-      <ul>
-        <li>One-click Ollama setup with NVIDIA GPU auto-detection</li>
-        <li>Tool calling — AI can list, inspect, and manage your containers</li>
-        <li>5 providers — Claude, GPT, Gemini, Ollama (local), custom</li>
-        <li>MCP server with 43 tools for Claude Code integration</li>
-        <li>Conversation history with sliding window context</li>
-      </ul>
-    </div>
-    <div class="highlight-screenshot" style="direction: ltr;">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/03-container-detail.png" alt="Container management with AI diagnostics" loading="lazy">
-    </div>
-  </div>
-
-  <div class="highlight-row" id="security">
-    <div class="highlight-text">
-      <h3>Security scanning with exportable reports</h3>
-      <p>Scan any image for vulnerabilities with one click. Orca Desktop uses Trivy to find CVEs, displays results with distinct severity colors, and generates full HTML reports you can share with your team or open in any browser.</p>
-      <ul>
-        <li>One-click vulnerability scan powered by Trivy</li>
-        <li>Critical, High, Medium, Low — color-coded at a glance</li>
-        <li>Exportable HTML report — opens directly in your browser</li>
-        <li>Image file browser — explore layers without running</li>
-        <li>Private registry support for enterprise workflows</li>
-      </ul>
-    </div>
-    <div class="highlight-screenshot">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/06b-image-scan.png" alt="Vulnerability scanning with severity badges" loading="lazy">
-    </div>
-  </div>
-
-  <div class="highlight-row" style="direction: rtl;" id="agents">
-    <div class="highlight-text" style="direction: ltr;">
-      <h3>Built for AI agents</h3>
-      <p>Orca Desktop exposes a full container management API that any AI agent can use. Connect Claude Code, OpenAI agents, or any MCP-compatible client.</p>
-      <ul>
-        <li>MCP server with 43 tools</li>
-        <li>OpenAI-compatible function calling</li>
-        <li>Direct tool execution endpoint</li>
-        <li>Bearer token authentication</li>
-      </ul>
-    </div>
-    <div class="highlight-screenshot" style="direction: ltr;">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/20-settings-ai.png" alt="AI & Agents settings with MCP configuration" loading="lazy">
-    </div>
-  </div>
-
-  <div class="highlight-row" id="fleet">
-    <div class="highlight-text">
-      <h3>Fleet management</h3>
-      <p>Install the Orca daemon on any Linux server and manage your entire fleet from one desktop. Tags, groups, bulk operations, health alerts — all built in.</p>
-      <ul>
-        <li>Fleet dashboard — status, CPU, memory, OS, containers at a glance</li>
-        <li>Host groups &amp; tags — filter by production, staging, region</li>
-        <li>Bulk test &amp; manage — select hosts, test connectivity, deploy templates</li>
-        <li>Health alerts — automatic toast when hosts go offline or recover</li>
-        <li>One-liner install — <code>apt install orca-daemon</code></li>
-      </ul>
-    </div>
-    <div class="highlight-screenshot" style="direction: ltr;">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/00-fleet.png" alt="Fleet dashboard with host cards, tags, and status" loading="lazy">
-    </div>
-  </div>
-
-  <div class="highlight-row" style="direction: rtl;" id="cli">
-    <div class="highlight-text" style="direction: ltr;">
-      <h3>Full CLI for scripting &amp; teams</h3>
-      <p>The <code>orca</code> command gives you complete control from the terminal. Script deployments, automate team onboarding, manage the gateway, and export config — all without opening the GUI.</p>
-      <ul>
-        <li>Manage containers, images, stacks, and Kubernetes from the terminal</li>
-        <li>Gateway management — add routes, configure domains, set up custom certs</li>
-        <li>Config export/import — share team setup as YAML, secrets excluded by default</li>
-        <li>CA management — export certificate, install to system trust store</li>
-        <li>Deploy stacks and templates from the command line</li>
-        <li>Bundled with the installer — available on PATH immediately</li>
-      </ul>
-    </div>
-    <div class="highlight-visual" style="direction: ltr; text-align: left;">
-<span style="color:#6e7681"># Team onboarding — one-time setup</span>
-$ <span style="color:#a5d6ff">orca config import team-config.yaml</span>
-$ <span style="color:#a5d6ff">orca gateway start</span>
-
-<span style="color:#6e7681"># Deploy a project (reads orca.yaml)</span>
-$ <span style="color:#a5d6ff">orca deploy ./my-project</span>
-<span style="color:#3fb950">Gateway: app.dev.example.com, api.dev.example.com</span>
-
-<span style="color:#6e7681"># Manage the gateway</span>
-$ <span style="color:#a5d6ff">orca gateway routes</span>
-<span style="color:#8b949e">HOSTNAME              CONTAINER          PORT</span>
-app.dev.example.com   frontend-1         3000
-api.dev.example.com   backend-1          8080
-
-<span style="color:#6e7681"># Install the CA cert</span>
-$ <span style="color:#a5d6ff">orca ca install</span>
-<span style="color:#3fb950">CA certificate installed to system trust store.</span>
-    </div>
-  </div>
-
-  <!-- Install instructions -->
-  <div style="max-width: 900px; margin: 20px auto 0; padding: 0 24px;">
-    <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 20px 24px;">
-      <div style="font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 12px;">Install the daemon on any Linux server</div>
-      <pre style="background: #161b22; border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 13px; margin-bottom: 12px;"><code style="color: #e6edf3;"># One-liner install (Ubuntu/Debian)
-curl -1sLf 'https://dl.cloudsmith.io/public/edvin/orca/setup.deb.sh' | sudo bash
-sudo apt install orca-daemon</code></pre>
-      <div style="font-size: 12px; color: #8b949e; line-height: 1.6;">
-        Starts automatically on boot. API token generated at <code style="color: #58a6ff;">/etc/orca/config.json</code>. Then add the host in Orca Desktop: Settings &rarr; Remote Hosts &rarr; paste URL and token.
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Auto-Deploy -->
-<section class="showcase" style="padding-bottom: 0;">
-  <div class="section-header">
-    <h2>Push to deploy</h2>
-    <p>Push code to GitHub. Containers update automatically on your servers.</p>
-  </div>
-
-  <div style="max-width: 900px; margin: 0 auto; padding: 0 24px;">
-    <!-- Flow diagram -->
-    <div style="display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 40px; flex-wrap: wrap;">
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 14px 20px; text-align: center;">
-        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">You push code</div>
-        <div style="font-size: 14px; font-weight: 600; color: #e6edf3; font-family: monospace;">git push</div>
-      </div>
-      <div style="padding: 0 6px; color: #30363d; font-size: 20px;">&#x2192;</div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 14px 20px; text-align: center;">
-        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">GitHub Actions</div>
-        <div style="font-size: 14px; font-weight: 600; color: #e6edf3;">Build &amp; Push</div>
-      </div>
-      <div style="padding: 0 6px; color: #30363d; font-size: 20px;">&#x2192;</div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 14px 20px; text-align: center;">
-        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">ghcr.io</div>
-        <div style="font-size: 14px; font-weight: 600; color: #e6edf3;">New Image</div>
-      </div>
-      <div style="padding: 0 6px; color: #30363d; font-size: 20px;">&#x2192;</div>
-      <div style="background: linear-gradient(135deg, rgba(63, 185, 80, 0.12), rgba(88, 166, 255, 0.12)); border: 1px solid rgba(63, 185, 80, 0.3); border-radius: 12px; padding: 14px 20px; text-align: center;">
-        <div style="font-size: 11px; color: #3fb950; margin-bottom: 4px;">Webhook</div>
-        <div style="font-size: 14px; font-weight: 600; color: #e6edf3;">Orca Daemon</div>
-      </div>
-      <div style="padding: 0 6px; color: #30363d; font-size: 20px;">&#x2192;</div>
-      <div style="background: #161b22; border: 1px solid #3fb95066; border-radius: 12px; padding: 14px 20px; text-align: center;">
-        <div style="font-size: 11px; color: #3fb950; margin-bottom: 4px;">Auto</div>
-        <div style="font-size: 14px; font-weight: 600; color: #3fb950;">Redeploy</div>
-      </div>
-    </div>
-
-    <!-- Feature cards -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 40px;">
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #3fb950; margin-bottom: 8px;">Zero-config CD</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          Add a webhook URL to your GitHub repo. Set a deploy rule in Orca. That's it. No ArgoCD, no Watchtower, no YAML pipelines.
-        </div>
-      </div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #58a6ff; margin-bottom: 8px;">Smart tag filters</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          Deploy on version tags (<code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">v*</code>), specific branches (<code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">main</code>), or every push. One rule per environment.
-        </div>
-      </div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #d29922; margin-bottom: 8px;">Config preserved</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          Ports, volumes, env vars, labels, restart policy — all carried over. Only the image changes. Signed webhook validation prevents unauthorized deploys.
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Remote Port Forwarding -->
-<section class="showcase" style="padding-bottom: 0;">
-  <div class="section-header">
-    <h2>Remote port forwarding</h2>
-    <p>Access any service on any remote host — as if it were running locally.</p>
-  </div>
-
-  <div style="max-width: 900px; margin: 0 auto; padding: 0 24px;">
-    <!-- Flow diagram -->
-    <div style="display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 40px; flex-wrap: wrap;">
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px 24px; text-align: center;">
-        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">Your browser</div>
-        <div style="font-size: 15px; font-weight: 600; color: #e6edf3; font-family: monospace;">localhost:8080</div>
-      </div>
-      <div style="padding: 0 8px; color: #30363d; font-size: 20px;">&#x2192;</div>
-      <div style="background: linear-gradient(135deg, rgba(88, 166, 255, 0.12), rgba(139, 92, 246, 0.12)); border: 1px solid rgba(88, 166, 255, 0.3); border-radius: 12px; padding: 16px 24px; text-align: center;">
-        <div style="font-size: 11px; color: #58a6ff; margin-bottom: 4px;">WebSocket tunnel</div>
-        <div style="font-size: 13px; color: #8b949e;">Encrypted &middot; Authenticated</div>
-      </div>
-      <div style="padding: 0 8px; color: #30363d; font-size: 20px;">&#x2192;</div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px 24px; text-align: center;">
-        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">Remote daemon</div>
-        <div style="font-size: 15px; font-weight: 600; color: #3fb950; font-family: monospace;">service:80</div>
-      </div>
-    </div>
-
-    <!-- Feature cards -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 40px;">
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #58a6ff; margin-bottom: 8px;">No VPN required</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          Tunnels through the existing HTTPS connection to the daemon. Works through any firewall or NAT. No SSH, no WireGuard, no extra software.
-        </div>
-      </div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #3fb950; margin-bottom: 8px;">One-click forwarding</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          Click "Port Forward" on any K8s service. Orca opens a local listener and tunnels traffic to the remote cluster. Access it at <code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">localhost</code>.
-        </div>
-      </div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #d29922; margin-bottom: 8px;">Authenticated &amp; secure</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          Every tunnel is authenticated with your API token. Constant-time token comparison prevents timing attacks. TLS supported for production deployments.
-        </div>
-      </div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #bc8cff; margin-bottom: 8px;">Works everywhere</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          Same UI for local and remote hosts. Switch between fleet members in the titlebar — port forwarding works on all of them. Multiple tunnels at once.
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- macOS -->
-<section class="showcase" style="padding-bottom: 0;">
-  <div class="section-header">
-    <h2>macOS: How it works</h2>
-    <p>No Docker Desktop required. Orca uses Lima with Apple's Virtualization.framework.</p>
-  </div>
-
-  <div style="max-width: 900px; margin: 0 auto; padding: 0 24px;">
-    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; margin-bottom: 40px;">
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #58a6ff; margin-bottom: 8px;">Auto-Setup</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          First launch installs Lima, Docker CLI, Compose &amp; Buildx via Homebrew. Creates a Linux VM with auto-sized RAM and VirtioFS.
-        </div>
-      </div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #3fb950; margin-bottom: 8px;">Port Forwarding</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          Container ports automatically forwarded to your Mac. <code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">-p 8080:80</code> works at <code style="color: #e6edf3; background: #0d1117; padding: 2px 6px; border-radius: 4px;">localhost:8080</code>.
-        </div>
-      </div>
-      <div style="background: #161b22; border: 1px solid #3fb95066; border-radius: 12px; padding: 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #3fb950; margin-bottom: 8px;">Bind Mounts</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          chmod, chown, and file writes <strong style="color: #e6edf3;">just work</strong> on bind mounts. No workarounds needed.
-        </div>
-      </div>
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px;">
-        <div style="font-size: 14px; font-weight: 600; color: #d29922; margin-bottom: 8px;">Auto-Reconcile</div>
-        <div style="font-size: 13px; color: #8b949e; line-height: 1.6;">
-          On startup, the daemon patches VM config and kernel automatically. No manual steps on upgrade.
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Community App Catalog -->
-<section class="showcase">
-  <div class="section-header">
-    <h2>Community App Catalog</h2>
-    <p>One-click deploy for popular apps. The catalog updates automatically — no app update needed.</p>
-  </div>
-
-  <div style="max-width: 1000px; margin: 0 auto; padding: 0 24px;">
-    <!-- Tab switcher -->
-    <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
-      <button id="catalog-cards-btn" onclick="showCatalogView('cards')" style="padding: 6px 16px; border-radius: 8px; border: 1px solid rgba(88, 166, 255, 0.4); background: rgba(88, 166, 255, 0.12); color: #58a6ff; font-size: 13px; cursor: pointer; font-weight: 500;">Cards</button>
-      <button id="catalog-json-btn" onclick="showCatalogView('json')" style="padding: 6px 16px; border-radius: 8px; border: 1px solid #30363d; background: transparent; color: #8b949e; font-size: 13px; cursor: pointer;">JSON</button>
-    </div>
-
-    <!-- Cards view -->
-    <div id="catalog-cards" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 30px;">
-      <div style="padding: 40px; text-align: center; color: #484f58; grid-column: 1 / -1;">Loading catalog...</div>
-    </div>
-
-    <!-- JSON view -->
-    <div id="catalog-json" style="display: none; margin-bottom: 30px;">
-      <pre style="background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 20px; overflow-x: auto; font-size: 12px; color: #8b949e; max-height: 500px; overflow-y: auto; line-height: 1.5;"><code id="catalog-json-code">Loading...</code></pre>
-    </div>
-
-    <div style="text-align: center;">
-      <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" class="btn btn-primary" style="text-decoration: none;">Contribute a Template</a>
-      <span style="font-size: 13px; color: #484f58; margin-left: 12px;">Add your favorite app to the catalog via a simple form</span>
-    </div>
-  </div>
-</section>
-
-<script>
-function showCatalogView(view) {
-  document.getElementById('catalog-cards').style.display = view === 'cards' ? 'grid' : 'none';
-  document.getElementById('catalog-json').style.display = view === 'json' ? 'block' : 'none';
-  document.getElementById('catalog-cards-btn').style.background = view === 'cards' ? 'rgba(88, 166, 255, 0.12)' : 'transparent';
-  document.getElementById('catalog-cards-btn').style.borderColor = view === 'cards' ? 'rgba(88, 166, 255, 0.4)' : '#30363d';
-  document.getElementById('catalog-cards-btn').style.color = view === 'cards' ? '#58a6ff' : '#8b949e';
-  document.getElementById('catalog-json-btn').style.background = view === 'json' ? 'rgba(88, 166, 255, 0.12)' : 'transparent';
-  document.getElementById('catalog-json-btn').style.borderColor = view === 'json' ? 'rgba(88, 166, 255, 0.4)' : '#30363d';
-  document.getElementById('catalog-json-btn').style.color = view === 'json' ? '#58a6ff' : '#8b949e';
-}
-
-(async function loadCatalog() {
-  try {
-    const resp = await fetch('templates.json');
-    if (!resp.ok) return;
-    const templates = await resp.json();
-
-    // Render cards
-    const container = document.getElementById('catalog-cards');
-    container.innerHTML = templates.map(t => `
-      <div style="background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; transition: border-color 0.2s;"
-           onmouseover="this.style.borderColor='rgba(88,166,255,0.3)'"
-           onmouseout="this.style.borderColor='#30363d'">
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-          <div style="width: 28px; height: 28px; color: #58a6ff; flex-shrink: 0;">${t.icon}</div>
-          <div>
-            <div style="font-size: 14px; font-weight: 600; color: #e6edf3;">${t.name}</div>
-            <div style="font-size: 10px; color: #58a6ff; background: rgba(88,166,255,0.1); padding: 1px 6px; border-radius: 8px; display: inline-block;">${t.category}</div>
-          </div>
-        </div>
-        <div style="font-size: 12px; color: #8b949e; line-height: 1.5; margin-bottom: 8px;">${t.description}</div>
-        <code style="font-size: 11px; color: #6e7681; word-break: break-all;">${t.image}</code>
-      </div>
-    `).join('');
-
-    // Render JSON
-    document.getElementById('catalog-json-code').textContent = JSON.stringify(templates, null, 2);
-  } catch (e) {
-    document.getElementById('catalog-cards').innerHTML = '<div style="padding: 20px; text-align: center; color: #484f58; grid-column: 1/-1;">Could not load catalog</div>';
-  }
-})();
-</script>
-
-<!-- Screenshot Gallery -->
-<section class="showcase">
-  <div class="section-header">
-    <h2>See it in action</h2>
-    <p>Real screenshots from a live environment. Click to enlarge.</p>
-  </div>
-  <div class="screenshot-grid">
-    <div class="screenshot-card">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/02-containers.png" alt="Containers" loading="lazy">
-      <div class="screenshot-label">Containers<span>Compose stacks, live CPU/memory, port links</span></div>
-    </div>
-    <div class="screenshot-card">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/00-fleet.png" alt="Fleet Dashboard" loading="lazy">
-      <div class="screenshot-label">Fleet Dashboard<span>Manage all servers from one UI with tags and health</span></div>
-    </div>
-    <div class="screenshot-card">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/04-container-logs.png" alt="Container Logs" loading="lazy">
-      <div class="screenshot-label">Log Viewer<span>Regex search, match highlighting, auto-scroll</span></div>
-    </div>
-    <div class="screenshot-card">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/09-network-topology.png" alt="Network Topology" loading="lazy">
-      <div class="screenshot-label">Network Topology<span>Visual diagram of networks and containers</span></div>
-    </div>
-    <div class="screenshot-card">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/16-app-catalog.png" alt="App Catalog" loading="lazy">
-      <div class="screenshot-label">App Catalog<span>One-click templates with auto-generated passwords</span></div>
-    </div>
-    <div class="screenshot-card">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/21-settings-maintenance.png" alt="System Cleanup" loading="lazy">
-      <div class="screenshot-label">System Cleanup<span>Prune containers, images, volumes, build cache</span></div>
-    </div>
-    <div class="screenshot-card">
-      <img src="https://raw.githubusercontent.com/edvin/orca/main/screenshots/22-keyboard-shortcuts.png" alt="Keyboard Shortcuts" loading="lazy">
-      <div class="screenshot-label">Keyboard Shortcuts<span>Command palette, shortcuts overlay</span></div>
-    </div>
-  </div>
-</section>
-
-<!-- Lightbox -->
-<div class="lightbox" id="lightbox">
-  <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
-  <div class="lightbox-counter" id="lightbox-counter">1 / 12</div>
-  <button class="lightbox-prev" onclick="prevImage(event)">&lsaquo;</button>
-  <button class="lightbox-next" onclick="nextImage(event)">&rsaquo;</button>
-  <img id="lightbox-img" src="" alt="">
-  <div class="lightbox-caption" id="lightbox-caption">
-    <strong id="lightbox-title"></strong>
-    <span id="lightbox-desc"></span>
+</header>
+<div class="mobile-menu" hidden>
+  <div class="mm-head"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><button class="icon-btn" type="button" aria-label="Close menu" data-menu-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="mm-body">
+    <div class="mm-top"><a href="/docs/introduction/">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca">GitHub</a></div>
+    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">AI assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
   </div>
 </div>
+<main id="main">
 
-<script>
-function toggleCategory(el) {
-  el.classList.toggle('collapsed');
-  updateToggleLink();
-}
-function toggleAllCategories(expand) {
-  document.querySelectorAll('.ft-category').forEach(el => {
-    if (expand) el.classList.remove('collapsed');
-    else el.classList.add('collapsed');
-  });
-  updateToggleLink();
-}
-function updateToggleLink() {
-  const link = document.getElementById('ft-toggle-link');
-  if (!link) return;
-  const allCollapsed = [...document.querySelectorAll('.ft-category')].every(el => el.classList.contains('collapsed'));
-  link.textContent = allCollapsed ? 'Expand All' : 'Collapse All';
-  link.setAttribute('onclick', allCollapsed ? 'toggleAllCategories(true)' : 'toggleAllCategories(false)');
-}
-
-let galleryImages = [];
-let currentIndex = 0;
-
-function initGallery() {
-  document.querySelectorAll('.hero-screenshot, .highlight-screenshot, .screenshot-card').forEach(el => {
-    const img = el.querySelector('img');
-    if (!img) return;
-    const label = el.querySelector('.screenshot-label');
-    galleryImages.push({
-      src: img.src,
-      title: label ? label.childNodes[0]?.textContent?.trim() || img.alt : img.alt,
-      description: label ? label.querySelector('span')?.textContent?.trim() || '' : '',
-    });
-    el.style.cursor = 'pointer';
-    el.addEventListener('click', (e) => {
-      e.preventDefault();
-      currentIndex = galleryImages.findIndex(g => g.src === img.src);
-      showLightbox();
-    });
-  });
-}
-
-function showLightbox() {
-  const img = galleryImages[currentIndex];
-  document.getElementById('lightbox-img').src = img.src;
-  document.getElementById('lightbox-title').textContent = img.title;
-  document.getElementById('lightbox-desc').textContent = img.description;
-  document.getElementById('lightbox-counter').textContent = `${currentIndex + 1} / ${galleryImages.length}`;
-  const lb = document.getElementById('lightbox');
-  lb.style.display = 'flex';
-  requestAnimationFrame(() => { lb.classList.add('active'); });
-}
-
-function closeLightbox() {
-  const lb = document.getElementById('lightbox');
-  lb.classList.remove('active');
-  setTimeout(() => { lb.style.display = 'none'; }, 300);
-}
-
-function prevImage(e) {
-  e.stopPropagation();
-  currentIndex = (currentIndex - 1 + galleryImages.length) % galleryImages.length;
-  showLightbox();
-}
-
-function nextImage(e) {
-  e.stopPropagation();
-  currentIndex = (currentIndex + 1) % galleryImages.length;
-  showLightbox();
-}
-
-document.addEventListener('keydown', (e) => {
-  if (!document.getElementById('lightbox').classList.contains('active')) return;
-  if (e.key === 'Escape') closeLightbox();
-  if (e.key === 'ArrowLeft') prevImage(e);
-  if (e.key === 'ArrowRight') nextImage(e);
-});
-
-document.getElementById('lightbox').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('lightbox')) closeLightbox();
-});
-
-document.addEventListener('DOMContentLoaded', initGallery);
-</script>
-
-<!-- Privacy & Security -->
-<section style="max-width: 1100px; margin: 0 auto; padding: 40px 20px 80px;" id="privacy">
-  <div class="section-header">
-    <h2>Privacy & Security</h2>
-    <p>Built for teams that take data security seriously.</p>
+<section class="hero">
+  <div class="hero-bg" aria-hidden="true"><div class="hero-grid"></div><div class="hero-glow"></div></div>
+  <div class="container hero-inner">
+    
+    <h1>Local development,<br><span class="grad">without the duct tape.</span></h1>
+    <p class="hero-sub">Orca is a free, open source desktop app for containers, compose stacks and Kubernetes. It gives every service an HTTPS hostname, runs a full copy of your app for each git worktree, and lets your AI agents drive it all. One file in your repo sets it up for the whole team.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary btn-lg" href="/download/" data-os-label="Download for {os}" data-os-href>Download</a>
+      <a class="btn btn-lg btn-ghost" href="/docs/quickstart/">Read the quickstart <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+    <div class="hero-meta"><span><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9s-2-.9-3.4-.9a5 5 0 0 0-4.2 2.6c-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6s1.8-.8 3.4-.8 2 .8 3.4.8 2.2-1.3 3.1-2.5c1-1.4 1.4-2.8 1.4-2.9 0 0-2.7-1-2.7-4.1zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.2.7-3 1.6-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.5z"/></svg> macOS</span><span><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg> Windows</span><span><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 2c-2.2 0-3.5 1.9-3.5 4.4 0 1.3.3 2.2-.4 3.4-.9 1.5-2.6 3.4-2.6 6.2 0 .6.1 1.1.3 1.5-.8.4-1.8.6-1.8 1.6 0 1.3 2.3 1 3.7 1.9 1 .6 1.7.9 2.6.6.6-.2 1-.6 1.2-1h2.9c.2.4.6.8 1.2 1 .9.3 1.6 0 2.6-.6 1.4-.9 3.7-.6 3.7-1.9 0-1-1-1.2-1.8-1.6.2-.4.3-.9.3-1.5 0-2.8-1.7-4.7-2.6-6.2-.7-1.2-.4-2.1-.4-3.4C15.5 3.9 14.2 2 12 2zm-1.6 4.5c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1zm3.2 0c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1zM12 9.6c.9 0 2 .5 2 .9s-1.1 1.2-2 1.2-2-.8-2-1.2.9-.9 2-.9z"/></svg> Linux</span><span class="sep"></span><span>MIT licensed</span><span>No telemetry</span></div>
   </div>
-
-  <!-- Zero Telemetry Hero Banner -->
-  <div style="background: linear-gradient(135deg, rgba(63, 185, 80, 0.08) 0%, rgba(88, 166, 255, 0.08) 100%); border: 1px solid rgba(63, 185, 80, 0.15); border-radius: 18px; padding: 40px 48px; margin-bottom: 32px; text-align: center; position: relative; overflow: hidden;">
-    <div style="position: absolute; top: -30px; right: -30px; width: 200px; height: 200px; background: radial-gradient(circle, rgba(63, 185, 80, 0.1) 0%, transparent 60%); pointer-events: none;"></div>
-    <div style="font-size: 48px; font-weight: 800; letter-spacing: -2px; margin-bottom: 8px; background: linear-gradient(135deg, #3fb950, #58a6ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Zero Telemetry</div>
-    <div style="font-size: 16px; color: #8b949e; max-width: 520px; margin: 0 auto; line-height: 1.6;">No analytics. No crash reporting. No accounts. No cloud service. Your containers are your business — we never see them.</div>
-  </div>
-
-  <!-- Privacy Cards -->
-  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px;">
-    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
-      <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: rgba(63, 185, 80, 0.1); border-radius: 10px; margin-bottom: 16px;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-      </div>
-      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #e6edf3;">100% Local</h3>
-      <p style="font-size: 13px; color: #8b949e; line-height: 1.6;">Everything runs on your machine. The daemon binds to localhost only. Config, credentials, and logs never leave your system.</p>
-    </div>
-    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
-      <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: rgba(88, 166, 255, 0.1); border-radius: 10px; margin-bottom: 16px;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      </div>
-      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #e6edf3;">No Phone Home</h3>
-      <p style="font-size: 13px; color: #8b949e; line-height: 1.6;">We don't operate servers. The only automatic calls are update checks (GitHub) and the template catalog — both plain GET requests with no user data.</p>
-    </div>
-    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
-      <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: rgba(163, 113, 247, 0.1); border-radius: 10px; margin-bottom: 16px;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a371f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      </div>
-      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #e6edf3;">Fully Auditable</h3>
-      <p style="font-size: 13px; color: #8b949e; line-height: 1.6;">MIT licensed and open source. Every network call is documented. Build from source to verify. Your security team can audit everything.</p>
-    </div>
-  </div>
-
-  <!-- Network Transparency Table -->
-  <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 16px; overflow: hidden; margin-bottom: 32px;">
-    <div style="padding: 16px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); font-size: 13px; font-weight: 700; color: #e6edf3; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      Every Network Connection — Full Transparency
-    </div>
-    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 10px 24px; font-size: 11px; color: #484f58; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; border-bottom: 1px solid rgba(255, 255, 255, 0.04); gap: 16px;">
-      <span></span><span>Connection</span><span>When</span><span>User Data?</span>
-    </div>
-    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid rgba(255, 255, 255, 0.03); gap: 16px; align-items: center;">
-      <span style="color: #d29922; font-size: 10px;">AUTO</span>
-      <span><strong style="color: #e6edf3;">Update check</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">github.com</code></span>
-      <span style="color: #8b949e; font-size: 12px;">On startup</span>
-      <span style="color: #3fb950; font-size: 12px; font-weight: 600;">None</span>
-    </div>
-    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid rgba(255, 255, 255, 0.03); gap: 16px; align-items: center;">
-      <span style="color: #d29922; font-size: 10px;">AUTO</span>
-      <span><strong style="color: #e6edf3;">Template catalog</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">orca-desktop.com</code></span>
-      <span style="color: #8b949e; font-size: 12px;">Hourly, cached</span>
-      <span style="color: #3fb950; font-size: 12px; font-weight: 600;">None</span>
-    </div>
-    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid rgba(255, 255, 255, 0.03); gap: 16px; align-items: center;">
-      <span style="color: #58a6ff; font-size: 10px;">USER</span>
-      <span><strong style="color: #e6edf3;">Docker Hub search</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">hub.docker.com</code></span>
-      <span style="color: #8b949e; font-size: 12px;">You search</span>
-      <span style="color: #d29922; font-size: 12px; font-weight: 600;">Query only</span>
-    </div>
-    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; border-bottom: 1px solid rgba(255, 255, 255, 0.03); gap: 16px; align-items: center;">
-      <span style="color: #58a6ff; font-size: 10px;">USER</span>
-      <span><strong style="color: #e6edf3;">AI assistant</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">Your provider</code></span>
-      <span style="color: #8b949e; font-size: 12px;">You ask AI</span>
-      <span style="color: #d29922; font-size: 12px; font-weight: 600;">Context you see</span>
-    </div>
-    <div style="display: grid; grid-template-columns: auto 1fr auto auto; padding: 12px 24px; font-size: 13px; color: #c9d1d9; gap: 16px; align-items: center;">
-      <span style="color: #58a6ff; font-size: 10px;">USER</span>
-      <span><strong style="color: #e6edf3;">Image pull</strong> — <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px;">Your registries</code></span>
-      <span style="color: #8b949e; font-size: 12px;">You pull</span>
-      <span style="color: #d29922; font-size: 12px; font-weight: 600;">Image ref</span>
-    </div>
-  </div>
-
-  <!-- Built-in CA -->
-  <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px; margin-bottom: 16px;">
-    <div style="display: flex; align-items: flex-start; gap: 20px;">
-      <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: rgba(210, 153, 34, 0.1); border-radius: 10px; flex-shrink: 0;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d29922" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
-      </div>
-      <div>
-        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 6px; color: #e6edf3;">Built-in Certificate Authority</h3>
-        <p style="font-size: 13px; color: #8b949e; line-height: 1.6; margin-bottom: 10px;">Orca generates a persistent local CA that signs TLS certificates for every deployed app template. Install the CA certificate once and all Orca-deployed services are automatically trusted — no more browser warnings.</p>
-        <div style="display: flex; gap: 20px; font-size: 12px; color: #6e7681;">
-          <span style="display: flex; align-items: center; gap: 5px;"><span style="color: #d29922;">&#10003;</span> One-click download in Settings</span>
-          <span style="display: flex; align-items: center; gap: 5px;"><span style="color: #d29922;">&#10003;</span> 10-year root CA, 1-year leaf certs</span>
-          <span style="display: flex; align-items: center; gap: 5px;"><span style="color: #d29922;">&#10003;</span> Install instructions for macOS, Windows, Linux</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Code Signing + Air-Gap -->
-  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
-      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #e6edf3; display: flex; align-items: center; gap: 8px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Code Signed Releases
-      </h3>
-      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #8b949e; line-height: 1.6;">
-        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #3fb950;">&#10003;</span> macOS — Apple notarized with Developer ID</div>
-        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #3fb950;">&#10003;</span> Windows — EV code signed via SSL.com</div>
-        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #3fb950;">&#10003;</span> Signed update manifests — tamper-proof upgrades</div>
-        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #3fb950;">&#10003;</span> Built in GitHub Actions — reproducible CI</div>
-      </div>
-    </div>
-    <div style="background: rgba(22, 27, 34, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 28px;">
-      <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #e6edf3; display: flex; align-items: center; gap: 8px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a371f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-        Air-Gap Ready
-      </h3>
-      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #8b949e; line-height: 1.6;">
-        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #a371f7;">&#10003;</span> Ollama integration — fully local AI, no cloud</div>
-        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #a371f7;">&#10003;</span> Private registries — no Docker Hub required</div>
-        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #a371f7;">&#10003;</span> Localhost-only daemon — no open ports</div>
-        <div style="display: flex; align-items: center; gap: 8px;"><span style="color: #a371f7;">&#10003;</span> Works offline — cached templates, no cloud deps</div>
-      </div>
-    </div>
-  </div>
-
-  <div style="text-align: center; margin-top: 24px;">
-    <a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" style="font-size: 13px; color: #58a6ff;">Read the full Privacy Statement</a>
-    <span style="color: #484f58; margin: 0 8px;">&#183;</span>
-    <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" style="font-size: 13px; color: #58a6ff;">Security Policy</a>
+  <div class="container hero-visual reveal">
+    <div class="window"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="window-title">Orca</span></div><img class="hero-shot" src="/assets/screens/dashboard.webp" alt="The Orca dashboard: containers, stacks, CPU and memory at a glance" loading="lazy" decoding="async"></div>
+    <div class="float float-url" aria-hidden="true"><span class="lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>https://shop.localhost<span class="live"></span></div>
+    <div class="float float-yaml" aria-hidden="true"><div class="float-title">orca.yaml</div><pre><span class="k">gateway</span>:
+  - <span class="k">hostname</span>: shop
+    <span class="k">service</span>: web
+    <span class="k">port</span>: <span class="n">3000</span></pre></div>
   </div>
 </section>
 
-<section class="cta" id="download">
-  <h2>Ready to try it?</h2>
-  <p>Free, open source, and works with your existing Docker and Kubernetes setup.</p>
-  <div class="hero-buttons" style="justify-content: center;">
-    <a href="https://github.com/edvin/orca/releases/latest" class="btn btn-primary">Download Orca Desktop</a>
-    <a href="https://github.com/edvin/orca" class="btn btn-secondary">Star on GitHub</a>
+<section class="strip">
+  <div class="container strip-inner">
+    <p>One app instead of <strong>Docker Desktop</strong>, a reverse proxy you keep alive by hand, and a wiki page of setup steps.</p>
   </div>
-  <p style="margin-top: 20px; font-size: 13px; color: #8b949e;">
-    The App Catalog is powered by a <a href="https://orca-desktop.com/templates.json">community catalog</a>. <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml">Contribute a template</a> for your favorite app.
-  </p>
 </section>
 
-<footer class="footer">
-  <p style="margin-bottom: 8px;">
-    <a href="#features">Features</a> ·
-    <a href="#gateway">Gateway</a> ·
-    <a href="#environments">Environments</a> ·
-    <a href="#kubernetes">Kubernetes</a> ·
-    <a href="#ai">AI</a> ·
-    <a href="#fleet">Fleet</a> ·
-    <a href="#cli">CLI</a> ·
-    <a href="#privacy">Privacy</a> ·
-    <a href="#download">Download</a>
-  </p>
-  <p>
-    <a href="https://github.com/edvin/orca">GitHub</a> ·
-    <a href="https://github.com/edvin/orca/releases">Releases</a> ·
-    <a href="https://github.com/edvin/orca/blob/main/LICENSE">MIT License</a> ·
-    <a href="https://github.com/edvin/orca/blob/main/PRIVACY.md">Privacy</a> ·
-    <a href="https://github.com/edvin/orca/blob/main/SECURITY.md">Security</a> ·
-    <a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md">Contributing</a>
-  </p>
-  <p style="margin-top: 12px;">Made by <a href="https://github.com/edvin">Edvin Syse</a></p>
+<section class="section">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">How it works</span>
+      <h2>From <code>git clone</code> to HTTPS in a minute</h2>
+      <p>Orca finds every compose project on your machine, however you start it. Add one file and it gets real hostnames, setup commands and links for everyone on the team.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">1</div>
+        <h3>Start your project</h3>
+        <p>From Orca, or the way you always do. Orca picks it up as a stack.</p>
+        <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">git</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> clone</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> git@github.com:acme/shop.git</span></span>
+<span class="line"><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">cd</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> shop</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3"> &#x26;&#x26; </span><span style="--shiki-light:#953800;--shiki-dark:#FFA657">docker</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> compose</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> up</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -d</span></span></code></pre></div>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">2</div>
+        <h3>Describe it once</h3>
+        <p>Commit an <code>orca.yaml</code> next to the compose file, or let Orca write it from what runs.</p>
+        <div class="code has-title"><div class="code-title"><span>orca.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">gateway</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hostname</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    service</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">web</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    port</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">3000</span></span></code></pre></div>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">3</div>
+        <h3>Open it</h3>
+        <p>Trusted HTTPS on a real name, with WebSockets and hot reload working as they should.</p>
+        <div class="browser-pill"><span class="lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><span>https://<b>shop</b>.localhost</span><span class="ok-dot"></span></div>
+        <div class="step-note">Running · up 2 min · web:3000</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section feature">
+  <div class="container feature-grid">
+    <div class="feature-copy reveal">
+      <span class="eyebrow"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg> Gateway</span>
+      <h2>Every service gets a real HTTPS name</h2>
+      <p>A managed gateway routes <code>shop.localhost</code>, <code>api.localhost</code> or your team's own domain to the right container, with certificates from Orca's own certificate authority.</p>
+      <ul class="checks">
+        <li>Routes from <code>orca.yaml</code>, container labels, existing Traefik labels or one click</li>
+        <li>Path routes, WebSockets, SSE and HTTP/2 on the same host</li>
+        <li>The same names resolve inside containers, so OIDC and server-to-server calls just work</li>
+        <li>A live landing page lists every service with its status and uptime</li>
+      </ul>
+      <a class="link-arrow" href="/docs/gateway/">How the gateway works <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+    <div class="feature-visual reveal">
+      <div class="window browser"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>https://localhost</span></div><img class="" src="/assets/screens/landing-page.webp" alt="The gateway landing page listing every routed service with status and uptime" loading="lazy" decoding="async"></div>
+    </div>
+  </div>
+</section>
+
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
+    <div class="feature-copy reveal">
+      <span class="eyebrow"><svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg> Worktree instances</span>
+      <h2>A running copy of your app for every branch</h2>
+      <p>Work on three branches at once, or let three AI agents do it. Each git worktree runs as its own instance with its own URLs and ports, while databases and other infrastructure run once and are shared.</p>
+      <ul class="checks">
+        <li>Hostnames per instance, like <code>web-feature-x-shop.localhost</code></li>
+        <li>Shared data, a database of its own, or a private server, per service</li>
+        <li><code>orca up</code> from the worktree; <code>eval $(orca env)</code> for tests</li>
+        <li>Idle instances stop themselves and wake on the next request</li>
+      </ul>
+      <a class="link-arrow" href="/docs/worktrees/">Set up worktree instances <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+    <div class="feature-visual reveal">
+      <div class="window"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="window-title">Orca — Projects</span></div><img class="" src="/assets/screens/feature-worktrees.webp" alt="The Projects page with an instance per git worktree" loading="lazy" decoding="async"></div>
+    </div>
+  </div>
+</section>
+
+<section class="section feature">
+  <div class="container feature-grid">
+    <div class="feature-copy reveal">
+      <span class="eyebrow"><svg viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg> orca.yaml</span>
+      <h2>One file sets up the project for everyone</h2>
+      <p>Routes, links to staging and production, build targets and setup commands live in the repo. Edit it as a form with the stack's real services and ports to pick from, or as YAML. Comments survive either way.</p>
+      <ul class="checks">
+        <li>Applied the moment it changes, however the stack was started</li>
+        <li><code>orca.local.yaml</code> for what differs per machine</li>
+        <li>Compose profiles switch optional services on and off, per developer</li>
+      </ul>
+      <a class="link-arrow" href="/docs/orca-yaml/">The orca.yaml reference <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+    <div class="feature-visual reveal stack-visual">
+      <div class="window"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="window-title">Orca — shop</span></div><img class="" src="/assets/screens/feature-editor.webp" alt="The orca.yaml editor with routes, services and ports" loading="lazy" decoding="async"></div>
+      <div class="code-float"><div class="code has-title"><div class="code-title"><span>orca.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">gateway</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hostname</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">          # https://shop.localhost</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    service</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">web</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    port</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">3000</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hostname</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    service</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">api</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    port</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">8080</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    path</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">/api/*</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">            # same host, another service</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hooks</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  after_up</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">    - </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"api: php artisan migrate --force"</span></span></code></pre></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
+    <div class="feature-copy reveal">
+      <span class="eyebrow"><svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg> Agents</span>
+      <h2>Built for AI agents</h2>
+      <p>Claude Code and other MCP clients can list and inspect containers, read logs, start stacks and spin up a worktree instance to test their own changes. Any OpenAI-compatible agent can use the same tools.</p>
+      <ul class="checks">
+        <li>MCP endpoint on the local daemon, authenticated with your token</li>
+        <li>Worktree tools so each agent tests in its own instance</li>
+        <li>A built-in assistant with Claude, GPT, Gemini or local Ollama</li>
+      </ul>
+      <a class="link-arrow" href="/docs/agents/">Connect your agent <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+    <div class="feature-visual reveal">
+      <div class="code has-title"><div class="code-title"><span>.mcp.json</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">{</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  "mcpServers"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: {</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    "orca"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: {</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      "type"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"http"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">,</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      "url"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"http://127.0.0.1:9477/api/v1/agent/mcp"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">,</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      "headers"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: { </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">"Authorization"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"Bearer &#x3C;your token>"</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3"> }</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">    }</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  }</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">}</span></span></code></pre></div>
+      <div class="agent-log">
+        <div><span class="who">agent</span> instance_up <span class="arg">worktree: ../shop-fix-checkout</span></div>
+        <div class="ok">✓ Started fix-checkout · https://web-fix-checkout-shop.localhost</div>
+        <div><span class="who">agent</span> container_logs <span class="arg">service: api, tail: 50</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">Everything else</span>
+      <h2>The rest of your container workflow, too</h2>
+      <p>Orca is a complete replacement for the desktop container tools you use today.</p>
+    </div>
+    <div class="bento">
+      <a class="bento-card reveal" href="/docs/containers/"><span class="bento-icon"><svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg></span><h3>Containers</h3><p>Run, inspect, edit limits live, open a terminal, browse files and follow logs with search.</p><span class="bento-more">Learn more <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+      <a class="bento-card reveal" href="/docs/stacks/"><span class="bento-icon"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg></span><h3>Compose stacks</h3><p>Every compose project, however it was started, with profiles, editing and setup hooks.</p><span class="bento-more">Learn more <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+      <a class="bento-card reveal" href="/docs/images-and-builds/"><span class="bento-icon"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></span><h3>Images and scans</h3><p>Pull with tag search, build with live output, and scan for CVEs with Trivy.</p><span class="bento-more">Learn more <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+      <a class="bento-card reveal" href="/docs/kubernetes/"><span class="bento-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span><h3>Kubernetes</h3><p>A local k3s cluster in one click, with Helm, topology and a YAML editor, on its own context.</p><span class="bento-more">Learn more <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+      <a class="bento-card reveal" href="/docs/templates/"><span class="bento-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><h3>App Catalog</h3><p>Databases, mail, monitoring and more in one click, with generated secrets and setup guides.</p><span class="bento-more">Learn more <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+      <a class="bento-card reveal" href="/docs/remote-hosts/"><span class="bento-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span><h3>Remote hosts</h3><p>Install the daemon on a Linux server and manage your whole fleet from one window.</p><span class="bento-more">Learn more <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+      <a class="bento-card reveal" href="/docs/auto-deploy/"><span class="bento-icon"><svg viewBox="0 0 24 24"><path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2"/><path d="M14 4c3-1 6-1 6-1s0 3-1 6l-7 7-5-5z"/><path d="M9 11 5 11l3-4h4M13 15v4l4-3v-4"/></svg></span><h3>Push to deploy</h3><p>A webhook from GitHub or Docker Hub pulls the new image and redeploys, keeping your config.</p><span class="bento-more">Learn more <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+      <a class="bento-card reveal" href="/docs/cli/"><span class="bento-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span><h3>CLI and API</h3><p>Everything is scriptable: the orca command, a REST API and an event stream.</p><span class="bento-more">Learn more <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+    </div>
+  </div>
+</section>
+
+<section class="section platforms-section">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">Platforms</span>
+      <h2>Native on every desktop</h2>
+      <p>Orca sets up what each platform needs on first start. No Docker Desktop required.</p>
+    </div>
+    <div class="platforms">
+      <div class="platform reveal" data-os-card="mac"><div class="platform-icon"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9s-2-.9-3.4-.9a5 5 0 0 0-4.2 2.6c-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6s1.8-.8 3.4-.8 2 .8 3.4.8 2.2-1.3 3.1-2.5c1-1.4 1.4-2.8 1.4-2.9 0 0-2.7-1-2.7-4.1zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.2.7-3 1.6-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.5z"/></svg></div><h3>macOS</h3><p>A lightweight Linux VM with Lima and Apple's Virtualization framework, VirtioFS mounts that keep file permissions, and ports forwarded to your Mac.</p><span class="yours">Your platform</span></div>
+      <div class="platform reveal" data-os-card="windows"><div class="platform-icon"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg></div><h3>Windows</h3><p>Docker inside WSL2, installed and configured for you, with memory, CPU and swap settings in the app.</p><span class="yours">Your platform</span></div>
+      <div class="platform reveal" data-os-card="linux"><div class="platform-icon"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 2c-2.2 0-3.5 1.9-3.5 4.4 0 1.3.3 2.2-.4 3.4-.9 1.5-2.6 3.4-2.6 6.2 0 .6.1 1.1.3 1.5-.8.4-1.8.6-1.8 1.6 0 1.3 2.3 1 3.7 1.9 1 .6 1.7.9 2.6.6.6-.2 1-.6 1.2-1h2.9c.2.4.6.8 1.2 1 .9.3 1.6 0 2.6-.6 1.4-.9 3.7-.6 3.7-1.9 0-1-1-1.2-1.8-1.6.2-.4.3-.9.3-1.5 0-2.8-1.7-4.7-2.6-6.2-.7-1.2-.4-2.1-.4-3.4C15.5 3.9 14.2 2 12 2zm-1.6 4.5c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1zm3.2 0c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1zM12 9.6c.9 0 2 .5 2 .9s-1.1 1.2-2 1.2-2-.8-2-1.2.9-.9 2-.9z"/></svg></div><h3>Linux</h3><p>Talks to Docker or Podman directly, with no VM in between. AppImage and .deb packages.</p><span class="yours">Your platform</span></div>
+    </div>
+    <div class="server-line reveal">
+      <div><strong>Servers too.</strong> Install the daemon on any Linux server and add it to Orca.</div>
+      <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">curl</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -fsSL</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> https://orca-desktop.com/install-daemon.sh</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72"> |</span><span style="--shiki-light:#953800;--shiki-dark:#FFA657"> sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> sh</span></span></code></pre></div>
+    </div>
+  </div>
+</section>
+
+<section class="section trust">
+  <div class="container trust-grid">
+    <div class="trust-item reveal"><svg viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg><h3>Open source</h3><p>MIT licensed. Read the code, file issues, send pull requests.</p></div>
+    <div class="trust-item reveal"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg><h3>No telemetry</h3><p>No analytics, no tracking. Orca only talks to the services you point it at.</p></div>
+    <div class="trust-item reveal"><svg viewBox="0 0 24 24"><path d="M20 4c-6 0-12 4-14 12l-2 4"/><path d="M8 14h7M11 10h6"/></svg><h3>Light</h3><p>A Rust daemon and a native Tauri window, not a bundled browser.</p></div>
+    <div class="trust-item reveal"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><h3>Local first</h3><p>The desktop daemon listens on localhost, and every request needs your token.</p></div>
+  </div>
+</section>
+
+<section class="cta-band">
+  <div class="container cta-inner reveal">
+    <h2>Set it up in five minutes</h2>
+    <p>Download Orca, open a project, and give it a hostname. The quickstart walks you through it.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary btn-lg" href="/download/" data-os-label="Download for {os}" data-os-href>Download</a>
+      <a class="btn btn-lg btn-ghost" href="/docs/quickstart/">Quickstart <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+  </div>
+</section>
+
+</main>
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="f-brand"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><p>The open source container platform for local development. Free, MIT licensed, no telemetry.</p></div>
+    <div class="f-col"><div class="f-title">Product</div><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="/docs/templates/">App Catalog</a><a href="https://github.com/edvin/orca/releases" target="_blank" rel="noopener">Releases</a></div>
+    <div class="f-col"><div class="f-title">Docs</div><a href="/docs/quickstart/">Quickstart</a><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/agents/">Agents & MCP</a><a href="/docs/cli/">CLI</a></div>
+    <div class="f-col"><div class="f-title">Community</div><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">Issues</a><a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a><a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener">Add a template</a></div>
+    <div class="f-col"><div class="f-title">Trust</div><a href="/docs/security/">Security</a><a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a><a href="https://github.com/edvin/orca/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a></div>
+  </div>
+  <div class="footer-bottom"><span>© 2026 Orca contributors</span><span>Packages hosted by <a href="https://cloudsmith.com" target="_blank" rel="noopener">Cloudsmith</a></span></div>
 </footer>
-
-<script>
-(async function() {
-  try {
-    const resp = await fetch('https://api.github.com/repos/edvin/orca/releases/latest');
-    if (!resp.ok) return;
-    const release = await resp.json();
-    const assets = release.assets || [];
-
-    const fmt = (bytes) => {
-      if (bytes > 1048576) return (bytes / 1048576).toFixed(0) + ' MB';
-      return (bytes / 1024).toFixed(0) + ' KB';
-    };
-
-    // Find assets by pattern
-    const find = (pattern) => assets.find(a => pattern.test(a.name));
-    const exe = find(/setup\.exe$/i);
-    const dmg = find(/\.dmg$/i);
-    const appimage = find(/\.AppImage$/i);
-    const deb = find(/\.deb$/i);
-
-    if (exe) {
-      const el = document.getElementById('dl-windows');
-      el.href = exe.browser_download_url;
-      document.getElementById('dl-windows-size').textContent = fmt(exe.size);
-    }
-    if (dmg) {
-      const el = document.getElementById('dl-macos');
-      el.href = dmg.browser_download_url;
-      document.getElementById('dl-macos-size').textContent = fmt(dmg.size);
-    }
-    if (appimage || deb) {
-      const asset = appimage || deb;
-      const el = document.getElementById('dl-linux');
-      el.href = asset.browser_download_url;
-      document.getElementById('dl-linux-size').textContent = fmt(asset.size);
-    }
-
-    // Version and date
-    const version = release.tag_name;
-    const date = new Date(release.published_at).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric'
-    });
-    document.getElementById('dl-version').textContent = version;
-    document.getElementById('dl-date').textContent = 'Released ' + date;
-    document.getElementById('dl-meta').style.display = 'flex';
-
-    // Detect OS and highlight the recommended download
-    const ua = navigator.userAgent || navigator.platform || '';
-    let osId = null;
-    if (/Mac/i.test(ua)) osId = 'dl-macos';
-    else if (/Win/i.test(ua)) osId = 'dl-windows';
-    else if (/Linux/i.test(ua)) osId = 'dl-linux';
-    if (osId) {
-      document.getElementById(osId).classList.add('dl-recommended');
-    }
-
-    // Also update the CTA download button at the bottom
-    const ctaBtn = document.querySelector('.cta .btn-primary');
-    if (ctaBtn && osId) {
-      const dlEl = document.getElementById(osId);
-      ctaBtn.href = dlEl.href;
-      const osName = osId === 'dl-macos' ? 'macOS' : osId === 'dl-windows' ? 'Windows' : 'Linux';
-      ctaBtn.textContent = 'Download for ' + osName;
-    }
-  } catch (e) {
-    // Silently fail — links still point to releases page
-  }
-})();
-</script>
+<div class="search-dialog" hidden role="dialog" aria-modal="true" aria-label="Search the docs">
+  <div class="search-panel">
+    <div class="search-input"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Search the docs" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <div class="search-results" role="listbox"></div>
+    <div class="search-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span></div>
+  </div>
+</div>
 </body>
 </html>

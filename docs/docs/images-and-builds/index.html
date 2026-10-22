@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en" data-page="docs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Images and builds — Orca docs</title>
+<meta name="description" content="Pull, build, inspect, scan, tag and prune images in Orca, add private registries, and track builds with history, comparisons and build targets.">
+<link rel="canonical" href="https://orca-desktop.com/docs/images-and-builds/">
+<meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Orca">
+<meta property="og:title" content="Images and builds — Orca docs">
+<meta property="og:description" content="Pull, build, inspect, scan, tag and prune images in Orca, add private registries, and track builds with history, comparisons and build targets.">
+<meta property="og:url" content="https://orca-desktop.com/docs/images-and-builds/">
+<meta property="og:image" content="https://orca-desktop.com/assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v=mvjqae17">
+<script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
+<script src="/assets/site.js?v=mvjqae17" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a>
+    <nav class="top-nav" aria-label="Main"><a href="/docs/introduction/" aria-current="page">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="search-trigger" type="button" data-search-open aria-label="Search the docs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search docs</span><kbd>⌘K</kbd></button>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode"><span class="when-dark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="when-light"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span></button>
+      <a class="icon-btn gh-btn" href="https://github.com/edvin/orca" target="_blank" rel="noopener" aria-label="Orca on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span class="gh-stars">26</span></a>
+      <a class="btn btn-primary btn-sm header-cta" href="/download/">Download</a>
+      <button class="icon-btn menu-btn" type="button" aria-label="Open menu" aria-expanded="false" data-menu-open><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+</header>
+<div class="mobile-menu" hidden>
+  <div class="mm-head"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><button class="icon-btn" type="button" aria-label="Close menu" data-menu-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="mm-body">
+    <div class="mm-top"><a href="/docs/introduction/">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca">GitHub</a></div>
+    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">AI assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
+  </div>
+</div>
+<main id="main">
+<div class="docs-shell">
+  <aside class="docs-sidebar" aria-label="Documentation">
+    <div class="sb-inner"><div class="sb-section"><div class="sb-title">Getting started</div><ul><li><a href="/docs/introduction/">Introduction</a></li><li><a href="/docs/install/">Install</a></li><li><a href="/docs/quickstart/">Quickstart</a></li><li><a href="/docs/platforms/">Platforms</a></li></ul></div><div class="sb-section"><div class="sb-title">Local development</div><ul><li><a href="/docs/gateway/">Gateway</a></li><li><a href="/docs/orca-yaml/">orca.yaml</a></li><li><a href="/docs/profiles/">Profiles</a></li><li><a href="/docs/worktrees/">Worktree instances</a></li></ul></div><div class="sb-section"><div class="sb-title">Working with Orca</div><ul><li><a href="/docs/containers/">Containers</a></li><li><a href="/docs/stacks/">Stacks</a></li><li><a href="/docs/images-and-builds/" aria-current="page">Images &amp; builds</a></li><li><a href="/docs/templates/">App Catalog</a></li><li><a href="/docs/kubernetes/">Kubernetes</a></li></ul></div><div class="sb-section"><div class="sb-title">AI and automation</div><ul><li><a href="/docs/agents/">Agents &amp; MCP</a></li><li><a href="/docs/ai-assistant/">AI assistant</a></li><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/api/">REST API</a></li><li><a href="/docs/auto-deploy/">Push to deploy</a></li></ul></div><div class="sb-section"><div class="sb-title">Servers and teams</div><ul><li><a href="/docs/remote-hosts/">Remote hosts</a></li><li><a href="/docs/security/">Security &amp; privacy</a></li></ul></div><div class="sb-section"><div class="sb-title">Help</div><ul><li><a href="/docs/troubleshooting/">Troubleshooting</a></li></ul></div></div>
+  </aside>
+  <article class="doc">
+    <div class="doc-head">
+      <div class="crumbs"><a href="/docs/introduction/">Docs</a><span>/</span><span>Working with Orca</span></div>
+      <h1>Images and builds</h1>
+      <p class="lede">Pull, build, inspect, scan, tag and prune images in Orca, add private registries, and track builds with history, comparisons and build targets.</p>
+    </div>
+    <div class="prose"><p>This page covers the <strong>Images</strong> page, where you pull, build and manage images, and the <strong>Builds</strong> page, which keeps a history of every build and runs the build targets from your <code>orca.yaml</code> files.</p>
+<h2 id="pull-an-image"><a class="anchor" href="#pull-an-image" aria-hidden="true" tabindex="-1">#</a>Pull an image</h2>
+<p>Click <strong>Pull</strong> on the <strong>Images</strong> page. Start typing to search Docker Hub: results show official images, download counts and stars. Click a result to pull it, or type a full reference such as <code>postgres:16</code> and click <strong>Pull</strong>.</p>
+<p>The dialog shows the progress of each layer while the image downloads.</p>
+<p>For a private registry, either save credentials once under <strong>Settings</strong> &gt; <strong>Registries</strong> (see <a href="#private-registries">Registries</a>), or click <strong>Auth</strong> in the pull dialog and enter a username and password for this pull only.</p>
+<div class="callout callout-tip"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg><span>Tip</span></div><p>The <strong>Run Container</strong> dialog also helps with tags: type a Docker Hub image name and it suggests the image&#39;s most recent tags. See <a href="/docs/containers/#run-a-container">Containers</a>.</p>
+</div><h2 id="build-an-image"><a class="anchor" href="#build-an-image" aria-hidden="true" tabindex="-1">#</a>Build an image</h2>
+<p>Click <strong>Build</strong> on the <strong>Images</strong> page to open the build panel:</p>
+<ul>
+<li><strong>Context path (directory with Dockerfile)</strong>: the build context, for example <code>/path/to/project</code>.</li>
+<li><strong>Dockerfile (optional)</strong>: a Dockerfile name or path if it isn&#39;t <code>Dockerfile</code>.</li>
+<li><strong>Tag (optional)</strong>: for example <code>myapp:latest</code>.</li>
+<li><strong>+ Add build arg</strong> for <code>ARG</code> values.</li>
+</ul>
+<p>Click <strong>Build</strong> to start. The build output streams into the panel, and the build is recorded on the <a href="#the-builds-page">Builds page</a>.</p>
+<h2 id="inspect-an-image"><a class="anchor" href="#inspect-an-image" aria-hidden="true" tabindex="-1">#</a>Inspect an image</h2>
+<p>Click an image row to expand it. You see the image ID, tags, size, creation date and number of layers, and three actions:</p>
+<ul>
+<li><strong>View Layers</strong> lists every layer with the Dockerfile instruction that created it and its size, so you can see what makes an image large.</li>
+<li><strong>Browse Files</strong> opens the image&#39;s filesystem. Click folders to open them and files to view them.</li>
+<li><strong>Scan for Vulnerabilities</strong> runs a Trivy scan (see below).</li>
+</ul>
+<p>Each row also has buttons to run a container from the image, tag it, save it to a tar file and remove it. Select several rows with the checkboxes to delete them together.</p>
+<h2 id="scan-for-vulnerabilities"><a class="anchor" href="#scan-for-vulnerabilities" aria-hidden="true" tabindex="-1">#</a>Scan for vulnerabilities</h2>
+<p><strong>Scan for Vulnerabilities</strong> checks an image with <a href="https://trivy.dev" target="_blank" rel="noopener">Trivy</a>. Orca runs Trivy in a container from <code>ghcr.io/aquasecurity/trivy:latest</code> and pulls that image on the first scan. You don&#39;t need to install anything.</p>
+<p>The result shows how many vulnerabilities were found at each severity (critical, high, medium and low) and a table with the CVE, package, installed version, fixed version and title of each one.</p>
+<p>Click <strong>Export Report</strong> to save the results as a self-contained HTML file named <code>vulnerability-report-&lt;image&gt;.html</code>, ready to share or attach to a ticket.</p>
+<h2 id="import-tag-save-and-prune"><a class="anchor" href="#import-tag-save-and-prune" aria-hidden="true" tabindex="-1">#</a>Import, tag, save and prune</h2>
+<div class="table-wrap"><table><thead><tr><th>Action</th><th>How</th></tr></thead><tbody><tr><td>Import an image from a tar file</td><td>Click <strong>Import</strong> and enter the path to the tar file.</td></tr><tr><td>Save an image to a tar file</td><td>Click the save button on the image row and enter a <strong>Save path</strong>.</td></tr><tr><td>Tag an image</td><td>Click the tag button on the image row and enter a <strong>Repository</strong> and <strong>Tag</strong>, for example <code>myregistry.com/myapp</code> and <code>latest</code>.</td></tr><tr><td>Remove unused images</td><td>Click <strong>Prune</strong>. This removes dangling images and images no container uses. Images used by running or stopped containers are kept.</td></tr></tbody></table></div><p>Paths must be absolute.</p>
+<p>You can do some of this from the terminal too:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> images</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> list</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> images</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> pull</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> nginx:alpine</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> images</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> remove</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> nginx:alpine</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> images</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> prune</span></span></code></pre></div><h2 id="private-registries"><a class="anchor" href="#private-registries" aria-hidden="true" tabindex="-1">#</a>Private registries</h2>
+<p><strong>Settings</strong> &gt; <strong>Registries</strong> stores credentials for private registries. Click <strong>Add Registry</strong>, pick a preset (<strong>Docker Hub</strong>, <strong>GitHub</strong>, <strong>GitLab</strong> or <strong>AWS ECR</strong>) or enter the <strong>Server URL</strong> yourself, then a <strong>Display Name</strong>, <strong>Username</strong> and <strong>Password</strong> (a password or access token).</p>
+<p>When you pull an image from a registry with saved credentials, Orca uses them automatically.</p>
+<h2 id="the-builds-page"><a class="anchor" href="#the-builds-page" aria-hidden="true" tabindex="-1">#</a>The Builds page</h2>
+<p>The <strong>Builds</strong> page lists builds with their status, tag, duration, start time and source. Use <strong>All</strong>, <strong>In Progress</strong>, <strong>Success</strong> and <strong>Failed</strong> to filter. The summary at the top shows the total number of builds, success rate, failures and average duration; open <strong>Analytics</strong> for builds per day over the last seven days and the most built images.</p>
+<p>The source tells you where a build came from:</p>
+<div class="table-wrap"><table><thead><tr><th>Source</th><th>Meaning</th></tr></thead><tbody><tr><td><strong>Manual</strong></td><td>Started from the Images page or from a build target.</td></tr><tr><td><strong>URL</strong></td><td>Started with <strong>Build from URL</strong>.</td></tr><tr><td><strong>Scheduled</strong></td><td>Started by a <a href="#scheduled-builds">scheduled build</a>.</td></tr><tr><td><strong>External</strong></td><td>Built outside Orca, read from BuildKit&#39;s build history (<code>docker buildx history</code>).</td></tr></tbody></table></div><h3 id="build-details-and-cache-insights"><a class="anchor" href="#build-details-and-cache-insights" aria-hidden="true" tabindex="-1">#</a>Build details and cache insights</h3>
+<p>Click a build to see its status, duration, context path, Dockerfile, image ID, build args and the full <strong>Build Log</strong>.</p>
+<p><strong>Cache Insights</strong> shows how many build steps came from the cache, for example &quot;Cache: 8/10 steps cached (80%)&quot;. A low number on a build that should be cached usually means an early step, such as a <code>COPY</code> of the whole project, changes on every build.</p>
+<h3 id="debug-a-failed-build-with-ai"><a class="anchor" href="#debug-a-failed-build-with-ai" aria-hidden="true" tabindex="-1">#</a>Debug a failed build with AI</h3>
+<p>When a build fails, the detail view shows the error and an <strong>Ask AI</strong> button. It opens Orca&#39;s AI assistant with a question already filled in: the image tag, the error and the last 50 lines of the build log, followed by &quot;What went wrong and how can I fix it?&quot;. Send it as is or edit it first. The assistant uses the provider you set up under <strong>Settings</strong> &gt; <strong>AI &amp; Agents</strong>; see <a href="/docs/ai-assistant/">AI assistant</a>.</p>
+<h3 id="build-from-a-url"><a class="anchor" href="#build-from-a-url" aria-hidden="true" tabindex="-1">#</a>Build from a URL</h3>
+<p>Click <strong>Build from URL</strong> and enter a <strong>Source URL</strong>: a Git repository such as <code>https://github.com/user/repo.git</code>, or the URL of a Dockerfile. Add an optional <strong>Tag</strong> and click <strong>Build</strong>.</p>
+<h3 id="compare-two-builds"><a class="anchor" href="#compare-two-builds" aria-hidden="true" tabindex="-1">#</a>Compare two builds</h3>
+<p>Click <strong>Compare</strong>, select two builds and click <strong>Compare Selected</strong>. The comparison shows both builds side by side, with status, duration, start time, source and Dockerfile, and lists any build args that changed. <strong>View Both Logs</strong> shows the two build logs next to each other.</p>
+<h2 id="build-targets"><a class="anchor" href="#build-targets" aria-hidden="true" tabindex="-1">#</a>Build targets</h2>
+<p>Build targets are images defined in a project&#39;s <code>orca.yaml</code> under <code>builds:</code>. Orca reads them from every <code>orca.yaml</code> it knows about: compose projects it can see, registered worktree projects and its own stacks folder.</p>
+<div class="code has-title"><div class="code-title"><span>orca.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">builds</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">name</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">web</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    context</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">./web</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    dockerfile</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">Dockerfile</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">    # the default</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    tag</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop-web:dev</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    args</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      NODE_VERSION</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">22</span></span></code></pre></div><p>Paths are relative to the folder with <code>orca.yaml</code>. You can also edit build targets as a form in the <strong>Builds</strong> tab of a stack&#39;s <code>orca.yaml</code> editor (see <a href="/docs/stacks/#orcayaml">Compose stacks</a>).</p>
+<p>The <strong>Build Targets</strong> section of the <strong>Builds</strong> page lists each target with its tag, context and Dockerfile. Click <strong>Build</strong> on one, or <strong>Build All</strong>.</p>
+<p>See <a href="/docs/orca-yaml/#builds">builds in the orca.yaml reference</a> for the full format.</p>
+<h3 id="scheduled-builds"><a class="anchor" href="#scheduled-builds" aria-hidden="true" tabindex="-1">#</a>Scheduled builds</h3>
+<p>To rebuild an image on a schedule, for example every night to pick up base image updates, add a schedule under <strong>Settings</strong> &gt; <strong>Schedules</strong> with the action <strong>Build</strong> and pick the <strong>Build Target</strong>. See <a href="/docs/containers/#scheduled-actions">Scheduled actions</a> for the cron format.</p>
+<h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>
+<ul>
+<li><a href="/docs/containers/">Containers</a></li>
+<li><a href="/docs/stacks/">Compose stacks</a></li>
+<li><a href="/docs/orca-yaml/">orca.yaml reference</a></li>
+</ul>
+</div>
+    <div class="doc-foot">
+      <a class="edit" href="https://github.com/edvin/orca/edit/main/site/content/docs/images-and-builds.md" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg> Edit this page on GitHub</a>
+    </div>
+    <nav class="pager" aria-label="Previous and next page"><a class="pager-prev" href="/docs/stacks/"><span class="pager-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Previous</span><span class="pager-title">Stacks</span></a><a class="pager-next" href="/docs/templates/"><span class="pager-label">Next <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="pager-title">App Catalog</span></a></nav>
+  </article>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#pull-an-image">Pull an image</a></li><li class="d2"><a href="#build-an-image">Build an image</a></li><li class="d2"><a href="#inspect-an-image">Inspect an image</a></li><li class="d2"><a href="#scan-for-vulnerabilities">Scan for vulnerabilities</a></li><li class="d2"><a href="#import-tag-save-and-prune">Import, tag, save and prune</a></li><li class="d2"><a href="#private-registries">Private registries</a></li><li class="d2"><a href="#the-builds-page">The Builds page</a></li><li class="d3"><a href="#build-details-and-cache-insights">Build details and cache insights</a></li><li class="d3"><a href="#debug-a-failed-build-with-ai">Debug a failed build with AI</a></li><li class="d3"><a href="#build-from-a-url">Build from a URL</a></li><li class="d3"><a href="#compare-two-builds">Compare two builds</a></li><li class="d2"><a href="#build-targets">Build targets</a></li><li class="d3"><a href="#scheduled-builds">Scheduled builds</a></li><li class="d2"><a href="#related">Related</a></li></ul></nav></aside>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="f-brand"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><p>The open source container platform for local development. Free, MIT licensed, no telemetry.</p></div>
+    <div class="f-col"><div class="f-title">Product</div><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="/docs/templates/">App Catalog</a><a href="https://github.com/edvin/orca/releases" target="_blank" rel="noopener">Releases</a></div>
+    <div class="f-col"><div class="f-title">Docs</div><a href="/docs/quickstart/">Quickstart</a><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/agents/">Agents & MCP</a><a href="/docs/cli/">CLI</a></div>
+    <div class="f-col"><div class="f-title">Community</div><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">Issues</a><a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a><a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener">Add a template</a></div>
+    <div class="f-col"><div class="f-title">Trust</div><a href="/docs/security/">Security</a><a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a><a href="https://github.com/edvin/orca/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a></div>
+  </div>
+  <div class="footer-bottom"><span>© 2026 Orca contributors</span><span>Packages hosted by <a href="https://cloudsmith.com" target="_blank" rel="noopener">Cloudsmith</a></span></div>
+</footer>
+<div class="search-dialog" hidden role="dialog" aria-modal="true" aria-label="Search the docs">
+  <div class="search-panel">
+    <div class="search-input"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Search the docs" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <div class="search-results" role="listbox"></div>
+    <div class="search-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span></div>
+  </div>
+</div>
+</body>
+</html>
