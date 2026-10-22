@@ -9000,6 +9000,24 @@ fn uuid_v4() -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn deploy_takes_a_project_folder_or_a_compose_file() {
+        let dir = std::env::temp_dir().join(format!("orca-deploy-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir = dir.canonicalize().unwrap();
+        let p = dir.to_string_lossy().to_string();
+        assert!(deploy_target(&p).unwrap_err().to_string().contains("no compose file"));
+        std::fs::write(dir.join("compose.yaml"), "services: {}\n").unwrap();
+        assert_eq!(deploy_target(&p).unwrap(), (dir.clone(), None));
+        let file = dir.join("compose.yaml");
+        assert_eq!(
+            deploy_target(&file.to_string_lossy()).unwrap(),
+            (dir.clone(), Some(file))
+        );
+        assert!(deploy_target("relative/path").is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     // ---- parse_orca_yaml_gateway_routes tests ----
 
     #[test]
