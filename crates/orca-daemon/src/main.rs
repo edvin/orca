@@ -14,6 +14,7 @@ mod api;
 mod build_manager;
 mod dev;
 mod gateway;
+mod gateway_sync;
 mod state;
 
 use state::AppState;
@@ -128,6 +129,7 @@ async fn main() -> anyhow::Result<()> {
     // Start the scheduled actions runner (checks every 60 seconds)
     let scheduler_state = state.clone();
     dev::activity::spawn(state.clone());
+    gateway_sync::spawn(state.clone());
     tokio::spawn(async move {
         run_scheduler(scheduler_state).await;
     });

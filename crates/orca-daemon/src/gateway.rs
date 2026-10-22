@@ -10,7 +10,7 @@ use orca_core::runtime::{ContainerCreateOpts, ContainerRuntime, ContainerState, 
 use crate::state::AppState;
 
 const CADDY_IMAGE: &str = "caddy:2-alpine";
-const CADDY_CONTAINER: &str = "orca-gateway";
+pub const CADDY_CONTAINER: &str = "orca-gateway";
 const CADDY_ADMIN_PORT: u16 = 2019;
 
 /// HTML-entity-escape a user-supplied string for safe insertion into
@@ -213,6 +213,8 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
     push_caddy_config(config)
         .await
         .context("Gateway started but failed to push Caddy configuration")?;
+    // Join the routed containers' networks under the routed hostnames.
+    crate::gateway_sync::routes_changed();
 
     Ok(id)
 }
@@ -246,7 +248,10 @@ pub async fn apply_config(config: &GatewayConfig) -> Result<()> {
     }
     // Regenerate the landing page
     let _ = write_landing_page(config);
-    push_caddy_config(config).await
+    let pushed = push_caddy_config(config).await;
+    // Routes may have changed: join new networks, update hostname aliases.
+    crate::gateway_sync::routes_changed();
+    pushed
 }
 
 /// Connect gateway to a container's Docker networks.
