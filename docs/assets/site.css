@@ -642,3 +642,10 @@ kbd {
 .faq-item p { margin: -6px 0 22px; color: var(--muted); font-size: 15.5px; line-height: 1.65; max-width: 640px; }
 .faq-item code { font-family: var(--mono); font-size: 0.86em; padding: 0.1em 0.38em; border-radius: 6px; background: var(--inline-code-bg); border: 1px solid var(--border); color: var(--text); }
 @media (max-width: 900px) { .faq-grid { grid-template-columns: 1fr; gap: 28px; } }
+
+/* The URL pill straddles the window's top edge, so it's seen at first glance, on every width. */
+.float-url { top: -22px; left: 96px; }
+@media (max-width: 1100px) { .float-url { left: 84px; } }
+@media (max-width: 900px) {
+  .float-url { display: flex; left: 0; right: 0; margin: 0 auto; width: max-content; top: -20px; padding: 9px 14px; font-size: 13px; }
+}
