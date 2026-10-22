@@ -1,6 +1,6 @@
 import { batch, createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import { startPoller, type Poller } from "./poller";
+import { hiddenInterval, startPoller, type Poller } from "./poller";
 import type { SystemHealth } from "./types";
 
 // One `system_health` poll for the whole app. The Titlebar, StatusBar,
@@ -45,7 +45,8 @@ export function refreshHealth(opts?: { recomputeDisk?: boolean }): Promise<void>
 export function useHealth() {
   onMount(() => {
     subscribers++;
-    if (!poller) poller = startPoller(() => refreshHealth(), POLL_MS);
+    // keeps running, slowly, while hidden, so the figures on screen when the window is shown are at most a few minutes old
+    if (!poller) poller = startPoller(() => refreshHealth(), POLL_MS, { hiddenMs: hiddenInterval(POLL_MS) });
     onCleanup(() => {
       subscribers--;
       if (subscribers === 0 && poller) {

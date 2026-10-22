@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { ContainerStats } from "./types";
-import { startPoller, type Poller } from "./poller";
+import { hiddenInterval, startPoller, type Poller } from "./poller";
 import { recordMetricsBatch } from "./metricsStore";
 import { containersStore } from "./dockerStore";
 
@@ -49,7 +49,8 @@ document.addEventListener("orca-host-switch", () => {
 /** Subscribe the calling component to the shared stats poll. */
 export function useContainerStats() {
   onMount(() => {
-    if (subscribers++ === 0) poller = startPoller(fetchStats, POLL_MS);
+    // keeps running, slowly, while hidden: the metrics history and the CPU alert need readings without a hole
+    if (subscribers++ === 0) poller = startPoller(fetchStats, POLL_MS, { hiddenMs: hiddenInterval(POLL_MS) });
   });
   onCleanup(() => {
     if (--subscribers === 0) {
