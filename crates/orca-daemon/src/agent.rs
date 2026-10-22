@@ -345,10 +345,9 @@ pub async fn execute_tool(
         "compose_up" => {
             let name = get_str(&arguments, "name")?;
             let (dir, config) = resolve_stack_dir(state, name).await?;
-            let output =
-                orca_core::compose::ComposeRunner::compose_up(state.rt().await.as_ref(), &dir, config.as_deref())
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let output = crate::stack_profiles::up(state, name, &dir, config.as_deref())
+                .await
+                .map_err(|e| e.to_string())?;
             let hooks = if output.success {
                 crate::api::run_stack_hooks(state, &dir, config.as_deref()).await
             } else {
@@ -715,7 +714,10 @@ async fn instance_tool(
                 _ => None,
             };
             let opts = deploy::UpOptions {
-                preset: args.get("preset").and_then(|v| v.as_str()).map(str::to_string),
+                profiles: args
+                    .get("profiles")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|p| p.as_str()).map(str::to_string).collect()),
                 build: Some(args.get("rebuild").and_then(|v| v.as_bool()).unwrap_or(true)),
                 source: Some("mcp".into()),
                 data_modes,

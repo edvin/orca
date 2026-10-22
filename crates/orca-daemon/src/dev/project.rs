@@ -309,7 +309,8 @@ pub struct InstanceView {
     pub services: Vec<ServiceView>,
     pub routes: Vec<RouteView>,
     pub ports: Vec<PortAssignment>,
-    pub preset: Option<String>,
+    /// Compose profiles it runs, besides the services without one.
+    pub profiles: Vec<String>,
     pub hostname_overrides: BTreeMap<String, String>,
     /// Data mode per shared service, where it differs from shared data.
     pub data_modes: BTreeMap<String, orca_core::dev::DataMode>,
@@ -500,7 +501,7 @@ pub async fn build_view(state: &AppState, ctx: &ProjectCtx, with_git_details: bo
             services,
             routes,
             ports: st.map(|s| s.ports.clone()).unwrap_or_default(),
-            preset: st.and_then(|s| s.preset.clone()),
+            profiles: st.map(|s| s.profiles.clone()).unwrap_or_default(),
             hostname_overrides: st.map(|s| s.hostname_overrides.clone()).unwrap_or_default(),
             data_modes: shared_names
                 .iter()

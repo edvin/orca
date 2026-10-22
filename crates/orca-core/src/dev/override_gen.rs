@@ -68,7 +68,8 @@ pub struct InstanceInput<'a> {
     pub own_servers: &'a BTreeSet<String>,
     /// `localhost:<port>` of shared services published on the host.
     pub shared_endpoints: &'a BTreeMap<String, String>,
-    pub preset: Option<&'a str>,
+    /// Compose profiles to run, besides the services without one.
+    pub profiles: &'a [String],
     pub hostname_overrides: &'a BTreeMap<String, String>,
     pub domain: &'a str,
     pub https_port: u16,
@@ -112,11 +113,16 @@ pub struct PlannedRoute {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstancePlan {
     pub compose_project: String,
-    /// Services passed to `compose up` (the preset). Their per-instance
-    /// dependencies start too.
+    /// Services passed to `compose up`: those without a profile and those in
+    /// the chosen profiles. Their per-instance dependencies start too, even
+    /// behind another profile.
     pub services: Vec<String>,
     /// Everything that will run in this instance, dependencies included.
     pub running_services: Vec<String>,
+    /// Per-instance services that won't run: behind a profile not picked.
+    pub left_out: Vec<String>,
+    /// The compose file's profiles, with the per-instance services in each.
+    pub profiles: Vec<ProfileInfo>,
     pub routes: Vec<PlannedRoute>,
     pub host_ports: Vec<PortAssignment>,
     /// Resolved names of the networks the instance's services use; shared
@@ -133,44 +139,28 @@ pub struct InstancePlan {
     pub own_servers: Vec<String>,
 }
 
-/// Which services the instance runs, given a preset. Validates that the
-/// preset only names per-instance services that exist.
+/// A compose profile and the services behind it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProfileInfo {
+    pub name: String,
+    pub services: Vec<String>,
+}
+
+/// Which services the instance runs: every per-instance service without a
+/// compose profile, plus those in `profiles`. Returns (requested, running).
 pub fn select_services(
     model: &ComposeModel,
-    dev: &DevConfig,
     shared: &BTreeSet<String>,
-    preset: Option<&str>,
-) -> anyhow::Result<(Vec<String>, Vec<String>)> {
-    let preset_name = preset.or(dev.instance.default_preset.as_deref());
-    let requested: Vec<String> = match preset_name {
-        Some(name) => {
-            let list = dev.instance.presets.get(name).ok_or_else(|| {
-                let known: Vec<&str> = dev.instance.presets.keys().map(String::as_str).collect();
-                anyhow::anyhow!(
-                    "preset '{name}' is not defined in orca.yaml (known: {})",
-                    if known.is_empty() {
-                        "none".to_string()
-                    } else {
-                        known.join(", ")
-                    }
-                )
-            })?;
-            for s in list {
-                if !model.services.contains_key(s) {
-                    anyhow::bail!("preset '{name}' names service '{s}', which is not in the compose file");
-                }
-            }
-            list.iter().filter(|s| !shared.contains(*s)).cloned().collect()
-        }
-        // No preset: every per-instance service that compose would start by
-        // default (services behind a compose profile are left out).
-        None => model
-            .services
-            .iter()
-            .filter(|(n, s)| !shared.contains(*n) && s.profiles.is_empty())
-            .map(|(n, _)| n.clone())
-            .collect(),
-    };
+    profiles: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let requested: Vec<String> = model
+        .services
+        .iter()
+        .filter(|(n, s)| {
+            !shared.contains(*n) && (s.profiles.is_empty() || s.profiles.iter().any(|p| profiles.contains(p)))
+        })
+        .map(|(n, _)| n.clone())
+        .collect();
 
     // Close over per-instance dependencies: compose starts them too.
     let mut running: BTreeSet<String> = requested.iter().cloned().collect();
@@ -184,7 +174,20 @@ pub fn select_services(
             }
         }
     }
-    Ok((requested, running.into_iter().collect()))
+    (requested, running.into_iter().collect())
+}
+
+/// The profiles the compose file defines, in order of first appearance.
+pub fn model_profiles(model: &ComposeModel) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for s in model.services.values() {
+        for p in &s.profiles {
+            if !out.contains(p) {
+                out.push(p.clone());
+            }
+        }
+    }
+    out
 }
 
 /// How a per-instance service port is reached when `orca.yaml` doesn't say.
@@ -235,9 +238,9 @@ pub fn required_host_ports(
     model: &ComposeModel,
     dev: &DevConfig,
     shared: &BTreeSet<String>,
-    preset: Option<&str>,
+    profiles: &[String],
 ) -> anyhow::Result<Vec<(String, u16)>> {
-    let (_, running) = select_services(model, dev, shared, preset)?;
+    let (_, running) = select_services(model, shared, profiles);
     let mut out = Vec::new();
     for s in &running {
         for r in reach_for(model, dev, s) {
@@ -275,7 +278,11 @@ pub fn plan_instance(input: &InstanceInput<'_>) -> anyhow::Result<InstancePlan> 
         }
     }
 
-    let (services, running) = select_services(model, dev, shared, input.preset)?;
+    let (services, running) = select_services(model, shared, input.profiles);
+    let known = model_profiles(model);
+    for p in input.profiles.iter().filter(|p| !known.contains(p)) {
+        warnings.push(format!("Profile '{p}' is not in the compose file any more."));
+    }
 
     // Cross-stack references can't work: compose would pull the shared
     // service into this instance's project.
@@ -376,7 +383,7 @@ pub fn plan_instance(input: &InstanceInput<'_>) -> anyhow::Result<InstancePlan> 
     // --- Template variables for env ---------------------------------------
     let mut vars = base_vars.clone();
     // URLs are known for every per-instance service, not just the ones this
-    // preset starts, so env templates don't break when a preset is smaller.
+    // profiles start, so env templates don't break when fewer run.
     for name in model.services.keys().filter(|n| !shared.contains(*n)) {
         if reach_for(model, dev, name)
             .iter()
@@ -654,10 +661,31 @@ pub fn plan_instance(input: &InstanceInput<'_>) -> anyhow::Result<InstancePlan> 
     let env_file = render_env_file(input, &cp, &routes, &host_ports);
     let service_env = service_env(model, &running, &edits);
 
+    let left_out = model
+        .services
+        .keys()
+        .filter(|n| !shared.contains(*n) && !running.contains(*n))
+        .cloned()
+        .collect();
+    let profiles = model_profiles(model)
+        .into_iter()
+        .map(|name| ProfileInfo {
+            services: model
+                .services
+                .iter()
+                .filter(|(n, s)| !shared.contains(*n) && s.profiles.contains(&name))
+                .map(|(n, _)| n.clone())
+                .collect(),
+            name,
+        })
+        .collect();
+
     Ok(InstancePlan {
         compose_project: cp,
         services,
         running_services: running,
+        left_out,
+        profiles,
         routes,
         host_ports,
         networks,
@@ -966,7 +994,7 @@ mod tests {
             own_databases: &NO_OWN_DBS,
             own_servers: &NO_OWN_SERVERS,
             shared_endpoints: &NO_ENDPOINTS,
-            preset: None,
+            profiles: &[],
             hostname_overrides: overrides,
             domain: "localhost",
             https_port: 443,
@@ -975,7 +1003,7 @@ mod tests {
     }
 
     fn assign(model: &ComposeModel, dev: &DevConfig, shared: &BTreeSet<String>) -> Vec<PortAssignment> {
-        required_host_ports(model, dev, shared, None)
+        required_host_ports(model, dev, shared, &[])
             .unwrap()
             .into_iter()
             .enumerate()
@@ -1044,7 +1072,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_config_presets_env_and_overrides() {
+    fn explicit_config_profiles_env_and_overrides() {
         let model = ComposeModel::parse(SAMPLE).unwrap();
         let y = OrcaYaml::parse(
             r#"
@@ -1062,8 +1090,6 @@ dev:
       api: { port: 8080, host: web, path: /api }
     host_ports:
       api: [9229]
-    presets:
-      test: [api]
     limits: { memory: 1g, cpus: 1.5 }
 "#,
         )
@@ -1077,7 +1103,7 @@ dev:
         ov.insert("web".to_string(), "auth.localhost".to_string());
         let plan = plan_instance(&input(&model, &dev, &shared, &dbs, &ov, &ports)).unwrap();
 
-        // No preset given → everything; api's route lives on web's host.
+        // No profiles in the file → everything; api's route lives on web's host.
         let api = plan.routes.iter().find(|r| r.service == "api").unwrap();
         assert_eq!(api.hostname, "auth.localhost");
         assert_eq!(api.path.as_deref(), Some("/api*"));
@@ -1096,30 +1122,39 @@ dev:
             plan.env_file
         );
 
-        // Preset "test" runs api plus its per-instance dependency worker.
-        let mut i = input(&model, &dev, &shared, &dbs, &ov, &ports);
-        i.preset = Some("test");
-        let plan = plan_instance(&i).unwrap();
-        assert_eq!(plan.services, vec!["api"]);
-        assert_eq!(plan.running_services, vec!["api", "worker"]);
+        // web behind a profile: left out until the profile is picked.
+        let mut profiled = model.clone();
+        profiled.services.get_mut("web").unwrap().profiles = vec!["ui".into()];
+        let ports = assign(&profiled, &dev, &shared);
+        let plan = plan_instance(&input(&profiled, &dev, &shared, &dbs, &ov, &ports)).unwrap();
+        assert_eq!(plan.services, vec!["api", "worker"]);
         assert!(!plan.routes.iter().any(|r| r.service == "web"));
         assert!(
             plan.warnings
                 .iter()
                 .any(|w| w.contains("Hostname override for 'web' is unused"))
         );
+        let ui = vec!["ui".to_string(), "gone".to_string()];
+        let mut i = input(&profiled, &dev, &shared, &dbs, &ov, &ports);
+        i.profiles = &ui;
+        let plan = plan_instance(&i).unwrap();
+        assert_eq!(plan.services, vec!["api", "web", "worker"]);
+        assert!(plan.warnings.iter().any(|w| w.contains("Profile 'gone'")));
+        assert_eq!(model_profiles(&profiled), vec!["ui"]);
+        assert!(plan.left_out.is_empty());
+        assert_eq!(
+            plan.profiles,
+            vec![ProfileInfo {
+                name: "ui".into(),
+                services: vec!["web".into()]
+            }]
+        );
     }
 
     #[test]
-    fn unknown_preset_and_template_errors_are_clear() {
+    fn template_errors_are_clear() {
         let model = ComposeModel::parse(SAMPLE).unwrap();
-        let dev = DevConfig::default();
         let shared = shared();
-        let err = select_services(&model, &dev, &shared, Some("nope"))
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("preset 'nope' is not defined"), "{err}");
-
         let y = OrcaYaml::parse("dev:\n  instance:\n    env:\n      api:\n        X: \"{db.mysql}\"\n").unwrap();
         let dev = y.dev.unwrap();
         let ports = assign(&model, &dev, &shared);

@@ -235,7 +235,9 @@ async fn shared_down(State(state): State<Arc<AppState>>, Path(id): Path<String>)
 
 #[derive(Deserialize)]
 struct PlanQuery {
-    preset: Option<String>,
+    /// Compose profiles to preview, comma-separated (empty: none). Absent:
+    /// the instance's saved choice.
+    profiles: Option<String>,
     /// Data modes to preview: `postgres:own-database,redis:shared`.
     data: Option<String>,
 }
@@ -259,10 +261,12 @@ async fn instance_plan(
     Query(q): Query<PlanQuery>,
 ) -> R<impl IntoResponse> {
     activity::touch(&id, &name).await;
-    let preset = q.preset.filter(|p| !p.is_empty());
+    let profiles: Option<Vec<String>> = q
+        .profiles
+        .map(|p| p.split(',').filter(|s| !s.is_empty()).map(str::to_string).collect());
     let modes = q.data.as_deref().map(parse_modes).transpose()?;
     Ok(Json(
-        deploy::plan_view(&state, &id, &name, preset.as_deref(), modes.as_ref()).await?,
+        deploy::plan_view(&state, &id, &name, profiles.as_deref(), modes.as_ref()).await?,
     ))
 }
 

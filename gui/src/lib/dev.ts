@@ -61,7 +61,8 @@ export interface DevInstance {
   services: DevService[];
   routes: DevRoute[];
   ports: PortAssignment[];
-  preset: string | null;
+  /** Compose profiles it runs, besides the services without one. */
+  profiles: string[];
   hostname_overrides: Record<string, string>;
   data_modes: Record<string, DataMode>;
   tenants: Record<string, string>;
@@ -156,6 +157,10 @@ export interface InstancePlan {
   compose_project: string;
   services: string[];
   running_services: string[];
+  /** Per-instance services that won't run: behind a profile not picked. */
+  left_out: string[];
+  /** The compose file's profiles, with the per-instance services in each. */
+  profiles: { name: string; services: string[] }[];
   routes: PlannedRoute[];
   host_ports: PortAssignment[];
   networks: string[];
@@ -175,8 +180,8 @@ export interface PlanView {
   resolved_mode: boolean;
   shared_services: string[];
   plan: InstancePlan;
-  presets: string[];
-  default_preset: string | null;
+  /** The profiles this plan runs. */
+  active_profiles: string[];
   data: DataChoice[];
 }
 
@@ -200,8 +205,6 @@ export interface DevConfigT {
     expose: Record<string, ExposeT>;
     host_ports: Record<string, number[]>;
     hooks: { after_up: string[]; after_own_database: string[] };
-    presets: Record<string, string[]>;
-    default_preset: string | null;
     idle_stop: string | null;
     limits: { memory?: string | null; cpus?: unknown } | null;
   };
@@ -271,9 +274,10 @@ export const devApi = {
   candidates: () => call<Candidate[]>("GET", "/dev/candidates"),
   sharedUp: (id: string) => call<DevJob>("POST", `/dev/projects/${enc(id)}/shared/up`),
   sharedDown: (id: string) => call<DevJob>("POST", `/dev/projects/${enc(id)}/shared/down`),
-  plan: (p: string, i: string, preset?: string | null, modes?: Record<string, DataMode>) => {
+  /** `profiles` undefined: the instance's saved choice. */
+  plan: (p: string, i: string, profiles?: string[], modes?: Record<string, DataMode>) => {
     const q = new URLSearchParams();
-    if (preset) q.set("preset", preset);
+    if (profiles) q.set("profiles", profiles.join(","));
     if (modes && Object.keys(modes).length > 0) {
       q.set("data", Object.entries(modes).map(([k, v]) => `${k}:${v}`).join(","));
     }
@@ -283,7 +287,7 @@ export const devApi = {
   up: (
     p: string,
     i: string,
-    opts: { preset?: string | null; build?: boolean; data_modes?: Record<string, DataMode> } = {},
+    opts: { profiles?: string[]; build?: boolean; data_modes?: Record<string, DataMode> } = {},
   ) => call<DevJob>("POST", `${inst(p, i)}/up`, { ...opts, source: "ui" }),
   data: (p: string, i: string) => call<DataInfo[]>("GET", `${inst(p, i)}/data`),
   dataReset: (p: string, i: string, service: string) =>
@@ -296,7 +300,7 @@ export const devApi = {
     s: {
       name?: string;
       hostname_overrides?: Record<string, string>;
-      preset?: string | null;
+      profiles?: string[];
       data_modes?: Record<string, DataMode>;
       drop_data?: boolean;
     },

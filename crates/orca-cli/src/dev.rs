@@ -169,7 +169,8 @@ async fn follow_job(client: &DaemonClient, job: Value, quiet: bool) -> anyhow::R
     }
 }
 
-pub async fn up(client: &DaemonClient, preset: Option<String>, no_build: bool, json_out: bool) -> anyhow::Result<()> {
+pub async fn up(client: &DaemonClient, profiles: Vec<String>, no_build: bool, json_out: bool) -> anyhow::Result<()> {
+    let profiles = (!profiles.is_empty()).then_some(profiles);
     let h = here(client).await?;
     if !json_out {
         println!("Starting {} / {} ({})", h.project, h.instance, h.worktree.display());
@@ -177,7 +178,7 @@ pub async fn up(client: &DaemonClient, preset: Option<String>, no_build: bool, j
     let job = client
         .post_value(
             &format!("{}/up", instance_path(&h)),
-            &json!({ "preset": preset, "build": !no_build, "source": "cli" }),
+            &json!({ "profiles": profiles, "build": !no_build, "source": "cli" }),
         )
         .await?;
     let done = follow_job(client, job, json_out).await?;
@@ -362,11 +363,11 @@ pub async fn env(client: &DaemonClient) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `orca run [--preset p] [--serve svc] [--down] -- cmd …`: make sure the
+/// `orca run [--profile p] [--serve svc] [--down] -- cmd …`: make sure the
 /// instance runs, load its env, run the command, return its exit code.
 pub async fn run(
     client: &DaemonClient,
-    preset: Option<String>,
+    profiles: Vec<String>,
     serve: Option<String>,
     down_after: bool,
     no_up: bool,
@@ -382,12 +383,12 @@ pub async fn run(
             .find(|i| str_of(i, "name") == h.instance)
             .map(|i| str_of(i, "status"))
             .unwrap_or_default();
-        if status != "running" || preset.is_some() {
+        if status != "running" || !profiles.is_empty() {
             eprintln!("Starting {} / {}", h.project, h.instance);
             let job = client
                 .post_value(
                     &format!("{}/up", instance_path(&h)),
-                    &json!({ "preset": preset, "build": true, "source": "cli" }),
+                    &json!({ "profiles": (!profiles.is_empty()).then_some(&profiles), "build": true, "source": "cli" }),
                 )
                 .await?;
             let done = follow_job(client, job, false).await?;

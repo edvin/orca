@@ -17,6 +17,7 @@ mod gateway;
 mod gateway_sync;
 mod landing;
 mod project_config;
+mod stack_profiles;
 mod stack_yaml;
 mod state;
 

@@ -393,6 +393,26 @@ pub async fn stack_orca_yaml(name: String) -> Result<serde_json::Value, String> 
     get_json(&format!("/stacks/{}/orca-yaml", urlencoding::encode(&name))).await
 }
 
+/// A stack's compose profiles: which optional services run.
+#[tauri::command]
+pub async fn stack_profiles(name: String) -> Result<serde_json::Value, String> {
+    get_json(&format!("/stacks/{}/profiles", urlencoding::encode(&name))).await
+}
+
+/// Remember the profiles a stack runs on this machine; with `apply`, start
+/// and stop services to match when it runs.
+#[tauri::command]
+pub async fn set_stack_profiles(name: String, profiles: Vec<String>, apply: bool) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = client()
+        .put(format!("{base}/stacks/{}/profiles", urlencoding::encode(&name)))
+        .json(&serde_json::json!({ "profiles": profiles, "apply": apply }))
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?;
+    resp.daemon_json().await
+}
+
 /// Write a stack's orca.yaml next to its compose file.
 #[tauri::command]
 pub async fn save_stack_orca_yaml(name: String, text: String) -> Result<serde_json::Value, String> {

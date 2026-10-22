@@ -13,7 +13,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 
 const ORCA_YAML_REFERENCE = "https://github.com/edvin/orca/blob/main/docs/orca-yaml.md";
 import OrcaYamlStudio from "../orcayaml/OrcaYamlStudio";
-import { DataSection, PresetsSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
+import { DataSection, ProfilesSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";
 
 interface Props {
@@ -41,8 +41,6 @@ const KEYS: [string, string][] = [
   ["hooks", "Commands run in containers: under dev.instance for worktrees, at the top for the stack"],
   ["after_up", '"service: command" lines run after every start'],
   ["after_own_database", '"service: command" lines run when a worktree gets its own database'],
-  ["presets", "Named sets of services to start"],
-  ["default_preset", "Preset started when none is chosen"],
   ["limits", "memory and cpus limits per service"],
   ["compose", "Compose file(s) to use"],
   ["project", "Project name (defaults to the folder name)"],
@@ -195,7 +193,7 @@ export default function OrcaYamlEditor(props: Props) {
                 <FormSection title="Shared or per worktree"><SharedSection {...section()} /></FormSection>
                 <FormSection title="Data"><DataSection {...section()} /></FormSection>
                 <FormSection title="Reach"><ReachSection {...section()} /></FormSection>
-                <FormSection title="Presets and setup commands"><PresetsSection {...section()} /></FormSection>
+                <FormSection title="Profiles and setup commands"><ProfilesSection {...section()} /></FormSection>
               </Show>
               <Show when={view() === "project"}>
                 <p style={{ color: "#8b949e", "font-size": "12px", "margin": "0 0 12px", "line-height": "1.5" }}>

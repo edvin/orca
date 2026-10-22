@@ -135,7 +135,7 @@ export default function ProjectsPage(props: Props) {
   const run = async (
     inst: DevInstance,
     action: "up" | "down" | "remove",
-    opts?: { preset: string | null; build: boolean; data_modes?: Record<string, DataMode> },
+    opts?: { profiles?: string[]; build: boolean; data_modes?: Record<string, DataMode> },
   ) => {
     const p = selected();
     if (!p) return;
@@ -157,7 +157,7 @@ export default function ProjectsPage(props: Props) {
   // can change what will happen; a plain restart uses the remembered setup.
   const onStart = (inst: DevInstance) => {
     if ((inst.status === "stopped" || inst.status === "idle_stopped") && inst.configured) {
-      run(inst, "up", { preset: inst.preset, build: true });
+      run(inst, "up", { build: true });
     } else {
       setStartFor(inst.name);
     }
@@ -545,7 +545,7 @@ export default function ProjectsPage(props: Props) {
                   job={jobFor(inst())}
                   onClose={() => setDrawer(null)}
                   onStart={() => setStartFor(inst().name)}
-                  onRestart={() => run(inst(), "up", { preset: inst().preset, build: true })}
+                  onRestart={() => run(inst(), "up", { build: true })}
                   onStop={() => run(inst(), "down")}
                   onRemove={async () => {
                     await onRemove(inst());

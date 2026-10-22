@@ -38,9 +38,10 @@ enum Commands {
 
     /// Start this worktree's instance (run inside a registered project)
     Up {
-        /// Preset from orca.yaml (a named set of services)
-        #[arg(long)]
-        preset: Option<String>,
+        /// Compose profile to run as well (repeat for several); remembered
+        /// for the next start. Without it, the last choice.
+        #[arg(long = "profile", value_name = "PROFILE")]
+        profiles: Vec<String>,
         /// Don't rebuild images from this worktree's code
         #[arg(long)]
         no_build: bool,
@@ -74,9 +75,9 @@ enum Commands {
     /// Run a command against this worktree's instance: starts it if needed and
     /// passes its URLs and ports in the environment. `orca run -- npm test`
     Run {
-        /// Preset to start
-        #[arg(long)]
-        preset: Option<String>,
+        /// Compose profile to run as well (repeat for several)
+        #[arg(long = "profile", value_name = "PROFILE")]
+        profiles: Vec<String>,
         /// Run a dev server on this machine as SERVICE: it gets a port in $PORT and
         /// the service's URL routes to it. `orca run --serve web -- npm run dev`
         #[arg(long, value_name = "SERVICE")]
@@ -413,17 +414,21 @@ async fn main() -> anyhow::Result<()> {
             }
             dev::status(&client, all, json).await?
         }
-        Commands::Up { preset, no_build, json } => dev::up(&client, preset, no_build, json).await?,
+        Commands::Up {
+            profiles,
+            no_build,
+            json,
+        } => dev::up(&client, profiles, no_build, json).await?,
         Commands::Down { remove, json } => dev::down(&client, remove, json).await?,
         Commands::Logs { service, tail, follow } => dev::logs(&client, service, tail, follow).await?,
         Commands::Env => dev::env(&client).await?,
         Commands::Run {
-            preset,
+            profiles,
             serve,
             down,
             no_up,
             cmd,
-        } => dev::run(&client, preset, serve, down, no_up, cmd).await?,
+        } => dev::run(&client, profiles, serve, down, no_up, cmd).await?,
         Commands::Projects { action } => dev::projects(&client, action).await?,
         Commands::Version => cmd_version(&client).await?,
         Commands::Containers { action } => match action {

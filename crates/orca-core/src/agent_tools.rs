@@ -347,7 +347,7 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
                 "type": "object",
                 "properties": {
                     "worktree": { "type": "string", "description": "Absolute path of the git worktree" },
-                    "preset": { "type": "string", "description": "Preset from orca.yaml: a named set of services, e.g. 'test'" },
+                    "profiles": { "type": "array", "items": { "type": "string" }, "description": "Compose profiles to run besides the services without one, e.g. [\"search\"]. Remembered for the next start; [] runs only the default services. Omit to keep the last choice." },
                     "rebuild": { "type": "boolean", "description": "Rebuild images from the worktree's code (default true)" },
                     "data": { "type": "object", "description": "Data mode per shared service, e.g. {\"postgres\": \"own-database\"}. Modes: shared, own-database (a copy just for this worktree), own-server. Use own-database before running migrations or writing test data.", "additionalProperties": { "type": "string", "enum": ["shared", "own-database", "own-server"] } }
                 },

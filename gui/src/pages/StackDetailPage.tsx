@@ -1,4 +1,4 @@
-import { createSignal, Show, For } from "solid-js";
+import { createResource, createSignal, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { stacksStore } from "../lib/dockerStore";
 import { useRefresh } from "../lib/useRefresh";
@@ -9,6 +9,9 @@ import Spinner from "../components/Spinner";
 import Breadcrumb from "../components/Breadcrumb";
 import YamlEditor from "../components/YamlEditor";
 import StackOrcaYaml from "../components/StackOrcaYaml";
+import StackProfiles, { PROFILES_DOC } from "../components/StackProfiles";
+import type { StackProfilesReport } from "../lib/types";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { logError } from "../lib/activityStore";
 import { confirmDanger } from "../components/ConfirmDialog";
 
@@ -35,6 +38,44 @@ export default function StackDetailPage(props: StackDetailPageProps) {
   const fetchStack = () => stackList.refresh();
 
   useRefresh(fetchStack);
+
+  // Compose profiles: the optional parts of the stack. Read from the compose
+  // file, so fetched on open and after changes, not on every event.
+  const [profiles, { mutate: setProfiles, refetch: refetchProfiles }] = createResource(
+    () => props.stackName,
+    (name) => invoke<StackProfilesReport>("stack_profiles", { name }),
+  );
+  const [profilesBusy, setProfilesBusy] = createSignal(false);
+  const hasProfiles = () => !profiles.error && (profiles()?.profiles.length ?? 0) > 0;
+  const profilesOf = (service: string) =>
+    (!profiles.error && profiles()?.services.find((s) => s.name === service)?.profiles) || [];
+  /** Services behind a profile that is off, so they have no container. */
+  const offServices = () =>
+    hasProfiles()
+      ? profiles()!.services.filter((s) => s.profiles.length > 0 && !stack()?.services.some((c) => c.name === s.name))
+      : [];
+  const openProfilesDoc = () => shellOpen(PROFILES_DOC).catch(() => window.open(PROFILES_DOC, "_blank", "noopener,noreferrer"));
+
+  const saveProfiles = async (list: string[], apply: boolean) => {
+    setProfilesBusy(true);
+    try {
+      const r = await invoke<StackProfilesReport & { output?: { success: boolean; stderr: string } | null }>(
+        "set_stack_profiles",
+        { name: props.stackName, profiles: list, apply },
+      );
+      setProfiles(r);
+      if (r.output && !r.output.success) {
+        logError(`Could not apply profiles to ${props.stackName}`, r.output.stderr);
+        showToast(`Could not apply: ${r.output.stderr.trim().split("\n").pop()}`, "error");
+      } else {
+        showToast(apply ? "Profiles applied" : "Saved. Orca starts this set from now on.", "success");
+      }
+      void fetchStack();
+    } catch (e) {
+      showToast(String(e), "error");
+    }
+    setProfilesBusy(false);
+  };
 
   const fetchComposeFile = async () => {
     const s = stack();
@@ -66,6 +107,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
         showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
       }
       setTimeout(fetchStack, 500);
+      if (action === "compose_up" || action === "compose_down") setTimeout(() => void refetchProfiles(), 600);
     } catch (err) {
       logError(`Failed to ${action.replace(/_/g, " ")} stack: ${err}`, `Stack "${props.stackName}"`);
       showToast(`${action} failed: ${err}`, "error");
@@ -261,6 +303,9 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       <div class="detail-tab-content">
         {/* Services tab */}
         <Show when={activeTab() === "services"}>
+          <Show when={hasProfiles()}>
+            <StackProfiles report={profiles()!} busy={profilesBusy()} onSave={(l, a) => void saveProfiles(l, a)} onOpenDocs={openProfilesDoc} />
+          </Show>
           <Show
             when={stack() && stack()!.services.length > 0}
             fallback={
@@ -298,6 +343,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                     >
                       <td>
                         <span style={{ "font-weight": "500" }}>{svc.name}</span>
+                        <For each={profilesOf(svc.name)}>{(p) => <span class="profile-tag" title={`In the ${p} profile`}>{p}</span>}</For>
                         <br />
                         <span
                           class="mono"
@@ -379,8 +425,41 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                     </tr>
                   )}
                 </For>
+                <For each={offServices()}>
+                  {(svc) => (
+                    <tr class="service-off">
+                      <td>
+                        <span style={{ "font-weight": "500" }}>{svc.name}</span>
+                        <For each={svc.profiles}>{(p) => <span class="profile-tag">{p}</span>}</For>
+                      </td>
+                      <td class="mono">{svc.image ?? "built"}</td>
+                      <Show when={svc.profiles.some((p) => profiles()!.active.includes(p))} fallback={
+                        <>
+                          <td><span class="state-badge state-stopped" title="Its profile is off">Off</span></td>
+                          <td />
+                          <td style={{ "text-align": "right", opacity: 1 }}>
+                            <button class="btn btn-sm" disabled={profilesBusy()}
+                              onClick={() => void saveProfiles([...profiles()!.active, svc.profiles[0]], profiles()!.running)}>
+                              Turn on {svc.profiles[0]}
+                            </button>
+                          </td>
+                        </>
+                      }>
+                        <td><span class="state-badge state-created" title="Its profile is on; it starts with the stack">Not started</span></td>
+                        <td />
+                        <td />
+                      </Show>
+                    </tr>
+                  )}
+                </For>
               </tbody>
             </table>
+            <Show when={!profiles.loading && !hasProfiles() && stack()!.services.length > 2}>
+              <div style={{ color: "#6e7681", "font-size": "12px", "margin-top": "12px" }}>
+                Not every service needed every time? Put optional ones behind a compose profile and switch them on here.{" "}
+                <button class="link-btn" onClick={openProfilesDoc}>How</button>
+              </div>
+            </Show>
           </Show>
         </Show>
 

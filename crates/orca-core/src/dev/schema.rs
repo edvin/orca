@@ -302,9 +302,6 @@ pub struct InstanceConfig {
     /// Container ports published on the host, assigned per instance.
     pub host_ports: BTreeMap<String, Vec<u16>>,
     pub hooks: Hooks,
-    /// Named sets of services to start.
-    pub presets: BTreeMap<String, Vec<String>>,
-    pub default_preset: Option<String>,
     /// Stop an instance after this long without use (`30m`, `2h`). Off when unset.
     pub idle_stop: Option<String>,
     /// Most instances of this project that may run at once (default 6).
@@ -513,6 +510,14 @@ pub fn project_warnings(text: &str) -> Vec<String> {
             }
         }
     }
+    let instance = value.get("dev").and_then(|d| d.get("instance"));
+    if instance.is_some_and(|i| i.get("presets").is_some() || i.get("default_preset").is_some()) {
+        warnings.push(
+            "dev.instance.presets is no longer used: put optional services behind compose profiles \
+             (profiles: [search]) and pick the profiles when starting an instance"
+                .into(),
+        );
+    }
     let hooks = value
         .get("hooks")
         .and_then(|h| h.get("after_up"))
@@ -720,9 +725,7 @@ dev:
       api: [9229]
     hooks:
       after_up: ["api: npm run seed"]
-    presets:
-      test: [api]
-    default_preset: test
+    idle_stop: 2h
     limits: { memory: 2g, cpus: 2 }
 "#;
 
@@ -762,16 +765,12 @@ dev:
     fn local_file_merges_on_top() {
         let dir = tempdir();
         std::fs::write(dir.join("orca.yaml"), FULL).unwrap();
-        std::fs::write(
-            dir.join("orca.local.yaml"),
-            "dev:\n  instance:\n    default_preset: full\n",
-        )
-        .unwrap();
+        std::fs::write(dir.join("orca.local.yaml"), "dev:\n  instance:\n    idle_stop: 30m\n").unwrap();
         let y = OrcaYaml::load(&dir).unwrap();
         let dev = y.dev.unwrap();
-        assert_eq!(dev.instance.default_preset.as_deref(), Some("full"));
+        assert_eq!(dev.instance.idle_stop.as_deref(), Some("30m"));
         // Untouched keys survive the merge.
-        assert_eq!(dev.instance.presets["test"], vec!["api"]);
+        assert_eq!(dev.instance.host_ports["api"], vec![9229]);
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -841,5 +840,12 @@ dev:
         assert_eq!(i.idle_stop_duration().unwrap().unwrap().as_secs(), 7200);
         i.idle_stop = Some("soon".into());
         assert!(i.idle_stop_duration().is_err());
+    }
+
+    #[test]
+    fn retired_presets_are_ignored_with_a_warning() {
+        let text = "dev:\n  instance:\n    presets:\n      api: [api]\n    default_preset: api\n";
+        assert!(OrcaYaml::parse(text).unwrap().dev.is_some());
+        assert!(project_warnings(text).iter().any(|w| w.contains("compose profiles")));
     }
 }

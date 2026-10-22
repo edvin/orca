@@ -360,7 +360,7 @@ function Generated(props: { project: DevProject; inst: DevInstance }) {
       () => props.inst.name,
       async () => {
         try {
-          setPlan(await devApi.plan(props.project.id, props.inst.name, props.inst.preset));
+          setPlan(await devApi.plan(props.project.id, props.inst.name));
           setError(null);
         } catch (e) {
           setError(String(e));
@@ -414,7 +414,7 @@ function Settings(props: { project: DevProject; inst: DevInstance; onRenamed: (n
   const [saving, setSaving] = createSignal(false);
   const hasContainers = () => props.inst.services.length > 0;
 
-  devApi.plan(props.project.id, props.inst.name, props.inst.preset).then(setPlan).catch(() => {});
+  devApi.plan(props.project.id, props.inst.name).then(setPlan).catch(() => {});
 
   // Services with a browser URL get a hostname field; show the pattern's
   // default as the placeholder.
@@ -509,7 +509,7 @@ function Env(props: { project: DevProject; inst: DevInstance }) {
   const [error, setError] = createSignal<string | null>(null);
   const [reveal, setReveal] = createSignal(false);
   devApi
-    .plan(props.project.id, props.inst.name, props.inst.preset)
+    .plan(props.project.id, props.inst.name)
     .then(setPlan)
     .catch((e) => setError(String(e)));
 

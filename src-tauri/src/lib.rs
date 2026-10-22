@@ -53,6 +53,8 @@ pub fn run() {
             commands::gateway_set_landing,
             commands::stack_orca_yaml,
             commands::save_stack_orca_yaml,
+            commands::stack_profiles,
+            commands::set_stack_profiles,
             commands::validate_orca_yaml,
             commands::start_container,
             commands::stop_container,

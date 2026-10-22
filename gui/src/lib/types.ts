@@ -698,3 +698,15 @@ export interface BuildComparison {
   args_diff: Array<{ key: string; value1: string | null; value2: string | null }>;
   dockerfile_changed: boolean;
 }
+
+/** A stack's compose profiles: GET /stacks/{name}/profiles. */
+export interface StackProfilesReport {
+  profiles: { name: string; services: string[] }[];
+  services: { name: string; image: string | null; profiles: string[]; depends_on: string[]; state: string | null }[];
+  /** The profiles chosen in Orca, or (when none were) those running now. */
+  active: string[];
+  /** Whether a choice was saved on this machine. */
+  remembered: boolean;
+  /** Whether any of the stack's containers runs. */
+  running: boolean;
+}

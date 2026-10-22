@@ -48,9 +48,6 @@ export function SharedSection(props: SectionProps) {
           if (!(name in d.shared)) d.shared[name] = { data: "shared" };
           delete d.instance.expose[name];
           delete d.instance.host_ports[name];
-          for (const p of Object.keys(d.instance.presets)) {
-            d.instance.presets[p] = d.instance.presets[p].filter((s) => s !== name);
-          }
         } else {
           delete d.shared[name];
           // Give it the reach Orca would pick by default.
@@ -572,33 +569,17 @@ export function ReachSection(props: SectionProps) {
   );
 }
 
-// --- Presets and setup commands -------------------------------------------------------
+// --- Profiles and setup commands -------------------------------------------------------
 
-export function PresetsSection(props: SectionProps) {
-  const perInstance = () => props.analysis.services.filter((s) => !isShared(props.dev, s.name)).map((s) => s.name);
-  const presets = createMemo(() => Object.keys(props.dev.instance.presets));
-  const [newName, setNewName] = createSignal("");
-
-  const toggle = (preset: string, svc: string) =>
-    props.setDev(
-      produce((d) => {
-        const list = d.instance.presets[preset] ?? [];
-        d.instance.presets[preset] = list.includes(svc) ? list.filter((s) => s !== svc) : [...list, svc];
-      }),
-    );
-  const addPreset = () => {
-    const n = newName().trim().toLowerCase().replace(/[^a-z0-9-]/g, "-");
-    if (!n || n in props.dev.instance.presets) return;
-    props.setDev(produce((d) => (d.instance.presets[n] = [...perInstance()])));
-    setNewName("");
-  };
-  const removePreset = (p: string) =>
-    props.setDev(
-      produce((d) => {
-        delete d.instance.presets[p];
-        if (d.instance.default_preset === p) d.instance.default_preset = null;
-      }),
-    );
+export function ProfilesSection(props: SectionProps) {
+  const perInstance = () => props.analysis.services.filter((s) => !isShared(props.dev, s.name));
+  /** Compose profiles of per-instance services, with their members. */
+  const profiles = createMemo(() => {
+    const out = new Map<string, string[]>();
+    for (const s of perInstance()) for (const p of s.profiles) out.set(p, [...(out.get(p) ?? []), s.name]);
+    return [...out.entries()];
+  });
+  const always = () => perInstance().filter((s) => s.profiles.length === 0).map((s) => s.name);
   const hookOn = (line: string) => props.dev.instance.hooks.after_own_database.includes(line);
   const toggleHook = (line: string) =>
     props.setDev(
@@ -611,57 +592,33 @@ export function PresetsSection(props: SectionProps) {
   return (
     <div>
       <p class="dev-step-intro">
-        Presets are named sets of services, so a worktree can start just what its tests need. Setup commands run inside the
-        instance's containers.
+        Services behind a compose profile are optional: each worktree picks the profiles it needs when it starts, and keeps
+        that choice. Setup commands run inside the instance's containers.
       </p>
       <div class="dev-section">
-        <div class="dev-section-title">Presets</div>
-        <table class="dev-table">
-          <thead>
-            <tr>
-              <th>Service</th>
-              <th style={{ color: "#6e7681" }}>Everything</th>
-              <For each={presets()}>
-                {(p) => (
-                  <th>
-                    {p}{" "}
-                    <button class="dev-icon-btn" title={`Remove preset ${p}`} onClick={() => removePreset(p)}>×</button>
-                  </th>
-                )}
-              </For>
-            </tr>
-          </thead>
-          <tbody>
-            <For each={perInstance()}>
-              {(svc) => (
-                <tr>
-                  <td>{svc}</td>
-                  <td style={{ color: "#6e7681" }}>✓</td>
-                  <For each={presets()}>
-                    {(p) => (
-                      <td>
-                        <input type="checkbox" checked={(props.dev.instance.presets[p] ?? []).includes(svc)} onChange={() => toggle(p, svc)} />
-                      </td>
-                    )}
-                  </For>
-                </tr>
+        <div class="dev-section-title">Profiles</div>
+        <Show when={profiles().length > 0} fallback={
+          <div class="form-hint">
+            Every service starts in every worktree. To make some optional, give them a profile in the compose file, such as{" "}
+            <span class="mono">profiles: [search]</span>; worktrees can then start without them.
+          </div>
+        }>
+          <div class="profiles-grid">
+            <div class="profile-card always">
+              <div class="profile-card-head"><span class="profile-name">Always</span></div>
+              <div class="profile-chips"><For each={always()}>{(s) => <span class="profile-chip">{s}</span>}</For></div>
+            </div>
+            <For each={profiles()}>
+              {([name, members]) => (
+                <div class="profile-card always" style={{ "border-style": "solid" }}>
+                  <div class="profile-card-head"><span class="profile-name">{name}</span><span class="form-hint">optional</span></div>
+                  <div class="profile-chips"><For each={members}>{(s) => <span class="profile-chip">{s}</span>}</For></div>
+                </div>
               )}
             </For>
-          </tbody>
-        </table>
-        <div style={{ display: "flex", gap: "8px", "margin-top": "10px", "align-items": "center" }}>
-          <input class="form-input mono" style={{ width: "160px" }} placeholder="test" value={newName()} onInput={(e) => setNewName(e.currentTarget.value)} onKeyDown={(e) => e.key === "Enter" && addPreset()} />
-          <button class="btn btn-sm" onClick={addPreset} disabled={!newName().trim()}>Add preset</button>
-          <span style={{ "margin-left": "auto", "font-size": "12px", color: "#8b949e", display: "flex", gap: "8px", "align-items": "center" }}>
-            Starts by default:
-            <Dropdown
-              value={props.dev.instance.default_preset ?? ""}
-              options={[{ value: "", label: "Everything" }, ...presets().map((p) => ({ value: p, label: p }))]}
-              onChange={(v) => props.setDev("instance", "default_preset", v || null)}
-              style={{ width: "160px" }}
-            />
-          </span>
-        </div>
+          </div>
+          <div class="form-hint" style={{ "margin-top": "8px" }}>From the compose file; change them there.</div>
+        </Show>
       </div>
 
       <div class="dev-section">

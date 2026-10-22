@@ -180,10 +180,11 @@ With a `dev:` section, every git worktree of the project can run as its own copy
 | `dev.instance.env.<service>.<KEY>` | | Extra environment. Values can use `{url.<service>}`, `{port.<service>.<port>}` and `{db.<service>}`. |
 | `dev.instance.hooks.after_up` | | `"service: command"`, after every start. |
 | `dev.instance.hooks.after_own_database` | | `"service: command"`, when an instance gets its own database. |
-| `dev.instance.presets` / `default_preset` | | Named sets of services to start. |
 | `dev.instance.idle_stop` | off | Stop an instance after this long unused (`30m`, `2h`); the next request to its URL starts it again. |
 | `dev.instance.max_running` | `6` | How many instances may run at once. |
 | `dev.instance.limits` | | `memory` and `cpus` for each service in an instance. |
+
+Which optional services an instance runs is chosen with compose profiles when it starts; see [Running only the services you need](profiles.md).
 
 Each instance also gets `.orca/env` with `ORCA_PROJECT`, `ORCA_INSTANCE`, `ORCA_URL_<SERVICE>`, `ORCA_PORT_<SERVICE>_<PORT>`, `ORCA_DB_<SERVICE>` and `ORCA_SHARED_<SERVICE>`, for tests and scripts: `eval $(orca env)`.
 

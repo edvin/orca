@@ -63,6 +63,9 @@ export default function InstanceCard(props: Props) {
             <Show when={props.inst.is_main}>
               <span class="dev-chip" style={{ "font-size": "10px", padding: "1px 7px" }}>main checkout</span>
             </Show>
+            <For each={props.inst.profiles ?? []}>
+              {(p) => <span class="profile-tag" title={`Runs the ${p} profile`}>+{p}</span>}
+            </For>
           </div>
           <div class="dev-card-sub">
             <span style={{ display: "inline-flex", "align-items": "center", gap: "4px" }}>

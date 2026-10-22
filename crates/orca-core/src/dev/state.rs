@@ -36,9 +36,9 @@ pub struct DevInstanceState {
     /// Service → hostname, replacing the pattern for that service.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub hostname_overrides: BTreeMap<String, String>,
-    /// Preset to start; `None` uses the project's default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preset: Option<String>,
+    /// Compose profiles this instance runs, besides the services without one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profiles: Vec<String>,
     /// Shared service → data mode, overriding the project default.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub data_modes: BTreeMap<String, DataMode>,

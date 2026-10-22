@@ -284,6 +284,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stacks/{name}/restart", post(restart_stack))
         .route("/stacks/{name}/up", post(compose_up))
         .route(
+            "/stacks/{name}/profiles",
+            get(crate::stack_profiles::get).put(crate::stack_profiles::set),
+        )
+        .route(
             "/stacks/{name}/orca-yaml",
             get(crate::stack_yaml::get).put(crate::stack_yaml::save),
         )
@@ -3372,7 +3376,7 @@ async fn compose_up(
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let (dir, config) = resolve_stack_dir(&state, &name).await?;
-    let output = state.rt().await.compose_up(&dir, config.as_deref()).await?;
+    let output = crate::stack_profiles::up(&state, &name, &dir, config.as_deref()).await?;
     let hooks = if output.success {
         run_stack_hooks(&state, &dir, config.as_deref()).await
     } else {
@@ -3399,7 +3403,16 @@ async fn compose_deploy_path(
     let validated =
         validate_compose_path(dir).map_err(|e| ApiError::bad_request(format!("invalid compose path: {e}")))?;
     let validated_str = validated.to_string_lossy().to_string();
-    let output = state.rt().await.compose_up(&validated_str, None).await?;
+    // The compose project is named after the folder, as compose names it;
+    // its remembered profiles apply.
+    let project: String = validated
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    let output = crate::stack_profiles::up(&state, &project, &validated_str, None).await?;
 
     // The stack's orca.yaml routes and links are applied by the gateway
     // sync, as for any compose project; show which hostnames it asks for.
@@ -4701,9 +4714,32 @@ fn parse_orca_yaml_hooks(dir: &std::path::Path) -> Vec<String> {
 pub(crate) async fn run_stack_hooks(state: &AppState, dir: &str, config: Option<&str>) -> Vec<serde_json::Value> {
     let hooks = parse_orca_yaml_hooks(std::path::Path::new(dir));
     let rt = state.rt().await;
+    // Services that run: a hook for one whose profile is off is skipped.
+    let running: Vec<String> = rt
+        .list_containers(false)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|c| {
+            c.labels
+                .get("com.docker.compose.project.working_dir")
+                .map(String::as_str)
+                == Some(dir)
+        })
+        .filter_map(|c| c.labels.get("com.docker.compose.service").cloned())
+        .collect();
     let mut results = Vec::new();
     for hook in hooks {
         let result = match orca_core::dev::schema::parse_hook(&hook) {
+            Ok((service, _)) if !running.contains(&service) => {
+                results.push(serde_json::json!({
+                    "hook": hook,
+                    "success": true,
+                    "skipped": true,
+                    "output": format!("Skipped: '{service}' isn't running."),
+                }));
+                continue;
+            }
             Ok((service, command)) => rt.compose_exec(dir, config, &service, &command).await,
             Err(e) => Err(e),
         };

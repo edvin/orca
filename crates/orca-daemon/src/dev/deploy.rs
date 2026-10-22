@@ -21,7 +21,8 @@ use crate::state::AppState;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct UpOptions {
-    pub preset: Option<String>,
+    /// Compose profiles to run (saved for next time); `None` keeps the last.
+    pub profiles: Option<Vec<String>>,
     /// Rebuild images from the worktree's code (default true).
     pub build: Option<bool>,
     /// Who asked: "ui", "cli" or "mcp".
@@ -47,6 +48,8 @@ pub struct Prepared {
     pub own_databases: BTreeMap<String, OwnDatabase>,
     pub own_servers: std::collections::BTreeSet<String>,
     pub data: Vec<DataChoice>,
+    /// Compose profiles this start runs.
+    pub profiles: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,8 +61,8 @@ pub struct PlanView {
     pub resolved_mode: bool,
     pub shared_services: Vec<String>,
     pub plan: InstancePlan,
-    pub presets: Vec<String>,
-    pub default_preset: Option<String>,
+    /// The profiles this plan runs.
+    pub active_profiles: Vec<String>,
     /// Data choices per shared service (all of them, own-server included).
     pub data: Vec<DataChoice>,
 }
@@ -108,11 +111,11 @@ pub async fn prepare(
     state: &AppState,
     project_id: &str,
     name: &str,
-    preset: Option<&str>,
+    profiles: Option<&[String]>,
     requested_modes: Option<&BTreeMap<String, DataMode>>,
     persist: bool,
 ) -> Result<Prepared> {
-    prepare_with(state, project_id, name, preset, requested_modes, persist, None).await
+    prepare_with(state, project_id, name, profiles, requested_modes, persist, None).await
 }
 
 /// [`prepare`] with an optional `dev:` config that replaces orca.yaml on
@@ -121,7 +124,7 @@ pub async fn prepare_with(
     state: &AppState,
     project_id: &str,
     name: &str,
-    preset: Option<&str>,
+    profiles: Option<&[String]>,
     requested_modes: Option<&BTreeMap<String, DataMode>>,
     persist: bool,
     dev_override: Option<&core_dev::DevConfig>,
@@ -186,15 +189,15 @@ pub async fn prepare_with(
         })
         .collect();
 
-    let preset = preset
-        .map(str::to_string)
-        .or_else(|| existing_state.as_ref().and_then(|s| s.preset.clone()));
-    let preset = preset.as_deref();
+    let profiles: Vec<String> = match profiles {
+        Some(p) => p.to_vec(),
+        None => existing_state.as_ref().map(|s| s.profiles.clone()).unwrap_or_default(),
+    };
 
     // Assign host ports under the project lock so two instances never get
     // the same one.
     let _lock = Locks::get().lock("ports").await;
-    let needed = override_gen::required_host_ports(&model, &instance_dev, &shared, preset)?;
+    let needed = override_gen::required_host_ports(&model, &instance_dev, &shared, &profiles)?;
     let ports: Vec<PortAssignment> = {
         let cfg = state.config.lock().await;
         let mine = existing_state.as_ref().map(|s| s.ports.clone()).unwrap_or_default();
@@ -241,7 +244,7 @@ pub async fn prepare_with(
         own_databases: &own_dbs,
         own_servers: &own_servers,
         shared_endpoints: &shared_endpoints,
-        preset,
+        profiles: &profiles,
         hostname_overrides: &overrides,
         domain: &domain,
         https_port,
@@ -297,6 +300,7 @@ pub async fn prepare_with(
         own_databases: own_dbs,
         own_servers,
         data: data_choices,
+        profiles,
     })
 }
 
@@ -304,21 +308,21 @@ pub async fn plan_view(
     state: &AppState,
     project_id: &str,
     name: &str,
-    preset: Option<&str>,
+    profiles: Option<&[String]>,
     modes: Option<&BTreeMap<String, DataMode>>,
 ) -> Result<PlanView> {
-    plan_view_with(state, project_id, name, preset, modes, None).await
+    plan_view_with(state, project_id, name, profiles, modes, None).await
 }
 
 pub async fn plan_view_with(
     state: &AppState,
     project_id: &str,
     name: &str,
-    preset: Option<&str>,
+    profiles: Option<&[String]>,
     modes: Option<&BTreeMap<String, DataMode>>,
     dev_override: Option<&core_dev::DevConfig>,
 ) -> Result<PlanView> {
-    let p = prepare_with(state, project_id, name, preset, modes, false, dev_override).await?;
+    let p = prepare_with(state, project_id, name, profiles, modes, false, dev_override).await?;
     Ok(PlanView {
         instance: p.name.clone(),
         worktree: p.worktree.clone(),
@@ -326,8 +330,7 @@ pub async fn plan_view_with(
         compose_files: p.files.clone(),
         resolved_mode: p.resolved_mode,
         shared_services: p.shared.iter().cloned().collect(),
-        presets: p.instance_dev.instance.presets.keys().cloned().collect(),
-        default_preset: p.instance_dev.instance.default_preset.clone(),
+        active_profiles: p.profiles.clone(),
         data: p.data,
         plan: p.plan,
     })
@@ -809,7 +812,7 @@ async fn run_up(
         state,
         project_id,
         name,
-        opts.preset.as_deref(),
+        opts.profiles.as_deref(),
         opts.data_modes.as_ref(),
         true,
     )
@@ -922,6 +925,23 @@ async fn run_up(
     ops::compose_ok(state, &p.worktree, &args, Some(j)).await?;
     j.done("start", Some(p.plan.running_services.join(", "))).await;
 
+    // Services of profiles no longer picked: stop them, if they ran before.
+    if !p.plan.left_out.is_empty() {
+        let cp = &p.plan.compose_project;
+        let running_before = state.rt().await.list_containers(false).await?.into_iter().any(|c| {
+            c.labels.get("com.docker.compose.project") == Some(cp)
+                && c.labels
+                    .get("com.docker.compose.service")
+                    .is_some_and(|s| p.plan.left_out.contains(s))
+        });
+        if running_before {
+            let mut args = base_args.clone();
+            args.extend(["rm".into(), "-sf".into()]);
+            args.extend(p.plan.left_out.iter().cloned());
+            ops::compose_ok(state, &p.worktree, &args, Some(j)).await?;
+        }
+    }
+
     j.start("routes").await;
     let n = register_routes(state, project_id, name, &p.plan, j).await?;
     if n == 0 {
@@ -943,7 +963,7 @@ async fn run_up(
         for h in hooks {
             let (svc, cmd) = parse_hook(h)?;
             if !p.plan.running_services.contains(&svc) {
-                j.log(format!("skipping hook for '{svc}': not running in this preset"))
+                j.log(format!("skipping hook for '{svc}': its profile isn't running"))
                     .await;
                 continue;
             }
@@ -972,9 +992,7 @@ async fn run_up(
             s.last_started = Some(chrono::Utc::now().to_rfc3339());
             s.idle_stopped_at = None;
             s.started_by = Some(opts.source.clone().unwrap_or_else(|| "ui".into()));
-            if opts.preset.is_some() {
-                s.preset = opts.preset.clone();
-            }
+            s.profiles = p.profiles.clone();
         }
         cfg.save()?;
     }
@@ -1168,12 +1186,12 @@ pub async fn logs(
     Ok(run.stdout)
 }
 
-/// Update per-instance settings (rename, hostname overrides, preset).
+/// Update per-instance settings (rename, hostname overrides, profiles).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct InstanceSettings {
     pub name: Option<String>,
     pub hostname_overrides: Option<BTreeMap<String, String>>,
-    pub preset: Option<Option<String>>,
+    pub profiles: Option<Vec<String>>,
     /// New data modes. Takes effect on the next start.
     pub data_modes: Option<BTreeMap<String, DataMode>>,
     /// When leaving own-database mode: delete that database (else keep it
@@ -1230,8 +1248,8 @@ pub async fn update_settings(state: &AppState, project_id: &str, name: &str, s: 
     if let Some(ov) = s.hostname_overrides {
         inst.hostname_overrides = ov.into_iter().filter(|(_, v)| !v.trim().is_empty()).collect();
     }
-    if let Some(p) = s.preset {
-        inst.preset = p.filter(|p| !p.is_empty());
+    if let Some(p) = s.profiles {
+        inst.profiles = p.into_iter().filter(|p| !p.is_empty()).collect();
     }
     let mut to_drop: Vec<(String, String)> = Vec::new();
     if let Some(modes) = s.data_modes {

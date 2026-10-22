@@ -396,7 +396,15 @@ pub async fn resolve_model(
         args.push("-f".into());
         args.push(f.to_string_lossy().to_string());
     }
-    args.extend(["config".into(), "--format".into(), "json".into()]);
+    // Every profile, so services behind one are known too; which of them
+    // run is chosen per start.
+    args.extend([
+        "--profile".into(),
+        "*".into(),
+        "config".into(),
+        "--format".into(),
+        "json".into(),
+    ]);
     let json = compose_ok(state, dir, &args, None)
         .await
         .context("compose could not read the project")?;

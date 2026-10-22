@@ -179,6 +179,10 @@ pub struct OrcaConfig {
     /// Git repos registered for worktree dev instances.
     #[serde(default)]
     pub dev_projects: Vec<crate::dev::DevProject>,
+    /// Compose profiles to run per stack (compose project name), on this
+    /// machine. A stack without an entry runs what compose runs by default.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub stack_profiles: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 /// A scheduled container action (e.g., restart every Sunday).
@@ -582,6 +586,7 @@ impl Default for OrcaConfig {
             intercept_docker_desktop_urls: true,
             kubernetes_runtime: KubernetesRuntime::default(),
             dev_projects: Vec::new(),
+            stack_profiles: Default::default(),
         }
     }
 }

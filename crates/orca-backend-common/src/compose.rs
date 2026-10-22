@@ -25,6 +25,18 @@ impl ComposeRunner for BollardRuntime {
 }
 
 impl BollardRuntime {
+    /// Run `compose <args…>` in a project directory, e.g. with `--profile`
+    /// flags ahead of the subcommand.
+    pub async fn compose_args(
+        &self,
+        working_dir: &str,
+        config_file: Option<&str>,
+        args: &[String],
+    ) -> anyhow::Result<ComposeOutput> {
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        run_compose(self, working_dir, config_file, &args).await
+    }
+
     /// Run `sh -c <command>` in a running service of a compose project
     /// (`compose exec -T`), e.g. a stack's setup hook.
     pub async fn compose_exec(

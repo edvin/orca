@@ -1,7 +1,8 @@
 // Start dialog: shows what starting an instance will do before it happens,
-// and lets the user choose the preset and data mode per shared service.
+// and lets the user choose the compose profiles and data mode per shared
+// service.
 import { createSignal, createEffect, For, Show, on } from "solid-js";
-import Dropdown from "../Dropdown";
+import ProfileCards from "../ProfileCards";
 import { devApi, tildify } from "../../lib/dev";
 import type { DataMode, DevInstance, DevProject, PlanView } from "../../lib/dev";
 import { DataModePicker, YamlView } from "./DevBits";
@@ -10,11 +11,11 @@ interface Props {
   project: DevProject;
   inst: DevInstance;
   onClose: () => void;
-  onStart: (opts: { preset: string | null; build: boolean; data_modes: Record<string, DataMode> }) => void;
+  onStart: (opts: { profiles: string[]; build: boolean; data_modes: Record<string, DataMode> }) => void;
 }
 
 export default function StartDialog(props: Props) {
-  const [preset, setPreset] = createSignal<string | null>(props.inst.preset);
+  const [profiles, setProfiles] = createSignal<string[]>(props.inst.profiles ?? []);
   const [plan, setPlan] = createSignal<PlanView | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(true);
@@ -24,7 +25,7 @@ export default function StartDialog(props: Props) {
   const [modes, setModes] = createSignal<Record<string, DataMode>>({});
 
   createEffect(
-    on([preset, modes], async ([p, m]) => {
+    on([profiles, modes], async ([p, m]) => {
       setLoading(true);
       setError(null);
       try {
@@ -45,13 +46,14 @@ export default function StartDialog(props: Props) {
     }),
   );
 
-  const presetOptions = () => {
-    const p = plan();
-    const opts = [{ value: "", label: "Everything" + (p?.default_preset ? "" : " (default)") }];
-    for (const name of p?.presets ?? []) {
-      opts.push({ value: name, label: name + (p?.default_preset === name ? " (default)" : "") });
-    }
-    return opts;
+  const toggleProfile = (p: string) =>
+    setProfiles((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
+  /** Services in no profile: they always run. */
+  const always = () => {
+    const v = plan()?.plan;
+    if (!v) return [];
+    const members = new Set(v.profiles.flatMap((p) => p.services));
+    return [...v.running_services, ...v.left_out].filter((s) => !members.has(s)).sort();
   };
 
   const urls = () => {
@@ -79,22 +81,18 @@ export default function StartDialog(props: Props) {
         <div class="modal-body" style={{ "max-height": "68vh", overflow: "auto" }}>
           <div class="dev-section">
             <div class="dev-section-title">What runs</div>
-            <div style={{ display: "flex", gap: "12px", "align-items": "center" }}>
-              <Dropdown
-                value={preset() ?? ""}
-                options={presetOptions()}
-                onChange={(v) => setPreset(v || null)}
-                style={{ width: "240px" }}
-              />
-              <span style={{ "font-size": "12px", color: "#8b949e" }}>
-                <Show when={plan()} fallback="…">
-                  {plan()!.plan.running_services.join(", ")}
+            <Show when={(plan()?.plan.profiles.length ?? 0) > 0} fallback={
+              <div style={{ "font-size": "12.5px", color: "#c9d1d9" }}>
+                <Show when={plan()} fallback="…">{plan()!.plan.running_services.join(", ")}</Show>
+              </div>
+            }>
+              <ProfileCards profiles={plan()!.plan.profiles} always={always()} selected={profiles()} onToggle={toggleProfile} />
+              <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "8px" }}>
+                Runs {plan()!.plan.running_services.join(", ") || "nothing"}
+                <Show when={plan()!.plan.left_out.length > 0}>
+                  <span style={{ color: "#6e7681" }}> · leaves out {plan()!.plan.left_out.join(", ")}</span>
                 </Show>
-              </span>
-            </div>
-            <Show when={(plan()?.presets.length ?? 0) === 0 && plan()}>
-              <div class="form-hint" style={{ "margin-top": "6px" }}>
-                Presets are named sets of services, defined under <span class="mono">dev.instance.presets</span> in orca.yaml.
+                . Remembered for this worktree.
               </div>
             </Show>
           </div>
@@ -154,7 +152,7 @@ export default function StartDialog(props: Props) {
                 </For>
                 <Show when={urls().length === 0 && plan()!.plan.host_ports.length === 0}>
                   <div style={{ color: "#8b949e", "font-size": "12px" }}>
-                    No browser URLs or host ports: nothing in this preset publishes a port.
+                    No browser URLs or host ports: nothing that runs publishes a port.
                   </div>
                 </Show>
               </div>
@@ -208,7 +206,7 @@ export default function StartDialog(props: Props) {
           <button
             class="btn btn-primary"
             disabled={!!error() || loading()}
-            onClick={() => props.onStart({ preset: preset(), build: build(), data_modes: modes() })}
+            onClick={() => props.onStart({ profiles: profiles(), build: build(), data_modes: modes() })}
           >
             Start instance
           </button>

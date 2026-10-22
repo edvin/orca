@@ -6,7 +6,7 @@ import { devApi } from "../../lib/dev";
 import type { DevConfigT, DevProject, SetupAnalysis } from "../../lib/dev";
 import { showToast } from "../Toast";
 import { YamlView } from "./DevBits";
-import { DataSection, PresetsSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
+import { DataSection, ProfilesSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";
 
 interface Props {
@@ -19,7 +19,7 @@ const STEPS = [
   { id: "shared", title: "Shared or per worktree?" },
   { id: "data", title: "How much data do worktrees share?" },
   { id: "reach", title: "How do you reach it?" },
-  { id: "presets", title: "Presets and setup commands" },
+  { id: "profiles", title: "Profiles and setup commands" },
   { id: "review", title: "Review and save" },
 ] as const;
 
@@ -104,8 +104,8 @@ export default function SetupWizard(props: Props) {
                 <Match when={STEPS[step()].id === "reach"}>
                   <ReachSection {...section()} />
                 </Match>
-                <Match when={STEPS[step()].id === "presets"}>
-                  <PresetsSection {...section()} />
+                <Match when={STEPS[step()].id === "profiles"}>
+                  <ProfilesSection {...section()} />
                 </Match>
                 <Match when={STEPS[step()].id === "review"}>
                   <Review {...section()} project={props.project} onSaved={props.onSaved} onClose={props.onClose} />
