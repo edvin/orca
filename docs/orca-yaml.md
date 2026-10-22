@@ -25,6 +25,8 @@ gateway:
   - hostname: shop            # shop.<domain>
     service: web
     port: 3000
+    title: Storefront         # how it appears on the landing page
+    description: The customer-facing shop
   - hostname: shop
     service: api
     port: 8080
@@ -78,6 +80,17 @@ Each entry routes a hostname (and optionally a path) to a service's port inside 
 | `service` | required | The compose service. With several replicas, a running one is used. |
 | `port` | required | The port the service listens on inside its container, not a published host port. |
 | `path` | optional | Only requests under this path, such as `/api/*`. Without a `*`, only that exact path matches. |
+| `title` | optional | The card's title on the landing page; from the hostname when unset. |
+| `description` | optional | A line under the title. |
+| `group` | optional | The section the card is shown under; the compose project when unset. |
+| `icon` | optional | An image URL (`https:` or `data:image/`) shown instead of the initial. |
+| `hidden` | optional | `true` keeps the route off the landing page. It still routes. |
+
+### The landing page
+
+The gateway's own address (`https://localhost`, or your domain) lists every routed service as a card, grouped by project, with whether it runs and for how long: running, starting, unhealthy (from the container's healthcheck), sleeping or stopped. It updates whenever a container starts or stops, and refreshes itself while it's open. Links from `links:` appear on it too, one tab per environment.
+
+Its title, subtitle, and whether it shows status and the container behind each card are set on the **Landing page** tab of Orca's Gateway page. Routes added by hand get their title, description, group and icon there too.
 
 A hostname that a route added by hand on the Gateway page, or a worktree instance, already uses stays with that route. The orca.yaml tab and the Gateway page say which route has it.
 
@@ -94,6 +107,7 @@ services:
       orca.route.api: api.{domain}   # more routes, each with a name
       orca.route.api.port: "8080"
       orca.route.api.path: /v1*
+      orca.route.title: Storefront   # also .description, .group, .icon, .hidden
 ```
 
 Traefik labels work too: each `traefik.http.routers.<name>.rule` with `Host(...)`, and optionally `PathPrefix(...)`, becomes a route to the router's service port. `traefik.enable=false` opts out.

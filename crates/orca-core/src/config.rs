@@ -250,6 +250,57 @@ pub struct GatewayConfig {
     /// Dismissed route suggestions (container_name:port combos).
     #[serde(default)]
     pub dismissed_suggestions: Vec<String>,
+    /// How the landing page at the gateway's domain looks.
+    #[serde(default)]
+    pub landing: LandingConfig,
+}
+
+/// The landing page at the gateway's domain, listing every routed service.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct LandingConfig {
+    /// Page heading; "Orca Gateway" when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Line under the heading; the gateway's domain when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    /// Show whether each service runs, and for how long.
+    pub show_status: bool,
+    /// Show the container and port behind each card.
+    pub show_targets: bool,
+}
+
+impl Default for LandingConfig {
+    fn default() -> Self {
+        Self {
+            title: None,
+            subtitle: None,
+            show_status: true,
+            show_targets: true,
+        }
+    }
+}
+
+/// How a route appears on the landing page. Set by hand on the Gateway
+/// page, or by the route's source (orca.yaml, labels, a template).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct RoutePresentation {
+    /// Card title; from the hostname when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Section the card is shown under; the project or stack when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// Image URL (https or data:) shown instead of the initial.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Leave the route off the landing page (it still routes).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +321,9 @@ pub struct GatewayRoute {
     /// gateway shows a "waking up" page and Orca starts it on request.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sleeping: bool,
+    /// How the route appears on the landing page.
+    #[serde(default, flatten)]
+    pub presentation: RoutePresentation,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -313,6 +367,7 @@ impl Default for GatewayConfig {
             traefik_http_port: default_traefik_http(),
             traefik_https_port: default_traefik_https(),
             dismissed_suggestions: Vec::new(),
+            landing: LandingConfig::default(),
         }
     }
 }
@@ -949,6 +1004,7 @@ mod tests {
             path: None,
             owner: None,
             sleeping: false,
+            presentation: Default::default(),
         };
         let json = serde_json::to_string(&route).expect("serialize");
         let restored: GatewayRoute = serde_json::from_str(&json).expect("deserialize");
@@ -969,6 +1025,7 @@ mod tests {
             path: Some("/api/*".to_string()),
             owner: None,
             sleeping: false,
+            presentation: Default::default(),
         };
         let json = serde_json::to_string(&route).expect("serialize");
         let restored: GatewayRoute = serde_json::from_str(&json).expect("deserialize");
@@ -985,6 +1042,7 @@ mod tests {
             path: None,
             owner: None,
             sleeping: false,
+            presentation: Default::default(),
         };
         let json = serde_json::to_string(&route).expect("serialize");
         assert!(

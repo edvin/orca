@@ -54,6 +54,10 @@ pub struct GatewayRouteTemplate {
     pub port: u16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// How the route appears on the landing page: title, description,
+    /// group, icon, hidden.
+    #[serde(default, flatten)]
+    pub presentation: crate::config::RoutePresentation,
 }
 
 /// A post-deploy setup guide with step-by-step instructions.
@@ -202,6 +206,7 @@ mod tests {
             service: "frontend".to_string(),
             port: 3000,
             path: None,
+            presentation: Default::default(),
         };
         let json = serde_json::to_string(&route).unwrap();
         assert!(!json.contains("path"), "path should be omitted when None");

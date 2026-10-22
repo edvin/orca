@@ -120,6 +120,7 @@
 - **Environment links** — group URLs by section and environment (Local/Staging/Production) in `orca.yaml`
 - **`orca.yaml`** — projects declare gateway routes, path overlays, and environment links in their repo
 - **Routes from container labels** — `orca.route: app` in a compose file, or existing Traefik `Host(...)` rules, route a container while it runs
+- **Landing page** — the gateway's domain lists every routed service, grouped by project, with live status and uptime; titles, descriptions, groups and icons come from `orca.yaml`, labels, or the Gateway page
 - **Hostnames work inside containers too** — a backend reaches `https://oidc.<domain>` through the gateway, as the browser does (OIDC issuers, server-to-server calls)
 
 ### AI Assistant

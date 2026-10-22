@@ -582,6 +582,25 @@ export interface GatewayRoute {
   path?: string;
   /** Who manages the route: `label:<container>`, `dev:<project>:<instance>`, `stack:<name>`; none when added by hand. */
   owner?: string;
+  /** How the route appears on the landing page. */
+  presentation?: RoutePresentation;
+}
+
+export interface RoutePresentation {
+  title?: string | null;
+  description?: string | null;
+  group?: string | null;
+  /** Image URL (https: or data:image/) shown instead of the initial. */
+  icon?: string | null;
+  hidden?: boolean;
+}
+
+/** The landing page at the gateway's domain. */
+export interface LandingSettings {
+  title?: string | null;
+  subtitle?: string | null;
+  show_status: boolean;
+  show_targets: boolean;
 }
 
 export interface GatewayConfig {

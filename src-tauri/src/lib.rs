@@ -49,6 +49,8 @@ pub fn run() {
             commands::inspect_container,
             commands::container_stats,
             commands::all_container_stats,
+            commands::gateway_get_landing,
+            commands::gateway_set_landing,
             commands::stack_orca_yaml,
             commands::save_stack_orca_yaml,
             commands::validate_orca_yaml,

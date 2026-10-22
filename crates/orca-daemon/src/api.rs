@@ -419,6 +419,7 @@ pub fn routes() -> Router<Arc<AppState>> {
             delete(gateway_remove_route).put(gateway_update_route),
         )
         .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
+        .route("/gateway/landing", get(gateway_get_landing).put(gateway_set_landing))
         .route("/gateway/port-check", get(gateway_port_check))
         .route("/gateway/links", get(gateway_get_links).put(gateway_update_links))
         .route("/gateway/traefik-status", get(gateway_traefik_status))
@@ -4972,6 +4973,7 @@ async fn auto_register_gateway_routes(
                 path: route.path.clone(),
                 owner: Some(owner.clone()),
                 sleeping: false,
+                presentation: route.presentation.clone(),
             };
             // Redeploying the same stack refreshes its own routes; a route
             // owned by anything else keeps the hostname, and we say so
@@ -8201,6 +8203,7 @@ async fn gateway_list_routes(State(state): State<Arc<AppState>>) -> Result<impl 
                 "url": url,
                 "path": r.path,
                 "owner": r.owner,
+                "presentation": r.presentation,
             })
         })
         .collect();
@@ -8214,6 +8217,22 @@ struct AddRouteRequest {
     port: u16,
     #[serde(default)]
     path: Option<String>,
+    /// How the route appears on the landing page.
+    #[serde(default)]
+    presentation: orca_core::config::RoutePresentation,
+}
+
+/// Landing-page text set by hand: trimmed, length-capped, empty means unset.
+fn clean_presentation(mut p: orca_core::config::RoutePresentation) -> orca_core::config::RoutePresentation {
+    let clean = |v: Option<String>, max: usize| {
+        v.map(|t| t.trim().chars().take(max).collect::<String>())
+            .filter(|t| !t.is_empty())
+    };
+    p.title = clean(p.title, 80);
+    p.description = clean(p.description, 300);
+    p.group = clean(p.group, 60);
+    p.icon = clean(p.icon, 4096).filter(|u| u.starts_with("https://") || u.starts_with("data:image/"));
+    p
 }
 
 /// Validate a gateway hostname as a DNS-1123 subdomain. Used before the
@@ -8271,6 +8290,7 @@ async fn gateway_add_route(
         path: req.path.clone(),
         owner: None,
         sleeping: false,
+        presentation: clean_presentation(req.presentation.clone()),
     };
     config.gateway.routes.push(route);
     config
@@ -8354,6 +8374,9 @@ struct UpdateRouteRequest {
     container_name: String,
     port: u16,
     enabled: bool,
+    /// How the route appears on the landing page; left as is when absent.
+    #[serde(default)]
+    presentation: Option<orca_core::config::RoutePresentation>,
 }
 
 async fn gateway_update_route(
@@ -8377,6 +8400,12 @@ async fn gateway_update_route(
         return Err(ApiError::bad_request(format!(
             "{hostname} comes from {source}. Change it there instead."
         )));
+    }
+    // A route from labels or orca.yaml gets its presentation from there.
+    if let Some(p) = req.presentation
+        && crate::gateway_sync::managed_source(route).is_none()
+    {
+        route.presentation = clean_presentation(p);
     }
     route.container_name = req.container_name;
     route.port = req.port;
@@ -8438,6 +8467,44 @@ async fn gateway_update_config(
         .save()
         .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
     Ok(Json(serde_json::json!({ "saved": true })))
+}
+
+/// GET /gateway/landing: the landing page's settings and address.
+async fn gateway_get_landing(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let config = state.config.lock().await;
+    let gw = &config.gateway;
+    let port = if gw.https_port == 443 {
+        String::new()
+    } else {
+        format!(":{}", gw.https_port)
+    };
+    Ok(Json(serde_json::json!({
+        "settings": gw.landing,
+        "url": format!("https://{}{port}", gw.domain),
+    })))
+}
+
+/// PUT /gateway/landing: save the landing page's settings and rewrite it.
+async fn gateway_set_landing(
+    State(state): State<Arc<AppState>>,
+    Json(mut landing): Json<orca_core::config::LandingConfig>,
+) -> Result<impl IntoResponse, ApiError> {
+    let clean = |v: Option<String>| {
+        v.map(|t| t.trim().chars().take(120).collect::<String>())
+            .filter(|t| !t.is_empty())
+    };
+    landing.title = clean(landing.title);
+    landing.subtitle = clean(landing.subtitle);
+    let gateway = {
+        let mut config = state.config.lock().await;
+        config.gateway.landing = landing;
+        config
+            .save()
+            .map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+        config.gateway.clone()
+    };
+    crate::landing::write(&gateway).map_err(|e| anyhow::anyhow!("Could not write the landing page: {e}"))?;
+    Ok(Json(serde_json::json!({ "settings": gateway.landing })))
 }
 
 async fn gateway_port_check(

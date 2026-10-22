@@ -1156,6 +1156,7 @@ fn cmd_config_import(file: &str) -> anyhow::Result<()> {
                         path,
                         owner: r.get("owner").and_then(|v| v.as_str()).map(|s| s.to_string()),
                         sleeping: false,
+                        presentation: Default::default(),
                     });
                 }
             }

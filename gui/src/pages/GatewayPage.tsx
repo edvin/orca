@@ -8,6 +8,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
 import { SkeletonCard } from "../components/Skeleton";
 import { safeHref } from "../lib/sanitize";
+import LandingPageTab from "../components/gateway/LandingPageTab";
 
 interface GatewayPageProps {
   onNavigate?: (target: string) => void;
@@ -28,7 +29,7 @@ function friendlyStartError(raw: string): string {
   return raw;
 }
 
-type GatewayTab = "routes" | "configuration" | "settings";
+type GatewayTab = "routes" | "landing" | "configuration" | "settings";
 
 export default function GatewayPage(props: GatewayPageProps) {
   const [activeTab, setActiveTab] = createSignal<GatewayTab>("routes");
@@ -43,6 +44,7 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [addPath, setAddPath] = createSignal("");
   const [addContainer, setAddContainer] = createSignal("");
   const [addPort, setAddPort] = createSignal("80");
+  const [addTitle, setAddTitle] = createSignal("");
   const [containers, setContainers] = createSignal<Container[]>([]);
   const [adding, setAdding] = createSignal(false);
   const [showContainerPicker, setShowContainerPicker] = createSignal(false);
@@ -56,6 +58,19 @@ export default function GatewayPage(props: GatewayPageProps) {
   const [editPort, setEditPort] = createSignal("80");
   const [editPath, setEditPath] = createSignal("");
   const [editSaving, setEditSaving] = createSignal(false);
+  // How the route appears on the landing page.
+  const [editTitle, setEditTitle] = createSignal("");
+  const [editDescription, setEditDescription] = createSignal("");
+  const [editGroup, setEditGroup] = createSignal("");
+  const [editIcon, setEditIcon] = createSignal("");
+  const [editHidden, setEditHidden] = createSignal(false);
+  const editPresentation = () => ({
+    title: editTitle().trim() || null,
+    description: editDescription().trim() || null,
+    group: editGroup().trim() || null,
+    icon: editIcon().trim() || null,
+    hidden: editHidden(),
+  });
 
   // Environment links
   const [stackLinks, setStackLinks] = createSignal<StackLinkGroup[]>([]);
@@ -345,7 +360,9 @@ export default function GatewayPage(props: GatewayPageProps) {
         containerName,
         port,
         path: addPath().trim() || null,
+        presentation: { title: addTitle().trim() || null },
       });
+      setAddTitle("");
       showToast(`Route added: ${fullHostname}`, "success");
       setShowAdd(false);
       await refresh();
@@ -374,6 +391,11 @@ export default function GatewayPage(props: GatewayPageProps) {
     setEditContainer(route.container_name);
     setEditPort(String(route.port));
     setEditPath(route.path || "");
+    setEditTitle(route.presentation?.title ?? "");
+    setEditDescription(route.presentation?.description ?? "");
+    setEditGroup(route.presentation?.group ?? "");
+    setEditIcon(route.presentation?.icon ?? "");
+    setEditHidden(!!route.presentation?.hidden);
   };
 
   const handleSaveEdit = async () => {
@@ -412,6 +434,7 @@ export default function GatewayPage(props: GatewayPageProps) {
           containerName,
           port,
           enabled: original.enabled,
+          presentation: editPresentation(),
         });
       } else {
         // Hostname changed — the PUT endpoint keys on hostname so it
@@ -423,6 +446,7 @@ export default function GatewayPage(props: GatewayPageProps) {
           containerName,
           port,
           path: pathValue,
+          presentation: editPresentation(),
         });
         try {
           await invoke("gateway_remove_route", { hostname: original.hostname });
@@ -644,6 +668,7 @@ export default function GatewayPage(props: GatewayPageProps) {
       {/* Tab bar */}
       <div class="tab-bar" style={{ "margin-bottom": "24px" }}>
         <button class={`tab-item ${activeTab() === "routes" ? "active" : ""}`} onClick={() => setActiveTab("routes")}>Routes</button>
+        <button class={`tab-item ${activeTab() === "landing" ? "active" : ""}`} onClick={() => setActiveTab("landing")}>Landing page</button>
         <button class={`tab-item ${activeTab() === "configuration" ? "active" : ""}`} onClick={() => setActiveTab("configuration")}>Configuration</button>
         <button class={`tab-item ${activeTab() === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>Settings</button>
       </div>
@@ -914,6 +939,12 @@ export default function GatewayPage(props: GatewayPageProps) {
                         >
                           {route.hostname}{route.path || ""}
                         </button>
+                        <Show when={route.presentation?.title}>
+                          <div style={{ color: "#8b949e", "font-size": "11.5px", "margin-top": "2px" }}>{route.presentation!.title}</div>
+                        </Show>
+                        <Show when={route.presentation?.hidden}>
+                          <span title="Not shown on the landing page" style={{ "margin-left": "8px", "font-size": "10px", color: "#6e7681" }}>hidden</span>
+                        </Show>
                         <Show when={routeSource(route)}>
                           {(src) => (
                             <span title={src().title} style={{ "margin-left": "8px", "font-size": "10px", "font-weight": "600", "text-transform": "uppercase", "letter-spacing": "0.04em", color: "#8b949e", border: "1px solid #30363d", "border-radius": "4px", padding: "1px 5px", "white-space": "nowrap" }}>
@@ -978,6 +1009,8 @@ export default function GatewayPage(props: GatewayPageProps) {
             </table>
             <p style={{ color: "#6e7681", "font-size": "12px", "margin-top": "8px" }}>
               These hostnames also work from inside containers that share a network with a routed container: a backend can call <span class="mono">https://{routes()[0]?.hostname}</span> through the gateway, as the browser does.
+              {" "}They're also listed, with whether each one runs, on the gateway's{" "}
+              <button class="btn-link" style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", padding: "0", "font-size": "12px" }} onClick={() => setActiveTab("landing")}>landing page</button>.
             </p>
           </Show>
         </Show>
@@ -1231,6 +1264,10 @@ export default function GatewayPage(props: GatewayPageProps) {
       </Show>
 
       {/* ============ TAB 2: Configuration ============ */}
+      <Show when={activeTab() === "landing"}>
+        <LandingPageTab routes={routes()} onEditRoute={openEditRoute} onChanged={() => void refresh()} />
+      </Show>
+
       <Show when={activeTab() === "configuration"}>
         <Show when={cfgLoaded()} fallback={<SkeletonCard height="200px" />}>
           <div class="card" style={{ padding: "20px" }}>
@@ -1513,6 +1550,13 @@ export default function GatewayPage(props: GatewayPageProps) {
                     Optional. Route a specific path to this container (e.g., /api/*, /ws/*)
                   </p>
                 </div>
+                <div class="form-group">
+                  <label class="form-label" for="add-route-title">Title on the landing page</label>
+                  <input id="add-route-title" class="form-input" type="text" placeholder="From the hostname" value={addTitle()} onInput={(e) => setAddTitle(e.currentTarget.value)} />
+                  <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>
+                    Optional. Description, group and icon are on the Landing page tab.
+                  </p>
+                </div>
 
                 <div class="form-group">
                   <label class="form-label">
@@ -1723,6 +1767,31 @@ export default function GatewayPage(props: GatewayPageProps) {
                 <label class="form-label">Path (optional)</label>
                 <input class="form-input" type="text" value={editPath()} onInput={(e) => setEditPath(e.currentTarget.value)} placeholder="/api/*" />
                 <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>Route a specific path to this container</p>
+              </div>
+              <div style={{ "border-top": "1px solid #21262d", "padding-top": "14px", "margin-top": "4px", display: "flex", "flex-direction": "column", gap: "12px" }}>
+                <div style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "600" }}>On the landing page</div>
+                <div class="form-group" style={{ "margin-bottom": "0" }}>
+                  <label class="form-label" for="edit-route-title">Title</label>
+                  <input id="edit-route-title" class="form-input" type="text" value={editTitle()} onInput={(e) => setEditTitle(e.currentTarget.value)} placeholder="From the hostname" />
+                </div>
+                <div class="form-group" style={{ "margin-bottom": "0" }}>
+                  <label class="form-label" for="edit-route-description">Description</label>
+                  <input id="edit-route-description" class="form-input" type="text" value={editDescription()} onInput={(e) => setEditDescription(e.currentTarget.value)} placeholder="What it is, in a few words" />
+                </div>
+                <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "10px" }}>
+                  <div class="form-group" style={{ "margin-bottom": "0" }}>
+                    <label class="form-label" for="edit-route-group">Group</label>
+                    <input id="edit-route-group" class="form-input" type="text" value={editGroup()} onInput={(e) => setEditGroup(e.currentTarget.value)} placeholder="Its project" />
+                  </div>
+                  <div class="form-group" style={{ "margin-bottom": "0" }}>
+                    <label class="form-label" for="edit-route-icon">Icon URL</label>
+                    <input id="edit-route-icon" class="form-input" type="text" value={editIcon()} onInput={(e) => setEditIcon(e.currentTarget.value)} placeholder="https://…/logo.png" />
+                  </div>
+                </div>
+                <label style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "13px", color: "#c9d1d9", cursor: "pointer" }}>
+                  <input type="checkbox" checked={editHidden()} onChange={(e) => setEditHidden(e.currentTarget.checked)} />
+                  Hide from the landing page (it still routes)
+                </label>
               </div>
             </div>
             <div class="modal-footer">

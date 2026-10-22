@@ -19,7 +19,7 @@ use std::time::Duration;
 use anyhow::Result;
 use bollard::models::EndpointSettings;
 use bollard::network::{ConnectNetworkOptions, DisconnectNetworkOptions};
-use orca_core::config::{EnvironmentLink, GatewayRoute, StackLinkGroup};
+use orca_core::config::{EnvironmentLink, GatewayRoute, RoutePresentation, StackLinkGroup};
 use orca_core::event::EventKind;
 use orca_core::runtime::{ContainerRuntime, ContainerState};
 use tokio::sync::Notify;
@@ -87,7 +87,14 @@ pub fn spawn(state: Arc<AppState>) {
 
 async fn sync(state: &AppState) -> Result<()> {
     sync_label_routes(state).await?;
-    sync_networks(state).await
+    sync_networks(state).await?;
+    // The landing page shows which services run: refresh it on every
+    // container start and stop (it's only rewritten when it changed).
+    if crate::gateway::is_running(state).await.unwrap_or(false) {
+        let gateway = state.config.lock().await.gateway.clone();
+        crate::landing::refresh(&state.rt().await.docker, &gateway).await;
+    }
+    Ok(())
 }
 
 /// Owner prefix of routes from a compose project's `orca.yaml`.
@@ -138,6 +145,7 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                 path: r.path.clone(),
                 owner: Some(format!("{PROJECT_OWNER_PREFIX}{}", p.name)),
                 sleeping: false,
+                presentation: r.presentation.clone(),
             });
         }
     }
@@ -165,6 +173,7 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                 path: a.path,
                 owner: Some(format!("{LABEL_OWNER_PREFIX}{}", c.name)),
                 sleeping: false,
+                presentation: a.presentation,
             });
         }
     }
@@ -418,6 +427,8 @@ struct Ask {
     port: Option<u16>,
     /// A Caddy path matcher (`/api*`), like a route's `path`.
     path: Option<String>,
+    /// How it appears on the landing page.
+    presentation: RoutePresentation,
 }
 
 /// Routes asked for in Orca's own labels and in Traefik's.
@@ -429,6 +440,8 @@ struct Ask {
 ///   orca.route.api: api.{domain} # more routes, each with its own name
 ///   orca.route.api.port: "3000"
 ///   orca.route.api.path: /v1*
+///   orca.route.title: Storefront # on the landing page; also .description,
+///                                # .group, .icon (an image URL) and .hidden
 /// ```
 ///
 /// A hostname without a dot gets `.<domain>`; `{domain}` is replaced.
@@ -446,7 +459,11 @@ struct RouteLabels<'a> {
     host: Option<&'a str>,
     port: Option<&'a str>,
     path: Option<&'a str>,
+    presentation: RoutePresentation,
 }
+
+/// Attributes a route label can have after its name.
+const ROUTE_ATTRS: &[&str] = &["port", "path", "title", "description", "group", "icon", "hidden"];
 
 fn orca_label_routes(labels: &HashMap<String, String>, domain: &str) -> Vec<Ask> {
     let mut routes: std::collections::BTreeMap<&str, RouteLabels> = Default::default();
@@ -457,39 +474,52 @@ fn orca_label_routes(labels: &HashMap<String, String>, domain: &str) -> Vec<Ask>
         let (name, attr) = match rest.strip_prefix('.') {
             None if rest.is_empty() => ("", None),
             None => continue, // orca.routes, orca.router…
-            Some("port") => ("", Some("port")),
-            Some("path") => ("", Some("path")),
+            Some(attr) if ROUTE_ATTRS.contains(&attr) => ("", Some(attr)),
             Some(r) => match r.rsplit_once('.') {
-                Some((name, attr @ ("port" | "path"))) => (name, Some(attr)),
+                Some((name, attr)) if ROUTE_ATTRS.contains(&attr) => (name, Some(attr)),
                 Some(_) => continue,
                 None => (r, None),
             },
         };
         let entry = routes.entry(name).or_default();
+        let text = || Some(value.trim().to_string()).filter(|v| !v.is_empty());
         match attr {
             None => entry.host = Some(value),
             Some("port") => entry.port = Some(value),
-            _ => entry.path = Some(value),
+            Some("path") => entry.path = Some(value),
+            Some("title") => entry.presentation.title = text(),
+            Some("description") => entry.presentation.description = text(),
+            Some("group") => entry.presentation.group = text(),
+            Some("icon") => entry.presentation.icon = text(),
+            _ => entry.presentation.hidden = matches!(value.trim(), "true" | "yes" | "1"),
         }
     }
     routes
         .into_values()
-        .filter_map(|RouteLabels { host, port, path }| {
-            let host = host?.trim().replace("{domain}", domain);
-            if host.is_empty() {
-                return None;
-            }
-            let hostname = if host.contains('.') {
-                host
-            } else {
-                format!("{host}.{domain}")
-            };
-            Some(Ask {
-                hostname: hostname.to_lowercase(),
-                port: port.and_then(|p| p.trim().parse().ok()),
-                path: path.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
-            })
-        })
+        .filter_map(
+            |RouteLabels {
+                 host,
+                 port,
+                 path,
+                 presentation,
+             }| {
+                let host = host?.trim().replace("{domain}", domain);
+                if host.is_empty() {
+                    return None;
+                }
+                let hostname = if host.contains('.') {
+                    host
+                } else {
+                    format!("{host}.{domain}")
+                };
+                Some(Ask {
+                    hostname: hostname.to_lowercase(),
+                    port: port.and_then(|p| p.trim().parse().ok()),
+                    path: path.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
+                    presentation,
+                })
+            },
+        )
         .collect()
 }
 
@@ -528,6 +558,7 @@ fn traefik_label_routes(labels: &HashMap<String, String>) -> Vec<Ask> {
                 hostname: host.to_lowercase(),
                 port,
                 path: path.clone(),
+                presentation: RoutePresentation::default(),
             });
         }
     }
@@ -590,20 +621,41 @@ mod tests {
                 Ask {
                     hostname: "admin.example.test".into(),
                     port: None,
-                    path: None
+                    path: None,
+                    presentation: Default::default()
                 },
                 Ask {
                     hostname: "api.local.test".into(),
                     port: Some(3000),
-                    path: Some("/v1*".into())
+                    path: Some("/v1*".into()),
+                    presentation: Default::default()
                 },
                 Ask {
                     hostname: "app.local.test".into(),
                     port: Some(8080),
-                    path: None
+                    path: None,
+                    presentation: Default::default()
                 },
             ]
         );
+    }
+
+    #[test]
+    fn labels_set_how_a_route_appears_on_the_landing_page() {
+        let l = labels(&[
+            ("orca.route", "shop"),
+            ("orca.route.title", "Storefront"),
+            ("orca.route.group", "Shop"),
+            ("orca.route.admin", "admin"),
+            ("orca.route.admin.hidden", "true"),
+            ("orca.route.admin.description", "Back office"),
+        ]);
+        let mut asks = label_routes(&l, "x");
+        asks.sort_by(|a, b| a.hostname.cmp(&b.hostname));
+        assert!(asks[0].presentation.hidden);
+        assert_eq!(asks[0].presentation.description.as_deref(), Some("Back office"));
+        assert_eq!(asks[1].presentation.title.as_deref(), Some("Storefront"));
+        assert_eq!(asks[1].presentation.group.as_deref(), Some("Shop"));
     }
 
     #[test]
@@ -636,17 +688,20 @@ mod tests {
                 Ask {
                     hostname: "shop.test".into(),
                     port: Some(8080),
-                    path: Some("/api*".into())
+                    path: Some("/api*".into()),
+                    presentation: Default::default()
                 },
                 Ask {
                     hostname: "shop.test".into(),
                     port: Some(3000),
-                    path: None
+                    path: None,
+                    presentation: Default::default()
                 },
                 Ask {
                     hostname: "www.shop.test".into(),
                     port: Some(3000),
-                    path: None
+                    path: None,
+                    presentation: Default::default()
                 },
             ]
         );

@@ -422,6 +422,26 @@ pub async fn validate_orca_yaml(text: String) -> Result<serde_json::Value, Strin
     resp.daemon_json().await
 }
 
+/// The gateway landing page's settings and address.
+#[tauri::command]
+pub async fn gateway_get_landing() -> Result<serde_json::Value, String> {
+    get_json("/gateway/landing").await
+}
+
+/// Save the gateway landing page's settings.
+#[tauri::command]
+pub async fn gateway_set_landing(settings: serde_json::Value) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    client()
+        .put(format!("{base}/gateway/landing"))
+        .json(&settings)
+        .send()
+        .await
+        .map_err(|e| format!("Daemon connection failed: {e}"))?
+        .daemon_json()
+        .await
+}
+
 /// Stats of all running containers in one request.
 #[tauri::command]
 pub async fn all_container_stats() -> Result<serde_json::Value, String> {
@@ -4448,6 +4468,7 @@ pub async fn gateway_add_route(
     container_name: String,
     port: u16,
     path: Option<String>,
+    presentation: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     let resp = client()
@@ -4457,6 +4478,7 @@ pub async fn gateway_add_route(
             "container_name": container_name,
             "port": port,
             "path": path,
+            "presentation": presentation.unwrap_or_default(),
         }))
         .send()
         .await
@@ -4478,6 +4500,7 @@ pub async fn gateway_update_route(
     container_name: String,
     port: u16,
     enabled: bool,
+    presentation: Option<serde_json::Value>,
 ) -> Result<(), String> {
     let base = daemon_url();
     let resp = client()
@@ -4486,6 +4509,7 @@ pub async fn gateway_update_route(
             "container_name": container_name,
             "port": port,
             "enabled": enabled,
+            "presentation": presentation,
         }))
         .send()
         .await
