@@ -4,23 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Quickstart — Orca docs</title>
-<meta name="description" content="A ten-minute walkthrough after installing Orca: run a container, start a compose stack, give it an HTTPS hostname and add an orca.yaml.">
+<meta name="description" content="A ten-minute walkthrough after installing Orca: open a project folder, give it an HTTPS hostname, trust the certificate and add an orca.yaml.">
 <link rel="canonical" href="https://orca-desktop.com/docs/quickstart/">
 <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Orca">
 <meta property="og:title" content="Quickstart — Orca docs">
-<meta property="og:description" content="A ten-minute walkthrough after installing Orca: run a container, start a compose stack, give it an HTTPS hostname and add an orca.yaml.">
+<meta property="og:description" content="A ten-minute walkthrough after installing Orca: open a project folder, give it an HTTPS hostname, trust the certificate and add an orca.yaml.">
 <meta property="og:url" content="https://orca-desktop.com/docs/quickstart/">
 <meta property="og:image" content="https://orca-desktop.com/assets/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,41 +53,47 @@
     <div class="doc-head">
       <div class="crumbs"><a href="/docs/introduction/">Docs</a><span>/</span><span>Getting started</span></div>
       <h1>Quickstart</h1>
-      <p class="lede">A ten-minute walkthrough after installing Orca: run a container, start a compose stack, give it an HTTPS hostname and add an orca.yaml.</p>
+      <p class="lede">A ten-minute walkthrough after installing Orca: open a project folder, give it an HTTPS hostname, trust the certificate and add an orca.yaml.</p>
     </div>
-    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#1-check-the-runtime">1. Check the runtime</a></li><li><a href="#2-run-a-container">2. Run a container</a></li><li><a href="#3-start-a-compose-stack">3. Start a compose stack</a></li><li><a href="#4-give-it-an-https-hostname">4. Give it an HTTPS hostname</a></li><li><a href="#5-trust-orcas-certificate">5. Trust Orca's certificate</a></li><li><a href="#6-add-an-orcayaml">6. Add an orca.yaml</a></li><li><a href="#next-steps">Next steps</a></li></ul></details>
+    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#1-check-the-runtime">1. Check the runtime</a></li><li><a href="#2-open-a-project-folder">2. Open a project folder</a></li><li><a href="#3-or-run-a-single-container">3. Or run a single container</a></li><li><a href="#4-give-it-an-https-hostname">4. Give it an HTTPS hostname</a></li><li><a href="#5-trust-orcas-certificate">5. Trust Orca's certificate</a></li><li><a href="#6-add-an-orcayaml">6. Add an orca.yaml</a></li><li><a href="#next-steps">Next steps</a></li></ul></details>
     <div class="prose"><p>This walkthrough takes you from a fresh install to a compose app served at <code>https://&lt;name&gt;.localhost</code> with a trusted certificate. It assumes Orca is installed and has finished its first-start setup. If not, start with <a href="/docs/install/">Install Orca</a>.</p>
 <h2 id="1-check-the-runtime"><a class="anchor" href="#1-check-the-runtime" aria-hidden="true" tabindex="-1">#</a>1. Check the runtime</h2>
-<p>Open <strong>System Health</strong> in the sidebar. When everything is in place it says <strong>All Systems Operational</strong>, with your platform and runtime underneath. If a check is red, click its <strong>Fix</strong> button, or see <a href="/docs/troubleshooting/">Troubleshooting</a>.</p>
+<p>Open <strong>System Health</strong> in the sidebar. When everything is in place it says <strong>All systems operational</strong>, with your platform and runtime underneath. If a check is red, click its <strong>Fix</strong> button, or see <a href="/docs/troubleshooting/">Troubleshooting</a>.</p>
 <p>The status bar at the bottom shows a green <strong>Docker</strong> dot while Orca is connected to the engine.</p>
-<h2 id="2-run-a-container"><a class="anchor" href="#2-run-a-container" aria-hidden="true" tabindex="-1">#</a>2. Run a container</h2>
+<h2 id="2-open-a-project-folder"><a class="anchor" href="#2-open-a-project-folder" aria-hidden="true" tabindex="-1">#</a>2. Open a project folder</h2>
+<p>If you have a project with a <code>compose.yaml</code> (or <code>docker-compose.yml</code>), open its folder. This is the main way to start an existing project in Orca.</p>
+<ol>
+<li>On the <strong>Dashboard</strong>, click <strong>Open folder</strong>. On a fresh install you can also click the <strong>Open a project folder</strong> card under <strong>Get your first app running</strong>.</li>
+<li>Click <strong>Choose a folder…</strong> and pick the project&#39;s folder. You can also drop the folder onto Orca&#39;s window.</li>
+<li>Orca shows the compose files, services and profiles it found, and whether there&#39;s an <code>orca.yaml</code>. If the folder is a git repository, <strong>Also add it to Projects</strong> is ticked, so you can later run each worktree side by side.</li>
+<li>Click <strong>Start</strong>.</li>
+</ol>
+<p><figure class="shot"><img src="/assets/screens/open-folder.webp" alt="The Open a project folder dialog showing a folder's compose file, services, profiles and orca.yaml" loading="lazy" decoding="async"></figure></p>
+<p>Orca runs the project as a stack named after the folder and opens the stack&#39;s page, with <strong>Services</strong>, <strong>Logs</strong>, <strong>Compose file</strong> and <strong>orca.yaml</strong> tabs. A folder without a compose file gets a starter <code>compose.yaml</code>, which you can edit in the dialog before <strong>Create and start</strong>. See <a href="/docs/stacks/#open-a-project-folder">Open a project folder</a> for the details.</p>
+<p>Projects you start from a terminal show up too. On macOS, first-start setup pointed the <code>docker</code> command at Orca&#39;s VM, and on Linux it talks to the same engine as Orca, so this works as usual:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">docker</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> compose</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> up</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -d</span></span></code></pre></div><h2 id="3-or-run-a-single-container"><a class="anchor" href="#3-or-run-a-single-container" aria-hidden="true" tabindex="-1">#</a>3. Or run a single container</h2>
+<p>No project at hand? Run an image instead.</p>
 <ol>
 <li>Go to <strong>Containers</strong> and click <strong>Run</strong>.</li>
-<li>In the <strong>Run Container</strong> dialog, set <strong>Image</strong> to <code>nginx:alpine</code> and <strong>Port Mappings</strong> to <code>8080:80</code>.</li>
+<li>In the <strong>Run container</strong> dialog, set <strong>Image</strong> to <code>nginx:alpine</code> and <strong>Port mappings</strong> to <code>8080:80</code>.</li>
 <li>Click <strong>Run</strong>.</li>
 </ol>
 <p>Orca pulls the image if needed and starts the container. Open <code>http://localhost:8080</code> to see the nginx welcome page. On macOS this works because Orca forwards the VM&#39;s ports to your Mac.</p>
 <p>Prefer a ready-made app? Open <strong>App Catalog</strong>, click a template, review the settings in the <strong>Deploy</strong> dialog and click <strong>Deploy</strong>.</p>
 <p><figure class="shot"><img src="/assets/screens/app-catalog.webp" alt="App Catalog with templates grouped by category" loading="lazy" decoding="async"></figure></p>
-<h2 id="3-start-a-compose-stack"><a class="anchor" href="#3-start-a-compose-stack" aria-hidden="true" tabindex="-1">#</a>3. Start a compose stack</h2>
-<p>Orca shows every compose project it can see, however it was started. You have two ways to start one.</p>
-<p><strong>From a terminal.</strong> In a folder with a <code>compose.yaml</code> (or <code>docker-compose.yml</code>), run:</p>
-<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">docker</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> compose</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> up</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -d</span></span></code></pre></div><p>On macOS, first-start setup pointed the <code>docker</code> command at Orca&#39;s VM, and on Linux it talks to the same engine as Orca.</p>
-<p><strong>From Orca.</strong> On <strong>Containers</strong>, click <strong>Compose</strong>. In <strong>Deploy Compose Stack</strong>, enter an absolute <strong>Directory Path</strong> where Orca should save <code>docker-compose.yml</code>, edit the YAML, then click <strong>Validate</strong> and <strong>Deploy</strong>.</p>
-<p>The stack appears on <strong>Containers</strong> as a group with its services. Click the stack&#39;s name to open its page, with <strong>Services</strong>, <strong>Logs</strong>, <strong>Compose File</strong> and <strong>orca.yaml</strong> tabs.</p>
 <h2 id="4-give-it-an-https-hostname"><a class="anchor" href="#4-give-it-an-https-hostname" aria-hidden="true" tabindex="-1">#</a>4. Give it an HTTPS hostname</h2>
 <p>The gateway is a reverse proxy, running as a container, that serves your containers at <code>https://&lt;name&gt;.localhost</code> on ports 80 and 443. <code>.localhost</code> names resolve to your own machine in browsers, so there&#39;s nothing to add to a hosts file.</p>
 <ol>
-<li>Open <strong>Gateway</strong> and click <strong>Start Gateway</strong>. The first start pulls <code>caddy:2-alpine</code>.</li>
-<li>Go back to <strong>Containers</strong>. On the container you want to expose, open <strong>More actions</strong> (the menu at the end of the row) and choose <strong>Expose via Gateway</strong>.</li>
-<li>Enter a <strong>Hostname</strong>, for example <code>myapp</code>, and the <strong>Container Port</strong> your app listens on inside the container (for nginx, <code>80</code>). A name without a dot gets <code>.localhost</code> added.</li>
-<li>Click <strong>Add Route</strong>.</li>
+<li>Open <strong>Gateway</strong> and click <strong>Start gateway</strong>. The first start pulls <code>caddy:2-alpine</code>.</li>
+<li>Go back to <strong>Containers</strong>. On the container you want to expose, open <strong>More actions</strong> (the &quot;…&quot; at the end of the row) and choose <strong>Expose via gateway</strong>. The container&#39;s own page has the same button in its header.</li>
+<li>Enter a <strong>Hostname</strong>, for example <code>myapp</code>, and the <strong>Container port</strong> your app listens on inside the container (for nginx, <code>80</code>). A name without a dot gets <code>.localhost</code> added.</li>
+<li>Click <strong>Add route</strong>.</li>
 </ol>
-<p>Open <code>https://myapp.localhost</code>. The route also shows on the container&#39;s row and on the <strong>Gateway</strong> page under <strong>Routes</strong>, where <strong>Add Route</strong> works too.</p>
+<p>Open <code>https://myapp.localhost</code>. The route also shows on the container&#39;s row and on the <strong>Gateway</strong> page under <strong>Routes</strong>, where <strong>Add route</strong> works too. The stack&#39;s page shows its URLs as buttons in the header.</p>
 <p>The <a href="/docs/gateway/">Gateway</a> page covers paths, custom domains and the landing page.</p>
 <h2 id="5-trust-orcas-certificate"><a class="anchor" href="#5-trust-orcas-certificate" aria-hidden="true" tabindex="-1">#</a>5. Trust Orca&#39;s certificate</h2>
 <p>Orca signs a certificate for each hostname with its own local certificate authority. Until your system trusts that CA, the browser shows a certificate warning.</p>
-<p>Go to <strong>Settings</strong> &gt; <strong>Certificates</strong> and click <strong>Download CA Certificate</strong>. It saves <code>orca-ca.pem</code> to your Downloads folder, and the page shows the command to install it on your platform. On macOS that is:</p>
+<p>Go to <strong>Settings</strong> &gt; <strong>Certificates</strong> and click <strong>Download CA certificate</strong>. It saves <code>orca-ca.pem</code> to your Downloads folder, and the page shows the command to install it on your platform. On macOS that is:</p>
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> security</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> add-trusted-cert</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -d</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -r</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> trustRoot</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -k</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> /Library/Keychains/System.keychain</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ~/Downloads/orca-ca.pem</span></span></code></pre></div><p>If the <code>orca</code> CLI is on your <code>PATH</code>, this does the same in one step for macOS, Windows and Linux:</p>
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> install</span></span></code></pre></div><p>Reload <code>https://myapp.localhost</code>: the warning is gone. You only do this once per machine.</p>
 <h2 id="6-add-an-orcayaml"><a class="anchor" href="#6-add-an-orcayaml" aria-hidden="true" tabindex="-1">#</a>6. Add an orca.yaml</h2>
@@ -104,6 +110,7 @@
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    port</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">3000</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">          # the port it listens on inside the container</span></span></code></pre></div><p>Orca picks up changes to the file straight away. The <a href="/docs/orca-yaml/">orca.yaml reference</a> covers links, builds, hooks and worktree instances.</p>
 <h2 id="next-steps"><a class="anchor" href="#next-steps" aria-hidden="true" tabindex="-1">#</a>Next steps</h2>
 <ul>
+<li><a href="/docs/introduction/#find-your-way-around">Find your way around</a>: the sidebar, the Cmd+K / Ctrl+K command palette and dropping folders on the window.</li>
 <li><a href="/docs/orca-yaml/">orca.yaml reference</a>: links, build targets, setup hooks and per-worktree instances.</li>
 <li><a href="/docs/gateway/">Gateway</a>: custom domains, path routes and routes from container labels.</li>
 <li><a href="/docs/platforms/">How Orca runs on your platform</a>: the VM, ports and where files live.</li>
@@ -115,7 +122,7 @@
     </div>
     <nav class="pager" aria-label="Previous and next page"><a class="pager-prev" href="/docs/install/"><span class="pager-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Previous</span><span class="pager-title">Install</span></a><a class="pager-next" href="/docs/platforms/"><span class="pager-label">Next <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="pager-title">Platforms</span></a></nav>
   </article>
-  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-check-the-runtime">1. Check the runtime</a></li><li class="d2"><a href="#2-run-a-container">2. Run a container</a></li><li class="d2"><a href="#3-start-a-compose-stack">3. Start a compose stack</a></li><li class="d2"><a href="#4-give-it-an-https-hostname">4. Give it an HTTPS hostname</a></li><li class="d2"><a href="#5-trust-orcas-certificate">5. Trust Orca's certificate</a></li><li class="d2"><a href="#6-add-an-orcayaml">6. Add an orca.yaml</a></li><li class="d2"><a href="#next-steps">Next steps</a></li></ul></nav></aside>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-check-the-runtime">1. Check the runtime</a></li><li class="d2"><a href="#2-open-a-project-folder">2. Open a project folder</a></li><li class="d2"><a href="#3-or-run-a-single-container">3. Or run a single container</a></li><li class="d2"><a href="#4-give-it-an-https-hostname">4. Give it an HTTPS hostname</a></li><li class="d2"><a href="#5-trust-orcas-certificate">5. Trust Orca's certificate</a></li><li class="d2"><a href="#6-add-an-orcayaml">6. Add an orca.yaml</a></li><li class="d2"><a href="#next-steps">Next steps</a></li></ul></nav></aside>
 </div>
 </main>
 <footer class="site-footer">

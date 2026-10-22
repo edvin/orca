@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -80,7 +80,7 @@
 <p>On a running VM the daemon also makes sure IPv4 forwarding is on, so <code>docker compose up</code> networking works after a reboot.</p>
 <p>If the VM is stopped when the daemon starts, the daemon starts it. If it doesn&#39;t come up, the daemon force-stops it, clears Lima&#39;s stale lock and socket files and tries again.</p>
 <h3 id="vm-resources"><a class="anchor" href="#vm-resources" aria-hidden="true" tabindex="-1">#</a>VM resources</h3>
-<p>Change CPUs, memory and disk in <strong>Settings</strong> &gt; <strong>General</strong> &gt; <strong>Virtual Machine</strong>, then click <strong>Apply Changes</strong>. This restarts the VM and stops running containers. Memory must be at least 2 GB and no more than your Mac has; disk must be at least 10 GB.</p>
+<p>Change CPUs, memory and disk in <strong>Settings</strong> &gt; <strong>General</strong> &gt; <strong>Virtual machine</strong>, then click <strong>Apply changes</strong>. This restarts the VM and stops running containers. Memory must be at least 2 GB and no more than your Mac has; disk must be at least 10 GB.</p>
 <h2 id="windows-wsl2"><a class="anchor" href="#windows-wsl2" aria-hidden="true" tabindex="-1">#</a>Windows: WSL2</h2>
 <p>On Windows, Docker runs in your default WSL2 distro.</p>
 <ul>
@@ -90,7 +90,7 @@
 </ul>
 <p>The TCP listener is bound to <code>127.0.0.1</code> inside WSL. Uninstalling Orca removes the override.</p>
 <h3 id="wsl2-resources"><a class="anchor" href="#wsl2-resources" aria-hidden="true" tabindex="-1">#</a>WSL2 resources</h3>
-<p>WSL2&#39;s limits apply to all your distros, not only Docker. Set them in <strong>Settings</strong> &gt; <strong>General</strong> &gt; <strong>WSL2 Resources</strong>: <strong>Memory</strong>, <strong>Processors</strong> and <strong>Swap</strong> (for example <code>8GB</code>, <code>4</code>, <code>0</code>). Orca writes them to the <code>[wsl2]</code> section of <code>%USERPROFILE%\.wslconfig</code> and keeps your other settings in that file.</p>
+<p>WSL2&#39;s limits apply to all your distros, not only Docker. Set them in <strong>Settings</strong> &gt; <strong>General</strong> &gt; <strong>WSL2 resources</strong>: <strong>Memory</strong>, <strong>Processors</strong> and <strong>Swap</strong> (for example <code>8GB</code>, <code>4</code>, <code>0</code>). Orca writes them to the <code>[wsl2]</code> section of <code>%USERPROFILE%\.wslconfig</code> and keeps your other settings in that file.</p>
 <p>Changes take effect after WSL restarts:</p>
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">wsl</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> --shutdown</span></span></code></pre></div><h2 id="linux-native"><a class="anchor" href="#linux-native" aria-hidden="true" tabindex="-1">#</a>Linux: native</h2>
 <p>On Linux there&#39;s no VM. Orca talks to the Docker or Podman socket on your machine, and container ports are on your host directly.</p>

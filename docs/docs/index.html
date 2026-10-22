@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -55,7 +55,7 @@
       <h1>What is Orca?</h1>
       <p class="lede">Orca is a free, open source desktop app for containers, compose stacks and Kubernetes, built for local development with real HTTPS hostnames, worktree instances and AI agents.</p>
     </div>
-    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#who-its-for">Who it's for</a></li><li><a href="#how-it-fits-together">How it fits together</a></li><li><a href="#the-ideas-worth-knowing">The ideas worth knowing</a></li><li><a href="#where-to-start">Where to start</a></li></ul></details>
+    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#who-its-for">Who it's for</a></li><li><a href="#how-it-fits-together">How it fits together</a></li><li><a href="#the-ideas-worth-knowing">The ideas worth knowing</a></li><li><a href="#find-your-way-around">Find your way around</a></li><li><a href="#where-to-start">Where to start</a></li></ul></details>
     <div class="prose"><p>Orca runs your containers, compose stacks and a local Kubernetes cluster, and adds what local development usually needs on top: real HTTPS hostnames for every service, one file in the repo that sets a project up for the whole team, and a running copy of the app for every git worktree. AI agents can drive all of it through MCP.</p>
 <p>It runs on macOS, Windows and Linux, and replaces Docker Desktop on all three.</p>
 <p><figure class="shot"><img src="/assets/screens/dashboard.webp" alt="The Orca dashboard with containers, stacks, worktree instances, the gateway and live CPU and memory" loading="lazy" decoding="async"></figure></p>
@@ -76,10 +76,26 @@
 <p><strong>Profiles.</strong> Compose&#39;s own <code>profiles:</code> mark optional services. Orca lets each developer switch them on and off and remembers the choice. See <a href="/docs/profiles/">Profiles</a>.</p>
 <p><strong>Worktree instances.</strong> Each git worktree of a project can run as its own copy of the app, with its own hostnames and ports, while databases and other infrastructure run once and are shared. See <a href="/docs/worktrees/">Worktree instances</a>.</p>
 <p><strong>Agents.</strong> The daemon is an MCP server. Claude Code and other agents can list containers, read logs, start stacks and run their own worktree instance to test a change. See <a href="/docs/agents/">Agents and MCP</a>.</p>
+<h2 id="find-your-way-around"><a class="anchor" href="#find-your-way-around" aria-hidden="true" tabindex="-1">#</a>Find your way around</h2>
+<h3 id="the-sidebar"><a class="anchor" href="#the-sidebar" aria-hidden="true" tabindex="-1">#</a>The sidebar</h3>
+<p>The sidebar starts with the <strong>Dashboard</strong> and ends with <strong>Settings</strong>. In between, pages are grouped by what you&#39;re doing:</p>
+<div class="table-wrap"><table><thead><tr><th>Group</th><th>Pages</th></tr></thead><tbody><tr><td><strong>Develop</strong></td><td><strong>Projects</strong>, <strong>Containers</strong>, <strong>Gateway</strong>, <strong>App Catalog</strong></td></tr><tr><td><strong>Resources</strong></td><td><strong>Images</strong>, <strong>Builds</strong>, <strong>Volumes</strong>, <strong>Networks</strong></td></tr><tr><td><strong>Platform</strong></td><td><strong>Kubernetes</strong>, and <strong>Fleet</strong> once you&#39;ve added a <a href="/docs/remote-hosts/">remote host</a></td></tr><tr><td><strong>System</strong></td><td><strong>System Health</strong>, <strong>Activity</strong></td></tr></tbody></table></div><p>While Kubernetes is turned off, its entry is marked <strong>off</strong>.</p>
+<p>The <strong>Dashboard</strong> opens with <strong>Your apps</strong>: a card for each stack with its HTTPS URLs, and <strong>Start</strong> on the stopped ones. Below them are counts of containers, images, stacks and worktree instances, the gateway&#39;s state, and charts of <strong>CPU used by containers</strong> and <strong>Memory used by containers</strong> (with the machine&#39;s total memory). Before you&#39;ve run anything, it shows three ways to start instead: <strong>Open a project folder</strong>, <strong>Add a git repository</strong> and <strong>Start from the catalog</strong>.</p>
+<h3 id="the-command-palette"><a class="anchor" href="#the-command-palette" aria-hidden="true" tabindex="-1">#</a>The command palette</h3>
+<p>Press Cmd+K on macOS or Ctrl+K on Windows and Linux, or click <strong>Search or run a command…</strong> in the title bar. Start typing to search everything on the active host at once, and the matching actions and pages:</p>
+<ul>
+<li>stacks, and the gateway URLs (opening one opens it in your browser),</li>
+<li>projects, containers and images,</li>
+<li><strong>Shell in</strong> followed by a running container&#39;s name, which opens that container&#39;s terminal.</li>
+</ul>
+<p><figure class="shot"><img src="/assets/screens/palette.webp" alt="The command palette with &quot;shop&quot; typed, listing matching stacks and gateway URLs" loading="lazy" decoding="async"></figure></p>
+<p>With nothing typed, the palette lists actions and pages. The actions include <strong>Open a project folder…</strong>, <strong>Run a container…</strong>, <strong>Pull an image…</strong>, <strong>Build an image…</strong>, <strong>Add a gateway route…</strong>, <strong>Create a stack from scratch…</strong>, <strong>Connect Claude or another AI tool</strong>, <strong>Start the gateway</strong>, <strong>Stop the gateway</strong>, <strong>Stop all containers</strong> and <strong>Keyboard shortcuts</strong>. Under <strong>Go to</strong> are the pages, plus direct links to tabs such as <strong>Settings → AI &amp; agents</strong>. Use the arrow keys and Enter, or click.</p>
+<h3 id="drop-a-folder-on-the-window"><a class="anchor" href="#drop-a-folder-on-the-window" aria-hidden="true" tabindex="-1">#</a>Drop a folder on the window</h3>
+<p>Drag a project folder, or a compose file, from your file manager onto Orca&#39;s window. Orca opens the <strong>Open a project folder</strong> dialog on it, ready to start. See <a href="/docs/stacks/#open-a-project-folder">Open a project folder</a>.</p>
 <h2 id="where-to-start"><a class="anchor" href="#where-to-start" aria-hidden="true" tabindex="-1">#</a>Where to start</h2>
 <ol>
 <li><a href="/docs/install/">Install Orca</a> for your platform.</li>
-<li>Follow the <a href="/docs/quickstart/">quickstart</a>: run something, give it a hostname, and add an <code>orca.yaml</code>.</li>
+<li>Follow the <a href="/docs/quickstart/">quickstart</a>: open a project folder, give it a hostname, and add an <code>orca.yaml</code>.</li>
 <li>If you work on several branches at once, set up <a href="/docs/worktrees/">worktree instances</a>.</li>
 <li>If you use an AI coding agent, <a href="/docs/agents/">connect it</a>.</li>
 </ol>
@@ -90,7 +106,7 @@
     </div>
     <nav class="pager" aria-label="Previous and next page"><span></span><a class="pager-next" href="/docs/install/"><span class="pager-label">Next <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="pager-title">Install</span></a></nav>
   </article>
-  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#who-its-for">Who it's for</a></li><li class="d2"><a href="#how-it-fits-together">How it fits together</a></li><li class="d2"><a href="#the-ideas-worth-knowing">The ideas worth knowing</a></li><li class="d2"><a href="#where-to-start">Where to start</a></li></ul></nav></aside>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#who-its-for">Who it's for</a></li><li class="d2"><a href="#how-it-fits-together">How it fits together</a></li><li class="d2"><a href="#the-ideas-worth-knowing">The ideas worth knowing</a></li><li class="d2"><a href="#find-your-way-around">Find your way around</a></li><li class="d3"><a href="#the-sidebar">The sidebar</a></li><li class="d3"><a href="#the-command-palette">The command palette</a></li><li class="d3"><a href="#drop-a-folder-on-the-window">Drop a folder on the window</a></li><li class="d2"><a href="#where-to-start">Where to start</a></li></ul></nav></aside>
 </div>
 </main>
 <footer class="site-footer">

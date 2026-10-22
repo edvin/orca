@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -58,9 +58,9 @@
     <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#run-a-container">Run a container</a></li><li><a href="#the-containers-list">The containers list</a></li><li><a href="#container-details">Container details</a></li><li><a href="#change-resource-limits-live">Change resource limits live</a></li><li><a href="#rename-a-container">Rename a container</a></li><li><a href="#save-as-an-image">Save as an image</a></li><li><a href="#export-a-container">Export a container</a></li><li><a href="#logs-from-several-containers">Logs from several containers</a></li><li><a href="#resource-alerts">Resource alerts</a></li><li><a href="#scheduled-actions">Scheduled actions</a></li><li><a href="#volumes">Volumes</a></li><li><a href="#networks">Networks</a></li><li><a href="#related">Related</a></li></ul></details>
     <div class="prose"><p>This page covers everything you do with individual containers: starting one, finding it in the list, and working with it on its detail page. It also touches on volumes and networks, which you reach from the same sidebar.</p>
 <h2 id="run-a-container"><a class="anchor" href="#run-a-container" aria-hidden="true" tabindex="-1">#</a>Run a container</h2>
-<p>Click <strong>Run</strong> on the <strong>Containers</strong> page to open the <strong>Run Container</strong> dialog. Only <strong>Image</strong> is required.</p>
-<div class="table-wrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Image</strong></td><td>The image to run, for example <code>nginx:latest</code>. Type a Docker Hub image name and Orca suggests its most recent tags.</td></tr><tr><td><strong>Name</strong></td><td>Optional container name. Docker picks one if you leave it empty.</td></tr><tr><td><strong>Port Mappings</strong></td><td><code>host:container</code> pairs, separated by commas or new lines, for example <code>8080:80, 5432:5432</code>.</td></tr><tr><td><strong>Environment Variables</strong></td><td>One <code>KEY=value</code> per line.</td></tr></tbody></table></div><p>Open <strong>Advanced Options</strong> for the rest:</p>
-<div class="table-wrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Command Override</strong></td><td>Replaces the image&#39;s default command.</td></tr><tr><td><strong>Volume Mounts</strong></td><td><code>host:container</code> pairs, one per line.</td></tr><tr><td><strong>Network</strong></td><td>The network to attach the container to.</td></tr><tr><td><strong>Restart Policy</strong></td><td><strong>No</strong>, <strong>Always</strong>, <strong>Unless Stopped</strong> or <strong>On Failure</strong>.</td></tr><tr><td><strong>CPU Limit</strong></td><td>Cores, for example <code>0.5</code>.</td></tr><tr><td><strong>Memory</strong></td><td>A memory limit, for example <code>512m</code>.</td></tr></tbody></table></div><p>Click <strong>Run</strong>. The dialog shows the progress through pulling the image, creating the container and starting it. If something fails, the error is shown and <strong>Back</strong> returns you to the form with your values intact.</p>
+<p>Click <strong>Run</strong> on the <strong>Containers</strong> page to open the <strong>Run container</strong> dialog. <strong>Run a container…</strong> in the <a href="/docs/introduction/#the-command-palette">command palette</a> opens it too. Only <strong>Image</strong> is required.</p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Image</strong></td><td>The image to run, for example <code>nginx:latest</code>. Type a Docker Hub image name and Orca suggests its most recent tags.</td></tr><tr><td><strong>Name</strong></td><td>Optional container name. Docker picks one if you leave it empty.</td></tr><tr><td><strong>Port mappings</strong></td><td><code>host:container</code> pairs, separated by commas or new lines, for example <code>8080:80, 5432:5432</code>.</td></tr><tr><td><strong>Environment variables</strong></td><td>One <code>KEY=value</code> per line.</td></tr></tbody></table></div><p>Open <strong>Advanced options</strong> for the rest:</p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Command override</strong></td><td>Replaces the image&#39;s default command.</td></tr><tr><td><strong>Volume mounts</strong></td><td><code>host:container</code> pairs, one per line.</td></tr><tr><td><strong>Network</strong></td><td>The network to attach the container to.</td></tr><tr><td><strong>Restart policy</strong></td><td><strong>No</strong>, <strong>Always</strong>, <strong>Unless stopped</strong> or <strong>On failure</strong>.</td></tr><tr><td><strong>CPU limit</strong></td><td>Cores, for example <code>0.5</code>.</td></tr><tr><td><strong>Memory</strong></td><td>A memory limit, for example <code>512m</code>.</td></tr></tbody></table></div><p>Click <strong>Run</strong>. The dialog shows the progress through pulling the image, creating the container and starting it. If something fails, the error is shown and <strong>Back</strong> returns you to the form with your values intact.</p>
 <p>You can also start a container from an image on the <strong>Images</strong> page, or deploy a ready-made app from the <a href="/docs/templates/">App Catalog</a>.</p>
 <h2 id="the-containers-list"><a class="anchor" href="#the-containers-list" aria-hidden="true" tabindex="-1">#</a>The containers list</h2>
 <p><figure class="shot"><img src="/assets/screens/containers.webp" alt="The Containers page with stacks grouped as cards and standalone containers below" loading="lazy" decoding="async"></figure></p>
@@ -68,15 +68,17 @@
 <ul>
 <li>Filter with <strong>All</strong>, <strong>Running</strong> and <strong>Stopped</strong>, or search by name with the search box.</li>
 <li>Select rows with the checkboxes to start, stop or delete several containers at once.</li>
-<li><strong>Stop All</strong> stops every running container after a confirmation.</li>
-<li>The <strong>More actions</strong> menu on a row has <strong>Restart</strong>, <strong>Logs</strong>, <strong>Expose via Gateway</strong> and <strong>Delete</strong>. A running container has to be stopped before you can delete it.</li>
+<li><strong>Stop all</strong> stops every running container after a confirmation.</li>
+<li>The <strong>More actions</strong> menu (the &quot;…&quot; at the end of a row) has <strong>Restart</strong>, <strong>Logs</strong>, <strong>Open shell</strong>, <strong>Expose via gateway</strong>, <strong>Schedule restarts…</strong>, <strong>Auto-deploy on new image…</strong> and <strong>Remove container</strong>. <strong>Open shell</strong> shows only while the container runs, and opens its page on the <strong>Terminal</strong> tab. A running container has to be stopped before you can remove it.</li>
 </ul>
-<p>Click a stack name to open its stack page. See <a href="/docs/stacks/">Compose stacks</a>.</p>
+<p>Click a stack&#39;s name, or its <strong>Open stack</strong> button, to open its stack page. See <a href="/docs/stacks/">Compose stacks</a>.</p>
+<p><strong>Open folder</strong> in the page header starts a project from a folder with a compose file. See <a href="/docs/stacks/#open-a-project-folder">Open a project folder</a>.</p>
+<p>If Orca can&#39;t get the list from Docker, the page shows a <strong>Can&#39;t reach Docker</strong> banner with the error instead of a list that never loads. <strong>Open System Health</strong> shows what&#39;s wrong and can fix it. The <strong>Images</strong> page shows the same banner.</p>
 <h2 id="container-details"><a class="anchor" href="#container-details" aria-hidden="true" tabindex="-1">#</a>Container details</h2>
-<p>Click a container to open its detail page. The header holds the start, stop, restart and remove buttons, plus <strong>Save as Image</strong> and <strong>Expose via Gateway</strong>. The tabs are <strong>Overview</strong>, <strong>Logs</strong>, <strong>Terminal</strong>, <strong>Files</strong>, <strong>Inspect</strong>, <strong>Volumes</strong>, <strong>Resources</strong> and <strong>Export</strong>. <strong>Terminal</strong> and <strong>Files</strong> appear only while the container is running.</p>
+<p>Click a container to open its detail page. The header has <strong>Start</strong> (or <strong>Stop</strong> and <strong>Restart</strong> while it runs), <strong>Expose via gateway</strong>, <strong>Save as image</strong>, and <strong>Remove</strong>, which shows only when the container is stopped. The tabs are <strong>Overview</strong>, <strong>Logs</strong>, <strong>Terminal</strong>, <strong>Files</strong>, <strong>Inspect</strong>, <strong>Volumes</strong>, <strong>Resources</strong> and <strong>Export</strong>. <strong>Terminal</strong> and <strong>Files</strong> appear only while the container is running.</p>
 <p><figure class="shot"><img src="/assets/screens/container-detail.webp" alt="A container's detail page with live CPU and memory charts" loading="lazy" decoding="async"></figure></p>
 <h3 id="overview-and-stats"><a class="anchor" href="#overview-and-stats" aria-hidden="true" tabindex="-1">#</a>Overview and stats</h3>
-<p><strong>Overview</strong> shows live CPU, memory, network I/O and uptime. While the container runs, Orca also draws <strong>CPU Usage</strong> and <strong>Memory Usage</strong> charts from the readings it has collected since you opened the app.</p>
+<p><strong>Overview</strong> shows live CPU, memory, network I/O and uptime. While the container runs, Orca also draws <strong>CPU usage</strong> and <strong>Memory usage</strong> charts from the readings it has collected since you opened the app.</p>
 <p>Below the charts you find the container ID, image, creation time, state, command and port mappings, and how many times the container has restarted.</p>
 <h3 id="health-checks"><a class="anchor" href="#health-checks" aria-hidden="true" tabindex="-1">#</a>Health checks</h3>
 <p>If the image or your run options define a health check, the <strong>Health</strong> section shows the current status (healthy, unhealthy or starting) and a table of recent checks with their time, exit code and output. A container without a health check shows <strong>No health check configured</strong>.</p>
@@ -99,24 +101,24 @@
 <h2 id="change-resource-limits-live"><a class="anchor" href="#change-resource-limits-live" aria-hidden="true" tabindex="-1">#</a>Change resource limits live</h2>
 <p>The <strong>Resources</strong> tab changes limits on the container without recreating it:</p>
 <ul>
-<li><strong>Memory Limit</strong> in MB. Leave it empty for no limit.</li>
-<li><strong>CPU Limit</strong> in cores, such as <code>0.5</code> for half a core or <code>2.0</code> for two.</li>
-<li><strong>Restart Policy</strong>.</li>
+<li><strong>Memory limit</strong> in MB. Leave it empty for no limit.</li>
+<li><strong>CPU limit</strong> in cores, such as <code>0.5</code> for half a core or <code>2.0</code> for two.</li>
+<li><strong>Restart policy</strong>.</li>
 </ul>
-<p>Each field shows the current value. Click <strong>Apply Changes</strong>; they take effect on the running container right away. <strong>Reset</strong> puts the fields back to the current values.</p>
+<p>Each field shows the current value. Click <strong>Apply changes</strong>; they take effect on the running container right away. <strong>Reset</strong> puts the fields back to the current values.</p>
 <h2 id="rename-a-container"><a class="anchor" href="#rename-a-container" aria-hidden="true" tabindex="-1">#</a>Rename a container</h2>
 <p>Click the container&#39;s name at the top of its detail page, type the new name and click <strong>Save</strong>.</p>
 <h2 id="save-as-an-image"><a class="anchor" href="#save-as-an-image" aria-hidden="true" tabindex="-1">#</a>Save as an image</h2>
-<p><strong>Save as Image</strong> in the detail page header commits the container&#39;s current filesystem to a new image. Enter a <strong>Repository</strong> and a <strong>Tag</strong> (<code>latest</code> if you leave it empty). The new image appears on the <strong>Images</strong> page.</p>
+<p><strong>Save as image</strong> in the detail page header commits the container&#39;s current filesystem to a new image. Enter a <strong>Repository</strong> and a <strong>Tag</strong> (<code>latest</code> if you leave it empty). The new image appears on the <strong>Images</strong> page.</p>
 <h2 id="export-a-container"><a class="anchor" href="#export-a-container" aria-hidden="true" tabindex="-1">#</a>Export a container</h2>
 <p>The <strong>Export</strong> tab gives you three ways to take a container elsewhere:</p>
 <ul>
-<li><strong>Docker Run Command</strong>: a <code>docker run</code> command that recreates the container. Click <strong>Copy</strong>.</li>
+<li><strong>Docker run command</strong>: a <code>docker run</code> command that recreates the container. Click <strong>Copy</strong>.</li>
 <li><strong>Compose YAML</strong>: the same container as a compose service. Click <strong>Copy</strong>.</li>
-<li><strong>Export Filesystem to Tar</strong>: enter an absolute path such as <code>/path/to/container-export.tar</code> and click <strong>Export</strong>.</li>
+<li><strong>Export filesystem to tar</strong>: enter an absolute path such as <code>/path/to/container-export.tar</code> and click <strong>Export</strong>.</li>
 </ul>
 <h2 id="logs-from-several-containers"><a class="anchor" href="#logs-from-several-containers" aria-hidden="true" tabindex="-1">#</a>Logs from several containers</h2>
-<p>When two or more containers are running, <strong>Combined Logs</strong> on the <strong>Containers</strong> page opens one view with the output of all running containers. Each container gets its own color, and checkboxes let you hide or show containers. The filter supports the same regex and case-sensitive toggles as the single-container view.</p>
+<p>When two or more containers are running, <strong>Combined logs</strong> on the <strong>Containers</strong> page opens one view with the output of all running containers. Each container gets its own color, and checkboxes let you hide or show containers. The filter supports the same regex and case-sensitive toggles as the single-container view.</p>
 <h2 id="resource-alerts"><a class="anchor" href="#resource-alerts" aria-hidden="true" tabindex="-1">#</a>Resource alerts</h2>
 <p>While the app is open, Orca watches container usage and shows a notification when:</p>
 <ul>
@@ -125,13 +127,13 @@
 </ul>
 <p>Orca repeats an alert for the same container and metric at most once every five minutes.</p>
 <h2 id="scheduled-actions"><a class="anchor" href="#scheduled-actions" aria-hidden="true" tabindex="-1">#</a>Scheduled actions</h2>
-<p><strong>Settings</strong> &gt; <strong>Schedules</strong> runs container actions on a cron schedule, such as a nightly restart. The daemon runs them, so they fire even when the app window is closed.</p>
-<p>Click <strong>Add Schedule</strong> and fill in:</p>
+<p><strong>Settings</strong> &gt; <strong>Schedules</strong> runs container actions on a cron schedule, such as a nightly restart. The daemon runs them, so they fire even when the app window is closed. <strong>Schedule restarts…</strong> in a container&#39;s <strong>More actions</strong> menu opens this tab too.</p>
+<p>Click <strong>Add schedule</strong> and fill in:</p>
 <ul>
 <li><strong>Name</strong>, for example &quot;Nightly restart&quot;.</li>
 <li><strong>Action</strong>: <strong>Restart</strong>, <strong>Stop</strong>, <strong>Start</strong> or <strong>Build</strong>.</li>
-<li><strong>Container</strong>: a container name or ID. For <strong>Build</strong>, pick a <strong>Build Target</strong> from an <code>orca.yaml</code> instead (see <a href="/docs/images-and-builds/#build-targets">Images and builds</a>).</li>
-<li><strong>Cron Expression</strong>.</li>
+<li><strong>Container</strong>: a container name or ID. For <strong>Build</strong>, pick a <strong>Build target</strong> from an <code>orca.yaml</code> instead (see <a href="/docs/images-and-builds/#build-targets">Images and builds</a>).</li>
+<li><strong>Cron expression</strong>.</li>
 <li><strong>Enabled</strong>, to pause a schedule without deleting it.</li>
 </ul>
 <p>Cron expressions use the standard five fields, and times are in the local time of the machine the daemon runs on (the server, for a <a href="/docs/remote-hosts/">remote host</a>):</p>
@@ -142,10 +144,10 @@
 <span class="line"><span>0    0     1             *      *            the first of every month at midnight</span></span></code></pre></div><p>For the day of the week, Sunday is <code>0</code> or <code>7</code>. Day names such as <code>Sun</code> or <code>Mon-Fri</code> work too. Six-field expressions that start with seconds, which earlier versions of Orca used, are still accepted; in those, Sunday is <code>1</code>.</p>
 <p>The daemon checks schedules every minute. The list shows each schedule as <strong>Active</strong> or <strong>Paused</strong>.</p>
 <h2 id="volumes"><a class="anchor" href="#volumes" aria-hidden="true" tabindex="-1">#</a>Volumes</h2>
-<p>The <strong>Volumes</strong> page lists volumes with their driver, size and creation date. <strong>Create</strong> makes a new volume with a name, driver and optional labels.</p>
-<p>Click a volume to see its mount point and labels, which containers use it, and its files. <strong>Browse Volume Files</strong> reads the volume through a temporary Alpine container, so it works whether or not a container is using the volume.</p>
+<p>The <strong>Volumes</strong> page lists volumes with their driver, size and creation date. <strong>Create volume</strong> makes a new volume with a name, driver and optional labels. When there are no volumes yet, the empty page has the same button.</p>
+<p>Click a volume to see its mount point and labels, which containers use it, and its files. On the <strong>Files</strong> tab, <strong>Browse files</strong> reads the volume through a temporary Alpine container, so it works whether or not a container is using the volume.</p>
 <h2 id="networks"><a class="anchor" href="#networks" aria-hidden="true" tabindex="-1">#</a>Networks</h2>
-<p>The <strong>Networks</strong> page lists networks with their driver, subnet and gateway. <strong>Create</strong> makes a new network with the <code>bridge</code>, <code>host</code>, <code>macvlan</code>, <code>ipvlan</code> or <code>none</code> driver.</p>
+<p>The <strong>Networks</strong> page lists networks with their driver, subnet and gateway. <strong>Create network</strong> makes a new network with the <code>bridge</code>, <code>host</code>, <code>macvlan</code>, <code>ipvlan</code> or <code>none</code> driver.</p>
 <p>Click <strong>Topology</strong> to switch to a graph of networks and the containers connected to them.</p>
 <h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>
 <ul>

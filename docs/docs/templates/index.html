@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -59,11 +59,11 @@
     <div class="prose"><p>The <strong>App Catalog</strong> deploys ready-made apps, from a single database container to multi-service compose stacks, with passwords and secrets generated for you. This page covers deploying from the catalog, what happens during a deploy, creating your own templates and contributing one to the community catalog.</p>
 <h2 id="deploy-an-app"><a class="anchor" href="#deploy-an-app" aria-hidden="true" tabindex="-1">#</a>Deploy an app</h2>
 <p><figure class="shot"><img src="/assets/screens/app-catalog.webp" alt="The App Catalog with templates grouped by category" loading="lazy" decoding="async"></figure></p>
-<p>Open <strong>App Catalog</strong> in the sidebar. The <strong>Curated</strong> view lists the catalog&#39;s templates by category; use the category tabs or <strong>Search templates...</strong> to narrow it down. Click a template to open its deploy dialog.</p>
-<p>For a single-container app, the dialog shows the <strong>Container Name</strong>, the image, and the port mappings, environment variables and volumes from the template. Change any of them before you deploy. When you deploy, Orca checks that the host ports are free and pulls the image before it creates the container.</p>
-<p>For a compose stack, the dialog shows the <strong>Stack Name</strong> and the <strong>Compose YAML</strong>, which you can edit before you deploy. If the template asks for values, such as an admin email address, they appear under <strong>Configuration</strong>.</p>
-<p>Click <strong>Deploy</strong> (or <strong>Deploy Stack</strong>). A single container opens on its detail page afterwards. A stack opens its setup guide if it has one.</p>
-<p>If you have set up <a href="/docs/remote-hosts/">remote hosts</a> under <strong>Settings</strong> &gt; <strong>Remote Hosts</strong>, a <strong>Deploy to</strong> row lets you pick one or more hosts to deploy to.</p>
+<p>Open <strong>App Catalog</strong> in the sidebar, or click <strong>Start from the catalog</strong> on a fresh dashboard. The <strong>Curated</strong> view lists the catalog&#39;s templates by category; use the category tabs or <strong>Search templates...</strong> to narrow it down. Click a template to open its deploy dialog.</p>
+<p>For a single-container app, the dialog shows the <strong>Container name</strong>, the image, and the port mappings, environment variables and volumes from the template. Change any of them before you deploy. When you deploy, Orca checks that the host ports are free and pulls the image before it creates the container.</p>
+<p>For a compose stack, the dialog shows the <strong>Stack name</strong> and the <strong>Compose YAML</strong>, which you can edit before you deploy. If the template asks for values, such as an admin email address, they appear under <strong>Configuration</strong>.</p>
+<p>Click <strong>Deploy</strong> (or <strong>Deploy stack</strong>). A single container opens on its detail page afterwards. A stack opens its setup guide if it has one.</p>
+<p>If you have set up <a href="/docs/remote-hosts/">remote hosts</a> under <strong>Settings</strong> &gt; <strong>Remote hosts</strong>, a <strong>Deploy to</strong> row lets you pick one or more hosts to deploy to.</p>
 <p>The <strong>Docker Hub</strong> view searches Docker Hub instead. Click <strong>Pull</strong> on a result to pull the image, then run it from the <strong>Images</strong> page.</p>
 <p>You can also use the CLI:</p>
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> templates</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> list</span></span>
@@ -78,7 +78,7 @@
 <p>Compose stacks from the catalog are saved in Orca&#39;s stacks folder, one folder per stack: <code>~/.config/orca/stacks/&lt;name&gt;</code> on Linux and <code>~/Library/Application Support/orca/stacks/&lt;name&gt;</code> on macOS. After deploy you manage them like any other <a href="/docs/stacks/">compose stack</a>, including editing the compose file on the stack page.</p>
 <h2 id="tls-certificates-from-orcas-ca"><a class="anchor" href="#tls-certificates-from-orcas-ca" aria-hidden="true" tabindex="-1">#</a>TLS certificates from Orca&#39;s CA</h2>
 <p>Some apps need a TLS certificate, for example a mail server. A template can ask for one with the <code>self_signed_cert</code> and <code>self_signed_key</code> generators. Orca issues the certificate from its own local certificate authority, the same CA that signs the gateway&#39;s HTTPS certificates. The certificate is valid for one year, for the name the template asks for (<code>localhost</code> by default) plus <code>localhost</code> and <code>127.0.0.1</code>.</p>
-<p>To make your browser and tools trust these certificates, install Orca&#39;s CA once. Go to <strong>Settings</strong> &gt; <strong>Certificates</strong>, click <strong>Download CA Certificate</strong> and run the install command shown for your system, or run:</p>
+<p>To make your browser and tools trust these certificates, install Orca&#39;s CA once. Go to <strong>Settings</strong> &gt; <strong>Certificates</strong>, click <strong>Download CA certificate</strong> and run the install command shown for your system, or run:</p>
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> install</span></span></code></pre></div><p><code>orca ca info</code> shows the CA&#39;s details and <code>orca ca export</code> prints the certificate.</p>
 <h2 id="setup-guides"><a class="anchor" href="#setup-guides" aria-hidden="true" tabindex="-1">#</a>Setup guides</h2>
 <p>Apps that need a few manual steps after deploy, such as creating an admin account, come with a setup guide. It opens after the stack is deployed and walks you through numbered steps. Steps can:</p>
@@ -94,7 +94,7 @@
 <p>Mark steps as done as you go. <strong>Done</strong> closes the guide and opens the stack&#39;s page.</p>
 <p>If the template declares gateway routes, Orca registers them during deploy and shows the HTTPS hostnames. See <a href="/docs/gateway/">Gateway</a>.</p>
 <h2 id="create-your-own-templates"><a class="anchor" href="#create-your-own-templates" aria-hidden="true" tabindex="-1">#</a>Create your own templates</h2>
-<p>Click <strong>Create Template</strong> to save an app you deploy often. Fill in an <strong>Icon</strong>, <strong>Name</strong>, <strong>Category</strong>, <strong>Description</strong> and <strong>Docker Image</strong>, plus port mappings, environment variables, volumes and notes. Use <code>changeme</code> for passwords so Orca generates one on each deploy.</p>
+<p>Click <strong>Create template</strong> to save an app you deploy often. Fill in an <strong>Icon</strong>, <strong>Name</strong>, <strong>Category</strong>, <strong>Description</strong> and <strong>Docker image</strong>, plus port mappings, environment variables, volumes and notes. Use <code>changeme</code> for passwords so Orca generates one on each deploy.</p>
 <p>Your templates appear in the catalog next to the community ones, with buttons to edit and delete them. They are single-container templates and are stored on your machine in <code>templates.json</code> in Orca&#39;s config folder (<code>~/.config/orca/</code> on Linux, <code>~/Library/Application Support/orca/</code> on macOS).</p>
 <h2 id="the-community-catalog"><a class="anchor" href="#the-community-catalog" aria-hidden="true" tabindex="-1">#</a>The community catalog</h2>
 <p>The curated templates come from the community catalog at <a href="https://orca-desktop.com/templates.json">https://orca-desktop.com/templates.json</a>. Orca downloads it and keeps a local copy for an hour, so the catalog also works offline. Click the refresh button next to the search box to fetch the latest version right away.</p>
@@ -169,7 +169,7 @@
 </ol>
 <p>To try a template before you submit it, add it to your own <code>templates.json</code> in Orca&#39;s config folder (see <a href="#create-your-own-templates">Create your own templates</a>) with a unique <code>id</code>. That file is a JSON array too, and it accepts the full format, including <code>compose_yaml</code>.</p>
 <div class="callout callout-warning"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg><span>Warning</span></div><p>If your local <code>templates.json</code> isn&#39;t valid JSON, Orca ignores the whole file and none of your own templates show up.</p>
-</div><p>If you&#39;d rather not write JSON, click <strong>Contribute Template</strong> in the App Catalog. It opens a GitHub issue form where you describe the app, and a maintainer adds it. <code>CONTRIBUTING.md</code> in the repository has more guidance on icons, categories and gateway routes.</p>
+</div><p>If you&#39;d rather not write JSON, click <strong>Contribute template</strong> in the App Catalog. It opens a GitHub issue form where you describe the app, and a maintainer adds it. <code>CONTRIBUTING.md</code> in the repository has more guidance on icons, categories and gateway routes.</p>
 <h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>
 <ul>
 <li><a href="/docs/stacks/">Compose stacks</a></li>

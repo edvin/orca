@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -131,25 +131,26 @@
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">ssh</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -L</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> 9477:localhost:9477</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> user@your-server</span></span></code></pre></div><p>Then add the host in the app as <code>http://localhost:9477</code>. Use a different local port if your own daemon already uses 9477.</p>
 <h2 id="add-the-host-in-orca-desktop"><a class="anchor" href="#add-the-host-in-orca-desktop" aria-hidden="true" tabindex="-1">#</a>Add the host in Orca Desktop</h2>
 <ol>
-<li>Open <strong>Settings</strong> and select the <strong>Remote Hosts</strong> tab.</li>
-<li>Click <strong>Add Host</strong>.</li>
+<li>Open <strong>Settings</strong> and select the <strong>Remote hosts</strong> tab.</li>
+<li>Click <strong>Add host</strong>. The form is titled <strong>Add remote host</strong>.</li>
 <li>Fill in the form:<ul>
-<li><strong>Display Name</strong>: how the host appears in the app, for example <code>Production Server</code>.</li>
+<li><strong>Display name</strong>: how the host appears in the app, for example <code>Production Server</code>.</li>
 <li><strong>Daemon URL</strong>: for example <code>https://orca.example.com</code>. A trailing <code>/api/v1</code> is optional.</li>
 <li><strong>API Token</strong>: the token from <code>/etc/orca/config.json</code>.</li>
-<li><strong>Verify TLS Certificate</strong>: on by default for <code>https://</code> URLs. Turn it off only for a self-signed certificate.</li>
+<li><strong>Verify TLS certificate</strong>: on by default for <code>https://</code> URLs. Turn it off only for a self-signed certificate.</li>
 <li><strong>Tags</strong>: optional, comma-separated, for example <code>production, eu-west</code>.</li>
 </ul>
 </li>
-<li>Click <strong>Test Connection</strong>. Orca checks that the daemon answers and that the token is accepted.</li>
+<li>Click <strong>Test connection</strong>. Orca checks that the daemon answers and that the token is accepted.</li>
 <li>Click <strong>Save</strong>.</li>
 </ol>
 <p>Hosts are saved in the desktop app&#39;s own config file, together with their tokens. To change or remove one, use <strong>Edit host</strong> or <strong>Remove host</strong> in the <strong>Actions</strong> column.</p>
 <h2 id="switch-hosts"><a class="anchor" href="#switch-hosts" aria-hidden="true" tabindex="-1">#</a>Switch hosts</h2>
-<p>The host selector sits in the titlebar and shows the name of the active host. Open it to choose <strong>Local</strong> or any remote host, or <strong>Manage Hosts...</strong> to go to the <strong>Remote Hosts</strong> tab.</p>
+<p>The host selector sits in the titlebar and shows the name of the active host. Open it to choose <strong>Local</strong> or any remote host, or <strong>Manage hosts...</strong> to go to the <strong>Remote hosts</strong> tab.</p>
 <p>Orca shows one host at a time. After you switch, every page, from containers to Kubernetes and settings such as <a href="/docs/auto-deploy/">push to deploy</a> rules, talks to the selected daemon.</p>
+<p>A few things work differently on a remote host, because its folders aren&#39;t on your computer. <a href="/docs/stacks/#open-a-project-folder">Open a project folder</a> asks you to type the folder&#39;s path on the server instead of picking it, and the buttons that open a stack&#39;s folder in your editor, terminal or file manager are hidden.</p>
 <h2 id="fleet-page"><a class="anchor" href="#fleet-page" aria-hidden="true" tabindex="-1">#</a>Fleet page</h2>
-<p><strong>Fleet</strong> appears in the sidebar once you&#39;ve added a remote host. It shows a card for each host, with the local daemon first. Each card shows:</p>
+<p><strong>Fleet</strong> appears in the sidebar, under <strong>Platform</strong>, once you&#39;ve added a remote host. It shows a card for each host, with the local daemon first. Each card shows:</p>
 <ul>
 <li>online or offline status, and how long ago an offline host was last seen</li>
 <li>the daemon version, and a note if Docker is disconnected</li>
@@ -157,12 +158,12 @@
 <li>disk usage, which turns yellow above 75% and red above 90%</li>
 <li>running and total containers, and the number of images</li>
 </ul>
-<p>The page checks every host again every 30 seconds. Click <strong>Test All</strong> to check now, or click a card to switch to that host and open its dashboard.</p>
+<p>The page checks every host again every 30 seconds. Click <strong>Test all</strong> to check now, or click a card to switch to that host and open its dashboard.</p>
 <p>If hosts run different daemon versions, the page shows a <strong>Version mismatch detected</strong> banner.</p>
 <h3 id="tags"><a class="anchor" href="#tags" aria-hidden="true" tabindex="-1">#</a>Tags</h3>
 <p>Tags come from the <strong>Tags</strong> field on each host. On the Fleet page, click a tag pill to show only hosts with that tag, and <strong>All</strong> to clear the filter.</p>
 <h3 id="compare-and-remove-hosts"><a class="anchor" href="#compare-and-remove-hosts" aria-hidden="true" tabindex="-1">#</a>Compare and remove hosts</h3>
-<p>Click <strong>Select</strong> to pick hosts. With exactly two selected, <strong>Compare</strong> opens a side-by-side view of their resources, containers and images, and marks the items only one host has. <strong>Remove Selected</strong> removes the hosts from the app. It doesn&#39;t stop or uninstall the remote daemons.</p>
+<p>Click <strong>Select</strong> to pick hosts. With exactly two selected, <strong>Compare</strong> opens a side-by-side view of their resources, containers and images, and marks the items only one host has. <strong>Remove selected</strong> removes the hosts from the app. It doesn&#39;t stop or uninstall the remote daemons.</p>
 <h2 id="update-the-daemon"><a class="anchor" href="#update-the-daemon" aria-hidden="true" tabindex="-1">#</a>Update the daemon</h2>
 <p>The daemon is a normal apt package:</p>
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> apt</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> update</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3"> &#x26;&#x26; </span><span style="--shiki-light:#953800;--shiki-dark:#FFA657">sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> apt</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> upgrade</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> orca-daemon</span></span></code></pre></div><p>Running the install script again also works. Upgrades keep <code>/etc/orca/config.json</code>, so the token doesn&#39;t change, and restart the service.</p>
@@ -171,8 +172,8 @@
 <p>It keeps <code>/etc/orca/</code>. Delete it yourself if you don&#39;t need the token and settings any more:</p>
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> rm</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -rf</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> /etc/orca</span></span></code></pre></div><h2 id="troubleshooting"><a class="anchor" href="#troubleshooting" aria-hidden="true" tabindex="-1">#</a>Troubleshooting</h2>
 <ul>
-<li><strong>Test Connection fails</strong>: run <code>curl http://localhost:9477/api/v1/health</code> on the server, then check your firewall and proxy.</li>
-<li><strong>Connected, but authentication failed</strong>: the token in the app doesn&#39;t match <code>api_token</code> in <code>/etc/orca/config.json</code>.</li>
+<li><strong>Test connection fails</strong>: run <code>curl http://localhost:9477/api/v1/health</code> on the server, then check your firewall and proxy.</li>
+<li><strong>Connected to daemon v…, but authentication failed</strong>: the token in the app doesn&#39;t match <code>api_token</code> in <code>/etc/orca/config.json</code>.</li>
 <li><strong>Daemon won&#39;t start</strong>: read <code>journalctl -u orca-daemon -e --no-pager</code>. Common causes are Docker not running or port 9477 already in use (<code>sudo ss -tlnp | grep 9477</code>).</li>
 </ul>
 <h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>

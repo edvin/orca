@@ -4,23 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Compose stacks — Orca docs</title>
-<meta name="description" content="How Orca finds Docker Compose projects, and how to start, stop, edit and create compose stacks, switch profiles and set up orca.yaml.">
+<meta name="description" content="How Orca finds Docker Compose projects, how to open a project folder, and how to start, stop, edit and create stacks, switch profiles and set up orca.yaml.">
 <link rel="canonical" href="https://orca-desktop.com/docs/stacks/">
 <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Orca">
 <meta property="og:title" content="Compose stacks — Orca docs">
-<meta property="og:description" content="How Orca finds Docker Compose projects, and how to start, stop, edit and create compose stacks, switch profiles and set up orca.yaml.">
+<meta property="og:description" content="How Orca finds Docker Compose projects, how to open a project folder, and how to start, stop, edit and create stacks, switch profiles and set up orca.yaml.">
 <meta property="og:url" content="https://orca-desktop.com/docs/stacks/">
 <meta property="og:image" content="https://orca-desktop.com/assets/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,37 +53,58 @@
     <div class="doc-head">
       <div class="crumbs"><a href="/docs/introduction/">Docs</a><span>/</span><span>Working with Orca</span></div>
       <h1>Compose stacks</h1>
-      <p class="lede">How Orca finds Docker Compose projects, and how to start, stop, edit and create compose stacks, switch profiles and set up orca.yaml.</p>
+      <p class="lede">How Orca finds Docker Compose projects, how to open a project folder, and how to start, stop, edit and create stacks, switch profiles and set up orca.yaml.</p>
     </div>
-    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#how-stacks-are-found">How stacks are found</a></li><li><a href="#the-stack-page">The stack page</a></li><li><a href="#create-a-new-stack">Create a new stack</a></li><li><a href="#profiles">Profiles</a></li><li><a href="#setup-commands">Setup commands</a></li><li><a href="#orcayaml-1">orca.yaml</a></li><li><a href="#related">Related</a></li></ul></details>
+    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#how-stacks-are-found">How stacks are found</a></li><li><a href="#open-a-project-folder">Open a project folder</a></li><li><a href="#the-stack-page">The stack page</a></li><li><a href="#create-a-new-stack">Create a new stack</a></li><li><a href="#profiles">Profiles</a></li><li><a href="#setup-commands">Setup commands</a></li><li><a href="#orcayaml-1">orca.yaml</a></li><li><a href="#related">Related</a></li></ul></details>
     <div class="prose"><p>A stack is a Docker Compose project. Orca shows every compose project on the machine as a stack, whether you started it from Orca or from a terminal, and gives it a page with its services, logs, compose file and <code>orca.yaml</code>.</p>
 <h2 id="how-stacks-are-found"><a class="anchor" href="#how-stacks-are-found" aria-hidden="true" tabindex="-1">#</a>How stacks are found</h2>
 <p>Docker Compose labels every container it creates with the project name, its working directory and its compose files. Orca groups containers by these labels, so any project you start with <code>docker compose up</code> shows up as a stack without extra setup. A project started from several compose files (<code>docker compose -f compose.yaml -f compose.dev.yaml up</code>) works the same way: Orca passes every file to Compose for every command it runs on the stack.</p>
-<p>Stacks appear as cards at the top of the <strong>Containers</strong> page. Each card shows the stack&#39;s services and lets you start, stop, restart, pull or delete the stack. Click the stack name to open its page.</p>
+<p>Stacks appear as cards at the top of the <strong>Containers</strong> page. Each card shows the stack&#39;s services, start and stop buttons, and a <strong>More actions</strong> menu with <strong>Restart</strong>, <strong>Pull images</strong> and <strong>Delete stack</strong>. Click the stack&#39;s name, or <strong>Open stack</strong>, to open its page. The <strong>Your apps</strong> cards on the <strong>Dashboard</strong> list the same stacks with their HTTPS URLs.</p>
 <p>The stack status is <strong>Running</strong> when all services run, <strong>Partial</strong> when only some do, and <strong>Stopped</strong> when none do.</p>
+<h2 id="open-a-project-folder"><a class="anchor" href="#open-a-project-folder" aria-hidden="true" tabindex="-1">#</a>Open a project folder</h2>
+<p>To run a project you already have on disk, open its folder. Orca shows what&#39;s in it and starts it as a stack, the same as <code>docker compose up</code> in that folder would.</p>
+<p>You can open the <strong>Open a project folder</strong> dialog from several places:</p>
+<ul>
+<li><strong>Open folder</strong> in the header of the <strong>Dashboard</strong> or the <strong>Containers</strong> page.</li>
+<li><strong>Open a project folder</strong> on the dashboard&#39;s <strong>Get your first app running</strong> cards, shown before you have any apps.</li>
+<li><strong>Open a project folder…</strong> in the <a href="/docs/introduction/#the-command-palette">command palette</a> (Cmd+K on macOS, Ctrl+K elsewhere).</li>
+<li>Dropping a folder, or a compose file, onto Orca&#39;s window. A dropped compose file stands for its folder.</li>
+</ul>
+<p>Click <strong>Choose a folder…</strong>, or paste a path and click <strong>Open</strong>. For the folder you pick, the dialog shows:</p>
+<ul>
+<li><strong>Compose</strong>: the compose files it found (<code>compose.yaml</code>, <code>compose.yml</code>, <code>docker-compose.yaml</code> or <code>docker-compose.yml</code>).</li>
+<li><strong>Services</strong> and <strong>Profiles</strong> from those files. Pick which profiles run later, on the stack&#39;s page.</li>
+<li><strong>orca.yaml</strong>: whether the folder has one. If it does, its routes and setup commands apply when the stack starts.</li>
+<li><strong>Also add it to Projects</strong>, a checkbox that is on by default when the folder is a git repository, so each git worktree of it can run side by side. See <a href="/docs/worktrees/">Worktree instances</a>.</li>
+</ul>
+<p>Click <strong>Start</strong>. Orca runs the project as a stack named after the folder, runs any setup commands from its <code>orca.yaml</code>, and opens the stack&#39;s page. If the folder already runs in Orca, the dialog says so, with <strong>Show it</strong> and <strong>Start again</strong>.</p>
+<p>A folder without a compose file gets a first <code>compose.yaml</code>. The dialog shows a small starter file you can edit before you click <strong>Create and start</strong>. Orca never overwrites a compose file that&#39;s already there.</p>
+<p>When you manage a <a href="/docs/remote-hosts/">remote host</a>, the dialog asks you to type the folder&#39;s path on that machine instead of picking it.</p>
 <h2 id="the-stack-page"><a class="anchor" href="#the-stack-page" aria-hidden="true" tabindex="-1">#</a>The stack page</h2>
-<p>The header shows the stack&#39;s working directory (<strong>Copy path</strong> copies it), how many services are running, and the stack actions. Below are four tabs: <strong>Services</strong>, <strong>Logs</strong>, <strong>Compose File</strong> and <strong>orca.yaml</strong>.</p>
+<p>The breadcrumb at the top reads <strong>Containers</strong> › the stack&#39;s name. The header shows the stack&#39;s working directory (<strong>Copy path</strong> copies it), how many services are running, and the stack actions. When the stack has HTTPS routes, its first URLs show as buttons that open in your browser.</p>
+<p>On your own machine, the header also has buttons to open the stack&#39;s folder in the first editor Orca finds (VS Code, Cursor, Zed, Windsurf, IntelliJ IDEA or PhpStorm), the first terminal it finds (Ghostty, iTerm, Warp or Terminal on macOS; the desktop&#39;s terminal on Linux; Windows Terminal or <code>cmd</code> on Windows), and the file manager (Finder, Explorer or Files). Each button is labelled with the app&#39;s name, such as <strong>VS Code</strong> or <strong>Finder</strong>. The <strong>Open a project folder</strong> dialog shows the same buttons, as <strong>Open in VS Code</strong> and so on. They are hidden while you manage a remote host, since the folder isn&#39;t on your computer.</p>
+<p>Below are four tabs: <strong>Services</strong>, <strong>Logs</strong>, <strong>Compose file</strong> and <strong>orca.yaml</strong>.</p>
 <h3 id="start-stop-restart-and-pull"><a class="anchor" href="#start-stop-restart-and-pull" aria-hidden="true" tabindex="-1">#</a>Start, stop, restart and pull</h3>
 <div class="table-wrap"><table><thead><tr><th>Button</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Start</strong></td><td>Runs <code>docker compose up</code> for the stack, then any <a href="#setup-commands">setup commands</a> from its <code>orca.yaml</code>. Shown when the stack is not fully running.</td></tr><tr><td><strong>Stop</strong></td><td>Runs <code>docker compose down</code> after a confirmation. This stops and removes the stack&#39;s containers. Named volumes are kept.</td></tr><tr><td><strong>Restart</strong></td><td>Stops and starts the stack&#39;s existing containers.</td></tr><tr><td><strong>Pull</strong></td><td>Runs <code>docker compose pull</code> to fetch newer images.</td></tr></tbody></table></div><p><strong>Restart</strong>, <strong>Pull</strong> and <strong>Start</strong> need the stack&#39;s working directory, which Compose records when it creates the containers.</p>
-<div class="callout callout-tip"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg><span>Tip</span></div><p><strong>Restart</strong> reuses the existing containers. To pick up new images after <strong>Pull</strong>, use <strong>Stop</strong> and then <strong>Start</strong> so Compose recreates the containers. For changes to the compose file, use <strong>Apply changes</strong> on the <a href="#compose-file">Compose File</a> tab.</p>
+<div class="callout callout-tip"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg><span>Tip</span></div><p><strong>Restart</strong> reuses the existing containers. To pick up new images after <strong>Pull</strong>, use <strong>Stop</strong> and then <strong>Start</strong> so Compose recreates the containers. For changes to the compose file, use <strong>Apply changes</strong> on the <a href="#compose-file">Compose file</a> tab.</p>
 </div><h3 id="services"><a class="anchor" href="#services" aria-hidden="true" tabindex="-1">#</a>Services</h3>
-<p><strong>Services</strong> lists each service with its container name, image, state and ports. Each row has <strong>Logs</strong>, and <strong>Start</strong>, <strong>Stop</strong> or <strong>Restart</strong> for that service alone. Click a row to open the container&#39;s detail page (see <a href="/docs/containers/">Containers</a>).</p>
+<p><strong>Services</strong> lists each service with its container name, image, state and ports. Each row has <strong>Logs</strong>, <strong>Shell</strong> while the service runs (it opens the container&#39;s page on its <strong>Terminal</strong> tab), and <strong>Start</strong>, <strong>Stop</strong> or <strong>Restart</strong> for that service alone. Click a row to open the container&#39;s detail page (see <a href="/docs/containers/">Containers</a>).</p>
 <p>If the compose file uses profiles, services whose profile is off are listed too, marked <strong>Off</strong>, with a button to turn their profile on.</p>
 <h3 id="logs"><a class="anchor" href="#logs" aria-hidden="true" tabindex="-1">#</a>Logs</h3>
 <p><strong>Logs</strong> shows the output of one service at a time. Pick the service from the row of buttons at the top. The log viewer has the same filter, regex and case-sensitive options as on a container&#39;s page.</p>
-<h3 id="compose-file"><a class="anchor" href="#compose-file" aria-hidden="true" tabindex="-1">#</a>Compose File</h3>
-<p><strong>Compose File</strong> opens the stack&#39;s compose file in an editor, with its path above it. If the stack was started from several compose files, a picker above the editor switches between them. The editor works wherever the project lives, and for stacks on a <a href="/docs/remote-hosts/">remote host</a> it edits the files on that host.</p>
-<p>Click <strong>Apply Changes</strong> (or press Ctrl+S, Cmd+S on macOS) to save. Orca checks that the file is valid YAML and doesn&#39;t save it otherwise. After a save, a banner offers <strong>Apply changes</strong>: it runs <code>docker compose up</code>, which recreates the services whose definition changed and leaves the others running, then runs the stack&#39;s <a href="#setup-commands">setup commands</a>.</p>
+<h3 id="compose-file"><a class="anchor" href="#compose-file" aria-hidden="true" tabindex="-1">#</a>Compose file</h3>
+<p><strong>Compose file</strong> opens the stack&#39;s compose file in an editor, with its path above it. If the stack was started from several compose files, a picker above the editor switches between them. The editor works wherever the project lives, and for stacks on a <a href="/docs/remote-hosts/">remote host</a> it edits the files on that host.</p>
+<p>Click <strong>Apply changes</strong> above the editor (or press Ctrl+S, Cmd+S on macOS) to save. Orca checks that the file is valid YAML and doesn&#39;t save it otherwise. After a save, a banner offers <strong>Apply changes</strong> again: it runs <code>docker compose up</code>, which recreates the services whose definition changed and leaves the others running, then runs the stack&#39;s <a href="#setup-commands">setup commands</a>.</p>
 <h3 id="orcayaml"><a class="anchor" href="#orcayaml" aria-hidden="true" tabindex="-1">#</a>orca.yaml</h3>
 <p>The <strong>orca.yaml</strong> tab edits the stack&#39;s <code>orca.yaml</code>, see <a href="#orcayaml">below</a>.</p>
 <h2 id="create-a-new-stack"><a class="anchor" href="#create-a-new-stack" aria-hidden="true" tabindex="-1">#</a>Create a new stack</h2>
-<p>There are two ways to create a compose project from Orca. Both save the compose file in Orca&#39;s stacks folder and then run <code>docker compose up</code>. The project is named after its folder.</p>
-<p><strong>Write the compose file yourself.</strong> Click <strong>Compose</strong> on the <strong>Containers</strong> page to open <strong>Deploy Compose Stack</strong>. Enter a <strong>Directory Path</strong> inside the stacks folder, edit the YAML, and click <strong>Deploy</strong>. Click <strong>Validate</strong> first if you want a check: Orca runs <code>docker compose config</code> on the file and shows any errors.</p>
-<p><strong>Use the wizard.</strong> Open the command palette (Ctrl+K, Cmd+K on macOS) and run <strong>Compose: Create New Stack</strong>. The wizard has three steps:</p>
+<p>There are two ways to create a compose project from Orca. The project is named after its folder.</p>
+<p><strong>Start in a folder of your own.</strong> <a href="#open-a-project-folder">Open the folder</a>. If it has no compose file yet, Orca writes a starter <code>compose.yaml</code> that you edit in the dialog, then starts it.</p>
+<p><strong>Use the wizard.</strong> Open the <a href="/docs/introduction/#the-command-palette">command palette</a> (Cmd+K on macOS, Ctrl+K elsewhere) and run <strong>Create a stack from scratch…</strong>. The wizard saves a <code>docker-compose.yml</code> in a new folder inside Orca&#39;s stacks folder. It has three steps:</p>
 <ol>
 <li><strong>Name</strong>: the stack name.</li>
-<li><strong>Services</strong>: add services with an image (with Docker Hub search), ports, environment variables, volumes, <strong>Depends On</strong> and a restart policy.</li>
-<li><strong>Review &amp; Deploy</strong>: check and edit the generated YAML, then click <strong>Deploy</strong>, or <strong>Save Only</strong> to write the file without starting it.</li>
+<li><strong>Services</strong>: add services with an image (with Docker Hub search), ports, environment variables, volumes, <strong>Depends on</strong> and a restart policy.</li>
+<li><strong>Review &amp; Deploy</strong>: check and edit the generated YAML, then click <strong>Deploy</strong>, or <strong>Save only</strong> to write the file without starting it.</li>
 </ol>
 <p>To deploy a ready-made app instead, use the <a href="/docs/templates/">App Catalog</a>.</p>
 <h2 id="profiles"><a class="anchor" href="#profiles" aria-hidden="true" tabindex="-1">#</a>Profiles</h2>
@@ -115,7 +136,7 @@
     </div>
     <nav class="pager" aria-label="Previous and next page"><a class="pager-prev" href="/docs/containers/"><span class="pager-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Previous</span><span class="pager-title">Containers</span></a><a class="pager-next" href="/docs/images-and-builds/"><span class="pager-label">Next <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="pager-title">Images &amp; builds</span></a></nav>
   </article>
-  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#how-stacks-are-found">How stacks are found</a></li><li class="d2"><a href="#the-stack-page">The stack page</a></li><li class="d3"><a href="#start-stop-restart-and-pull">Start, stop, restart and pull</a></li><li class="d3"><a href="#services">Services</a></li><li class="d3"><a href="#logs">Logs</a></li><li class="d3"><a href="#compose-file">Compose File</a></li><li class="d3"><a href="#orcayaml">orca.yaml</a></li><li class="d2"><a href="#create-a-new-stack">Create a new stack</a></li><li class="d2"><a href="#profiles">Profiles</a></li><li class="d2"><a href="#setup-commands">Setup commands</a></li><li class="d2"><a href="#orcayaml-1">orca.yaml</a></li><li class="d2"><a href="#related">Related</a></li></ul></nav></aside>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#how-stacks-are-found">How stacks are found</a></li><li class="d2"><a href="#open-a-project-folder">Open a project folder</a></li><li class="d2"><a href="#the-stack-page">The stack page</a></li><li class="d3"><a href="#start-stop-restart-and-pull">Start, stop, restart and pull</a></li><li class="d3"><a href="#services">Services</a></li><li class="d3"><a href="#logs">Logs</a></li><li class="d3"><a href="#compose-file">Compose file</a></li><li class="d3"><a href="#orcayaml">orca.yaml</a></li><li class="d2"><a href="#create-a-new-stack">Create a new stack</a></li><li class="d2"><a href="#profiles">Profiles</a></li><li class="d2"><a href="#setup-commands">Setup commands</a></li><li class="d2"><a href="#orcayaml-1">orca.yaml</a></li><li class="d2"><a href="#related">Related</a></li></ul></nav></aside>
 </div>
 </main>
 <footer class="site-footer">

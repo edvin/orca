@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -85,7 +85,7 @@
       <div class="step reveal">
         <div class="step-num">1</div>
         <h3>Start your project</h3>
-        <p>From Orca, or the way you always do. Orca picks it up as a stack.</p>
+        <p>Open the folder in Orca, drop it on the window, or start it the way you always do. Orca picks it up as a stack.</p>
         <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">git</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> clone</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> git@github.com:acme/shop.git</span></span>
 <span class="line"><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">cd</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> shop</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3"> &#x26;&#x26; </span><span style="--shiki-light:#953800;--shiki-dark:#FFA657">docker</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> compose</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> up</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -d</span></span></code></pre></div>
       </div>
@@ -105,6 +105,26 @@
         <div class="browser-pill"><span class="lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><span>https://<b>shop</b>.localhost</span><span class="ok-dot"></span></div>
         <div class="step-note">Running · up 2 min · web:3000</div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
+    <div class="feature-copy reveal">
+      <span class="eyebrow"><svg viewBox="0 0 24 24"><path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2"/><path d="M14 4c3-1 6-1 6-1s0 3-1 6l-7 7-5-5z"/><path d="M9 11 5 11l3-4h4M13 15v4l4-3v-4"/></svg> Get going</span>
+      <h2>Open a folder. It's running.</h2>
+      <p>Point Orca at a project and it shows what's inside before it starts anything: the compose file, its services and profiles, the <code>orca.yaml</code>, and whether it's a git repository you can run per worktree.</p>
+      <ul class="checks">
+        <li>Open a folder, or drop it on Orca's window. No compose file yet? Orca writes a first one</li>
+        <li>Jump to the code: open any stack in VS Code, Cursor or your terminal, or a shell in any service</li>
+        <li>Press <kbd>⌘K</kbd> to find any stack, container, image or URL and run any action</li>
+      </ul>
+      <a class="link-arrow" href="/docs/quickstart/">Start your first project <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+    <div class="feature-visual reveal stacked-shots">
+      <div class="window"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="window-title">Orca — Open a project folder</span></div><img class="" src="/assets/screens/open-folder.webp" alt="Opening a project folder: Orca lists its compose file, services, profiles and orca.yaml before starting it" loading="lazy" decoding="async"></div>
+      <div class="window"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="window-title">⌘K</span></div><img class="" src="/assets/screens/palette.webp" alt="The command palette finding the shop stack and its URLs" loading="lazy" decoding="async"></div>
     </div>
   </div>
 </section>

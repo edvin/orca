@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -59,7 +59,7 @@
     <div class="prose"><p>Orca has an optional built-in assistant: a chat window that can look at your containers, images, stacks and Kubernetes cluster and act on them. It&#39;s meant for a model running on your own computer, so it&#39;s free, private and works offline.</p>
 <div class="callout callout-tip"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg><span>Tip</span></div><p>Already use Claude, ChatGPT/Codex, Cursor or Copilot? <a href="/docs/agents/">Connect it to Orca</a> instead. It uses the subscription you already have, gets all of Orca&#39;s tools, and you don&#39;t need an API key. Until the built-in assistant is set up, its window offers exactly that.</p>
 </div><h2 id="open-the-assistant"><a class="anchor" href="#open-the-assistant" aria-hidden="true" tabindex="-1">#</a>Open the assistant</h2>
-<p>Click the sparkle icon (<strong>AI Assistant</strong>) in the title bar. The assistant opens in its own window, <strong>Orca Desktop AI</strong>, so you can keep it next to the main window.</p>
+<p>Click the sparkle icon (<strong>AI assistant</strong>) in the title bar. The assistant opens in its own window, <strong>Orca Desktop AI</strong>, so you can keep it next to the main window.</p>
 <p>Until the assistant has a model, the window offers to connect the AI tools found on your computer instead. If you came from <strong>Ask AI</strong> on a container or build, it also offers the question ready to copy into Claude.</p>
 <ul>
 <li>Press Enter to send, Shift+Enter for a new line.</li>
@@ -68,7 +68,7 @@
 </ul>
 <p>Each question is sent with the last 20 messages, so you can ask follow-ups.</p>
 <h2 id="use-a-local-model"><a class="anchor" href="#use-a-local-model" aria-hidden="true" tabindex="-1">#</a>Use a local model</h2>
-<p>Open <strong>Settings → AI &amp; Agents</strong>. Under <strong>Built-in assistant</strong>, <strong>Local model</strong> lists the model servers running on this computer. Orca looks for:</p>
+<p>Open <strong>Settings → AI &amp; agents</strong>. Under <strong>Built-in assistant</strong>, <strong>Local model</strong> lists the model servers running on this computer. Orca looks for:</p>
 <div class="table-wrap"><table><thead><tr><th>Server</th><th>Where Orca looks</th></tr></thead><tbody><tr><td><a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a></td><td><code>http://127.0.0.1:11434/v1</code></td></tr><tr><td><a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a> (its server started)</td><td><code>http://127.0.0.1:1234/v1</code></td></tr><tr><td>llama.cpp&#39;s <code>llama-server</code></td><td><code>http://127.0.0.1:8080/v1</code></td></tr></tbody></table></div><p>Pick a model next to a server and click <strong>Use</strong>. The assistant switches to it right away. <strong>Look again</strong> searches once more after you start a server. For a server on another port, click <strong>A server on another port?</strong> and enter its OpenAI-compatible URL and a model name.</p>
 <p><figure class="shot"><img src="/assets/screens/settings-assistant.webp" alt="The built-in assistant in Settings, using a model from Ollama" loading="lazy" decoding="async"></figure></p>
 <p>If nothing is running yet, the easiest start is Ollama:</p>

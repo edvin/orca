@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvjzklkf">
+<link rel="stylesheet" href="/assets/site.css?v=mvk2kbo1">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvjzklkf" defer></script>
+<script src="/assets/site.js?v=mvk2kbo1" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -79,13 +79,13 @@
 <p>The server package for <a href="/docs/remote-hosts/">remote hosts</a> binds to <code>0.0.0.0</code> so the desktop app can connect.</p>
 <div class="callout callout-warning"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg><span>Warning</span></div><p>Anyone who has the token controls Docker on that machine, which is equivalent to root. Don&#39;t expose port 9477 to the internet without TLS. Put a reverse proxy in front of it, as described in <a href="/docs/remote-hosts/#add-tls-with-a-reverse-proxy">Remote hosts</a>, or reach it over an SSH tunnel.</p>
 </div><h3 id="remote-host-connections"><a class="anchor" href="#remote-host-connections" aria-hidden="true" tabindex="-1">#</a>Remote host connections</h3>
-<p>Each remote host has its own token, saved in plain text in the desktop app&#39;s <code>config.json</code> and sent only to that host. <strong>Verify TLS Certificate</strong> is on by default for <code>https://</code> hosts. Turn it off only for a self-signed certificate you trust.</p>
+<p>Each remote host has its own token, saved in plain text in the desktop app&#39;s <code>config.json</code> and sent only to that host. <strong>Verify TLS certificate</strong> is on by default for <code>https://</code> hosts. Turn it off only for a self-signed certificate you trust.</p>
 <h2 id="local-certificate-authority"><a class="anchor" href="#local-certificate-authority" aria-hidden="true" tabindex="-1">#</a>Local certificate authority</h2>
 <p>The <a href="/docs/gateway/">gateway</a> serves your containers over HTTPS with certificates signed by a local certificate authority that Orca creates the first time it needs one.</p>
 <ul>
 <li>The CA certificate and key are stored in <code>orca/ca/</code> inside the config directory, for example <code>~/.config/orca/ca/</code> on Linux. The key is written with mode <code>600</code> and isn&#39;t encrypted.</li>
 <li>The CA is valid for 10 years. Certificates for gateway hostnames are stored in <code>orca/ca/certs/</code> and are valid for one year.</li>
-<li>Orca never adds the CA to your system&#39;s trust store by itself. You do that from <strong>Settings</strong>, <strong>Certificates</strong>, with <strong>Download CA Certificate</strong> and the command shown for your system, or with <code>orca ca install</code>, which runs that command with <code>sudo</code>.</li>
+<li>Orca never adds the CA to your system&#39;s trust store by itself. You do that from <strong>Settings</strong>, <strong>Certificates</strong>, with <strong>Download CA certificate</strong> and the command shown for your system, or with <code>orca ca install</code>, which runs that command with <code>sudo</code>.</li>
 </ul>
 <p>Because a trusted CA can sign a certificate for any hostname, treat <code>ca-key.pem</code> like a password. To stop trusting the CA, remove &quot;Orca Desktop CA&quot; from your system&#39;s trust store. Deleting the files alone doesn&#39;t do that.</p>
 <h2 id="updates"><a class="anchor" href="#updates" aria-hidden="true" tabindex="-1">#</a>Updates</h2>
@@ -95,7 +95,7 @@
 <p>Orca has no analytics, crash reporting or usage tracking, and no accounts. There is no Orca server that it reports to. The source code is MIT licensed at <a href="https://github.com/edvin/orca" target="_blank" rel="noopener">github.com/edvin/orca</a>, so you can check this yourself.</p>
 <p>Orca connects to these places, besides the hosts you add:</p>
 <div class="table-wrap"><table><thead><tr><th>Destination</th><th>When</th></tr></thead><tbody><tr><td><code>github.com</code>, <code>raw.githubusercontent.com</code></td><td>The update check, and the Helm or Homebrew install scripts when you ask Orca to install them.</td></tr><tr><td><code>orca-desktop.com/templates.json</code></td><td>When you open the templates catalog. Cached for an hour.</td></tr><tr><td><code>hub.docker.com</code></td><td>When you search for images or open the tag list for an image.</td></tr><tr><td>Container registries</td><td>When you pull an image. Image scanning also pulls the Trivy image and its vulnerability database.</td></tr><tr><td><code>get.docker.com</code>, <code>get.k3s.io</code> and similar installers</td><td>When you ask Orca to set up Docker or <a href="/docs/kubernetes/">Kubernetes</a>.</td></tr><tr><td>Your AI provider</td><td>When you use the AI assistant.</td></tr><tr><td>GitHub or Docker Hub, inbound</td><td>Webhooks you&#39;ve configured for push to deploy.</td></tr></tbody></table></div><h2 id="the-ai-assistant"><a class="anchor" href="#the-ai-assistant" aria-hidden="true" tabindex="-1">#</a>The AI assistant</h2>
-<p>The built-in AI assistant is optional and does nothing until you choose a model under <strong>Settings → AI &amp; Agents → Built-in assistant</strong>: a local model server (Ollama, LM Studio, llama.cpp), or a cloud API key for Anthropic, OpenAI, Google Gemini or another OpenAI-compatible endpoint.</p>
+<p>The built-in AI assistant is optional and does nothing until you choose a model under <strong>Settings → AI &amp; agents → Built-in assistant</strong>: a local model server (Ollama, LM Studio, llama.cpp), or a cloud API key for Anthropic, OpenAI, Google Gemini or another OpenAI-compatible endpoint.</p>
 <p>Requests go straight from the daemon to the provider you chose, never through an Orca server. With a local model, nothing leaves your machine. On Linux and Windows, Orca can set Ollama up for you as a container.</p>
 <p>What the provider receives:</p>
 <ul>
