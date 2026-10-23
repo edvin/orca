@@ -400,9 +400,50 @@ pub struct GatewayRoute {
     /// gateway shows a "waking up" page and Orca starts it on request.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sleeping: bool,
+    /// Only WebSocket upgrade requests take this route (a Reverb or Vite
+    /// HMR socket on the app's own hostname); others fall through.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub websocket: bool,
     /// How the route appears on the landing page.
     #[serde(default, flatten)]
     pub presentation: RoutePresentation,
+}
+
+impl GatewayRoute {
+    /// A hostname with `*` in its first label (`*-onehome.local.example.dev`)
+    /// matches every hostname that fills it in with letters, digits and
+    /// dashes (one label, so no dots).
+    pub fn is_pattern(&self) -> bool {
+        self.hostname.contains('*')
+    }
+}
+
+/// The regex a pattern hostname matches with, anchored and case-insensitive.
+pub fn host_pattern_regex(hostname: &str) -> String {
+    let parts: Vec<String> = hostname.split('*').map(regex_escape).collect();
+    format!("(?i)^{}$", parts.join("[a-z0-9-]+"))
+}
+
+fn regex_escape(s: &str) -> String {
+    s.chars()
+        .flat_map(|c| {
+            if "\\.+*?()|[]{}^$".contains(c) {
+                vec!['\\', c]
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
+}
+
+/// The certificate name that covers a hostname: itself, or for a pattern
+/// (`*-onehome.local.example.dev`) the wildcard of its parent domain
+/// (`*.local.example.dev`).
+pub fn certificate_name(hostname: &str) -> String {
+    match hostname.split_once('.') {
+        Some((first, rest)) if first.contains('*') => format!("*.{rest}"),
+        _ => hostname.to_string(),
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -931,6 +972,21 @@ struct SaveLock {
 }
 
 #[cfg(test)]
+mod pattern_tests {
+    use super::*;
+
+    #[test]
+    fn pattern_hostnames() {
+        assert_eq!(
+            host_pattern_regex("*-onehome.local.example.dev"),
+            "(?i)^[a-z0-9-]+-onehome\\.local\\.example\\.dev$"
+        );
+        assert_eq!(certificate_name("*-onehome.local.example.dev"), "*.local.example.dev");
+        assert_eq!(certificate_name("shop.localhost"), "shop.localhost");
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1090,6 +1146,7 @@ mod tests {
             path: None,
             owner: None,
             sleeping: false,
+            websocket: false,
             presentation: Default::default(),
         };
         let json = serde_json::to_string(&route).expect("serialize");
@@ -1111,6 +1168,7 @@ mod tests {
             path: Some("/api/*".to_string()),
             owner: None,
             sleeping: false,
+            websocket: false,
             presentation: Default::default(),
         };
         let json = serde_json::to_string(&route).expect("serialize");
@@ -1128,6 +1186,7 @@ mod tests {
             path: None,
             owner: None,
             sleeping: false,
+            websocket: false,
             presentation: Default::default(),
         };
         let json = serde_json::to_string(&route).expect("serialize");

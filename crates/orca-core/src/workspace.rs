@@ -80,7 +80,9 @@ pub struct SharedServices {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkspaceRoute {
-    /// `mail` (gets the workspace domain) or a full hostname.
+    /// `mail` (gets the workspace domain) or a full hostname. A `*` in the
+    /// first label matches many: `*-onehome` is `zoner-onehome`,
+    /// `antagonist-onehome`… and `*` alone is every hostname.
     pub hostname: String,
     /// `alias:port`, the network alias (or container name) and its port.
     pub target: String,
@@ -89,6 +91,10 @@ pub struct WorkspaceRoute {
     /// Card title on the landing page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// Only WebSocket connections take this route (a Reverb or Vite HMR
+    /// socket on the app's hostname); everything else falls through.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub websocket: bool,
 }
 
 impl WorkspaceRoute {
@@ -337,7 +343,16 @@ impl WorkspaceFile {
 }
 
 fn check_route(r: &WorkspaceRoute) -> anyhow::Result<()> {
-    if r.hostname.is_empty() || !r.hostname.split('.').all(valid_dns_name) {
+    let ok = !r.hostname.is_empty()
+        && r.hostname.split('.').enumerate().all(|(i, label)| {
+            // A `*` may stand for part of the first label: `*-onehome`, `*`.
+            if i == 0 && label.contains('*') {
+                label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '*')
+            } else {
+                valid_dns_name(label)
+            }
+        });
+    if !ok {
         anyhow::bail!("'{}' is not a valid hostname", r.hostname);
     }
     if r.target().is_none() {

@@ -5112,6 +5112,7 @@ async fn auto_register_gateway_routes(
                 path: route.path.clone(),
                 owner: Some(owner.clone()),
                 sleeping: false,
+                websocket: false,
                 presentation: route.presentation.clone(),
             };
             // Redeploying the same stack refreshes its own routes; a route
@@ -8613,6 +8614,7 @@ async fn gateway_add_route(
         path: req.path.clone(),
         owner: None,
         sleeping: false,
+        websocket: false,
         presentation: clean_presentation(req.presentation.clone()),
     };
     config.gateway.routes.push(route);

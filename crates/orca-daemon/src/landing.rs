@@ -176,7 +176,12 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
         }
     };
     let routes: Vec<&GatewayRoute> = config.routes.iter().filter(|r| r.enabled).collect();
-    let visible: Vec<&GatewayRoute> = routes.iter().copied().filter(|r| !r.presentation.hidden).collect();
+    // Pattern and WebSocket-only routes aren't pages one could open.
+    let visible: Vec<&GatewayRoute> = routes
+        .iter()
+        .copied()
+        .filter(|r| !r.presentation.hidden && !r.is_pattern() && !r.websocket)
+        .collect();
 
     let status_of = |r: &GatewayRoute| -> Option<(&'static str, &'static str, Option<String>)> {
         if !landing.show_status {
@@ -815,6 +820,7 @@ mod tests {
             path: None,
             owner: None,
             sleeping: false,
+            websocket: false,
             presentation: RoutePresentation::default(),
         }
     }

@@ -147,7 +147,7 @@ projects:
 | `gateway.domain` | The domain hostnames get. A name without a dot, like `mail`, becomes `mail.local.acme.dev`. |
 | `gateway.certificate` | `cert` and `key` files (PEM) for `*.<domain>`. Without them, Orca's certificate authority is used. |
 | `shared.compose` | The shared services' compose file. Started on join, and per project as `uses` lists them. `shared.name` sets the compose project name. |
-| `routes` | Gateway routes: `hostname`, `target` (`alias:port`), optional `path` and `title`. |
+| `routes` | Gateway routes: `hostname`, `target` (`alias:port`), and optionally `path`, `title` and `websocket`. See [routes](#routes). |
 | `clone_into` | Where projects are cloned; `~/…`, absolute, or relative to the workspace. |
 | `registries` | Image registries; Orca checks `docker login` was done for each. |
 | `secrets` | The secret managers references point into: `passbolt.url`, `1password.account`. |
@@ -158,6 +158,23 @@ projects:
 | `projects.<key>.routes` | Routes for the project, like the workspace's. A project's own [orca.yaml](/docs/orca-yaml/) can take over later. |
 | `projects.<key>.env` | `from` (template), `file` (default `.env`), and `secrets`: variable → reference. |
 | `projects.<key>.worktrees` | Also add the project to **Projects**, so each git worktree can run as its own instance. |
+
+### Routes
+
+A route sends a hostname, and optionally a path, to a container's port on the workspace network. The target is the container's network alias (or name) and port.
+
+```yaml
+routes:
+  - { hostname: onehome, target: "one-home-nginx:80" }
+  - { hostname: onehome, path: "/_/admin*", target: "one-home-admin:80" }   # one path to another app
+  - { hostname: "*-onehome", target: "one-home-nginx:80" }                  # zoner-onehome, antagonist-onehome…
+  - { hostname: devcentral, target: "release-tool-reverb:8080", websocket: true }
+  - { hostname: "*", target: "soketi:6001", websocket: true }               # every other WebSocket
+```
+
+- **`*` in the hostname** stands for letters, digits and dashes within the first label: `*-onehome` matches `zoner-onehome.<domain>`, and `*` alone matches every hostname under the domain. Patterns need a wildcard certificate, such as the workspace's own; with Orca's certificate authority, Orca issues one for `*.<domain>`.
+- **`websocket: true`** routes only WebSocket connections, so an app's Reverb or Vite socket can live on its own hostname while its pages go elsewhere.
+- **The most specific route wins:** WebSocket routes before the rest, exact hostnames before patterns (and `*-docs` before `*`), and a route with a path before one without.
 
 Orca checks the file when it reads it and names what's wrong, such as a target without a port or a secret whose manager isn't listed under `secrets`.
 

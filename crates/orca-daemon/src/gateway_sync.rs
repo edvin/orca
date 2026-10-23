@@ -145,6 +145,7 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                 path: r.path.clone(),
                 owner: Some(format!("{PROJECT_OWNER_PREFIX}{}", p.name)),
                 sleeping: false,
+                websocket: false,
                 presentation: r.presentation.clone(),
             });
         }
@@ -173,6 +174,7 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                 path: a.path,
                 owner: Some(format!("{LABEL_OWNER_PREFIX}{}", c.name)),
                 sleeping: false,
+                websocket: false,
                 presentation: a.presentation,
             });
         }

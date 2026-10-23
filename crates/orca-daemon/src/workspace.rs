@@ -360,6 +360,18 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
                         anyhow::bail!("starting the shared services failed:\n{}", r.stderr_tail)
                     }
                 })?;
+            // The shared stack's own orca.yaml hooks, as for any stack Orca starts.
+            let compose_str = compose.to_string_lossy().to_string();
+            for h in crate::api::run_stack_hooks(state, &dir.to_string_lossy(), Some(&compose_str)).await {
+                if h.get("success").and_then(|v| v.as_bool()) == Some(false) {
+                    job.log(format!(
+                        "Hook failed: {}\n{}",
+                        h.get("hook").and_then(|v| v.as_str()).unwrap_or("?"),
+                        h.get("output").and_then(|v| v.as_str()).unwrap_or("").trim()
+                    ))
+                    .await;
+                }
+            }
             job.done("shared", Some(name)).await;
         }
         None => job.skip("shared", "None in the workspace file").await,
@@ -391,16 +403,18 @@ async fn ensure_network(state: &AppState, name: &str) -> Result<()> {
 
 /// Replace the workspace's routes with what its file says now.
 async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
+    let domain = state.config.lock().await.gateway.domain.clone();
     let to_route = |r: &WorkspaceRoute, owner: String, group: &str| -> Option<GatewayRoute> {
         let (host, port) = r.target()?;
         Some(GatewayRoute {
-            hostname: r.hostname.clone(),
+            hostname: crate::project_config::qualify_hostname(&r.hostname, &domain),
             container_name: host.to_string(),
             port,
             enabled: true,
             path: r.path.clone(),
             owner: Some(owner),
             sleeping: false,
+            websocket: r.websocket,
             presentation: RoutePresentation {
                 title: r.title.clone(),
                 group: Some(group.to_string()),
@@ -457,6 +471,11 @@ async fn leave(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, 
     }
     crate::gateway_sync::routes_changed();
     Ok(Json(serde_json::json!({ "left": true })))
+}
+
+/// A route one can open: not a hostname pattern or a WebSocket-only route.
+fn is_page(r: &WorkspaceRoute) -> bool {
+    !r.hostname.contains('*') && !r.websocket
 }
 
 /// Whether `docker login` was done for a registry (or a credential helper covers it).
@@ -565,7 +584,7 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
                 "running": running,
                 "uses": p.uses,
                 "setup": p.setup,
-                "urls": p.routes.iter().map(&url).collect::<Vec<_>>(),
+                "urls": p.routes.iter().filter(|r| is_page(r)).map(&url).collect::<Vec<_>>(),
                 "secrets": secrets_of(&file, key, &pdir),
                 "worktrees": p.worktrees,
             })
@@ -582,7 +601,7 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
         "domain": domain,
         "certificate": if file.gateway.as_ref().is_some_and(|g| g.certificate.is_some()) { "workspace" } else { "orca" },
         "shared": shared,
-        "shared_urls": file.routes.iter().map(|r| serde_json::json!({ "title": r.title.clone().unwrap_or_else(|| r.hostname.clone()), "url": url(r) })).collect::<Vec<_>>(),
+        "shared_urls": file.routes.iter().filter(|r| is_page(r)).map(|r| serde_json::json!({ "title": r.title.clone().unwrap_or_else(|| r.hostname.clone()), "url": url(r) })).collect::<Vec<_>>(),
         "registries": file.registries.iter().map(|h| serde_json::json!({ "host": h, "logged_in": registry_logged_in(h) })).collect::<Vec<_>>(),
         "secret_clis": crate::secrets::cli_status(),
         "providers": {
@@ -779,6 +798,7 @@ async fn setup(
             let urls: Vec<String> = project
                 .routes
                 .iter()
+                .filter(|r| is_page(r))
                 .map(|r| {
                     format!(
                         "https://{}{}",

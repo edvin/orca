@@ -664,6 +664,7 @@ async fn register_routes(
                 path: r.path.clone(),
                 owner: Some(me.clone()),
                 sleeping: false,
+                websocket: false,
                 presentation: Default::default(),
             });
             added += 1;
@@ -1527,6 +1528,7 @@ pub async fn add_host_route(state: &AppState, project_id: &str, name: &str, serv
             path: None,
             owner: Some(owner),
             sleeping: false,
+            websocket: false,
             presentation: Default::default(),
         });
         cfg.save()?;

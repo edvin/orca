@@ -128,7 +128,7 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
         generate_cert_for_hostname(&config.domain)?;
         for route in &config.routes {
             if route.enabled {
-                generate_cert_for_hostname(&route.hostname)?;
+                generate_cert_for_hostname(&orca_core::config::certificate_name(&route.hostname))?;
             }
         }
     }
@@ -239,7 +239,7 @@ pub async fn apply_config(config: &GatewayConfig) -> Result<()> {
         generate_cert_for_hostname(&config.domain)?;
         for route in &config.routes {
             if route.enabled {
-                generate_cert_for_hostname(&route.hostname)?;
+                generate_cert_for_hostname(&orca_core::config::certificate_name(&route.hostname))?;
             }
         }
     } else if matches!(config.tls_mode, GatewayTlsMode::Custom) {
@@ -400,6 +400,12 @@ fn write_custom_cert_files(config: &GatewayConfig) -> Result<()> {
 }
 
 /// Generate a TLS certificate for a hostname, signed by the Orca CA.
+/// A certificate's file name: its hostname, with a wildcard spelled out
+/// (`*` isn't allowed in Windows file names).
+fn cert_file_stem(name: &str) -> String {
+    name.replace('*', "_wildcard")
+}
+
 fn generate_cert_for_hostname(hostname: &str) -> Result<()> {
     // Defense in depth: the API layer validates gateway hostnames before
     // they reach this function, but we re-check here so an internal caller
@@ -407,7 +413,11 @@ fn generate_cert_for_hostname(hostname: &str) -> Result<()> {
     if hostname.is_empty() || hostname.len() > 253 {
         anyhow::bail!("invalid hostname length");
     }
-    for label in hostname.split('.') {
+    for (i, label) in hostname.split('.').enumerate() {
+        // `*.local.example.dev`: a wildcard certificate, for pattern routes.
+        if i == 0 && label == "*" {
+            continue;
+        }
         if label.is_empty() || label.len() > 63 {
             anyhow::bail!("invalid hostname label length");
         }
@@ -422,8 +432,9 @@ fn generate_cert_for_hostname(hostname: &str) -> Result<()> {
     let certs = certs_dir();
     std::fs::create_dir_all(&certs)?;
 
-    let cert_path = certs.join(format!("{hostname}.pem"));
-    let key_path = certs.join(format!("{hostname}-key.pem"));
+    let stem = cert_file_stem(hostname);
+    let cert_path = certs.join(format!("{stem}.pem"));
+    let key_path = certs.join(format!("{stem}-key.pem"));
 
     // Skip if already exists
     if cert_path.exists() && key_path.exists() {
@@ -586,23 +597,58 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     let mut enabled_routes: Vec<&orca_core::config::GatewayRoute> =
         config.routes.iter().filter(|r| r.enabled).collect();
 
-    // Sort routes so path-specific routes come before hostname-only routes.
-    // This ensures /ws/* matches before a catch-all for the same hostname.
+    // Caddy takes the first route that matches, so the most specific come
+    // first: WebSocket-only routes (they only match upgrades), then exact
+    // hostnames before patterns, then routes with a path before those
+    // without, so /api/* wins over the rest of the same hostname.
+    // Among patterns, the one that fixes more of the hostname wins:
+    // `*-docs.example.dev` before `*.example.dev`.
+    let fixed = |r: &orca_core::config::GatewayRoute| std::cmp::Reverse(r.hostname.replace('*', "").len());
     enabled_routes.sort_by(|a, b| {
-        let a_has_path = a.path.is_some();
-        let b_has_path = b.path.is_some();
-        b_has_path.cmp(&a_has_path).then_with(|| a.hostname.cmp(&b.hostname))
+        (
+            !a.websocket,
+            a.is_pattern(),
+            fixed(a),
+            a.path.is_none(),
+            &a.hostname,
+            &a.path,
+        )
+            .cmp(&(
+                !b.websocket,
+                b.is_pattern(),
+                fixed(b),
+                b.path.is_none(),
+                &b.hostname,
+                &b.path,
+            ))
     });
 
     // Build route objects
     let mut routes: Vec<serde_json::Value> = enabled_routes
         .iter()
         .map(|route| {
-            let match_rule = if let Some(path) = &route.path {
-                serde_json::json!([{"host": [route.hostname.clone()]}, {"path": [path]}])
+            // One matcher set: everything in it must match (separate sets
+            // would be alternatives, sending a whole hostname to a path route).
+            let mut matcher = serde_json::Map::new();
+            if route.is_pattern() {
+                let re = orca_core::config::host_pattern_regex(&route.hostname);
+                matcher.insert(
+                    "expression".into(),
+                    serde_json::json!(format!("{{http.request.host}}.matches(r'{re}')")),
+                );
             } else {
-                serde_json::json!([{"host": [route.hostname.clone()]}])
-            };
+                matcher.insert("host".into(), serde_json::json!([route.hostname.clone()]));
+            }
+            if let Some(path) = &route.path {
+                matcher.insert("path".into(), serde_json::json!([path]));
+            }
+            if route.websocket {
+                matcher.insert(
+                    "header_regexp".into(),
+                    serde_json::json!({ "Upgrade": { "pattern": "(?i)^websocket$" } }),
+                );
+            }
+            let match_rule = serde_json::json!([matcher]);
             let handle = if route.sleeping {
                 // Idle-stopped worktree instance: show a page that reloads
                 // itself; Orca sees the request and starts the instance.
@@ -641,10 +687,13 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     let mut load_files: Vec<serde_json::Value> = enabled_routes
         .iter()
         .map(|route| match config.tls_mode {
-            GatewayTlsMode::OrcaCa | GatewayTlsMode::Unknown => serde_json::json!({
-                "certificate": format!("/certs/{}.pem", route.hostname),
-                "key": format!("/certs/{}-key.pem", route.hostname),
-            }),
+            GatewayTlsMode::OrcaCa | GatewayTlsMode::Unknown => {
+                let stem = cert_file_stem(&orca_core::config::certificate_name(&route.hostname));
+                serde_json::json!({
+                    "certificate": format!("/certs/{stem}.pem"),
+                    "key": format!("/certs/{stem}-key.pem"),
+                })
+            }
             GatewayTlsMode::Custom => {
                 // The custom_cert/custom_key fields hold PEM *content*, not a
                 // path. `write_custom_cert_files` writes that content to
@@ -876,6 +925,7 @@ mod tests {
             path: None,
             owner: None,
             sleeping: false,
+            websocket: false,
             presentation: Default::default(),
         }
     }
@@ -889,6 +939,7 @@ mod tests {
             path: Some(path.to_string()),
             owner: None,
             sleeping: false,
+            websocket: false,
             presentation: Default::default(),
         }
     }
@@ -973,19 +1024,42 @@ mod tests {
         // 2 reverse_proxy routes + 1 landing page fallback
         assert_eq!(routes.len(), 3);
 
-        // First route should be the path-specific one (sorted before hostname-only)
-        let first_match = &routes[0]["match"];
-        assert!(
-            first_match[1].get("path").is_some(),
-            "Path-specific route should come first"
-        );
-        assert_eq!(first_match[1]["path"][0], "/api/*");
+        // The path route comes first, with host and path in one matcher set:
+        // separate sets would be alternatives, and every request to the
+        // hostname would go to the API.
+        let first = &routes[0]["match"];
+        assert_eq!(first.as_array().unwrap().len(), 1, "one matcher set: {first}");
+        assert_eq!(first[0]["host"][0], "app");
+        assert_eq!(first[0]["path"][0], "/api/*");
 
-        // Second route should be hostname-only
-        let second_match = &routes[1]["match"];
-        assert!(
-            second_match.get(1).is_none() || second_match[1].is_null(),
-            "Hostname-only route should come second"
+        let second = &routes[1]["match"];
+        assert_eq!(second.as_array().unwrap().len(), 1);
+        assert!(second[0].get("path").is_none(), "hostname-only route comes second");
+    }
+
+    #[test]
+    fn pattern_and_websocket_routes() {
+        let mut ws = make_route("app.localhost", "reverb-1", 8080);
+        ws.websocket = true;
+        let config = make_config(vec![
+            make_route("*-onehome.localhost", "onehome-1", 80),
+            make_route("onehome.localhost", "onehome-1", 80),
+            ws,
+        ]);
+        let caddy: serde_json::Value = serde_json::from_str(&build_caddy_config(&config, &[])).unwrap();
+        let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
+            .as_array()
+            .unwrap();
+        // WebSocket first, then the exact hostname, then the pattern.
+        assert_eq!(
+            routes[0]["match"][0]["header_regexp"]["Upgrade"]["pattern"],
+            "(?i)^websocket$"
+        );
+        assert_eq!(routes[1]["match"][0]["host"][0], "onehome.localhost");
+        let expr = routes[2]["match"][0]["expression"].as_str().unwrap();
+        assert_eq!(
+            expr,
+            "{http.request.host}.matches(r'(?i)^[a-z0-9-]+-onehome\\.localhost$')"
         );
     }
 

@@ -202,6 +202,7 @@ mod tests {
             path: None,
             owner: Some("dev:shop:other".into()),
             sleeping: false,
+            websocket: false,
             presentation: Default::default(),
         });
         let w = route_warnings(&gw, "dev:shop:a", &[route("web-a-shop.localhost")]);
