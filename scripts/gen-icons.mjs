@@ -29,7 +29,7 @@ const BRANDS = {
   laravel: "laravel", symfony: "symfony", vue: "vuedotjs", react: "react", nextjs: "nextdotjs", vite: "vite",
   django: "django", rails: "rubyonrails", apache: "apache", influxdb: "influxdb", opensearch: "opensearch",
   ollama: "ollama", n8n: "n8n", metabase: "metabase", mattermost: "mattermost", nextcloud: "nextcloud",
-  gitea: "gitea", portainer: "portainer", pusher: "pusher", pocketbase: "pocketbase", sonarqube: "sonarqubeserver",
+  gitea: "gitea", portainer: "portainer", ghost: "ghost", pusher: "pusher", pocketbase: "pocketbase", sonarqube: "sonarqubeserver",
 };
 
 // Generic roles, drawn with strokes on a 24 grid.
@@ -72,7 +72,7 @@ const IMAGES = [
   ["otel/opentelemetry-collector-contrib", "opentelemetry"], ["adminer", "adminer"], ["httpd", "apache"], ["influxdb", "influxdb"],
   ["opensearchproject/opensearch", "opensearch"], ["ollama/ollama", "ollama"], ["n8nio/n8n", "n8n"], ["metabase/metabase", "metabase"],
   ["mattermost/mattermost-team-edition", "mattermost"], ["nextcloud", "nextcloud"], ["gitea/gitea", "gitea"],
-  ["portainer/portainer-ce", "portainer"], ["sonarqube", "sonarqube"], ["typesense/typesense", "search"],
+  ["portainer/portainer-ce", "portainer"], ["ghost", "ghost"], ["sonarqube", "sonarqube"], ["typesense/typesense", "search"],
   ["pocket-id/pocket-id", "auth"], ["authelia/authelia", "auth"], ["nats", "queue"], ["localstack/localstack", "storage"],
 ];
 

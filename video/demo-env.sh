@@ -56,8 +56,17 @@ GIT
   done
 }
 
+# Folders a developer has on disk and opens in Orca, outside the workspace.
+folders() {
+  mkdir -p "$DEMO_HOME/code"
+  for dir in "$ROOT/demo/folders/"*; do
+    rm -rf "$DEMO_HOME/code/$(basename "$dir")"
+    cp -R "$dir" "$DEMO_HOME/code/"
+  done
+}
+
 images() {
-  cat "$ROOT"/demo/projects/*/compose.yaml "$ROOT/demo/workspace/compose.yaml" |
+  cat "$ROOT"/demo/projects/*/compose.yaml "$ROOT"/demo/folders/*/compose.yaml "$ROOT/demo/workspace/compose.yaml" |
     awk '/image:/ {print $2}' | sort -u | while read -r img; do
       docker image inspect "$img" >/dev/null 2>&1 || docker pull -q "$img"
     done
@@ -86,12 +95,15 @@ daemon_down() {
   fi
 }
 
+api() { curl -sf -X "$1" -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" ${3:+-d "$3"} "http://127.0.0.1:$PORT/api/v1$2"; }
+
 token() { python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['api_token'])" "$CONFIG"; }
 
 case "${1:-}" in
   up)
     vm_up
     repos
+    folders
     images
     daemon_up
     echo "Demo daemon on http://127.0.0.1:$PORT (HOME=$DEMO_HOME)"
@@ -104,7 +116,13 @@ case "${1:-}" in
     docker network prune -f >/dev/null
     rm -rf "$DEMO_HOME/code" "$DEMO_HOME/Library" "$DEMO_HOME/.local" "$DEMO_HOME/.config"
     repos
+    folders
     daemon_up
+    # The gateway already serves the team's domain, as it would on a
+    # developer's machine that has run Orca for a while.
+    api PUT /gateway/config '{"domain":"acme.localhost","http_port":80,"https_port":443,"tls_mode":"orca_ca"}' >/dev/null
+    api POST /gateway/start >/dev/null
+    api PUT /gateway/landing '{"title":"Acme dev","show_status":true,"show_targets":true,"search":true}' >/dev/null
     echo "Fresh demo machine on http://127.0.0.1:$PORT"
     ;;
   down)

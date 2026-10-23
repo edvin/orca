@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: blog, service: ghost, port: 2368, title: Blog, description: The Acme blog, on Ghost }

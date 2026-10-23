@@ -17,12 +17,12 @@ const LOGO = "data:image/png;base64," + fs.readFileSync(path.join(ROOT, "../site
  * seconds after its highlight; the cuts share the line's length.
  */
 export const coldOpen = {
-  say: "Ask for two apps, and moments later they're running on your machine, each at its own address. And when one breaks, it gets fixed.",
+  say: "Open any project, and it's running, at its own address. See every container, live. Ask your AI for the rest, and when something breaks, it gets fixed.",
   cuts: [
-    { scene: "ask", highlight: "claude-typing", from: 1.2 },
+    { scene: "folder", highlight: "running", from: 0.2 },
+    { scene: "containers", highlight: "logs", from: 0.8 },
     { scene: "ask", highlight: "claude-working", from: 0.6 },
     { scene: "landing", highlight: "search", from: 0.4 },
-    { scene: "fix", highlight: "claude-working", from: 1 },
     { scene: "fix", highlight: "fixed", from: 0.6 },
   ],
 };
@@ -32,31 +32,71 @@ export default [
     // Before the cold open: what you're about to see.
     id: "hook",
     prelude: true,
-    say: "What if your AI could run your whole dev environment?",
+    say: "What if your dev environment just worked?",
     tail: 0.5,
     async run(s) {
       await s.layout("none");
-      await s.card({ title: "What if your AI could run<br>your whole dev environment?", animate: true, size: "question" });
+      await s.card({ title: "What if your dev environment<br>just worked?", animate: true, size: "question" });
     },
   },
   {
     id: "intro",
-    say: "This is Orca: your containers and dev environments, with an AI that runs them for you.",
+    say: "This is Orca: one app for every container and dev environment on your machine. And your AI can run it, too.",
     tail: 0.6,
     async run(s) {
       await s.layout("none");
-      await s.card({ logo: LOGO, title: "<span>Orca</span>", text: "Your containers, your dev environments, and an AI that can run them.", animate: true });
+      await s.card({ logo: LOGO, title: "<span>Orca</span>", text: "Every container and dev environment on your machine, in one app.", animate: true });
+    },
+  },
+  // --- Your machine ---------------------------------------------------------
+  {
+    id: "folder",
+    say: "Start with any project on your machine. Open its folder, and Orca starts it, and gives it its own address.",
+    tail: 1.2,
+    async run(s) {
+      await s.card(null);
+      await s.layout("app");
+      await s.lower({ n: "1", title: "Open any project", sub: "A folder with a compose file" });
+      await s.click("text=Open a project folder");
+      await s.click("button:has-text('Choose a folder')");
+      await s.see("text=Services");
+      await s.sleep(1200);
+      await s.click(".modal-dialog button.btn-primary:has-text('Start')");
+      await s.fast(() => s.see("text=blog.acme.localhost", { timeout: 120000 }));
+      s.highlight("running");
+      await s.sleep(2000);
     },
   },
   {
+    id: "containers",
+    say: "Every container on your machine, live: its stats, its logs as they happen, and a shell inside it, one click away.",
+    tail: 1.2,
+    async run(s) {
+      await s.lower({ n: "2", title: "Every container, live", sub: "Stats, logs and a shell" });
+      await s.open("Containers");
+      await s.sleep(1500);
+      await s.click((r) => r.getByText("ghost-1", { exact: true }).first());
+      await s.sleep(2200);
+      await s.click(".detail-tab-item:has-text('Logs')");
+      s.highlight("logs");
+      await s.sleep(2600);
+      await s.say("Need to look inside? There's a shell, right there.");
+      await s.click(".detail-tab-item:has-text('Terminal')");
+      await s.sleep(1800);
+      await s.typeKeys("ls content\n", { delay: 90 });
+      await s.sleep(2000);
+    },
+  },
+  // --- Your team -------------------------------------------------------------
+  {
     id: "join",
-    say: "Meet a new developer at Acme. Instead of a wiki page of setup steps, they paste one link: the team's workspace. Orca clones it, creates the network, puts every app on the team's own domain, and starts the services everyone shares.",
+    say: "Now meet a new developer at Acme. Instead of a wiki page of setup steps, they paste one link: the team's workspace. Orca clones it, creates the network, puts every app on the team's own domain, and starts the services everyone shares.",
     async run(s) {
       await s.card(null);
       await s.layout("app");
       await s.sleep(1200);
       await s.open("Workspace");
-      await s.lower({ n: "1", title: "Join your team's workspace", sub: "One repo describes everything" });
+      await s.lower({ n: "3", title: "Join your team's workspace", sub: "One repo describes everything" });
       await s.type("input[placeholder*='dev-workspace.git']", s.env.ORCA_DEMO_REPO);
       await s.click("button:has-text('Join')");
       await s.fast(() => s.see("text=Shared services", { timeout: 180000 }));
@@ -71,7 +111,7 @@ export default [
     say: "Every project the team works on is right here. One click clones it, prepares its environment, starts it, and hands you its address.",
     tail: 1.5,
     async run(s) {
-      await s.lower({ n: "2", title: "Set up any project in one click", sub: "Clone, configure, start" });
+      await s.lower({ n: "4", title: "Set up any project in one click", sub: "Clone, configure, start" });
       const card = (r) => r.locator(".ws-card", { hasText: "status" });
       await s.hover((r) => card(r).locator("b", { hasText: "status" }));
       await s.click((r) => card(r).locator("button", { hasText: "Set up" }));
@@ -87,7 +127,7 @@ export default [
     say: "Or simply ask. Orca plugs into Claude, so your AI can see your whole environment, and run it.",
     tail: 1.5,
     async run(s) {
-      await s.lower({ n: "3", title: "Or just ask Claude", sub: "Through Orca's MCP server" });
+      await s.lower({ n: "5", title: "Or just ask Claude", sub: "Through Orca's MCP server" });
       await s.layout("split");
       await s.claude("Spin up analytics and notes for me, and tell me where to find them.");
       await s.say("Claude finds both projects in the workspace, sets them up, and hands back their addresses. And the app keeps up, the whole time.", { wait: true });
@@ -98,7 +138,7 @@ export default [
     say: "Every app also lands on your start page, with live status and the right icon on every card. Type to find any service, or search the web.",
     tail: 1.5,
     async run(s) {
-      await s.lower({ n: "4", title: "Your start page", sub: "https://acme.localhost" });
+      await s.lower({ n: "6", title: "Your start page", sub: "https://acme.localhost" });
       await s.layout("browser");
       await s.browse("https://acme.localhost");
       await s.sleep(2500);
@@ -116,14 +156,12 @@ export default [
     tail: 1.5,
     before: "docker stop $(docker ps -q --filter label=com.docker.compose.project=notes)",
     async run(s) {
-      await s.lower({ n: "5", title: "Something broke?", sub: "Claude finds out why and fixes it" });
+      await s.lower({ n: "7", title: "Something broke?", sub: "Claude finds out why and fixes it" });
       await s.layout("split-browser");
       await s.browse("https://notes.acme.localhost");
-      await s.sleep(2500);
-      const fixing = s.claude("notes.acme.localhost isn't loading. Can you find out why and fix it?");
-      await s.sleep(5000);
-      await s.say("Claude checks the gateway, the workspace and the container itself, works out what happened, and fixes it.");
-      await fixing;
+      await s.claude("notes.acme.localhost isn't loading. Can you find out why and fix it?", {
+        onWorking: () => s.say("Claude checks the gateway, the workspace and the container itself, works out what happened, and fixes it."),
+      });
       await s.browse("https://notes.acme.localhost");
       await s.see("text=Memos", { where: "site", timeout: 30000 }).catch(() => {});
       s.highlight("fixed");
@@ -135,7 +173,7 @@ export default [
     say: "Back in Orca, the dashboard groups every app by where it comes from, with its icon and its addresses one click away.",
     tail: 1.5,
     async run(s) {
-      await s.lower({ n: "6", title: "Every app at a glance" });
+      await s.lower({ n: "8", title: "Every app at a glance" });
       await s.layout("app");
       await s.open("Dashboard");
       await s.sleep(2000);

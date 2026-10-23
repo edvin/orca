@@ -104,6 +104,59 @@ export function bridgeScript({ token, table, extra = {} }) {
   const snake = (k) => k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
   const camel = (s) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
   let cbId = 0;
+  // Tauri events: listeners by event name, and emit() to call them, for the
+  // streams the native app would forward (logs, the daemon's events).
+  const listeners = {};
+  let listenerId = 0;
+  window.__orcaEmit = (event, payload) => {
+    for (const l of listeners[event] || []) window["_" + l.handler]?.({ event, id: l.id, payload });
+  };
+  // A server-sent-events stream from the daemon, a callback per data line.
+  const sse = (path, onLine, onBatch) => {
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const r = await fetch(API + path, { headers: { Authorization: "Bearer " + TOKEN }, signal: ctrl.signal });
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\\n");
+          buf = lines.pop();
+          const data = lines.filter((l) => l.startsWith("data:")).map((l) => l.slice(5));
+          if (data.length) onBatch ? onBatch(data) : data.forEach(onLine);
+        }
+      } catch {}
+    })();
+    return ctrl;
+  };
+  const logStreams = {};
+  let eventStream = null;
+  const BUILTIN = {
+    "plugin:event|listen": (a) => { const id = ++listenerId; (listeners[a.event] ||= []).push({ id, handler: a.handler }); return id; },
+    "plugin:event|unlisten": (a) => { listeners[a.event] = (listeners[a.event] || []).filter((l) => l.id !== a.eventId); },
+    subscribe_events: () => {
+      eventStream ||= sse("/events", (line) => { try { window.__orcaEmit("orca-event", JSON.parse(line)); } catch {} });
+      return {};
+    },
+    subscribe_container_logs: (a) => {
+      logStreams[a.id]?.abort();
+      logStreams[a.id] = sse("/containers/" + encodeURIComponent(a.id) + "/logs?follow=true&tail=" + (a.tail ?? 0), null,
+        (lines) => window.__orcaEmit("container-log-lines", { containerId: a.id, lines }));
+      return null;
+    },
+    // As the native command: the SSE body's data lines, "data:" taken off.
+    container_logs: async (a) => {
+      const r = await fetch(API + "/containers/" + encodeURIComponent(a.id) + "/logs?follow=false&tail=" + (a.tail ?? 500), { headers: { Authorization: "Bearer " + TOKEN } });
+      return (await r.text()).split("\\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5));
+    },
+    unsubscribe_container_logs: (a) => { logStreams[a.id]?.abort(); delete logStreams[a.id]; return null; },
+    // Through the dev server's proxy, which passes WebSockets on.
+    get_daemon_ws_url: (a) => (location.protocol === "https:" ? "wss://" : "ws://") + location.host + API + a.path + "?token=" + encodeURIComponent(TOKEN),
+  };
   window.__TAURI_INTERNALS__ = {
     transformCallback: (cb) => { const id = ++cbId; window["_" + id] = cb; return id; },
     unregisterCallback: () => {},
@@ -111,6 +164,7 @@ export function bridgeScript({ token, table, extra = {} }) {
     convertFileSrc: (p) => p,
     invoke: async (cmd, args = {}) => {
       if (EXTRA[cmd]) return EXTRA[cmd](args, call);
+      if (BUILTIN[cmd]) return BUILTIN[cmd](args);
       if (cmd.startsWith("plugin:")) return null;
       const e = TABLE[cmd];
       if (!e) { window.__orcaUnknown.push(cmd); console.warn("[bridge] unknown command", cmd, args); throw "not in the browser bridge: " + cmd; }

@@ -1,4 +1,5 @@
 import { createResource, createSignal, onCleanup, Show, For } from "solid-js";
+import { tildePath } from "../lib/paths";
 import { invoke } from "@tauri-apps/api/core";
 import { stacksStore } from "../lib/dockerStore";
 import { useRefresh } from "../lib/useRefresh";
@@ -213,7 +214,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
               <div class="detail-page-info">
                 <div class="detail-page-name">{s().name}</div>
                 <div class="detail-page-image" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                  {s().working_dir || "No working directory"}
+                  {s().working_dir ? tildePath(s().working_dir!) : "No working directory"}
                   <Show when={s().working_dir}>
                     <button
                       class="btn btn-sm"

@@ -13,6 +13,7 @@ export default defineConfig({
         // ORCA_DAEMON_URL points the dev server at another daemon (e.g. a test one).
         target: process.env.ORCA_DAEMON_URL ?? "http://127.0.0.1:9477",
         changeOrigin: true,
+        ws: true,
       },
     },
   },

@@ -1,4 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Show, createEffect, createMemo } from "solid-js";
+import { ansiToHtml, hasAnsi } from "../lib/ansi";
 import VirtualLogList from "./VirtualLogList";
 import { LogBuffer, FilteredView, createFrameBatcher } from "../lib/logBuffer";
 import { invoke } from "@tauri-apps/api/core";
@@ -554,7 +555,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
                   <span
                     class="multi-log-text"
                     // eslint-disable-next-line solid/no-innerhtml -- highlightLine produces pre-escaped HTML with safe <mark> tags
-                    innerHTML={highlightLine(entry.line, highlightRegex())}
+                    innerHTML={hasAnsi(entry.line) ? ansiToHtml(entry.line, (t) => highlightLine(t, highlightRegex())) : highlightLine(entry.line, highlightRegex())}
                   />
                 </div>
               );

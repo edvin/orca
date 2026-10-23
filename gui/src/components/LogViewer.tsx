@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { copyToClipboard } from "../lib/clipboard";
 import Dropdown from "./Dropdown";
 import VirtualLogList from "./VirtualLogList";
+import { ansiToHtml, hasAnsi, stripAnsi } from "../lib/ansi";
 import { LogBuffer, FilteredView, createFrameBatcher } from "../lib/logBuffer";
 
 interface LogViewerProps {
@@ -238,7 +239,7 @@ export default function LogViewer(props: LogViewerProps) {
     return filter() ? view.total : 0;
   };
 
-  const filteredText = () => filtered().map((seq) => buffer.at(seq)).join("\n");
+  const filteredText = () => filtered().map((seq) => stripAnsi(buffer.at(seq))).join("\n");
 
   // Memoize the compiled highlight regex so we don't rebuild it per rendered
   // line — the previous version called `new RegExp` on every rendered row.
@@ -463,7 +464,7 @@ export default function LogViewer(props: LogViewerProps) {
               <div
                 class="log-line"
                 // eslint-disable-next-line solid/no-innerhtml -- highlightLine produces pre-escaped HTML with safe <mark> tags
-                innerHTML={highlightLine(line, highlightRegex())}
+                innerHTML={hasAnsi(line) ? ansiToHtml(line, (t) => highlightLine(t, highlightRegex())) : highlightLine(line, highlightRegex())}
               />
             );
           }}

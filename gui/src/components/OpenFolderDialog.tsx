@@ -13,6 +13,8 @@ import { devApi } from "../lib/dev";
 
 interface FolderInfo {
   path: string;
+  /** The path with ~ for the home folder. */
+  display_path?: string;
   name: string;
   compose_files: string[];
   orca_yaml: boolean;
@@ -126,7 +128,7 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
                 <div class="open-folder-head">
                   <div>
                     <div class="open-folder-name">{f().name}</div>
-                    <div class="mono open-folder-path">{f().path}</div>
+                    <div class="mono open-folder-path">{f().display_path ?? f().path}</div>
                   </div>
                   <button class="btn btn-sm" onClick={() => { setError(""); setPath(""); setTyped(""); }} disabled={busy()}>Another folder</button>
                 </div>

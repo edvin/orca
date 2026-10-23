@@ -125,6 +125,10 @@ pub async fn inspect(
 
     Ok(Json(serde_json::json!({
         "path": dir_str,
+        // For people: `~/code/shop` rather than the full home path.
+        "display_path": dirs::home_dir()
+            .and_then(|h| dir.strip_prefix(&h).ok().map(|r| format!("~/{}", r.display())))
+            .unwrap_or_else(|| dir_str.clone()),
         "name": name,
         "compose_files": compose_files,
         "orca_yaml": orca_yaml,

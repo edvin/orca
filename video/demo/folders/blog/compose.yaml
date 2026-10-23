@@ -1,0 +1,15 @@
+# The company blog, on Ghost: a folder you open in Orca, not part of the
+# workspace.
+services:
+  ghost:
+    image: ghost:6-alpine
+    environment:
+      url: https://blog.acme.localhost
+      NODE_ENV: development
+      database__client: sqlite3
+      database__connection__filename: /var/lib/ghost/content/data/ghost.db
+    volumes:
+      - content:/var/lib/ghost/content
+
+volumes:
+  content:

@@ -89,7 +89,6 @@ await context.addInitScript({
       extra: {
         get_status: "() => ({ daemon_running: true })",
         start_daemon: "() => ({})",
-        subscribe_events: "() => ({})",
         get_version: `() => "${fs.readFileSync(path.join(REPO, "Cargo.toml"), "utf8").match(/^version = "([^"]+)"/m)[1]}"`,
         get_active_host: `() => ({ id: null, name: "Local", url: "${env.ORCA_DEMO_URL}/api/v1", is_remote: false })`,
         list_remote_hosts: "() => []",
@@ -100,8 +99,9 @@ await context.addInitScript({
         folder_apps: "() => [{ id: 'vscode', label: 'VS Code', kind: 'editor' }, { id: 'terminal', label: 'Terminal', kind: 'terminal' }]",
         mcp_clients: "() => [{ id: 'claude-code', name: 'Claude Code', detected: true, connected: true, config_path: '~/.claude.json', after_connect: null }]",
         get_api_token: `() => "demo"`,
+        // The native folder picker: the demo's blog, as if picked.
+        pick_folder: `() => ${JSON.stringify(env.ORCA_DEMO_HOME + "/code/blog")}`,
         check_for_updates: "() => null",
-        container_logs: "(a, call) => call('GET', '/containers/' + encodeURIComponent(a.id) + '/logs?follow=false&tail=' + (a.tail || 300), undefined, true).then((t) => t.split('\\\\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5)))",
       },
     })}
   }`,
@@ -198,6 +198,11 @@ function sceneApi(scene, rec) {
       await s.click(sel, { where, wait: 150 });
       await target(where, sel).pressSequentially(text, { delay });
     },
+    /** Type into a terminal in the app: click into it, then the keys. */
+    async typeKeys(text, { delay = 80 } = {}) {
+      await s.click(".xterm", { wait: 300 });
+      await page.keyboard.type(text, { delay });
+    },
     async press(key, { where = "app" } = {}) {
       const frame = page.frame({ url: where === "site" ? /acme\.localhost/ : new RegExp(`:${GUI_PORT}/`) });
       await frame.locator("body").press(key);
@@ -230,7 +235,7 @@ function sceneApi(scene, rec) {
       try { return await fn(); } finally { rec.mark("fast-end"); }
     },
     /** Ask Claude, in the terminal pane, and show what it does. */
-    async claude(prompt, { title = "claude · ~/code/acme" } = {}) {
+    async claude(prompt, { title = "claude · ~/code/acme", onWorking } = {}) {
       await stage("cursor", 1500, 1200, 600); // out of the way while Claude works
       await stage("term.title", title);
       await stage("term.clear");
@@ -242,7 +247,7 @@ function sceneApi(scene, rec) {
           const caret = window.__p.querySelector(".caret");
           caret.insertAdjacentText("beforebegin", ch);
         }, ch);
-        await sleep(28 + Math.random() * 30);
+        await sleep(18 + Math.random() * 22);
       }
       await page.evaluate(() => window.__p.querySelector(".caret").remove());
       await sleep(500);
@@ -259,7 +264,7 @@ function sceneApi(scene, rec) {
         model: process.env.ORCA_VIDEO_MODEL,
         on: (e) => {
           // Tools at work play faster; Claude's words at normal speed.
-          if (e.tool && !sawTool) (sawTool = true), rec.mark("highlight", { name: "claude-working" });
+          if (e.tool && !sawTool) (sawTool = true), rec.mark("highlight", { name: "claude-working" }), onWorking?.();
           if (e.tool && inFlight++ === 0) rec.speed(FAST);
           if (e.result !== undefined && --inFlight === 0) rec.speed(CLAUDE_SPEED);
           pending.push(page.evaluate(([e]) => {
