@@ -215,3 +215,16 @@
   });
   if (/Win|Linux/.test(navigator.platform)) $$(".search-trigger kbd").forEach((k) => (k.textContent = "Ctrl K"));
 })();
+
+// The tour video: YouTube loads only when someone presses play.
+document.querySelectorAll(".video-embed[data-youtube]").forEach((box) => {
+  const btn = box.querySelector(".video-play");
+  btn?.addEventListener("click", () => {
+    const f = document.createElement("iframe");
+    f.src = `https://www.youtube-nocookie.com/embed/${box.dataset.youtube}?autoplay=1&rel=0&modestbranding=1`;
+    f.title = btn.getAttribute("aria-label") || "Video";
+    f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+    f.allowFullscreen = true;
+    box.replaceChildren(f);
+  });
+});

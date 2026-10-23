@@ -55,6 +55,9 @@ export function downloadButton(ctx, cls = "btn-lg") {
   }${win ? ` data-href-windows="${win}"` : ""}${linux ? ` data-href-linux="${linux}"` : ""}>${"Download"}</a>`;
 }
 
+/** The tour video on YouTube (video/ in the repo records it). */
+const TOUR_VIDEO = "13pnOR7eGtY";
+
 export function homePage(ctx) {
   const v = ctx.latest?.tag ?? "";
   const yaml = `gateway:
@@ -93,12 +96,12 @@ hooks:
 <section class="hero">
   <div class="hero-bg" aria-hidden="true"><div class="hero-grid"></div><div class="hero-glow"></div></div>
   <div class="container hero-inner">
-    ${v ? `<a class="pill" href="/changelog/"><span class="pill-tag">New</span><span>${esc(v)}: Open any project folder, and ⌘K finds everything</span>${ICONS.arrow}</a>` : ""}
+    ${v ? `<a class="pill" href="/changelog/"><span class="pill-tag">New</span><span>${esc(v)}: Workspaces, app icons, and AI that can update Orca</span>${ICONS.arrow}</a>` : ""}
     <h1>Local development,<br><span class="grad">without the duct tape.</span></h1>
     <p class="hero-sub">Orca is a free, open source desktop app for containers, compose stacks and Kubernetes. It gives every service an HTTPS hostname, runs a full copy of your app for each git worktree, and lets your AI agents drive it all. One file in your repo sets it up for the whole team.</p>
     <div class="hero-ctas">
       ${downloadButton(ctx)}
-      <a class="btn btn-lg btn-ghost" href="/docs/quickstart/">Read the quickstart ${ICONS.arrow}</a>
+      <a class="btn btn-lg btn-ghost" href="#tour"><svg class="play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg> Watch the tour</a>
     </div>
     <div class="hero-meta"><span>${ICONS.apple} macOS</span><span>${ICONS.windows} Windows</span><span>${ICONS.linux} Linux</span><span class="sep"></span><span>MIT licensed</span><span>No telemetry</span></div>
   </div>
@@ -115,6 +118,24 @@ hooks:
 <section class="strip">
   <div class="container strip-inner">
     <p>One app instead of <strong>Docker Desktop</strong>, a reverse proxy you keep alive by hand, and a wiki page of setup steps.</p>
+  </div>
+</section>
+
+<section class="section tour" id="tour">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">See it in action</span>
+      <h2>Orca in two and a half minutes</h2>
+      <p>Recorded from the real app: a project folder that just runs, every container live, a whole team set up from one repo, and Claude setting up and fixing apps through Orca.</p>
+    </div>
+    <div class="video-embed reveal" data-youtube="${TOUR_VIDEO}">
+      <button class="video-play" type="button" aria-label="Play the video: Orca in two and a half minutes">
+        <img src="/assets/screens/tour-poster.webp" alt="" width="1600" height="900" loading="lazy" decoding="async">
+        <span class="video-btn" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
+        <span class="video-len">2:26</span>
+      </button>
+    </div>
+    <p class="video-note">The video plays from YouTube once you start it. <a href="https://youtu.be/${TOUR_VIDEO}">Watch it on YouTube</a></p>
   </div>
 </section>
 

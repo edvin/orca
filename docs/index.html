@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvl1cspt">
+<link rel="stylesheet" href="/assets/site.css?v=mvl1qhnk">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvl1cspt" defer></script>
+<script src="/assets/site.js?v=mvl1qhnk" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -49,12 +49,12 @@
 <section class="hero">
   <div class="hero-bg" aria-hidden="true"><div class="hero-grid"></div><div class="hero-glow"></div></div>
   <div class="container hero-inner">
-    <a class="pill" href="/changelog/"><span class="pill-tag">New</span><span>v0.54.0: Open any project folder, and ⌘K finds everything</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    <a class="pill" href="/changelog/"><span class="pill-tag">New</span><span>v0.54.0: Workspaces, app icons, and AI that can update Orca</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
     <h1>Local development,<br><span class="grad">without the duct tape.</span></h1>
     <p class="hero-sub">Orca is a free, open source desktop app for containers, compose stacks and Kubernetes. It gives every service an HTTPS hostname, runs a full copy of your app for each git worktree, and lets your AI agents drive it all. One file in your repo sets it up for the whole team.</p>
     <div class="hero-ctas">
       <a class="btn btn-primary btn-lg" href="/download/" data-os-label="Download for {os}" data-os-href data-href-mac="https://github.com/edvin/orca/releases/download/v0.54.0/Orca.Desktop_0.54.0_aarch64.dmg" data-href-windows="https://github.com/edvin/orca/releases/download/v0.54.0/Orca.Desktop_0.54.0_x64-setup.exe" data-href-linux="https://github.com/edvin/orca/releases/download/v0.54.0/Orca.Desktop_0.54.0_amd64.AppImage">Download</a>
-      <a class="btn btn-lg btn-ghost" href="/docs/quickstart/">Read the quickstart <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      <a class="btn btn-lg btn-ghost" href="#tour"><svg class="play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg> Watch the tour</a>
     </div>
     <div class="hero-meta"><span><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9s-2-.9-3.4-.9a5 5 0 0 0-4.2 2.6c-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6s1.8-.8 3.4-.8 2 .8 3.4.8 2.2-1.3 3.1-2.5c1-1.4 1.4-2.8 1.4-2.9 0 0-2.7-1-2.7-4.1zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.2.7-3 1.6-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.5z"/></svg> macOS</span><span><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg> Windows</span><span><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 2c-2.2 0-3.5 1.9-3.5 4.4 0 1.3.3 2.2-.4 3.4-.9 1.5-2.6 3.4-2.6 6.2 0 .6.1 1.1.3 1.5-.8.4-1.8.6-1.8 1.6 0 1.3 2.3 1 3.7 1.9 1 .6 1.7.9 2.6.6.6-.2 1-.6 1.2-1h2.9c.2.4.6.8 1.2 1 .9.3 1.6 0 2.6-.6 1.4-.9 3.7-.6 3.7-1.9 0-1-1-1.2-1.8-1.6.2-.4.3-.9.3-1.5 0-2.8-1.7-4.7-2.6-6.2-.7-1.2-.4-2.1-.4-3.4C15.5 3.9 14.2 2 12 2zm-1.6 4.5c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1zm3.2 0c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1zM12 9.6c.9 0 2 .5 2 .9s-1.1 1.2-2 1.2-2-.8-2-1.2.9-.9 2-.9z"/></svg> Linux</span><span class="sep"></span><span>MIT licensed</span><span>No telemetry</span></div>
   </div>
@@ -71,6 +71,24 @@
 <section class="strip">
   <div class="container strip-inner">
     <p>One app instead of <strong>Docker Desktop</strong>, a reverse proxy you keep alive by hand, and a wiki page of setup steps.</p>
+  </div>
+</section>
+
+<section class="section tour" id="tour">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">See it in action</span>
+      <h2>Orca in two and a half minutes</h2>
+      <p>Recorded from the real app: a project folder that just runs, every container live, a whole team set up from one repo, and Claude setting up and fixing apps through Orca.</p>
+    </div>
+    <div class="video-embed reveal" data-youtube="13pnOR7eGtY">
+      <button class="video-play" type="button" aria-label="Play the video: Orca in two and a half minutes">
+        <img src="/assets/screens/tour-poster.webp" alt="" width="1600" height="900" loading="lazy" decoding="async">
+        <span class="video-btn" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
+        <span class="video-len">2:26</span>
+      </button>
+    </div>
+    <p class="video-note">The video plays from YouTube once you start it. <a href="https://youtu.be/13pnOR7eGtY">Watch it on YouTube</a></p>
   </div>
 </section>
 
