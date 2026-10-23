@@ -14,6 +14,7 @@ import { useContainerStats } from "../lib/statsStore";
 import TimeChart from "../components/TimeChart";
 import AiNudge from "../components/AiNudge";
 import AppsOverview from "../components/AppsOverview";
+import { workspaceApi, type WorkspaceStatus } from "../lib/workspace";
 import { openFolderDialog } from "../lib/openFolder";
 import LastUpdated from "../components/LastUpdated";
 
@@ -135,6 +136,9 @@ export default function DashboardPage(props: DashboardPageProps) {
   // Worktree instances: a quick view of what's running per project.
   const loadProjects = () => devApi.listProjects(false).then(setDevProjects).catch(() => setDevProjects([]));
   usePoller(loadProjects, 10000);
+  // The joined workspace, so its projects and shared services group together.
+  const [workspace, setWorkspace] = createSignal<WorkspaceStatus | null>(null);
+  usePoller(() => workspaceApi.status().then(setWorkspace).catch(() => setWorkspace(null)), 10000);
   const devRunning = () =>
     (devProjects() ?? []).flatMap((p) => p.instances ?? []).filter((i) => i.status === "running" || i.status === "partial").length;
   const devTotal = () => (devProjects() ?? []).reduce((n, p) => n + (p.instances ?? []).length, 0);
@@ -231,6 +235,8 @@ export default function DashboardPage(props: DashboardPageProps) {
         routes={gatewayRoutes()}
         loaded={stacksState() === "ready" && devProjects() !== null}
         hasProjects={(devProjects() ?? []).length > 0}
+        devProjects={devProjects() ?? []}
+        workspace={workspace()}
         onNavigate={props.onNavigate}
       />
 

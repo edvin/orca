@@ -58,7 +58,7 @@ The sidebar starts with the **Dashboard** and ends with **Settings**. In between
 
 While Kubernetes is turned off, its entry is marked **off**.
 
-The **Dashboard** opens with **Your apps**: a card for each stack with its HTTPS URLs, and **Start** on the stopped ones. Below them are counts of containers, images, stacks and worktree instances, the gateway's state, and charts of **CPU used by containers** and **Memory used by containers** (with the machine's total memory). Before you've run anything, it shows three ways to start instead: **Open a project folder**, **Add a git repository** and **Start from the catalog**.
+The **Dashboard** opens with **Your apps**: a card for each stack with its HTTPS URLs, and **Start** on the stopped ones. The cards are grouped by where they come from: your [workspace](/docs/workspaces/)'s projects, with its shared services as one row of links; each project's [worktree instances](/docs/worktrees/), named by branch; then other stacks. Click a group's name to fold it. Hover a card to **pin** it to the top or **hide** it; **N hidden** next to the heading shows hidden apps again. Below them are counts of containers, images, stacks and worktree instances, the gateway's state, and charts of **CPU used by containers** and **Memory used by containers** (with the machine's total memory). Before you've run anything, it shows four ways to start instead: **Open a project folder**, **Add a git repository**, **Join your team's workspace** and **Start from the catalog**.
 
 ### The command palette
 

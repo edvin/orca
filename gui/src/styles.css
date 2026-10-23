@@ -4442,3 +4442,22 @@ tr.service-off td { opacity: 0.55; }
 .secret-ok { font-size: 11.5px; color: #3fb950; }
 .secret-spacer { flex: 1; }
 .secret-row.filled .form-input { opacity: 0.7; }
+.apps-group { margin-bottom: 14px; }
+.apps-group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 2px 8px; background: none; border: 0; color: #c9d1d9; font-size: 13px; cursor: pointer; text-align: left; }
+.apps-group-head b { font-weight: 600; }
+.apps-group-sub { font-size: 11px; color: #8b949e; padding: 1px 7px; border: 1px solid #30363d; border-radius: 999px; }
+.apps-group-count { margin-left: auto; font-size: 12px; color: #8b949e; }
+.apps-group-chevron { display: inline-flex; color: #8b949e; transition: transform 0.15s; }
+.apps-group-chevron.folded { transform: rotate(-90deg); }
+.apps-group-empty { display: block; width: 100%; padding: 12px 16px; border: 1px dashed #30363d; border-radius: 10px; background: none; color: #8b949e; font-size: 13px; text-align: left; cursor: pointer; }
+.apps-group-empty:hover { border-color: rgba(88, 166, 255, 0.45); color: #c9d1d9; }
+.apps-shared { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 10px 16px; margin-bottom: 12px; border-radius: 10px; border: 1px solid #21262d; background: #11161d; font-size: 13px; cursor: pointer; }
+.apps-shared:hover { border-color: rgba(88, 166, 255, 0.45); }
+.apps-shared-links { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.app-card-actions { display: inline-flex; gap: 2px; }
+.app-card-act { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 6px; background: none; color: #8b949e; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.app-card:hover .app-card-act, .app-card-act.on, .app-card-act:focus-visible { opacity: 1; }
+.app-card-act:hover { background: #21262d; color: #e6edf3; }
+.app-card-act.on { color: #58a6ff; }
+.app-card.is-hidden { opacity: 0.5; }
+.apps-hidden-toggle { background: none; border: 0; color: #58a6ff; font-size: 12px; cursor: pointer; }
