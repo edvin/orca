@@ -108,11 +108,12 @@ Error: *network '…' is not a valid Docker network name*.
 
 ## gateway
 
-The [gateway](/docs/gateway/)'s domain and certificate, applied to Orca's gateway on join and **Update**.
+The [gateway](/docs/gateway/)'s domain, certificate and landing page title, applied to Orca's gateway on join and **Update**.
 
 ```yaml
 gateway:
   domain: local.acme.dev
+  title: Acme dev
   certificate:
     cert: certs/local.acme.dev.crt
     key: certs/local.acme.dev.key
@@ -121,6 +122,7 @@ gateway:
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `domain` | string | the gateway's current domain | The domain every short hostname gets: `mail` becomes `mail.local.acme.dev`. The landing page is served at the domain itself. |
+| `title` | string | the landing page's current title | The title of the [landing page](/docs/gateway/#the-landing-page), such as `Acme dev`. |
 | `certificate.cert` | path | none | The certificate in PEM format, with its chain. |
 | `certificate.key` | path | none | Its private key in PEM format. |
 

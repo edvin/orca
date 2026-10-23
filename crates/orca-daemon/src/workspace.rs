@@ -62,6 +62,15 @@ fn home() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
 
+/// A path for people to read: `~/code/acme` rather than the full home path.
+fn tilde(path: &Path) -> String {
+    match path.strip_prefix(home()) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".into(),
+        Ok(rest) => format!("~/{}", rest.display()),
+        Err(_) => path.display().to_string(),
+    }
+}
+
 /// `git`, never prompting: credentials come from the developer's SSH agent
 /// or credential helper, and a first-time host key is accepted as `ssh`
 /// does when you type "yes".
@@ -223,10 +232,10 @@ async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) ->
                 }
                 let mut cmd = git();
                 cmd.arg("clone").arg("--").arg(&repo).arg(&dir);
-                run_logged(&j, cmd, &format!("git clone {repo} {}", dir.display())).await?;
-                j.done("clone", Some(dir.display().to_string())).await;
+                run_logged(&j, cmd, &format!("git clone {repo} {}", tilde(&dir))).await?;
+                j.done("clone", Some(tilde(&dir))).await;
             } else {
-                j.done("clone", Some(format!("Using {}", dir.display()))).await;
+                j.done("clone", Some(format!("Using {}", tilde(&dir)))).await;
             }
             let file = WorkspaceFile::load(&dir)?;
             {
@@ -359,6 +368,9 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
         if let Some(g) = &file.gateway {
             if let Some(domain) = &g.domain {
                 gw.domain = domain.clone();
+            }
+            if let Some(title) = g.title.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+                gw.landing.title = Some(title.chars().take(120).collect());
             }
             match &g.certificate {
                 Some(c) => {
@@ -563,6 +575,48 @@ fn page_url(r: &WorkspaceRoute, domain: &str, https_port: u16) -> String {
     )
 }
 
+/// A project's addresses: its routes in the workspace file, then the ones
+/// its own orca.yaml defines.
+fn project_urls(routes: &[WorkspaceRoute], pdir: &Path, domain: &str, https_port: u16) -> Vec<String> {
+    let mut urls: Vec<String> = routes
+        .iter()
+        .filter(|r| is_page(r))
+        .map(|r| page_url(r, domain, https_port))
+        .collect();
+    if let Ok(yaml) = orca_core::dev::OrcaYaml::load(pdir) {
+        for g in yaml
+            .gateway
+            .iter()
+            .filter(|g| !g.presentation.hidden && !g.hostname.contains('*'))
+        {
+            let r = WorkspaceRoute {
+                hostname: g.hostname.replace("{domain}", domain),
+                path: g.path.clone(),
+                ..Default::default()
+            };
+            let url = page_url(&r, domain, https_port);
+            if !urls.contains(&url) {
+                urls.push(url);
+            }
+        }
+    }
+    urls
+}
+
+/// The icon a workspace gives the project in `dir`, as the gateway keeps
+/// icons, for routes the project's own orca.yaml defines without one.
+pub(crate) fn project_icon(workspace: &WorkspaceRef, dir: &Path) -> Option<String> {
+    let ws_dir = PathBuf::from(&workspace.path);
+    let file = WorkspaceFile::load(&ws_dir).ok()?;
+    let dir = dir.canonicalize().ok()?;
+    file.projects.iter().find_map(|(key, p)| {
+        let icon = p.icon.as_deref()?;
+        (file.project_dir(&ws_dir, key).canonicalize().ok()? == dir)
+            .then(|| orca_core::icons::resolve(icon, Some(&ws_dir)).ok())
+            .flatten()
+    })
+}
+
 /// A route one can open: not a hostname pattern or a WebSocket-only route.
 fn is_page(r: &WorkspaceRoute) -> bool {
     !r.hostname.contains('*') && !r.websocket
@@ -684,7 +738,7 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
                 "running": running,
                 "uses": p.uses,
                 "setup": p.setup,
-                "urls": p.routes.iter().filter(|r| is_page(r)).map(&url).collect::<Vec<_>>(),
+                "urls": project_urls(&p.routes, &pdir, &domain, https_port),
                 "secrets": secrets_of(&file, key, &pdir),
                 "env_file": p.env.as_ref().map(|e| e.file().to_string()),
                 "icon": icon_of(p.icon.as_deref(), stack.into_iter().flat_map(|s| s.services.iter().map(|x| x.image.as_str())).collect()),
@@ -758,7 +812,7 @@ async fn setup(
         let r: Result<serde_json::Value> = async {
             j.start("clone").await;
             if pdir.is_dir() {
-                j.done("clone", Some(format!("Already in {}", pdir.display()))).await;
+                j.done("clone", Some(format!("Already in {}", tilde(&pdir)))).await;
             } else {
                 if let Some(parent) = pdir.parent() {
                     std::fs::create_dir_all(parent)?;
@@ -769,8 +823,8 @@ async fn setup(
                     cmd.args(["--branch", b]);
                 }
                 cmd.arg("--").arg(&project.repo).arg(&pdir);
-                run_logged(&j, cmd, &format!("git clone {} {}", project.repo, pdir.display())).await?;
-                j.done("clone", Some(pdir.display().to_string())).await;
+                run_logged(&j, cmd, &format!("git clone {} {}", project.repo, tilde(&pdir))).await?;
+                j.done("clone", Some(tilde(&pdir))).await;
             }
 
             j.start("env").await;
@@ -908,12 +962,7 @@ async fn setup(
                 let cfg = state.config.lock().await;
                 (cfg.gateway.domain.clone(), cfg.gateway.https_port)
             };
-            let urls: Vec<String> = project
-                .routes
-                .iter()
-                .filter(|r| is_page(r))
-                .map(|r| page_url(r, &domain, https_port))
-                .collect();
+            let urls = project_urls(&project.routes, &pdir, &domain, https_port);
             Ok(serde_json::json!({ "stack": stack, "urls": urls, "dir": pdir, "warnings": warnings }))
         }
         .await;

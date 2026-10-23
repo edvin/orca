@@ -4800,6 +4800,15 @@ fn validate_compose_path(p: &str) -> anyhow::Result<std::path::PathBuf> {
     Ok(canonical)
 }
 
+/// `:8443` for an address on a port other than HTTPS's own, else nothing.
+fn port_suffix(https_port: u16) -> String {
+    if https_port == 443 {
+        String::new()
+    } else {
+        format!(":{https_port}")
+    }
+}
+
 /// Hooks from a stack's orca.yaml, run after every `up`:
 /// ```yaml
 /// hooks:
@@ -8538,7 +8547,7 @@ async fn gateway_list_routes(State(state): State<Arc<AppState>>) -> Result<impl 
         .routes
         .iter()
         .map(|r| {
-            let url = format!("https://{}:{}", r.hostname, config.gateway.https_port);
+            let url = format!("https://{}{}", r.hostname, port_suffix(config.gateway.https_port));
             serde_json::json!({
                 "hostname": r.hostname,
                 "container_name": r.container_name,
@@ -8664,7 +8673,7 @@ async fn gateway_add_route(
         tracing::warn!("Failed to push updated config to Caddy: {e}");
     }
 
-    let url = format!("https://{}:{}", req.hostname, gw_config.https_port);
+    let url = format!("https://{}{}", req.hostname, port_suffix(gw_config.https_port));
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({

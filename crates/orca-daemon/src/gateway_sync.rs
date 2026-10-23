@@ -129,7 +129,13 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
 
     // From each running project's orca.yaml, then from labels.
     let mut wanted: Vec<GatewayRoute> = Vec::new();
+    let workspace = state.config.lock().await.workspace.clone();
     for p in projects.iter().filter(|p| p.running()) {
+        // A workspace project's own icon, for its routes that set none.
+        let ws_icon = workspace
+            .as_ref()
+            .filter(|_| p.yaml.gateway.iter().any(|r| r.presentation.icon.is_none()))
+            .and_then(|w| crate::workspace::project_icon(w, &p.dir));
         for r in &p.yaml.gateway {
             let Some(c) = p
                 .container_of(&r.service)
@@ -146,7 +152,13 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                 owner: Some(format!("{PROJECT_OWNER_PREFIX}{}", p.name)),
                 sleeping: false,
                 websocket: false,
-                presentation: with_icon(r.presentation.clone(), Some(&p.dir)),
+                presentation: {
+                    let mut pr = with_icon(r.presentation.clone(), Some(&p.dir));
+                    if pr.icon.is_none() {
+                        pr.icon = ws_icon.clone();
+                    }
+                    pr
+                },
             });
         }
     }

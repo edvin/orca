@@ -15,7 +15,7 @@ export function stackUrls(stack: ComposeProject, routes: GatewayRoute[]): StackU
     .sort((a, b) => (a.path ? 1 : 0) - (b.path ? 1 : 0))
     .map((r) => {
       const path = (r.path ?? "").replace(/\*$/, "");
-      const url = r.url ?? `https://${r.hostname}${path}`;
+      const url = (r.url ?? `https://${r.hostname}`) + path;
       const service = stack.services.find((s) => s.container_name === r.container_name)?.name ?? r.container_name;
       return { url, label: r.presentation?.title || service };
     })

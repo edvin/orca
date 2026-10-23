@@ -29,7 +29,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
   const [jobs, setJobs] = createSignal<Record<string, DevJob>>({});
   const [secretsFor, setSecretsFor] = createSignal<WorkspaceProject | null>(null);
 
-  const timer = setInterval(() => { if (!document.hidden && !Object.values(jobs()).some((j) => j.status === "running")) void refetch(); }, 10_000);
+  const timer = setInterval(() => { if (!document.hidden && !Object.values(jobs()).some((j) => j.status === "running")) void refetch(); }, 5_000);
   onCleanup(() => clearInterval(timer));
 
   const track = async (key: string, start: Promise<DevJob>) => {

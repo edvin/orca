@@ -55,6 +55,9 @@ pub struct WorkspaceGateway {
     /// Without one, Orca's own certificate authority signs the names.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub certificate: Option<CertificateFiles>,
+    /// The landing page's title, such as "Acme dev".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

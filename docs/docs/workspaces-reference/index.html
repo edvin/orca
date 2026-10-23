@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvkwf7mk">
+<link rel="stylesheet" href="/assets/site.css?v=mvkx2187">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvkwf7mk" defer></script>
+<script src="/assets/site.js?v=mvkx2187" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -121,12 +121,13 @@
 </ul>
 <p>Error: <em>network &#39;…&#39; is not a valid Docker network name</em>.</p>
 <h2 id="gateway"><a class="anchor" href="#gateway" aria-hidden="true" tabindex="-1">#</a>gateway</h2>
-<p>The <a href="/docs/gateway/">gateway</a>&#39;s domain and certificate, applied to Orca&#39;s gateway on join and <strong>Update</strong>.</p>
+<p>The <a href="/docs/gateway/">gateway</a>&#39;s domain, certificate and landing page title, applied to Orca&#39;s gateway on join and <strong>Update</strong>.</p>
 <div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">gateway</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  domain</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">local.acme.dev</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  title</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">Acme dev</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  certificate</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    cert</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">certs/local.acme.dev.crt</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    key</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">certs/local.acme.dev.key</span></span></code></pre></div><div class="table-wrap"><table><thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead><tbody><tr><td><code>domain</code></td><td>string</td><td>the gateway&#39;s current domain</td><td>The domain every short hostname gets: <code>mail</code> becomes <code>mail.local.acme.dev</code>. The landing page is served at the domain itself.</td></tr><tr><td><code>certificate.cert</code></td><td>path</td><td>none</td><td>The certificate in PEM format, with its chain.</td></tr><tr><td><code>certificate.key</code></td><td>path</td><td>none</td><td>Its private key in PEM format.</td></tr></tbody></table></div><p>What Orca does with it:</p>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    key</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">certs/local.acme.dev.key</span></span></code></pre></div><div class="table-wrap"><table><thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead><tbody><tr><td><code>domain</code></td><td>string</td><td>the gateway&#39;s current domain</td><td>The domain every short hostname gets: <code>mail</code> becomes <code>mail.local.acme.dev</code>. The landing page is served at the domain itself.</td></tr><tr><td><code>title</code></td><td>string</td><td>the landing page&#39;s current title</td><td>The title of the <a href="/docs/gateway/#the-landing-page">landing page</a>, such as <code>Acme dev</code>.</td></tr><tr><td><code>certificate.cert</code></td><td>path</td><td>none</td><td>The certificate in PEM format, with its chain.</td></tr><tr><td><code>certificate.key</code></td><td>path</td><td>none</td><td>Its private key in PEM format.</td></tr></tbody></table></div><p>What Orca does with it:</p>
 <ul>
 <li>With <code>certificate</code>, the gateway uses that one certificate for every hostname (the <strong>Custom certificate</strong> TLS mode). It must cover <code>*.&lt;domain&gt;</code>, and the domain itself for the landing page.</li>
 <li>With a <code>gateway</code> section but no <code>certificate</code>, the gateway uses Orca&#39;s own certificate authority (the <strong>Orca CA (automatic)</strong> mode), which issues a certificate per hostname.</li>
