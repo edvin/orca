@@ -194,11 +194,31 @@ Each card's title, description, group and icon come from the route:
 
 | Route from | Set it with |
 |---|---|
-| Added by hand | **Edit** on the Landing page tab (or the route's edit dialog): **Title**, **Description**, **Group**, **Icon URL**, and **Hide** |
+| Added by hand | **Edit** on the Landing page tab (or the route's edit dialog): **Title**, **Description**, **Group**, **Icon**, and **Hide** |
 | orca.yaml | `title`, `description`, `group`, `icon`, `hidden` on the gateway entry |
 | Labels | `orca.route.title`, `.description`, `.group`, `.icon`, `.hidden` (for a named route, `orca.route.<name>.title` and so on) |
 
-Without a title, the card is named after the hostname. The group defaults to the compose project. A group of [environment links](#environment-links) with the same name as a group of cards, such as the project's name, joins that section instead of showing as a second one. An icon is an image URL (`https:` or `data:image/`). A hidden route still routes; it's only left off the page.
+Without a title, the card is named after the hostname. The group defaults to the compose project. A group of [environment links](#environment-links) with the same name as a group of cards, such as the project's name, joins that section instead of showing as a second one. A hidden route still routes; it's only left off the page.
+
+### Icons
+
+Every app gets an icon on the landing page, on the dashboard's **Your apps**, on the **Workspace** and **Gateway** pages and in the ⌘K palette.
+
+**Most need no setting at all.** When a route doesn't set an icon, the image of the container behind it picks one: `postgres:17` gets PostgreSQL's logo, `grafana/grafana` Grafana's, `axllent/mailpit` Mailpit's. Anything Orca doesn't recognise shows its initial.
+
+To choose one, set `icon` on the route (in [orca.yaml](/docs/orca-yaml/#gateway), a label, the [workspace file](/docs/workspaces-reference/#routes) or the route's **Edit** dialog) to one of these:
+
+| Kind | Example | Notes |
+|---|---|---|
+| A built-in icon | `icon: grafana` | Works everywhere, offline. The list is below. |
+| An image file in the repo | `icon: assets/logo.svg` | SVG, PNG, WebP or JPEG, up to 64 KB, relative to the project folder (or the workspace folder in a workspace file). Orca reads it in, so it works offline too. Not for routes added by hand. |
+| An image URL | `icon: https://example.com/logo.png` | Loaded by the browser from that address, on the landing page only: the app doesn't load images from other sites. |
+
+**Built-in brand icons:** `grafana`, `prometheus`, `postgresql`, `redis`, `mysql`, `mariadb`, `mongodb`, `rabbitmq`, `nginx`, `traefik`, `caddy`, `minio`, `elasticsearch`, `kibana`, `keycloak`, `phpmyadmin`, `temporal`, `wordpress`, `nodejs`, `php`, `python`, `go`, `meilisearch`, `clickhouse`, `docker`, `kubernetes`, `kafka`, `vault`, `consul`, `jenkins`, `gitlab`, `sentry`, `jaeger`, `opentelemetry`, `adminer`, `laravel`, `symfony`, `vue`, `react`, `nextjs`, `vite`, `django`, `rails`, `apache`, `influxdb`, `opensearch`, `ollama`, `n8n`, `metabase`, `mattermost`, `nextcloud`, `gitea`, `portainer`, `pusher`, `pocketbase`, `sonarqube`, `mailpit`.
+
+**Built-in generic icons**, for roles rather than products: `mail`, `database`, `cache`, `queue`, `websocket`, `docs`, `api`, `worker`, `auth`, `search`, `storage`, `web`, `metrics`, `app`.
+
+Common other names work too, such as `postgres`, `node`, `mongo`, `s3` and `oidc`. The brand icons come from [Simple Icons](https://simpleicons.org) (CC0), the Mailpit logo from Mailpit (MIT). Logos are trademarks of their owners.
 
 > [!NOTE]
 > Anyone who can reach the gateway can see the landing page. It lists hostnames and, unless you switch it off, the container and port behind each one.

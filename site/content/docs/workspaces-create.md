@@ -240,6 +240,20 @@ Go through the keys for each project:
 - **`env`**: the template its `.env` starts from, and each secret's reference. See [Secrets](/docs/workspaces-secrets/).
 - **`worktrees: true`**: if the project has a `dev:` section in its `orca.yaml` for [worktree instances](/docs/worktrees/).
 
+### Give projects an icon
+
+Shared services usually get theirs from their image: Mailpit, Temporal, MinIO and most others are built in. For your own apps, put their logos in an `icons/` folder in the workspace repo and point at them:
+
+```yaml
+projects:
+  shop:
+    icon: icons/shop.svg        # SVG, PNG, WebP or JPEG, up to 64 KB
+  billing:
+    icon: api                   # or a built-in icon
+```
+
+A project's icon shows on its card on the **Workspace** page and the dashboard, and on the landing page for its routes. See [Icons](/docs/gateway/#icons).
+
 ### Prepare each project's repo
 
 A few things in each project make setup reliable:
@@ -369,7 +383,7 @@ routes:
   - { hostname: mail, target: "mailpit:8025", title: Mailpit }
   - { hostname: temporal, target: "temporal-ui:8080", title: Temporal }
   - { hostname: s3, target: "minio:9001", title: MinIO }
-  - { hostname: soketi, target: "soketi:9601", title: Soketi metrics }
+  - { hostname: soketi, target: "soketi:9601", title: Soketi metrics, icon: websocket }
   # Every WebSocket goes to soketi (Laravel Echo on each app's own hostname),
   # unless a project below routes its own.
   - { hostname: "*", target: "soketi:6001", websocket: true }
@@ -379,6 +393,7 @@ projects:
   shop:
     repo: git@git.acme.dev:shop/shop.git
     description: The storefront and checkout (Laravel and Vue), one store per brand
+    icon: icons/shop.svg
     uses: [mailpit, soketi]
     setup: just setup
     worktrees: true

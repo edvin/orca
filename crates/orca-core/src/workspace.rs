@@ -91,6 +91,14 @@ pub struct WorkspaceRoute {
     /// Card title on the landing page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// A line under the title on the landing page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// A built-in icon (`grafana`), an image file in the workspace repo
+    /// (`icons/crm.svg`) or an https URL. Without one, the target
+    /// container's image picks one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// Only WebSocket connections take this route (a Reverb or Vite HMR
     /// socket on the app's hostname); everything else falls through.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -184,6 +192,11 @@ pub struct WorkspaceProject {
     pub repo: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Shown on the Workspace page and the project's cards, and for its
+    /// routes that don't set their own: a built-in icon, an image file in
+    /// the workspace repo or an https URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// Folder under `clone_into`; the project's key when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,

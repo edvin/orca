@@ -182,6 +182,8 @@ routes:
 | `target` | string | required | `alias:port`: a container name or network alias on the workspace network, and the port inside it. |
 | `path` | string | none | Only requests for this path. `/api/*` matches everything under `/api/`; without `*`, only that exact path. |
 | `title` | string | from the hostname | The card's title on the landing page. For shared routes, also the button's label on the **Workspace** page. |
+| `description` | string | none | A line under the title on the landing page. |
+| `icon` | string | from the target's image | A built-in icon (`grafana`), an image file in the workspace repo (`icons/crm.svg`) or an https URL. See [Icons](/docs/gateway/#icons). |
 | `websocket` | boolean | `false` | Only WebSocket connections take this route. |
 
 Rules:
@@ -251,6 +253,7 @@ Keys use letters, digits, dashes and underscores, at most 63 characters, and don
 |---|---|---|---|
 | `repo` | string | required | What to `git clone`. |
 | `description` | string | none | One line, shown on the card. AI tools match on it too. |
+| `icon` | string | from its images | The project's icon on the **Workspace** page and the dashboard, and for its routes that don't set their own: a built-in icon, an image file in the workspace repo or an https URL. See [Icons](/docs/gateway/#icons). |
 | `path` | path | the project's key | The folder under `clone_into`. |
 | `branch` | string | the repo's default branch | The branch to check out when cloning. |
 | [`uses`](#uses) | list of strings | `[]` | Shared services to start before the project. |

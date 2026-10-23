@@ -83,7 +83,7 @@ Each entry routes a hostname (and optionally a path) to a service's port inside 
 | `title` | optional | The card's title on the landing page; from the hostname when unset. |
 | `description` | optional | A line under the title. |
 | `group` | optional | The section the card is shown under; the compose project when unset. |
-| `icon` | optional | An image URL (`https:` or `data:image/`) shown instead of the initial. |
+| `icon` | optional | A built-in icon such as `grafana` or `postgres`, an image file in the project (`assets/logo.svg`), or an image URL. Without one, the service's image picks an icon when Orca knows it. See [Icons](https://orca-desktop.com/docs/gateway/#icons). |
 | `hidden` | optional | `true` keeps the route off the landing page. It still routes. |
 
 ### The landing page

@@ -7,6 +7,8 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "../components/Toast";
 import { confirm as confirmDialog } from "../components/ConfirmDialog";
 import FolderActions from "../components/FolderActions";
+import AppIcon from "../components/AppIcon";
+import { iconSrc } from "../lib/icons";
 import SecretsDialog from "../components/SecretsDialog";
 import { JobProgress, JobSteps } from "../components/dev/DevBits";
 import { followJob, type DevJob } from "../lib/dev";
@@ -143,7 +145,12 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                 <div class="ws-section-title">Shared services</div>
                 <div class="ws-shared">
                   <For each={w().shared_urls}>
-                    {(u) => <button class="app-url" title={u.url} onClick={() => void openUrl(u.url)}>{u.title} ↗</button>}
+                    {(u) => (
+                      <button class="app-url app-url-icon" title={u.url} onClick={() => void openUrl(u.url)}>
+                        <Show when={iconSrc(u.icon)}>{(src) => <img src={src()} alt="" />}</Show>
+                        {u.title} ↗
+                      </button>
+                    )}
                   </For>
                 </div>
               </Show>
@@ -203,8 +210,9 @@ function ProjectCard(props: {
   return (
     <div class="ws-card" classList={{ running: p().running }}>
       <div class="ws-card-head">
-        <span class={`app-dot ${p().running ? "running" : ""}`} />
+        <AppIcon src={iconSrc(p().icon)} name={p().key} size={26} />
         <b>{p().key}</b>
+        <span class={`app-dot ${p().running ? "running" : ""}`} />
         <span class={`ws-state ${state()}`}>{p().running ? "Running" : p().cloned ? "Cloned" : "Not cloned"}</span>
       </div>
       <Show when={p().description}><div class="ws-card-desc">{p().description}</div></Show>

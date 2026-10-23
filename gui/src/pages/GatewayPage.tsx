@@ -10,6 +10,8 @@ import { logError } from "../lib/activityStore";
 import { SkeletonCard } from "../components/Skeleton";
 import { safeHref } from "../lib/sanitize";
 import LandingPageTab from "../components/gateway/LandingPageTab";
+import AppIcon from "../components/AppIcon";
+import { iconForImage, iconSrc } from "../lib/icons";
 import "../styles/polish-a.css";
 
 interface GatewayPageProps {
@@ -953,14 +955,21 @@ export default function GatewayPage(props: GatewayPageProps) {
                   {(route) => (
                     <tr>
                       <td>
-                        <button
-                          class="btn-link"
-                          style={{ color: "#58a6ff", cursor: "pointer", background: "none", border: "none", "font-size": "13px", padding: "0", "word-break": "break-all" }}
-                          onClick={() => route.url && openUrl(route.url)}
-                          title={route.url}
-                        >
-                          {route.hostname}{route.path || ""}
-                        </button>
+                        <span style={{ display: "inline-flex", "align-items": "center", gap: "8px" }}>
+                          <AppIcon
+                            src={iconSrc(route.presentation?.icon) ?? iconForImage(containers().find((c) => c.name === route.container_name)?.image)}
+                            name={route.presentation?.title || route.hostname}
+                            size={20}
+                          />
+                          <button
+                            class="btn-link"
+                            style={{ color: "#58a6ff", cursor: "pointer", background: "none", border: "none", "font-size": "13px", padding: "0", "word-break": "break-all" }}
+                            onClick={() => route.url && openUrl(route.url)}
+                            title={route.url}
+                          >
+                            {route.hostname}{route.path || ""}
+                          </button>
+                        </span>
                         <Show when={route.presentation?.title}>
                           <div style={{ color: "#8b949e", "font-size": "11.5px", "margin-top": "2px" }}>{route.presentation!.title}</div>
                         </Show>
@@ -1809,8 +1818,11 @@ export default function GatewayPage(props: GatewayPageProps) {
                     <input id="edit-route-group" class="form-input" type="text" value={editGroup()} onInput={(e) => setEditGroup(e.currentTarget.value)} placeholder="Its project" />
                   </div>
                   <div class="form-group" style={{ "margin-bottom": "0" }}>
-                    <label class="form-label" for="edit-route-icon">Icon URL</label>
-                    <input id="edit-route-icon" class="form-input" type="text" value={editIcon()} onInput={(e) => setEditIcon(e.currentTarget.value)} placeholder="https://…/logo.png" />
+                    <label class="form-label" for="edit-route-icon">Icon</label>
+                    <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                      <AppIcon src={iconSrc(editIcon())} name={editTitle() || "?"} size={30} />
+                      <input id="edit-route-icon" class="form-input" type="text" value={editIcon()} onInput={(e) => setEditIcon(e.currentTarget.value)} placeholder="grafana, postgres, mail… or https://…/logo.png" />
+                    </div>
                   </div>
                 </div>
                 <label style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "13px", color: "#c9d1d9", cursor: "pointer" }}>

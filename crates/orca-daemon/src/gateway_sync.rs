@@ -146,7 +146,7 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                 owner: Some(format!("{PROJECT_OWNER_PREFIX}{}", p.name)),
                 sleeping: false,
                 websocket: false,
-                presentation: r.presentation.clone(),
+                presentation: with_icon(r.presentation.clone(), Some(&p.dir)),
             });
         }
     }
@@ -175,7 +175,12 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                 owner: Some(format!("{LABEL_OWNER_PREFIX}{}", c.name)),
                 sleeping: false,
                 websocket: false,
-                presentation: a.presentation,
+                presentation: with_icon(
+                    a.presentation,
+                    c.labels
+                        .get("com.docker.compose.project.working_dir")
+                        .map(std::path::Path::new),
+                ),
             });
         }
     }
@@ -496,6 +501,20 @@ struct RouteLabels<'a> {
 
 /// Attributes a route label can have after its name.
 const ROUTE_ATTRS: &[&str] = &["port", "path", "title", "description", "group", "icon", "hidden"];
+
+/// A route's `icon:` as the gateway keeps it: a built-in name, a URL, or a
+/// repo file read in (paths are relative to `base`, the project folder). One
+/// that can't be used is left out, and the card shows the image's icon or
+/// an initial.
+pub(crate) fn with_icon(mut p: RoutePresentation, base: Option<&std::path::Path>) -> RoutePresentation {
+    if let Some(spec) = p.icon.take() {
+        match orca_core::icons::resolve(&spec, base) {
+            Ok(icon) => p.icon = Some(icon),
+            Err(e) => tracing::debug!("{e}"),
+        }
+    }
+    p
+}
 
 fn orca_label_routes(labels: &HashMap<String, String>, domain: &str) -> Vec<Ask> {
     let mut routes: std::collections::BTreeMap<&str, RouteLabels> = Default::default();

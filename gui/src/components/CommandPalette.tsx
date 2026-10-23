@@ -1,6 +1,7 @@
 // ⌘K: find anything (stacks, containers, images, projects, URLs) and run
 // actions. Typing searches everything; with no query it shows the actions.
 
+import { iconForImage, iconSrc, stackIcon } from "../lib/icons";
 import { createSignal, createEffect, onMount, onCleanup, For, Show, createMemo, createResource } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -19,6 +20,8 @@ interface Command {
   /** Shown dimmed after the name: a path, image, state. */
   hint?: string;
   icon: string;
+  /** An app icon shown instead of `icon`. */
+  img?: string | null;
   category: string;
   shortcut?: string;
   action: () => void;
@@ -128,13 +131,14 @@ export default function CommandPalette(props: CommandPaletteProps) {
   // Things on this machine, searched as you type.
   const resources = createMemo<Command[]>(() => [
     ...stacks().map((s) => ({
-      id: `stack-${s.name}`, name: s.name, hint: `stack · ${s.status.toLowerCase()}`, icon: "◫", category: "Stacks",
+      id: `stack-${s.name}`, name: s.name, hint: `stack · ${s.status.toLowerCase()}`, icon: "◫", img: stackIcon(s, routes() ?? []), category: "Stacks",
       action: go(`stack:${s.name}`),
     })),
     ...(routes() ?? []).filter((r) => r.enabled).map((r) => {
       const url = `https://${r.hostname}${(r.path ?? "").replace(/\*$/, "")}`;
       return {
-        id: `url-${url}`, name: url.replace(/^https:\/\//, ""), hint: `open · ${r.container_name}`, icon: "↗", category: "URLs",
+        id: `url-${url}`, name: url.replace(/^https:\/\//, ""), hint: `open · ${r.container_name}`, icon: "↗",
+        img: iconSrc(r.presentation?.icon) ?? iconForImage(containers().find((c) => c.name === r.container_name)?.image), category: "URLs",
         action: run(() => void shellOpen(url).catch(() => window.open(url, "_blank", "noopener,noreferrer"))),
       };
     }),
@@ -143,7 +147,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
       category: "Projects", action: go("projects"),
     })),
     ...containers().flatMap((c) => [
-      { id: `ct-${c.id}`, name: c.name, hint: `${c.state.toLowerCase()} · ${c.image}`, icon: "▣", category: "Containers", action: go(`container:${c.id}`) },
+      { id: `ct-${c.id}`, name: c.name, hint: `${c.state.toLowerCase()} · ${c.image}`, icon: "▣", img: iconForImage(c.image), category: "Containers", action: go(`container:${c.id}`) },
       ...(c.state === "Running"
         ? [{ id: `sh-${c.id}`, name: `Shell in ${c.name}`, icon: ">_", category: "Containers", action: run(() => { openContainerOn(c.id, "terminal"); props.onNavigate(`container:${c.id}`); }) }]
         : []),
@@ -245,7 +249,9 @@ export default function CommandPalette(props: CommandPaletteProps) {
                       onClick={() => cmd.action()}
                       onMouseEnter={() => setSelectedIndex(indexOf(cmd))}
                     >
-                      <span class="command-item-icon">{cmd.icon}</span>
+                      <span class="command-item-icon">
+                        <Show when={cmd.img} fallback={cmd.icon}>{(src) => <img class="command-item-img" src={src()} alt="" />}</Show>
+                      </span>
                       <span class="command-item-name">{cmd.name}</span>
                       <Show when={cmd.hint}><span class="command-item-hint">{cmd.hint}</span></Show>
                       <Show when={cmd.shortcut}>

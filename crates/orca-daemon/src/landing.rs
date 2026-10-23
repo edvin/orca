@@ -22,6 +22,8 @@ pub struct ServiceState {
     pub started_at: Option<String>,
     /// Its compose project, to group cards by.
     pub project: Option<String>,
+    /// Its image, which picks an icon when the route sets none.
+    pub image: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -78,6 +80,7 @@ pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig) {
             Some("paused") => Status::Paused,
             _ => Status::Stopped,
         };
+        let image = info.config.as_ref().and_then(|c| c.image.clone());
         let project = info
             .config
             .and_then(|c| c.labels)
@@ -88,6 +91,7 @@ pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig) {
                 status,
                 started_at: state.started_at.filter(|_| status != Status::Stopped),
                 project,
+                image,
             },
         );
     }
@@ -202,6 +206,17 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             Status::Stopped => ("off", "Stopped", None),
         })
     };
+    // The route's own icon, else one its container's image picks.
+    let icon_of = |r: &GatewayRoute| -> Option<String> {
+        r.presentation
+            .icon
+            .as_deref()
+            .and_then(orca_core::icons::src)
+            .or_else(|| {
+                let image = states.get(&r.container_name)?.image.as_deref()?;
+                orca_core::icons::src(orca_core::icons::for_image(image)?)
+            })
+    };
     let route_card = |r: &GatewayRoute| -> Card {
         let host = full_host(&r.hostname);
         let path = r.path.as_deref().unwrap_or("").trim_end_matches('*');
@@ -210,7 +225,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             description: r.presentation.description.clone(),
             url: Some(format!("{scheme}://{host}{port_suffix}{path}")),
             display_url: format!("{host}{port_suffix}{path}"),
-            icon: r.presentation.icon.clone(),
+            icon: icon_of(r),
             target: landing
                 .show_targets
                 .then(|| format!("{} :{}", r.container_name, r.port)),
@@ -284,7 +299,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
                             description: None,
                             url: Some(format!("{scheme}://{host}{port_suffix}{rest}")),
                             display_url: format!("{host}{port_suffix}{rest}"),
-                            icon: route.and_then(|r| r.presentation.icon.clone()),
+                            icon: route.and_then(|r| icon_of(r)),
                             target: route
                                 .filter(|_| landing.show_targets)
                                 .map(|r| format!("{} :{}", r.container_name, r.port)),
@@ -838,7 +853,27 @@ mod tests {
             status: Status::Running,
             started_at: Some(since.into()),
             project: project.map(Into::into),
+            image: None,
         }
+    }
+
+    #[test]
+    fn cards_get_built_in_and_image_icons() {
+        let mut named = route("grafana.localhost", "grafana-1", 3000);
+        named.presentation.icon = Some("grafana".into());
+        let config = GatewayConfig {
+            routes: vec![named, route("db.localhost", "db-1", 5432)],
+            ..Default::default()
+        };
+        let states = HashMap::from([(
+            "db-1".to_string(),
+            ServiceState {
+                image: Some("postgres:17".into()),
+                ..running("2026-01-01T00:00:00Z", None)
+            },
+        )]);
+        let html = render(&config, &states);
+        assert_eq!(html.matches(r#"<img src="data:image/svg+xml;base64,"#).count(), 2);
     }
 
     #[test]
@@ -1126,6 +1161,7 @@ mod tests {
             status: Status::Unhealthy,
             started_at: Some(ago(12)),
             project: Some("sso".into()),
+            image: Some("quay.io/keycloak/keycloak:26.0".into()),
         };
         let states = HashMap::from([
             ("shop-web-1".to_string(), running(&ago(185), Some("shop"))),
@@ -1145,6 +1181,23 @@ mod tests {
             ),
             ("sso-keycloak-1".to_string(), unhealthy),
         ]);
+        // Icons: the shop's own logo from its repo, the rest from images.
+        let mut states = states;
+        for (name, image) in [
+            ("shop-mailpit-1", "axllent/mailpit:v1.24"),
+            ("website-wordpress-1", "wordpress:6"),
+            ("telemetry-grafana-1", "grafana/grafana:12.1"),
+        ] {
+            states.get_mut(name).unwrap().image = Some(image.into());
+        }
+        let shop = "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e8590c'/%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M8 11h16l-1.5 11h-13z M12 11a4 4 0 0 1 8 0'/%3E%3C/svg%3E";
+        for r in c.routes.iter_mut().filter(|r| {
+            (r.owner.as_deref() == Some("project:shop")
+                || r.owner.as_deref().is_some_and(|o| o.starts_with("dev:shop")))
+                && r.container_name != "shop-mailpit-1"
+        }) {
+            r.presentation.icon = Some(shop.into());
+        }
         std::fs::write(out, render(&c, &states)).unwrap();
     }
 }

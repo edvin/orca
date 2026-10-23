@@ -30,6 +30,8 @@ export interface WorkspaceProject {
   urls: string[];
   secrets: WorkspaceSecret[];
   env_file?: string | null;
+  /** The project's icon as an image src, when the workspace file sets one. */
+  icon?: string | null;
   worktrees: boolean;
 }
 
@@ -45,7 +47,7 @@ export interface WorkspaceStatus {
   domain?: string;
   certificate?: "workspace" | "orca";
   shared?: { name: string; running: number; total: number } | null;
-  shared_urls?: { title: string; url: string }[];
+  shared_urls?: { title: string; url: string; icon?: string | null }[];
   registries?: { host: string; logged_in: boolean }[];
   secret_clis?: { passbolt: boolean; "1password": boolean };
   providers?: { passbolt: string | null; "1password": boolean };

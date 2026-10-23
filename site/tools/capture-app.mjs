@@ -339,33 +339,39 @@ hooks:
   };
 
 
+  // Made-up logos for the demo company's apps, as a workspace repo's icon
+  // files would come through.
+  const logo = (bg, glyph) => "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="${bg}"/><path fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="${glyph}"/></svg>`);
+  const SHOP_ICON = logo("#e8590c", "M8 11h16l-1.5 11h-13z M12 11a4 4 0 0 1 8 0");
+  const BILLING_ICON = logo("#0c8599", "M10 7h12v18l-3-2-3 2-3-2-3 2z M13 12h6 M13 16h6");
+  const CRM_ICON = logo("#7048e8", "M16 9a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z M9 24c1-4 4-6 7-6s6 2 7 6");
   const WORKSPACE = {
     joined: true, name: "acme", description: "Everything you need to work on Acme's apps locally.",
     repo: "git@git.acme.dev:devops/dev-workspace.git", path: "/Users/alex/code/dev-workspace",
     network: "local-dev", domain: "local.acme.dev", certificate: "workspace",
     shared: { name: "dev-workspace", running: 7, total: 7 },
     shared_urls: [
-      { title: "Mailpit", url: "https://mail.local.acme.dev" }, { title: "Grafana", url: "https://grafana.local.acme.dev" },
-      { title: "Temporal", url: "https://temporal.local.acme.dev" }, { title: "MinIO", url: "https://minio.local.acme.dev" },
-      { title: "phpMyAdmin", url: "https://pma.local.acme.dev" },
+      { title: "Mailpit", url: "https://mail.local.acme.dev", icon: "mailpit" }, { title: "Grafana", url: "https://grafana.local.acme.dev", icon: "grafana" },
+      { title: "Temporal", url: "https://temporal.local.acme.dev", icon: "temporal" }, { title: "MinIO", url: "https://minio.local.acme.dev", icon: "minio" },
+      { title: "phpMyAdmin", url: "https://pma.local.acme.dev", icon: "phpmyadmin" },
     ],
     registries: [{ host: "registry.acme.dev", logged_in: true }],
     secret_clis: { passbolt: false, "1password": false },
     providers: { passbolt: "https://passbolt.acme.dev", "1password": false },
     projects: [
-      { key: "shop", description: "The storefront and checkout (Laravel + Vue)", repo: "git@git.acme.dev:shop/shop.git", dir: "/Users/alex/code/acme/shop",
+      { key: "shop", icon: SHOP_ICON, description: "The storefront and checkout (Laravel + Vue)", repo: "git@git.acme.dev:shop/shop.git", dir: "/Users/alex/code/acme/shop",
         cloned: true, set_up: true, stack: "shop", running: true, uses: ["mailpit", "soketi"], setup: "just setup",
         urls: ["https://shop.local.acme.dev", "https://admin.local.acme.dev"], secrets: [], worktrees: true },
-      { key: "billing", description: "Invoices, payments and dunning", repo: "git@git.acme.dev:finance/billing.git", dir: "/Users/alex/code/acme/billing",
+      { key: "billing", icon: BILLING_ICON, description: "Invoices, payments and dunning", repo: "git@git.acme.dev:finance/billing.git", dir: "/Users/alex/code/acme/billing",
         cloned: true, set_up: false, stack: null, running: false, uses: ["temporal"], setup: "just setup", urls: ["https://billing.local.acme.dev"],
         secrets: [
           { name: "DB_PASSWORD", provider: "passbolt", reference: "passbolt:7f3c91a2", link: "https://passbolt.acme.dev/app/passwords/view/7f3c91a2", filled: false },
           { name: "STRIPE_SECRET", provider: "passbolt", reference: "passbolt:0b88e4d1", link: "https://passbolt.acme.dev/app/passwords/view/0b88e4d1", filled: false },
           { name: "APP_KEY", provider: "passbolt", reference: "passbolt:51aa20f3", link: "https://passbolt.acme.dev/app/passwords/view/51aa20f3", filled: true },
         ], worktrees: false },
-      { key: "crm", description: "Customer records and support tools", repo: "git@git.acme.dev:crm/crm.git", dir: "/Users/alex/code/acme/crm",
+      { key: "crm", icon: CRM_ICON, description: "Customer records and support tools", repo: "git@git.acme.dev:crm/crm.git", dir: "/Users/alex/code/acme/crm",
         cloned: false, set_up: false, stack: null, running: false, uses: ["mailpit", "temporal"], setup: "just setup", urls: ["https://crm.local.acme.dev"], secrets: [], worktrees: true },
-      { key: "partner-api", description: "The public partner REST API", repo: "git@git.acme.dev:api/partner-api.git", dir: "/Users/alex/code/acme/partner-api",
+      { key: "partner-api", icon: "api", description: "The public partner REST API", repo: "git@git.acme.dev:api/partner-api.git", dir: "/Users/alex/code/acme/partner-api",
         cloned: false, set_up: false, stack: null, running: false, uses: [], setup: null, urls: ["https://partner-api.local.acme.dev"], secrets: [], worktrees: false },
     ],
   };

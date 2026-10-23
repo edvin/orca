@@ -10,6 +10,8 @@ import type { ComposeProject, GatewayRoute } from "../lib/types";
 import type { DevProject } from "../lib/dev";
 import type { WorkspaceStatus } from "../lib/workspace";
 import { stackUrls } from "../lib/stackUrls";
+import { iconSrc, stackIcon } from "../lib/icons";
+import AppIcon from "./AppIcon";
 import { openFolderDialog } from "../lib/openFolder";
 import { showToast } from "./Toast";
 
@@ -58,6 +60,8 @@ interface App {
   stack: ComposeProject;
   title: string;
   sub?: string | null;
+  /** Set by the workspace file; else the stack's routes and images pick one. */
+  icon?: string | null;
 }
 
 interface Group {
@@ -66,7 +70,7 @@ interface Group {
   sub?: string;
   apps: App[];
   /** The workspace's shared services, as one compact row. */
-  shared?: { stack: ComposeProject | null; running: number; total: number; urls: { title: string; url: string }[] };
+  shared?: { stack: ComposeProject | null; running: number; total: number; urls: { title: string; url: string; icon?: string | null }[] };
 }
 
 export default function AppsOverview(props: {
@@ -104,7 +108,7 @@ export default function AppsOverview(props: {
       const apps: App[] = [];
       for (const p of ws.projects) {
         const s = take(p.stack);
-        if (s) apps.push({ stack: s, title: p.key, sub: p.description });
+        if (s) apps.push({ stack: s, title: p.key, sub: p.description, icon: p.icon });
       }
       out.push({
         key: "workspace",
@@ -122,11 +126,13 @@ export default function AppsOverview(props: {
       });
     }
 
+    // A worktree instance wears its project's icon from the workspace.
+    const wsIcon = (id: string) => ws?.projects?.find((x) => x.key === id)?.icon ?? null;
     for (const p of props.devProjects) {
       const apps: App[] = [];
       for (const i of p.instances ?? []) {
         const s = take(i.compose_project);
-        if (s) apps.push({ stack: s, title: i.branch ?? i.name, sub: i.is_main ? "main checkout" : null });
+        if (s) apps.push({ stack: s, title: i.branch ?? i.name, sub: i.is_main ? "main checkout" : null, icon: wsIcon(p.id) });
       }
       if (apps.length) out.push({ key: `project:${p.id}`, title: p.id, sub: "Worktrees", apps });
     }
@@ -164,8 +170,9 @@ export default function AppsOverview(props: {
       <div class="app-card" classList={{ stopped: stopped(), "is-hidden": hidden.has(s.name) }}
         onClick={() => props.onNavigate?.(`stack:${s.name}`)} title={a.sub ? `${a.sub} · ${s.name}` : s.name}>
         <div class="app-card-head">
-          <span class={`app-dot ${s.status.toLowerCase()}`} />
+          <AppIcon src={iconSrc(a.icon) || stackIcon(s, props.routes)} name={a.title} size={26} />
           <b>{a.title}</b>
+          <span class={`app-dot ${s.status.toLowerCase()}`} />
           <span class="app-card-count">{running(s)}/{s.services.length}</span>
           <span class="app-card-actions">
             <button class="app-card-act" classList={{ on: pinned.has(s.name) }}
@@ -205,7 +212,8 @@ export default function AppsOverview(props: {
       <span class="apps-shared-links">
         <For each={sh.urls.slice(0, 8)}>
           {(u) => (
-            <button class="app-url" title={`Open ${u.url}`} onClick={(e) => { e.stopPropagation(); void openUrl(u.url); }}>
+            <button class="app-url app-url-icon" title={`Open ${u.url}`} onClick={(e) => { e.stopPropagation(); void openUrl(u.url); }}>
+              <Show when={iconSrc(u.icon)}>{(src) => <img src={src()} alt="" />}</Show>
               {u.title}
             </button>
           )}

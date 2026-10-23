@@ -6,6 +6,7 @@ pub mod config;
 pub mod dev;
 pub mod environment;
 pub mod event;
+pub mod icons;
 pub mod image;
 pub mod kubernetes;
 pub mod machine;

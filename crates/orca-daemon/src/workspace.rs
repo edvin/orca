@@ -451,7 +451,14 @@ async fn ensure_network(state: &AppState, name: &str) -> Result<()> {
 /// Replace the workspace's routes with what its file says now.
 async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
     let domain = state.config.lock().await.gateway.domain.clone();
-    let to_route = |r: &WorkspaceRoute, owner: String, group: &str| -> Option<GatewayRoute> {
+    let ws_dir = state
+        .config
+        .lock()
+        .await
+        .workspace
+        .as_ref()
+        .map(|w| PathBuf::from(&w.path));
+    let to_route = |r: &WorkspaceRoute, owner: String, group: &str, icon: Option<&String>| -> Option<GatewayRoute> {
         let (host, port) = r.target()?;
         Some(GatewayRoute {
             hostname: crate::project_config::qualify_hostname(&r.hostname, &domain),
@@ -462,23 +469,28 @@ async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
             owner: Some(owner),
             sleeping: false,
             websocket: r.websocket,
-            presentation: RoutePresentation {
-                title: r.title.clone(),
-                group: Some(group.to_string()),
-                ..Default::default()
-            },
+            presentation: crate::gateway_sync::with_icon(
+                RoutePresentation {
+                    title: r.title.clone(),
+                    description: r.description.clone(),
+                    group: Some(group.to_string()),
+                    icon: r.icon.clone().or_else(|| icon.cloned()),
+                    ..Default::default()
+                },
+                ws_dir.as_deref(),
+            ),
         })
     };
     let mut wanted: Vec<GatewayRoute> = file
         .routes
         .iter()
-        .filter_map(|r| to_route(r, format!("{OWNER}{}", file.name), "Shared services"))
+        .filter_map(|r| to_route(r, format!("{OWNER}{}", file.name), "Shared services", None))
         .collect();
     for (key, p) in &file.projects {
         wanted.extend(
             p.routes
                 .iter()
-                .filter_map(|r| to_route(r, format!("{OWNER}{}:{key}", file.name), key)),
+                .filter_map(|r| to_route(r, format!("{OWNER}{}:{key}", file.name), key, p.icon.as_ref())),
         );
     }
     let n = wanted.len();
@@ -628,7 +640,28 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
         })
     };
     let shared_name = shared_name(&file, &dir);
-    let shared = stacks.iter().find(|s| s.name == shared_name).map(|s| {
+    let shared_stack = stacks.iter().find(|s| s.name == shared_name);
+    // An icon the workspace file sets, else one the image of the container
+    // a route targets picks (by service or container name).
+    let icon_of = |spec: Option<&str>, images: Vec<&str>| -> Option<String> {
+        spec.and_then(|i| orca_core::icons::resolve(i, Some(&dir)).ok())
+            .and_then(|i| orca_core::icons::src(&i))
+            .or_else(|| {
+                images
+                    .into_iter()
+                    .find_map(orca_core::icons::for_image)
+                    .and_then(orca_core::icons::src)
+            })
+    };
+    let shared_image = |r: &WorkspaceRoute| -> Option<&str> {
+        let host = r.target()?.0;
+        shared_stack?
+            .services
+            .iter()
+            .find(|x| x.name == host || x.container_name == host)
+            .map(|x| x.image.as_str())
+    };
+    let shared = shared_stack.map(|s| {
         let running = s.services.iter().filter(|x| x.state == ContainerState::Running).count();
         serde_json::json!({ "name": s.name, "running": running, "total": s.services.len() })
     });
@@ -654,6 +687,7 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
                 "urls": p.routes.iter().filter(|r| is_page(r)).map(&url).collect::<Vec<_>>(),
                 "secrets": secrets_of(&file, key, &pdir),
                 "env_file": p.env.as_ref().map(|e| e.file().to_string()),
+                "icon": icon_of(p.icon.as_deref(), stack.into_iter().flat_map(|s| s.services.iter().map(|x| x.image.as_str())).collect()),
                 "worktrees": p.worktrees,
             })
         })
@@ -669,7 +703,11 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
         "domain": domain,
         "certificate": if file.gateway.as_ref().is_some_and(|g| g.certificate.is_some()) { "workspace" } else { "orca" },
         "shared": shared,
-        "shared_urls": file.routes.iter().filter(|r| is_page(r)).map(|r| serde_json::json!({ "title": r.title.clone().unwrap_or_else(|| r.hostname.clone()), "url": url(r) })).collect::<Vec<_>>(),
+        "shared_urls": file.routes.iter().filter(|r| is_page(r)).map(|r| serde_json::json!({
+            "title": r.title.clone().unwrap_or_else(|| r.hostname.clone()),
+            "url": url(r),
+            "icon": icon_of(r.icon.as_deref(), shared_image(r).into_iter().collect()),
+        })).collect::<Vec<_>>(),
         "registries": file.registries.iter().map(|h| serde_json::json!({ "host": h, "logged_in": registry_logged_in(h) })).collect::<Vec<_>>(),
         "secret_clis": crate::secrets::cli_status(),
         "providers": {
