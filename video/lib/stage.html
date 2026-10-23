@@ -50,6 +50,7 @@
   .card h1 { font-size: 92px; letter-spacing: -0.04em; margin: 0; font-weight: 800; }
   .card h1 span { background: linear-gradient(90deg, #58a6ff, #3fb950); -webkit-background-clip: text; color: transparent; }
   .card p { font-size: 30px; color: #aab4c0; margin: 22px 0 0; max-width: 1100px; line-height: 1.4; }
+  .card.question h1 { font-size: 64px; line-height: 1.15; letter-spacing: -0.03em; font-weight: 700; color: #e6edf3; }
   .card .url-tag { margin-top: 40px; font-size: 24px; color: var(--accent); letter-spacing: .02em; }
   /* The logo sting: the mark pops in, the name rises, the line fades in. */
   .card.anim .logo { animation: pop 1s var(--ease) both; }
@@ -121,6 +122,7 @@ window.stage = {
     card.classList.remove("anim");
     void card.offsetWidth; // restart the animation
     card.classList.toggle("anim", !!o.animate);
+    card.classList.toggle("question", o.size === "question");
     card.classList.remove("hidden");
   },
   lower(o) {

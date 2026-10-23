@@ -29,6 +29,17 @@ export const coldOpen = {
 
 export default [
   {
+    // Before the cold open: what you're about to see.
+    id: "hook",
+    prelude: true,
+    say: "What if your AI could run your whole dev environment?",
+    tail: 0.5,
+    async run(s) {
+      await s.layout("none");
+      await s.card({ title: "What if your AI could run<br>your whole dev environment?", animate: true, size: "question" });
+    },
+  },
+  {
     id: "intro",
     say: "This is Orca: your containers and dev environments, with an AI that runs them for you.",
     tail: 0.6,

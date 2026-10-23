@@ -32,8 +32,13 @@ const COLD = !only.length && coldOpen && !process.argv.includes("--no-cold");
 const XFADE = 0.3;
 const coldVoice = COLD ? await speak(coldOpen.say) : null;
 const coldLength = COLD ? coldVoice.duration + 0.9 : 0;
-let offset = coldLength;
+let offset = 0;
+// Seconds of prelude (the hook) before the cold open.
+let preludeLength = 0;
+let coldPlaced = !COLD;
 for (const id of ids) {
+  // The cold open goes after the preludes: leave room for it.
+  if (!coldPlaced && !SCENES.find((x) => x.id === id)?.prelude) (coldPlaced = true), (preludeLength = offset), (offset += coldLength);
   const dir = path.join(OUT, "scenes", id);
   const scene = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
   const t = (ms) => outTime(ms, scene.start, scene.marks);
@@ -107,7 +112,11 @@ for (const id of ids) {
   offset += length;
 }
 
-if (COLD) clips.unshift(await buildColdOpen());
+if (COLD) {
+  // Prelude scenes (the hook) come before the cold open.
+  const preludes = clips.filter((c) => SCENES.find((x) => x.prelude && c.includes(`/scenes/${x.id}/`))).length;
+  clips.splice(preludes, 0, await buildColdOpen(preludeLength));
+}
 
 const name = only.length ? `preview-${ids.join("-")}` : "orca-showcase";
 const list = path.join(OUT, `${name}.txt`);
@@ -142,7 +151,7 @@ if (process.argv.includes("--no-music")) {
 
 /** The cold open: a cut per highlight, crossfaded, under its line. Cut from
  *  the scenes as recorded, before their labels go on. */
-async function buildColdOpen() {
+async function buildColdOpen(at = 0) {
   const dir = path.join(OUT, "cold");
   fs.mkdirSync(dir, { recursive: true });
   const n = coldOpen.cuts.length;
@@ -161,7 +170,7 @@ async function buildColdOpen() {
     );
     return out;
   });
-  let chain = "[0:v]null[x0]";
+  let chain = "[0:v]fade=t=in:d=0.35[x0]";
   for (let i = 1; i < n; i++) chain += `;[x${i - 1}][${i}:v]xfade=transition=fade:duration=${XFADE}:offset=${(i * (each - XFADE)).toFixed(3)}[x${i}]`;
   const out = path.join(dir, "cold.mp4");
   ff(
@@ -171,7 +180,7 @@ async function buildColdOpen() {
     "-c:v", "libx264", "-preset", FINAL ? "slow" : "veryfast", "-crf", FINAL ? "17" : "21", "-r", String(FPS),
     "-c:a", "aac", "-b:a", "192k", "-ar", "48000", out,
   );
-  caption(coldVoice.words, 0.25);
+  caption(coldVoice.words, at + 0.25);
   console.log(`  cold open: ${coldLength.toFixed(1)} s`);
   return out;
 }
@@ -185,7 +194,7 @@ function caption(words, at) {
     line = [];
   };
   for (const w of words) {
-    if (line.length && line.map((x) => x.word).join(" ").length + w.word.length > 46) flush();
+    if (line.length && line.map((x) => x.word).join(" ").length + w.word.length > 52) flush();
     line.push(w);
     if (/[.,:;!?]$/.test(w.word) && line.map((x) => x.word).join(" ").length > 24) flush();
   }
