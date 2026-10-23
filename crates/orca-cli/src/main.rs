@@ -437,6 +437,8 @@ enum WorkspaceAction {
     },
     /// Pull the workspace and apply it again
     Update,
+    /// Forget the workspace: remove its routes and put the gateway's domain and certificate back
+    Leave,
     /// Clone, configure and start a project
     Setup {
         /// The project's key, as `orca workspace status` lists it
@@ -445,7 +447,7 @@ enum WorkspaceAction {
         #[arg(long)]
         rerun_setup: bool,
     },
-    /// Print workspace routes for an HAProxy config (devproxy's haproxy.cfg)
+    /// Print workspace routes for an HAProxy config (such as a shared dev proxy's haproxy.cfg)
     ImportHaproxy {
         file: String,
         /// Shorten hostnames under this domain, e.g. local.example.dev
@@ -517,6 +519,7 @@ async fn main() -> anyhow::Result<()> {
             WorkspaceAction::Join { repo, folder } => workspace::join(&client, repo, folder).await?,
             WorkspaceAction::Status { json } => workspace::status(&client, json).await?,
             WorkspaceAction::Update => workspace::update(&client).await?,
+            WorkspaceAction::Leave => workspace::leave(&client).await?,
             WorkspaceAction::Setup { project, rerun_setup } => workspace::setup(&client, project, rerun_setup).await?,
             WorkspaceAction::ImportHaproxy { file, domain } => workspace::import_haproxy(&client, file, domain).await?,
         },

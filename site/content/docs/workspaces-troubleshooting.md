@@ -10,7 +10,7 @@ This page lists the problems people run into with workspaces, what causes each, 
 
 - **The card or the join form.** Every step shows its result. When one fails, the error is shown under the steps, with the last lines of the command's output for `git`, `docker compose` and setup commands.
 - **The CLI.** `orca workspace setup <project>` and `orca workspace update` print each step and fail with the same error, which is easier to copy.
-- **The full log of a job.** Orca keeps the full output of the last 50 jobs while it runs, including warnings that aren't shown on the card, such as a `.env` that isn't ignored by git, or why a secret couldn't be fetched. Get it from the [API](/docs/api/#authentication):
+- **The full log of a job.** Orca keeps the full output of the last 50 jobs while it runs, including every command's output. Get it from the [API](/docs/api/#authentication):
 
   ```bash
   TOKEN=…   # see the API page for where to find it
@@ -64,7 +64,7 @@ Then click **Update** on the **Workspace** page. See also [Gateway: port 80 or 4
 
 ## Certificate problems
 
-**The browser says the certificate expired.** The workspace's certificate needs renewing. The team lead replaces both files in the repo and pushes; then everyone clicks **Update**. Orca pulls on start, but only applies a new certificate on **Update**. Check a certificate's dates with:
+**The browser says the certificate expired.** The workspace's certificate needs renewing. The team lead replaces both files in the repo and pushes; then everyone clicks **Update**. Orca applies it when it next starts, or right away with **Update**. Check a certificate's dates with:
 
 ```bash
 openssl x509 -in certs/local.acme.dev.crt -noout -subject -dates -ext subjectAltName
@@ -120,7 +120,7 @@ The landing page shows **Not running** on a card, or the browser gets a 502 erro
 
 ## A hostname goes to the wrong place
 
-- **Another route has it.** A hostname and path that a route added by hand on the **Gateway** page, or a worktree instance, already uses keeps going there, and the workspace's route is left out without a warning. A project's own `orca.yaml` can also hold it. Check the **Routes** tab on the **Gateway** page. See [Conflicts](/docs/workspaces-routes/#conflicts).
+- **Another route has it.** A hostname and path that a route added by hand on the **Gateway** page, or a worktree instance, already uses keeps going there, and the workspace's route is left out. A project's own `orca.yaml` or labels take over the workspace's route for that project. Check the **Routes** tab on the **Gateway** page. See [Conflicts](/docs/workspaces-routes/#conflicts).
 - **A more specific route wins.** An exact hostname beats a pattern, and a more specific pattern beats `*`. A path route only takes its own paths. See [Which route wins](/docs/workspaces-routes/#which-route-wins).
 - **A name with a dot isn't under the domain.** `api.billing` is taken as a full hostname, not `api.billing.local.acme.dev`.
 

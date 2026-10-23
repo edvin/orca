@@ -13,7 +13,7 @@ use axum::extract::{Path as UrlPath, State};
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use orca_core::config::{GatewayRoute, GatewayTlsMode, RoutePresentation, WorkspaceRef};
+use orca_core::config::{GatewayRoute, GatewayTlsMode, PreviousGateway, RoutePresentation, WorkspaceRef};
 use orca_core::runtime::{ContainerRuntime, ContainerState};
 use orca_core::workspace::{self as schema, SecretRef, WorkspaceFile, WorkspaceRoute};
 use serde::Deserialize;
@@ -230,12 +230,25 @@ async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) ->
             let file = WorkspaceFile::load(&dir)?;
             {
                 let mut cfg = state.config.lock().await;
+                // Joining again (or another workspace) keeps what was there
+                // before the first one.
+                let previous_gateway = match &cfg.workspace {
+                    Some(w) => w.previous_gateway.clone(),
+                    None => Some(PreviousGateway {
+                        enabled: cfg.gateway.enabled,
+                        domain: cfg.gateway.domain.clone(),
+                        tls_mode: cfg.gateway.tls_mode.clone(),
+                        custom_cert: cfg.gateway.custom_cert.clone(),
+                        custom_key: cfg.gateway.custom_key.clone(),
+                    }),
+                };
                 cfg.workspace = Some(WorkspaceRef {
                     repo: repo.clone(),
                     path: dir.to_string_lossy().to_string(),
                     name: file.name.clone(),
                     network: file.network.clone(),
                     setup_done: Vec::new(),
+                    previous_gateway,
                 });
                 cfg.save()?;
             }
@@ -253,6 +266,13 @@ async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) ->
 /// POST /workspace/update: pull the workspace and apply it again.
 async fn update(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let (_, _, dir) = current(&state).await?;
+    let job = update_job(&state, dir, true).await;
+    Ok(accepted(job).await)
+}
+
+/// Pull the workspace (when `pull`) and apply it, as a job.
+async fn update_job(state: &Arc<AppState>, dir: PathBuf, pull: bool) -> JobHandle {
+    let state = state.clone();
     let job = JobHandle::create(
         "workspace",
         None,
@@ -270,10 +290,16 @@ async fn update(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
     tokio::spawn(async move {
         let r: Result<()> = async {
             j.start("clone").await;
-            let mut cmd = git();
-            cmd.arg("-C").arg(&dir).args(["pull", "--ff-only"]);
-            run_logged(&j, cmd, "git pull --ff-only").await?;
-            j.done("clone", None).await;
+            if !pull {
+                j.done("clone", Some("Pulled when Orca started".into())).await;
+            } else if has_upstream(&dir).await {
+                let mut cmd = git();
+                cmd.arg("-C").arg(&dir).args(["pull", "--ff-only"]);
+                run_logged(&j, cmd, "git pull --ff-only").await?;
+                j.done("clone", None).await;
+            } else {
+                j.skip("clone", "No upstream branch: using the folder as it is").await;
+            }
             let file = WorkspaceFile::load(&dir)?;
             {
                 let mut cfg = state.config.lock().await;
@@ -291,7 +317,26 @@ async fn update(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
             Err(e) => j.fail(&e).await,
         }
     });
-    Ok(accepted(job).await)
+    job
+}
+
+/// Whether the checkout tracks a remote branch to pull from.
+async fn has_upstream(dir: &Path) -> bool {
+    let mut cmd = git();
+    cmd.arg("-C")
+        .arg(dir)
+        .args(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.status().await.is_ok_and(|s| s.success())
+}
+
+async fn head(dir: &Path) -> Option<String> {
+    let mut cmd = git();
+    cmd.arg("-C").arg(dir).args(["rev-parse", "HEAD"]);
+    let out = cmd.output().await.ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 /// Make this machine match the workspace file: network, gateway, shared
@@ -362,7 +407,8 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
                 })?;
             // The shared stack's own orca.yaml hooks, as for any stack Orca starts.
             let compose_str = compose.to_string_lossy().to_string();
-            for h in crate::api::run_stack_hooks(state, &dir.to_string_lossy(), Some(&compose_str)).await {
+            let working_dir = compose.parent().unwrap_or(dir).to_string_lossy().to_string();
+            for h in crate::api::run_stack_hooks_from(state, dir, &working_dir, Some(&compose_str)).await {
                 if h.get("success").and_then(|v| v.as_bool()) == Some(false) {
                     job.log(format!(
                         "Hook failed: {}\n{}",
@@ -461,16 +507,47 @@ async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
 /// POST /workspace/leave: forget the workspace and remove its routes. The
 /// clone, projects and running services stay.
 async fn leave(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
-    {
+    let restored = {
         let mut cfg = state.config.lock().await;
-        cfg.workspace = None;
+        let previous = cfg.workspace.take().and_then(|w| w.previous_gateway);
         cfg.gateway
             .routes
             .retain(|r| !r.owner.as_deref().is_some_and(|o| o.starts_with(OWNER)));
+        // Put back the domain and certificate the gateway had before joining.
+        if let Some(p) = &previous {
+            cfg.gateway.enabled = p.enabled;
+            cfg.gateway.domain = p.domain.clone();
+            cfg.gateway.tls_mode = p.tls_mode.clone();
+            cfg.gateway.custom_cert = p.custom_cert.clone();
+            cfg.gateway.custom_key = p.custom_key.clone();
+        }
         cfg.save().map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
+        previous.map(|_| cfg.gateway.clone())
+    };
+    if let Some(gateway) = restored
+        && crate::gateway::is_running(&state).await.unwrap_or(false)
+    {
+        crate::gateway::stop(&state).await?;
+        if gateway.enabled {
+            crate::gateway::start(&state, &gateway).await?;
+        }
     }
     crate::gateway_sync::routes_changed();
     Ok(Json(serde_json::json!({ "left": true })))
+}
+
+/// A route's address, as the status and setup results give it.
+fn page_url(r: &WorkspaceRoute, domain: &str, https_port: u16) -> String {
+    let host = crate::project_config::qualify_hostname(&r.hostname, domain);
+    let port = if https_port == 443 {
+        String::new()
+    } else {
+        format!(":{https_port}")
+    };
+    format!(
+        "https://{host}{port}{}",
+        r.path.as_deref().unwrap_or("").trim_end_matches('*')
+    )
 }
 
 /// A route one can open: not a hostname pattern or a WebSocket-only route.
@@ -529,22 +606,11 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
             })));
         }
     };
-    let (domain, port_suffix) = {
+    let (domain, https_port) = {
         let cfg = state.config.lock().await;
-        let p = if cfg.gateway.https_port == 443 {
-            String::new()
-        } else {
-            format!(":{}", cfg.gateway.https_port)
-        };
-        (cfg.gateway.domain.clone(), p)
+        (cfg.gateway.domain.clone(), cfg.gateway.https_port)
     };
-    let url = |r: &WorkspaceRoute| {
-        let host = crate::project_config::qualify_hostname(&r.hostname, &domain);
-        format!(
-            "https://{host}{port_suffix}{}",
-            r.path.as_deref().unwrap_or("").trim_end_matches('*')
-        )
-    };
+    let url = |r: &WorkspaceRoute| page_url(r, &domain, https_port);
 
     let stacks = match state.rt().await.list_containers(true).await {
         Ok(c) => orca_core::compose::extract_projects(&c),
@@ -586,6 +652,7 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
                 "setup": p.setup,
                 "urls": p.routes.iter().filter(|r| is_page(r)).map(&url).collect::<Vec<_>>(),
                 "secrets": secrets_of(&file, key, &pdir),
+                "env_file": p.env.as_ref().map(|e| e.file().to_string()),
                 "worktrees": p.worktrees,
             })
         })
@@ -669,6 +736,8 @@ async fn setup(
 
             j.start("env").await;
             let mut missing: Vec<String> = Vec::new();
+            // Shown with the result too, not only in the log.
+            let mut warnings: Vec<String> = Vec::new();
             match &project.env {
                 Some(env) => {
                     let target = pdir.join(env.file());
@@ -678,7 +747,7 @@ async fn setup(
                                 .with_context(|| format!("{from} doesn't exist"))?,
                             None => String::new(),
                         };
-                        std::fs::write(&target, text)?;
+                        write_private(&target, &text)?;
                         j.done(
                             "env",
                             Some(format!(
@@ -692,17 +761,19 @@ async fn setup(
                         j.done("env", Some(format!("{} already exists", env.file()))).await;
                     }
                     if !git_ignored(&pdir, env.file()).await {
-                        j.log(format!(
-                            "Warning: {} isn't in .gitignore; don't commit it, it will hold secrets.",
+                        let w = format!(
+                            "{} isn't in .gitignore; don't commit it, it will hold secrets.",
                             env.file()
-                        ))
-                        .await;
+                        );
+                        j.log(format!("Warning: {w}")).await;
+                        warnings.push(w);
                     }
 
                     j.start("secrets").await;
                     let (filled, failed) = fill_secrets(&file, &key, &pdir).await?;
                     for (name, why) in &failed {
                         j.log(format!("{name}: {why}")).await;
+                        warnings.push(format!("{name} couldn't be fetched: {why}"));
                     }
                     missing = secrets_of(&file, &key, &pdir)
                         .into_iter()
@@ -733,7 +804,7 @@ async fn setup(
                 for step in ["setup", "shared", "start"] {
                     j.skip(step, "Waiting for the missing secrets").await;
                 }
-                return Ok(serde_json::json!({ "missing_secrets": missing }));
+                return Ok(serde_json::json!({ "missing_secrets": missing, "warnings": warnings }));
             }
 
             j.start("setup").await;
@@ -794,20 +865,17 @@ async fn setup(
                 .await;
             }
             j.done("start", Some(stack.clone())).await;
-            let domain = state.config.lock().await.gateway.domain.clone();
+            let (domain, https_port) = {
+                let cfg = state.config.lock().await;
+                (cfg.gateway.domain.clone(), cfg.gateway.https_port)
+            };
             let urls: Vec<String> = project
                 .routes
                 .iter()
                 .filter(|r| is_page(r))
-                .map(|r| {
-                    format!(
-                        "https://{}{}",
-                        crate::project_config::qualify_hostname(&r.hostname, &domain),
-                        r.path.as_deref().unwrap_or("")
-                    )
-                })
+                .map(|r| page_url(r, &domain, https_port))
                 .collect();
-            Ok(serde_json::json!({ "stack": stack, "urls": urls, "dir": pdir }))
+            Ok(serde_json::json!({ "stack": stack, "urls": urls, "dir": pdir, "warnings": warnings }))
         }
         .await;
         match r {
@@ -845,8 +913,12 @@ async fn fill_secrets(file: &WorkspaceFile, key: &str, pdir: &Path) -> Result<(V
             continue;
         }
         match crate::secrets::fetch(&r, &file.secrets).await {
+            Ok(v) if v.trim_end_matches(['\r', '\n']).contains('\n') => failed.push((
+                s.name.clone(),
+                "it has several lines; a .env value must be one line".into(),
+            )),
             Ok(v) if !v.is_empty() => {
-                values.insert(s.name.clone(), v);
+                values.insert(s.name.clone(), v.trim_end_matches(['\r', '\n']).to_string());
             }
             Ok(_) => failed.push((s.name.clone(), "empty in the secret manager".into())),
             Err(e) => failed.push((s.name.clone(), e.to_string())),
@@ -862,6 +934,13 @@ fn write_env(path: &Path, values: &BTreeMap<String, String>) -> Result<()> {
     let text = std::fs::read_to_string(path).unwrap_or_default();
     let new = schema::set_env_values(&text, values);
     let tmp = path.with_extension("orca-tmp");
+    write_private(&tmp, &new)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+/// Write a file only its owner can read: it holds, or will hold, secrets.
+fn write_private(path: &Path, text: &str) -> Result<()> {
     {
         use std::io::Write;
         let mut opts = std::fs::OpenOptions::new();
@@ -871,9 +950,8 @@ fn write_env(path: &Path, values: &BTreeMap<String, String>) -> Result<()> {
             use std::os::unix::fs::OpenOptionsExt;
             opts.mode(0o600);
         }
-        opts.open(&tmp)?.write_all(new.as_bytes())?;
+        opts.open(path)?.write_all(text.as_bytes())?;
     }
-    std::fs::rename(&tmp, path)?;
     Ok(())
 }
 
@@ -934,7 +1012,7 @@ struct ImportBody {
 }
 
 /// POST /workspace/import-haproxy: routes for the workspace file from an
-/// HAProxy config (devproxy's), as YAML to paste.
+/// HAProxy config, such as a shared dev proxy's, as YAML to paste.
 async fn import_haproxy(Json(body): Json<ImportBody>) -> Result<impl IntoResponse, ApiError> {
     let import = schema::routes_from_haproxy(&body.text, body.domain.as_deref());
     let mut yaml = serde_yaml::to_string(&serde_json::json!({ "routes": import.routes })).unwrap_or_default();
@@ -957,6 +1035,7 @@ pub fn spawn(state: Arc<AppState>) {
             return;
         };
         let dir = PathBuf::from(&ws.path);
+        let before = head(&dir).await;
         let mut cmd = git();
         cmd.arg("-C").arg(&dir).args(["pull", "--ff-only", "--quiet"]);
         if let Ok(out) = cmd.output().await
@@ -966,6 +1045,13 @@ pub fn spawn(state: Arc<AppState>) {
                 "workspace: git pull skipped: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             );
+        }
+        // Something new (a renewed certificate, a shared service): apply it
+        // all, as Update does. Otherwise only the routes.
+        if before.is_some() && head(&dir).await != before {
+            tracing::info!("workspace: changed upstream, applying it");
+            update_job(&state, dir, false).await;
+            return;
         }
         match WorkspaceFile::load(&dir) {
             Ok(file) => {

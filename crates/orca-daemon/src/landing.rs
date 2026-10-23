@@ -901,7 +901,7 @@ mod tests {
     #[test]
     fn page_settings_and_links_per_environment() {
         let mut c = config(vec![route("storefront.localhost", "storefront-1", 3000)]);
-        c.landing.title = Some("group.one dev".into());
+        c.landing.title = Some("Acme dev".into());
         c.landing.show_targets = false;
         c.landing.show_status = false;
         c.stack_links = vec![StackLinkGroup {
@@ -916,7 +916,7 @@ mod tests {
             }],
         }];
         let html = render(&c, &HashMap::new());
-        assert!(html.contains("<title>group.one dev</title>"));
+        assert!(html.contains("<title>Acme dev</title>"));
         assert!(html.contains(r#"data-env="staging""#) && html.contains(">Staging<"));
         assert!(html.contains("Web App") && html.contains("https://staging.example.com"));
         assert!(!html.contains("storefront-1 :3000"), "targets hidden");

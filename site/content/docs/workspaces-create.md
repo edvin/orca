@@ -132,7 +132,7 @@ This is the smoothest option for a team. Developers trust nothing extra, and eve
 > [!WARNING]
 > Keep the repository private. A certificate authority must revoke a certificate whose private key becomes public, which breaks every developer's setup at once.
 
-**Renewing.** Before the certificate expires, get a new one, replace both files and push. Orca pulls the change when it starts, but applies a new certificate only on **Update**, so ask everyone to click **Update** on the **Workspace** page. A note with the expiry date in the file, as above, helps the next person. Certificates that last 90 days, like Let's Encrypt's, mean doing this every couple of months; a yearly certificate is less work.
+**Renewing.** Before the certificate expires, get a new one, replace both files and push. Everyone's Orca pulls and applies it when it next starts; **Update** on the **Workspace** page does it right away. A note with the expiry date in the file, as above, helps the next person. Certificates that last 90 days, like Let's Encrypt's, mean doing this every couple of months; a yearly certificate is less work.
 
 ### Orca's certificate authority
 
@@ -270,7 +270,7 @@ Then check, in order:
 5. **Secrets** are asked for, link to the right entries, and the app starts with them.
 6. **Asking your AI tool** *"spin up billing"* works.
 
-After changing the file, apply it again. Once the folder has a remote branch, **Update** does that. Before you've pushed anything, **Update** can't pull and fails at its first step; join again with the same path instead.
+After changing the file, click **Update** to apply it again. Before the folder has a remote branch, **Update** skips the pull and applies the folder as it is.
 
 ## 8. Publish it
 
@@ -312,7 +312,7 @@ Put it in the workspace's README and your onboarding page, with the plain git UR
 Edit `orca-workspace.yaml`, push, and the change reaches everyone:
 
 - **When Orca starts**, it pulls the workspace (fast-forward only) and refreshes the routes. New and changed projects and routes appear without anyone doing anything.
-- **Some changes need Update** on each machine: changes to `compose.yaml`, the network, the domain or the certificate. Ask the team to click **Update** on the **Workspace** page, or to run `orca workspace update`.
+- **Changes reach everyone when their Orca next starts**, all of them: projects, routes, `compose.yaml`, the network, the domain and the certificate. To hurry it along, ask the team to click **Update** on the **Workspace** page, or to run `orca workspace update`.
 
 Common changes:
 
@@ -320,12 +320,12 @@ Common changes:
 |---|---|---|
 | Add a project | Add it under `projects`. | A new **Not cloned** card. |
 | Add or change a route | Edit `routes`. | The hostname works on the next start. |
-| Add a shared service | Add it to `compose.yaml`, and a route if it has a page. | It starts on the next **Update**. |
+| Add a shared service | Add it to `compose.yaml`, and a route if it has a page. | It starts when each Orca next starts, or on **Update**. |
 | Change a setup command | Edit `setup`. | It doesn't rerun by itself; tell people to click **Run setup again** if they need it. |
 | Rename a project's key | Rename it, and set `path` to the old folder name. | Without `path`, the project looks **Not cloned** and setup would clone it again into a new folder. Its setup command also runs again once. |
 | Remove a project | Delete its entry. | The card and its routes go away. Clones, `.env` files and containers stay on each machine. |
 | Move routes into the project's `orca.yaml` | Remove them from the workspace file in the same change. | Nothing, if the hostnames stay the same. See [Conflicts](/docs/workspaces-routes/#conflicts). |
-| Renew the certificate | Replace both files. | Nothing, after **Update**. |
+| Renew the certificate | Replace both files. | Nothing. |
 
 Keep comments in the file: why a route exists, when the certificate expires, which secrets a project still lacks. It's the team's documentation of its local environment.
 

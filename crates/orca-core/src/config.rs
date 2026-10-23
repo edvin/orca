@@ -202,6 +202,21 @@ pub struct WorkspaceRef {
     /// Projects whose setup command ran on this machine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub setup_done: Vec<String>,
+    /// The gateway's domain and TLS before joining, put back on leaving.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_gateway: Option<PreviousGateway>,
+}
+
+/// What joining a workspace changed on the gateway.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PreviousGateway {
+    pub enabled: bool,
+    pub domain: String,
+    pub tls_mode: GatewayTlsMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_cert: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_key: Option<String>,
 }
 
 /// A scheduled container action (e.g., restart every Sunday).
@@ -410,7 +425,7 @@ pub struct GatewayRoute {
 }
 
 impl GatewayRoute {
-    /// A hostname with `*` in its first label (`*-onehome.local.example.dev`)
+    /// A hostname with `*` in its first label (`*-shop.local.example.dev`)
     /// matches every hostname that fills it in with letters, digits and
     /// dashes (one label, so no dots).
     pub fn is_pattern(&self) -> bool {
@@ -437,7 +452,7 @@ fn regex_escape(s: &str) -> String {
 }
 
 /// The certificate name that covers a hostname: itself, or for a pattern
-/// (`*-onehome.local.example.dev`) the wildcard of its parent domain
+/// (`*-shop.local.example.dev`) the wildcard of its parent domain
 /// (`*.local.example.dev`).
 pub fn certificate_name(hostname: &str) -> String {
     match hostname.split_once('.') {
@@ -446,7 +461,7 @@ pub fn certificate_name(hostname: &str) -> String {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GatewayTlsMode {
     #[default]
@@ -978,10 +993,10 @@ mod pattern_tests {
     #[test]
     fn pattern_hostnames() {
         assert_eq!(
-            host_pattern_regex("*-onehome.local.example.dev"),
-            "(?i)^[a-z0-9-]+-onehome\\.local\\.example\\.dev$"
+            host_pattern_regex("*-shop.local.example.dev"),
+            "(?i)^[a-z0-9-]+-shop\\.local\\.example\\.dev$"
         );
-        assert_eq!(certificate_name("*-onehome.local.example.dev"), "*.local.example.dev");
+        assert_eq!(certificate_name("*-shop.local.example.dev"), "*.local.example.dev");
         assert_eq!(certificate_name("shop.localhost"), "shop.localhost");
     }
 }

@@ -49,7 +49,8 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
       showToast(`${p.key}: ${done.error ?? "setup failed"}`, "error");
       return;
     }
-    const result = done.result as { missing_secrets?: string[]; urls?: string[] } | null;
+    const result = done.result as { missing_secrets?: string[]; urls?: string[]; warnings?: string[] } | null;
+    for (const w of result?.warnings ?? []) showToast(`${p.key}: ${w}`, "info");
     if (result?.missing_secrets?.length) {
       const fresh = ws()?.projects?.find((x) => x.key === p.key) ?? p;
       setSecretsFor(fresh);
@@ -73,7 +74,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
   const leave = async () => {
     const ok = await confirmDialog({
       title: "Leave the workspace?",
-      message: "Orca forgets the workspace and removes its routes. The cloned projects, their .env files and running services stay.",
+      message: "Orca forgets the workspace, removes its routes and puts the gateway's domain and certificate back as they were. The cloned projects, their .env files and running services stay.",
       confirmLabel: "Leave",
       danger: true,
     });

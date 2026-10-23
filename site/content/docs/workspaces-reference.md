@@ -279,7 +279,7 @@ The shared services the project needs, by their **service name** in the shared c
 uses: [mailpit, temporal, minio]
 ```
 
-When the project is set up or started, Orca runs `docker compose up -d` for exactly these services in the shared stack, which also starts services behind a compose profile. With no `shared` section, or an empty list, the step is skipped. A name that isn't a service in the shared compose file makes the step fail with Docker Compose's error.
+When the project is set up or started, Orca runs `docker compose up -d` for exactly these services in the shared stack, which also starts services behind a compose profile. With an empty list, the step is skipped. `uses` needs a `shared` section. A name that isn't a service in the shared compose file makes the step fail with Docker Compose's error.
 
 Error: *project '…': empty entry in `uses`*.
 
@@ -370,6 +370,7 @@ Orca checks the whole file whenever it reads it: on join, on **Update**, when Or
 | *… is not a valid variable name* | Variable names: letters, digits and `_`, not starting with a digit. |
 | *… isn't a secret reference* | Use `passbolt:<id>` or `op://vault/item/field`. |
 | *… uses passbolt, but the workspace's `secrets:` doesn't set it up* | Add the secret manager under top-level `secrets`. |
+| *project '…' `uses` shared services, but the workspace has no `shared:` compose file* | Add a `shared` section, or remove `uses`. |
 
 ## The shared stack's orca.yaml
 

@@ -219,8 +219,25 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
             .retain(|r| !r.owner.as_ref().is_some_and(|o| superseded.contains(o)));
         dirty |= cfg.gateway.routes.len() != before;
 
-        // Routes added by hand, by stacks or by worktree instances win; then
-        // orca.yaml over labels, and of two asking for one hostname the first.
+        // A workspace's route for one of its projects (`workspace:<name>:<project>`)
+        // only stands in until the project's own orca.yaml or labels route
+        // that hostname: then it gives way.
+        let project_of_workspace = |r: &GatewayRoute| {
+            r.owner
+                .as_deref()
+                .is_some_and(|o| o.starts_with("workspace:") && o.matches(':').count() >= 2)
+        };
+        let wanted_keys: HashSet<(String, Option<String>)> =
+            wanted.iter().map(|r| (r.hostname.clone(), r.path.clone())).collect();
+        let before = cfg.gateway.routes.len();
+        cfg.gateway
+            .routes
+            .retain(|r| !(project_of_workspace(r) && wanted_keys.contains(&(r.hostname.clone(), r.path.clone()))));
+        dirty |= cfg.gateway.routes.len() != before;
+
+        // Routes added by hand, by stacks, by worktree instances or by the
+        // workspace win; then orca.yaml over labels, and of two asking for
+        // one hostname the first.
         let mut taken: HashMap<(String, Option<String>), String> = cfg
             .gateway
             .routes
@@ -230,6 +247,7 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                 let by = match r.owner.as_deref() {
                     Some(o) if o.starts_with("dev:") => "a worktree instance".to_string(),
                     Some(o) if o.starts_with("stack:") => format!("stack {}", &o["stack:".len()..]),
+                    Some(o) if o.starts_with("workspace:") => format!("workspace {}", &o["workspace:".len()..]),
                     _ => format!("a route to {}", r.container_name),
                 };
                 ((r.hostname.clone(), r.path.clone()), by)

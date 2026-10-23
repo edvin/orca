@@ -209,10 +209,10 @@ mod tests {
 
     #[test]
     fn wildcards_cover_one_label() {
-        let names = vec!["*.local.groupone.dev".to_string(), "local.groupone.dev".to_string()];
-        assert!(cert_covers(&names, "web-feat-shop.local.groupone.dev"));
-        assert!(cert_covers(&names, "local.groupone.dev"));
-        assert!(!cert_covers(&names, "web.feat.shop.local.groupone.dev"));
+        let names = vec!["*.local.acme.dev".to_string(), "local.acme.dev".to_string()];
+        assert!(cert_covers(&names, "web-feat-shop.local.acme.dev"));
+        assert!(cert_covers(&names, "local.acme.dev"));
+        assert!(!cert_covers(&names, "web.feat.shop.local.acme.dev"));
         assert!(!cert_covers(&names, "other.dev"));
     }
 

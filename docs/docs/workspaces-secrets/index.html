@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvkpoimk">
+<link rel="stylesheet" href="/assets/site.css?v=mvkpw10c">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvkpoimk" defer></script>
+<script src="/assets/site.js?v=mvkpw10c" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -96,7 +96,7 @@
 <ul>
 <li>Only the variables the workspace lists as secrets for the project can be set this way.</li>
 <li>Empty fields are ignored, so you can fill in one secret at a time.</li>
-<li>A value must be a single line. For a multi-line value such as a private key, store it base64-encoded in the secret manager and decode it in the app.</li>
+<li>A value must be a single line. For a multi-line value such as a private key, store it base64-encoded in the secret manager and decode it in the app. When a fetched value has several lines, Orca leaves it out and says so.</li>
 <li>The project must be cloned first. Setup clones it before it asks.</li>
 </ul>
 <h3 id="find-a-passbolt-resource-id"><a class="anchor" href="#find-a-passbolt-resource-id" aria-hidden="true" tabindex="-1">#</a>Find a Passbolt resource id</h3>
@@ -159,7 +159,7 @@
 </ul>
 <p>The file is <code>.env</code> in the project&#39;s folder, unless the workspace sets another name with <code>env.file</code>.</p>
 <p>When Orca writes secrets, it changes only those variables: an existing <code>NAME=</code> line is replaced in place (an <code>export</code> in front is kept), and a variable that isn&#39;t in the file yet is added at the end. A value with spaces, <code>#</code>, quotes, <code>$</code>, backticks or backslashes is written in double quotes, with those characters escaped.</p>
-<p>Orca writes the new content to a temporary file and moves it into place, so the <code>.env</code> is never half-written. On macOS and Linux, that file is created readable and writable by your user only (mode <code>0600</code>).</p>
+<p>Orca writes the new content to a temporary file and moves it into place, so the <code>.env</code> is never half-written. On macOS and Linux, the <code>.env</code> is readable and writable by your user only (mode <code>0600</code>), from the moment setup creates it from the template.</p>
 <p>A variable counts as filled when it has a non-empty value. That&#39;s why secret variables should be <strong>empty in the template</strong>: a placeholder like <code>DB_PASSWORD=changeme</code> counts as a value, and Orca won&#39;t ask for the real one.</p>
 <div class="code has-title"><div class="code-title"><span>.env.example</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">APP_URL</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">https://billing.local.acme.dev</span></span>
 <span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">DB_HOST</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">billing-db</span></span>
@@ -167,7 +167,7 @@
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E"># Filled in by Orca from Passbolt</span></span>
 <span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">DB_PASSWORD</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span></span>
-<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">STRIPE_SECRET</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span></span></code></pre></div><p>Setup also checks with <code>git check-ignore</code> that the <code>.env</code> is ignored by git, and adds a warning to the setup log when it isn&#39;t. It doesn&#39;t stop. Make sure every project&#39;s <code>.gitignore</code> covers its <code>.env</code> before you add secrets to it.</p>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">STRIPE_SECRET</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span></span></code></pre></div><p>Setup also checks with <code>git check-ignore</code> that the <code>.env</code> is ignored by git, and warns you when it isn&#39;t, on the <strong>Workspace</strong> page and in <code>orca workspace setup</code>. It doesn&#39;t stop. Make sure every project&#39;s <code>.gitignore</code> covers its <code>.env</code> before you add secrets to it.</p>
 <h2 id="reference-secrets-in-the-workspace-file"><a class="anchor" href="#reference-secrets-in-the-workspace-file" aria-hidden="true" tabindex="-1">#</a>Reference secrets in the workspace file</h2>
 <p>Team leads list the secret managers once, at the top of the file, and the references per project:</p>
 <div class="code has-title"><div class="code-title"><span>orca-workspace.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">secrets</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>

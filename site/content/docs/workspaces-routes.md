@@ -63,7 +63,7 @@ The request reaches the target with its full path: `/api/orders` arrives as `/ap
 
 On the landing page and the **Workspace** page, a path route's address ends without the `*`, such as `https://shop.local.acme.dev/admin`.
 
-Avoid routes whose paths overlap on one hostname, such as `/api/*` and `/api/admin/*`. Orca doesn't promise to try the longer one first.
+Paths may overlap on one hostname: the longer one is tried first, so with `/api/*` and `/api/admin/*`, `/api/admin/users` goes to the second.
 
 ## Hostname patterns
 
@@ -203,11 +203,12 @@ It works because the gateway carries every exact route hostname as a network ali
 A hostname and path can have only one route. When a workspace route wants a hostname and path that another route already has:
 
 - **Routes added by hand** on the **Gateway** page, and **worktree instances**, keep it. The workspace route is left out.
-- **A route from a project's own orca.yaml or container labels** for the same hostname and path: whichever the gateway had first keeps it. Workspace routes exist from the moment you join, so they usually win. The **Gateway** page's **Routes** tab lists the route that lost and who has the hostname.
+- **A route from a project's own orca.yaml or container labels** for the same hostname and path takes over from the workspace's route for that project, once the project runs. The workspace's routes for a project stand in until the project routes its hostnames itself.
+- **The workspace's shared routes** (the top-level `routes:`) keep their hostnames. A project route that asks for one is left out, and the **Gateway** page's **Routes** tab names the workspace that has it.
 
-Orca doesn't warn when it leaves a workspace route out. If a workspace hostname goes to the wrong place, check the **Routes** tab for another route with the same name.
+A workspace route is also left out when a route added by hand or a worktree instance has its hostname. If a workspace hostname goes to the wrong place, check the **Routes** tab for another route with the same name.
 
-When a project moves its routes into its own `orca.yaml`, remove them from the workspace file in the same change, so there's only one owner.
+When a project moves its routes into its own `orca.yaml`, remove them from the workspace file too, to keep one place to look.
 
 ## Related
 

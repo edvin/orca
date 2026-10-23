@@ -600,16 +600,21 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     // Caddy takes the first route that matches, so the most specific come
     // first: WebSocket-only routes (they only match upgrades), then exact
     // hostnames before patterns, then routes with a path before those
-    // without, so /api/* wins over the rest of the same hostname.
+    // without, so /api/* wins over the rest of the same hostname, and a
+    // longer path before a shorter one (/api/admin/* before /api/*).
     // Among patterns, the one that fixes more of the hostname wins:
     // `*-docs.example.dev` before `*.example.dev`.
     let fixed = |r: &orca_core::config::GatewayRoute| std::cmp::Reverse(r.hostname.replace('*', "").len());
+    let path_len = |r: &orca_core::config::GatewayRoute| {
+        std::cmp::Reverse(r.path.as_deref().map_or(0, |p| p.trim_end_matches('*').len()))
+    };
     enabled_routes.sort_by(|a, b| {
         (
             !a.websocket,
             a.is_pattern(),
             fixed(a),
             a.path.is_none(),
+            path_len(a),
             &a.hostname,
             &a.path,
         )
@@ -618,6 +623,7 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
                 b.is_pattern(),
                 fixed(b),
                 b.path.is_none(),
+                path_len(b),
                 &b.hostname,
                 &b.path,
             ))
@@ -1042,8 +1048,8 @@ mod tests {
         let mut ws = make_route("app.localhost", "reverb-1", 8080);
         ws.websocket = true;
         let config = make_config(vec![
-            make_route("*-onehome.localhost", "onehome-1", 80),
-            make_route("onehome.localhost", "onehome-1", 80),
+            make_route("*-shop.localhost", "shop-1", 80),
+            make_route("shop.localhost", "shop-1", 80),
             ws,
         ]);
         let caddy: serde_json::Value = serde_json::from_str(&build_caddy_config(&config, &[])).unwrap();
@@ -1055,12 +1061,28 @@ mod tests {
             routes[0]["match"][0]["header_regexp"]["Upgrade"]["pattern"],
             "(?i)^websocket$"
         );
-        assert_eq!(routes[1]["match"][0]["host"][0], "onehome.localhost");
+        assert_eq!(routes[1]["match"][0]["host"][0], "shop.localhost");
         let expr = routes[2]["match"][0]["expression"].as_str().unwrap();
         assert_eq!(
             expr,
-            "{http.request.host}.matches(r'(?i)^[a-z0-9-]+-onehome\\.localhost$')"
+            "{http.request.host}.matches(r'(?i)^[a-z0-9-]+-shop\\.localhost$')"
         );
+    }
+
+    #[test]
+    fn longer_path_wins() {
+        let mut api = make_route("app.localhost", "api-1", 80);
+        api.path = Some("/api/*".into());
+        let mut admin = make_route("app.localhost", "admin-1", 80);
+        admin.path = Some("/api/admin/*".into());
+        let config = make_config(vec![make_route("app.localhost", "web-1", 80), api, admin]);
+        let caddy: serde_json::Value = serde_json::from_str(&build_caddy_config(&config, &[])).unwrap();
+        let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
+            .as_array()
+            .unwrap();
+        assert_eq!(routes[0]["match"][0]["path"][0], "/api/admin/*");
+        assert_eq!(routes[1]["match"][0]["path"][0], "/api/*");
+        assert!(routes[2]["match"][0].get("path").is_none());
     }
 
     #[test]

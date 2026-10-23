@@ -142,6 +142,7 @@ A [workspace](/docs/workspaces/) sets up a team's local environment from one rep
 | `orca workspace status` | The workspace and its projects: cloned, running, URLs, missing secrets. `--json` for scripts. |
 | `orca workspace setup <project>` | Clone, configure and start a project. `--rerun-setup` runs its setup command again. |
 | `orca workspace update` | Pull the workspace and apply it again. |
+| `orca workspace leave` | Forget the workspace, remove its routes and put the gateway's domain and certificate back. |
 | `orca workspace import-haproxy <file>` | Print workspace routes for an HAProxy config. `--domain` shortens hostnames under it. |
 
 ## AI tools (MCP)

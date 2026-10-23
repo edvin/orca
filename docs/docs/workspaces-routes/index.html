@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvkpoimk">
+<link rel="stylesheet" href="/assets/site.css?v=mvkpw10c">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvkpoimk" defer></script>
+<script src="/assets/site.js?v=mvkpw10c" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -84,7 +84,7 @@
 <p>A route with a <code>path</code> only takes requests for that path. The rest of the hostname goes to the route without a path.</p>
 <div class="table-wrap"><table><thead><tr><th><code>path</code></th><th>Matches</th><th>Doesn&#39;t match</th></tr></thead><tbody><tr><td><code>/api/*</code></td><td><code>/api/</code>, <code>/api/orders</code>, <code>/api/orders/7</code></td><td><code>/api</code>, <code>/apiary</code></td></tr><tr><td><code>/api*</code></td><td><code>/api</code>, <code>/api/orders</code>, <code>/apiary</code></td><td><code>/v1/api</code></td></tr><tr><td><code>/health</code></td><td><code>/health</code> only</td><td><code>/health/</code>, <code>/health/db</code></td></tr></tbody></table></div><p>The request reaches the target with its full path: <code>/api/orders</code> arrives as <code>/api/orders</code>, not <code>/orders</code>.</p>
 <p>On the landing page and the <strong>Workspace</strong> page, a path route&#39;s address ends without the <code>*</code>, such as <code>https://shop.local.acme.dev/admin</code>.</p>
-<p>Avoid routes whose paths overlap on one hostname, such as <code>/api/*</code> and <code>/api/admin/*</code>. Orca doesn&#39;t promise to try the longer one first.</p>
+<p>Paths may overlap on one hostname: the longer one is tried first, so with <code>/api/*</code> and <code>/api/admin/*</code>, <code>/api/admin/users</code> goes to the second.</p>
 <h2 id="hostname-patterns"><a class="anchor" href="#hostname-patterns" aria-hidden="true" tabindex="-1">#</a>Hostname patterns</h2>
 <p>A <code>*</code> in the first part of a hostname matches many hostnames:</p>
 <div class="table-wrap"><table><thead><tr><th><code>hostname</code></th><th>Matches</th><th>Doesn&#39;t match</th></tr></thead><tbody><tr><td><code>*-shop</code></td><td><code>nordic-shop.local.acme.dev</code>, <code>b2b-shop.local.acme.dev</code></td><td><code>shop.local.acme.dev</code>, <code>a.b-shop.local.acme.dev</code></td></tr><tr><td><code>*-docs</code></td><td><code>billing-docs.local.acme.dev</code></td><td><code>docs.local.acme.dev</code></td></tr><tr><td><code>*</code></td><td>every one-level name: <code>anything.local.acme.dev</code></td><td><code>local.acme.dev</code>, <code>a.b.local.acme.dev</code></td></tr></tbody></table></div><p>The <code>*</code> stands for one or more letters, digits and dashes, within the first part of the name. It never matches a dot, so a pattern never reaches deeper names. Matching ignores case.</p>
@@ -160,10 +160,11 @@
 <p>A hostname and path can have only one route. When a workspace route wants a hostname and path that another route already has:</p>
 <ul>
 <li><strong>Routes added by hand</strong> on the <strong>Gateway</strong> page, and <strong>worktree instances</strong>, keep it. The workspace route is left out.</li>
-<li><strong>A route from a project&#39;s own orca.yaml or container labels</strong> for the same hostname and path: whichever the gateway had first keeps it. Workspace routes exist from the moment you join, so they usually win. The <strong>Gateway</strong> page&#39;s <strong>Routes</strong> tab lists the route that lost and who has the hostname.</li>
+<li><strong>A route from a project&#39;s own orca.yaml or container labels</strong> for the same hostname and path takes over from the workspace&#39;s route for that project, once the project runs. The workspace&#39;s routes for a project stand in until the project routes its hostnames itself.</li>
+<li><strong>The workspace&#39;s shared routes</strong> (the top-level <code>routes:</code>) keep their hostnames. A project route that asks for one is left out, and the <strong>Gateway</strong> page&#39;s <strong>Routes</strong> tab names the workspace that has it.</li>
 </ul>
-<p>Orca doesn&#39;t warn when it leaves a workspace route out. If a workspace hostname goes to the wrong place, check the <strong>Routes</strong> tab for another route with the same name.</p>
-<p>When a project moves its routes into its own <code>orca.yaml</code>, remove them from the workspace file in the same change, so there&#39;s only one owner.</p>
+<p>A workspace route is also left out when a route added by hand or a worktree instance has its hostname. If a workspace hostname goes to the wrong place, check the <strong>Routes</strong> tab for another route with the same name.</p>
+<p>When a project moves its routes into its own <code>orca.yaml</code>, remove them from the workspace file too, to keep one place to look.</p>
 <h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>
 <ul>
 <li><a href="/docs/workspaces-reference/#routes">File reference</a>: the exact rules for each key.</li>

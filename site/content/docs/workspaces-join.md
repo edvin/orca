@@ -55,7 +55,7 @@ Instead of a git URL, you can give the absolute path of a folder that already co
 orca workspace join /Users/you/code/dev-workspace
 ```
 
-The path must be absolute. A relative path such as `.` is treated as a git URL.
+From a terminal, a relative path such as `.` works too: the CLI turns it into an absolute one.
 
 ## What joining does
 
@@ -205,25 +205,25 @@ orca workspace setup billing --rerun-setup
 orca workspace update                    # pull the workspace and apply it
 ```
 
-`orca workspace status` prints the domain, how many shared services run, registries you're not logged in to, and a line per project with its state (`running`, `cloned` or `not set up`), its URLs when it runs, and its missing secrets when it's cloned.
+`orca workspace status` prints the domain, how many shared services run, registries you're not logged in to, and a line per project with its state (`running`, `cloned` or `not cloned`), its URLs when it runs, and its missing secrets when it's cloned.
 
 `orca workspace setup` prints each step as it finishes and the project's URLs at the end. When secrets are missing, it lists them with a link or reference for each, and exits without starting the project. Fill them in, then run the command again.
 
 ## Stay up to date
 
-Every time Orca starts, it pulls the workspace with `git pull --ff-only` and refreshes the routes. A project or route a team lead added shows up without anyone doing anything.
+Every time Orca starts, it pulls the workspace with `git pull --ff-only`. When the pull brought something new, Orca applies the whole workspace, as **Update** does, so a new project, route, shared service or renewed certificate arrives without anyone doing anything. When nothing changed, it only refreshes the routes.
 
 The pull is fast-forward only: it never merges, rebases or touches your local changes. If you have commits of your own on the workspace's branch, or the pull fails for another reason (offline, no access), Orca keeps using what you have and tries again on the next start.
 
-Some changes need the whole workspace applied again: a new shared service, a changed compose file, a new network, a new domain or a renewed certificate. Click **Update** on the **Workspace** page, run `orca workspace update`, or ask your AI tool. **Update** runs the join steps again, starting with **Get the latest workspace**, and restarts the gateway, so routes are briefly unavailable.
+To get a change before Orca next starts, click **Update** on the **Workspace** page, run `orca workspace update`, or ask your AI tool. **Update** runs the join steps again, starting with **Get the latest workspace**, and restarts the gateway, so routes are briefly unavailable.
 
 If the workspace file has a mistake, the page shows **The workspace file has a problem** with the error, and **Update** to try again once it's fixed.
 
 ## Leave the workspace
 
-Click **Leave** on the **Workspace** page and confirm. Orca forgets the workspace and removes its routes.
+Click **Leave** on the **Workspace** page and confirm, or run `orca workspace leave`. Orca forgets the workspace, removes its routes, and puts the gateway's domain and certificate back as they were before you joined.
 
-Everything else stays: the workspace folder, the cloned projects, their `.env` files, running containers and the gateway's domain and certificate. Stop the stacks you don't need on the **Containers** page, and delete folders yourself if you want them gone.
+Everything else stays: the workspace folder, the cloned projects, their `.env` files and running containers. Stop the stacks you don't need on the **Containers** page, and delete folders yourself if you want them gone.
 
 ## Several machines and remote hosts
 

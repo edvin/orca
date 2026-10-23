@@ -58,7 +58,7 @@ A few rules apply:
 
 - Only the variables the workspace lists as secrets for the project can be set this way.
 - Empty fields are ignored, so you can fill in one secret at a time.
-- A value must be a single line. For a multi-line value such as a private key, store it base64-encoded in the secret manager and decode it in the app.
+- A value must be a single line. For a multi-line value such as a private key, store it base64-encoded in the secret manager and decode it in the app. When a fetched value has several lines, Orca leaves it out and says so.
 - The project must be cloned first. Setup clones it before it asks.
 
 ### Find a Passbolt resource id
@@ -168,7 +168,7 @@ The file is `.env` in the project's folder, unless the workspace sets another na
 
 When Orca writes secrets, it changes only those variables: an existing `NAME=` line is replaced in place (an `export` in front is kept), and a variable that isn't in the file yet is added at the end. A value with spaces, `#`, quotes, `$`, backticks or backslashes is written in double quotes, with those characters escaped.
 
-Orca writes the new content to a temporary file and moves it into place, so the `.env` is never half-written. On macOS and Linux, that file is created readable and writable by your user only (mode `0600`).
+Orca writes the new content to a temporary file and moves it into place, so the `.env` is never half-written. On macOS and Linux, the `.env` is readable and writable by your user only (mode `0600`), from the moment setup creates it from the template.
 
 A variable counts as filled when it has a non-empty value. That's why secret variables should be **empty in the template**: a placeholder like `DB_PASSWORD=changeme` counts as a value, and Orca won't ask for the real one.
 
@@ -182,7 +182,7 @@ DB_PASSWORD=
 STRIPE_SECRET=
 ```
 
-Setup also checks with `git check-ignore` that the `.env` is ignored by git, and adds a warning to the setup log when it isn't. It doesn't stop. Make sure every project's `.gitignore` covers its `.env` before you add secrets to it.
+Setup also checks with `git check-ignore` that the `.env` is ignored by git, and warns you when it isn't, on the **Workspace** page and in `orca workspace setup`. It doesn't stop. Make sure every project's `.gitignore` covers its `.env` before you add secrets to it.
 
 ## Reference secrets in the workspace file
 

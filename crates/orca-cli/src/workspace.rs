@@ -18,6 +18,14 @@ fn finish(done: &Value) -> anyhow::Result<()> {
 }
 
 pub async fn join(client: &DaemonClient, repo: String, folder: Option<String>) -> anyhow::Result<()> {
+    // A local folder (`.`, `../team-workspace`) is joined where it is; the
+    // daemon wants its absolute path.
+    let local = std::path::Path::new(&repo);
+    let repo = if !local.is_absolute() && local.is_dir() {
+        local.canonicalize()?.to_string_lossy().to_string()
+    } else {
+        repo
+    };
     let job = client
         .post_value("/workspace/join", &json!({ "repo": repo, "folder": folder }))
         .await?;
@@ -29,6 +37,20 @@ pub async fn join(client: &DaemonClient, repo: String, folder: Option<String>) -
 pub async fn update(client: &DaemonClient) -> anyhow::Result<()> {
     let job = client.post_value("/workspace/update", &json!({})).await?;
     finish(&follow_job(client, job, false).await?)
+}
+
+pub async fn leave(client: &DaemonClient) -> anyhow::Result<()> {
+    client.post_value("/workspace/leave", &json!({})).await?;
+    println!("Left the workspace and removed its routes. Your clones and their .env files are still there.");
+    Ok(())
+}
+
+/// Warnings a job left with its result (a .env not in .gitignore, a secret
+/// that couldn't be fetched).
+fn print_warnings(result: &Value) {
+    for w in result["warnings"].as_array().into_iter().flatten() {
+        println!("Warning: {}", w.as_str().unwrap_or_default());
+    }
 }
 
 pub async fn status(client: &DaemonClient, json_out: bool) -> anyhow::Result<()> {
@@ -65,7 +87,7 @@ pub async fn status(client: &DaemonClient, json_out: bool) -> anyhow::Result<()>
         } else if p["cloned"] == json!(true) {
             "cloned"
         } else {
-            "not set up"
+            "not cloned"
         };
         let missing: Vec<&str> = p["secrets"]
             .as_array()
@@ -96,6 +118,7 @@ pub async fn setup(client: &DaemonClient, key: String, rerun_setup: bool) -> any
     let done = follow_job(client, job, false).await?;
     finish(&done)?;
     let result = &done["result"];
+    print_warnings(result);
     if let Some(missing) = result.get("missing_secrets").and_then(Value::as_array) {
         let w = client.get_value("/workspace").await?;
         let project = w["projects"]
@@ -103,7 +126,8 @@ pub async fn setup(client: &DaemonClient, key: String, rerun_setup: bool) -> any
             .into_iter()
             .flatten()
             .find(|p| s(p, "key") == key);
-        println!("\n{key} needs these secrets in its .env before it can start:");
+        let env_file = project.and_then(|p| p["env_file"].as_str()).unwrap_or(".env");
+        println!("\n{key} needs these secrets in its {env_file} before it can start:");
         for name in missing.iter().filter_map(Value::as_str) {
             let info = project.and_then(|p| {
                 p["secrets"]
@@ -122,7 +146,7 @@ pub async fn setup(client: &DaemonClient, key: String, rerun_setup: bool) -> any
                 .unwrap_or_default();
             println!("  {name:<24} {hint}");
         }
-        println!("\nFill them in on Orca's Workspace page (or in the .env), then run this again.");
+        println!("\nFill them in on Orca's Workspace page (or in {env_file}), then run this again.");
         return Ok(());
     }
     for u in result["urls"].as_array().into_iter().flatten() {

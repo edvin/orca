@@ -23,6 +23,7 @@ export default function SecretsDialog(props: {
   const [busy, setBusy] = createSignal(false);
   const [fetching, setFetching] = createSignal(false);
 
+  const envFile = () => props.project.env_file || ".env";
   const missing = () => secrets().filter((s) => !s.filled);
   const canFetch = () => missing().some((s) => props.clis?.[s.provider]);
   const typed = () => Object.entries(values()).filter(([, v]) => v.trim());
@@ -65,7 +66,7 @@ export default function SecretsDialog(props: {
         </div>
         <div class="modal-body">
           <p class="secrets-intro">
-            These go into <span class="mono">{props.project.dir.split(/[\\/]/).pop()}/.env</span> on this computer and nowhere else.
+            These go into <span class="mono">{props.project.dir.split(/[\\/]/).pop()}/{envFile()}</span> on this computer and nowhere else.
             Open each one in your secret manager, copy the value and paste it here.
           </p>
           <Show when={canFetch()}>
@@ -83,7 +84,7 @@ export default function SecretsDialog(props: {
                   <div class="secret-head">
                     <b class="mono">{s.name}</b>
                     <span class="secret-provider">{PROVIDER[s.provider] ?? s.provider}</span>
-                    <Show when={s.filled}><span class="secret-ok">✓ in .env</span></Show>
+                    <Show when={s.filled}><span class="secret-ok">✓ in {envFile()}</span></Show>
                     <span class="secret-spacer" />
                     <Show when={s.link} fallback={
                       <button class="btn btn-sm" title="Copy the reference" onClick={() => navigator.clipboard.writeText(s.reference).then(() => showToast("Reference copied", "success"), () => {})}>

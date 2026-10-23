@@ -29,6 +29,7 @@ export interface WorkspaceProject {
   setup: string | null;
   urls: string[];
   secrets: WorkspaceSecret[];
+  env_file?: string | null;
   worktrees: boolean;
 }
 

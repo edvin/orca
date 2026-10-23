@@ -4815,7 +4815,18 @@ fn parse_orca_yaml_hooks(dir: &std::path::Path) -> Vec<String> {
 /// Run a stack's `after_up` hooks in order. A failing hook is reported and
 /// the rest still run: the stack itself is up.
 pub(crate) async fn run_stack_hooks(state: &AppState, dir: &str, config: Option<&str>) -> Vec<serde_json::Value> {
-    let hooks = parse_orca_yaml_hooks(std::path::Path::new(dir));
+    run_stack_hooks_from(state, std::path::Path::new(dir), dir, config).await
+}
+
+/// As [`run_stack_hooks`], with the orca.yaml in `yaml_dir` for a stack whose
+/// compose working directory is `dir` (a compose file in a subfolder).
+pub(crate) async fn run_stack_hooks_from(
+    state: &AppState,
+    yaml_dir: &std::path::Path,
+    dir: &str,
+    config: Option<&str>,
+) -> Vec<serde_json::Value> {
+    let hooks = parse_orca_yaml_hooks(yaml_dir);
     let rt = state.rt().await;
     // Services that run: a hook for one whose profile is off is skipped.
     let running: Vec<String> = rt
@@ -8252,7 +8263,7 @@ const MCP_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
 /// Shown to agents on connect, so they know when Orca is the right tool.
 const MCP_INSTRUCTIONS: &str = "Orca manages this machine's containers, compose stacks, Kubernetes and git worktree instances. \
-When the developer asks to run or set up one of their team's projects by name (\"spin up onecrm\"), call workspace_status: \
+When the developer asks to run or set up one of their team's projects by name (\"spin up billing\"), call workspace_status: \
 if a workspace is joined it lists the team's projects; setup_project clones, configures and starts one and returns its URLs. \
 Never ask the developer to paste secrets into the chat: missing secrets are filled in on Orca's Workspace page. \
 To start a project from a folder with a compose file or orca.yaml, use deploy_project with its path; then list_stacks, \

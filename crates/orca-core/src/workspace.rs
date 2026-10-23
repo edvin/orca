@@ -18,7 +18,7 @@ pub const FILE_NAMES: &[&str] = &["orca-workspace.yaml", "orca-workspace.yml"];
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkspaceFile {
-    /// Shown in Orca, e.g. "group.one".
+    /// Shown in Orca, e.g. "Acme".
     pub name: String,
     /// One line about the workspace.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,7 +48,7 @@ pub struct WorkspaceFile {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkspaceGateway {
-    /// The domain hostnames get, e.g. `local.groupone.dev`.
+    /// The domain hostnames get, e.g. `local.acme.dev`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
     /// A certificate for `*.<domain>`, paths relative to the workspace.
@@ -81,8 +81,8 @@ pub struct SharedServices {
 #[serde(default, deny_unknown_fields)]
 pub struct WorkspaceRoute {
     /// `mail` (gets the workspace domain) or a full hostname. A `*` in the
-    /// first label matches many: `*-onehome` is `zoner-onehome`,
-    /// `antagonist-onehome`… and `*` alone is every hostname.
+    /// first label matches many: `*-shop` is `north-shop`,
+    /// `south-shop`… and `*` alone is every hostname.
     pub hostname: String,
     /// `alias:port`, the network alias (or container name) and its port.
     pub target: String,
@@ -315,6 +315,11 @@ impl WorkspaceFile {
                     }
                 }
             }
+            if !p.uses.is_empty() && self.shared.is_none() {
+                anyhow::bail!(
+                    "project '{key}' `uses` shared services, but the workspace has no `shared:` compose file"
+                );
+            }
             for u in &p.uses {
                 if u.trim().is_empty() {
                     anyhow::bail!("project '{key}': empty entry in `uses`");
@@ -345,7 +350,7 @@ impl WorkspaceFile {
 fn check_route(r: &WorkspaceRoute) -> anyhow::Result<()> {
     let ok = !r.hostname.is_empty()
         && r.hostname.split('.').enumerate().all(|(i, label)| {
-            // A `*` may stand for part of the first label: `*-onehome`, `*`.
+            // A `*` may stand for part of the first label: `*-shop`, `*`.
             if i == 0 && label.contains('*') {
                 label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '*')
             } else {
@@ -401,7 +406,7 @@ fn valid_env_name(s: &str) -> bool {
         && !s.starts_with(|c: char| c.is_ascii_digit())
 }
 
-/// What an HAProxy config (devproxy's) becomes: workspace routes for every
+/// What an HAProxy config (a shared dev proxy's) becomes: workspace routes for every
 /// plain "this hostname goes to that backend" rule, and the rules that need
 /// a person to look at them (WebSocket special cases, regex or suffix
 /// hostnames, several conditions).
@@ -609,10 +614,10 @@ mod tests {
     }
 
     const EXAMPLE: &str = r#"
-name: group.one
+name: acme
 network: local-dev
 gateway:
-  domain: local.groupone.dev
+  domain: local.acme.dev
   certificate: { cert: certs/wildcard.crt, key: certs/wildcard.key }
 shared:
   compose: compose.yaml
@@ -621,15 +626,15 @@ routes:
 secrets:
   passbolt: { url: https://passbolt.example.com }
   1password: {}
-clone_into: ~/code/group.one
+clone_into: ~/code/acme
 projects:
-  onecrm:
-    repo: git@git.example.com:crm/onecrm.git
+  crm:
+    repo: git@git.example.com:crm/crm.git
     description: CRM
     uses: [mailpit, temporal]
     setup: just setup
     routes:
-      - { hostname: one-crm, target: "one-crm-app:80" }
+      - { hostname: one-crm, target: "crm-app:80" }
     env:
       from: .env.example
       secrets:
@@ -641,17 +646,14 @@ projects:
     fn a_full_workspace_parses() {
         let w = WorkspaceFile::parse(EXAMPLE).unwrap();
         assert_eq!(w.network.as_deref(), Some("local-dev"));
-        let p = &w.projects["onecrm"];
-        assert_eq!(p.routes[0].target(), Some(("one-crm-app", 80)));
+        let p = &w.projects["crm"];
+        assert_eq!(p.routes[0].target(), Some(("crm-app", 80)));
         assert_eq!(p.env.as_ref().unwrap().file(), ".env");
         assert_eq!(
             w.secrets.passbolt.as_ref().unwrap().link("7f3c"),
             "https://passbolt.example.com/app/passwords/view/7f3c"
         );
-        assert!(
-            w.project_dir(Path::new("/x/ws"), "onecrm")
-                .ends_with("code/group.one/onecrm")
-        );
+        assert!(w.project_dir(Path::new("/x/ws"), "crm").ends_with("code/acme/crm"));
     }
 
     #[test]
@@ -673,31 +675,31 @@ projects:
     }
 
     #[test]
-    fn devproxy_haproxy_config_becomes_routes() {
+    fn dev_proxy_haproxy_config_becomes_routes() {
         let cfg = r#"
 frontend http
     acl hdr_connection_upgrade hdr(Connection) -i upgrade
-    acl is_tool_ws req.hdr(host) -i tool.local.groupone.dev
-    acl is_any_docs req.hdr(host) -m end -- -docs.local.groupone.dev
+    acl is_tool_ws req.hdr(host) -i tool.local.acme.dev
+    acl is_any_docs req.hdr(host) -m end -- -docs.local.acme.dev
     use_backend tool-reverb if hdr_connection_upgrade is_tool_ws
-    acl is_local req.hdr(host) -i local.groupone.dev
+    acl is_local req.hdr(host) -i local.acme.dev
     use_backend local if is_local
-    acl URI_crm req.hdr(host) -i one-crm.local.groupone.dev
-    acl URI_mail hdr(host) -i mail.local.groupone.dev mailpit.local.groupone.dev
+    acl URI_crm req.hdr(host) -i crm-app.local.acme.dev
+    acl URI_mail hdr(host) -i mail.local.acme.dev mailpit.local.acme.dev
     use_backend crm if URI_crm
     use_backend mailpit if URI_mail
     use_backend docs if is_any_docs
 backend crm
-    description oneCRM App
-    server one-crm-app one-crm-app:80 resolvers docker init-addr last,none
+    description CRM App
+    server crm-app crm-app:80 resolvers docker init-addr last,none
 backend mailpit
-    server devproxy-mailpit devproxy-mailpit:8025
+    server devstack-mailpit devstack-mailpit:8025
 backend tool-reverb
     server reverb tool-reverb:8080
 backend local
-    server nginx devproxy-nginx:80
+    server nginx devstack-nginx:80
 "#;
-        let import = routes_from_haproxy(cfg, Some("local.groupone.dev"));
+        let import = routes_from_haproxy(cfg, Some("local.acme.dev"));
         let pairs: Vec<(&str, &str)> = import
             .routes
             .iter()
@@ -706,12 +708,12 @@ backend local
         assert_eq!(
             pairs,
             vec![
-                ("one-crm", "one-crm-app:80"),
-                ("mail", "devproxy-mailpit:8025"),
-                ("mailpit", "devproxy-mailpit:8025")
+                ("crm-app", "crm-app:80"),
+                ("mail", "devstack-mailpit:8025"),
+                ("mailpit", "devstack-mailpit:8025")
             ]
         );
-        assert_eq!(import.routes[0].title.as_deref(), Some("oneCRM App"));
+        assert_eq!(import.routes[0].title.as_deref(), Some("CRM App"));
         assert_eq!(import.skipped.len(), 2, "{:?}", import.skipped);
         assert!(
             import.skipped.iter().any(|l| l.contains("tool-reverb"))
