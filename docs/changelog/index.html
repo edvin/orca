@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvl3h282">
+<link rel="stylesheet" href="/assets/site.css?v=mvlfa7pv">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvl3h282" defer></script>
+<script src="/assets/site.js?v=mvlfa7pv" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,30 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.55.0">
+<section class="container releases"><article class="release" id="v0.56.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.56.0">v0.56.0</a><time datetime="2026-10-23T20:28:18Z">October 23, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="ports-that-say-what-they-are"><a class="anchor" href="#ports-that-say-what-they-are" aria-hidden="true" tabindex="-1">#</a>Ports that say what they are</h2>
+<p>The Gateway page&#39;s <strong>Suggested routes</strong> now tell you what each port is:</p>
+<ul>
+<li><strong>Names:</strong> <code>:8123 ClickHouse HTTP</code>, <code>:5432 PostgreSQL</code>, <code>:3478 STUN/TURN</code>, worked out from the image and the port number.</li>
+<li><strong>Web or not:</strong> a blue dot marks a web page the gateway can serve, a hollow dot anything else.</li>
+<li><strong>Port runs:</strong> a run of ports, like a TURN server&#39;s relay range, is one label (<code>:49160–49200 relay ports</code>) instead of forty.</li>
+</ul>
+<p><strong>Check</strong> asks a container&#39;s ports directly. It names a web page by its title, and anything else by its protocol: PostgreSQL, Redis, SMTP, SSH, MySQL and more. It only runs when you click it.</p>
+<p>Databases and other containers with no web pages no longer show up as routes to add. They&#39;re listed under <strong>Other services</strong>, with the address to reach them on your computer, such as <code>localhost:5432</code>. <strong>Add to Gateway</strong> now picks the container&#39;s web port.</p>
+<h2 id="a-sturdier-gateway-start"><a class="anchor" href="#a-sturdier-gateway-start" aria-hidden="true" tabindex="-1">#</a>A sturdier gateway start</h2>
+<p>If something else on your computer is using port 2019, such as another Orca&#39;s gateway, Orca no longer sends your gateway&#39;s settings to it by mistake. It now says what&#39;s wrong and how to fix it. Starting the gateway also no longer fails when a just-created certificate takes a moment to appear.</p>
+<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
+<ul>
+<li>Containers with many ports no longer push their port labels out of the suggestion card.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.56.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.55.0">
   <div class="release-meta"><a class="release-tag" href="#v0.55.0">v0.55.0</a><time datetime="2026-10-23T14:57:39Z">October 23, 2026</time></div>
   <div class="release-body prose">
     
@@ -556,35 +579,6 @@
 <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.0...v0.47.1" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.0...v0.47.1</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.47.0">
-  <div class="release-meta"><a class="release-tag" href="#v0.47.0">v0.47.0</a><time datetime="2026-10-14T15:02:41Z">October 14, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="worktree-instances"><a class="anchor" href="#worktree-instances" aria-hidden="true" tabindex="-1">#</a>Worktree instances</h2>
-<p>Every git worktree of a compose project can now run as its own instance, with its own URLs, ports and compose project. Databases and other infrastructure run once in a shared stack. Your compose files are never modified.</p>
-<ul>
-<li><strong>Projects</strong> page in the app, a Dashboard card, and running instances in the tray menu</li>
-<li>CLI: <code>orca up</code>, <code>down</code>, <code>status</code>, <code>logs</code>, <code>env</code>, <code>run</code> and <code>projects</code>, from inside any worktree</li>
-<li>MCP: <code>instance_*</code> tools for coding agents</li>
-<li>Per-instance data: shared (default), own database or own server, with reset</li>
-<li>Idle stop, with wake on the next request</li>
-<li>Host dev servers: <code>orca run --serve web -- npm run dev</code> routes the service&#39;s URL to a process on your machine</li>
-</ul>
-<h2 id="security"><a class="anchor" href="#security" aria-hidden="true" tabindex="-1">#</a>Security</h2>
-<ul>
-<li>The gateway no longer serves its certificates folder. Before this release, the TLS private keys could be fetched from every routed hostname. Update if you use the gateway.</li>
-</ul>
-<h2 id="other-changes"><a class="anchor" href="#other-changes" aria-hidden="true" tabindex="-1">#</a>Other changes</h2>
-<ul>
-<li>The gateway access log is now a rotated file (<code>ca/certs/access.log</code>) instead of container output</li>
-<li>macOS: <code>docker compose</code> now works when Orca is opened from Finder or the Dock</li>
-<li>macOS: the gateway can now reach dev servers running on the Mac</li>
-</ul>
-<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.20...v0.47.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.20...v0.47.0</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
