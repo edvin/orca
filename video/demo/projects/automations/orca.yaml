@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: flows, service: n8n, port: 5678, title: n8n, description: Workflows and integrations }

@@ -1,0 +1,48 @@
+# The demo company's workspace, for Orca's showcase video (video/README.md).
+# Every app is a real open-source project, so everything on screen runs.
+name: acme
+description: Everything you need to work on Acme's apps.
+
+network: acme
+
+gateway:
+  domain: acme.localhost
+  title: Acme dev
+
+shared:
+  compose: compose.yaml
+  name: acme-shared
+
+routes:
+  - { hostname: mail, target: "mailpit:8025", title: Mailpit, description: Every email our apps send }
+  - { hostname: grafana, target: "grafana:3000", title: Grafana, description: Dashboards and alerts }
+  - { hostname: db, target: "adminer:8080", title: Adminer, description: Look inside any database }
+
+clone_into: ~/code/acme
+
+projects:
+  website:
+    repo: https://git.acme.dev/acme/website.git
+    description: The marketing site, on WordPress
+    icon: wordpress
+  git:
+    repo: https://git.acme.dev/acme/git.git
+    description: Our own Git server (Gitea)
+    icon: gitea
+  automations:
+    repo: https://git.acme.dev/acme/automations.git
+    description: Workflows and integrations (n8n)
+    icon: n8n
+    uses: [mailpit]
+  analytics:
+    repo: https://git.acme.dev/acme/analytics.git
+    description: Privacy-friendly web analytics (Umami)
+    icon: icons/umami.svg
+  status:
+    repo: https://git.acme.dev/acme/status.git
+    description: Uptime monitoring and status pages (Uptime Kuma)
+    icon: icons/uptime-kuma.svg
+  notes:
+    repo: https://git.acme.dev/acme/notes.git
+    description: The team's notes (Memos)
+    icon: icons/memos.svg

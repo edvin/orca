@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: git, service: gitea, port: 3000, title: Gitea, description: Our own Git server }

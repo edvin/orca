@@ -1,0 +1,16 @@
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-v2.19.0
+    environment:
+      DATABASE_URL: postgresql://umami:umami@db:5432/umami
+      APP_SECRET: demo-not-a-secret
+    depends_on: [db]
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: umami
+    volumes: [db:/var/lib/postgresql/data]
+volumes:
+  db:

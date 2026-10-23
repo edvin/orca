@@ -1,0 +1,6 @@
+services:
+  memos:
+    image: neosmemo/memos:0.31.0
+    volumes: [data:/var/opt/memos]
+volumes:
+  data:

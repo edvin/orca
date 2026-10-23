@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: analytics, service: umami, port: 3000, title: Umami, description: Privacy-friendly analytics }

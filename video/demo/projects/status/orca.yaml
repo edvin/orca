@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: status, service: uptime-kuma, port: 3001, title: Uptime Kuma, description: Is everything up? }

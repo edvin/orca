@@ -1,0 +1,13 @@
+{
+  "name": "orca-video",
+  "private": true,
+  "type": "module",
+  "description": "Records Orca's showcase video from the real app (see README.md).",
+  "scripts": {
+    "record": "node record.mjs",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.58.2"
+  }
+}

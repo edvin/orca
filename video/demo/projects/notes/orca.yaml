@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: notes, service: memos, port: 5230, title: Memos, description: The team's notes }

@@ -1,0 +1,20 @@
+# Services every Acme app shares.
+name: acme-shared
+
+services:
+  mailpit:
+    image: axllent/mailpit:v1.27
+    networks: [acme]
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    networks: [acme]
+  adminer:
+    image: adminer:5
+    networks: [acme]
+
+networks:
+  acme:
+    external: true

@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: www, service: wordpress, port: 80, title: Website, description: The marketing site }

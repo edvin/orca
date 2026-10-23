@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Orca video stage</title>
+<style>
+  :root { --bg: #070a0f; --accent: #58a6ff; --text: #e6edf3; --muted: #8b949e; --ease: cubic-bezier(.22,.8,.2,1); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: clip; background: var(--bg); font-family: "Inter", -apple-system, "SF Pro Display", system-ui, sans-serif; color: var(--text); }
+  body::before { content: ""; position: absolute; inset: 0; background:
+      radial-gradient(1100px 600px at 18% -10%, rgba(88,166,255,.22), transparent 60%),
+      radial-gradient(900px 600px at 100% 110%, rgba(63,185,80,.10), transparent 60%),
+      radial-gradient(700px 500px at 85% 10%, rgba(163,113,247,.12), transparent 60%); }
+  body::after { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 48px 48px; mask-image: radial-gradient(circle at 50% 40%, #000 30%, transparent 80%); }
+
+  .win { position: absolute; border-radius: 14px; overflow: hidden; background: #0d1117; border: 1px solid rgba(255,255,255,.09);
+    box-shadow: 0 40px 120px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.4); transition: all .9s var(--ease); z-index: 2; }
+  .win.hidden { opacity: 0; transform: translateY(40px) scale(.97); pointer-events: none; }
+  .bar { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #161b22; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 13px; color: var(--muted); }
+  .dots { display: flex; gap: 8px; margin-right: 10px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .dots i:nth-child(1) { background: #ff5f57; } .dots i:nth-child(2) { background: #febc2e; } .dots i:nth-child(3) { background: #28c840; }
+  .bar .title { flex: 1; text-align: center; margin-right: 70px; }
+  .url { flex: 1; margin: 0 80px 0 10px; height: 26px; border-radius: 8px; background: #0d1117; border: 1px solid rgba(255,255,255,.07); display: flex; align-items: center; gap: 8px; padding: 0 12px; color: #c9d1d9; font-size: 13px; }
+  .url svg { color: #3fb950; }
+  iframe { border: 0; width: 100%; height: calc(100% - 40px); display: block; background: #0a0e14; }
+
+  /* Terminal */
+  .term .body { height: calc(100% - 40px); padding: 22px 24px; overflow: hidden; font: 15px/1.55 "JetBrains Mono", "SF Mono", Menlo, monospace; color: #c9d1d9; display: flex; flex-direction: column; justify-content: flex-end; }
+  .term .line { white-space: pre-wrap; word-break: break-word; margin: 0 0 8px; animation: in .35s var(--ease) both; }
+  .term .prompt { color: var(--text); font-weight: 600; } .term .prompt b { color: #d2a8ff; }
+  .term .tool { color: var(--muted); } .term .tool b { color: #79c0ff; font-weight: 600; }
+  .term .tool .ok { color: #3fb950; } .term .result { color: #8b949e; padding-left: 22px; font-size: 13.5px; }
+  .term .say { color: #e6edf3; }
+  .term .say strong { color: #fff; } .term .say code { color: #ffa657; }
+  .term .spin { color: #d2a8ff; }
+  .term .caret { display: inline-block; width: 9px; height: 18px; background: #c9d1d9; vertical-align: -3px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } }
+
+  /* Cursor */
+  #cursor { position: absolute; left: 960px; top: 1200px; width: 26px; height: 26px; z-index: 50; pointer-events: none; transition: left .7s var(--ease), top .7s var(--ease); filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+  .ripple { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 2px solid rgba(88,166,255,.9); z-index: 49; pointer-events: none; animation: ripple .55s ease-out forwards; }
+  @keyframes ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+
+  /* Title cards and lower thirds */
+  .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 30; transition: opacity .8s var(--ease); text-align: center; }
+  .card.hidden { opacity: 0; pointer-events: none; }
+  .card .logo { width: 120px; height: 120px; border-radius: 28px; margin-bottom: 34px; box-shadow: 0 20px 80px rgba(88,166,255,.35); }
+  .card h1 { font-size: 92px; letter-spacing: -0.04em; margin: 0; font-weight: 800; }
+  .card h1 span { background: linear-gradient(90deg, #58a6ff, #3fb950); -webkit-background-clip: text; color: transparent; }
+  .card p { font-size: 30px; color: #aab4c0; margin: 22px 0 0; max-width: 1100px; line-height: 1.4; }
+  .card .url-tag { margin-top: 40px; font-size: 24px; color: var(--accent); letter-spacing: .02em; }
+  .lower { position: absolute; left: 50%; transform: translateX(-50%); bottom: 34px; z-index: 31; display: flex; align-items: center; gap: 14px; padding: 12px 20px 12px 14px; border-radius: 14px; background: rgba(13,17,23,.82); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(10px); font-size: 22px; font-weight: 600; transition: all .7s var(--ease); }
+  .lower.hidden { opacity: 0; transform: translate(-50%, 20px); }
+  .lower .n { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(88,166,255,.16); color: var(--accent); font-size: 17px; }
+  .lower small { display: block; font-size: 15px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+  .spot { position: absolute; z-index: 40; border-radius: 12px; box-shadow: 0 0 0 4px rgba(88,166,255,.85), 0 0 60px rgba(88,166,255,.45); pointer-events: none; transition: all .6s var(--ease); }
+  .spot.hidden { opacity: 0; }
+</style>
+</head>
+<body>
+  <div class="win hidden" id="app" style="left:160px; top:70px; width:1600px; height:940px">
+    <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="title">Orca Desktop</div></div>
+    <iframe id="appframe"></iframe>
+  </div>
+
+  <div class="win hidden" id="browser" style="left:220px; top:90px; width:1480px; height:900px">
+    <div class="bar"><div class="dots"><i></i><i></i><i></i></div>
+      <div class="url"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span id="urltext"></span></div>
+    </div>
+    <iframe id="browserframe"></iframe>
+  </div>
+
+  <div class="win term hidden" id="term" style="left:1180px; top:70px; width:680px; height:940px">
+    <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="title" id="termtitle">claude</div></div>
+    <div class="body" id="termbody"></div>
+  </div>
+
+  <div class="card hidden" id="card"><img class="logo" id="cardlogo"><h1 id="cardtitle"></h1><p id="cardtext"></p><div class="url-tag" id="cardurl"></div></div>
+  <div class="lower hidden" id="lower"><div class="n" id="lowern"></div><div><span id="lowertitle"></span><small id="lowersub"></small></div></div>
+  <div class="spot hidden" id="spot"></div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M5 3l14 8.5-6.2 1.4L9.5 19z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const LAYOUTS = {
+  // Window rectangles: [left, top, width, height]. The strip below them is
+  // for the lower-third labels.
+  app: { app: [170, 44, 1580, 900] },
+  split: { app: [40, 44, 1130, 900], term: [1190, 44, 690, 900] },
+  "split-browser": { browser: [40, 44, 1130, 900], term: [1190, 44, 690, 900] },
+  browser: { browser: [200, 44, 1520, 900] },
+  none: {},
+};
+window.stage = {
+  layout(name) {
+    const l = LAYOUTS[name];
+    for (const id of ["app", "browser", "term"]) {
+      const el = $(id), r = l[id];
+      el.classList.toggle("hidden", !r);
+      if (r) Object.assign(el.style, { left: r[0] + "px", top: r[1] + "px", width: r[2] + "px", height: r[3] + "px" });
+    }
+  },
+  appUrl(url) { $("appframe").src = url; },
+  browse(url) { $("urltext").textContent = url.replace(/^https:\/\//, ""); $("browserframe").src = url; },
+  card(o) {
+    if (!o) return $("card").classList.add("hidden");
+    $("cardlogo").src = o.logo || ""; $("cardlogo").style.display = o.logo ? "" : "none";
+    $("cardtitle").innerHTML = o.title || ""; $("cardtext").textContent = o.text || ""; $("cardurl").textContent = o.url || "";
+    $("card").classList.remove("hidden");
+  },
+  lower(o) {
+    if (!o) return $("lower").classList.add("hidden");
+    $("lowern").textContent = o.n || ""; $("lowertitle").textContent = o.title; $("lowersub").textContent = o.sub || "";
+    $("lower").classList.remove("hidden");
+  },
+  spot(r) {
+    if (!r) return $("spot").classList.add("hidden");
+    Object.assign($("spot").style, { left: r.x - 8 + "px", top: r.y - 8 + "px", width: r.w + 16 + "px", height: r.h + 16 + "px" });
+    $("spot").classList.remove("hidden");
+  },
+  cursor(x, y, ms = 700) { const c = $("cursor"); c.style.transitionDuration = ms + "ms"; c.style.left = x + "px"; c.style.top = y + "px"; },
+  ripple(x, y) { const r = document.createElement("div"); r.className = "ripple"; r.style.left = x + "px"; r.style.top = y + "px"; document.body.appendChild(r); setTimeout(() => r.remove(), 700); },
+  term: {
+    title(t) { $("termtitle").textContent = t; },
+    clear() { $("termbody").innerHTML = ""; },
+    line(html, cls = "") { const d = document.createElement("div"); d.className = "line " + cls; d.innerHTML = html; $("termbody").appendChild(d); return d; },
+    set(el, html) { el.innerHTML = html; },
+  },
+};
+</script>
+</body>
+</html>

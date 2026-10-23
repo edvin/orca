@@ -1,0 +1,9 @@
+services:
+  gitea:
+    image: gitea/gitea:1.24
+    environment:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__server__ROOT_URL: https://git.acme.localhost/
+    volumes: [data:/data]
+volumes:
+  data:

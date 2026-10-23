@@ -1,0 +1,9 @@
+services:
+  n8n:
+    image: n8nio/n8n:1.110.1
+    environment:
+      N8N_SECURE_COOKIE: "false"
+      WEBHOOK_URL: https://flows.acme.localhost/
+    volumes: [data:/home/node/.n8n]
+volumes:
+  data:
