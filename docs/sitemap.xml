@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://orca-desktop.com/</loc></url>
+  <url><loc>https://orca-desktop.com/workspaces/</loc></url>
   <url><loc>https://orca-desktop.com/download/</loc></url>
   <url><loc>https://orca-desktop.com/changelog/</loc></url>
   <url><loc>https://orca-desktop.com/docs/introduction/</loc></url>
@@ -8,6 +9,13 @@
   <url><loc>https://orca-desktop.com/docs/quickstart/</loc></url>
   <url><loc>https://orca-desktop.com/docs/platforms/</loc></url>
   <url><loc>https://orca-desktop.com/docs/workspaces/</loc></url>
+  <url><loc>https://orca-desktop.com/docs/workspaces-join/</loc></url>
+  <url><loc>https://orca-desktop.com/docs/workspaces-secrets/</loc></url>
+  <url><loc>https://orca-desktop.com/docs/workspaces-create/</loc></url>
+  <url><loc>https://orca-desktop.com/docs/workspaces-routes/</loc></url>
+  <url><loc>https://orca-desktop.com/docs/workspaces-migrate/</loc></url>
+  <url><loc>https://orca-desktop.com/docs/workspaces-reference/</loc></url>
+  <url><loc>https://orca-desktop.com/docs/workspaces-troubleshooting/</loc></url>
   <url><loc>https://orca-desktop.com/docs/gateway/</loc></url>
   <url><loc>https://orca-desktop.com/docs/orca-yaml/</loc></url>
   <url><loc>https://orca-desktop.com/docs/profiles/</loc></url>

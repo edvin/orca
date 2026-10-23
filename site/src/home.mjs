@@ -15,16 +15,16 @@ export const SHOTS = {
   palette: "palette",
 };
 
-const shot = (name, alt, cls = "") =>
+export const shot = (name, alt, cls = "") =>
   `<img class="${cls}" src="/assets/screens/${name}.webp" alt="${esc(alt)}" loading="lazy" decoding="async">`;
 
-const windowFrame = (inner, title = "Orca") =>
+export const windowFrame = (inner, title = "Orca") =>
   `<div class="window"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="window-title">${esc(title)}</span></div>${inner}</div>`;
 
-const browserFrame = (inner, url) =>
+export const browserFrame = (inner, url) =>
   `<div class="window browser"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>${esc(url)}</span></div>${inner}</div>`;
 
-const F = {
+export const F = {
   gateway: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
   branch: '<svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg>',
   bot: '<svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg>',
@@ -44,7 +44,7 @@ const F = {
   feather: '<svg viewBox="0 0 24 24"><path d="M20 4c-6 0-12 4-14 12l-2 4"/><path d="M8 14h7M11 10h6"/></svg>',
 };
 
-function downloadButton(ctx, cls = "btn-lg") {
+export function downloadButton(ctx, cls = "btn-lg") {
   const assets = ctx.latest?.assets ?? [];
   const find = (re) => assets.find((a) => re.test(a.name))?.url;
   const mac = find(/aarch64\.dmg$/) ?? find(/\.dmg$/);
@@ -180,7 +180,7 @@ hooks:
         <li>Secrets come from Passbolt or 1Password: a direct link to each entry, or filled in automatically by their CLI</li>
         <li>Coming from a devproxy-style HAProxy? Import its routes; projects don't change</li>
       </ul>
-      <a class="link-arrow" href="/docs/workspaces/">Set up a workspace ${ICONS.arrow}</a>
+      <a class="link-arrow" href="/workspaces/">How workspaces work ${ICONS.arrow}</a>
     </div>
     <div class="feature-visual reveal">
       ${windowFrame(shot(SHOTS.workspace, "The Workspace page: shared services, and projects that are running, cloned or ready to set up"), "Orca — Workspace")}

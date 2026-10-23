@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en" data-page="docs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Workspace secrets — Orca docs</title>
+<meta name="description" content="How a workspace fills in a project's .env from Passbolt or 1Password, by hand or with their CLIs, without secrets ever entering the workspace repo.">
+<link rel="canonical" href="https://orca-desktop.com/docs/workspaces-secrets/">
+<meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Orca">
+<meta property="og:title" content="Workspace secrets — Orca docs">
+<meta property="og:description" content="How a workspace fills in a project's .env from Passbolt or 1Password, by hand or with their CLIs, without secrets ever entering the workspace repo.">
+<meta property="og:url" content="https://orca-desktop.com/docs/workspaces-secrets/">
+<meta property="og:image" content="https://orca-desktop.com/assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v=mvkpoimk">
+<script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
+<script src="/assets/site.js?v=mvkpoimk" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a>
+    <nav class="top-nav" aria-label="Main"><a href="/docs/introduction/" aria-current="page">Docs</a><a href="/workspaces/">Workspaces</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="search-trigger" type="button" data-search-open aria-label="Search the docs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search docs</span><kbd>⌘K</kbd></button>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode"><span class="when-dark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="when-light"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span></button>
+      <a class="icon-btn gh-btn" href="https://github.com/edvin/orca" target="_blank" rel="noopener" aria-label="Orca on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span class="gh-stars">26</span></a>
+      <a class="btn btn-primary btn-sm header-cta" href="/download/">Download</a>
+      <button class="icon-btn menu-btn" type="button" aria-label="Open menu" aria-expanded="false" data-menu-open><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+</header>
+<div class="mobile-menu" hidden>
+  <div class="mm-head"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><button class="icon-btn" type="button" aria-label="Close menu" data-menu-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="mm-body">
+    <div class="mm-top"><a href="/docs/introduction/">Docs</a><a href="/workspaces/">Workspaces</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca">GitHub</a></div>
+    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Workspaces</div><a href="/docs/workspaces/">Overview</a><a href="/docs/workspaces-join/">Join and use</a><a href="/docs/workspaces-secrets/">Secrets</a><a href="/docs/workspaces-create/">Create a workspace</a><a href="/docs/workspaces-routes/">Routes</a><a href="/docs/workspaces-migrate/">Migrate from a reverse proxy</a><a href="/docs/workspaces-reference/">File reference</a><a href="/docs/workspaces-troubleshooting/">Troubleshooting</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">Built-in assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
+  </div>
+</div>
+<main id="main">
+<div class="docs-shell">
+  <aside class="docs-sidebar" aria-label="Documentation">
+    <div class="sb-inner"><div class="sb-section"><div class="sb-title">Getting started</div><ul><li><a href="/docs/introduction/">Introduction</a></li><li><a href="/docs/install/">Install</a></li><li><a href="/docs/quickstart/">Quickstart</a></li><li><a href="/docs/platforms/">Platforms</a></li></ul></div><div class="sb-section"><div class="sb-title">Workspaces</div><ul><li><a href="/docs/workspaces/">Overview</a></li><li><a href="/docs/workspaces-join/">Join and use</a></li><li><a href="/docs/workspaces-secrets/" aria-current="page">Secrets</a></li><li><a href="/docs/workspaces-create/">Create a workspace</a></li><li><a href="/docs/workspaces-routes/">Routes</a></li><li><a href="/docs/workspaces-migrate/">Migrate from a reverse proxy</a></li><li><a href="/docs/workspaces-reference/">File reference</a></li><li><a href="/docs/workspaces-troubleshooting/">Troubleshooting</a></li></ul></div><div class="sb-section"><div class="sb-title">Local development</div><ul><li><a href="/docs/gateway/">Gateway</a></li><li><a href="/docs/orca-yaml/">orca.yaml</a></li><li><a href="/docs/profiles/">Profiles</a></li><li><a href="/docs/worktrees/">Worktree instances</a></li></ul></div><div class="sb-section"><div class="sb-title">Working with Orca</div><ul><li><a href="/docs/containers/">Containers</a></li><li><a href="/docs/stacks/">Stacks</a></li><li><a href="/docs/images-and-builds/">Images &amp; builds</a></li><li><a href="/docs/templates/">App Catalog</a></li><li><a href="/docs/kubernetes/">Kubernetes</a></li></ul></div><div class="sb-section"><div class="sb-title">AI and automation</div><ul><li><a href="/docs/agents/">Agents &amp; MCP</a></li><li><a href="/docs/ai-assistant/">Built-in assistant</a></li><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/api/">REST API</a></li><li><a href="/docs/auto-deploy/">Push to deploy</a></li></ul></div><div class="sb-section"><div class="sb-title">Servers and teams</div><ul><li><a href="/docs/remote-hosts/">Remote hosts</a></li><li><a href="/docs/security/">Security &amp; privacy</a></li></ul></div><div class="sb-section"><div class="sb-title">Help</div><ul><li><a href="/docs/troubleshooting/">Troubleshooting</a></li></ul></div></div>
+  </aside>
+  <article class="doc">
+    <div class="doc-head">
+      <div class="crumbs"><a href="/docs/introduction/">Docs</a><span>/</span><span>Workspaces</span></div>
+      <h1>Workspace secrets</h1>
+      <p class="lede">How a workspace fills in a project's .env from Passbolt or 1Password, by hand or with their CLIs, without secrets ever entering the workspace repo.</p>
+    </div>
+    <details class="toc-mobile"><summary>On this page</summary><ul><li><a href="#how-it-works">How it works</a></li><li><a href="#when-a-project-needs-secrets">When a project needs secrets</a></li><li><a href="#fill-in-secrets-by-hand">Fill in secrets by hand</a></li><li><a href="#fill-in-secrets-automatically">Fill in secrets automatically</a></li><li><a href="#the-env-file">The .env file</a></li><li><a href="#reference-secrets-in-the-workspace-file">Reference secrets in the workspace file</a></li><li><a href="#what-not-to-put-in-the-workspace-repo">What not to put in the workspace repo</a></li><li><a href="#related">Related</a></li></ul></details>
+    <div class="prose"><p>Most projects need a few values in their <code>.env</code> that can&#39;t be committed: a database password, an API key, an OAuth client secret. A workspace handles these without ever holding the values. This page explains the model, how developers fill secrets in, how to make Orca fetch them automatically, and how team leads reference them.</p>
+<h2 id="how-it-works"><a class="anchor" href="#how-it-works" aria-hidden="true" tabindex="-1">#</a>How it works</h2>
+<ul>
+<li>The workspace file holds <strong>references</strong>, such as <code>passbolt:7f3c91a2-…</code> or <code>op://Dev/Stripe/secret</code>. A reference says where the value lives, not what it is.</li>
+<li>Each developer gets the <strong>values</strong> from your team&#39;s secret manager with their own account, on their own machine.</li>
+<li>The values are written to <strong>one place only</strong>: the project&#39;s <code>.env</code> file on that machine.</li>
+</ul>
+<p>Nothing secret goes into git, into Orca&#39;s config, or to an AI tool. When Orca reports a project&#39;s secrets (on the <strong>Workspace</strong> page, to the CLI or to an AI tool), it gives each one&#39;s name, its reference, a link, and whether the <code>.env</code> has a value. Never the value itself.</p>
+<p>Two secret managers are supported:</p>
+<div class="table-wrap"><table><thead><tr><th>Secret manager</th><th>Reference</th><th>By hand</th><th>Automatically</th></tr></thead><tbody><tr><td>Passbolt</td><td><code>passbolt:&lt;resource id&gt;</code></td><td><strong>Open in Passbolt</strong> opens that entry in your browser.</td><td>With go-passbolt-cli, configured on your machine.</td></tr><tr><td>1Password</td><td><code>op://vault/item/field</code></td><td>Copy the reference and look it up.</td><td>With the 1Password CLI (<code>op</code>), signed in.</td></tr></tbody></table></div><p>A workspace can use both, and a project can mix references from both.</p>
+<h2 id="when-a-project-needs-secrets"><a class="anchor" href="#when-a-project-needs-secrets" aria-hidden="true" tabindex="-1">#</a>When a project needs secrets</h2>
+<p>When you <a href="/docs/workspaces-join/#set-up-a-project">set up a project</a>, the <strong>Fill in secrets</strong> step looks at every variable the workspace lists as a secret for it:</p>
+<ol>
+<li>A variable that already has a value in the project&#39;s <code>.env</code> is left alone.</li>
+<li>For each empty one, if the secret manager&#39;s CLI is set up on your machine, Orca fetches the value and writes it.</li>
+<li>If anything is still empty, setup stops before starting the project, and the secrets dialog opens.</li>
+</ol>
+<p>A cloned project with empty secrets also shows <strong>N secrets to fill in</strong> on its card. Click it to open the same dialog.</p>
+<h2 id="fill-in-secrets-by-hand"><a class="anchor" href="#fill-in-secrets-by-hand" aria-hidden="true" tabindex="-1">#</a>Fill in secrets by hand</h2>
+<p><figure class="shot"><img src="/assets/screens/workspace-secrets.webp" alt="The secrets dialog: each variable with its secret manager, a link to its entry, and a field to paste the value" loading="lazy" decoding="async"></figure></p>
+<p>The dialog, <strong>Secrets for billing</strong>, lists every secret of the project. Each row shows:</p>
+<ul>
+<li>the variable name, such as <code>DB_PASSWORD</code>, and the secret manager it&#39;s in;</li>
+<li><strong>✓ in .env</strong> when the <code>.env</code> already has a value;</li>
+<li><strong>Open in Passbolt ↗</strong> for a Passbolt secret, which opens that exact entry in your browser;</li>
+<li>for a 1Password secret, the reference itself as a button. Click it to copy the reference, then find the item in 1Password;</li>
+<li>a password field: <strong>Paste the value</strong>, or <strong>Paste a new value to replace it</strong> for one that&#39;s already filled.</li>
+</ul>
+<p>To fill them in:</p>
+<ol>
+<li>Click <strong>Open in Passbolt ↗</strong> (or copy the 1Password reference) for a secret.</li>
+<li>Copy the value in your secret manager and paste it into the field.</li>
+<li>Repeat for the others.</li>
+<li>Click <strong>Save and start</strong> when every missing secret has a value. Orca writes them to the <code>.env</code> and runs setup again, which now goes all the way to starting the project. With some still empty, the button says <strong>Save</strong>: Orca writes what you entered and the project waits for the rest.</li>
+</ol>
+<p><strong>Later</strong> closes the dialog without saving.</p>
+<p>A few rules apply:</p>
+<ul>
+<li>Only the variables the workspace lists as secrets for the project can be set this way.</li>
+<li>Empty fields are ignored, so you can fill in one secret at a time.</li>
+<li>A value must be a single line. For a multi-line value such as a private key, store it base64-encoded in the secret manager and decode it in the app.</li>
+<li>The project must be cloned first. Setup clones it before it asks.</li>
+</ul>
+<h3 id="find-a-passbolt-resource-id"><a class="anchor" href="#find-a-passbolt-resource-id" aria-hidden="true" tabindex="-1">#</a>Find a Passbolt resource id</h3>
+<p>Team leads need the resource id for each Passbolt reference. Open the entry in Passbolt&#39;s web app and look at the address bar:</p>
+<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span>https://passbolt.acme.dev/app/passwords/view/7f3c91a2-5d0e-4c2b-9a51-2a9be1c3d4f0</span></span></code></pre></div><p>The id is the last part, after <code>/view/</code>. In the workspace file it becomes <code>passbolt:7f3c91a2-5d0e-4c2b-9a51-2a9be1c3d4f0</code>.</p>
+<p>The entry must be shared with everyone who will set up the project, or with a group they&#39;re in. Otherwise the link opens an error and the CLI can&#39;t fetch it.</p>
+<h2 id="fill-in-secrets-automatically"><a class="anchor" href="#fill-in-secrets-automatically" aria-hidden="true" tabindex="-1">#</a>Fill in secrets automatically</h2>
+<p>When a secret manager&#39;s command-line tool is set up on your machine, Orca fetches the values itself during setup. In the dialog, a line says <strong>Your secret manager&#39;s command-line tool is set up on this computer.</strong> with a <strong>Fill in automatically</strong> button. Clicking it fetches every missing secret it can; when they&#39;re all filled, the project starts.</p>
+<p>Orca never types anything into the CLI. If the CLI asks for a passphrase, a sign-in or a confirmation, the fetch fails and you fill that secret in by hand, as above. Each fetch has 30 seconds to answer.</p>
+<h3 id="passbolt-go-passbolt-cli"><a class="anchor" href="#passbolt-go-passbolt-cli" aria-hidden="true" tabindex="-1">#</a>Passbolt: go-passbolt-cli</h3>
+<p>Orca uses <a href="https://github.com/passbolt/go-passbolt-cli" target="_blank" rel="noopener">go-passbolt-cli</a>, Passbolt&#39;s command-line client. It looks for a program called <code>passbolt</code> or <code>go-passbolt-cli</code> and runs, for each secret:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">passbolt</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> get</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> resource</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> --id</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72"> &#x3C;</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">resource</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> i</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">d</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">></span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -j</span></span></code></pre></div><p>It reads the <code>password</code> field from the JSON the CLI prints.</p>
+<p>To set it up:</p>
+<ol>
+<li><p><strong>Install it.</strong> The <a href="https://github.com/passbolt/go-passbolt-cli" target="_blank" rel="noopener">project&#39;s README</a> lists the packages and downloads for each platform. Make sure the program ends up in a folder Orca searches (see <a href="#the-path-orca-uses">the PATH Orca uses</a> below).</p>
+</li>
+<li><p><strong>Get your private key.</strong> It&#39;s the recovery kit you downloaded when you set up your Passbolt account, a <code>.asc</code> file; Passbolt&#39;s web app can also give it to you again from your profile. Store it somewhere only you can read, such as <code>~/.config/passbolt/private.asc</code>.</p>
+</li>
+<li><p><strong>Configure the CLI</strong> with your server and key:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">passbolt</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> configure</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72"> \</span></span>
+<span class="line"><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">  --serverAddress</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> https://passbolt.acme.dev</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72"> \</span></span>
+<span class="line"><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">  --userPrivateKeyFile</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ~/.config/passbolt/private.asc</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72"> \</span></span>
+<span class="line"><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">  --userPassword</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> 'your passphrase'</span></span></code></pre></div><p>Check the README for the flags of the version you installed, and for servers that require multi-factor authentication.</p>
+</li>
+<li><p><strong>Test it</strong> in a terminal with an id from your workspace file:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">passbolt</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> get</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> resource</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> --id</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> 7f3c91a2-5d0e-4c2b-9a51-2a9be1c3d4f0</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -j</span></span></code></pre></div><p>It should print JSON with a <code>password</code> field, without asking you anything.</p>
+</li>
+</ol>
+<p>Orca can only use the CLI when it answers without a prompt, which means the CLI has your passphrase saved in its configuration. That&#39;s a convenience trade-off: anyone who can read your user&#39;s files can then use your key. Without a saved passphrase, the CLI asks for it on every call, Orca&#39;s fetch fails, and you fill secrets in by hand instead.</p>
+<h3 id="1password-the-op-cli"><a class="anchor" href="#1password-the-op-cli" aria-hidden="true" tabindex="-1">#</a>1Password: the op CLI</h3>
+<p>Orca uses the <a href="https://developer.1password.com/docs/cli/" target="_blank" rel="noopener">1Password CLI</a>, <code>op</code>. For each secret it runs:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">op</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> read</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> --no-newline</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> op://Dev/Stripe/secret</span></span></code></pre></div><p>If the workspace names a 1Password account (<code>secrets.1password.account</code>), Orca adds <code>--account &lt;account&gt;</code>, for developers signed in to several.</p>
+<p>To set it up:</p>
+<ol>
+<li><p>Install the 1Password CLI, following 1Password&#39;s instructions for your platform.</p>
+</li>
+<li><p>Sign in, either with the 1Password app&#39;s CLI integration or with <code>op signin</code>.</p>
+</li>
+<li><p>Test it with a reference from your workspace file:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">op</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> read</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> --no-newline</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> "op://Dev/Stripe/secret"</span></span></code></pre></div></li>
+</ol>
+<p>With the app integration, <code>op</code> may ask you to approve access in the 1Password app. Approve it within the 30 seconds Orca waits, or unlock the app before you click <strong>Fill in automatically</strong>.</p>
+<h3 id="when-a-fetch-fails"><a class="anchor" href="#when-a-fetch-fails" aria-hidden="true" tabindex="-1">#</a>When a fetch fails</h3>
+<p>A failed fetch never stops setup on its own. The secret stays empty, so setup stops before starting the project, as it does for any missing secret, and you can fill it in by hand.</p>
+<p>To see why it failed, open the dialog and click <strong>Fill in automatically</strong>: each failure shows as a message with the variable name and the CLI&#39;s last error line, such as <code>DB_PASSWORD: the CLI didn&#39;t answer within 30 seconds</code>. Common causes are in <a href="/docs/workspaces-troubleshooting/#secrets-arent-filled-in-automatically">Troubleshooting</a>.</p>
+<h3 id="the-path-orca-uses"><a class="anchor" href="#the-path-orca-uses" aria-hidden="true" tabindex="-1">#</a>The PATH Orca uses</h3>
+<p>Orca starts the CLI itself, not through your shell, so it doesn&#39;t see <code>PATH</code> changes from your <code>~/.zshrc</code> or <code>~/.bashrc</code>. It looks in:</p>
+<ul>
+<li><code>/opt/homebrew/bin</code> and <code>/usr/local/bin</code>;</li>
+<li>Docker&#39;s own folders, <code>~/.docker/bin</code> and <code>~/.rd/bin</code>;</li>
+<li>the <code>PATH</code> Orca itself was started with.</li>
+</ul>
+<p>A CLI installed elsewhere, such as <code>~/go/bin</code> by <code>go install</code>, isn&#39;t found. Link it into one of those folders:</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">sudo</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ln</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> -s</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> ~/go/bin/go-passbolt-cli</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> /usr/local/bin/passbolt</span></span></code></pre></div><p>The same applies to your projects&#39; setup commands, such as <code>just</code>. See <a href="/docs/workspaces-troubleshooting/#the-setup-command-fails">Troubleshooting</a>.</p>
+<h2 id="the-env-file"><a class="anchor" href="#the-env-file" aria-hidden="true" tabindex="-1">#</a>The .env file</h2>
+<p>For each project with an <code>env</code> section, setup makes sure a <code>.env</code> exists before filling in secrets:</p>
+<ul>
+<li><strong>If the file doesn&#39;t exist</strong>, Orca creates it as a copy of the template named in <code>env.from</code>, such as <code>.env.example</code>, or as an empty file when there&#39;s no template. If the template is missing, setup fails with <em>&quot;.env.example doesn&#39;t exist&quot;</em>.</li>
+<li><strong>If the file exists</strong>, Orca leaves it as it is. Your own changes are never overwritten, and running setup again doesn&#39;t reset anything.</li>
+</ul>
+<p>The file is <code>.env</code> in the project&#39;s folder, unless the workspace sets another name with <code>env.file</code>.</p>
+<p>When Orca writes secrets, it changes only those variables: an existing <code>NAME=</code> line is replaced in place (an <code>export</code> in front is kept), and a variable that isn&#39;t in the file yet is added at the end. A value with spaces, <code>#</code>, quotes, <code>$</code>, backticks or backslashes is written in double quotes, with those characters escaped.</p>
+<p>Orca writes the new content to a temporary file and moves it into place, so the <code>.env</code> is never half-written. On macOS and Linux, that file is created readable and writable by your user only (mode <code>0600</code>).</p>
+<p>A variable counts as filled when it has a non-empty value. That&#39;s why secret variables should be <strong>empty in the template</strong>: a placeholder like <code>DB_PASSWORD=changeme</code> counts as a value, and Orca won&#39;t ask for the real one.</p>
+<div class="code has-title"><div class="code-title"><span>.env.example</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">APP_URL</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">https://billing.local.acme.dev</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">DB_HOST</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">billing-db</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">DB_USERNAME</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">billing</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E"># Filled in by Orca from Passbolt</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">DB_PASSWORD</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span></span>
+<span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">STRIPE_SECRET</span><span style="--shiki-light:#CF222E;--shiki-dark:#FF7B72">=</span></span></code></pre></div><p>Setup also checks with <code>git check-ignore</code> that the <code>.env</code> is ignored by git, and adds a warning to the setup log when it isn&#39;t. It doesn&#39;t stop. Make sure every project&#39;s <code>.gitignore</code> covers its <code>.env</code> before you add secrets to it.</p>
+<h2 id="reference-secrets-in-the-workspace-file"><a class="anchor" href="#reference-secrets-in-the-workspace-file" aria-hidden="true" tabindex="-1">#</a>Reference secrets in the workspace file</h2>
+<p>Team leads list the secret managers once, at the top of the file, and the references per project:</p>
+<div class="code has-title"><div class="code-title"><span>orca-workspace.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">secrets</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  passbolt</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    url</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">https://passbolt.acme.dev</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">   # must start with https://</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  1password</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    account</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">acme.1password.com</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">      # optional; {} when there's no account to name</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">projects</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  billing</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    repo</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">git@git.acme.dev:finance/billing.git</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    env</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      from</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">.env.example</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      secrets</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">        DB_PASSWORD</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">passbolt:7f3c91a2-5d0e-4c2b-9a51-2a9be1c3d4f0</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">        STRIPE_SECRET</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">op://Dev/Stripe/secret</span></span></code></pre></div><p>The rules, checked when Orca reads the file:</p>
+<ul>
+<li>A Passbolt reference is <code>passbolt:</code> followed by the resource id: letters, digits and dashes.</li>
+<li>A 1Password reference is <code>op://</code> followed by at least three parts separated by <code>/</code>: vault, item and field, optionally with a section before the field (<code>op://Dev/Stripe/live/secret</code>).</li>
+<li>A reference can only use a secret manager that&#39;s set up under <code>secrets:</code>. Using <code>op://…</code> without a <code>1password</code> entry is an error.</li>
+<li>Variable names use letters, digits and underscores, and don&#39;t start with a digit.</li>
+</ul>
+<p>See the <a href="/docs/workspaces-reference/#secrets">file reference</a> for every key.</p>
+<h2 id="what-not-to-put-in-the-workspace-repo"><a class="anchor" href="#what-not-to-put-in-the-workspace-repo" aria-hidden="true" tabindex="-1">#</a>What not to put in the workspace repo</h2>
+<ul>
+<li><strong>Secret values.</strong> Not in the workspace file, not in comments, not in a committed <code>.env</code>. Use references.</li>
+<li><strong><code>.env</code> files</strong> of any kind. The <code>.env.example</code> belongs in each project&#39;s own repo.</li>
+<li><strong>Personal credentials</strong>, such as a Passbolt private key, a CLI config file or a registry password. Each developer sets those up on their own machine.</li>
+</ul>
+<p>The references themselves aren&#39;t secrets, but they do reveal which vaults, items and resource ids exist. Keep the workspace repo private to your team. If you put the gateway&#39;s certificate in it, it must be private anyway: see <a href="/docs/workspaces-create/#4-choose-a-domain-and-certificate">the certificate</a>.</p>
+<div class="callout callout-warning"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg><span>Warning</span></div><p>Don&#39;t paste a secret into an AI tool&#39;s chat, even if it asks. Orca tells AI tools to send you to the <strong>Workspace</strong> page instead, but anything typed in a chat leaves your machine.</p>
+</div><h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>
+<ul>
+<li><a href="/docs/workspaces-join/">Join and use a workspace</a>: the setup steps around this one.</li>
+<li><a href="/docs/workspaces-reference/#env">File reference</a>: <code>env.file</code>, <code>env.from</code> and <code>env.secrets</code>.</li>
+<li><a href="/docs/workspaces-troubleshooting/#secrets-arent-filled-in-automatically">Troubleshooting</a>: when automatic filling doesn&#39;t work.</li>
+</ul>
+</div>
+    <div class="doc-foot">
+      <a class="edit" href="https://github.com/edvin/orca/edit/main/site/content/docs/workspaces-secrets.md" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg> Edit this page on GitHub</a>
+    </div>
+    <nav class="pager" aria-label="Previous and next page"><a class="pager-prev" href="/docs/workspaces-join/"><span class="pager-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Previous</span><span class="pager-title">Join and use</span></a><a class="pager-next" href="/docs/workspaces-create/"><span class="pager-label">Next <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="pager-title">Create a workspace</span></a></nav>
+  </article>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#how-it-works">How it works</a></li><li class="d2"><a href="#when-a-project-needs-secrets">When a project needs secrets</a></li><li class="d2"><a href="#fill-in-secrets-by-hand">Fill in secrets by hand</a></li><li class="d3"><a href="#find-a-passbolt-resource-id">Find a Passbolt resource id</a></li><li class="d2"><a href="#fill-in-secrets-automatically">Fill in secrets automatically</a></li><li class="d3"><a href="#passbolt-go-passbolt-cli">Passbolt: go-passbolt-cli</a></li><li class="d3"><a href="#1password-the-op-cli">1Password: the op CLI</a></li><li class="d3"><a href="#when-a-fetch-fails">When a fetch fails</a></li><li class="d3"><a href="#the-path-orca-uses">The PATH Orca uses</a></li><li class="d2"><a href="#the-env-file">The .env file</a></li><li class="d2"><a href="#reference-secrets-in-the-workspace-file">Reference secrets in the workspace file</a></li><li class="d2"><a href="#what-not-to-put-in-the-workspace-repo">What not to put in the workspace repo</a></li><li class="d2"><a href="#related">Related</a></li></ul></nav></aside>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="f-brand"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><p>The open source container platform for local development. Free, MIT licensed, no telemetry.</p></div>
+    <div class="f-col"><div class="f-title">Product</div><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="/docs/templates/">App Catalog</a><a href="https://github.com/edvin/orca/releases" target="_blank" rel="noopener">Releases</a></div>
+    <div class="f-col"><div class="f-title">Docs</div><a href="/docs/quickstart/">Quickstart</a><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/agents/">Agents & MCP</a><a href="/docs/cli/">CLI</a></div>
+    <div class="f-col"><div class="f-title">Community</div><a href="https://github.com/edvin/orca" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/edvin/orca/issues" target="_blank" rel="noopener">Issues</a><a href="https://github.com/edvin/orca/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a><a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener">Add a template</a></div>
+    <div class="f-col"><div class="f-title">Trust</div><a href="/docs/security/">Security</a><a href="https://github.com/edvin/orca/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a><a href="https://github.com/edvin/orca/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a></div>
+  </div>
+  <div class="footer-bottom"><span>© 2026 Orca contributors</span><span>Packages hosted by <a href="https://cloudsmith.com" target="_blank" rel="noopener">Cloudsmith</a></span></div>
+</footer>
+<div class="search-dialog" hidden role="dialog" aria-modal="true" aria-label="Search the docs">
+  <div class="search-panel">
+    <div class="search-input"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" placeholder="Search the docs" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <div class="search-results" role="listbox"></div>
+    <div class="search-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span></div>
+  </div>
+</div>
+</body>
+</html>

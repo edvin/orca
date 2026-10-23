@@ -17,6 +17,7 @@ import { NAV, SHARED_DOCS } from "./src/nav.mjs";
 import { layout, docPage } from "./src/layout.mjs";
 import { homePage } from "./src/home.mjs";
 import { downloadPage } from "./src/download.mjs";
+import { workspacesPage } from "./src/workspaces.mjs";
 import { changelogPage } from "./src/changelog.mjs";
 import { notFoundPage } from "./src/notfound.mjs";
 
@@ -306,6 +307,7 @@ async function build() {
   }
 
   write("index.html", layout(ctx, { path: "/", title: "Orca — the open source container platform for local development", description: "Free, open source desktop app for Docker containers, compose stacks and Kubernetes, with HTTPS hostnames for every service, a running copy of your app per git worktree, and APIs for AI agents.", body: homePage(ctx), page: "home" }));
+  write("workspaces/index.html", layout(ctx, { path: "/workspaces/", title: "Workspaces: your team's local setup in one repo", description: "One repo sets up a team's whole local environment: shared services, your domain and certificate, and every project with its setup steps and secrets. One link to join, one click (or one sentence to Claude) per project.", body: workspacesPage(ctx), page: "workspaces" }));
   write("download/index.html", layout(ctx, { path: "/download/", title: "Download Orca", description: "Download Orca Desktop for macOS, Windows and Linux, or install the Orca daemon on a Linux server.", body: downloadPage(ctx), page: "download" }));
   write("changelog/index.html", layout(ctx, { path: "/changelog/", title: "Changelog — Orca", description: "What's new in each Orca Desktop release.", body: changelogPage(ctx), page: "changelog" }));
   write("404.html", layout(ctx, { path: "/404.html", title: "Page not found — Orca", description: "", body: notFoundPage(ctx), page: "404" }));
@@ -327,7 +329,7 @@ async function build() {
 
   write("assets/search.json", JSON.stringify(docs.flatMap(searchEntries)));
 
-  const urls = ["/", "/download/", "/changelog/", ...docs.map((d) => `/docs/${d.slug}/`)];
+  const urls = ["/", "/workspaces/", "/download/", "/changelog/", ...docs.map((d) => `/docs/${d.slug}/`)];
   write(
     "sitemap.xml",
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
