@@ -51,8 +51,14 @@ for (const id of ids) {
   fs.writeFileSync(path.join(dir, "frames.txt"), lines.join("\n") + "\n");
 
   const clip = path.join(dir, "clip.mp4");
+  const raw = path.join(dir, "raw.mp4");
   const firstAt = Math.max(0, t(frames[0].t));
-  const video = ["-f", "concat", "-safe", "0", "-i", path.join(dir, "frames.txt")];
+  // The scene as recorded, without labels: the cold open cuts from this.
+  ff(
+    "-f", "concat", "-safe", "0", "-i", path.join(dir, "frames.txt"),
+    "-vf", `tpad=start_duration=${firstAt.toFixed(3)}:start_mode=clone,fps=${FPS},scale=2560:1440:flags=lanczos,format=yuv420p,trim=duration=${length.toFixed(3)}`,
+    "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "10", "-r", String(FPS), raw,
+  );
   // The opening line, then any said later in the scene, each at its moment.
   const voices = [
     ...(scene.voice ? [{ ...scene.voice, at: VOICE_DELAY }] : []),
@@ -60,16 +66,36 @@ for (const id of ids) {
   ];
   // Never two lines at once (takes recorded before the recorder knew that).
   for (let i = 1; i < voices.length; i++) voices[i].at = Math.max(voices[i].at, voices[i - 1].at + voices[i - 1].duration + 0.25);
-  const inputs = voices.length ? voices.flatMap((v) => ["-i", v.file]) : ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"];
+  // Labels, each from its mark until the next (or the scene's end), fading.
+  const labelMarks = scene.marks.filter((m) => m.kind === "label");
+  const shown = labelMarks
+    .map((m, i) => ({ ...m.label, from: Math.max(0, t(m.t)), to: i + 1 < labelMarks.length ? t(labelMarks[i + 1].t) : length }))
+    .filter((l) => l.file && l.to - l.from > 0.2);
+  const SCALE = 2560 / 1920;
+  const inputs = [
+    "-i", raw,
+    ...voices.flatMap((v) => ["-i", v.file]),
+    ...(voices.length ? [] : ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]),
+    ...shown.flatMap((l) => ["-loop", "1", "-t", length.toFixed(3), "-i", l.file]),
+  ];
+  const audioInputs = voices.length || 1;
+  let vchain = "[0:v]null[v0]";
+  shown.forEach((l, i) => {
+    const input = 1 + audioInputs + i;
+    // A label carried over from the scene before is already up: no fade in.
+    const fadeIn = l.from > 0.05 ? `,fade=t=in:st=${l.from.toFixed(3)}:d=0.5:alpha=1` : "";
+    const fadeOut = l.to < length - 0.05 ? `,fade=t=out:st=${Math.max(l.from, l.to - 0.4).toFixed(3)}:d=0.4:alpha=1` : "";
+    vchain += `;[${input}:v]format=rgba${fadeIn}${fadeOut}[l${i}];[v${i}][l${i}]overlay=x=${Math.round(l.x * SCALE)}:y=${Math.round(l.y * SCALE)}:enable='between(t,${l.from.toFixed(3)},${l.to.toFixed(3)})'[v${i + 1}]`;
+  });
+  vchain += `;[v${shown.length}]format=yuv420p[v]`;
   const audio = voices.length
-    ? voices.map((v, i) => `[${i + 1}:a]aresample=48000,adelay=${Math.round(v.at * 1000)}|${Math.round(v.at * 1000)}[v${i}]`).join(";") +
-      `;${voices.map((_, i) => `[v${i}]`).join("")}amix=inputs=${voices.length}:normalize=0:duration=longest,apad,atrim=duration=${length.toFixed(3)}[a]`
+    ? voices.map((v, i) => `[${i + 1}:a]aresample=48000,adelay=${Math.round(v.at * 1000)}|${Math.round(v.at * 1000)}[a${i}]`).join(";") +
+      `;${voices.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voices.length}:normalize=0:duration=longest,apad,atrim=duration=${length.toFixed(3)}[a]`
     : `[1:a]apad,atrim=duration=${length.toFixed(3)}[a]`;
   ff(
-    ...video, ...inputs,
-    "-filter_complex",
-    `[0:v]tpad=start_duration=${firstAt.toFixed(3)}:start_mode=clone,fps=${FPS},scale=2560:1440:flags=lanczos,format=yuv420p,trim=duration=${length.toFixed(3)}[v];${audio}`,
-    "-map", "[v]", "-map", "[a]",
+    ...inputs,
+    "-filter_complex", `${vchain};${audio}`,
+    "-map", "[v]", "-map", "[a]", "-t", length.toFixed(3),
     "-c:v", "libx264", "-preset", FINAL ? "slow" : "veryfast", "-crf", FINAL ? "17" : "21", "-r", String(FPS),
     "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
     clip,
@@ -114,8 +140,8 @@ if (process.argv.includes("--no-music")) {
   fs.rmSync(joined);
 }
 
-/** The cold open: a cut per highlight, pushing in slowly, crossfaded, under its line.
- *  Framed on the windows, closer than the scenes, so their labels stay out. */
+/** The cold open: a cut per highlight, crossfaded, under its line. Cut from
+ *  the scenes as recorded, before their labels go on. */
 async function buildColdOpen() {
   const dir = path.join(OUT, "cold");
   fs.mkdirSync(dir, { recursive: true });
@@ -128,11 +154,10 @@ async function buildColdOpen() {
     const length = outTime(scene.end, scene.start, scene.marks);
     const at = Math.max(0, Math.min(outTime(mark.t, scene.start, scene.marks) + (c.from ?? 0), length - each));
     const out = path.join(dir, `cut${i}.mp4`);
-    const frames = Math.ceil(each * FPS);
     ff(
-      "-ss", at.toFixed(3), "-t", each.toFixed(3), "-i", path.join(OUT, "scenes", c.scene, "clip.mp4"),
-      "-vf", `scale=3840:-2:flags=lanczos,zoompan=z='1.15+0.07*on/${frames}':d=1:x='iw/2-(iw/zoom/2)':y='ih*0.03':s=2560x1440:fps=${FPS},format=yuv420p`,
-      "-an", "-c:v", "libx264", "-preset", FINAL ? "slow" : "veryfast", "-crf", FINAL ? "17" : "21", out,
+      "-ss", at.toFixed(3), "-t", each.toFixed(3), "-i", path.join(OUT, "scenes", c.scene, "raw.mp4"),
+      "-vf", `fps=${FPS},format=yuv420p`,
+      "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "10", out,
     );
     return out;
   });

@@ -107,6 +107,27 @@ await context.addInitScript({
   }`,
 });
 
+// Labels are drawn on a page of their own, on a transparent background.
+const labelPage = await context.newPage();
+await labelPage.goto("file://" + path.join(ROOT, "lib/stage.html"));
+await labelPage.addStyleTag({ content: "html, body { background: transparent !important; } body::before, body::after, #cursor { display: none !important; } .lower { transition: none !important; }" });
+const labels = new Map();
+async function renderLabel(o) {
+  const key = JSON.stringify(o);
+  if (labels.has(key)) return labels.get(key);
+  await labelPage.evaluate((o) => window.stage.lower(o), o);
+  const el = labelPage.locator("#lower");
+  const box = await el.boundingBox();
+  const dir = path.join(OUT, "labels");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `label-${labels.size}.png`);
+  await el.screenshot({ path: file, omitBackground: true });
+  const label = { file, x: box.x, y: box.y };
+  labels.set(key, label);
+  return label;
+}
+let currentLabel = null;
+
 const page = await context.newPage();
 page.on("pageerror", (e) => console.log("  [page error]", e.message));
 await page.goto("file://" + path.join(ROOT, "lib/stage.html"));
@@ -148,7 +169,9 @@ function sceneApi(scene, rec) {
     // Windows glide into place; wait for them before clicking in them.
     layout: async (name) => { await stage("layout", name); await sleep(1000); },
     card: (o) => stage("card", o),
-    lower: (o) => stage("lower", o),
+    // Labels aren't recorded into the frames: the build lays them over the
+    // scene, so the cold open can cut from clean footage.
+    lower: async (o) => rec.label(o ? await renderLabel(o) : null),
     /** Go to a page in the app, the way its sidebar would. */
     async open(pageName) {
       await s.click((r) => r.locator(".nav-item", { hasText: pageName }).first(), { wait: 900 });
@@ -308,6 +331,7 @@ for (const scene of scenes) {
     mark(kind, extra = {}) { marks.push({ kind, t: Date.now(), ...extra }); },
     speed(factor) { marks.push({ kind: "speed", factor, t: Date.now() }); },
     voice(v) { cues.push({ ...v, t: Date.now() }); },
+    label(l) { currentLabel = l; marks.push({ kind: "label", label: l, t: Date.now() }); },
     videoTime: () => outTime(Date.now(), start, marks),
     /** Video time when the last line started so far is done. */
     voiceFreeAt: () => Math.max(voice ? 0.35 + voice.duration : 0, ...cues.map((c) => outTime(c.t, start, marks) + 0.15 + c.duration)),
@@ -321,6 +345,8 @@ for (const scene of scenes) {
     }
   }
   const start = Date.now();
+  // A label from the scene before stays up.
+  if (currentLabel) marks.push({ kind: "label", label: currentLabel, t: start });
   sink = rec;
   // A fresh frame at the start, even if nothing moves.
   await page.evaluate(() => document.body.style.setProperty("--tick", Math.random()));
