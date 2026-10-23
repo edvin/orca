@@ -35,10 +35,16 @@ export function ansiToHtml(line: string, text: (s: string) => string): string {
     const codes = m[1] === "" ? [0] : m[1].split(";").map(Number);
     for (let i = 0; i < codes.length; i++) {
       const c = codes[i];
-      if (c === 0) (color = null), (bold = false), (dim = false);
-      else if (c === 1) bold = true;
+      if (c === 0) {
+        color = null;
+        bold = false;
+        dim = false;
+      } else if (c === 1) bold = true;
       else if (c === 2) dim = true;
-      else if (c === 22) (bold = false), (dim = false);
+      else if (c === 22) {
+        bold = false;
+        dim = false;
+      }
       else if (c === 39) color = null;
       else if (FG[c]) color = FG[c];
       else if (c === 38 || c === 48) i += codes[i + 1] === 5 ? 2 : codes[i + 1] === 2 ? 4 : 0; // 256/true colour: skip
