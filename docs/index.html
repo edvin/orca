@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvkmy666">
+<link rel="stylesheet" href="/assets/site.css?v=mvknygu2">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvkmy666" defer></script>
+<script src="/assets/site.js?v=mvknygu2" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -41,7 +41,7 @@
   <div class="mm-head"><a class="brand" href="/" aria-label="Orca home"><img src="/assets/img/logo-tile.png" alt="" width="28" height="28"><span>Orca</span></a><button class="icon-btn" type="button" aria-label="Close menu" data-menu-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
   <div class="mm-body">
     <div class="mm-top"><a href="/docs/introduction/">Docs</a><a href="/download/">Download</a><a href="/changelog/">Changelog</a><a href="https://github.com/edvin/orca">GitHub</a></div>
-    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">Built-in assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
+    <div class="mm-section"><div class="mm-title">Getting started</div><a href="/docs/introduction/">Introduction</a><a href="/docs/install/">Install</a><a href="/docs/quickstart/">Quickstart</a><a href="/docs/platforms/">Platforms</a></div><div class="mm-section"><div class="mm-title">Local development</div><a href="/docs/workspaces/">Workspaces</a><a href="/docs/gateway/">Gateway</a><a href="/docs/orca-yaml/">orca.yaml</a><a href="/docs/profiles/">Profiles</a><a href="/docs/worktrees/">Worktree instances</a></div><div class="mm-section"><div class="mm-title">Working with Orca</div><a href="/docs/containers/">Containers</a><a href="/docs/stacks/">Stacks</a><a href="/docs/images-and-builds/">Images &amp; builds</a><a href="/docs/templates/">App Catalog</a><a href="/docs/kubernetes/">Kubernetes</a></div><div class="mm-section"><div class="mm-title">AI and automation</div><a href="/docs/agents/">Agents &amp; MCP</a><a href="/docs/ai-assistant/">Built-in assistant</a><a href="/docs/cli/">CLI</a><a href="/docs/api/">REST API</a><a href="/docs/auto-deploy/">Push to deploy</a></div><div class="mm-section"><div class="mm-title">Servers and teams</div><a href="/docs/remote-hosts/">Remote hosts</a><a href="/docs/security/">Security &amp; privacy</a></div><div class="mm-section"><div class="mm-title">Help</div><a href="/docs/troubleshooting/">Troubleshooting</a></div>
   </div>
 </div>
 <main id="main">
@@ -132,6 +132,25 @@
 <section class="section feature">
   <div class="container feature-grid">
     <div class="feature-copy reveal">
+      <span class="eyebrow"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg> Workspaces</span>
+      <h2>A new developer, up and running in minutes</h2>
+      <p>One repo describes your team's whole local setup: the shared services, the network, the gateway on your own domain with its certificate, and every project. Join it once, and any project is one click away, or one sentence in Claude: <em>"spin up billing"</em>.</p>
+      <ul class="checks">
+        <li>Clones the repo, creates the <code>.env</code>, runs the setup command and starts it, with progress you can follow</li>
+        <li>Secrets come from Passbolt or 1Password: a direct link to each entry, or filled in automatically by their CLI</li>
+        <li>Coming from a devproxy-style HAProxy? Import its routes; projects don't change</li>
+      </ul>
+      <a class="link-arrow" href="/docs/workspaces/">Set up a workspace <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+    <div class="feature-visual reveal">
+      <div class="window"><div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="window-title">Orca — Workspace</span></div><img class="" src="/assets/screens/workspace.webp" alt="The Workspace page: shared services, and projects that are running, cloned or ready to set up" loading="lazy" decoding="async"></div>
+    </div>
+  </div>
+</section>
+
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
+    <div class="feature-copy reveal">
       <span class="eyebrow"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg> Gateway</span>
       <h2>Every service gets a real HTTPS name</h2>
       <p>A managed gateway routes <code>shop.localhost</code>, <code>api.localhost</code> or your team's own domain to the right container, with certificates from Orca's own certificate authority.</p>
@@ -149,8 +168,8 @@
   </div>
 </section>
 
-<section class="section feature alt">
-  <div class="container feature-grid reverse">
+<section class="section feature">
+  <div class="container feature-grid">
     <div class="feature-copy reveal">
       <span class="eyebrow"><svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg> Worktree instances</span>
       <h2>A running copy of your app for every branch</h2>
@@ -169,8 +188,8 @@
   </div>
 </section>
 
-<section class="section feature">
-  <div class="container feature-grid">
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
       <span class="eyebrow"><svg viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg> orca.yaml</span>
       <h2>One file sets up the project for everyone</h2>
@@ -200,15 +219,15 @@
   </div>
 </section>
 
-<section class="section feature alt" id="agents">
-  <div class="container feature-grid reverse">
+<section class="section feature" id="agents">
+  <div class="container feature-grid">
     <div class="feature-copy reveal">
       <span class="eyebrow"><svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg> Agents</span>
       <h2>Your AI runs Orca. One click to connect.</h2>
       <p>Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex from Orca's settings. Then just ask: start a project from a folder, switch on a profile, find out why a container keeps restarting, or run a branch as its own instance and test against it.</p>
       <ul class="checks">
         <li>No tokens to copy: the AI tool runs <code>orca mcp</code>, which signs in by itself</li>
-        <li>69 tools: projects, stacks, profiles, gateway routes, builds, Kubernetes, worktrees</li>
+        <li>72 tools: workspace projects, stacks, profiles, gateway routes, builds, Kubernetes, worktrees</li>
         <li>Works with the AI subscription you already have. No API key needed</li>
       </ul>
       <a class="link-arrow" href="/docs/agents/">Connect your AI tools <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
