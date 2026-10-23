@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvkx2187">
+<link rel="stylesheet" href="/assets/site.css?v=mvkx5mmz">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvkx2187" defer></script>
+<script src="/assets/site.js?v=mvkx5mmz" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,36 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.53.0">
+<section class="container releases"><article class="release" id="v0.54.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.54.0">v0.54.0</a><time datetime="2026-10-23T12:00:34Z">October 23, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="every-app-gets-its-icon"><a class="anchor" href="#every-app-gets-its-icon" aria-hidden="true" tabindex="-1">#</a>Every app gets its icon</h2>
+<p>Apps now show their logos on the gateway&#39;s landing page, in the dashboard&#39;s <strong>Your apps</strong>, on the <strong>Workspace</strong> and <strong>Gateway</strong> pages and in the ⌘K palette.</p>
+<ul>
+<li><strong>Most need no setting at all.</strong> The container&#39;s image picks the icon: <code>postgres:17</code> gets PostgreSQL&#39;s logo, <code>grafana/grafana</code> Grafana&#39;s, <code>axllent/mailpit</code> Mailpit&#39;s. Orca knows about 80 common images.</li>
+<li><strong>Or choose one</strong> with <code>icon:</code> in <code>orca.yaml</code>, a label, the workspace file or a route&#39;s <strong>Edit</strong> dialog:<ul>
+<li>a built-in icon, such as <code>icon: grafana</code>, <code>icon: redis</code> or <code>icon: keycloak</code>. There are 71: brand logos, plus generic ones such as <code>mail</code>, <code>database</code>, <code>api</code> and <code>worker</code>;</li>
+<li>an image file in your repo, such as <code>icon: assets/logo.svg</code>. Orca reads it in, so it works offline;</li>
+<li>or an image URL.</li>
+</ul>
+</li>
+<li><strong>Workspaces get icons too.</strong> Projects and shared services take <code>icon</code>, and routes take a <code>description</code>. A team lead sets each project&#39;s logo once, for everyone.</li>
+</ul>
+<p>The brand icons come from <a href="https://simpleicons.org" target="_blank" rel="noopener">Simple Icons</a> (CC0) and the Mailpit logo from Mailpit (MIT).</p>
+<p><strong>Docs:</strong> <a href="https://orca-desktop.com/docs/gateway/#icons">Icons</a></p>
+<h2 id="ask-your-ai-tool-whether-orca-is-up-to-date"><a class="anchor" href="#ask-your-ai-tool-whether-orca-is-up-to-date" aria-hidden="true" tabindex="-1">#</a>Ask your AI tool whether Orca is up to date</h2>
+<p>Two new MCP tools, 74 in all:</p>
+<ul>
+<li><strong><code>check_for_update</code></strong> tells your AI tool which version you&#39;re running, what the latest one is, and what each newer release is about. Ask <em>&quot;is my Orca up to date?&quot;</em>. When you ask about a feature your version doesn&#39;t have yet, the tool can tell you it needs an update.</li>
+<li><strong><code>offer_update</code></strong> brings Orca to the front with its <strong>Update</strong> prompt. Nothing installs until you click <strong>Update</strong>. On a server running only the daemon, it gives the upgrade command instead.</li>
+</ul>
+<p><strong>Docs:</strong> <a href="https://orca-desktop.com/docs/agents/#orca-itself">Orca itself</a></p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.54.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.53.0">
   <div class="release-meta"><a class="release-tag" href="#v0.53.0">v0.53.0</a><time datetime="2026-10-23T09:48:52Z">October 23, 2026</time></div>
   <div class="release-body prose">
     
