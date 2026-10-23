@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvl1qhnk">
+<link rel="stylesheet" href="/assets/site.css?v=mvl3h282">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvl1qhnk" defer></script>
+<script src="/assets/site.js?v=mvl3h282" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,43 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.54.0">
+<section class="container releases"><article class="release" id="v0.55.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.55.0">v0.55.0</a><time datetime="2026-10-23T14:57:39Z">October 23, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="watch-orca-in-action"><a class="anchor" href="#watch-orca-in-action" aria-hidden="true" tabindex="-1">#</a>Watch Orca in action</h2>
+<p>There&#39;s now a two-and-a-half-minute tour of Orca, recorded from the real app: a project folder that just runs, every container live, a team set up from one repo, and Claude setting up and fixing apps through Orca. It&#39;s on <a href="https://orca-desktop.com/#tour">orca-desktop.com</a> and <a href="https://youtu.be/13pnOR7eGtY" target="_blank" rel="noopener">YouTube</a>.</p>
+<h2 id="a-start-page-that-gets-to-the-point"><a class="anchor" href="#a-start-page-that-gets-to-the-point" aria-hidden="true" tabindex="-1">#</a>A start page that gets to the point</h2>
+<p>The gateway&#39;s landing page now keeps its title, search box and counts in one bar across the top that stays put as you scroll. Your services start right below it instead of halfway down the page.</p>
+<h2 id="logs-in-colour"><a class="anchor" href="#logs-in-colour" aria-hidden="true" tabindex="-1">#</a>Logs in colour</h2>
+<p>Log views show the colours apps print. Ghost, Laravel, Vite and many others colour their logs, and until now that came through as <code>[36mINFO</code>. Copying and searching use the plain text.</p>
+<h2 id="fewer-false-alarms"><a class="anchor" href="#fewer-false-alarms" aria-hidden="true" tabindex="-1">#</a>Fewer false alarms</h2>
+<p>&quot;Container exited&quot; alerts are now only for real crashes and out-of-memory kills. Stopping a container, and Orca restarting its own gateway, no longer raise an error.</p>
+<h2 id="clearer-app-cards"><a class="anchor" href="#clearer-app-cards" aria-hidden="true" tabindex="-1">#</a>Clearer app cards</h2>
+<p>On the dashboard&#39;s <strong>Your apps</strong>:</p>
+<ul>
+<li>an address (marked ↗) opens the app in your browser;</li>
+<li>the rest of the card opens it in Orca, with its containers, logs and settings. <strong>Open →</strong> appears when you hover over it.</li>
+</ul>
+<h2 id="workspaces"><a class="anchor" href="#workspaces" aria-hidden="true" tabindex="-1">#</a>Workspaces</h2>
+<ul>
+<li><strong>Addresses from a project&#39;s own <code>orca.yaml</code></strong> now show on the <strong>Workspace</strong> page, in setup results and to AI tools, not only the routes in the workspace file.</li>
+<li><strong>A project&#39;s icon</strong> is used for the routes its own <code>orca.yaml</code> defines.</li>
+<li><strong><code>gateway.title</code></strong> in the workspace file sets the landing page&#39;s title, such as &quot;Acme dev&quot;.</li>
+<li><strong>Updates without clicking:</strong> the <strong>Workspace</strong> page refreshes every few seconds, so projects an AI tool sets up show up there by themselves.</li>
+<li><strong>Shorter paths:</strong> progress steps show <code>~/code/…</code> instead of the full path.</li>
+</ul>
+<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
+<ul>
+<li>Addresses no longer end in <code>:443</code>, and app cards keep a route&#39;s path.</li>
+<li>The <strong>Open a project folder</strong> dialog and a stack&#39;s page show <code>~/…</code> paths.</li>
+<li>Ghost joins the built-in icons.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.55.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.54.0">
   <div class="release-meta"><a class="release-tag" href="#v0.54.0">v0.54.0</a><time datetime="2026-10-23T12:00:34Z">October 23, 2026</time></div>
   <div class="release-body prose">
     
@@ -549,15 +585,6 @@
 <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.20...v0.47.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.20...v0.47.0</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.46.20">
-  <div class="release-meta"><a class="release-tag" href="#v0.46.20">v0.46.20</a><time datetime="2026-07-10T10:13:03Z">July 10, 2026</time></div>
-  <div class="release-body prose">
-    
-    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.46.19...v0.46.20" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.46.19...v0.46.20</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.46.20" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
