@@ -71,6 +71,13 @@
 - **Build notifications** — toast when background builds complete
 - **Registry authentication** for private registries (Docker Hub, GitHub, GitLab, AWS ECR)
 
+### Workspaces
+
+- **One repo sets up the team** — an `orca-workspace.yaml` describes the shared services, Docker network, gateway domain and certificate, and every project
+- **Join once, set up anything** — clone, `.env`, setup command and start, from the Workspace page, `orca workspace setup <project>`, or by asking Claude to "spin up" a project
+- **Secrets from Passbolt or 1Password** — direct links to each entry, or filled in automatically by their CLI; values only go into the project's `.env`
+- **Migrate from HAProxy** — `orca workspace import-haproxy` turns an existing reverse-proxy config into routes
+
 ### Compose Stacks
 
 - **Auto-detection** from container labels — no config file needed

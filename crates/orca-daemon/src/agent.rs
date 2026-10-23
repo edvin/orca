@@ -756,6 +756,23 @@ pub async fn execute_tool(
         }
 
         // === Projects ===
+        "workspace_status" => api(state, "GET", "/workspace", None).await,
+        "setup_project" => {
+            let body =
+                json!({ "rerun_setup": arguments.get("rerun_setup").and_then(|v| v.as_bool()).unwrap_or(false) });
+            let job = api(
+                state,
+                "POST",
+                &format!("/workspace/projects/{}/setup", seg(&arguments, "key")?),
+                Some(body),
+            )
+            .await?;
+            wait_for_job(job).await
+        }
+        "update_workspace" => {
+            let job = api(state, "POST", "/workspace/update", None).await?;
+            wait_for_job(job).await
+        }
         "list_projects" => api(state, "GET", "/dev/projects", None).await,
         "add_project" => {
             api(
@@ -1212,6 +1229,42 @@ mod redact_tests {
     }
 }
 
+/// Follow a job the API started until it ends (at most 20 minutes), and
+/// summarise it: status, steps, result, and the end of its log on failure.
+async fn wait_for_job(job: serde_json::Value) -> Result<serde_json::Value, String> {
+    let id = job
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or("the job has no id")?
+        .to_string();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * 60);
+    loop {
+        let j = crate::dev::jobs::get(&id).await.ok_or("the job disappeared")?;
+        if j.status != crate::dev::jobs::JobStatus::Running || std::time::Instant::now() > deadline {
+            let steps: Vec<String> = j
+                .steps
+                .iter()
+                .map(|s| {
+                    format!(
+                        "{:?}: {}{}",
+                        s.status,
+                        s.label,
+                        s.detail.as_ref().map(|d| format!(" ({d})")).unwrap_or_default()
+                    )
+                })
+                .collect();
+            let mut out = json!({ "status": j.status, "steps": steps, "result": j.result });
+            if let Some(e) = &j.error {
+                out["error"] = json!(e);
+                let start = j.log.len().saturating_sub(40);
+                out["log_tail"] = json!(j.log[start..]);
+            }
+            return Ok(out);
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
 /// A string argument made safe as one URL path segment.
 fn seg(args: &serde_json::Value, key: &str) -> Result<String, String> {
     Ok(urlencoding::encode(get_str(args, key)?).into_owned())
@@ -1219,7 +1272,7 @@ fn seg(args: &serde_json::Value, key: &str) -> Result<String, String> {
 
 /// Call one of the daemon's own API routes in-process, so a tool behaves and
 /// validates exactly like the app. Errors carry the API's message.
-async fn api(
+pub(crate) async fn api(
     state: &Arc<AppState>,
     method: &str,
     path: &str,

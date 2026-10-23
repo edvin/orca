@@ -132,6 +132,18 @@ orca run --serve web -- npm run dev
 
 Everything after `--` is the command and its arguments.
 
+## Workspaces
+
+A [workspace](/docs/workspaces/) sets up a team's local environment from one repo.
+
+| Command | What it does |
+|---------|--------------|
+| `orca workspace join <git url>` | Clone the workspace and apply it: network, gateway, shared services, routes. `--folder` picks where. |
+| `orca workspace status` | The workspace and its projects: cloned, running, URLs, missing secrets. `--json` for scripts. |
+| `orca workspace setup <project>` | Clone, configure and start a project. `--rerun-setup` runs its setup command again. |
+| `orca workspace update` | Pull the workspace and apply it again. |
+| `orca workspace import-haproxy <file>` | Print workspace routes for an HAProxy config. `--domain` shortens hostnames under it. |
+
 ## AI tools (MCP)
 
 `orca mcp` runs Orca as an MCP server over stdio for Claude Code, Claude Desktop, Cursor and other AI tools. It reads the token from Orca's config, so the AI tool's config holds none. See [AI agents and MCP](/docs/agents/).

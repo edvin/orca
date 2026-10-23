@@ -44,9 +44,24 @@ static WRITTEN: Mutex<Option<String>> = Mutex::new(None);
 pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig) {
     let mut states = HashMap::new();
     let names: std::collections::BTreeSet<&str> = config.routes.iter().map(|r| r.container_name.as_str()).collect();
+    // Workspace routes target network aliases (`one-crm-app`), which only
+    // resolve to a container through its networks; looked up once, if needed.
+    let mut aliases: Option<HashMap<String, String>> = None;
     for name in names {
-        let Ok(info) = docker.inspect_container(name, None).await else {
-            continue;
+        let info = match docker.inspect_container(name, None).await {
+            Ok(info) => info,
+            Err(_) => {
+                if aliases.is_none() {
+                    aliases = Some(alias_map(docker).await);
+                }
+                let Some(container) = aliases.as_ref().and_then(|m| m.get(name)) else {
+                    continue;
+                };
+                let Ok(info) = docker.inspect_container(container, None).await else {
+                    continue;
+                };
+                info
+            }
         };
         let state = info.state.unwrap_or_default();
         let health = state
@@ -80,6 +95,36 @@ pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig) {
     if let Err(e) = write(config) {
         tracing::warn!("landing page: {e}");
     }
+}
+
+/// Network alias → container name, for every container on a user network.
+async fn alias_map(docker: &bollard::Docker) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let Ok(list) = docker.list_containers::<String>(None).await else {
+        return map;
+    };
+    for c in list {
+        let Some(name) = c
+            .names
+            .and_then(|n| n.first().map(|n| n.trim_start_matches('/').to_string()))
+        else {
+            continue;
+        };
+        if name == crate::gateway::CADDY_CONTAINER {
+            continue;
+        }
+        // The list leaves aliases out on some engines; inspect has them.
+        let Ok(info) = docker.inspect_container(&name, None).await else {
+            continue;
+        };
+        let nets = info.network_settings.and_then(|n| n.networks).unwrap_or_default();
+        for ep in nets.into_values() {
+            for a in ep.aliases.unwrap_or_default() {
+                map.entry(a).or_insert_with(|| name.clone());
+            }
+        }
+    }
+    map
 }
 
 /// Write the page with the last known container states.

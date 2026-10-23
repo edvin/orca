@@ -210,6 +210,7 @@ pub async fn auth_middleware(
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(crate::dev::routes())
+        .merge(crate::workspace::routes())
         .route("/health", get(health))
         .route("/events", get(events_stream))
         // Machines
@@ -3451,6 +3452,34 @@ async fn compose_deploy_path(
         "gateway_routes": registered_routes,
         "hooks": hooks,
     })))
+}
+
+/// Start the compose project in a folder, as Open folder and `orca deploy`
+/// do: its compose files (orca.yaml's list first), remembered profiles, and
+/// its setup hooks. Returns the stack's name.
+pub(crate) async fn deploy_folder(state: &AppState, dir: &std::path::Path) -> anyhow::Result<String> {
+    let (validated, compose_file) = deploy_target(&dir.to_string_lossy())?;
+    let validated_str = validated.to_string_lossy().to_string();
+    let project = crate::folders::project_name(&validated)?;
+    let output = crate::stack_profiles::up(state, &project, &validated_str, compose_file.as_deref()).await?;
+    crate::gateway_sync::routes_changed();
+    if !output.success {
+        let tail: Vec<&str> = output.stderr.lines().rev().take(12).collect();
+        anyhow::bail!(
+            "compose up failed:\n{}",
+            tail.into_iter().rev().collect::<Vec<_>>().join("\n")
+        );
+    }
+    for h in run_stack_hooks(state, &validated_str, compose_file.as_deref()).await {
+        if h.get("success").and_then(|v| v.as_bool()) == Some(false) {
+            anyhow::bail!(
+                "setup hook '{}' failed: {}",
+                h.get("hook").and_then(|v| v.as_str()).unwrap_or("?"),
+                h.get("output").and_then(|v| v.as_str()).unwrap_or("").trim()
+            );
+        }
+    }
+    Ok(project)
 }
 
 /// Validate a compose file by running `docker compose -f <path> config`.
@@ -8222,6 +8251,9 @@ const MCP_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
 /// Shown to agents on connect, so they know when Orca is the right tool.
 const MCP_INSTRUCTIONS: &str = "Orca manages this machine's containers, compose stacks, Kubernetes and git worktree instances. \
+When the developer asks to run or set up one of their team's projects by name (\"spin up onecrm\"), call workspace_status: \
+if a workspace is joined it lists the team's projects; setup_project clones, configures and starts one and returns its URLs. \
+Never ask the developer to paste secrets into the chat: missing secrets are filled in on Orca's Workspace page. \
 To start a project from a folder with a compose file or orca.yaml, use deploy_project with its path; then list_stacks, \
 stack_logs and gateway_routes show how it runs and which https://*.localhost URL serves it. stack_profiles and \
 set_stack_profiles switch optional services on and off; read_orca_yaml and write_orca_yaml edit a stack's Orca settings. \
@@ -8257,6 +8289,7 @@ fn mcp_read_only(name: &str) -> bool {
                 | "gateway_status"
                 | "gateway_routes"
                 | "build_status"
+                | "workspace_status"
         )
 }
 
@@ -8291,6 +8324,7 @@ const MCP_ADDITIVE: &[&str] = &[
     "start_build",
     "instance_up",
     "k8s_restart_deployment",
+    "setup_project",
 ];
 
 /// Everything else that changes state may stop, overwrite or delete

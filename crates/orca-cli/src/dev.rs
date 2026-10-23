@@ -134,7 +134,7 @@ fn mark(status: &str) -> &'static str {
 }
 
 /// Poll a job, printing each step once it settles. Returns the final job.
-async fn follow_job(client: &DaemonClient, job: Value, quiet: bool) -> anyhow::Result<Value> {
+pub(crate) async fn follow_job(client: &DaemonClient, job: Value, quiet: bool) -> anyhow::Result<Value> {
     let id = str_of(&job, "id");
     let mut printed: Vec<String> = Vec::new();
     let mut announced: Option<String> = None;

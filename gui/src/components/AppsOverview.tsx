@@ -63,6 +63,11 @@ export default function AppsOverview(props: {
                 <b>Add a git repository</b>
                 <span>Run every worktree of it side by side, each with its own URLs.</span>
               </button>
+              <button class="get-started-card" onClick={() => props.onNavigate?.("workspace")}>
+                <span class="get-started-icon">{svg(<><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20h5v-6h4v6h5V9.5" /></>)}</span>
+                <b>Join your team's workspace</b>
+                <span>One repo sets up shared services, the gateway and every project.</span>
+              </button>
               <button class="get-started-card" onClick={() => props.onNavigate?.("templates")}>
                 <span class="get-started-icon">{ICON.grid()}</span>
                 <b>Start from the catalog</b>

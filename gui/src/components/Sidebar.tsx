@@ -22,6 +22,13 @@ const Icon = (props: { d: string | string[]; children?: JSX.Element }) => (
 
 const icons: Record<string, () => JSX.Element> = {
   // GitBranch (worktree projects)
+  // Workspace (a house: the team's home base)
+  workspace: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
+    </svg>
+  ),
   projects: () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="6" x2="6" y1="3" y2="15" />
@@ -142,6 +149,7 @@ const navGroups: { title: string | null; items: { id: Page; label: string }[] }[
   {
     title: "Develop",
     items: [
+      { id: "workspace", label: "Workspace" },
       { id: "projects", label: "Projects" },
       { id: "containers", label: "Containers" },
       { id: "gateway", label: "Gateway" },

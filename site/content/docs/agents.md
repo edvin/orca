@@ -172,7 +172,7 @@ A successful call returns `{"result": ...}`. A failed one returns HTTP 400 with 
 
 ## Tool reference
 
-Orca has 69 agent tools. The same set is available over MCP, the OpenAI-compatible endpoint, direct execution, and to the built-in [AI assistant](/docs/ai-assistant/).
+Orca has 72 agent tools. The same set is available over MCP, the OpenAI-compatible endpoint, direct execution, and to the built-in [AI assistant](/docs/ai-assistant/).
 
 ### Containers
 
@@ -278,6 +278,14 @@ Orca has 69 agent tools. The same set is available over MCP, the OpenAI-compatib
 | `k8s_restart_deployment` | Rolling restart of a deployment. |
 | `k8s_delete_pod` | Delete a pod so its controller recreates it. |
 | `k8s_helm_list` | List installed Helm releases. |
+
+### Workspace
+
+| Tool | What it does |
+|------|--------------|
+| `workspace_status` | The joined [workspace](/docs/workspaces/): shared services and every project, with whether it's cloned and running, its URLs and missing secrets. |
+| `setup_project` | Clone, configure and start a workspace project by its key, and return its URLs. Stops and lists missing secrets, which the developer fills in on the Workspace page. |
+| `update_workspace` | Pull the workspace file and apply it again. |
 
 ### Worktree projects and instances
 

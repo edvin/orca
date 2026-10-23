@@ -11,6 +11,7 @@ export const SHOTS = {
   profiles: "feature-profiles",
   editor: "feature-editor",
   openFolder: "open-folder",
+  workspace: "workspace",
   palette: "palette",
 };
 
@@ -171,6 +172,25 @@ hooks:
 <section class="section feature">
   <div class="container feature-grid">
     <div class="feature-copy reveal">
+      <span class="eyebrow">${F.layers} Workspaces</span>
+      <h2>A new developer, up and running in minutes</h2>
+      <p>One repo describes your team's whole local setup: the shared services, the network, the gateway on your own domain with its certificate, and every project. Join it once, and any project is one click away, or one sentence in Claude: <em>"spin up billing"</em>.</p>
+      <ul class="checks">
+        <li>Clones the repo, creates the <code>.env</code>, runs the setup command and starts it, with progress you can follow</li>
+        <li>Secrets come from Passbolt or 1Password: a direct link to each entry, or filled in automatically by their CLI</li>
+        <li>Coming from a devproxy-style HAProxy? Import its routes; projects don't change</li>
+      </ul>
+      <a class="link-arrow" href="/docs/workspaces/">Set up a workspace ${ICONS.arrow}</a>
+    </div>
+    <div class="feature-visual reveal">
+      ${windowFrame(shot(SHOTS.workspace, "The Workspace page: shared services, and projects that are running, cloned or ready to set up"), "Orca — Workspace")}
+    </div>
+  </div>
+</section>
+
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
+    <div class="feature-copy reveal">
       <span class="eyebrow">${F.gateway} Gateway</span>
       <h2>Every service gets a real HTTPS name</h2>
       <p>A managed gateway routes <code>shop.localhost</code>, <code>api.localhost</code> or your team's own domain to the right container, with certificates from Orca's own certificate authority.</p>
@@ -188,8 +208,8 @@ hooks:
   </div>
 </section>
 
-<section class="section feature alt">
-  <div class="container feature-grid reverse">
+<section class="section feature">
+  <div class="container feature-grid">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.branch} Worktree instances</span>
       <h2>A running copy of your app for every branch</h2>
@@ -208,8 +228,8 @@ hooks:
   </div>
 </section>
 
-<section class="section feature">
-  <div class="container feature-grid">
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.code} orca.yaml</span>
       <h2>One file sets up the project for everyone</h2>
@@ -228,15 +248,15 @@ hooks:
   </div>
 </section>
 
-<section class="section feature alt" id="agents">
-  <div class="container feature-grid reverse">
+<section class="section feature" id="agents">
+  <div class="container feature-grid">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.bot} Agents</span>
       <h2>Your AI runs Orca. One click to connect.</h2>
       <p>Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex from Orca's settings. Then just ask: start a project from a folder, switch on a profile, find out why a container keeps restarting, or run a branch as its own instance and test against it.</p>
       <ul class="checks">
         <li>No tokens to copy: the AI tool runs <code>orca mcp</code>, which signs in by itself</li>
-        <li>69 tools: projects, stacks, profiles, gateway routes, builds, Kubernetes, worktrees</li>
+        <li>72 tools: workspace projects, stacks, profiles, gateway routes, builds, Kubernetes, worktrees</li>
         <li>Works with the AI subscription you already have. No API key needed</li>
       </ul>
       <a class="link-arrow" href="/docs/agents/">Connect your AI tools ${ICONS.arrow}</a>

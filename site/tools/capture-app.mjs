@@ -338,11 +338,43 @@ hooks:
     return [];
   };
 
+
+  const WORKSPACE = {
+    joined: true, name: "acme", description: "Everything you need to work on Acme's apps locally.",
+    repo: "git@git.acme.dev:devops/dev-workspace.git", path: "/Users/alex/code/dev-workspace",
+    network: "local-dev", domain: "local.acme.dev", certificate: "workspace",
+    shared: { name: "dev-workspace", running: 7, total: 7 },
+    shared_urls: [
+      { title: "Mailpit", url: "https://mail.local.acme.dev" }, { title: "Grafana", url: "https://grafana.local.acme.dev" },
+      { title: "Temporal", url: "https://temporal.local.acme.dev" }, { title: "MinIO", url: "https://minio.local.acme.dev" },
+      { title: "phpMyAdmin", url: "https://pma.local.acme.dev" },
+    ],
+    registries: [{ host: "registry.acme.dev", logged_in: true }],
+    secret_clis: { passbolt: false, "1password": false },
+    providers: { passbolt: "https://passbolt.acme.dev", "1password": false },
+    projects: [
+      { key: "shop", description: "The storefront and checkout (Laravel + Vue)", repo: "git@git.acme.dev:shop/shop.git", dir: "/Users/alex/code/acme/shop",
+        cloned: true, set_up: true, stack: "shop", running: true, uses: ["mailpit", "soketi"], setup: "just setup",
+        urls: ["https://shop.local.acme.dev", "https://admin.local.acme.dev"], secrets: [], worktrees: true },
+      { key: "billing", description: "Invoices, payments and dunning", repo: "git@git.acme.dev:finance/billing.git", dir: "/Users/alex/code/acme/billing",
+        cloned: true, set_up: false, stack: null, running: false, uses: ["temporal"], setup: "just setup", urls: ["https://billing.local.acme.dev"],
+        secrets: [
+          { name: "DB_PASSWORD", provider: "passbolt", reference: "passbolt:7f3c91a2", link: "https://passbolt.acme.dev/app/passwords/view/7f3c91a2", filled: false },
+          { name: "STRIPE_SECRET", provider: "passbolt", reference: "passbolt:0b88e4d1", link: "https://passbolt.acme.dev/app/passwords/view/0b88e4d1", filled: false },
+          { name: "APP_KEY", provider: "passbolt", reference: "passbolt:51aa20f3", link: "https://passbolt.acme.dev/app/passwords/view/51aa20f3", filled: true },
+        ], worktrees: false },
+      { key: "crm", description: "Customer records and support tools", repo: "git@git.acme.dev:crm/crm.git", dir: "/Users/alex/code/acme/crm",
+        cloned: false, set_up: false, stack: null, running: false, uses: ["mailpit", "temporal"], setup: "just setup", urls: ["https://crm.local.acme.dev"], secrets: [], worktrees: true },
+      { key: "partner-api", description: "The public partner REST API", repo: "git@git.acme.dev:api/partner-api.git", dir: "/Users/alex/code/acme/partner-api",
+        cloned: false, set_up: false, stack: null, running: false, uses: [], setup: null, urls: ["https://partner-api.local.acme.dev"], secrets: [], worktrees: false },
+    ],
+  };
   window.__TAURI_INTERNALS__ = {
     invoke: async (cmd, args) => {
       if (cmd === "all_container_stats") return stats();
       if (cmd === "container_stats") return stats().find((s) => s.container_id === args?.id) ?? stats()[0];
       if (cmd === "dev_api") return devApi(args);
+      if (cmd === "workspace_api") return args?.path === "/workspace" ? (window.__WS_EMPTY ? { joined: false } : WORKSPACE) : {};
       if (cmd === "inspect_container") {
         const c = containers.find((x) => x.id === args?.id || x.name === args?.id) ?? containers[0];
         return { ...c, exit_code: 0, oom_killed: false, started_at: new Date(Date.now() - 3 * 3600e3).toISOString(),
@@ -454,6 +486,27 @@ const SHOTS = {
     await card.scrollIntoViewIfNeeded();
     const box = await card.boundingBox();
     return { clip: { x: box.x - 24, y: box.y - 24, width: box.width + 48, height: box.height + 48 } };
+  },
+  async workspace(page) {
+    await nav(page, "Workspace");
+    await page.waitForTimeout(1200);
+    return { clip: content };
+  },
+  async "workspace-secrets"(page) {
+    await nav(page, "Workspace");
+    await page.waitForTimeout(1000);
+    await page.locator(".ws-secrets-warn").first().click();
+    await page.waitForTimeout(500);
+    const box = await page.locator(".secrets-dialog").boundingBox();
+    return { clip: { x: box.x - 40, y: box.y - 40, width: box.width + 80, height: box.height + 80 } };
+  },
+  async "workspace-join"(page) {
+    await page.evaluate(() => { window.__WS_EMPTY = true; });
+    await nav(page, "Workspace");
+    await page.waitForTimeout(1000);
+    await page.locator(".ws-join-form input").fill("git@git.acme.dev:devops/dev-workspace.git");
+    const box = await page.locator(".ws-join").boundingBox();
+    return { clip: { x: box.x - 40, y: box.y - 40, width: box.width + 80, height: box.height + 80 } };
   },
   async kubernetes(page) {
     await nav(page, "Kubernetes");

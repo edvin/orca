@@ -374,6 +374,18 @@ async fn sync_networks(state: &AppState) -> Result<()> {
             networks.extend(nets.into_keys());
         }
     }
+    // A workspace's network too: its routes target aliases on it (like
+    // `one-crm-app:80`), not containers the gateway could look up.
+    if let Some(net) = state
+        .config
+        .lock()
+        .await
+        .workspace
+        .as_ref()
+        .and_then(|w| w.network.clone())
+    {
+        networks.insert(net);
+    }
     // The default bridge has no DNS (and no aliases); host and none aren't networks to join.
     networks.retain(|n| !matches!(n.as_str(), "bridge" | "host" | "none"));
 

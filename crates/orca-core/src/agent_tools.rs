@@ -258,6 +258,28 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             category: "Gateway".into(),
         },
 
+        // === Workspace ===
+        ToolDefinition {
+            name: "workspace_status".into(),
+            description: "The team workspace this machine joined: its shared services and every project in it (repo, whether it's cloned and running, its URLs, and secrets still missing from its .env). Use it to find a project by name or description before setting it up.".into(),
+            parameters: json_schema(json!({})),
+            category: "Workspace".into(),
+        },
+        ToolDefinition {
+            name: "setup_project".into(),
+            description: "Set up and start a workspace project by its key: clone it, create its .env and fill in secrets the developer's secret manager CLI can fetch, run its setup command, start the shared services it uses, and start it. Waits until done and returns its URLs. If secrets are missing, it stops before starting and lists them with links: ask the developer to fill them in Orca (Workspace page), never ask them to paste secrets into the chat. Then call it again.".into(),
+            parameters: json_schema(json!({
+                "key": { "type": "string", "description": "The project's key, from workspace_status" },
+                "rerun_setup": { "type": "boolean", "description": "Run the setup command again even if it ran before" }
+            })),
+            category: "Workspace".into(),
+        },
+        ToolDefinition {
+            name: "update_workspace".into(),
+            description: "Pull the latest workspace file and apply it: network, gateway domain and certificate, shared services and routes.".into(),
+            parameters: json_schema(json!({})),
+            category: "Workspace".into(),
+        },
         // === Projects (worktree instances) ===
         ToolDefinition {
             name: "list_projects".into(),

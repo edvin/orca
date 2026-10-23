@@ -20,10 +20,12 @@ mod gateway_sync;
 mod landing;
 mod local_ai;
 mod project_config;
+mod secrets;
 mod stack_files;
 mod stack_profiles;
 mod stack_yaml;
 mod state;
+mod workspace;
 
 use state::AppState;
 
@@ -138,6 +140,7 @@ async fn main() -> anyhow::Result<()> {
     let scheduler_state = state.clone();
     dev::activity::spawn(state.clone());
     gateway_sync::spawn(state.clone());
+    workspace::spawn(state.clone());
     tokio::spawn(async move {
         run_scheduler(scheduler_state).await;
     });

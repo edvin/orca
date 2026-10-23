@@ -261,7 +261,7 @@ pub async fn runtime_cli(state: &AppState, program: &str) -> Command {
     cmd
 }
 
-fn cli_path() -> String {
+pub(crate) fn cli_path() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let mut dirs: Vec<String> = [
         "/opt/homebrew/bin",

@@ -4388,3 +4388,57 @@ tr.service-off td { opacity: 0.55; }
 .landing-start-icon { color: #d29922; font-size: 18px; }
 .landing-start-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: #8b949e; line-height: 1.5; }
 .landing-start-text b { color: #e6edf3; font-size: 13px; }
+
+/* Workspace */
+.workspace-page .ws-muted { color: #6e7681; font-size: 12.5px; font-weight: 400; }
+.ws-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; padding: 18px 20px; border-radius: 12px; border: 1px solid #21262d; background: radial-gradient(120% 160% at 0% 0%, rgba(88, 166, 255, 0.1), transparent 60%), #161b22; margin-bottom: 16px; }
+.ws-name { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.ws-desc { color: #8b949e; font-size: 13px; margin-top: 4px; max-width: 560px; }
+.ws-facts { display: flex; gap: 6px; flex-wrap: wrap; }
+.ws-chip { font: 12px 'JetBrains Mono', monospace; padding: 5px 9px; border-radius: 999px; border: 1px solid #30363d; color: #c9d1d9; background: #0d1117; }
+.ws-chip.ok { color: #3fb950; border-color: rgba(63, 185, 80, 0.35); }
+.ws-chip.warn { color: #d29922; border-color: rgba(210, 153, 34, 0.4); }
+.ws-alert { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 12px; border-radius: 10px; border: 1px solid rgba(210, 153, 34, 0.4); background: rgba(210, 153, 34, 0.07); font-size: 12.5px; color: #c9d1d9; }
+.ws-alert.bad { border-color: rgba(248, 81, 73, 0.45); background: rgba(248, 81, 73, 0.07); flex-direction: column; align-items: flex-start; }
+.ws-alert code { padding: 3px 7px; border-radius: 5px; background: #0d1117; border: 1px solid #30363d; }
+.ws-section-title { font-size: 13px; font-weight: 600; color: #c9d1d9; margin: 18px 0 10px; }
+.ws-shared { display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-job { margin: 12px 0; padding: 12px 14px; border-radius: 10px; border: 1px solid #21262d; background: #0d1117; }
+.ws-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.ws-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 10px; border: 1px solid #21262d; background: #161b22; }
+.ws-card.running { border-color: rgba(63, 185, 80, 0.3); }
+.ws-card-head { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
+.ws-card-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ws-state { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid #30363d; color: #8b949e; }
+.ws-state.running { color: #3fb950; border-color: rgba(63, 185, 80, 0.35); }
+.ws-state.cloned { color: #58a6ff; border-color: rgba(88, 166, 255, 0.35); }
+.ws-card-desc { font-size: 12.5px; color: #c9d1d9; line-height: 1.5; }
+.ws-card-repo { font-size: 11px; color: #6e7681; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-secrets-warn { align-self: flex-start; font-size: 12px; color: #d29922; background: rgba(210, 153, 34, 0.08); border: 1px solid rgba(210, 153, 34, 0.35); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+.ws-secrets-warn:hover { background: rgba(210, 153, 34, 0.15); }
+.ws-card-job { padding: 8px 10px; border-radius: 8px; background: #0d1117; border: 1px solid #21262d; }
+.ws-card-error { margin-top: 6px; font: 11.5px/1.5 'JetBrains Mono', monospace; color: #f85149; white-space: pre-wrap; max-height: 140px; overflow: auto; }
+.ws-card-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: auto; padding-top: 4px; }
+.ws-rerun { font-size: 12px; color: #6e7681; background: none; border: none; cursor: pointer; margin-left: auto; }
+.ws-rerun:hover { color: #58a6ff; }
+.ws-join { max-width: 620px; margin: 24px auto; padding: 32px; border-radius: 14px; border: 1px solid #21262d; background: radial-gradient(120% 140% at 50% 0%, rgba(88, 166, 255, 0.1), transparent 60%), #161b22; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+.ws-join-icon { font-size: 30px; color: #58a6ff; }
+.ws-join-title { font-size: 20px; font-weight: 700; }
+.ws-join-sub { margin: 0; color: #8b949e; font-size: 13.5px; line-height: 1.6; }
+.ws-join-form { display: flex; gap: 8px; width: 100%; }
+.ws-join-form .form-input { flex: 1; }
+.ws-join-folder { width: 100%; }
+.ws-join .ws-job { width: 100%; text-align: left; }
+.ws-join-foot { margin: 6px 0 0; }
+.ws-join-foot .btn-link, .ws-join .btn-link { background: none; border: none; color: #58a6ff; cursor: pointer; padding: 0; font: inherit; }
+/* Secrets */
+.modal-dialog.secrets-dialog { max-width: 640px; }
+.secrets-intro { margin: 0 0 12px; font-size: 12.5px; color: #8b949e; line-height: 1.55; }
+.secrets-fetch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; margin-bottom: 12px; border-radius: 8px; border: 1px solid rgba(88, 166, 255, 0.3); background: rgba(88, 166, 255, 0.06); font-size: 12.5px; }
+.secrets-list { display: flex; flex-direction: column; gap: 12px; }
+.secret-row { display: flex; flex-direction: column; gap: 6px; }
+.secret-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.secret-provider { font-size: 11px; color: #8b949e; border: 1px solid #30363d; border-radius: 999px; padding: 1px 7px; }
+.secret-ok { font-size: 11.5px; color: #3fb950; }
+.secret-spacer { flex: 1; }
+.secret-row.filled .form-input { opacity: 0.7; }

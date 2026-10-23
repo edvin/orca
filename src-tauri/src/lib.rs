@@ -263,6 +263,7 @@ pub fn run() {
             commands::dev_api,
             commands::pick_folder,
             commands::inspect_folder,
+            commands::workspace_api,
             commands::create_compose_in_folder,
             commands::folder_apps,
             commands::open_folder_in,

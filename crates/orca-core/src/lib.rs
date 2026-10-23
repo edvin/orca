@@ -15,3 +15,4 @@ pub mod runtime;
 pub mod templates;
 pub mod volume;
 pub mod webhook;
+pub mod workspace;

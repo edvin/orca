@@ -93,7 +93,7 @@ Once the assistant is set up, **Test the assistant** checks that the model answe
 
 ## What the assistant can do
 
-With a cloud provider, the assistant has the same 69 tools that Orca offers to external agents (a local model gets the 19 above), listed in the [tool reference](/docs/agents/#tool-reference). It uses them to get real data instead of guessing, for example:
+With a cloud provider, the assistant has the tools Orca offers to external agents, except those that delete data (a local model gets the 19 above), listed in the [tool reference](/docs/agents/#tool-reference). It uses them to get real data instead of guessing, for example:
 
 - "Why does the api container keep restarting?" (it runs `diagnose_container` and reads the logs)
 - "Which container is using port 5432?"

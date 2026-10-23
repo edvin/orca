@@ -4,6 +4,7 @@ use serde::Serialize;
 mod client;
 mod dev;
 mod mcp;
+mod workspace;
 
 #[derive(Parser)]
 #[command(name = "orca", about = "Orca — open source container desktop")]
@@ -111,6 +112,12 @@ enum Commands {
         /// Manage a remote host from Orca Desktop's list instead of this machine
         #[arg(long)]
         host: Option<String>,
+    },
+
+    /// Join a team workspace and set up its projects
+    Workspace {
+        #[command(subcommand)]
+        action: WorkspaceAction,
     },
 
     /// Manage containers
@@ -414,6 +421,40 @@ struct RouteExport {
 }
 
 #[derive(Subcommand)]
+enum WorkspaceAction {
+    /// Clone a workspace repo and apply it: network, gateway, shared services, routes
+    Join {
+        /// The workspace's git URL (or a folder that already has orca-workspace.yaml)
+        repo: String,
+        /// Where to clone it (default ~/code/<repo name>)
+        #[arg(long)]
+        folder: Option<String>,
+    },
+    /// The workspace and its projects
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Pull the workspace and apply it again
+    Update,
+    /// Clone, configure and start a project
+    Setup {
+        /// The project's key, as `orca workspace status` lists it
+        project: String,
+        /// Run its setup command again
+        #[arg(long)]
+        rerun_setup: bool,
+    },
+    /// Print workspace routes for an HAProxy config (devproxy's haproxy.cfg)
+    ImportHaproxy {
+        file: String,
+        /// Shorten hostnames under this domain, e.g. local.example.dev
+        #[arg(long)]
+        domain: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum McpAction {
     /// Connect AI tools to Orca: the ones found on this machine, or the one named
     Install {
@@ -472,6 +513,13 @@ async fn main() -> anyhow::Result<()> {
         Commands::Projects { action } => dev::projects(&client, action).await?,
         Commands::Version => cmd_version(&client).await?,
         Commands::Mcp { .. } => unreachable!("handled before the client is built"),
+        Commands::Workspace { action } => match action {
+            WorkspaceAction::Join { repo, folder } => workspace::join(&client, repo, folder).await?,
+            WorkspaceAction::Status { json } => workspace::status(&client, json).await?,
+            WorkspaceAction::Update => workspace::update(&client).await?,
+            WorkspaceAction::Setup { project, rerun_setup } => workspace::setup(&client, project, rerun_setup).await?,
+            WorkspaceAction::ImportHaproxy { file, domain } => workspace::import_haproxy(&client, file, domain).await?,
+        },
         Commands::Containers { action } => match action {
             ContainerAction::List => cmd_containers_list(&client).await?,
             ContainerAction::Start { id } => cmd_container_start(&client, &id).await?,

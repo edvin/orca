@@ -184,6 +184,24 @@ pub struct OrcaConfig {
     /// machine. A stack without an entry runs what compose runs by default.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub stack_profiles: std::collections::BTreeMap<String, Vec<String>>,
+    /// The workspace this machine joined: a repo with an orca-workspace.yaml.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceRef>,
+}
+
+/// A joined workspace: where its repo was cloned, and what was applied from
+/// its file (so the gateway can join its network).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkspaceRef {
+    pub repo: String,
+    /// The local clone.
+    pub path: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<String>,
+    /// Projects whose setup command ran on this machine.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub setup_done: Vec<String>,
 }
 
 /// A scheduled container action (e.g., restart every Sunday).
@@ -649,6 +667,7 @@ impl Default for OrcaConfig {
             kubernetes_runtime: KubernetesRuntime::default(),
             dev_projects: Vec::new(),
             stack_profiles: Default::default(),
+            workspace: None,
         }
     }
 }

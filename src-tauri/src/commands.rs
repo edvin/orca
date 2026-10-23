@@ -4804,6 +4804,19 @@ pub async fn dev_api(
     daemon_call(&method, &path, body).await
 }
 
+/// Call the daemon's `/workspace` API, like `dev_api` for `/dev/`.
+#[tauri::command]
+pub async fn workspace_api(
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    if !(path == "/workspace" || path.starts_with("/workspace/")) || path.contains("..") {
+        return Err("invalid workspace API path".into());
+    }
+    daemon_call(&method, &path, body).await
+}
+
 /// What Orca would start from a folder: compose files, services, profiles,
 /// orca.yaml, git, and the stack already running from it.
 #[tauri::command]

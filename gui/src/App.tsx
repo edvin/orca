@@ -5,6 +5,7 @@ import { onOrcaEvent } from "./lib/events";
 import { addEvent } from "./lib/activityStore";
 import { lazy } from "solid-js";
 import { openFolderDialog, openFolderTarget } from "./lib/openFolder";
+import { requestWorkspaceJoin } from "./lib/workspace";
 const AiWindow = lazy(() => import("./components/AiWindow"));
 // Pages load on first visit: together with xterm and CodeMirror they made
 // one 1.6 MB bundle that was parsed before the first paint.
@@ -17,6 +18,7 @@ const VolumeDetailPage = lazy(() => import("./pages/VolumeDetailPage"));
 const NetworksPage = lazy(() => import("./pages/NetworksPage"));
 const GatewayPage = lazy(() => import("./pages/GatewayPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const WorkspacePage = lazy(() => import("./pages/WorkspacePage"));
 const KubernetesPage = lazy(() => import("./pages/KubernetesPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const EnvironmentPage = lazy(() => import("./pages/EnvironmentPage"));
@@ -41,7 +43,7 @@ import type { EnvironmentStatus } from "./lib/types";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import { startPoller, type Poller } from "./lib/poller";
 
-export type Page = "fleet" | "dashboard" | "projects" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "builds" | "volumes" | "volume-detail" | "networks" | "gateway" | "kubernetes" | "environment" | "activity" | "settings";
+export type Page = "fleet" | "dashboard" | "workspace" | "projects" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "builds" | "volumes" | "volume-detail" | "networks" | "gateway" | "kubernetes" | "environment" | "activity" | "settings";
 
 export default function App() {
   // The AI assistant opens this same App in a second webview via a #ai hash.
@@ -279,6 +281,13 @@ export default function App() {
         case "projects":
           navigate("projects");
           break;
+        case "workspace": {
+          // orca://workspace?repo=<git url>: the link a team puts in its wiki.
+          const repo = parsed.searchParams.get("repo");
+          if (repo) requestWorkspaceJoin(repo);
+          navigate("workspace");
+          break;
+        }
         case "kubernetes":
           navigate("kubernetes");
           break;
@@ -605,6 +614,7 @@ export default function App() {
               {page() === "networks" && <NetworksPage />}
               {page() === "gateway" && <GatewayPage onNavigate={(p) => navigate(p)} />}
               {page() === "projects" && <ProjectsPage onNavigate={(p) => navigate(p)} />}
+              {page() === "workspace" && <WorkspacePage onNavigate={(p) => navigate(p)} />}
               {page() === "kubernetes" && <KubernetesPage />}
               {/* Machine page merged into System Health */}
               {page() === "environment" && <EnvironmentPage />}
