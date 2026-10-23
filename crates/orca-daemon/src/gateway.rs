@@ -195,6 +195,9 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
     // Generate the landing page and write Caddy config to the mounted volume
     // (writing to the volume works before the container starts, unlike docker exec)
     let _ = write_landing_page(config);
+    // Caddy loads this config as it starts, so the certificate files it
+    // names must be there already.
+    prepare_certs(config)?;
     let caddy_json = build_caddy_config(config, &[]);
     let config_path = certs_dir.join("caddy.json");
     std::fs::write(&config_path, &caddy_json).context("Failed to write Caddy config to certs volume")?;
@@ -234,7 +237,18 @@ pub async fn stop(state: &AppState) -> Result<()> {
 
 /// Generate and push Caddy JSON config via the admin API.
 pub async fn apply_config(config: &GatewayConfig) -> Result<()> {
-    // Generate certs for all enabled routes + root domain
+    prepare_certs(config)?;
+    // Regenerate the landing page
+    let _ = write_landing_page(config);
+    let pushed = push_caddy_config(config).await;
+    // Routes may have changed: join new networks, update hostname aliases.
+    crate::gateway_sync::routes_changed();
+    pushed
+}
+
+/// The certificate files the Caddy config points at: Orca CA ones for the
+/// domain and every route, or the custom certificate and key.
+fn prepare_certs(config: &GatewayConfig) -> Result<()> {
     if matches!(config.tls_mode, GatewayTlsMode::OrcaCa) {
         generate_cert_for_hostname(&config.domain)?;
         for route in &config.routes {
@@ -246,12 +260,7 @@ pub async fn apply_config(config: &GatewayConfig) -> Result<()> {
         // Write user-provided cert/key PEM to files so Caddy can read them
         write_custom_cert_files(config)?;
     }
-    // Regenerate the landing page
-    let _ = write_landing_page(config);
-    let pushed = push_caddy_config(config).await;
-    // Routes may have changed: join new networks, update hostname aliases.
-    crate::gateway_sync::routes_changed();
-    pushed
+    Ok(())
 }
 
 /// Connect gateway to a container's Docker networks.

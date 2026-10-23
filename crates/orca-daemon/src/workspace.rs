@@ -89,28 +89,29 @@ async fn run_logged(job: &JobHandle, mut cmd: Command, shown: &str) -> Result<()
         .spawn()
         .with_context(|| format!("could not run `{shown}`"))?;
     let (out, err) = (child.stdout.take().expect("piped"), child.stderr.take().expect("piped"));
-    let (j1, j2) = (job.clone(), job.clone());
-    let t1 = tokio::spawn(async move {
-        let mut lines = BufReader::new(out).lines();
-        while let Ok(Some(l)) = lines.next_line().await {
-            j1.log(l).await;
-        }
-    });
-    let t2 = tokio::spawn(async move {
-        let mut tail = Vec::new();
-        let mut lines = BufReader::new(err).lines();
-        while let Ok(Some(l)) = lines.next_line().await {
-            j2.log(l.clone()).await;
-            tail.push(l);
-            if tail.len() > 8 {
-                tail.remove(0);
+    // The last lines of both streams: tools such as yarn print their errors
+    // to stdout.
+    let tail = Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()));
+    let follow = |stream: Box<dyn tokio::io::AsyncRead + Unpin + Send>| {
+        let (job, tail) = (job.clone(), tail.clone());
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(stream).lines();
+            while let Ok(Some(l)) = lines.next_line().await {
+                {
+                    let mut t = tail.lock().unwrap();
+                    t.push_back(l.clone());
+                    if t.len() > 8 {
+                        t.pop_front();
+                    }
+                }
+                job.log(l).await;
             }
-        }
-        tail.join("\n")
-    });
+        })
+    };
+    let (t1, t2) = (follow(Box::new(out)), follow(Box::new(err)));
     let status = child.wait().await?;
-    let _ = t1.await;
-    let tail = t2.await.unwrap_or_default();
+    let _ = tokio::join!(t1, t2);
+    let tail = tail.lock().unwrap().iter().cloned().collect::<Vec<_>>().join("\n");
     if !status.success() {
         anyhow::bail!(
             "`{shown}` failed{}",
@@ -408,7 +409,7 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
             // The shared stack's own orca.yaml hooks, as for any stack Orca starts.
             let compose_str = compose.to_string_lossy().to_string();
             let working_dir = compose.parent().unwrap_or(dir).to_string_lossy().to_string();
-            for h in crate::api::run_stack_hooks_from(state, dir, &working_dir, Some(&compose_str)).await {
+            for h in crate::api::run_stack_hooks_from(state, dir, &working_dir, Some(&compose_str), Some(&name)).await {
                 if h.get("success").and_then(|v| v.as_bool()) == Some(false) {
                     job.log(format!(
                         "Hook failed: {}\n{}",

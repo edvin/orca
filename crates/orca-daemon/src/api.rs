@@ -4815,16 +4815,18 @@ fn parse_orca_yaml_hooks(dir: &std::path::Path) -> Vec<String> {
 /// Run a stack's `after_up` hooks in order. A failing hook is reported and
 /// the rest still run: the stack itself is up.
 pub(crate) async fn run_stack_hooks(state: &AppState, dir: &str, config: Option<&str>) -> Vec<serde_json::Value> {
-    run_stack_hooks_from(state, std::path::Path::new(dir), dir, config).await
+    run_stack_hooks_from(state, std::path::Path::new(dir), dir, config, None).await
 }
 
-/// As [`run_stack_hooks`], with the orca.yaml in `yaml_dir` for a stack whose
-/// compose working directory is `dir` (a compose file in a subfolder).
+/// As [`run_stack_hooks`], with the orca.yaml in `yaml_dir`. With `project`,
+/// the stack's containers are those of that compose project, wherever they
+/// were created from (a workspace taking over another folder's containers).
 pub(crate) async fn run_stack_hooks_from(
     state: &AppState,
     yaml_dir: &std::path::Path,
     dir: &str,
     config: Option<&str>,
+    project: Option<&str>,
 ) -> Vec<serde_json::Value> {
     let hooks = parse_orca_yaml_hooks(yaml_dir);
     let rt = state.rt().await;
@@ -4834,11 +4836,14 @@ pub(crate) async fn run_stack_hooks_from(
         .await
         .unwrap_or_default()
         .into_iter()
-        .filter(|c| {
-            c.labels
-                .get("com.docker.compose.project.working_dir")
-                .map(String::as_str)
-                == Some(dir)
+        .filter(|c| match project {
+            Some(p) => c.labels.get("com.docker.compose.project").map(String::as_str) == Some(p),
+            None => {
+                c.labels
+                    .get("com.docker.compose.project.working_dir")
+                    .map(String::as_str)
+                    == Some(dir)
+            }
         })
         .filter_map(|c| c.labels.get("com.docker.compose.service").cloned())
         .collect();
