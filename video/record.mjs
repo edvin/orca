@@ -127,6 +127,7 @@ async function renderLabel(o) {
   return label;
 }
 let currentLabel = null;
+let currentLayout = null;
 
 const page = await context.newPage();
 page.on("pageerror", (e) => console.log("  [page error]", e.message));
@@ -167,7 +168,12 @@ function sceneApi(scene, rec) {
     stage,
     sleep,
     // Windows glide into place; wait for them before clicking in them.
-    layout: async (name) => { await stage("layout", name); await sleep(1000); },
+    layout: async (name) => {
+      if (currentLayout === name) return;
+      currentLayout = name;
+      await stage("layout", name);
+      await sleep(1000);
+    },
     card: (o) => stage("card", o),
     // Labels aren't recorded into the frames: the build lays them over the
     // scene, so the cold open can cut from clean footage.

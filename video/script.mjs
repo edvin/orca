@@ -72,6 +72,7 @@ export default [
     say: "Every container on your machine, live: its stats, its logs as they happen, and a shell inside it, one click away.",
     tail: 1.2,
     async run(s) {
+      await s.layout("app");
       await s.lower({ n: "2", title: "Every container, live", sub: "Stats, logs and a shell" });
       await s.open("Containers");
       await s.sleep(1500);
