@@ -80,7 +80,13 @@ A route maps a hostname, and optionally a path, to a container and a port. The *
 
 ### Added by hand
 
-On the Gateway page, **Add route** asks for a hostname, an optional path, a container and the **Container port** (the port the app listens on inside the container). On the **Containers** page and a container's detail page, **Expose via gateway** does the same for that container. When the gateway runs, **Suggested routes** lists containers with exposed ports that aren't routed yet.
+On the Gateway page, **Add route** asks for a hostname, an optional path, a container and the **Container port** (the port the app listens on inside the container). On the **Containers** page and a container's detail page, **Expose via gateway** does the same for that container. When the gateway runs, **Suggested routes** lists containers with web pages that aren't routed yet.
+
+Each port in a suggestion says what it is when Orca knows, from the image and the port number: `:8123 ClickHouse HTTP`, `:5432 PostgreSQL`. A blue dot marks a web page, which the gateway can serve. A hollow dot marks anything else. A run of ports, such as a TURN server's relay range, shows as one label: `:49160–49200 relay ports`. **Add to Gateway** routes to the first web port.
+
+**Check** asks a suggestion's ports what they are. It connects to each port the container publishes on your computer, and names a web page by its title, or anything else by its protocol, such as PostgreSQL, Redis, SMTP or SSH. Orca only checks when you click it, and remembers the answer until the app restarts.
+
+Containers with no web ports, such as databases, are listed under **Other services**, with the address to reach them on your computer, such as `localhost:5432`.
 
 From the command line, give the full hostname:
 

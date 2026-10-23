@@ -11,7 +11,76 @@ use crate::state::AppState;
 
 const CADDY_IMAGE: &str = "caddy:2-alpine";
 pub const CADDY_CONTAINER: &str = "orca-gateway";
+/// Caddy's admin API port inside the gateway container.
 const CADDY_ADMIN_PORT: u16 = 2019;
+
+/// The port on this computer that reaches the gateway's admin API: 2019, or
+/// `ORCA_GATEWAY_ADMIN_PORT` so two Orcas on one computer (such as the video's
+/// demo machine) don't share one.
+fn admin_port() -> u16 {
+    std::env::var("ORCA_GATEWAY_ADMIN_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(CADDY_ADMIN_PORT)
+}
+
+fn admin_url(path: &str) -> String {
+    format!("http://127.0.0.1:{}{path}", admin_port())
+}
+
+/// Marks the Caddy config this Orca pushes (`@id` on the landing route), so
+/// it never takes another Caddy on the admin port for its own gateway. It
+/// follows the certificates folder, which is per user and per Orca.
+fn instance_id() -> String {
+    // FNV-1a: the same across Orca versions, unlike std's hasher.
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in certs_dir().to_string_lossy().bytes() {
+        h = (h ^ b as u64).wrapping_mul(0x100000001b3);
+    }
+    format!("orca-gateway-{h:016x}")
+}
+
+/// Whose Caddy answers on the admin port.
+#[derive(Debug, PartialEq)]
+enum AdminOwner {
+    /// This Orca's gateway.
+    Ours,
+    /// Another Orca's gateway, or a Caddy someone runs themselves.
+    Other,
+    /// A gateway started by an Orca from before the config was marked; it
+    /// can only be this Orca's own, since it was already running.
+    Unmarked,
+}
+
+async fn admin_owner(client: &reqwest::Client) -> Result<AdminOwner> {
+    let ours = client.get(admin_url(&format!("/id/{}", instance_id()))).send().await?;
+    if ours.status().is_success() {
+        return Ok(AdminOwner::Ours);
+    }
+    let config = client
+        .get(admin_url("/config/"))
+        .send()
+        .await?
+        .text()
+        .await
+        .unwrap_or_default();
+    // A marked config that isn't ours is another Orca's.
+    Ok(if config.contains(r#""@id":"#) {
+        AdminOwner::Other
+    } else if config.contains("\"file_server\"") && config.contains("/certs") {
+        AdminOwner::Unmarked
+    } else {
+        AdminOwner::Other
+    })
+}
+
+fn admin_port_taken() -> anyhow::Error {
+    anyhow::anyhow!(
+        "Port {} on this computer is used by another Caddy server: another Orca's gateway, or one you run yourself. \
+         Orca uses that port to configure its gateway. Stop the other one, then start the gateway again.",
+        admin_port()
+    )
+}
 
 /// HTML-entity-escape a user-supplied string for safe insertion into
 /// the landing page's HTML. We render stack-link names, hostnames,
@@ -114,6 +183,15 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
         tracing::warn!("Port conflicts detected: {}", conflicts.join(", "));
     }
 
+    // Nothing of ours is running, so whatever answers on the admin port
+    // belongs to someone else, and would be sent this gateway's config.
+    let probe = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()?;
+    if probe.get(admin_url("/config/")).send().await.is_ok() {
+        return Err(admin_port_taken());
+    }
+
     // Pull the Caddy image if not present
     pull_if_needed(state, CADDY_IMAGE)
         .await
@@ -159,7 +237,7 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
             },
             PortMapping {
                 host_ip: Some("127.0.0.1".to_string()),
-                host_port: CADDY_ADMIN_PORT,
+                host_port: admin_port(),
                 container_port: CADDY_ADMIN_PORT,
                 protocol: "tcp".to_string(),
             },
@@ -738,6 +816,7 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     // Every path gets index.html: /certs also holds private keys, the Caddy
     // config and the access log, none of which may be served.
     let landing_route = serde_json::json!({
+        "@id": instance_id(),
         "handle": [
             {"handler": "rewrite", "uri": "/index.html"},
             {"handler": "file_server", "root": "/certs"}
@@ -825,33 +904,34 @@ fn wake_page(route: &orca_core::config::GatewayRoute) -> String {
     )
 }
 
-/// Wait for the Caddy admin API to be ready.
+/// Wait for the Caddy admin API to be ready, with this gateway's config
+/// (the one written to `caddy.json`) loaded.
 async fn wait_for_caddy_ready() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(2))
         .build()?;
 
+    let mut other = false;
     for attempt in 1..=20 {
-        match client
-            .get(format!("http://127.0.0.1:{CADDY_ADMIN_PORT}/config/"))
-            .send()
-            .await
-        {
-            Ok(resp) if resp.status().is_success() || resp.status().as_u16() == 404 => {
+        match admin_owner(&client).await {
+            Ok(AdminOwner::Ours) => {
                 tracing::info!("Caddy admin API ready (attempt {attempt})");
                 return Ok(());
             }
-            Ok(resp) => {
-                tracing::debug!("Caddy admin API attempt {attempt}/20: HTTP {}", resp.status());
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            Ok(owner) => {
+                other = true;
+                tracing::debug!("Caddy admin API attempt {attempt}/20: answered by {owner:?}");
             }
             Err(e) => {
                 tracing::debug!("Caddy admin API attempt {attempt}/20: connection error: {e}");
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
         }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
+    if other {
+        return Err(admin_port_taken());
+    }
     anyhow::bail!("Caddy admin API did not become ready within 10 seconds")
 }
 
@@ -868,17 +948,37 @@ pub async fn push_caddy_config_with_k8s(config: &GatewayConfig, k8s_routes: &[(S
         .timeout(std::time::Duration::from_secs(5))
         .build()?;
 
-    let resp = client
-        .post(format!("http://127.0.0.1:{CADDY_ADMIN_PORT}/load"))
-        .header("Content-Type", "application/json")
-        .body(caddy_json)
-        .send()
+    // Never hand this gateway's routes to someone else's Caddy.
+    if admin_owner(&client)
         .await
-        .context("Failed to push config to Caddy")?;
+        .context("Failed to reach the gateway's Caddy")?
+        == AdminOwner::Other
+    {
+        return Err(admin_port_taken());
+    }
 
-    if !resp.status().is_success() {
+    // A certificate written a moment ago can take a moment to show up in
+    // the container (the VM's file sharing), so a failed load is retried.
+    let mut attempt = 1;
+    loop {
+        let resp = client
+            .post(admin_url("/load"))
+            .header("Content-Type", "application/json")
+            .body(caddy_json.clone())
+            .send()
+            .await
+            .context("Failed to push config to Caddy")?;
+        if resp.status().is_success() {
+            break;
+        }
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
+        if attempt < 3 && status == reqwest::StatusCode::BAD_REQUEST && body.contains("no such file") {
+            tracing::debug!("Caddy config push attempt {attempt}: {body}");
+            attempt += 1;
+            tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+            continue;
+        }
         anyhow::bail!(
             "Caddy config push failed (HTTP {}): {}",
             status,
@@ -960,6 +1060,18 @@ mod tests {
     }
 
     // ---- build_caddy_config tests ----
+
+    #[test]
+    fn config_is_marked_as_this_orcas() {
+        let caddy: serde_json::Value = serde_json::from_str(&build_caddy_config(&make_config(vec![]), &[])).unwrap();
+        let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
+            .as_array()
+            .unwrap();
+        let ids: Vec<_> = routes.iter().filter_map(|r| r["@id"].as_str()).collect();
+        // Exactly one: Caddy refuses a config with an @id used twice.
+        assert_eq!(ids, [instance_id()]);
+        assert_eq!(instance_id(), instance_id());
+    }
 
     #[test]
     fn test_build_caddy_config_empty_routes() {

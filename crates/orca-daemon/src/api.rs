@@ -235,6 +235,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/containers/{id}/files", get(container_list_files))
         .route("/containers/{id}/file", get(container_read_file))
         .route("/containers/{id}/rename", post(rename_container))
+        .route("/containers/{id}/probe-ports", post(probe_container_ports))
         .route("/containers/{id}/commit", post(commit_container))
         .route("/containers/{id}/export/tar", get(export_container_tar))
         // Registries
@@ -619,6 +620,23 @@ async fn rename_container(
         .ok_or_else(|| anyhow::anyhow!("Missing 'name' field"))?;
     state.rt().await.rename_container(&id, name).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// What the container's published ports speak: connects to each one, so
+/// only on request.
+async fn probe_container_ports(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let rt = state.rt().await;
+    let containers = rt.list_containers(true).await?;
+    let container = containers
+        .iter()
+        .find(|c| c.id == id || c.name == id)
+        .ok_or_else(|| anyhow::anyhow!("No container named {id}"))?;
+    Ok(Json(
+        crate::port_probe::probe(rt.host.as_deref(), &container.ports).await,
+    ))
 }
 
 // --- Container Update (resource limits) ---

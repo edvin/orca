@@ -47,6 +47,8 @@ async function injectTauriBridge(page: Page) {
           subscribe_events: () => Promise.resolve({}),
           // Containers
           list_containers: () => fetchJson(DAEMON +"/containers"),
+          probe_container_ports: () => fetch(DAEMON + "/containers/" + encodeURIComponent(args.id) + "/probe-ports", { method: "POST", headers: AUTH })
+            .then(r => r.json()),
           container_stats: () => fetchJson(DAEMON +"/containers/" + (args?.id || "") + "/stats")
             .catch(() => ({ cpu_percent: 0, memory_usage_bytes: 0, memory_limit_bytes: 0 })),
           container_logs: () => fetch(DAEMON +"/containers/" + args.id + "/logs?follow=false&tail=" + (args.tail || 100), { headers: AUTH })

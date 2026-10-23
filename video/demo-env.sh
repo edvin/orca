@@ -79,7 +79,7 @@ daemon_up() {
   mkdir -p "$DEMO_HOME/.docker"
   # Its own HOME, but your Docker CLI plugins (compose, buildx).
   [ -e "$DEMO_HOME/.docker/cli-plugins" ] || ln -s "$HOME/.docker/cli-plugins" "$DEMO_HOME/.docker/cli-plugins"
-  HOME="$DEMO_HOME" nohup "$DAEMON" --port "$PORT" >"$DEMO_HOME/daemon.log" 2>&1 &
+  HOME="$DEMO_HOME" ORCA_GATEWAY_ADMIN_PORT=2029 nohup "$DAEMON" --port "$PORT" >"$DEMO_HOME/daemon.log" 2>&1 &
   echo $! >"$PIDFILE"
   i=0
   until curl -sf "http://127.0.0.1:$PORT/api/v1/health" >/dev/null; do

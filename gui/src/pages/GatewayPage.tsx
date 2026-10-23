@@ -12,7 +12,12 @@ import { safeHref } from "../lib/sanitize";
 import LandingPageTab from "../components/gateway/LandingPageTab";
 import AppIcon from "../components/AppIcon";
 import { iconForImage, iconSrc } from "../lib/icons";
+import { portGroups, routablePort, type PortProbe } from "../lib/ports";
+import PortChips from "../components/PortChips";
 import "../styles/polish-a.css";
+
+/** Port chips shown on a suggested route before "+N more". */
+const MAX_SUGGESTED_PORTS = 3;
 
 interface GatewayPageProps {
   onNavigate?: (target: string) => void;
@@ -248,6 +253,27 @@ export default function GatewayPage(props: GatewayPageProps) {
     });
   };
 
+  // What each suggested container's ports speak, once someone asks: checking
+  // connects to every port, so it's never done unasked. Kept for the session.
+  const [probes, setProbes] = createSignal<Record<string, PortProbe[]>>({});
+  const [checking, setChecking] = createSignal<string[]>([]);
+  const groupsOf = (c: Container) => portGroups(c.image, c.ports, probes()[c.id]);
+  const webSuggestions = () => suggestions().filter((c) => routablePort(groupsOf(c)) !== undefined);
+  const otherServices = () => suggestions().filter((c) => routablePort(groupsOf(c)) === undefined);
+  const [showOther, setShowOther] = createSignal(false);
+
+  const checkContainerPorts = async (c: Container) => {
+    setChecking((ids) => [...ids, c.id]);
+    try {
+      const result = await invoke<PortProbe[]>("probe_container_ports", { id: c.id });
+      setProbes((p) => ({ ...p, [c.id]: result }));
+    } catch (e) {
+      showToast(`Couldn't check the ports: ${e}`, "error");
+    } finally {
+      setChecking((ids) => ids.filter((id) => id !== c.id));
+    }
+  };
+
   const fetchContainers = async () => {
     try {
       const [c, s] = await Promise.all([
@@ -261,7 +287,7 @@ export default function GatewayPage(props: GatewayPageProps) {
 
   const quickAdd = async (c: Container) => {
     const hostname = suggestHostname(c.name);
-    const port = c.ports[0]?.container_port || 80;
+    const port = routablePort(groupsOf(c)) ?? (Math.min(...c.ports.map((p) => p.container_port)) || 80);
     const domain = status()?.domain || "localhost";
     try {
       await invoke("gateway_add_route", { hostname: `${hostname}.${domain}`, containerName: c.name, port });
@@ -1057,12 +1083,14 @@ export default function GatewayPage(props: GatewayPageProps) {
         </Show>
 
         {/* Suggested Routes */}
-        <Show when={status()?.running && suggestions().length > 0}>
+        <Show when={status()?.running && webSuggestions().length > 0}>
           <div style={{ "margin-top": "20px" }}>
             <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", "margin-bottom": "4px" }}>Suggested routes</h3>
-            <p style={{ color: "#6e7681", "font-size": "12px", "margin-bottom": "12px" }}>Containers with exposed ports not yet in the gateway</p>
+            <p style={{ color: "#6e7681", "font-size": "12px", "margin-bottom": "12px" }}>
+              Containers with web pages not yet in the gateway. <span style={{ color: "#58a6ff" }}>●</span> is a web page, <span style={{ color: "#6e7681" }}>○</span> something else; <b style={{ "font-weight": "500", color: "#8b949e" }}>Check</b> asks the ports themselves.
+            </p>
             <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
-              <For each={suggestions()}>
+              <For each={webSuggestions()}>
                 {(container) => (
                   <div style={{
                     padding: "12px 16px",
@@ -1075,23 +1103,21 @@ export default function GatewayPage(props: GatewayPageProps) {
                     "min-height": "48px",
                   }}>
                     <div style={{ flex: "1", "min-width": "0" }}>
-                      <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3" }}>{container.name}</div>
+                      <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{container.name}</div>
                       <div style={{ "font-size": "12px", color: "#8b949e", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{container.image}</div>
                     </div>
-                    <div style={{ display: "flex", gap: "4px", "flex-wrap": "wrap", "flex-shrink": "0" }}>
-                      <For each={[...new Set(container.ports.map((p) => p.container_port))]}>
-                        {(port) => (
-                          <span class="mono" style={{
-                            color: "#8b949e",
-                            "font-size": "11px",
-                            background: "#161b22",
-                            padding: "1px 6px",
-                            "border-radius": "4px",
-                            "border": "1px solid #30363d",
-                          }}>:{port}</span>
-                        )}
-                      </For>
-                    </div>
+                    <PortChips groups={groupsOf(container)} max={MAX_SUGGESTED_PORTS} />
+                    <Show when={!probes()[container.id]}>
+                      <button
+                        class="btn btn-sm"
+                        title="Connect to each port to see what it is"
+                        disabled={checking().includes(container.id)}
+                        onClick={() => checkContainerPorts(container)}
+                        style={{ "flex-shrink": "0", "white-space": "nowrap", "font-size": "12px", padding: "4px 10px" }}
+                      >
+                        {checking().includes(container.id) ? "Checking…" : "Check"}
+                      </button>
+                    </Show>
                     <button class="btn btn-sm btn-primary" onClick={() => quickAdd(container)} style={{ "flex-shrink": "0", "white-space": "nowrap", "font-size": "12px", padding: "4px 12px" }}>
                       Add to Gateway
                     </button>
@@ -1115,6 +1141,38 @@ export default function GatewayPage(props: GatewayPageProps) {
                 )}
               </For>
             </div>
+          </div>
+        </Show>
+
+        {/* Containers whose ports aren't web pages: nothing for the gateway, but where to reach them */}
+        <Show when={status()?.running && otherServices().length > 0}>
+          <div style={{ "margin-top": "14px" }}>
+            <button
+              onClick={() => setShowOther((v) => !v)}
+              style={{ background: "none", border: "none", padding: "0", cursor: "pointer", color: "#8b949e", "font-size": "12px" }}
+            >
+              {showOther() ? "▾" : "▸"} Other services ({otherServices().length}): databases and other ports that aren't web pages
+            </button>
+            <Show when={showOther()}>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "4px", "margin-top": "8px" }}>
+                <For each={otherServices()}>
+                  {(container) => {
+                    const reach = () => groupsOf(container).find((g) => g.hostPort && !g.to);
+                    return (
+                      <div style={{ display: "flex", "align-items": "center", gap: "12px", padding: "8px 16px", "border-radius": "8px", background: "rgba(22,27,34,0.35)" }}>
+                        <div style={{ flex: "1", "min-width": "0", "font-size": "12px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                          <span style={{ color: "#e6edf3", "font-weight": "500" }}>{container.name}</span>
+                          <Show when={reach()}>
+                            {(g) => <span style={{ color: "#6e7681" }}> · reach it at <span class="mono">localhost:{g().hostPort}</span></span>}
+                          </Show>
+                        </div>
+                        <PortChips groups={groupsOf(container)} max={MAX_SUGGESTED_PORTS} />
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </Show>
           </div>
         </Show>
 

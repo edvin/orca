@@ -68,6 +68,7 @@ pub fn run() {
             commands::exec_container,
             commands::remove_container,
             commands::rename_container,
+            commands::probe_container_ports,
             commands::update_container,
             commands::export_docker_run,
             commands::export_compose,

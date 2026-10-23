@@ -90,6 +90,7 @@ Orca connects to these places, besides the hosts you add:
 | Container registries | When you pull an image. Image scanning also pulls the Trivy image and its vulnerability database. |
 | `get.docker.com`, `get.k3s.io` and similar installers | When you ask Orca to set up Docker or [Kubernetes](/docs/kubernetes/). |
 | Your AI provider | When you use the AI assistant. |
+| Your containers' published ports | When you click **Check** on a suggested gateway route, to see what each port is. On your computer, or on the Docker host for a remote engine. |
 | GitHub or Docker Hub, inbound | Webhooks you've configured for push to deploy. |
 
 ## The AI assistant

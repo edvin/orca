@@ -19,6 +19,7 @@ mod gateway;
 mod gateway_sync;
 mod landing;
 mod local_ai;
+mod port_probe;
 mod project_config;
 mod secrets;
 mod stack_files;

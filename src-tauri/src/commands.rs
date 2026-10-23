@@ -383,6 +383,12 @@ pub async fn inspect_container(id: String) -> Result<serde_json::Value, String> 
     get_json(&format!("/containers/{}", urlencoding::encode(&id))).await
 }
 
+/// What a container's published ports speak (connects to each: on request only).
+#[tauri::command]
+pub async fn probe_container_ports(id: String) -> Result<serde_json::Value, String> {
+    post_json(&format!("/containers/{}/probe-ports", urlencoding::encode(&id))).await
+}
+
 #[tauri::command]
 pub async fn container_stats(id: String) -> Result<serde_json::Value, String> {
     get_json(&format!("/containers/{}/stats", urlencoding::encode(&id))).await
