@@ -439,7 +439,17 @@ export default function App() {
       const exitCode = typeof exitCodeRaw === "number" ? exitCodeRaw : Number.parseInt(String(exitCodeRaw ?? ""), 10);
       const oomKilled = data.oom_killed === true || attrs.oomKilled === "true";
 
-      if (eventType === "container.died" || eventType === "die" || eventType === "ContainerDied") {
+      // Docker says "died" for every stop. Speak up only when something went
+      // wrong: out of memory, or a crash, not a stop (0, or 143/137 from
+      // SIGTERM/SIGKILL) and never Orca's own containers (the gateway
+      // restarts when its domain or certificate changes).
+      const ownContainer = name.startsWith("orca-") || attrs["orca.managed"] === "true";
+      const stopped = exitCode === 0 || exitCode === 143 || exitCode === 137;
+      if (
+        (eventType === "container.died" || eventType === "die" || eventType === "ContainerDied") &&
+        !ownContainer &&
+        (oomKilled || !stopped)
+      ) {
         const title = oomKilled
           ? `Container '${containerLabel}' ran out of memory`
           : `Container '${containerLabel}' exited`;

@@ -606,14 +606,17 @@ const PAGE: &str = r##"<!DOCTYPE html>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:#e6edf3;min-height:100vh;
   background:radial-gradient(900px 500px at 20% -10%,rgba(31,111,235,.16),transparent 70%),radial-gradient(700px 500px at 100% 100%,rgba(163,113,247,.10),transparent 70%),#0a0e14;
-  -webkit-font-smoothing:antialiased}
-.shell{max-width:960px;margin:0 auto;padding:56px 24px 48px}
-header{text-align:center;margin-bottom:36px}
-h1{font-size:30px;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,#fff,#58a6ff 55%,#a371f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.sub{color:#8b949e;font-size:14px;margin-top:8px}
-.stats{display:flex;justify-content:center;gap:8px;margin-top:20px;flex-wrap:wrap}
-.stat{background:rgba(22,27,34,.6);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:8px 18px;display:flex;align-items:baseline;gap:6px}
-.stat b{font-size:17px}.stat span{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.6px}
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+.shell{max-width:1040px;margin:0 auto;padding:0 24px 48px}
+header{position:sticky;top:0;z-index:5;margin:0 calc(50% - 50vw) 26px;padding:14px 24px;background:rgba(10,14,20,.8);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.06)}
+.top{display:flex;align-items:center;gap:22px;max-width:992px;margin:0 auto}
+.brand{min-width:0;flex-shrink:0}
+.find{flex:1;min-width:0}
+h1{font-size:19px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;background:linear-gradient(135deg,#fff,#58a6ff 55%,#a371f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.sub{color:#8b949e;font-size:12px;margin-top:2px;white-space:nowrap}
+.stats{display:flex;gap:6px;flex-shrink:0}
+.stat{background:rgba(22,27,34,.6);border:1px solid rgba(255,255,255,.06);border-radius:9px;padding:6px 12px;display:flex;align-items:baseline;gap:6px}
+.stat b{font-size:15px}.stat span{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.6px}
 .tabs{display:flex;gap:4px;padding:3px;margin:0 auto 24px;width:fit-content;background:rgba(22,27,34,.5);border:1px solid rgba(255,255,255,.05);border-radius:12px}
 .tab{background:none;border:1px solid transparent;border-radius:9px;padding:7px 18px;color:#8b949e;font:600 13px inherit;cursor:pointer}
 .tab:hover{color:#e6edf3}.tab.active{background:rgba(88,166,255,.12);border-color:rgba(88,166,255,.25);color:#58a6ff}
@@ -639,17 +642,19 @@ a.card:focus-visible{outline:2px solid #58a6ff;outline-offset:2px}
 code{font:12px "SF Mono",ui-monospace,Menlo,monospace;background:rgba(88,166,255,.1);color:#58a6ff;padding:1px 5px;border-radius:4px}
 footer{text-align:center;margin-top:44px;font-size:12px;color:#484f58}footer a{color:#6e7681;text-decoration:none}
 [hidden]{display:none!important}
-.search{position:relative;max-width:580px;margin:26px auto 0;display:flex;align-items:center;gap:10px;padding:0 14px 0 16px;height:52px;border-radius:16px;
+.search{position:relative;display:flex;align-items:center;gap:10px;padding:0 12px 0 14px;height:42px;border-radius:12px;
   background:rgba(13,17,23,.75);border:1px solid rgba(255,255,255,.09);box-shadow:0 10px 40px -12px rgba(0,0,0,.6);transition:border-color .15s,box-shadow .15s}
 .search:focus-within{border-color:rgba(88,166,255,.55);box-shadow:0 0 0 4px rgba(88,166,255,.12),0 10px 40px -12px rgba(0,0,0,.6)}
 .search svg{width:18px;height:18px;flex-shrink:0;fill:none;stroke:#6e7681;stroke-width:2;stroke-linecap:round}
 .search:focus-within svg{stroke:#58a6ff}
-.search input{flex:1;min-width:0;height:100%;background:none;border:0;outline:0;color:#e6edf3;font:16px inherit}
+.search input{flex:1;min-width:0;height:100%;background:none;border:0;outline:0;color:#e6edf3;font:15px inherit}
 .search input::placeholder{color:#6e7681}
 .search input::-webkit-search-cancel-button{-webkit-appearance:none}
 .search kbd,.hint kbd{font:11px "SF Mono",ui-monospace,Menlo,monospace;color:#8b949e;border:1px solid rgba(255,255,255,.12);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:rgba(255,255,255,.03)}
 .search:focus-within kbd,.search.typed kbd{display:none}
-.hint{min-height:20px;margin-top:10px;font-size:12.5px;color:#8b949e;display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+.hint{font-size:12.5px;color:#8b949e;display:flex;gap:16px;flex-wrap:wrap;padding-left:4px}
+.hint:not(:empty){margin-top:8px}
+@media(max-width:760px){.top{flex-wrap:wrap;gap:12px}.find{order:3;flex-basis:100%}.stats{margin-left:auto}}
 .hint span{display:inline-flex;align-items:center;gap:6px}.hint b{color:#e6edf3;font-weight:600}
 .card.sel{border-color:rgba(88,166,255,.7);box-shadow:0 0 0 3px rgba(88,166,255,.16);transform:translateY(-2px)}
 mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
@@ -661,7 +666,7 @@ mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
 </head>
 <body>
 <div class="shell">
-<header><h1>{title}</h1><p class="sub">{subtitle}</p>{search}<div class="stats" id="stats">{stats}</div></header>
+<header><div class="top"><div class="brand"><h1>{title}</h1><p class="sub">{subtitle}</p></div><div class="find">{search}</div><div class="stats" id="stats">{stats}</div></div></header>
 <main id="content">{tabs}{panels}</main>
 <div class="nores" id="nores" hidden></div>
 <footer>Served by <a href="https://orca-desktop.com">Orca Desktop</a></footer>

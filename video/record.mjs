@@ -208,6 +208,7 @@ function sceneApi(scene, rec) {
     async typeKeys(text, { delay = 80 } = {}) {
       await s.click(".xterm", { wait: 300 });
       await page.keyboard.type(text, { delay });
+      await unscrollApp();
     },
     async press(key, { where = "app" } = {}) {
       const frame = page.frame({ url: where === "site" ? /acme\.localhost/ : new RegExp(`:${GUI_PORT}/`) });
@@ -299,6 +300,12 @@ function sceneApi(scene, rec) {
   return s;
 }
 
+/** The app's own page never scrolls (its panes do); clicking into a
+ *  terminal can nudge it, so put it back. */
+async function unscrollApp() {
+  await app().locator("html").evaluate(() => { document.documentElement.scrollTop = 0; document.body.scrollTop = 0; window.scrollTo(0, 0); }).catch(() => {});
+}
+
 /** One line for a tool result in the terminal. */
 function summarize(text) {
   try {
@@ -361,6 +368,7 @@ for (const scene of scenes) {
   sink = rec;
   // A fresh frame at the start, even if nothing moves.
   await page.evaluate(() => document.body.style.setProperty("--tick", Math.random()));
+  await unscrollApp();
   const s = sceneApi(scene, rec);
   try {
     await scene.run(s);

@@ -11,19 +11,18 @@ const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const LOGO = "data:image/png;base64," + fs.readFileSync(path.join(ROOT, "../site/assets/img/logo-tile.png")).toString("base64");
 
 /**
- * The first seconds: quick cuts of the best moments, from highlights the
+ * The first seconds: a cut for each part of one line, from highlights the
  * scenes mark (`s.highlight()`, and Claude's own: claude-typing,
- * claude-asked, claude-working), under one line. Each cut starts `from`
- * seconds after its highlight; the cuts share the line's length.
+ * claude-asked, claude-working). Each cut shows when the line reaches its
+ * `word`, from `from` seconds after its highlight.
  */
 export const coldOpen = {
-  say: "Open any project, and it's running, at its own address. See every container, live. Ask your AI for the rest, and when something breaks, it gets fixed.",
+  say: "Open any project, and it's running, at its own address. See every container, live. Ask your AI for the rest. And when something breaks, it gets fixed.",
   cuts: [
-    { scene: "folder", highlight: "running", from: 0.2 },
-    { scene: "containers", highlight: "logs", from: 0.8 },
-    { scene: "ask", highlight: "claude-working", from: 0.6 },
-    { scene: "landing", highlight: "search", from: 0.4 },
-    { scene: "fix", highlight: "fixed", from: 0.6 },
+    { word: "Open", scene: "folder", highlight: "running", from: -0.4 },
+    { word: "See", scene: "containers", highlight: "logs", from: 0.4 },
+    { word: "Ask", scene: "ask", highlight: "claude-working", from: 0.2 },
+    { word: "And", scene: "fix", highlight: "fixed", from: -2 },
   ],
 };
 
@@ -69,7 +68,7 @@ export default [
   },
   {
     id: "containers",
-    say: "Every container on your machine, live: its stats, its logs as they happen, and a shell inside it, one click away.",
+    say: "Every container on your machine, live: its stats, and its logs as they happen.",
     tail: 1.2,
     async run(s) {
       await s.layout("app");
@@ -131,7 +130,7 @@ export default [
       await s.lower({ n: "5", title: "Or just ask Claude", sub: "Through Orca's MCP server" });
       await s.layout("split");
       await s.claude("Spin up analytics and notes for me, and tell me where to find them.");
-      await s.say("Claude finds both projects in the workspace, sets them up, and hands back their addresses. And the app keeps up, the whole time.", { wait: true });
+      await s.say("Claude finds both projects in the workspace, sets them up, and hands back their addresses.", { wait: true });
     },
   },
   {

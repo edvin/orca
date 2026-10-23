@@ -155,8 +155,22 @@ async function buildColdOpen(at = 0) {
   const dir = path.join(OUT, "cold");
   fs.mkdirSync(dir, { recursive: true });
   const n = coldOpen.cuts.length;
-  const each = (coldLength + XFADE * (n - 1)) / n;
+  // Each cut starts as the line reaches its word (the first cut at once),
+  // overlapping the next by the crossfade.
+  const words = coldVoice.words.map((w) => w.word.replace(/[^\p{L}\p{N}']/gu, "").toLowerCase());
+  let from = 0;
+  const starts = coldOpen.cuts.map((c, i) => {
+    if (i === 0 || !c.word) return i === 0 ? 0 : null;
+    const k = words.indexOf(c.word.toLowerCase(), from);
+    if (k < 0) throw new Error(`cold open: the line has no "${c.word}" after cut ${i}`);
+    from = k + 1;
+    return 0.25 + coldVoice.words[k].start - XFADE / 2;
+  });
+  const even = coldLength / n;
+  starts.forEach((v, i) => (starts[i] = v ?? i * even));
+  const lengths = starts.map((st, i) => (i + 1 < n ? starts[i + 1] - st + XFADE : coldLength - st));
   const parts = coldOpen.cuts.map((c, i) => {
+    const each = lengths[i];
     const scene = JSON.parse(fs.readFileSync(path.join(OUT, "scenes", c.scene, "scene.json"), "utf8"));
     const mark = scene.marks.find((m) => m.kind === "highlight" && m.name === c.highlight);
     if (!mark) throw new Error(`cold open: no highlight "${c.highlight}" in scene ${c.scene}`);
@@ -171,7 +185,7 @@ async function buildColdOpen(at = 0) {
     return out;
   });
   let chain = "[0:v]fade=t=in:d=0.35[x0]";
-  for (let i = 1; i < n; i++) chain += `;[x${i - 1}][${i}:v]xfade=transition=fade:duration=${XFADE}:offset=${(i * (each - XFADE)).toFixed(3)}[x${i}]`;
+  for (let i = 1; i < n; i++) chain += `;[x${i - 1}][${i}:v]xfade=transition=fade:duration=${XFADE}:offset=${starts[i].toFixed(3)}[x${i}]`;
   const out = path.join(dir, "cold.mp4");
   ff(
     ...parts.flatMap((p) => ["-i", p]), "-i", coldVoice.file,
@@ -196,7 +210,8 @@ function caption(words, at) {
   for (const w of words) {
     if (line.length && line.map((x) => x.word).join(" ").length + w.word.length > 52) flush();
     line.push(w);
-    if (/[.,:;!?]$/.test(w.word) && line.map((x) => x.word).join(" ").length > 24) flush();
+    // A sentence ends a caption; a comma or colon does once there's enough.
+    if (/[.!?]$/.test(w.word) || (/[,:;]$/.test(w.word) && line.map((x) => x.word).join(" ").length > 24)) flush();
   }
   flush();
 }

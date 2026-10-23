@@ -4467,3 +4467,5 @@ tr.service-off td { opacity: 0.55; }
 .app-url-icon { display: inline-flex; align-items: center; gap: 6px; }
 .app-url-icon img { width: 14px; height: 14px; border-radius: 3px; }
 .command-item-img { width: 16px; height: 16px; border-radius: 4px; vertical-align: middle; }
+.app-card-open { font-size: 11.5px; color: #58a6ff; opacity: 0; transition: opacity 0.15s; white-space: nowrap; }
+.app-card:hover .app-card-open { opacity: 1; }

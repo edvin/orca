@@ -168,12 +168,13 @@ export default function AppsOverview(props: {
     const stopped = () => s.status === "Stopped" || s.status === "Empty";
     return (
       <div class="app-card" classList={{ stopped: stopped(), "is-hidden": hidden.has(s.name) }}
-        onClick={() => props.onNavigate?.(`stack:${s.name}`)} title={a.sub ? `${a.sub} · ${s.name}` : s.name}>
+        onClick={() => props.onNavigate?.(`stack:${s.name}`)} title={`${a.sub ? `${a.sub} · ` : ""}Open ${s.name} in Orca: its containers, logs and settings`}>
         <div class="app-card-head">
           <AppIcon src={iconSrc(a.icon) || stackIcon(s, props.routes)} name={a.title} size={26} />
           <b>{a.title}</b>
           <span class={`app-dot ${s.status.toLowerCase()}`} />
           <span class="app-card-count">{running(s)}/{s.services.length}</span>
+          <span class="app-card-open">Open →</span>
           <span class="app-card-actions">
             <button class="app-card-act" classList={{ on: pinned.has(s.name) }}
               title={pinned.has(s.name) ? "Unpin" : "Pin to the top"}
@@ -192,8 +193,8 @@ export default function AppsOverview(props: {
           }>
             <For each={urls().slice(0, 2)} fallback={<span class="app-card-none">No HTTPS route yet</span>}>
               {(u) => (
-                <button class="app-url" title={`Open ${u.url}`} onClick={(e) => { e.stopPropagation(); void openUrl(u.url); }}>
-                  {u.url.replace(/^https:\/\//, "")}
+                <button class="app-url" title={`Open ${u.url} in your browser`} onClick={(e) => { e.stopPropagation(); void openUrl(u.url); }}>
+                  {u.url.replace(/^https:\/\//, "")} ↗
                 </button>
               )}
             </For>
