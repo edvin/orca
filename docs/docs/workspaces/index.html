@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvknygu2">
+<link rel="stylesheet" href="/assets/site.css?v=mvko244a">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvknygu2" defer></script>
+<script src="/assets/site.js?v=mvko244a" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -160,7 +160,8 @@
 <p>Without a certificate in the workspace, Orca&#39;s own certificate authority signs the names. Each developer trusts it once (Orca does that on first start), and nothing secret is shared.</p>
 <h3 id="coming-from-a-reverse-proxy"><a class="anchor" href="#coming-from-a-reverse-proxy" aria-hidden="true" tabindex="-1">#</a>Coming from a reverse proxy</h3>
 <p>If your team already routes hostnames with HAProxy, such as a shared &quot;devproxy&quot; stack, Orca can turn its config into workspace routes:</p>
-<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> workspace</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> import-haproxy</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> haproxy.cfg</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> --domain</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> local.acme.dev</span></span></code></pre></div><p>It prints a <code>routes:</code> list to paste into the workspace file. Projects keep their compose files, network and aliases as they are: the gateway joins the workspace network and routes to the same aliases.</p>
+<div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> workspace</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> import-haproxy</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> haproxy.cfg</span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF"> --domain</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> local.acme.dev</span></span></code></pre></div><p>It prints a <code>routes:</code> list to paste into the workspace file, with each backend&#39;s <code>description</code> as the card title. Rules that aren&#39;t a plain &quot;this hostname goes to that backend&quot;, such as WebSocket special cases, hostname patterns or rules with several conditions, are listed as comments underneath, for you to look at by hand.</p>
+<p>Projects keep their compose files, network and aliases as they are: the gateway joins the workspace network and routes to the same aliases.</p>
 <h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>
 <ul>
 <li><a href="/docs/gateway/">Gateway</a>: domains, certificates and the landing page.</li>
