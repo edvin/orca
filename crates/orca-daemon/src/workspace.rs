@@ -916,9 +916,17 @@ struct ImportBody {
 /// POST /workspace/import-haproxy: routes for the workspace file from an
 /// HAProxy config (devproxy's), as YAML to paste.
 async fn import_haproxy(Json(body): Json<ImportBody>) -> Result<impl IntoResponse, ApiError> {
-    let routes = schema::routes_from_haproxy(&body.text, body.domain.as_deref());
-    let yaml = serde_yaml::to_string(&serde_json::json!({ "routes": routes })).unwrap_or_default();
-    Ok(Json(serde_json::json!({ "routes": routes, "yaml": yaml })))
+    let import = schema::routes_from_haproxy(&body.text, body.domain.as_deref());
+    let mut yaml = serde_yaml::to_string(&serde_json::json!({ "routes": import.routes })).unwrap_or_default();
+    if !import.skipped.is_empty() {
+        yaml.push_str("\n# Not imported: these rules need a look by hand (WebSocket special cases,\n# hostname patterns, several conditions).\n");
+        for line in &import.skipped {
+            yaml.push_str(&format!("#   {line}\n"));
+        }
+    }
+    Ok(Json(
+        serde_json::json!({ "routes": import.routes, "skipped": import.skipped, "yaml": yaml }),
+    ))
 }
 
 /// At startup: bring a joined workspace up to date (fast-forward only, never

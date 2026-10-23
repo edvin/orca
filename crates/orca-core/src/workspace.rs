@@ -386,13 +386,29 @@ fn valid_env_name(s: &str) -> bool {
         && !s.starts_with(|c: char| c.is_ascii_digit())
 }
 
-/// Turn an HAProxy config (devproxy's) into workspace routes: every
-/// `hdr(host)` rule that sends a hostname to a backend whose `server` is
-/// `alias:port`. Hostnames under `domain` are shortened to their label.
-pub fn routes_from_haproxy(cfg: &str, domain: Option<&str>) -> Vec<WorkspaceRoute> {
-    let mut acls: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut uses: Vec<(String, String)> = Vec::new();
+/// What an HAProxy config (devproxy's) becomes: workspace routes for every
+/// plain "this hostname goes to that backend" rule, and the rules that need
+/// a person to look at them (WebSocket special cases, regex or suffix
+/// hostnames, several conditions).
+#[derive(Debug, Default, Serialize)]
+pub struct HaproxyImport {
+    pub routes: Vec<WorkspaceRoute>,
+    pub skipped: Vec<String>,
+}
+
+/// Turn an HAProxy config into workspace routes. Hostnames under `domain`
+/// are shortened to their label; each backend's first `server alias:port`
+/// is the target, and its `description` the card title.
+pub fn routes_from_haproxy(cfg: &str, domain: Option<&str>) -> HaproxyImport {
+    enum Acl {
+        Hosts(Vec<String>),
+        /// A host match that isn't a plain list: a regex, prefix or suffix.
+        Pattern,
+    }
+    let mut acls: BTreeMap<String, Acl> = BTreeMap::new();
+    let mut rules: Vec<(String, Vec<String>, String)> = Vec::new();
     let mut servers: BTreeMap<String, String> = BTreeMap::new();
+    let mut titles: BTreeMap<String, String> = BTreeMap::new();
     let mut backend: Option<String> = None;
     for raw in cfg.lines() {
         let line = raw.split('#').next().unwrap_or("").trim();
@@ -400,24 +416,41 @@ pub fn routes_from_haproxy(cfg: &str, domain: Option<&str>) -> Vec<WorkspaceRout
         match words.as_slice() {
             ["backend", name, ..] => backend = Some(name.to_string()),
             ["frontend", ..] | ["listen", ..] | ["defaults", ..] | ["global", ..] => backend = None,
-            ["acl", name, rest @ ..]
-                if rest.iter().any(|w| {
-                    w.starts_with("hdr(host)") || w.starts_with("hdr_dom(host)") || w.starts_with("hdr_beg(host)")
-                }) =>
+            ["description", rest @ ..] if backend.is_some() => {
+                titles.insert(backend.clone().unwrap(), rest.join(" "));
+            }
+            ["acl", name, fetch, rest @ ..]
+                if fetch.contains("hdr(host)")
+                    || fetch.contains("hdr_dom(host)")
+                    || fetch.contains("hdr_beg(host)")
+                    || fetch.contains("hdr_end(host)") =>
             {
-                let hosts = rest
-                    .iter()
-                    .skip_while(|w| !w.starts_with("hdr"))
-                    .skip(1)
-                    .filter(|w| !w.starts_with('-'));
-                acls.entry(name.to_string())
-                    .or_default()
-                    .extend(hosts.map(|h| h.to_lowercase()));
+                let mut flags = Vec::new();
+                let mut values = Vec::new();
+                let mut it = rest.iter().peekable();
+                while let Some(w) = it.next() {
+                    match *w {
+                        "-m" => {
+                            if let Some(m) = it.next() {
+                                flags.push(m.to_string());
+                            }
+                        }
+                        "--" => {}
+                        w if w.starts_with('-') => {}
+                        w => values.push(w.to_lowercase()),
+                    }
+                }
+                let pattern = !fetch.ends_with("hdr(host)") || flags.iter().any(|f| f != "str");
+                let acl = if pattern { Acl::Pattern } else { Acl::Hosts(values) };
+                acls.insert(name.to_string(), acl);
             }
             ["use_backend", target, "if", conds @ ..] => {
-                for c in conds.iter().filter(|c| !matches!(**c, "or" | "||" | "!")) {
-                    uses.push((c.to_string(), target.to_string()));
-                }
+                let conds: Vec<String> = conds
+                    .iter()
+                    .filter(|c| !matches!(**c, "or" | "||"))
+                    .map(|c| c.to_string())
+                    .collect();
+                rules.push((target.to_string(), conds, line.to_string()));
             }
             ["server", _name, addr, ..] if backend.is_some() => {
                 servers
@@ -427,9 +460,22 @@ pub fn routes_from_haproxy(cfg: &str, domain: Option<&str>) -> Vec<WorkspaceRout
             _ => {}
         }
     }
-    let mut out: Vec<WorkspaceRoute> = Vec::new();
-    for (acl, target_backend) in uses {
-        let (Some(hosts), Some(addr)) = (acls.get(&acl), servers.get(&target_backend)) else {
+    let mut out = HaproxyImport::default();
+    for (target_backend, conds, line) in rules {
+        // Only rules about a hostname matter here.
+        let about_host = conds.iter().any(|c| acls.contains_key(c.trim_start_matches('!')));
+        if !about_host {
+            continue;
+        }
+        let hosts = match conds.as_slice() {
+            [c] => match acls.get(c) {
+                Some(Acl::Hosts(h)) => Some(h),
+                _ => None,
+            },
+            _ => None,
+        };
+        let (Some(hosts), Some(addr)) = (hosts, servers.get(&target_backend)) else {
+            out.skipped.push(line);
             continue;
         };
         let target = if addr.contains(':') {
@@ -438,17 +484,22 @@ pub fn routes_from_haproxy(cfg: &str, domain: Option<&str>) -> Vec<WorkspaceRout
             format!("{addr}:80")
         };
         for host in hosts {
-            let hostname = match domain.and_then(|d| host.strip_suffix(&format!(".{d}"))) {
-                Some(label) => label.to_string(),
+            let hostname = match domain {
+                Some(d) if host == d => continue, // the landing page itself
+                Some(d) => host
+                    .strip_suffix(&format!(".{d}"))
+                    .map(str::to_string)
+                    .unwrap_or_else(|| host.clone()),
                 None => host.clone(),
             };
             let route = WorkspaceRoute {
                 hostname,
                 target: target.clone(),
+                title: titles.get(&target_backend).cloned(),
                 ..Default::default()
             };
-            if check_route(&route).is_ok() && !out.iter().any(|r| r.hostname == route.hostname) {
-                out.push(route);
+            if check_route(&route).is_ok() && !out.routes.iter().any(|r| r.hostname == route.hostname) {
+                out.routes.push(route);
             }
         }
     }
@@ -609,19 +660,31 @@ projects:
     #[test]
     fn devproxy_haproxy_config_becomes_routes() {
         let cfg = r#"
-frontend https
-    bind *:443 ssl crt /certs/wildcard.pem
-    acl host_crm hdr(host) -i one-crm.local.groupone.dev
-    acl host_mail hdr(host) -i mail.local.groupone.dev mailpit.local.groupone.dev
-    use_backend crm if host_crm
-    use_backend mailpit if host_mail
+frontend http
+    acl hdr_connection_upgrade hdr(Connection) -i upgrade
+    acl is_tool_ws req.hdr(host) -i tool.local.groupone.dev
+    acl is_any_docs req.hdr(host) -m end -- -docs.local.groupone.dev
+    use_backend tool-reverb if hdr_connection_upgrade is_tool_ws
+    acl is_local req.hdr(host) -i local.groupone.dev
+    use_backend local if is_local
+    acl URI_crm req.hdr(host) -i one-crm.local.groupone.dev
+    acl URI_mail hdr(host) -i mail.local.groupone.dev mailpit.local.groupone.dev
+    use_backend crm if URI_crm
+    use_backend mailpit if URI_mail
+    use_backend docs if is_any_docs
 backend crm
+    description oneCRM App
     server one-crm-app one-crm-app:80 resolvers docker init-addr last,none
 backend mailpit
-    server mailpit mailpit:8025 check
+    server devproxy-mailpit devproxy-mailpit:8025
+backend tool-reverb
+    server reverb tool-reverb:8080
+backend local
+    server nginx devproxy-nginx:80
 "#;
-        let routes = routes_from_haproxy(cfg, Some("local.groupone.dev"));
-        let pairs: Vec<(&str, &str)> = routes
+        let import = routes_from_haproxy(cfg, Some("local.groupone.dev"));
+        let pairs: Vec<(&str, &str)> = import
+            .routes
             .iter()
             .map(|r| (r.hostname.as_str(), r.target.as_str()))
             .collect();
@@ -629,9 +692,15 @@ backend mailpit
             pairs,
             vec![
                 ("one-crm", "one-crm-app:80"),
-                ("mail", "mailpit:8025"),
-                ("mailpit", "mailpit:8025")
+                ("mail", "devproxy-mailpit:8025"),
+                ("mailpit", "devproxy-mailpit:8025")
             ]
+        );
+        assert_eq!(import.routes[0].title.as_deref(), Some("oneCRM App"));
+        assert_eq!(import.skipped.len(), 2, "{:?}", import.skipped);
+        assert!(
+            import.skipped.iter().any(|l| l.contains("tool-reverb"))
+                && import.skipped.iter().any(|l| l.contains("docs"))
         );
     }
 }

@@ -178,7 +178,9 @@ If your team already routes hostnames with HAProxy, such as a shared "devproxy" 
 orca workspace import-haproxy haproxy.cfg --domain local.acme.dev
 ```
 
-It prints a `routes:` list to paste into the workspace file. Projects keep their compose files, network and aliases as they are: the gateway joins the workspace network and routes to the same aliases.
+It prints a `routes:` list to paste into the workspace file, with each backend's `description` as the card title. Rules that aren't a plain "this hostname goes to that backend", such as WebSocket special cases, hostname patterns or rules with several conditions, are listed as comments underneath, for you to look at by hand.
+
+Projects keep their compose files, network and aliases as they are: the gateway joins the workspace network and routes to the same aliases.
 
 ## Related
 
