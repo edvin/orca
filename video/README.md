@@ -35,7 +35,7 @@ the `claude` CLI signed in.
 | `lib/claude.mjs` | A headless Claude Code session with only the demo daemon's Orca MCP server (`--strict-mcp-config`, no other tools), streamed into the terminal pane. |
 | `lib/voice.mjs`, `lib/music.mjs` | Narration (George, a British voice) with word timings, and a music bed, from ElevenLabs. Both cached in `.cache/`, so only changed lines cost anything. |
 | `lib/timeline.mjs` | Video time: waiting (`s.fast()`), Claude's tools at work (4×) and Claude's answers (1.7×) play faster than real time. |
-| `build.mjs` | Times the frames, lays each scene's narration over it, ducks the music under the voice, normalises to −16 LUFS for YouTube and writes captions (`.srt`). |
+| `build.mjs` | Cuts the cold open from the scenes' highlights, times the frames, lays each scene's narration over it, ducks the music under the voice, normalises to −16 LUFS for YouTube and writes captions (`.srt`). |
 
 ## What isn't shown as it is
 
@@ -51,6 +51,12 @@ the `claude` CLI signed in.
   only that line. Write it the way it should sound: "web address" reads better
   than "HTTPS URL".
 - **The voice:** `ORCA_VIDEO_VOICE=<ElevenLabs voice id>`.
+- **The cold open:** `coldOpen` in `script.mjs`: one line, and the moments it
+  cuts to, by highlights the scenes mark (`s.highlight("name")`; Claude's
+  sessions mark `claude-typing`, `claude-asked` and `claude-working`). The cuts
+  follow the highlights from take to take. `node build.mjs --no-cold` leaves it
+  out.
+- **Two lines never overlap:** a line said mid-scene waits for the one before.
 - **A new scene:** add it to `script.mjs`. The scene API (`s.click`, `s.type`,
   `s.see`, `s.open`, `s.browse`, `s.claude`, `s.say`, `s.fast`, `s.layout`,
   `s.lower`, `s.card`) is in `record.mjs`.

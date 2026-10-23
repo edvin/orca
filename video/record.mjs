@@ -194,9 +194,13 @@ function sceneApi(scene, rec) {
     /** Narration from this moment on. With `wait`, until it's been said. */
     async say(text, { wait = false } = {}) {
       const v = await speak(text);
+      // Never over another line: wait until whatever is being said is done.
+      while (rec.videoTime() < rec.voiceFreeAt() + 0.25) await sleep(50);
       rec.voice(v);
       if (wait) await sleep(v.duration * 1000 + 300);
     },
+    /** A moment the cold open can cut to (script.mjs `coldOpen`). */
+    highlight: (name) => rec.mark("highlight", { name }),
     /** Waiting that isn't interesting plays faster in the video. */
     async fast(fn) {
       rec.mark("fast-start");
@@ -207,6 +211,7 @@ function sceneApi(scene, rec) {
       await stage("cursor", 1500, 1200, 600); // out of the way while Claude works
       await stage("term.title", title);
       await stage("term.clear");
+      rec.mark("highlight", { name: "claude-typing" });
       // The prompt, typed.
       await page.evaluate(() => (window.__p = window.stage.term.line('<span class="prompt"><b>›</b> </span><span class="caret"></span>', "prompt")));
       for (const ch of prompt) {
@@ -218,11 +223,12 @@ function sceneApi(scene, rec) {
       }
       await page.evaluate(() => window.__p.querySelector(".caret").remove());
       await sleep(500);
+      rec.mark("highlight", { name: "claude-asked" });
       await page.evaluate(() => { window.__say = null; window.stage.term.line("✻ Thinking…", "spin"); });
       // Claude's answer plays a little faster than life; its tools at work, faster still.
       rec.speed(CLAUDE_SPEED);
       const pending = [];
-      let inFlight = 0;
+      let inFlight = 0, sawTool = false;
       await runClaude(prompt, {
         daemonUrl: env.ORCA_DEMO_URL,
         token: env.ORCA_DEMO_TOKEN,
@@ -230,6 +236,7 @@ function sceneApi(scene, rec) {
         model: process.env.ORCA_VIDEO_MODEL,
         on: (e) => {
           // Tools at work play faster; Claude's words at normal speed.
+          if (e.tool && !sawTool) (sawTool = true), rec.mark("highlight", { name: "claude-working" });
           if (e.tool && inFlight++ === 0) rec.speed(FAST);
           if (e.result !== undefined && --inFlight === 0) rec.speed(CLAUDE_SPEED);
           pending.push(page.evaluate(([e]) => {
@@ -301,6 +308,9 @@ for (const scene of scenes) {
     mark(kind, extra = {}) { marks.push({ kind, t: Date.now(), ...extra }); },
     speed(factor) { marks.push({ kind: "speed", factor, t: Date.now() }); },
     voice(v) { cues.push({ ...v, t: Date.now() }); },
+    videoTime: () => outTime(Date.now(), start, marks),
+    /** Video time when the last line started so far is done. */
+    voiceFreeAt: () => Math.max(voice ? 0.35 + voice.duration : 0, ...cues.map((c) => outTime(c.t, start, marks) + 0.15 + c.duration)),
   };
   const cues = [];
   if (scene.before) {

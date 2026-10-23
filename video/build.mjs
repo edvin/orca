@@ -7,7 +7,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import SCENES from "./script.mjs";
+import SCENES, { coldOpen } from "./script.mjs";
+import { speak } from "./lib/voice.mjs";
 import { outTime } from "./lib/timeline.mjs";
 import { music } from "./lib/music.mjs";
 
@@ -26,7 +27,12 @@ const ff = (...args) => execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "er
 
 const clips = [];
 const captions = [];
-let offset = 0;
+// The cold open goes first, in a full build: its line sets its length.
+const COLD = !only.length && coldOpen && !process.argv.includes("--no-cold");
+const XFADE = 0.3;
+const coldVoice = COLD ? await speak(coldOpen.say) : null;
+const coldLength = COLD ? coldVoice.duration + 0.9 : 0;
+let offset = coldLength;
 for (const id of ids) {
   const dir = path.join(OUT, "scenes", id);
   const scene = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
@@ -52,6 +58,8 @@ for (const id of ids) {
     ...(scene.voice ? [{ ...scene.voice, at: VOICE_DELAY }] : []),
     ...(scene.cues ?? []).map((c) => ({ ...c, at: Math.max(0, t(c.t)) + 0.15 })),
   ];
+  // Never two lines at once (takes recorded before the recorder knew that).
+  for (let i = 1; i < voices.length; i++) voices[i].at = Math.max(voices[i].at, voices[i - 1].at + voices[i - 1].duration + 0.25);
   const inputs = voices.length ? voices.flatMap((v) => ["-i", v.file]) : ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"];
   const audio = voices.length
     ? voices.map((v, i) => `[${i + 1}:a]aresample=48000,adelay=${Math.round(v.at * 1000)}|${Math.round(v.at * 1000)}[v${i}]`).join(";") +
@@ -68,24 +76,12 @@ for (const id of ids) {
   );
   clips.push(clip);
 
-  // Captions, a line at a time.
-  for (const v of voices) {
-    let line = [];
-    const flush = () => {
-      if (!line.length) return;
-      captions.push({ from: offset + v.at + line[0].start, to: offset + v.at + line.at(-1).end, text: line.map((w) => w.word).join(" ") });
-      line = [];
-    };
-    for (const w of v.words) {
-      if (line.length && line.map((x) => x.word).join(" ").length + w.word.length > 46) flush();
-      line.push(w);
-      if (/[.,:;!?]$/.test(w.word) && line.map((x) => x.word).join(" ").length > 24) flush();
-    }
-    flush();
-  }
+  for (const v of voices) caption(v.words, offset + v.at);
   console.log(`  ${id}: ${length.toFixed(1)} s`);
   offset += length;
 }
+
+if (COLD) clips.unshift(await buildColdOpen());
 
 const name = only.length ? `preview-${ids.join("-")}` : "orca-showcase";
 const list = path.join(OUT, `${name}.txt`);
@@ -116,6 +112,59 @@ if (process.argv.includes("--no-music")) {
     path.join(OUT, `${name}.mp4`),
   );
   fs.rmSync(joined);
+}
+
+/** The cold open: a cut per highlight, pushing in slowly, crossfaded, under its line.
+ *  Framed on the windows, closer than the scenes, so their labels stay out. */
+async function buildColdOpen() {
+  const dir = path.join(OUT, "cold");
+  fs.mkdirSync(dir, { recursive: true });
+  const n = coldOpen.cuts.length;
+  const each = (coldLength + XFADE * (n - 1)) / n;
+  const parts = coldOpen.cuts.map((c, i) => {
+    const scene = JSON.parse(fs.readFileSync(path.join(OUT, "scenes", c.scene, "scene.json"), "utf8"));
+    const mark = scene.marks.find((m) => m.kind === "highlight" && m.name === c.highlight);
+    if (!mark) throw new Error(`cold open: no highlight "${c.highlight}" in scene ${c.scene}`);
+    const length = outTime(scene.end, scene.start, scene.marks);
+    const at = Math.max(0, Math.min(outTime(mark.t, scene.start, scene.marks) + (c.from ?? 0), length - each));
+    const out = path.join(dir, `cut${i}.mp4`);
+    const frames = Math.ceil(each * FPS);
+    ff(
+      "-ss", at.toFixed(3), "-t", each.toFixed(3), "-i", path.join(OUT, "scenes", c.scene, "clip.mp4"),
+      "-vf", `scale=3840:-2:flags=lanczos,zoompan=z='1.15+0.07*on/${frames}':d=1:x='iw/2-(iw/zoom/2)':y='ih*0.03':s=2560x1440:fps=${FPS},format=yuv420p`,
+      "-an", "-c:v", "libx264", "-preset", FINAL ? "slow" : "veryfast", "-crf", FINAL ? "17" : "21", out,
+    );
+    return out;
+  });
+  let chain = "[0:v]null[x0]";
+  for (let i = 1; i < n; i++) chain += `;[x${i - 1}][${i}:v]xfade=transition=fade:duration=${XFADE}:offset=${(i * (each - XFADE)).toFixed(3)}[x${i}]`;
+  const out = path.join(dir, "cold.mp4");
+  ff(
+    ...parts.flatMap((p) => ["-i", p]), "-i", coldVoice.file,
+    "-filter_complex", `${chain};[x${n - 1}]trim=duration=${coldLength.toFixed(3)},format=yuv420p[v];[${n}:a]aresample=48000,adelay=250|250,apad,atrim=duration=${coldLength.toFixed(3)}[a]`,
+    "-map", "[v]", "-map", "[a]",
+    "-c:v", "libx264", "-preset", FINAL ? "slow" : "veryfast", "-crf", FINAL ? "17" : "21", "-r", String(FPS),
+    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", out,
+  );
+  caption(coldVoice.words, 0.25);
+  console.log(`  cold open: ${coldLength.toFixed(1)} s`);
+  return out;
+}
+
+/** Captions, a line at a time, for words starting `at` seconds in. */
+function caption(words, at) {
+  let line = [];
+  const flush = () => {
+    if (!line.length) return;
+    captions.push({ from: at + line[0].start, to: at + line.at(-1).end, text: line.map((w) => w.word).join(" ") });
+    line = [];
+  };
+  for (const w of words) {
+    if (line.length && line.map((x) => x.word).join(" ").length + w.word.length > 46) flush();
+    line.push(w);
+    if (/[.,:;!?]$/.test(w.word) && line.map((x) => x.word).join(" ").length > 24) flush();
+  }
+  flush();
 }
 
 const stamp = (s) => {

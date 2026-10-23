@@ -51,6 +51,15 @@
   .card h1 span { background: linear-gradient(90deg, #58a6ff, #3fb950); -webkit-background-clip: text; color: transparent; }
   .card p { font-size: 30px; color: #aab4c0; margin: 22px 0 0; max-width: 1100px; line-height: 1.4; }
   .card .url-tag { margin-top: 40px; font-size: 24px; color: var(--accent); letter-spacing: .02em; }
+  /* The logo sting: the mark pops in, the name rises, the line fades in. */
+  .card.anim .logo { animation: pop 1s var(--ease) both; }
+  .card.anim h1 { animation: rise .9s var(--ease) .25s both; }
+  .card.anim p { animation: rise .9s var(--ease) .55s both; }
+  .card.anim .url-tag { animation: rise .9s var(--ease) .8s both; }
+  .card.anim::before { content: ""; position: absolute; width: 900px; height: 900px; border-radius: 50%; background: radial-gradient(circle, rgba(88,166,255,.28), transparent 60%); animation: glow 2.4s ease-out both; z-index: -1; }
+  @keyframes pop { from { opacity: 0; transform: scale(.55) rotate(-8deg); filter: blur(8px); } 60% { transform: scale(1.06) rotate(1deg); } to { opacity: 1; transform: none; filter: none; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(26px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+  @keyframes glow { from { opacity: 0; transform: scale(.4); } 40% { opacity: 1; } to { opacity: .55; transform: scale(1.1); } }
   .lower { position: absolute; left: 50%; transform: translateX(-50%); bottom: 34px; z-index: 31; display: flex; align-items: center; gap: 14px; padding: 12px 20px 12px 14px; border-radius: 14px; background: rgba(13,17,23,.82); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(10px); font-size: 22px; font-weight: 600; transition: all .7s var(--ease); }
   .lower.hidden { opacity: 0; transform: translate(-50%, 20px); }
   .lower .n { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(88,166,255,.16); color: var(--accent); font-size: 17px; }
@@ -108,7 +117,11 @@ window.stage = {
     if (!o) return $("card").classList.add("hidden");
     $("cardlogo").src = o.logo || ""; $("cardlogo").style.display = o.logo ? "" : "none";
     $("cardtitle").innerHTML = o.title || ""; $("cardtext").textContent = o.text || ""; $("cardurl").textContent = o.url || "";
-    $("card").classList.remove("hidden");
+    const card = $("card");
+    card.classList.remove("anim");
+    void card.offsetWidth; // restart the animation
+    card.classList.toggle("anim", !!o.animate);
+    card.classList.remove("hidden");
   },
   lower(o) {
     if (!o) return $("lower").classList.add("hidden");

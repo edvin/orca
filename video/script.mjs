@@ -10,13 +10,31 @@ import path from "node:path";
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const LOGO = "data:image/png;base64," + fs.readFileSync(path.join(ROOT, "../site/assets/img/logo-tile.png")).toString("base64");
 
+/**
+ * The first seconds: quick cuts of the best moments, from highlights the
+ * scenes mark (`s.highlight()`, and Claude's own: claude-typing,
+ * claude-asked, claude-working), under one line. Each cut starts `from`
+ * seconds after its highlight; the cuts share the line's length.
+ */
+export const coldOpen = {
+  say: "Ask for two apps, and moments later they're running on your machine, each at its own address. And when one breaks, it gets fixed.",
+  cuts: [
+    { scene: "ask", highlight: "claude-typing", from: 1.2 },
+    { scene: "ask", highlight: "claude-working", from: 0.6 },
+    { scene: "landing", highlight: "search", from: 0.4 },
+    { scene: "fix", highlight: "claude-working", from: 1 },
+    { scene: "fix", highlight: "fixed", from: 0.6 },
+  ],
+};
+
 export default [
   {
     id: "intro",
-    say: "This is Orca. It runs the containers and dev environments on your machine, gives every app its own secure web address, and lets your AI run all of it for you.",
+    say: "This is Orca: your containers and dev environments, with an AI that runs them for you.",
+    tail: 0.6,
     async run(s) {
       await s.layout("none");
-      await s.card({ logo: LOGO, title: "<span>Orca</span>", text: "Your containers, your dev environments, and an AI that can run them." });
+      await s.card({ logo: LOGO, title: "<span>Orca</span>", text: "Your containers, your dev environments, and an AI that can run them.", animate: true });
     },
   },
   {
@@ -73,6 +91,7 @@ export default [
       await s.layout("browser");
       await s.browse("https://acme.localhost");
       await s.sleep(2500);
+      s.highlight("search");
       await s.type("#q", "analy", { where: "site", delay: 140 });
       await s.sleep(1200);
       await s.press("Enter", { where: "site" });
@@ -96,6 +115,7 @@ export default [
       await fixing;
       await s.browse("https://notes.acme.localhost");
       await s.see("text=Memos", { where: "site", timeout: 30000 }).catch(() => {});
+      s.highlight("fixed");
       await s.say("The notes are back, and Claude explains exactly what it found.", { wait: true });
     },
   },
