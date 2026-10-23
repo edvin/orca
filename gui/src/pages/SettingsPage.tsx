@@ -2094,6 +2094,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                   <For each={[
                     ["AUTO", "#d29922", "Update check", "github.com", "On startup and every hour", "No user data"],
                     ["AUTO", "#d29922", "Template catalog", "orca-desktop.com", "Fetches app templates (cached hourly)", "No user data"],
+                    ["USER", "#58a6ff", "Release check for AI tools", "api.github.com", "When an AI tool asks if Orca is current (cached hourly)", "No user data"],
                     ["USER", "#58a6ff", "Docker Hub search", "hub.docker.com", "When you search for images", "Search query only"],
                     ["USER", "#58a6ff", "AI assistant", "Your provider", "When you ask the assistant", "Your question and what its tools read, secrets blanked"],
                     ["USER", "#58a6ff", "Installers", "github.com", "When you set up Docker, Lima or Helm", "No user data"],

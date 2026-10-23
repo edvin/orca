@@ -6,6 +6,7 @@ import { showToast } from "./Toast";
 import { confirm } from "./ConfirmDialog";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning } from "../lib/ollamaSetup";
 import { useHealth } from "../lib/healthStore";
+import { onOrcaEvent } from "../lib/events";
 
 interface StatusBarProps {
   onNavigate?: (page: string) => void;
@@ -84,7 +85,25 @@ export default function StatusBar(props: StatusBarProps) {
     getVersion().then((v) => { if (!disposed) setAppVersion(v); }).catch(() => {});
     // The active host only changes through a host switch.
     document.addEventListener("orca-host-switch", pollActiveHost);
+    // An AI tool offered the update (offer_update): bring Orca forward and
+    // show the same prompt as the status bar's button.
+    const offFromAi = onOrcaEvent((e) => {
+      const kind = (e as { kind?: { type?: string } })?.kind;
+      if (kind?.type !== "UpdatePrompt" || installing()) return;
+      void (async () => {
+        try {
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          const w = getCurrentWindow();
+          await w.unminimize();
+          await w.show();
+          await w.setFocus();
+        } catch { /* not in Tauri */ }
+        await checkUpdate();
+        if (updateAvailable()) await installUpdate();
+      })();
+    });
     onCleanup(() => {
+      offFromAi();
       disposed = true;
       clearTimeout(t);
       clearInterval(updateInterval);

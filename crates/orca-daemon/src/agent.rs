@@ -769,6 +769,11 @@ pub async fn execute_tool(
             .await?;
             wait_for_job(job).await
         }
+        "check_for_update" => {
+            let refresh = arguments.get("refresh").and_then(|v| v.as_bool()).unwrap_or(false);
+            api(state, "GET", &format!("/update?refresh={refresh}"), None).await
+        }
+        "offer_update" => api(state, "POST", "/update/prompt", None).await,
         "update_workspace" => {
             let job = api(state, "POST", "/workspace/update", None).await?;
             wait_for_job(job).await

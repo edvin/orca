@@ -65,6 +65,12 @@ pub enum EventKind {
         name: String,
     },
 
+    /// An AI tool asked the app to offer this update; the app shows its
+    /// Update prompt and the user decides.
+    UpdatePrompt {
+        version: String,
+    },
+
     // Build events
     BuildStarted {
         id: String,

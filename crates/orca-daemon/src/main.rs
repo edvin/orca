@@ -25,6 +25,7 @@ mod stack_files;
 mod stack_profiles;
 mod stack_yaml;
 mod state;
+mod update;
 mod workspace;
 
 use state::AppState;

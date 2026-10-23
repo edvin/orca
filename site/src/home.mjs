@@ -256,7 +256,7 @@ hooks:
       <p>Connect Claude Code, Claude Desktop, Cursor, VS Code, Windsurf or Codex from Orca's settings. Then just ask: start a project from a folder, switch on a profile, find out why a container keeps restarting, or run a branch as its own instance and test against it.</p>
       <ul class="checks">
         <li>No tokens to copy: the AI tool runs <code>orca mcp</code>, which signs in by itself</li>
-        <li>72 tools: workspace projects, stacks, profiles, gateway routes, builds, Kubernetes, worktrees</li>
+        <li>74 tools: workspace projects, stacks, profiles, gateway routes, builds, Kubernetes, worktrees</li>
         <li>Works with the AI subscription you already have. No API key needed</li>
       </ul>
       <a class="link-arrow" href="/docs/agents/">Connect your AI tools ${ICONS.arrow}</a>

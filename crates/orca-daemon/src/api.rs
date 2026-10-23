@@ -211,6 +211,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(crate::dev::routes())
         .merge(crate::workspace::routes())
+        .merge(crate::update::routes())
         .route("/health", get(health))
         .route("/events", get(events_stream))
         // Machines
@@ -512,6 +513,7 @@ fn event_type_name(kind: &orca_core::event::EventKind) -> &'static str {
         BuildStarted { .. } => "build.started",
         BuildCompleted { .. } => "build.completed",
         DevInstance { .. } => "dev.instance",
+        UpdatePrompt { .. } => "update.prompt",
         Unknown => "unknown",
     }
 }
@@ -8307,6 +8309,7 @@ fn mcp_read_only(name: &str) -> bool {
                 | "gateway_routes"
                 | "build_status"
                 | "workspace_status"
+                | "check_for_update"
         )
 }
 
@@ -8342,6 +8345,7 @@ const MCP_ADDITIVE: &[&str] = &[
     "instance_up",
     "k8s_restart_deployment",
     "setup_project",
+    "offer_update",
 ];
 
 /// Everything else that changes state may stop, overwrite or delete

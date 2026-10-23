@@ -258,6 +258,21 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             category: "Gateway".into(),
         },
 
+        // === Orca itself ===
+        ToolDefinition {
+            name: "check_for_update".into(),
+            description: "Whether a newer Orca is out: the running version, the latest release, and the headlines of each newer release. Use it when the developer asks if Orca is current, or when a feature they ask about isn't there (it may need a newer version).".into(),
+            parameters: json_schema(json!({
+                "refresh": { "type": "boolean", "description": "Ask GitHub now instead of using the check from the last hour" }
+            })),
+            category: "Orca".into(),
+        },
+        ToolDefinition {
+            name: "offer_update".into(),
+            description: "Show the Orca app's Update prompt for the latest version, when the developer wants to update. It doesn't install anything: the developer clicks Update, and Orca restarts, which ends this connection for a moment. Without the app (a daemon on a server), it returns the command to upgrade instead.".into(),
+            parameters: json_schema(json!({})),
+            category: "Orca".into(),
+        },
         // === Workspace ===
         ToolDefinition {
             name: "workspace_status".into(),

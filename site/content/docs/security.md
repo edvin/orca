@@ -84,6 +84,7 @@ Orca connects to these places, besides the hosts you add:
 | Destination | When |
 |---|---|
 | `github.com`, `raw.githubusercontent.com` | The update check, and the Helm or Homebrew install scripts when you ask Orca to install them. |
+| `api.github.com` | When an AI tool asks whether Orca is up to date (`check_for_update`), to read the release list. Cached for an hour. |
 | `orca-desktop.com/templates.json` | When you open the templates catalog. Cached for an hour. |
 | `hub.docker.com` | When you search for images or open the tag list for an image. |
 | Container registries | When you pull an image. Image scanning also pulls the Trivy image and its vulnerability database. |

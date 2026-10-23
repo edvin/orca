@@ -172,7 +172,7 @@ A successful call returns `{"result": ...}`. A failed one returns HTTP 400 with 
 
 ## Tool reference
 
-Orca has 72 agent tools. The same set is available over MCP, the OpenAI-compatible endpoint, direct execution, and to the built-in [AI assistant](/docs/ai-assistant/).
+Orca has 74 agent tools. The same set is available over MCP, the OpenAI-compatible endpoint, direct execution, and to the built-in [AI assistant](/docs/ai-assistant/).
 
 ### Containers
 
@@ -278,6 +278,15 @@ Orca has 72 agent tools. The same set is available over MCP, the OpenAI-compatib
 | `k8s_restart_deployment` | Rolling restart of a deployment. |
 | `k8s_delete_pod` | Delete a pod so its controller recreates it. |
 | `k8s_helm_list` | List installed Helm releases. |
+
+### Orca itself
+
+| Tool | What it does |
+|------|--------------|
+| `check_for_update` | The running version, the latest release, and the headlines of each newer one. `refresh` asks GitHub now instead of using the last hour's check. |
+| `offer_update` | Show the app's **Update** prompt for the latest version. Nothing installs until you click **Update**; Orca then restarts, which drops the AI tool's connection for a moment. Without the app (a daemon on a server), it returns the command to upgrade instead. |
+
+Ask *"is my Orca up to date?"* or *"update Orca"*. When you ask about a feature your version doesn't have yet, the AI tool can check whether a newer release has it.
 
 ### Workspace
 
