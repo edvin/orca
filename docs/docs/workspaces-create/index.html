@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvlfgadx">
+<link rel="stylesheet" href="/assets/site.css?v=mvm5r0j2">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvlfgadx" defer></script>
+<script src="/assets/site.js?v=mvm5r0j2" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -174,9 +174,7 @@
 </ul>
 <h2 id="6-add-the-projects"><a class="anchor" href="#6-add-the-projects" aria-hidden="true" tabindex="-1">#</a>6. Add the projects</h2>
 <p>Add each project under <code>projects</code>, one at a time. A full entry:</p>
-<div class="code has-title"><div class="code-title"><span>orca-workspace.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">clone_into</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">~/code/acme</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">registries</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<div class="code has-title"><div class="code-title"><span>orca-workspace.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">registries</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
 <span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">registry.acme.dev</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">secrets</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
@@ -200,7 +198,7 @@
 <li><strong><code>repo</code></strong>: the URL people clone it with. SSH URLs work with each developer&#39;s own key.</li>
 <li><strong><code>description</code></strong>: one line. AI tools match on it, so name what the project is, not only its codename: <em>&quot;Invoices, payments and dunning&quot;</em>.</li>
 <li><strong><code>path</code></strong>: only if the folder should be named differently from the key.</li>
-<li><strong><code>clone_into</code></strong> (top level): where projects go. If your team already keeps checkouts in one place, such as <code>~/code/acme</code>, use that: existing checkouts are picked up as they are.</li>
+<li><strong>Where projects go:</strong> next to the workspace, in the folder each developer cloned it into. Someone who keeps code in <code>~/projects</code> clones the workspace there and gets <code>~/projects/billing</code>; their existing checkouts are picked up as they are. Leave out <code>clone_into</code> unless everyone on the team really uses the same folder.</li>
 <li><strong><code>uses</code></strong>: the shared services it needs, by their service name in <code>compose.yaml</code>.</li>
 <li><strong><code>setup</code></strong>: the one-time command a new developer runs today, such as <code>just setup</code>.</li>
 <li><strong><code>routes</code></strong>: its hostnames. See <a href="/docs/workspaces-routes/">Routes</a> for paths, patterns and WebSockets.</li>
@@ -286,8 +284,6 @@
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">shared</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  compose</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">compose.yaml</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  name</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">acme-shared</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">clone_into</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">~/code/acme</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">registries</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
 <span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">registry.acme.dev</span></span>

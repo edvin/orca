@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvlfgadx">
+<link rel="stylesheet" href="/assets/site.css?v=mvm5r0j2">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvlfgadx" defer></script>
+<script src="/assets/site.js?v=mvm5r0j2" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,35 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.56.0">
+<section class="container releases"><article class="release" id="v0.57.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.57.0">v0.57.0</a><time datetime="2026-10-24T08:48:46Z">October 24, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="your-teams-logo-on-the-start-page"><a class="anchor" href="#your-teams-logo-on-the-start-page" aria-hidden="true" tabindex="-1">#</a>Your team&#39;s logo on the start page</h2>
+<p>A workspace can now put its logo in the gateway start page&#39;s top bar, next to its title, and on the <strong>Workspace</strong> page. Add <code>gateway.logo</code> to the workspace file: an image in the workspace repo, a built-in icon or an https URL. Leaving the workspace puts back the start page&#39;s previous title and logo.</p>
+<h2 id="my-links"><a class="anchor" href="#my-links" aria-hidden="true" tabindex="-1">#</a>My links</h2>
+<p>Your own cards at the top of the start page: your sprint board, a staging admin, anything you open every day. Add them on the Gateway page&#39;s <strong>Landing page</strong> tab. They&#39;re kept on your computer only.</p>
+<h2 id="projects-you-havent-set-up-yet"><a class="anchor" href="#projects-you-havent-set-up-yet" aria-hidden="true" tabindex="-1">#</a>Projects you haven&#39;t set up yet</h2>
+<p>The start page now shows a workspace&#39;s projects that aren&#39;t on your computer yet, as dashed cards marked <strong>Not set up</strong>. Clicking one opens Orca at that project, ready to set up with one click.</p>
+<h2 id="what-changed-in-the-workspace"><a class="anchor" href="#what-changed-in-the-workspace" aria-hidden="true" tabindex="-1">#</a>What changed in the workspace</h2>
+<p>When Orca pulls new changes to your workspace, the <strong>Workspace</strong> page lists them: <em>Workspace updated: Add Gravity, Renew the certificate</em>.</p>
+<h2 id="search-the-web-from-the-start-page"><a class="anchor" href="#search-the-web-from-the-start-page" aria-hidden="true" tabindex="-1">#</a>Search the web from the start page</h2>
+<p>The start page&#39;s search box now searches Google when no service matches, without setting it up first. Pick another engine, or turn it off, on the <strong>Landing page</strong> tab.</p>
+<h2 id="joining-puts-things-where-your-code-is"><a class="anchor" href="#joining-puts-things-where-your-code-is" aria-hidden="true" tabindex="-1">#</a>Joining puts things where your code is</h2>
+<p>When you join a workspace, Orca suggests the folder where your git checkouts already are, such as <code>~/projects</code>, and shows where the workspace and its projects will go. If you already have a copy of the workspace there, Orca joins it where it is.</p>
+<h2 id="worktrees"><a class="anchor" href="#worktrees" aria-hidden="true" tabindex="-1">#</a>Worktrees</h2>
+<p>The <strong>Projects</strong> page is now called <strong>Worktrees</strong>, so it&#39;s no longer confused with a workspace&#39;s projects. Its page is much more compact: your repositories are listed right away. Paths starting with <code>~/</code> now work when you add one.</p>
+<h2 id="less-to-read"><a class="anchor" href="#less-to-read" aria-hidden="true" tabindex="-1">#</a>Less to read</h2>
+<p>Pages say what they&#39;re for in one line, with a <strong>How it works</strong> link to the docs, instead of paragraphs of explanation. This covers the Gateway, Kubernetes, Settings, container and stack pages, the worktree setup wizard and more.</p>
+<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
+<ul>
+<li>The note about switching from Docker Desktop now says correctly that containers and images aren&#39;t copied over.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.57.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.56.0">
   <div class="release-meta"><a class="release-tag" href="#v0.56.0">v0.56.0</a><time datetime="2026-10-23T20:28:18Z">October 23, 2026</time></div>
   <div class="release-body prose">
     
@@ -564,21 +592,6 @@
 <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.1...v0.47.2" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.1...v0.47.2</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.2" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.47.1">
-  <div class="release-meta"><a class="release-tag" href="#v0.47.1">v0.47.1</a><time datetime="2026-10-14T18:33:37Z">October 14, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
-<ul>
-<li><strong>The app now restarts its daemon if it stops unexpectedly.</strong> Before, a crashed daemon left Orca showing RUNNING while nothing worked, until you relaunched. Now you see a &quot;reconnecting&quot; banner, the daemon comes back within a few seconds, and after repeated crashes Orca shows the connection screen instead of retrying forever.</li>
-<li><strong>Escape closes menus and dialogs</strong> throughout the app. A dropdown inside a dialog closes first, then the dialog.</li>
-<li><strong>Containers table:</strong> CPU and memory share one column, and containers inside a stack show their short name (<code>clickhouse</code> instead of <code>ai-platform-clickhouse</code>), so names fit at the default window size.</li>
-</ul>
-<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.0...v0.47.1" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.0...v0.47.1</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 

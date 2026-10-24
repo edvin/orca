@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvlfgadx">
+<link rel="stylesheet" href="/assets/site.css?v=mvm5r0j2">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvlfgadx" defer></script>
+<script src="/assets/site.js?v=mvm5r0j2" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -64,11 +64,11 @@
 <li><strong>Per-instance services</strong>, typically everything built from your repository, run once per worktree in a compose project called <code>&lt;project&gt;-&lt;instance&gt;</code>.</li>
 <li>Each instance gets HTTPS hostnames through the <a href="/docs/gateway/">gateway</a>, host ports where it needs them, and a <code>.orca/env</code> file with its URLs, ports and database names.</li>
 </ul>
-<p><figure class="shot"><img src="/assets/screens/worktrees.webp" alt="The Projects page: shared services at the top, then one card per worktree with its own URLs, data and status" loading="lazy" decoding="async"></figure></p>
+<p><figure class="shot"><img src="/assets/screens/worktrees.webp" alt="The Worktrees page: shared services at the top, then one card per worktree with its own URLs, data and status" loading="lazy" decoding="async"></figure></p>
 <p>Orca never edits your compose files. It writes a compose override into the worktree&#39;s <code>.orca/</code> folder and passes it to <code>docker compose</code> next to your own files.</p>
 <p>The app reaches shared services by their usual names: Orca connects the shared containers to each instance&#39;s networks, so <code>postgres:5432</code> works inside every instance as it does in a plain <code>docker compose up</code>.</p>
 <h2 id="add-a-project"><a class="anchor" href="#add-a-project" aria-hidden="true" tabindex="-1">#</a>Add a project</h2>
-<p>On the <strong>Projects</strong> page, choose <strong>Add project</strong>, then pick any folder inside the repository or paste its path. Orca finds the main checkout and all of its worktrees. Repositories that already have compose stacks running on your machine are listed under <strong>Found on this machine</strong>.</p>
+<p>On the <strong>Worktrees</strong> page, choose <strong>Add project</strong>, then pick any folder inside the repository or paste its path. Orca finds the main checkout and all of its worktrees. Repositories that already have compose stacks running on your machine are listed under <strong>Found on this machine</strong>.</p>
 <p>You can get there in other ways too: the <strong>Add a git repository</strong> card on a fresh dashboard, or <strong>Add a git repository for worktrees</strong> in the command palette (Cmd+K, Ctrl+K elsewhere). When you <a href="/docs/stacks/#open-a-project-folder">open a project folder</a> that is a git repository, <strong>Also add it to Projects</strong> adds it as a project as well as starting it.</p>
 <p>From the command line, inside the repository:</p>
 <div class="code has-title"><div class="code-title"><span>Terminal</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> projects</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> add</span></span></code></pre></div><p>Nothing starts when you add a project. Each worktree shows up as an instance card, ready to start.</p>
@@ -104,10 +104,10 @@
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    hooks</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      after_up</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
 <span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">        - </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"api: php artisan migrate --force"</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    idle_stop</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">2h</span></span></code></pre></div><p>The <a href="/docs/orca-yaml/#dev-worktree-instances">orca.yaml reference</a> lists every key with its default. On the Projects page, the <strong>orca.yaml</strong> button edits this section as a form or as YAML.</p>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    idle_stop</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">2h</span></span></code></pre></div><p>The <a href="/docs/orca-yaml/#dev-worktree-instances">orca.yaml reference</a> lists every key with its default. On the Worktrees page, the <strong>orca.yaml</strong> button edits this section as a form or as YAML.</p>
 <p>Which services are shared, their data defaults, <code>start</code>, <code>idle_stop</code> and <code>max_running</code> are read from the main checkout. The rest (<code>dev.instance</code> and <code>dev.naming</code>) is read from each worktree&#39;s own <code>orca.yaml</code>, so a branch can add a service, an environment variable or a hook without touching the main branch. An <code>orca.local.yaml</code> next to it is merged on top, for settings that differ per machine.</p>
 <h2 id="shared-and-per-instance-services"><a class="anchor" href="#shared-and-per-instance-services" aria-hidden="true" tabindex="-1">#</a>Shared and per-instance services</h2>
-<p>The shared stack starts with the first instance, or with <strong>Start shared</strong> on the Projects page. Orca waits until its services are healthy before it starts an instance.</p>
+<p>The shared stack starts with the first instance, or with <strong>Start shared</strong> on the Worktrees page. Orca waits until its services are healthy before it starts an instance.</p>
 <p><strong>Stop shared</strong> stops the shared stack and keeps its data volumes. Running instances lose their database until it starts again.</p>
 <p>To keep instances apart, Orca adjusts the per-instance services in the override:</p>
 <ul>
@@ -213,7 +213,7 @@
 <span class="line"><span>- Orca's MCP server has the same operations (`instance_up`, `instance_status`, …); pass this worktree's path.</span></span></code></pre></div><div class="callout callout-tip"><div class="callout-head"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg><span>Tip</span></div><p>Before an agent runs migrations or writes test data, have it start with its own database: <code>instance_up</code> with <code>data: {&quot;postgres&quot;: &quot;own-database&quot;}</code>, or choose <strong>Own database</strong> in the Start dialog.</p>
 </div><h2 id="clean-up-removed-worktrees"><a class="anchor" href="#clean-up-removed-worktrees" aria-hidden="true" tabindex="-1">#</a>Clean up removed worktrees</h2>
 <p>When you delete a worktree folder, or its branch is deleted on the remote after a merge, the instance stays in Orca with its containers, volumes and own databases. Its card is marked <strong>Worktree gone</strong>, or says <strong>remote branch deleted</strong>.</p>
-<p><strong>Clean up</strong> on the Projects page lists those instances and removes them all: containers, volumes, images, own databases, ports and <code>.orca</code> folders. Worktree folders and branches are not touched. To remove one at a time, use <strong>Remove</strong> on its card, or <code>orca down --remove</code> inside a worktree that still exists.</p>
+<p><strong>Clean up</strong> on the Worktrees page lists those instances and removes them all: containers, volumes, images, own databases, ports and <code>.orca</code> folders. Worktree folders and branches are not touched. To remove one at a time, use <strong>Remove</strong> on its card, or <code>orca down --remove</code> inside a worktree that still exists.</p>
 <p><strong>Unregister</strong> makes Orca forget a project and its instance settings. Stop its instances and shared services first; the repository itself is not touched.</p>
 <h2 id="related"><a class="anchor" href="#related" aria-hidden="true" tabindex="-1">#</a>Related</h2>
 <ul>
