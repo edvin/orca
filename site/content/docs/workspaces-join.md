@@ -51,7 +51,7 @@ The command prints each step as it finishes and fails with the error if one fail
 
 ### From a folder you already have
 
-Instead of a git URL, you can give the absolute path of a folder that already contains an `orca-workspace.yaml`. Orca then uses that folder as it is, without cloning. This is how a team lead [tests a workspace](/docs/workspaces-create/#7-test-it-yourself) before publishing it.
+Instead of a git URL, you can give the path of a folder that already contains an `orca-workspace.yaml`, such as `~/projects/dev-workspace`: click **Choose its folder…** on the **Workspace** page, or paste the path where the git URL goes. Orca then uses that folder as it is, without cloning, and projects go beside it. When you type the workspace's git URL instead and Orca finds your copy in your code folder, it offers to use that copy. This is how a team lead [tests a workspace](/docs/workspaces-create/#7-test-it-yourself) before publishing it.
 
 ```bash
 orca workspace join /Users/you/code/dev-workspace

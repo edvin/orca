@@ -413,13 +413,13 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
                 .iter()
                 .map(|(name, cards)| {
                     format!(
-                        r#"<section class="group"><h2>{}</h2><div class="grid">{}</div></section>"#,
-                        escape_html(name),
+                        r#"<section class="group" data-group="{group}"><h2 role="button" tabindex="0" title="Fold or unfold">{group}</h2><div class="grid">{}</div></section>"#,
                         cards
                             .iter()
                             .enumerate()
                             .map(|(i, c)| card_html(c, i, name))
-                            .collect::<String>()
+                            .collect::<String>(),
+                        group = escape_html(name),
                     )
                 })
                 .collect()
@@ -595,8 +595,11 @@ fn card_html(c: &Card, i: usize, group: &str) -> String {
     .collect::<Vec<_>>()
     .join(" ")
     .to_lowercase();
+    // What "Running only" keeps: running, starting, unhealthy, sleeping, and
+    // links with no service behind them.
+    let state = c.status.as_ref().map(|(class, _, _)| *class).unwrap_or("none");
     let data = format!(
-        r#" data-title="{}" data-q="{}""#,
+        r#" data-title="{}" data-q="{}" data-st="{state}""#,
         escape_html(&c.title),
         escape_html(&search)
     );
@@ -726,21 +729,40 @@ footer{text-align:center;margin-top:44px;font-size:12px;color:#484f58}footer a{c
 .search input::-webkit-search-cancel-button{-webkit-appearance:none}
 .search kbd,.hint kbd{font:11px "SF Mono",ui-monospace,Menlo,monospace;color:#8b949e;border:1px solid rgba(255,255,255,.12);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:rgba(255,255,255,.03)}
 .search:focus-within kbd,.search.typed kbd{display:none}
-.hint{font-size:12.5px;color:#8b949e;display:flex;gap:16px;flex-wrap:wrap;padding-left:4px}
-.hint:not(:empty){margin-top:8px}
-@media(max-width:760px){.top{flex-wrap:wrap;gap:12px}.find{order:3;flex-basis:100%}.stats{margin-left:auto}}
+.hint{font-size:12.5px;color:#8b949e;display:flex;gap:16px;padding-left:4px;margin-top:6px;height:20px;align-items:center;white-space:nowrap;overflow:hidden}
+@media(max-width:760px){.top{flex-wrap:wrap;gap:12px}.find{order:3;flex-basis:100%}.stats{margin-left:auto}.tools{order:4}}
 .hint span{display:inline-flex;align-items:center;gap:6px}.hint b{color:#e6edf3;font-weight:600}
 .card.sel{border-color:rgba(88,166,255,.7);box-shadow:0 0 0 3px rgba(88,166,255,.16);transform:translateY(-2px)}
 mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
 .nores{text-align:center;padding:40px 24px;border:1px dashed rgba(255,255,255,.08);border-radius:16px;color:#8b949e;font-size:13.5px;line-height:1.6}
-.nores b{color:#e6edf3}
+.nores b{color:#e6edf3}.nores button{background:none;border:0;color:#58a6ff;font:inherit;cursor:pointer;padding:0}
+.tools{display:flex;gap:6px;flex-shrink:0;align-items:center}
+.seg{display:flex;padding:2px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(22,27,34,.6)}
+.seg button{width:30px;height:28px;display:grid;place-items:center;background:none;border:0;border-radius:7px;color:#8b949e;cursor:pointer}
+.seg button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.seg button:hover{color:#e6edf3}.seg button.on{background:rgba(88,166,255,.15);color:#58a6ff}
+.chip{height:34px;padding:0 12px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(22,27,34,.6);color:#8b949e;font:600 12px inherit;cursor:pointer;white-space:nowrap}
+.chip:hover{color:#e6edf3}.chip.on{color:#3fb950;border-color:rgba(63,185,80,.35);background:rgba(63,185,80,.08)}
+.group h2{cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;width:fit-content}
+.group h2::before{content:'';width:0;height:0;border:4px solid transparent;border-top:5px solid currentColor;border-bottom:0;opacity:.7;transition:transform .15s}
+.group.folded h2::before{transform:rotate(-90deg)}
+.group.folded h2::after{content:attr(data-n);font-weight:600;color:#6e7681;letter-spacing:0}
+.group.folded .grid{display:none}.group.folded{margin-bottom:14px}
+body.compact .grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px}
+body.compact .card{position:relative;padding:8px 26px 8px 10px;gap:10px;border-radius:10px;align-items:center}
+body.compact .icon{width:28px;height:28px;border-radius:8px;font-size:13px}
+body.compact .desc,body.compact .target,body.compact .st span{display:none}
+body.compact .st{position:absolute;top:50%;right:11px;margin:-4px 0 0}
+body.compact .name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.compact .url{margin-top:1px;font-size:11px}
+body.compact .group{margin-bottom:18px}body.compact .group h2{margin-bottom:8px}
 @media(pointer:coarse){.hint,.search kbd{display:none}}
 @media(max-width:640px){.shell{padding:36px 16px 28px}h1{font-size:24px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="shell">
-<header><div class="top"><div class="brand">{logo}<div><h1>{title}</h1><p class="sub">{subtitle}</p></div></div><div class="find">{search}</div><div class="stats" id="stats">{stats}</div></div></header>
+<header><div class="top"><div class="brand">{logo}<div><h1>{title}</h1><p class="sub">{subtitle}</p></div></div><div class="find">{search}</div><div class="stats" id="stats">{stats}</div><div class="tools"><div class="seg" role="group" aria-label="Layout"><button type="button" data-view="cards" title="Cards" aria-label="Cards"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button><button type="button" data-view="compact" title="Compact" aria-label="Compact"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div><button type="button" class="chip" id="runonly" aria-pressed="false" title="Hide what isn't running, except while you search">Running only</button></div></div></header>
 <main id="content">{tabs}{panels}</main>
 <div class="nores" id="nores" hidden></div>
 <footer>Served by <a href="https://orca-desktop.com">Orca Desktop</a></footer>
@@ -748,6 +770,11 @@ mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
 <script>
 (function(){
   var KEY='orca-landing-env';
+  // Per browser: the layout, "Running only" and folded groups.
+  function load(k,d){try{var v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}}
+  function save(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  var view=load('orca-landing-view','cards'),runOnly=load('orca-landing-running','0')==='1',folded={};
+  try{folded=JSON.parse(load('orca-landing-folded','{}'))||{}}catch(e){}
   function since(iso){
     var s=Math.max(0,(Date.now()-Date.parse(iso))/1000);
     if(s<60)return 'Up just now';
@@ -829,27 +856,69 @@ mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
     var s=el('span');keys.forEach(function(k){s.appendChild(el('kbd',k))});
     s.appendChild(document.createTextNode(' '+a.label+' '));s.appendChild(el('b',a.what));return s;
   }
+  function isUp(c){return /^(none|run|warn|bad|sleep)$/.test(c.getAttribute('data-st')||'none')}
   function apply(){
-    if(!q)return;
     var ts=terms(),best=-1,bestScore=-1;
     matches=[];
+    // Searching looks through everything: folded groups and what isn't running.
     panel().querySelectorAll('.card').forEach(function(c){
       var s=ts.length?score(c,ts):0;
-      c.hidden=s<0;c.classList.remove('sel');mark(c,ts);
+      c.hidden=s<0||(runOnly&&!ts.length&&!isUp(c));c.classList.remove('sel');mark(c,ts);
       if(s>=0&&ts.length&&c.tagName==='A'){matches.push(c);if(s>bestScore){bestScore=s;best=matches.length-1}}
     });
-    panel().querySelectorAll('.group').forEach(function(g){g.hidden=!g.querySelector('.card:not([hidden])')});
+    panel().querySelectorAll('.group').forEach(function(g){
+      var n=g.querySelectorAll('.card:not([hidden])').length,h=g.querySelector('h2');
+      g.hidden=!n;
+      g.classList.toggle('folded',!ts.length&&!!folded[g.getAttribute('data-group')]);
+      if(h)h.setAttribute('data-n',n);
+    });
     sel=ts.length?best:-1;
-    box.classList.toggle('typed',!!q.value);
+    if(box)box.classList.toggle('typed',!!q.value);
     render();
   }
+  function setView(v){
+    view=v==='compact'?'compact':'cards';
+    document.body.classList.toggle('compact',view==='compact');
+    document.querySelectorAll('.seg button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-view')===view)});
+  }
+  function setRunOnly(on){
+    runOnly=on;
+    var b=document.getElementById('runonly');
+    if(b){b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false')}
+  }
+  document.querySelectorAll('.seg button').forEach(function(b){
+    b.addEventListener('click',function(){setView(b.getAttribute('data-view'));save('orca-landing-view',view)});
+  });
+  var ro=document.getElementById('runonly');
+  if(ro)ro.addEventListener('click',function(){setRunOnly(!runOnly);save('orca-landing-running',runOnly?'1':'0');apply()});
+  // Fold a group by clicking its name; the page's refresh keeps it folded.
+  document.addEventListener('click',function(e){
+    var h=e.target.closest&&e.target.closest('.group h2');
+    if(!h)return;
+    var name=h.parentNode.getAttribute('data-group');
+    if(folded[name])delete folded[name];else folded[name]=1;
+    save('orca-landing-folded',JSON.stringify(folded));apply();
+  });
+  document.addEventListener('keydown',function(e){
+    var h=(e.key==='Enter'||e.key===' ')&&e.target.closest&&e.target.closest('.group h2');
+    if(h){e.preventDefault();h.click()}
+  });
+  setView(view);setRunOnly(runOnly);
   function render(){
     matches.forEach(function(c,i){c.classList.toggle('sel',i===sel)});
     if(sel>=0&&matches[sel]&&matches[sel].scrollIntoView)matches[sel].scrollIntoView({block:'nearest'});
-    hint.textContent='';
-    var v=q.value.trim();
+    var v=q?q.value.trim():'';
+    if(hint)hint.textContent='';
     if(!v){
-      nores.hidden=true;return;
+      // "Running only", and nothing runs.
+      nores.hidden=!runOnly||!!panel().querySelector('.card:not([hidden])');
+      if(!nores.hidden){
+        nores.textContent='Nothing is running. ';
+        var all=el('button','Show everything');
+        all.addEventListener('click',function(){setRunOnly(false);save('orca-landing-running','0');apply()});
+        nores.appendChild(all);
+      }
+      return;
     }
     var a=action(false),w=engineUrl?action(true):null;
     if(a)hint.appendChild(line(['↵'],a));
@@ -983,9 +1052,9 @@ mod tests {
             ("adminer".to_string(), running("2026-10-22T09:00:00Z", Some("tools"))),
         ]);
         let html = render(&config(vec![shop, db, sleepy]), &states);
-        assert!(html.contains(r#"<h2>shop</h2>"#));
+        assert!(html.contains(r#"data-group="shop"><h2 role="button" tabindex="0" title="Fold or unfold">shop</h2>"#));
         assert!(
-            html.contains(r#"<h2>tools</h2>"#),
+            html.contains(r#">tools</h2>"#),
             "label-less routes group by compose project"
         );
         assert!(html.contains("Database admin") && html.contains("Browse every database"));
@@ -1040,6 +1109,26 @@ mod tests {
     }
 
     #[test]
+    fn groups_fold_and_cards_say_their_state() {
+        let mut c = config(vec![route("x.localhost", "x", 80)]);
+        c.landing.links = vec![orca_core::config::LandingLink {
+            title: "<Board>".into(),
+            url: "https://jira.example.com".into(),
+            description: None,
+        }];
+        let states = HashMap::from([("x".to_string(), running("2026-10-24T08:00:00Z", Some("a&b")))]);
+        let html = render(&c, &states);
+        // Group names are escaped where they're attributes too.
+        assert!(
+            html.contains(r#"<section class="group" data-group="a&amp;b"><h2 role="button""#),
+            "{html}"
+        );
+        assert!(html.contains(r#"data-st="run""#), "a running service");
+        assert!(html.contains(r#"data-st="none""#), "a link with no service");
+        assert!(html.contains(r#"id="runonly""#) && html.contains(r#"data-view="compact""#));
+    }
+
+    #[test]
     fn my_links_come_first() {
         let mut c = config(vec![route("x.localhost", "x", 80)]);
         c.landing.links = vec![orca_core::config::LandingLink {
@@ -1048,7 +1137,7 @@ mod tests {
             description: None,
         }];
         let html = render(&c, &HashMap::new());
-        let mine = html.find("<h2>My links</h2>").expect("a My links section");
+        let mine = html.find(">My links</h2>").expect("a My links section");
         assert!(mine < html.find("x.localhost").unwrap(), "before the services");
         assert!(html.contains(r#"href="https://jira.example.com/board/7" target="_blank""#));
         assert!(html.contains("jira.example.com/board/7</p>"));
@@ -1135,7 +1224,7 @@ mod tests {
             .split(r#"<div class="panel""#)
             .next()
             .unwrap();
-        assert_eq!(local.matches("<h2>").count(), 1, "{local}");
+        assert_eq!(local.matches("<section class=\"group\"").count(), 1, "{local}");
     }
 
     #[test]

@@ -279,9 +279,13 @@ async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) ->
     if repo.is_empty() || repo.starts_with('-') {
         return Err(ApiError::bad_request("Give the workspace's git URL"));
     }
-    let local = Path::new(&repo);
+    // A folder that already has the workspace is joined where it is.
+    let local = match repo.strip_prefix("~/") {
+        Some(rest) => home().join(rest),
+        None => PathBuf::from(&repo),
+    };
     let (dir, clone) = if local.is_absolute() && local.is_dir() {
-        (local.to_path_buf(), false)
+        (local, false)
     } else {
         let dir = body
             .folder

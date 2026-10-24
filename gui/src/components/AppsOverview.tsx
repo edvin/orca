@@ -171,11 +171,13 @@ export default function AppsOverview(props: {
         onClick={() => props.onNavigate?.(`stack:${s.name}`)} title={`${a.sub ? `${a.sub} · ` : ""}Open ${s.name} in Orca: its containers, logs and settings`}>
         <div class="app-card-head">
           <AppIcon src={iconSrc(a.icon) || stackIcon(s, props.routes)} name={a.title} size={26} />
-          <b>{a.title}</b>
+          <b title={a.title}>{a.title}</b>
+          <Show when={pinned.has(s.name)}><span class="app-card-pinned" title="Pinned to the top">{ICON.pin()}</span></Show>
           <span class={`app-dot ${s.status.toLowerCase()}`} />
           <span class="app-card-count">{running(s)}/{s.services.length}</span>
-          <span class="app-card-open">Open →</span>
-          <span class="app-card-actions">
+          {/* Over the top-right corner on hover, so the name keeps the whole row. */}
+          <span class="app-card-hover">
+            <span class="app-card-open">Open →</span>
             <button class="app-card-act" classList={{ on: pinned.has(s.name) }}
               title={pinned.has(s.name) ? "Unpin" : "Pin to the top"}
               onClick={(e) => { e.stopPropagation(); pinned.toggle(s.name); }}>{ICON.pin()}</button>

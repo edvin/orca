@@ -3,6 +3,7 @@
 // here, from the team's secret manager, never typed into a chat.
 
 import { createEffect, createResource, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "../components/Toast";
 import { confirm as confirmDialog } from "../components/ConfirmDialog";
@@ -11,7 +12,7 @@ import AppIcon from "../components/AppIcon";
 import { iconSrc } from "../lib/icons";
 import SecretsDialog from "../components/SecretsDialog";
 import { JobProgress, JobSteps } from "../components/dev/DevBits";
-import { ago, followJob, type DevJob } from "../lib/dev";
+import { ago, followJob, tildify, type DevJob } from "../lib/dev";
 import {
   clearWorkspaceJoin,
   pendingWorkspaceJoin,
@@ -327,6 +328,13 @@ function JoinPanel(props: { onJoined: () => void }) {
     }, 300);
   }));
   onCleanup(() => clearTimeout(suggestTimer));
+  // A workspace already checked out: joined where it is, nothing cloned.
+  const pickFolder = async () => {
+    const path = await invoke<string | null>("pick_folder", { title: "Choose the workspace's folder" }).catch(() => null);
+    if (path) setRepo(path);
+  };
+  // A path rather than a git URL: that folder is joined where it is.
+  const isFolder = () => /^(\/|~\/)/.test(repo().trim());
   const changeFolder = () => {
     setFolder(suggested()?.folder ?? "");
     setShowFolder(true);
@@ -367,9 +375,22 @@ function JoinPanel(props: { onJoined: () => void }) {
           onInput={(e) => setRepo(e.currentTarget.value)} disabled={running()} />
         <button class="btn btn-primary" type="submit" disabled={!repo().trim() || running()}>{running() ? "Joining…" : "Join"}</button>
       </form>
+      <Show when={!repo().trim() && !running()}>
+        <p class="ws-muted ws-join-where">
+          Already have it checked out?{" "}
+          <button class="btn-link" onClick={() => void pickFolder()}>Choose its folder…</button>
+        </p>
+      </Show>
       <Show when={showFolder()} fallback={
+        <Show when={suggested() || !isFolder()} fallback={
+          <p class="ws-muted ws-join-where">
+            Joins your copy in <span class="mono">{tildify(repo().trim())}</span> where it is; projects go beside it.
+          </p>
+        }>
         <Show when={suggested()} fallback={
-          <button class="ai-connect-more" onClick={changeFolder}>Keep your code somewhere other than ~/code?</button>
+          <Show when={repo().trim()}>
+            <button class="ai-connect-more" onClick={changeFolder}>Keep your code somewhere other than ~/code?</button>
+          </Show>
         }>
           {(s) => (
             <p class="ws-muted ws-join-where">
@@ -381,6 +402,7 @@ function JoinPanel(props: { onJoined: () => void }) {
               <button class="btn-link" onClick={changeFolder} disabled={running()}>Change</button>
             </p>
           )}
+        </Show>
         </Show>
       }>
         <input class="form-input mono ws-join-folder" placeholder="~/projects/dev-workspace" value={folder()}

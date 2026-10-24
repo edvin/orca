@@ -197,6 +197,14 @@ Open it with **Open gateway** at the top of the Gateway page. Its settings are o
 - **Search box**, and where it searches the web (see below).
 - **My links**: your own cards at the top of the page, such as your Jira board or a staging admin. Add one with a name and an address; **↑** and **↓** reorder them. They're kept on your computer only, never in a workspace or project file.
 
+In the page's top bar:
+
+- **Cards** and **Compact** switch the layout. Compact shows each service as a one-line row, which fits many more on a screen.
+- **Running only** hides services that are stopped or not set up. Searching still finds everything.
+- Click a group's name to fold it; a folded group shows how many services it has.
+
+Each browser remembers these choices.
+
 Each card's title, description, group and icon come from the route:
 
 | Route from | Set it with |
