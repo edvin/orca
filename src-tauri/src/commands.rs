@@ -4847,6 +4847,19 @@ pub async fn workspace_api(
     daemon_call(&method, &path, body).await
 }
 
+/// The Databases page's calls: everything under /databases.
+#[tauri::command]
+pub async fn databases_api(
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    if !(path == "/databases" || path.starts_with("/databases/")) || path.contains("..") {
+        return Err("invalid databases API path".into());
+    }
+    daemon_call(&method, &path, body).await
+}
+
 /// What Orca would start from a folder: compose files, services, profiles,
 /// orca.yaml, git, and the stack already running from it.
 #[tauri::command]

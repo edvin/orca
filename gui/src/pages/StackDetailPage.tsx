@@ -12,6 +12,7 @@ import YamlEditor from "../components/YamlEditor";
 import StackOrcaYaml from "../components/StackOrcaYaml";
 import Dropdown from "../components/Dropdown";
 import StackProfiles from "../components/StackProfiles";
+import StackDatabases from "../components/StackDatabases";
 import HelpLink from "../components/HelpLink";
 import type { StackProfilesReport } from "../lib/types";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -60,9 +61,9 @@ export default function StackDetailPage(props: StackDetailPageProps) {
     (name) => invoke<StackProfilesReport>("stack_profiles", { name }),
   );
   const [profilesBusy, setProfilesBusy] = createSignal(false);
-  const hasProfiles = () => !profiles.error && (profiles()?.profiles.length ?? 0) > 0;
+  const hasProfiles = () => !profiles.error && (profiles()?.profiles?.length ?? 0) > 0;
   const profilesOf = (service: string) =>
-    (!profiles.error && profiles()?.services.find((s) => s.name === service)?.profiles) || [];
+    (!profiles.error && profiles()?.services?.find((s) => s.name === service)?.profiles) || [];
   /** Services behind a profile that is off, so they have no container. */
   const offServices = () =>
     hasProfiles()
@@ -342,6 +343,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       <div class="detail-tab-content">
         {/* Services tab */}
         <Show when={activeTab() === "services"}>
+          <StackDatabases stackName={props.stackName} onNavigate={props.onNavigate} />
           <Show when={hasProfiles()}>
             <StackProfiles report={profiles()!} busy={profilesBusy()} onSave={(l, a) => void saveProfiles(l, a)} />
           </Show>

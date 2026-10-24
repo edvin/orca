@@ -155,6 +155,7 @@ Click **Set up** on a project's card, or **Start** if it's already cloned. Orca 
 | **Clone the repository** | Runs `git clone` (with `--branch` when the workspace names one) into the project's folder. If the folder already exists, Orca uses it as it is and shows *"Already in …"*. |
 | **Create the .env file** | Creates the `.env` from its template, such as `.env.example`, if the file doesn't exist yet. An existing `.env` is never overwritten. |
 | **Fill in secrets** | Fetches each missing secret with your secret manager's CLI, when it's set up on this machine, and writes it to the `.env`. |
+| **Create its database** | When the project's `orca.yaml` [requires a database](/docs/databases/), creates it and a user for it on the workspace's server (or another, see [Databases](/docs/databases/#how-it-works)) and writes the connection into the `.env`, before the setup command, so migrations find it. Skipped with *"Its orca.yaml requires none"* otherwise. |
 | **Run the setup command** | Runs the project's setup command, such as `just setup`, in its folder. Only the first time on this machine. |
 | **Start the shared services it uses** | Starts the shared services the project lists under `uses`. |
 | **Start the project** | Starts the project's compose file as a stack, as [Open a project folder](/docs/stacks/#open-a-project-folder) does, and runs the `hooks` from its own `orca.yaml`. |
@@ -165,7 +166,7 @@ A step that doesn't apply is skipped with a reason, such as *"None in the worksp
 
 ### When secrets are missing
 
-If a secret is still empty after **Fill in secrets**, setup stops there. The last three steps are skipped with *"Waiting for the missing secrets"*, nothing is started, and the secrets dialog opens.
+If a secret is still empty after **Fill in secrets**, setup stops there. The last four steps are skipped with *"Waiting for the missing secrets"*, nothing is started, and the secrets dialog opens.
 
 Fill the values in and click **Save and start**: setup runs again from the top and this time continues to the end. Click **Later** to close the dialog; the card keeps showing **N secrets to fill in** until you do.
 
@@ -207,7 +208,7 @@ The tool mostly uses these of Orca's tools:
 | Tool | What it does |
 |---|---|
 | `workspace_status` | The workspace's shared services and every project: its repo, whether it's cloned and running, its URLs and which secrets are still missing. The tool uses it to find a project by name or description. |
-| `setup_project` | Runs the six setup steps for a project by its key and waits for them, up to 20 minutes. Returns the URLs, or the missing secrets with links. `rerun_setup` runs the setup command again. |
+| `setup_project` | Runs the setup steps for a project by its key and waits for them, up to 20 minutes. Returns the URLs, or the missing secrets with links. `rerun_setup` runs the setup command again. |
 | `update_workspace` | Pulls the workspace and applies it again, like **Update**. |
 | `join_workspace` | Joins a workspace from scratch, so *"set me up with the Acme workspace"* works on a new machine. Your AI tool asks you first. |
 | `check_workspace` | The same check as **Check this machine** on the Workspace page. |

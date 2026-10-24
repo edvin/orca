@@ -47,6 +47,17 @@ async function injectTauriBridge(page: Page) {
           subscribe_events: () => Promise.resolve({}),
           // Containers
           list_containers: () => fetchJson(DAEMON +"/containers"),
+          // The pages that call the daemon's API by path.
+          databases_api: () => fetch(DAEMON + args.path, {
+            method: args.method,
+            headers: { ...AUTH, "Content-Type": "application/json" },
+            body: args.body ? JSON.stringify(args.body) : undefined,
+          }).then(r => r.json()),
+          workspace_api: () => fetch(DAEMON + args.path, {
+            method: args.method,
+            headers: { ...AUTH, "Content-Type": "application/json" },
+            body: args.body ? JSON.stringify(args.body) : undefined,
+          }).then(r => r.json()),
           probe_container_ports: () => fetch(DAEMON + "/containers/" + encodeURIComponent(args.id) + "/probe-ports", { method: "POST", headers: AUTH })
             .then(r => r.json()),
           container_stats: () => fetchJson(DAEMON +"/containers/" + (args?.id || "") + "/stats")

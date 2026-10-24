@@ -12,6 +12,7 @@ Docker Compose labels every container with the folder its project was started fr
 - **Routes** exist while their service runs and go away when it stops.
 - **Links** and **build targets** show up as soon as the project has containers, running or not.
 - **Hooks** run after every start from Orca (the stack page, `orca deploy`, or an AI agent). Orca can't run them after a `docker compose up` in a terminal.
+- **Databases** (`requires:`) are made before every start from Orca. A `docker compose up` in a terminal starts the project as its compose file says, with its own database if it has one.
 
 An `orca.local.yaml` next to it is merged on top, for settings that differ per machine. Keep it out of git.
 
@@ -160,9 +161,41 @@ Groups of links, each with a URL per environment. The Gateway page shows one tab
 
 `after_up` is a list of `"service: command"` entries. After every start from Orca, each one runs in that service's container with `sh -c`, in order. A failing hook doesn't stop the others: the stack page shows its output and the Activity log keeps it. Hooks run on every start, so make them safe to repeat (`|| true`, `IF NOT EXISTS`, idempotent migrations).
 
+## requires: databases
+
+What the project needs from the machine it runs on. Today that's a database: Orca gives the project a database and a user of its own, on the workspace's shared server, on the project's own database service, or on a server Orca runs itself, and writes the connection into its `.env`. See [Databases](https://orca-desktop.com/docs/databases/) for how the server is chosen.
+
+```yaml
+requires:
+  database:
+    engine: mysql            # mysql, mariadb or postgres
+    version: ">=8.0"         # optional: 8, >=8.0, >=14, <18, ^8.0, ~10.6
+    replaces: db             # its own compose service this stands in for
+    env:                     # what goes into .env; DATABASE_URL: "{url}" when left out
+      DB_HOST: "{host}"
+      DB_PORT: "{port}"
+      DB_DATABASE: "{name}"
+      DB_USERNAME: "{user}"
+      DB_PASSWORD: "{password}"
+    privileges: [create]     # optional: may create databases named <name>_…
+    seed: php artisan migrate --seed   # optional: run after a reset
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `engine` | required | `mysql`, `mariadb` or `postgres`. |
+| `version` | any | The versions the project works with. |
+| `name` | the project's name | The database's name: lowercase letters, digits and `_`. |
+| `replaces` | none | The project's own database service. When a shared or Orca server is used, it doesn't start, and the services that depended on it get the connection. |
+| `env` | `DATABASE_URL: "{url}"` | Variables for `.env`, with `{host}`, `{port}`, `{name}`, `{user}`, `{password}` and `{url}` filled in. |
+| `privileges` | none | `[create]`: the project's user may create and drop databases named `<name>_…`. |
+| `seed` | none | Run in the project folder after **Reset** on the **Databases** page. |
+
+For several databases, list them under `databases:` with the same keys. A `requires:` with a mistake is left out, with a warning on the stack's **orca.yaml** tab.
+
 ## dev: worktree instances
 
-With a `dev:` section, every git worktree of the project can run as its own copy of the app, with its own hostnames, ports and, if you want, its own database. Infrastructure runs once in a shared stack. Add the project on the **Projects** page to use it. Its editor has a form for all of this, with help on every key.
+With a `dev:` section, every git worktree of the project can run as its own copy of the app, with its own hostnames, ports and, if you want, its own database. Infrastructure runs once in a shared stack. Add the project on the **Worktrees** page to use it. Its editor has a form for all of this, with help on every key.
 
 | Key | Default | |
 |---|---|---|

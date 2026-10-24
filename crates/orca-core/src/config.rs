@@ -1,5 +1,6 @@
 //! Global Orca configuration.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -187,6 +188,9 @@ pub struct OrcaConfig {
     /// The workspace this machine joined: a repo with an orca-workspace.yaml.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<WorkspaceRef>,
+    /// Databases Orca made for projects, and the servers it runs itself.
+    #[serde(default, skip_serializing_if = "DatabaseState::is_empty")]
+    pub databases: DatabaseState,
 }
 
 /// A joined workspace: where its repo was cloned, and what was applied from
@@ -208,6 +212,50 @@ pub struct WorkspaceRef {
     /// What the last pull brought in, for "Workspace updated" on its page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_update: Option<WorkspaceUpdate>,
+}
+
+/// Databases Orca made for projects, and the servers it runs itself.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct DatabaseState {
+    /// Servers Orca runs itself, by id (`mysql-8.4`).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub servers: BTreeMap<String, OrcaDatabaseServer>,
+    /// Each server's project users and their passwords: server id
+    /// (`workspace:mysql`, `orca:mysql-8.4`) → user → password.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub users: BTreeMap<String, BTreeMap<String, String>>,
+    /// The databases Orca made: server id → database → who it's for.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub databases: BTreeMap<String, BTreeMap<String, DatabaseOwner>>,
+}
+
+impl DatabaseState {
+    pub fn is_empty(&self) -> bool {
+        self.servers.is_empty() && self.users.is_empty() && self.databases.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OrcaDatabaseServer {
+    pub engine: crate::databases::Engine,
+    pub version: String,
+    /// The admin password it was started with.
+    pub root_password: String,
+    /// Its port on this computer, for database tools.
+    pub port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DatabaseOwner {
+    /// The project's name (its compose project).
+    pub project: String,
+    /// Its folder.
+    pub dir: String,
+    pub user: String,
+    /// What seeds it after a reset, from its requirement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<String>,
 }
 
 /// The commits a workspace pull brought in.
@@ -774,6 +822,7 @@ impl Default for OrcaConfig {
             dev_projects: Vec::new(),
             stack_profiles: Default::default(),
             workspace: None,
+            databases: DatabaseState::default(),
         }
     }
 }

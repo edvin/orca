@@ -13,6 +13,7 @@ mod agent;
 mod api;
 mod build_manager;
 mod cron_expr;
+mod databases;
 mod dev;
 mod folders;
 mod gateway;

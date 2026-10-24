@@ -14,6 +14,7 @@ const ContainerDetailPage = lazy(() => import("./pages/ContainerDetailPage"));
 const StackDetailPage = lazy(() => import("./pages/StackDetailPage"));
 const ImagesPage = lazy(() => import("./pages/ImagesPage"));
 const VolumesPage = lazy(() => import("./pages/VolumesPage"));
+const DatabasesPage = lazy(() => import("./pages/DatabasesPage"));
 const VolumeDetailPage = lazy(() => import("./pages/VolumeDetailPage"));
 const NetworksPage = lazy(() => import("./pages/NetworksPage"));
 const GatewayPage = lazy(() => import("./pages/GatewayPage"));
@@ -43,7 +44,7 @@ import type { EnvironmentStatus } from "./lib/types";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import { startPoller, type Poller } from "./lib/poller";
 
-export type Page = "fleet" | "dashboard" | "workspace" | "projects" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "builds" | "volumes" | "volume-detail" | "networks" | "gateway" | "kubernetes" | "environment" | "activity" | "settings";
+export type Page = "fleet" | "dashboard" | "workspace" | "projects" | "templates" | "containers" | "container-detail" | "stack-detail" | "images" | "builds" | "volumes" | "volume-detail" | "databases" | "networks" | "gateway" | "kubernetes" | "environment" | "activity" | "settings";
 
 export default function App() {
   // The AI assistant opens this same App in a second webview via a #ai hash.
@@ -271,6 +272,9 @@ export default function App() {
           break;
         case "volumes":
           navigate("volumes");
+          break;
+        case "databases":
+          navigate("databases");
           break;
         case "networks":
           navigate("networks");
@@ -617,6 +621,7 @@ export default function App() {
               {page() === "images" && <ImagesPage autoOpenPull={detailId() === "pull"} onPullOpened={() => setDetailId(null)} onNavigate={(p) => navigate(p)} />}
               {page() === "builds" && <BuildsPage onNavigate={(p) => navigate(p)} onAskAi={(tag, error, logTail) => aiApi?.askAboutBuild(tag, error, logTail)} />}
               {page() === "volumes" && <VolumesPage onNavigate={(p) => navigate(p)} />}
+              {page() === "databases" && <DatabasesPage onNavigate={(p) => navigate(p)} />}
               {page() === "volume-detail" && detailId() && (
                 <VolumeDetailPage
                   volumeName={detailId()!}

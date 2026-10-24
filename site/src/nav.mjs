@@ -4,7 +4,7 @@
 export const NAV = [
   { title: "Getting started", items: ["introduction", "install", "quickstart", "platforms"] },
   { title: "Workspaces", items: ["workspaces", "workspaces-join", "workspaces-secrets", "workspaces-create", "workspaces-routes", "workspaces-migrate", "workspaces-reference", "workspaces-troubleshooting"] },
-  { title: "Local development", items: ["gateway", "orca-yaml", "profiles", "worktrees"] },
+  { title: "Local development", items: ["gateway", "databases", "orca-yaml", "profiles", "worktrees"] },
   { title: "Working with Orca", items: ["containers", "stacks", "images-and-builds", "templates", "kubernetes"] },
   { title: "AI and automation", items: ["agents", "ai-assistant", "cli", "api", "auto-deploy"] },
   { title: "Servers and teams", items: ["remote-hosts", "security"] },

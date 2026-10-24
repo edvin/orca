@@ -211,6 +211,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(crate::dev::routes())
         .merge(crate::workspace::routes())
+        .merge(crate::databases::routes())
         .merge(crate::update::routes())
         .route("/health", get(health))
         .route("/events", get(events_stream))
@@ -8339,6 +8340,8 @@ fn mcp_read_only(name: &str) -> bool {
                 | "gateway_requests"
                 | "identify_ports"
                 | "check_workspace"
+                | "list_databases"
+                | "database_connection"
                 | "build_status"
                 | "workspace_status"
                 | "check_for_update"
@@ -8379,6 +8382,7 @@ const MCP_ADDITIVE: &[&str] = &[
     "setup_project",
     "offer_update",
     "fetch_project_secrets",
+    "database_snapshot",
 ];
 
 /// Everything else that changes state may stop, overwrite or delete
@@ -8395,7 +8399,13 @@ pub(crate) fn deletes_data(name: &str) -> bool {
         || name.starts_with("k8s_delete")
         || matches!(
             name,
-            "instance_down" | "instance_db_reset" | "compose_down" | "write_orca_yaml" | "gateway_remove_route"
+            "instance_down"
+                | "instance_db_reset"
+                | "database_reset"
+                | "database_restore"
+                | "compose_down"
+                | "write_orca_yaml"
+                | "gateway_remove_route"
         )
 }
 

@@ -82,6 +82,13 @@ const icons: Record<string, () => JSX.Element> = {
       <path d="M3 12A9 3 0 0 0 21 12" />
     </svg>
   ),
+  // Table (a project's database, with rows)
+  databases: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h18M3 15h18M9 3v18" />
+    </svg>
+  ),
   // Share2 (connected nodes — network topology)
   networks: () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -153,6 +160,7 @@ const navGroups: { title: string | null; items: { id: Page; label: string }[] }[
       { id: "projects", label: "Worktrees" },
       { id: "containers", label: "Containers" },
       { id: "gateway", label: "Gateway" },
+      { id: "databases", label: "Databases" },
       { id: "templates", label: "App Catalog" },
     ],
   },

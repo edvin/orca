@@ -41,6 +41,24 @@ pub struct OrcaYaml {
     /// Commands run after the stack comes up.
     #[serde(skip_serializing_if = "ProjectHooks::is_empty")]
     pub hooks: ProjectHooks,
+    /// What the project needs from the machine it runs on: a database, which
+    /// Orca provides on a team's shared server, on its own, or from the
+    /// project's own compose service. See [`crate::databases`].
+    #[serde(
+        deserialize_with = "lenient_requires",
+        skip_serializing_if = "crate::databases::Requires::is_empty"
+    )]
+    pub requires: crate::databases::Requires,
+}
+
+/// `requires:` that doesn't parse, or asks for something impossible, is left
+/// out (and named by [`project_warnings`]) rather than breaking the file.
+fn lenient_requires<'de, D: Deserializer<'de>>(d: D) -> Result<crate::databases::Requires, D::Error> {
+    let value = serde_yaml::Value::deserialize(d)?;
+    Ok(serde_yaml::from_value::<crate::databases::Requires>(value)
+        .ok()
+        .filter(|r| r.all().iter().all(|db| db.validate().is_ok()))
+        .unwrap_or_default())
 }
 
 /// A group of environment links (`links:` in `orca.yaml`).
@@ -482,6 +500,18 @@ pub fn project_warnings(text: &str) -> Vec<String> {
                 "gateway entry {} is skipped: {e} (needs hostname, service and port)",
                 i + 1
             ));
+        }
+    }
+    if let Some(req) = value.get("requires") {
+        match serde_yaml::from_value::<crate::databases::Requires>(req.clone()) {
+            Err(e) => warnings.push(format!("requires is ignored: {e}")),
+            Ok(r) => {
+                for db in r.all() {
+                    if let Err(e) = db.validate() {
+                        warnings.push(format!("requires is ignored: {e}"));
+                    }
+                }
+            }
         }
     }
     for (i, item) in items("builds").into_iter().enumerate() {

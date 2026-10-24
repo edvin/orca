@@ -14,6 +14,7 @@ import SecretsDialog from "../components/SecretsDialog";
 import { JobProgress, JobSteps } from "../components/dev/DevBits";
 import { ago, followJob, tildify, type DevJob } from "../lib/dev";
 import { certExpiry } from "../lib/format";
+import { databasesApi, ENGINE_NAME, shortFrom, type ProjectNeeds } from "../lib/databases";
 import {
   clearWorkspaceJoin,
   pendingWorkspaceJoin,
@@ -48,6 +49,12 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
     requestAnimationFrame(() => document.getElementById(`ws-project-${key}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
     setTimeout(() => setFocused((k) => (k === key ? null : k)), 4000);
   }));
+
+  // The databases each project's orca.yaml requires, and where they come from.
+  const [dbNeeds, { refetch: refetchDbs }] = createResource(() => databasesApi.quick().then((o) => o.projects).catch(() => [] as ProjectNeeds[]));
+  const dbTimer = setInterval(() => { if (!document.hidden) void refetchDbs(); }, 15_000);
+  onCleanup(() => clearInterval(dbTimer));
+  const dbsOf = (dir: string) => (dbNeeds() ?? []).find((n) => n.dir === dir || n.dir.endsWith(dir.replace(/^~/, "")))?.databases ?? [];
 
   // "Workspace updated", until dismissed (per update, on this machine).
   const SEEN_KEY = "orca.workspace.seenUpdate";
@@ -259,6 +266,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                       onSecrets={() => setSecretsFor(p)}
                       onNavigate={props.onNavigate}
                       focused={focused() === p.key}
+                      databases={dbsOf(p.dir)}
                     />
                   )}
                 </For>
@@ -294,6 +302,7 @@ function ProjectCard(props: {
   onSecrets: () => void;
   onNavigate?: (target: string) => void;
   focused?: boolean;
+  databases?: ProjectNeeds["databases"];
 }) {
   const p = () => props.project;
   const busy = () => props.job?.status === "running";
@@ -310,6 +319,16 @@ function ProjectCard(props: {
       </div>
       <Show when={p().description}><div class="ws-card-desc">{p().description}</div></Show>
       <div class="ws-card-repo mono" title={p().repo}>{p().repo}</div>
+      <For each={props.databases ?? []}>
+        {(r) => (
+          <button class="ws-card-db" classList={{ bad: !!r.error }}
+            title={r.error ?? (r.source?.kind === "own" ? `${r.from}: ${r.source?.why}` : `Database ${r.database} on ${r.from}. Open the Databases page.`)}
+            onClick={() => props.onNavigate?.("databases")}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /></svg>
+            {r.error ? `Database: ${r.error}` : `${ENGINE_NAME[r.engine!]} · ${shortFrom(r)}`}
+          </button>
+        )}
+      </For>
 
       <Show when={p().running && p().urls.length > 0}>
         <div class="app-card-urls">

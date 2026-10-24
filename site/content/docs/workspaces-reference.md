@@ -73,6 +73,7 @@ projects:
 | [`shared`](#shared) | object | none | The shared services' compose file. |
 | [`routes`](#routes) | list | `[]` | Gateway routes for the shared services. |
 | [`clone_into`](#clone_into) | string | the workspace's parent folder | Where projects are cloned. Usually left out. |
+| [`databases`](#databases) | map | `{}` | Database servers among the shared services, for projects that require a database. |
 | [`registries`](#registries) | list of strings | `[]` | Image registries developers must be logged in to. |
 | [`secrets`](#secrets) | object | none | The secret managers that references point into. |
 | [`projects`](#projects) | map | `{}` | The team's projects, by key. |
@@ -212,6 +213,29 @@ clone_into: ~/code/acme
 
 If a project's folder already exists, setup uses it as it is, so checkouts that sit next to the workspace are picked up.
 
+## databases
+
+Database servers among the shared services. Projects whose `orca.yaml` [requires a database](/docs/databases/#require-a-database) get a database and a user of their own on a matching one, instead of running their own database container.
+
+```yaml
+databases:
+  mysql:
+    engine: mysql
+    service: mysql
+    version: "8.4"
+  postgres:
+    engine: postgres
+    service: postgres
+```
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `engine` | string | required | `mysql`, `mariadb` or `postgres`. |
+| `service` | string | required | The service in the [shared](#shared) compose file. |
+| `version` | string | from the image tag | Its version, matched against what projects accept. |
+
+The name (`mysql` above) is what a project's [`database`](#projects) key refers to, and how the server shows on the **Databases** page. Each needs `shared:`. Errors: *databases: 'x' needs `shared:`, the compose file its service is in*; *databases: 'x': `service` is missing*. See [Databases](/docs/databases/#shared-servers-in-a-workspace).
+
 ## registries
 
 Image registries projects pull from, such as `registry.acme.dev` or `registry.acme.dev:5000`.
@@ -259,6 +283,7 @@ Keys use letters, digits, dashes and underscores, at most 63 characters, and don
 | `repo` | string | required | What to `git clone`. |
 | `description` | string | none | One line, shown on the card. AI tools match on it too. |
 | `icon` | string | from its images | The project's icon on the **Workspace** page and the dashboard, and for its routes that don't set their own: a built-in icon, an image file in the workspace repo or an https URL. See [Icons](/docs/gateway/#icons). |
+| `database` | string | a matching server | Where the project's database comes from when its `orca.yaml` requires one: a server under [`databases`](#databases) by name, or `own` for its own database service. See [Choose per project](/docs/databases/#choose-per-project-in-the-workspace). |
 | `group` | string | the project's key | Shows the project with others under one name, such as `oneWebshop` for its backend, frontend and admin: one section on the landing page and the Gateway page, side by side on the dashboard and the **Workspace** page. Up to 60 characters. |
 | `path` | path | the project's key | The folder under `clone_into`. |
 | `branch` | string | the repo's default branch | The branch to check out when cloning. |

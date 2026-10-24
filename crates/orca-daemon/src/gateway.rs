@@ -1460,7 +1460,7 @@ mod tests {
 }
 
 /// Pull an image if it's not already present.
-async fn pull_if_needed(state: &AppState, image: &str) -> Result<()> {
+pub(crate) async fn pull_if_needed(state: &AppState, image: &str) -> Result<()> {
     let rt = state.rt().await;
     let docker = &rt.docker;
 

@@ -1,4 +1,5 @@
-import { createSignal, createEffect, on, onMount, onCleanup, For, Show } from "solid-js";
+import { createResource, createSignal, createEffect, on, onMount, onCleanup, For, Show } from "solid-js";
+import { databasesApi } from "../lib/databases";
 import { invoke } from "@tauri-apps/api/core";
 import type { ContainerStats, SystemHealth, GatewayStatus, GatewayRoute } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
@@ -133,6 +134,9 @@ export default function DashboardPage(props: DashboardPageProps) {
     setHealthState("loading");
     gatewayPoller.now();
   };
+  // Databases projects require, when there are any.
+  const [dbs] = createResource(() => databasesApi.quick().catch(() => null));
+
   // Worktree instances: a quick view of what's running per project.
   const loadProjects = () => devApi.listProjects(false).then(setDevProjects).catch(() => setDevProjects([]));
   usePoller(loadProjects, 10000);
@@ -337,11 +341,32 @@ export default function DashboardPage(props: DashboardPageProps) {
           )}
         </Show>
 
+        <Show when={(dbs()?.servers.length ?? 0) > 0 || (dbs()?.projects.length ?? 0) > 0}>
+          <div class="dashboard-stat-card" style={{ cursor: "pointer" }} onClick={() => props.onNavigate?.("databases")} title="Go to Databases">
+            <div class="dashboard-stat-label">Databases</div>
+            <div class="dashboard-stat-value">
+              {dbs()!.servers.reduce((n, s) => n + s.databases.length, 0)}
+              <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": 400 }}> on {dbs()!.servers.length} server{dbs()!.servers.length === 1 ? "" : "s"}</span>
+            </div>
+            <div class="dashboard-stat-sub">
+              <Show when={dbs()!.projects.some((p) => p.databases.some((d) => d.error))} fallback={
+                (() => {
+                  const shared = dbs()!.servers.filter((s) => s.source === "workspace").length;
+                  const orca = dbs()!.servers.length - shared;
+                  return [shared && `${shared} shared by the workspace`, orca && `${orca} run by Orca`].filter(Boolean).join(" · ");
+                })()
+              }>
+                <span style={{ color: "#f85149" }}>A project's database can't be provided</span>
+              </Show>
+            </div>
+          </div>
+        </Show>
+
         <div
           class="dashboard-stat-card"
           style={{ cursor: "pointer" }}
           onClick={() => props.onNavigate?.("projects")}
-          title="Go to Projects"
+          title="Go to Worktrees"
         >
           <div class="dashboard-stat-label">Worktree instances</div>
           <Show

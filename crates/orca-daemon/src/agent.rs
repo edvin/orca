@@ -822,6 +822,89 @@ pub async fn execute_tool(
             wait_for_job(job).await
         }
         "check_workspace" => api(state, "POST", "/workspace/check", None).await,
+        "list_databases" => {
+            let mut v = api(state, "GET", "/databases", None).await?;
+            // Snapshots by name, so the tool can restore one.
+            if let Some(servers) = v["servers"].as_array_mut() {
+                for s in servers.iter_mut() {
+                    let id = s["id"].as_str().unwrap_or("").to_string();
+                    if let Some(dbs) = s["databases"].as_array_mut() {
+                        for d in dbs.iter_mut() {
+                            let name = d["name"].as_str().unwrap_or("").to_string();
+                            let snaps: Vec<String> = crate::databases::snapshots(&id, &name)
+                                .into_iter()
+                                .map(|s| s.name)
+                                .collect();
+                            d["snapshot_files"] = json!(snaps);
+                        }
+                    }
+                }
+            }
+            Ok(v)
+        }
+        "database_connection" => {
+            let mut v = api(
+                state,
+                "GET",
+                &format!(
+                    "/databases/{}/{}/connection",
+                    seg(&arguments, "server")?,
+                    seg(&arguments, "database")?
+                ),
+                None,
+            )
+            .await?;
+            // The password stays out of the conversation.
+            if let Some(pw) = v["password"].as_str().map(str::to_string).filter(|p| !p.is_empty()) {
+                for k in ["inside", "outside"] {
+                    if let Some(u) = v[k].as_str() {
+                        v[k] = json!(u.replace(&pw, "****"));
+                    }
+                }
+            }
+            v["password"] = json!("in the project's .env");
+            Ok(v)
+        }
+        "database_snapshot" => {
+            api(
+                state,
+                "POST",
+                &format!(
+                    "/databases/{}/{}/snapshots",
+                    seg(&arguments, "server")?,
+                    seg(&arguments, "database")?
+                ),
+                Some(json!({ "label": arguments.get("label").and_then(|v| v.as_str()) })),
+            )
+            .await
+        }
+        "database_restore" => {
+            api(
+                state,
+                "POST",
+                &format!(
+                    "/databases/{}/{}/snapshots/{}/restore",
+                    seg(&arguments, "server")?,
+                    seg(&arguments, "database")?,
+                    seg(&arguments, "snapshot")?
+                ),
+                None,
+            )
+            .await
+        }
+        "database_reset" => {
+            api(
+                state,
+                "POST",
+                &format!(
+                    "/databases/{}/{}/reset",
+                    seg(&arguments, "server")?,
+                    seg(&arguments, "database")?
+                ),
+                None,
+            )
+            .await
+        }
         "fetch_project_secrets" => {
             api(
                 state,

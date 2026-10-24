@@ -3,6 +3,7 @@ pub mod ai;
 pub mod build;
 pub mod compose;
 pub mod config;
+pub mod databases;
 pub mod dev;
 pub mod environment;
 pub mod event;

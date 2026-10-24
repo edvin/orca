@@ -39,6 +39,10 @@ pub struct WorkspaceFile {
     pub clone_into: Option<String>,
     /// The secret managers `env.secrets` references point into.
     pub secrets: SecretProviders,
+    /// Database servers among the shared services that projects get their
+    /// databases on: `mysql: {engine: mysql, service: mysql, version: "8.4"}`.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub databases: BTreeMap<String, crate::databases::DatabaseServer>,
     /// Image registries projects pull from, e.g. `registry.example.com:5000`:
     /// Orca checks you're logged in to each.
     pub registries: Vec<String>,
@@ -210,6 +214,11 @@ pub struct WorkspaceProject {
     /// page, the dashboard and the Workspace page. Its key when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// Where its database comes from, when its `orca.yaml` requires one: a
+    /// server under `databases:` by name, or `own` for the project's own
+    /// compose service. Orca picks a matching server when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database: Option<String>,
     /// Folder under `clone_into`; the project's key when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
@@ -295,6 +304,17 @@ impl WorkspaceFile {
         if let Some(s) = &self.shared {
             relative_path(&s.compose).map_err(|e| anyhow::anyhow!("shared.compose: {e}"))?;
         }
+        for (name, db) in &self.databases {
+            if !valid_dns_name(name) {
+                anyhow::bail!("databases: '{name}': use letters, digits and dashes");
+            }
+            if db.service.trim().is_empty() {
+                anyhow::bail!("databases: '{name}': `service` is missing");
+            }
+            if self.shared.is_none() {
+                anyhow::bail!("databases: '{name}' needs `shared:`, the compose file its service is in");
+            }
+        }
         if let Some(p) = &self.secrets.passbolt
             && !p.url.starts_with("https://")
         {
@@ -309,6 +329,12 @@ impl WorkspaceFile {
             }
             if p.repo.trim().is_empty() {
                 anyhow::bail!("project '{key}': `repo` is missing");
+            }
+            if let Some(d) = &p.database
+                && d != "own"
+                && !self.databases.contains_key(d)
+            {
+                anyhow::bail!("project '{key}': database '{d}' isn't under `databases:` (or use `own`)");
             }
             if p.group
                 .as_deref()

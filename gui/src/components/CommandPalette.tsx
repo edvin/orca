@@ -118,7 +118,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
 
   const pages: Command[] = (
     [
-      ["dashboard", "Dashboard"], ["workspace", "Workspace"], ["projects", "Worktrees"], ["containers", "Containers"], ["images", "Images"],
+      ["dashboard", "Dashboard"], ["workspace", "Workspace"], ["projects", "Worktrees"], ["databases", "Databases"], ["containers", "Containers"], ["images", "Images"],
       ["builds", "Builds"], ["volumes", "Volumes"], ["networks", "Networks"], ["gateway", "Gateway"],
       ["kubernetes", "Kubernetes"], ["templates", "App Catalog"], ["fleet", "Fleet (remote hosts)"],
       ["environment", "System Health"], ["activity", "Activity"], ["settings", "Settings"],

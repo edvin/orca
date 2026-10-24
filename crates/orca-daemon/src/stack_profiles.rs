@@ -47,17 +47,30 @@ fn enabled<'a>(model: &'a ComposeModel, profiles: &[String]) -> Vec<&'a String> 
 
 /// `compose up -d` with the stack's remembered profiles.
 pub async fn up(state: &AppState, name: &str, dir: &str, config: Option<&str>) -> anyhow::Result<ComposeOutput> {
+    // The databases its orca.yaml requires: made before it starts, and a
+    // server that stands in for one of its services keeps that one out.
+    let with_databases = crate::databases::prepare(state, name, std::path::Path::new(dir), config, &|m| {
+        tracing::info!("{name}: {m}")
+    })
+    .await?;
+    let config = with_databases.as_deref().or(config);
     let profiles = state.config.lock().await.stack_profiles.get(name).cloned();
-    let Some(profiles) = profiles else {
+    let output = match profiles {
         // Never chosen: whatever compose runs by default.
-        return state.rt().await.compose_up(dir, config).await;
+        None if with_databases.is_none() => state.rt().await.compose_up(dir, config).await?,
+        profiles => {
+            let mut args = vec!["-p".to_string(), name.to_string()];
+            for p in profiles.iter().flatten() {
+                args.extend(["--profile".into(), p.clone()]);
+            }
+            args.extend(["up".into(), "-d".into()]);
+            state.rt().await.compose_args(dir, config, &args).await?
+        }
     };
-    let mut args = vec!["-p".to_string(), name.to_string()];
-    for p in &profiles {
-        args.extend(["--profile".into(), p.clone()]);
+    if output.success {
+        crate::databases::after_up(state, name, std::path::Path::new(dir)).await;
     }
-    args.extend(["up".into(), "-d".into()]);
-    state.rt().await.compose_args(dir, config, &args).await
+    Ok(output)
 }
 
 async fn report(state: &AppState, name: &str) -> Result<serde_json::Value, ApiError> {

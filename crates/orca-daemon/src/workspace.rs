@@ -612,7 +612,7 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
     Ok(())
 }
 
-fn shared_name(file: &WorkspaceFile, dir: &Path) -> String {
+pub(crate) fn shared_name(file: &WorkspaceFile, dir: &Path) -> String {
     file.shared
         .as_ref()
         .and_then(|s| s.name.clone())
@@ -798,6 +798,41 @@ pub(crate) fn project_icon(workspace: &WorkspaceRef, dir: &Path) -> Option<Strin
             .then(|| orca_core::icons::resolve(icon, Some(&ws_dir)).ok())
             .flatten()
     })
+}
+
+/// Start some of the workspace's shared services (`up -d <services>`).
+pub(crate) async fn start_shared_services(
+    state: &AppState,
+    file: &WorkspaceFile,
+    dir: &Path,
+    services: &[String],
+) -> Result<()> {
+    start_shared_services_logged(state, file, dir, services, None).await
+}
+
+async fn start_shared_services_logged(
+    state: &AppState,
+    file: &WorkspaceFile,
+    dir: &Path,
+    services: &[String],
+    job: Option<&JobHandle>,
+) -> Result<()> {
+    let shared = file.shared.as_ref().context("the workspace has no shared services")?;
+    let compose = dir.join(&shared.compose);
+    let mut args: Vec<String> = vec![
+        "-p".into(),
+        shared_name(file, dir),
+        "-f".into(),
+        compose.to_string_lossy().to_string(),
+        "up".into(),
+        "-d".into(),
+    ];
+    args.extend(services.iter().cloned());
+    let r = crate::dev::ops::compose(state, dir, &args, job).await?;
+    if !r.success {
+        anyhow::bail!("starting {} failed:\n{}", services.join(", "), r.stderr_tail);
+    }
+    Ok(())
 }
 
 /// The workspace's projects not cloned on this machine yet, by the owner of
@@ -1008,6 +1043,7 @@ async fn setup(
             ("clone", "Clone the repository"),
             ("env", "Create the .env file"),
             ("secrets", "Fill in secrets"),
+            ("database", "Create its database"),
             ("setup", "Run the setup command"),
             ("shared", "Start the shared services it uses"),
             ("start", "Start the project"),
@@ -1101,10 +1137,34 @@ async fn setup(
                 }
             }
             if !missing.is_empty() {
-                for step in ["setup", "shared", "start"] {
+                for step in ["database", "setup", "shared", "start"] {
                     j.skip(step, "Waiting for the missing secrets").await;
                 }
                 return Ok(serde_json::json!({ "missing_secrets": missing, "warnings": warnings }));
+            }
+
+            // Before its setup command, which may run migrations.
+            j.start("database").await;
+            let name = crate::folders::project_name(&pdir)?;
+            let plans = crate::databases::plan(&state, &name, &pdir).await;
+            if plans.is_empty() {
+                j.skip("database", "Its orca.yaml requires none").await;
+            } else {
+                let jl = j.clone();
+                let rt = tokio::runtime::Handle::current();
+                crate::databases::prepare(&state, &name, &pdir, None, &move |m| {
+                    let jl = jl.clone();
+                    rt.spawn(async move { jl.log(m).await });
+                })
+                .await?;
+                let summary: Vec<String> = plans
+                    .iter()
+                    .map(|p| match p {
+                        Ok(p) => format!("{} on {}", p.database, crate::databases::describe(&p.source)),
+                        Err(e) => e.clone(),
+                    })
+                    .collect();
+                j.done("database", Some(summary.join("; "))).await;
             }
 
             j.start("setup").await;
@@ -1133,21 +1193,8 @@ async fn setup(
 
             j.start("shared").await;
             match (&file.shared, project.uses.is_empty()) {
-                (Some(shared), false) => {
-                    let compose = dir.join(&shared.compose);
-                    let mut args: Vec<String> = vec![
-                        "-p".into(),
-                        shared_name(&file, &dir),
-                        "-f".into(),
-                        compose.to_string_lossy().to_string(),
-                        "up".into(),
-                        "-d".into(),
-                    ];
-                    args.extend(project.uses.iter().cloned());
-                    let r = crate::dev::ops::compose(&state, &dir, &args, Some(&j)).await?;
-                    if !r.success {
-                        anyhow::bail!("starting {} failed:\n{}", project.uses.join(", "), r.stderr_tail);
-                    }
+                (Some(_), false) => {
+                    start_shared_services_logged(&state, &file, &dir, &project.uses, Some(&j)).await?;
                     j.done("shared", Some(project.uses.join(", "))).await;
                 }
                 _ => j.skip("shared", "Uses none").await,

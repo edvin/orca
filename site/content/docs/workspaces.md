@@ -20,6 +20,7 @@ One repository describes the whole local environment:
 | **Network** | A Docker network the shared services and projects meet on. | `local-dev` |
 | **Gateway domain and certificate** | The domain every HTTPS hostname lives under, and the certificate for it. | `*.local.acme.dev` |
 | **Routes** | Which hostname (and path) goes to which container and port. | `mail.local.acme.dev` to `mailpit:8025` |
+| **Database servers** | Shared MySQL, MariaDB or PostgreSQL servers. Each project that [requires a database](/docs/databases/) gets one and a user of its own on them. | One MySQL 8.4 and one PostgreSQL 17 for everyone |
 | **Projects** | Each project's git repo, its setup command, the shared services it needs, its routes and the secrets its `.env` file needs. | `billing`, `crm`, `shop` |
 | **Secret references** | Where each secret lives in your team's secret manager. Never the values. | `passbolt:7f3c91a2-…`, `op://Dev/Stripe/secret` |
 
@@ -49,20 +50,21 @@ Nothing else on your machine changes. See [Join and use a workspace](/docs/works
 
 ## What happens when you set up a project
 
-Setting up a project runs six steps:
+Setting up a project runs seven steps:
 
 1. **Clone the repository**, or use the checkout that's already there.
 2. **Create the .env file** from the project's template, such as `.env.example`.
 3. **Fill in secrets** from your team's secret manager.
-4. **Run the setup command**, such as `just setup`, once per machine.
-5. **Start the shared services it uses**.
-6. **Start the project**, and show its URLs.
+4. **Create its database**, when its `orca.yaml` [requires one](/docs/databases/): a database and a user of its own on the team's shared server.
+5. **Run the setup command**, such as `just setup`, once per machine.
+6. **Start the shared services it uses**.
+7. **Start the project**, and show its URLs.
 
 If a secret is still missing after step 3, Orca stops before starting anything and asks you to fill it in. See [Set up a project](/docs/workspaces-join/#set-up-a-project) and [Secrets](/docs/workspaces-secrets/).
 
 ## With an AI tool
 
-With Orca [connected to your AI tool](/docs/agents/), a developer can say *"spin up the CRM"* or *"set up billing and give me its URL"*. The tool looks the project up in the workspace, sets it up with the same six steps and answers with its URLs. If secrets are missing, it names them and sends you to the **Workspace** page to fill them in. Orca tells AI tools never to ask for secrets in the chat.
+With Orca [connected to your AI tool](/docs/agents/), a developer can say *"spin up the CRM"* or *"set up billing and give me its URL"*. The tool looks the project up in the workspace, sets it up with the same steps and answers with its URLs. If secrets are missing, it names them and sends you to the **Workspace** page to fill them in. Orca tells AI tools never to ask for secrets in the chat.
 
 ## Who it's for
 

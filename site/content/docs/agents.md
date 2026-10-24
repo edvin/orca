@@ -301,6 +301,18 @@ Ask *"is my Orca up to date?"* or *"update Orca"*. When you ask about a feature 
 | `check_workspace` | What this machine still needs: gateway ports, the domain, the certificate's expiry, Orca's certificate authority, registry logins, the secret manager's CLI and access to every repository, each problem with what to do. |
 | `fetch_project_secrets` | Fill in a project's secrets from Passbolt or 1Password with your own CLI. Returns which were filled; the values never reach the AI tool. |
 
+### Databases
+
+| Tool | What it does |
+|------|--------------|
+| `list_databases` | The database servers, the databases on them with their project and size, and what each project's `orca.yaml` requires. No passwords. |
+| `database_connection` | Host, port, database and user of a project's database; the password is left out. |
+| `database_snapshot` | Save a snapshot of a database, for example before a migration. |
+| `database_restore` | Replace a database with a snapshot. Marked `destructiveHint`. |
+| `database_reset` | Empty a database and run the project's seed command. Marked `destructiveHint`. |
+
+See [Databases](/docs/databases/).
+
 ### Worktree projects and instances
 
 | Tool | What it does |

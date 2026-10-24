@@ -332,6 +332,51 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             parameters: json_schema(json!({})),
             category: "Workspace".into(),
         },
+        // === Databases ===
+        ToolDefinition {
+            name: "list_databases".into(),
+            description: "Database servers and the databases on them: the workspace's shared servers and the ones Orca runs itself, each database's size, the project it's for and its user, and every project whose orca.yaml requires a database with where it comes from (or why it can't be provided). No passwords.".into(),
+            parameters: json_schema(json!({})),
+            category: "Databases".into(),
+        },
+        ToolDefinition {
+            name: "database_connection".into(),
+            description: "How to connect to a project's database: host, port, database and user, from inside the project's containers and from this computer. The password isn't included: it's in the project's .env (or the Databases page in Orca).".into(),
+            parameters: json_schema(json!({
+                "server": { "type": "string", "description": "Server id from list_databases, such as workspace:mysql or orca:postgres-17" },
+                "database": { "type": "string" }
+            })),
+            category: "Databases".into(),
+        },
+        ToolDefinition {
+            name: "database_snapshot".into(),
+            description: "Save a snapshot of a database (a compressed SQL dump on this computer), for example before running a migration. Restore it with database_restore.".into(),
+            parameters: json_schema(json!({
+                "server": { "type": "string" },
+                "database": { "type": "string" },
+                "label": { "type": "string", "description": "A word or two for the file name, such as before-migration" }
+            })),
+            category: "Databases".into(),
+        },
+        ToolDefinition {
+            name: "database_restore".into(),
+            description: "Replace a database's contents with a snapshot. Everything in it now is lost unless snapshotted first, so confirm with the developer.".into(),
+            parameters: json_schema(json!({
+                "server": { "type": "string" },
+                "database": { "type": "string" },
+                "snapshot": { "type": "string", "description": "Snapshot file name from list_databases or database_snapshot" }
+            })),
+            category: "Databases".into(),
+        },
+        ToolDefinition {
+            name: "database_reset".into(),
+            description: "Empty a project's database (drop and create it again) and run the project's seed command when its orca.yaml has one. Everything in it is lost, so confirm with the developer, and consider database_snapshot first.".into(),
+            parameters: json_schema(json!({
+                "server": { "type": "string" },
+                "database": { "type": "string" }
+            })),
+            category: "Databases".into(),
+        },
         // === Projects (worktree instances) ===
         ToolDefinition {
             name: "list_projects".into(),
