@@ -314,6 +314,21 @@ pub async fn stop(state: &AppState) -> Result<()> {
     Ok(())
 }
 
+/// At daemon start, a gateway left running by the previous Orca still has
+/// the config that version pushed; give it this version's, so the landing
+/// page it serves and the routes behind it match.
+pub fn resync_on_start(state: std::sync::Arc<AppState>) {
+    tokio::spawn(async move {
+        if !is_running(&state).await.unwrap_or(false) {
+            return;
+        }
+        let config = state.config.lock().await.gateway.clone();
+        if let Err(e) = apply_config(&config).await {
+            tracing::warn!("gateway: couldn't update the running gateway's config: {e:#}");
+        }
+    });
+}
+
 /// Generate and push Caddy JSON config via the admin API.
 pub async fn apply_config(config: &GatewayConfig) -> Result<()> {
     prepare_certs(config)?;

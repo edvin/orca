@@ -12,7 +12,7 @@ Docker Compose labels every container with the folder its project was started fr
 - **Routes** exist while their service runs and go away when it stops.
 - **Links** and **build targets** show up as soon as the project has containers, running or not.
 - **Hooks** run after every start from Orca (the stack page, `orca deploy`, or an AI agent). Orca can't run them after a `docker compose up` in a terminal.
-- **Databases** (`requires:`) are made before every start from Orca. A `docker compose up` in a terminal starts the project as its compose file says, with its own database if it has one.
+- **Databases** (`requires:`) are made before every start from Orca. After that, a `docker compose up` in a terminal uses them too: Orca points `COMPOSE_FILE` in `.env` at the override that leaves the replaced database service out.
 
 An `orca.local.yaml` next to it is merged on top, for settings that differ per machine. Keep it out of git.
 

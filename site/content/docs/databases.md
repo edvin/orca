@@ -22,7 +22,9 @@ On the chosen server, Orca:
 
 - creates a database named after the project (`onecrm`), and a **user of its own** with a generated password, allowed into that database only;
 - writes the connection into the project's `.env`;
-- with `replaces:`, keeps the project's own database service from starting, and sets the connection on the services that depended on it.
+- with `replaces:`, keeps the project's own database service from starting, and sets the connection on the services that depended on it, including those behind a profile.
+
+`replaces:` works with an override file in the project's `.orca/` folder, which leaves the service out. Orca also points `COMPOSE_FILE` in `.env` at it, so a `docker compose up` in a terminal, or a `just up` or `make up` that runs one, leaves the database out too. A `COMPOSE_FILE` the project sets itself is kept, with the override added at the end. When the project stops using a shared server, Orca takes the override out again.
 
 Orca does this every time the project starts, so a missing database or user is made again, and it's safe to repeat. A [workspace](/docs/workspaces/) project gets it during setup, in the **Create its database** step, before its setup command runs, so migrations in that command find their database.
 
@@ -109,6 +111,23 @@ services:
 | `version` | Its version, for matching projects' `version:`. When left out, Orca reads it from the running image's tag. |
 
 The server starts the first time a project needs it, like any shared service. Orca runs its commands inside the server's container and reads the admin login from the container's own environment (`MYSQL_ROOT_PASSWORD`, `MARIADB_ROOT_PASSWORD`, or `POSTGRES_USER` and `POSTGRES_PASSWORD`), so it never needs to be told the admin password. Set one of those on a shared server: Orca needs the admin login to create databases and users, so a server started with `MYSQL_RANDOM_ROOT_PASSWORD` can't be shared.
+
+Any image of the engine works, so the shared server can be the one production runs: Percona Server is `engine: mysql`, with `version:` set to the MySQL version it's built on.
+
+Server settings go on the shared service, as its `command:` or a config file it mounts, and apply to every project on it:
+
+```yaml title="compose.yaml (the workspace's shared services)"
+services:
+  percona:
+    image: percona/percona-server:8.0.37
+    command:
+      - --log_bin_trust_function_creators=1   # stored functions, with binary logging on
+      - --local_infile=1                      # LOAD DATA LOCAL INFILE
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+```
+
+A project that needs settings the others shouldn't get keeps its own database service, with [`database: own`](#choose-per-project-in-the-workspace).
 
 When a project starts, the servers it uses join its networks, so its services reach them by name whatever networks the project uses.
 

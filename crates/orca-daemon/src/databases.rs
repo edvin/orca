@@ -270,6 +270,7 @@ pub async fn prepare(
 ) -> Result<Option<String>> {
     let plans = plan(state, project, dir).await;
     if plans.is_empty() {
+        unset_compose_file(dir)?;
         return Ok(None);
     }
     let mut replaced = Vec::new();
@@ -316,6 +317,7 @@ pub async fn prepare(
         }
     }
     if replaced.is_empty() {
+        unset_compose_file(dir)?;
         return Ok(None);
     }
     let files = match compose_files {
@@ -330,6 +332,9 @@ pub async fn prepare(
             .collect(),
     };
     let override_path = write_override(state, dir, &files, &replaced).await?;
+    if env_file(state, dir).await == ".env" {
+        set_compose_file(dir, &files)?;
+    }
     let path = override_path.to_string_lossy().to_string();
     Ok(Some(
         files
@@ -634,6 +639,92 @@ fn write_env(dir: &Path, file: &str, values: &BTreeMap<String, String>) -> Resul
     Ok(())
 }
 
+/// Where `COMPOSE_FILE` in `.env` points at the override, so a
+/// `docker compose up` in a terminal (or a justfile's) leaves the replaced
+/// services out too.
+const OVERRIDE_ENTRY: &str = ".orca/databases.override.yaml";
+/// The comment above a `COMPOSE_FILE` Orca added, so it can take it out again.
+const COMPOSE_FILE_NOTE: &str = "# Added by Orca: leaves out the database services a shared server replaces.";
+
+fn compose_sep() -> char {
+    if cfg!(windows) { ';' } else { ':' }
+}
+
+/// Points `.env`'s `COMPOSE_FILE` at the project's compose files and the
+/// override, keeping a `COMPOSE_FILE` the project set itself.
+fn set_compose_file(dir: &Path, files: &[String]) -> Result<()> {
+    let path = dir.join(".env");
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let sep = compose_sep();
+    let rel = |f: &str| {
+        Path::new(f)
+            .strip_prefix(dir)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| f.to_string())
+    };
+    let mut list: Vec<String> = files
+        .iter()
+        .map(|f| rel(f))
+        .filter(|f| !f.ends_with(OVERRIDE_FILE))
+        .collect();
+    list.push(OVERRIDE_ENTRY.to_string());
+    let value = list.join(&sep.to_string());
+    let has_key = text.lines().any(|l| l.trim_start().starts_with("COMPOSE_FILE="));
+    let updated = if has_key {
+        orca_core::workspace::set_env_values(&text, &BTreeMap::from([("COMPOSE_FILE".to_string(), value)]))
+    } else {
+        let mut t = text.clone();
+        if !t.is_empty() && !t.ends_with('\n') {
+            t.push('\n');
+        }
+        t.push_str(&format!("\n{COMPOSE_FILE_NOTE}\nCOMPOSE_FILE={value}\n"));
+        t
+    };
+    if updated != text {
+        std::fs::write(&path, updated)?;
+    }
+    Ok(())
+}
+
+/// Takes the override back out of `.env`'s `COMPOSE_FILE`, and the whole
+/// setting when Orca added it.
+fn unset_compose_file(dir: &Path) -> Result<()> {
+    let path = dir.join(".env");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(());
+    };
+    if !text.contains(OVERRIDE_ENTRY) {
+        return Ok(());
+    }
+    let sep = compose_sep();
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out: Vec<String> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        let Some(v) = line.trim_start().strip_prefix("COMPOSE_FILE=") else {
+            out.push(line.to_string());
+            continue;
+        };
+        if i > 0 && lines[i - 1].trim() == COMPOSE_FILE_NOTE {
+            out.pop();
+            if out.last().is_some_and(|l| l.trim().is_empty()) {
+                out.pop();
+            }
+            continue;
+        }
+        let kept: Vec<&str> = v
+            .trim()
+            .trim_matches(['"', '\''])
+            .split(sep)
+            .filter(|f| !f.is_empty() && *f != OVERRIDE_ENTRY)
+            .collect();
+        out.push(format!("COMPOSE_FILE={}", kept.join(&sep.to_string())));
+    }
+    let mut updated = out.join("\n");
+    updated.push('\n');
+    std::fs::write(&path, updated)?;
+    Ok(())
+}
+
 /// A project service a server stands in for, and the connection that
 /// replaces it.
 struct Replaced {
@@ -695,13 +786,15 @@ async fn write_override(state: &AppState, dir: &Path, files: &[String], replaced
     Ok(path)
 }
 
-/// Each service's `depends_on`, from the project's compose files as compose
-/// resolves them.
+/// Each service's `depends_on`, in every profile, from the project's compose
+/// files as compose resolves them.
 async fn dependents(state: &AppState, dir: &Path, files: &[String]) -> BTreeMap<String, Vec<String>> {
     let mut args = vec!["compose".to_string()];
     for f in files.iter().filter(|f| !f.ends_with(OVERRIDE_FILE)) {
         args.extend(["-f".into(), f.clone()]);
     }
+    // Every profile's services: one switched on later depends on it too.
+    args.extend(["--profile".into(), "*".into()]);
     args.extend(["config".into(), "--format".into(), "json".into()]);
     let program = match state.rt().await.detect_runtime().await {
         orca_core::runtime::RuntimeKind::Podman => "podman",
@@ -1707,6 +1800,36 @@ async fn post_import(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compose_file_in_env_is_added_and_taken_out_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = dir.path().join(".env");
+        let original = "APP_NAME=shop\nDB_HOST=db\n";
+        std::fs::write(&env, original).unwrap();
+        let main = dir.path().join("docker-compose.yml").to_string_lossy().to_string();
+        set_compose_file(dir.path(), std::slice::from_ref(&main)).unwrap();
+        let text = std::fs::read_to_string(&env).unwrap();
+        assert!(
+            text.contains("COMPOSE_FILE=docker-compose.yml:.orca/databases.override.yaml"),
+            "{text}"
+        );
+        // Again, as on every start: unchanged.
+        set_compose_file(dir.path(), &[main, OVERRIDE_ENTRY.into()]).unwrap();
+        assert_eq!(std::fs::read_to_string(&env).unwrap(), text);
+        unset_compose_file(dir.path()).unwrap();
+        assert_eq!(std::fs::read_to_string(&env).unwrap(), original);
+
+        // The project's own COMPOSE_FILE is kept.
+        std::fs::write(&env, "COMPOSE_FILE=a.yml:b.yml\n").unwrap();
+        set_compose_file(dir.path(), &["a.yml".into(), "b.yml".into()]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&env).unwrap(),
+            "COMPOSE_FILE=a.yml:b.yml:.orca/databases.override.yaml\n"
+        );
+        unset_compose_file(dir.path()).unwrap();
+        assert_eq!(std::fs::read_to_string(&env).unwrap(), "COMPOSE_FILE=a.yml:b.yml\n");
+    }
 
     #[test]
     fn ids_from_the_api_are_checked() {

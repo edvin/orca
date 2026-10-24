@@ -146,6 +146,7 @@ async fn main() -> anyhow::Result<()> {
     let scheduler_state = state.clone();
     dev::activity::spawn(state.clone());
     gateway_sync::spawn(state.clone());
+    gateway::resync_on_start(state.clone());
     workspace::spawn(state.clone());
     tokio::spawn(async move {
         run_scheduler(scheduler_state).await;
