@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvmrnew8">
+<link rel="stylesheet" href="/assets/site.css?v=mvmt2k30">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvmrnew8" defer></script>
+<script src="/assets/site.js?v=mvmt2k30" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,81 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.60.0">
+<section class="container releases"><article class="release" id="v0.62.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.62.0">v0.62.0</a><time datetime="2026-10-24T19:41:05Z">October 24, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="databases"><a class="anchor" href="#databases" aria-hidden="true" tabindex="-1">#</a>Databases</h2>
+<p>A project can now say in its <code>orca.yaml</code> which database it needs, and Orca provides it:</p>
+<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">requires</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  database</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    engine</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">mysql</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    version</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">">=8.0"</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    replaces</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">db</span></span></code></pre></div><p>Orca gives the project a database and a user of its own, with a generated password, and writes the connection into its <code>.env</code>. The database comes from:</p>
+<ol>
+<li><strong>your team&#39;s shared server</strong>, when the workspace has one for that engine and version;</li>
+<li><strong>the project&#39;s own database service</strong>, when it has one and the workspace doesn&#39;t (as without Orca);</li>
+<li><strong>a server Orca runs itself</strong>: MySQL, MariaDB or PostgreSQL, one per version, started the first time a project needs it.</li>
+</ol>
+<p>With <code>replaces:</code>, the project&#39;s own database container doesn&#39;t start, and the connection is set on the services that used it, even when their compose file hardcodes it. Once a database exists, it stays on its server, so adding a shared server later never leaves data behind.</p>
+<h3 id="shared-servers-for-a-team"><a class="anchor" href="#shared-servers-for-a-team" aria-hidden="true" tabindex="-1">#</a>Shared servers for a team</h3>
+<p>A workspace shares servers with a <code>databases:</code> section naming services in its shared compose file. Each project gets its own database and user there, instead of every developer running a database container per project. The workspace file can choose per project with <code>database: mysql</code> or <code>database: own</code>.</p>
+<h3 id="the-databases-page"><a class="anchor" href="#the-databases-page" aria-hidden="true" tabindex="-1">#</a>The Databases page</h3>
+<p>A new <strong>Databases</strong> page shows every server and the databases on it, which project each is for, its user and size, and what each project requires (or why it can&#39;t be provided). For each database:</p>
+<ul>
+<li><strong>Connect</strong>: host, port, user and password, and a URL for TablePlus, DBeaver or DataGrip.</li>
+<li><strong>Snapshot</strong> and <strong>Restore</strong>: compressed SQL dumps on your computer, with a label such as <code>before-migration</code>.</li>
+<li><strong>Reset</strong>: empty it and run the project&#39;s seed command.</li>
+</ul>
+<p>A project&#39;s database also shows on its stack page, on its card on the Workspace page and on the dashboard. Setting up a workspace project creates its database before the setup command runs, so migrations find it.</p>
+<h3 id="for-ai-tools"><a class="anchor" href="#for-ai-tools" aria-hidden="true" tabindex="-1">#</a>For AI tools</h3>
+<p><code>list_databases</code>, <code>database_connection</code>, <code>database_snapshot</code>, <code>database_restore</code> and <code>database_reset</code>. Passwords never reach the AI tool, and restoring or resetting needs your approval. Ask <em>&quot;snapshot onecrm&#39;s database, then run the migration&quot;</em>, and <em>&quot;restore it&quot;</em> if it goes wrong.</p>
+<p>See <a href="https://orca-desktop.com/docs/databases/">Databases</a> for everything.</p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.62.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.61.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.61.0">v0.61.0</a><time datetime="2026-10-24T19:06:57Z">October 24, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="see-every-request"><a class="anchor" href="#see-every-request" aria-hidden="true" tabindex="-1">#</a>See every request</h2>
+<p>A new <strong>Requests</strong> tab on the Gateway page lists requests through the gateway as they happen: time, status, address, route, how long it took and how large the answer was. Filter it by hostname, path, project or status, or keep <strong>Only problems</strong>.</p>
+<p>A failed request says why, in plain words: <em>&quot;Nothing on the gateway&#39;s networks answers to crm-app: its container isn&#39;t running&quot;</em>, or <em>&quot;crm-app runs but doesn&#39;t accept connections on that port: it&#39;s still starting&quot;</em>. Click it for the gateway&#39;s own error.</p>
+<h2 id="check-this-machine"><a class="anchor" href="#check-this-machine" aria-hidden="true" tabindex="-1">#</a>Check this machine</h2>
+<p><strong>Check this machine</strong> on the Workspace page checks everything a computer needs for the workspace, and says what to do about each problem:</p>
+<ul>
+<li>the gateway on ports 80 and 443;</li>
+<li>the domain pointing at this computer;</li>
+<li>the team certificate&#39;s expiry;</li>
+<li>Orca&#39;s certificate authority being trusted;</li>
+<li>the shared network;</li>
+<li>registry logins;</li>
+<li>the secret manager&#39;s CLI;</li>
+<li>access to every project&#39;s repository.</li>
+</ul>
+<h2 id="no-surprise-certificate-expiry"><a class="anchor" href="#no-surprise-certificate-expiry" aria-hidden="true" tabindex="-1">#</a>No surprise certificate expiry</h2>
+<p>When a workspace&#39;s certificate is within 30 days of expiring, the Workspace page, the Gateway page and the gateway&#39;s start page say so, in yellow, then red once it has expired.</p>
+<h2 id="group-a-products-projects"><a class="anchor" href="#group-a-products-projects" aria-hidden="true" tabindex="-1">#</a>Group a product&#39;s projects</h2>
+<p>A workspace project can name its group, such as <code>group: oneWebshop</code> for its backend, frontend and admin. They then show together on the start page, the Gateway page, the dashboard and the Workspace page.</p>
+<h2 id="more-for-ai-tools"><a class="anchor" href="#more-for-ai-tools" aria-hidden="true" tabindex="-1">#</a>More for AI tools</h2>
+<ul>
+<li><code>gateway_requests</code>: recent requests and why the failed ones failed.</li>
+<li><code>join_workspace</code>: join a workspace from scratch. Your AI tool asks you first.</li>
+<li><code>check_workspace</code>: the same check as the Workspace page.</li>
+<li><code>fetch_project_secrets</code>: fill in a project&#39;s secrets with your own Passbolt or 1Password CLI; the values never reach the AI tool.</li>
+<li><code>identify_ports</code>: what each port of a container is.</li>
+<li><code>gateway_routes</code> now also says whether each route&#39;s service runs.</li>
+</ul>
+<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
+<ul>
+<li>The start page loads much less: icons are separate files the browser keeps, instead of being embedded in a page that refreshes every 20 seconds.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.61.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.60.0">
   <div class="release-meta"><a class="release-tag" href="#v0.60.0">v0.60.0</a><time datetime="2026-10-24T14:09:40Z">October 24, 2026</time></div>
   <div class="release-body prose">
     
@@ -516,50 +590,6 @@
 <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.49.0...v0.50.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.49.0...v0.50.0</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.50.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.49.0">
-  <div class="release-meta"><a class="release-tag" href="#v0.49.0">v0.49.0</a><time datetime="2026-10-22T13:01:55Z">October 22, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="set-up-a-project-with-one-file"><a class="anchor" href="#set-up-a-project-with-one-file" aria-hidden="true" tabindex="-1">#</a>Set up a project with one file</h2>
-<p>Put an <code>orca.yaml</code> next to your compose file and commit it. Everyone who runs the project with Orca gets the same HTTPS hostnames, links to the other environments, build targets and setup commands, whether they start it from Orca or with <code>docker compose up</code> in a terminal.</p>
-<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">gateway</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
-<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hostname</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">        # https://shop.localhost</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    service</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">web</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    port</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0550AE;--shiki-dark:#79C0FF">3000</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">links</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  Shop</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
-<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">    - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">name</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">Storefront</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      local</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      staging</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">https://staging.shop.example.com</span></span>
-<span class="line"></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hooks</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  after_up</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
-<span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">    - </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"web: npm run migrate"</span></span></code></pre></div><ul>
-<li><strong>Orca finds it on its own.</strong> Every compose project Orca can see gets its <code>orca.yaml</code> applied, and when you edit the file the change applies straight away. Routes exist while their service runs.</li>
-<li><strong>Create one in a click.</strong> The new <strong>orca.yaml</strong> tab on a stack&#39;s page writes a first version from the stack&#39;s running services, and checks it as you type. For a stack that already has one, the tab shows what Orca applied and why anything didn&#39;t apply, such as a hostname another route already uses or a service that isn&#39;t running.</li>
-<li><strong>One file for everything.</strong> Gateway routes, links, build targets, setup hooks and the <code>dev:</code> section for worktree instances all live together. An <code>orca.local.yaml</code> next to it holds settings that differ per machine. When Orca finds a repo whose <code>orca.yaml</code> is set up for worktrees, the Projects page offers to add it.</li>
-<li><strong>A full reference.</strong> Every key is described in the <a href="https://github.com/edvin/orca/blob/main/docs/orca-yaml.md" target="_blank" rel="noopener">orca.yaml reference</a>.</li>
-</ul>
-<h2 id="routes-from-container-labels"><a class="anchor" href="#routes-from-container-labels" aria-hidden="true" tabindex="-1">#</a>Routes from container labels</h2>
-<p>A container can now ask for its own hostname. Orca adds the route when the container starts and removes it when it stops.</p>
-<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">labels</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  orca.route</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span></span></code></pre></div><p>Traefik labels work too, so projects that already use <code>Host(...)</code> rules get routed with no changes. The Gateway page tags each route with where it comes from (labels, orca.yaml, a stack or a worktree) and points you to the right place to change it.</p>
-<h2 id="hostnames-work-inside-containers-too"><a class="anchor" href="#hostnames-work-inside-containers-too" aria-hidden="true" tabindex="-1">#</a>Hostnames work inside containers too</h2>
-<p>Every routed hostname now also resolves inside your containers, to the gateway. A backend can call <code>https://auth.localhost</code> the same way your browser does, which is what OIDC issuer URLs and server-to-server calls by public name need.</p>
-<h2 id="setup-commands-for-any-stack"><a class="anchor" href="#setup-commands-for-any-stack" aria-hidden="true" tabindex="-1">#</a>Setup commands for any stack</h2>
-<p><code>hooks.after_up</code> in a stack&#39;s <code>orca.yaml</code> runs commands after every start from Orca: migrations, creating buckets, registering search attributes. If one fails, the stack page shows its output and the rest still run.</p>
-<h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
-<ul>
-<li><strong>A brand-new install works on the first start.</strong> On some first starts, Orca&#39;s window opened before its background service had created its access key, and Orca kept going without it: every page failed with &quot;401 Unauthorized&quot; or stayed empty until Orca was restarted. Orca now picks up the key as soon as it exists.</li>
-<li><strong>Errors say what went wrong.</strong> A failed request used to leave pages loading forever, or report &quot;error decoding response body&quot;. Now the actual problem is shown, and System Health offers to try again.</li>
-<li><strong>Hostnames from templates work.</strong> A template route like <code>webmail</code> was registered as just <code>webmail</code>, which no browser asks for. It now becomes <code>webmail.localhost</code> (or your own domain).</li>
-</ul>
-<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.48.1...v0.49.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.48.1...v0.49.0</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.49.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 

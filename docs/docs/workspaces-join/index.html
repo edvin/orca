@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvmrnew8">
+<link rel="stylesheet" href="/assets/site.css?v=mvmt2k30">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvmrnew8" defer></script>
+<script src="/assets/site.js?v=mvmt2k30" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -161,6 +161,7 @@
 <p>Every time Orca starts, it pulls the workspace with <code>git pull --ff-only</code>. When the pull brought something new, Orca applies the whole workspace, as <strong>Update</strong> does, so a new project, route, shared service or renewed certificate arrives without anyone doing anything. When nothing changed, it only refreshes the routes.</p>
 <p>The pull is fast-forward only: it never merges, rebases or touches your local changes. If you have commits of your own on the workspace&#39;s branch, or the pull fails for another reason (offline, no access), Orca keeps using what you have and tries again on the next start.</p>
 <p>After a pull that brought something new, the <strong>Workspace</strong> page shows <strong>Workspace updated</strong> with the subject of each new commit, such as <em>Add Gravity</em> or <em>Renew the certificate</em>, until you dismiss it. <strong>Update</strong> also says how many new changes it got.</p>
+<p>When the pull can&#39;t fast-forward (you have commits of your own, the history was rewritten, or you&#39;re offline), <strong>Update</strong> says so on its first step and applies the workspace as it is in its folder, including any edits you made there.</p>
 <p>To get a change before Orca next starts, click <strong>Update</strong> on the <strong>Workspace</strong> page, run <code>orca workspace update</code>, or ask your AI tool. <strong>Update</strong> runs the join steps again, starting with <strong>Get the latest workspace</strong>, and restarts the gateway, so routes are briefly unavailable.</p>
 <p>If the workspace file has a mistake, the page shows <strong>The workspace file has a problem</strong> with the error, and <strong>Update</strong> to try again once it&#39;s fixed.</p>
 <h2 id="leave-the-workspace"><a class="anchor" href="#leave-the-workspace" aria-hidden="true" tabindex="-1">#</a>Leave the workspace</h2>

@@ -240,6 +240,8 @@ The pull is fast-forward only: it never merges, rebases or touches your local ch
 
 After a pull that brought something new, the **Workspace** page shows **Workspace updated** with the subject of each new commit, such as *Add Gravity* or *Renew the certificate*, until you dismiss it. **Update** also says how many new changes it got.
 
+When the pull can't fast-forward (you have commits of your own, the history was rewritten, or you're offline), **Update** says so on its first step and applies the workspace as it is in its folder, including any edits you made there.
+
 To get a change before Orca next starts, click **Update** on the **Workspace** page, run `orca workspace update`, or ask your AI tool. **Update** runs the join steps again, starting with **Get the latest workspace**, and restarts the gateway, so routes are briefly unavailable.
 
 If the workspace file has a mistake, the page shows **The workspace file has a problem** with the error, and **Update** to try again once it's fixed.

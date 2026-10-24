@@ -101,7 +101,9 @@ The endpoint takes JSON-RPC over `POST` and supports `initialize`, `ping`, `tool
 
 ## What the agent is told
 
-When an AI tool connects, Orca sends instructions on when to use which tools: `deploy_project` for a folder that isn't running yet, the `instance_*` tools inside a git worktree, and to ask before removing anything. Each tool also carries hints that clients use to decide when to ask you first:
+When an AI tool connects, Orca sends a short map of its concepts (stacks, `orca.yaml`, workspaces, the gateway, databases, worktrees) and instructions on when to use which tools: `deploy_project` for a folder that isn't running yet, the `instance_*` tools inside a git worktree, a snapshot before risky database changes, and to ask before removing anything or importing over a database.
+
+For anything deeper, the AI tool reads Orca's own documentation through `orca_docs`: these pages, as they were when your Orca was built, so the keys it writes into `orca.yaml` or `orca-workspace.yaml` match the version you run. It's told to read the relevant page before writing either file, rather than guessing. Each tool also carries hints that clients use to decide when to ask you first:
 
 - Tools that only read (listings, logs, status, `read_orca_yaml`) are marked `readOnlyHint`, so clients may run them without asking.
 - Tools that only add or start something (starting or restarting a container or stack, pulling images, adding a route or project, starting a build or an instance) are marked as not destructive.
@@ -285,6 +287,7 @@ Orca has 74 agent tools. The same set is available over MCP, the OpenAI-compatib
 
 | Tool | What it does |
 |------|--------------|
+| `orca_docs` | Orca's documentation: without a `topic`, the list of pages; with one, such as `databases` or `orca-yaml`, that page in Markdown; `section` narrows it to the part whose heading matches. No network needed. |
 | `check_for_update` | The running version, the latest release, and the headlines of each newer one. `refresh` asks GitHub now instead of using the last hour's check. |
 | `offer_update` | Show the app's **Update** prompt for the latest version. Nothing installs until you click **Update**; Orca then restarts, which drops the AI tool's connection for a moment. Without the app (a daemon on a server), it returns the command to upgrade instead. |
 
@@ -310,8 +313,10 @@ Ask *"is my Orca up to date?"* or *"update Orca"*. When you ask about a feature 
 | `database_snapshot` | Save a snapshot of a database, for example before a migration. |
 | `database_restore` | Replace a database with a snapshot. Marked `destructiveHint`. |
 | `database_reset` | Empty a database and run the project's seed command. Marked `destructiveHint`. |
+| `find_database_services` | Every project's own MySQL, MariaDB and PostgreSQL containers: engine, version, the database in them, their volumes, and whether the project already requires a shared one. |
+| `database_import` | Copy a project's own database into its database on a shared or Orca server, after a snapshot. Translates between MariaDB and MySQL. Marked `destructiveHint`. |
 
-See [Databases](/docs/databases/).
+See [Databases](/docs/databases/), including [asking an AI tool to move every project onto shared servers](/docs/databases/#ask-an-ai-tool-to-do-it).
 
 ### Worktree projects and instances
 
