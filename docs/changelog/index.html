@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvmdvgn3">
+<link rel="stylesheet" href="/assets/site.css?v=mvmf8ws8">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvmdvgn3" defer></script>
+<script src="/assets/site.js?v=mvmf8ws8" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,25 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.58.0">
+<section class="container releases"><article class="release" id="v0.59.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.59.0">v0.59.0</a><time datetime="2026-10-24T13:14:58Z">October 24, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="the-gateway-page-like-the-start-page"><a class="anchor" href="#the-gateway-page-like-the-start-page" aria-hidden="true" tabindex="-1">#</a>The Gateway page, like the start page</h2>
+<p>The routes table on Orca&#39;s <strong>Gateway</strong> page now works like the gateway&#39;s start page:</p>
+<ul>
+<li><strong>Grouped by project</strong>, with shared services last. Click a group&#39;s name to fold it; Orca remembers which ones you folded.</li>
+<li><strong>Whether each service runs</strong>: Running, Stopped or Unhealthy, instead of only whether the route is on. A route you switched off says <strong>Paused</strong>.</li>
+<li><strong>Not set up yet</strong>: a workspace project that isn&#39;t on your computer says so, with a <strong>Set up</strong> link that takes you to it on the Workspace page.</li>
+<li><strong>Search</strong>: with more than a few routes, a box above the table finds them by hostname, container, project or status. Press <kbd>/</kbd> to jump to it.</li>
+</ul>
+<h2 id="table-headers-stay-put"><a class="anchor" href="#table-headers-stay-put" aria-hidden="true" tabindex="-1">#</a>Table headers stay put</h2>
+<p>Scrolling a long table (containers, images, volumes, routes) no longer shows rows above its header: the header now sits flush at the top.</p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.59.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.58.0">
   <div class="release-meta"><a class="release-tag" href="#v0.58.0">v0.58.0</a><time datetime="2026-10-24T12:35:34Z">October 24, 2026</time></div>
   <div class="release-body prose">
     
@@ -577,29 +595,6 @@
 <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.3...v0.48.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.3...v0.48.0</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.48.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.47.3">
-  <div class="release-meta"><a class="release-tag" href="#v0.47.3">v0.47.3</a><time datetime="2026-10-20T21:03:57Z">October 20, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="docker-stays-quiet-while-orca-is-idle"><a class="anchor" href="#docker-stays-quiet-while-orca-is-idle" aria-hidden="true" tabindex="-1">#</a>Docker stays quiet while Orca is idle</h2>
-<p>Orca&#39;s health check asked Docker for its disk usage every few seconds, and the titlebar, status bar and dashboard each ran their own copy of that check. Working out disk usage means Docker walks every image, container, volume and build cache entry, so an idle Orca kept Docker noticeably busy.</p>
-<ul>
-<li><strong>Far less work for Docker</strong>: disk usage is now read at most every 10 minutes, and the whole window shares one health check. On a Mac with 39 running containers, Docker&#39;s CPU use with the dashboard open dropped from about 40% to 18% of a core, and on other pages from about 14% to 4%.</li>
-<li><strong>Figures still update when they should</strong>: deleting or pruning images, containers or volumes, stopping a stack, and running cleanup all refresh the numbers.</li>
-<li><strong>Health checks never wait for the disk scan</strong>, so the Docker status in the titlebar stays responsive even when Docker is slow to answer.</li>
-</ul>
-<p>Thanks to @diem2001 for finding this, measuring it and fixing it (#5).</p>
-<h2 id="installing-orca-on-a-remote-server"><a class="anchor" href="#installing-orca-on-a-remote-server" aria-hidden="true" tabindex="-1">#</a>Installing Orca on a remote server</h2>
-<ul>
-<li><strong>The install command works again.</strong> <code>curl -fsSL https://orca-desktop.com/install-daemon.sh | sudo sh</code> failed: the script wasn&#39;t published at that address, and on Debian and Ubuntu it stopped with <code>Illegal option -o pipefail</code>. Both are fixed, and it works with <code>sudo bash</code> too. Thanks to @erdincka for reporting it (#4).</li>
-<li><strong>The uninstall script removes Orca properly.</strong> It now uninstalls the <code>orca-daemon</code> package, including the <code>orca</code> command-line tool, and removes Orca&#39;s package repository. Before, it deleted the files but left the package registered as installed.</li>
-</ul>
-<p>Both scripts are served from orca-desktop.com, so these fixes already apply to new installs.</p>
-<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.2...v0.47.3" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.2...v0.47.3</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.47.3" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
