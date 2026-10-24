@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvmt2k30">
+<link rel="stylesheet" href="/assets/site.css?v=mvmudfgz">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvmt2k30" defer></script>
+<script src="/assets/site.js?v=mvmudfgz" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,42 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.62.0">
+<section class="container releases"><article class="release" id="v0.63.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.63.0">v0.63.0</a><time datetime="2026-10-24T20:17:56Z">October 24, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="ai-tools-that-understand-orca"><a class="anchor" href="#ai-tools-that-understand-orca" aria-hidden="true" tabindex="-1">#</a>AI tools that understand Orca</h2>
+<p>AI tools connected to Orca now get a map of how it works (stacks, <code>orca.yaml</code>, workspaces, the gateway, databases, worktrees), and can read Orca&#39;s whole documentation through a new <code>orca_docs</code> tool. The docs are built into Orca, so they always match the version you run, and need no web access. Before an AI tool writes <code>orca.yaml</code> or <code>orca-workspace.yaml</code>, it&#39;s told to read the relevant page instead of guessing keys.</p>
+<h2 id="move-projects-onto-shared-databases"><a class="anchor" href="#move-projects-onto-shared-databases" aria-hidden="true" tabindex="-1">#</a>Move projects onto shared databases</h2>
+<p>The <strong>Databases</strong> page now lists every project&#39;s own database container. Once a project requires its database on a shared server, its row offers <strong>Import into …</strong>, which copies the data over:</p>
+<ul>
+<li>Orca takes a snapshot of the new database first, so you can go back.</li>
+<li>A stopped container is started for the copy and stopped again.</li>
+<li>The copy streams from one container straight into the other.</li>
+<li><strong>Between MariaDB and MySQL</strong>, the dump is translated on the way: collations, and the first line of MariaDB&#39;s dumps that MySQL rejects.</li>
+<li><strong>Containers with a random admin password</strong> are read with the app&#39;s own user.</li>
+</ul>
+<p>AI tools get the same with <code>find_database_services</code> and <code>database_import</code>. So you can now ask:</p>
+<blockquote><p>Consolidate our apps&#39; databases into shared databases defined in the workspace, and move their data over.</p>
+</blockquote><p>In our test, Claude:</p>
+<ol>
+<li>read the docs;</li>
+<li>took stock of every app&#39;s database;</li>
+<li>noticed a WordPress site ran MariaDB while the team wanted MySQL, and asked;</li>
+<li>added the shared servers to the workspace;</li>
+<li>wrote <code>requires:</code> for each app;</li>
+<li>copied the data over;</li>
+<li>compared rows on both sides, and checked that the apps still worked.</li>
+</ol>
+<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
+<ul>
+<li><strong>Update</strong> on the Workspace page no longer fails when the workspace&#39;s repo can&#39;t be pulled (your own commits, or offline). It says so and applies the workspace as it is in its folder, including your local edits.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.63.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.62.0">
   <div class="release-meta"><a class="release-tag" href="#v0.62.0">v0.62.0</a><time datetime="2026-10-24T19:41:05Z">October 24, 2026</time></div>
   <div class="release-body prose">
     
@@ -547,49 +582,6 @@
 <p><strong>Full docs:</strong> <a href="https://orca-desktop.com/docs/agents/">AI agents and MCP</a> · <a href="https://orca-desktop.com/docs/ai-assistant/">Built-in assistant</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.50.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.50.0">
-  <div class="release-meta"><a class="release-tag" href="#v0.50.0">v0.50.0</a><time datetime="2026-10-22T16:41:12Z">October 22, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="run-only-the-parts-of-a-project-you-need"><a class="anchor" href="#run-only-the-parts-of-a-project-you-need" aria-hidden="true" tabindex="-1">#</a>Run only the parts of a project you need</h2>
-<p>Not everyone needs search, mail catchers and admin tools running all day. Orca now uses Docker Compose&#39;s own <strong>profiles</strong> for this, so there&#39;s nothing Orca-specific to write down: give optional services a profile in your compose file, and switch them on and off in Orca.</p>
-<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">services</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  search</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    image</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">elasticsearch:8</span></span>
-<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    profiles</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: [</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">search</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">]</span></span></code></pre></div><ul>
-<li><strong>Profiles as cards.</strong> A stack&#39;s page shows its profiles above its services, with the services in each and which of them run. Switch them and Orca shows what will start and what will be stopped before you press <strong>Apply</strong>.</li>
-<li><strong>Your choice sticks.</strong> Orca remembers the set for each stack on your machine and starts the same set every time, from the stack page, <code>orca deploy</code> or an AI agent. Teammates each pick their own, and nothing is committed.</li>
-<li><strong>No surprises.</strong> If a service you switch on needs one whose profile is off, Orca says so and offers to switch it on. Services that are off are still listed, with a button to bring them back. Setup commands for services that don&#39;t run are skipped instead of failing.</li>
-<li><strong>Worktrees too.</strong> The Start dialog has the same cards, and each worktree remembers its own choice: <code>orca up --profile search</code>.</li>
-</ul>
-<p>Presets (<code>dev.instance.presets</code>) are retired in favour of profiles. Orca ignores them in existing files and the editor tells you so. See <a href="https://github.com/edvin/orca/blob/main/docs/profiles.md" target="_blank" rel="noopener">Running only the services you need</a>.</p>
-<h2 id="an-editor-for-orcayaml"><a class="anchor" href="#an-editor-for-orcayaml" aria-hidden="true" tabindex="-1">#</a>An editor for orca.yaml</h2>
-<p>The <strong>orca.yaml</strong> tab on a stack&#39;s page is now a proper editor: routes, links, setup commands and build targets as forms, next to the file itself, and both stay in step.</p>
-<ul>
-<li>Pick the service and port from what the stack actually runs, and see the URL each route gives and whether it&#39;s active.</li>
-<li>One click adds a route for a web service that doesn&#39;t have one yet.</li>
-<li>Your comments, the <code>dev:</code> section and anything the forms don&#39;t cover are kept exactly as they are.</li>
-<li>Checked as you type; Save waits until the file is valid.</li>
-</ul>
-<p>The Projects page&#39;s orca.yaml dialog has the same editor next to the worktree settings.</p>
-<h2 id="websockets-per-project"><a class="anchor" href="#websockets-per-project" aria-hidden="true" tabindex="-1">#</a>WebSockets, per project</h2>
-<p>WebSockets pass through every route as they are. For Pusher-protocol servers like <strong>Soketi</strong>, put it in the project that uses it and route <code>/app/*</code> on the app&#39;s own hostname: Laravel Echo and pusher-js then use the page&#39;s own host, with no shared socket server and no list of exceptions. When a stack runs Soketi, the editor offers this route, and <strong>Create orca.yaml</strong> includes it. The <a href="https://github.com/edvin/orca/blob/main/docs/orca-yaml.md#websockets" target="_blank" rel="noopener">orca.yaml reference</a> has the recipe.</p>
-<h2 id="a-landing-page-thats-alive"><a class="anchor" href="#a-landing-page-thats-alive" aria-hidden="true" tabindex="-1">#</a>A landing page that&#39;s alive</h2>
-<p>The gateway&#39;s own address lists every routed service, and now shows whether each one runs and for how long: running, starting, unhealthy, sleeping or stopped. It updates whenever a container starts or stops and refreshes itself while open.</p>
-<ul>
-<li>Give it a title and subtitle, and choose whether it shows status and the container behind each card, on the new <strong>Landing page</strong> tab of the Gateway page.</li>
-<li>Each route can have a title, description, group and icon, from <code>orca.yaml</code>, <code>orca.route.*</code> labels or the Gateway page. Hide the ones nobody needs to see.</li>
-<li>Worktree instances read nicely, such as &quot;Web · feature-x&quot;.</li>
-</ul>
-<h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
-<ul>
-<li><strong>Worktrees see optional services.</strong> Services behind a compose profile were invisible to worktree instances, because <code>docker compose config</code> leaves them out unless asked. Orca now reads them all and lets you pick.</li>
-</ul>
-<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.49.0...v0.50.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.49.0...v0.50.0</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.50.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
