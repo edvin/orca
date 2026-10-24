@@ -128,7 +128,7 @@ gateway:
 
 What Orca does with it:
 
-- With `certificate`, the gateway uses that one certificate for every hostname (the **Custom certificate** TLS mode). It must cover `*.<domain>`, and the domain itself for the landing page.
+- With `certificate`, the gateway uses that certificate for every hostname under the domain (the **Custom certificate** TLS mode). It must cover `*.<domain>`, and the domain itself for the landing page. Your own routes outside it, such as `myapp.localhost`, keep a certificate from Orca's own certificate authority, so they work as before you joined.
 - With a `gateway` section but no `certificate`, the gateway uses Orca's own certificate authority (the **Orca CA (automatic)** mode), which issues a certificate per hostname.
 - Without a `gateway` section, Orca keeps the gateway's current domain and TLS mode, and only makes sure it runs.
 

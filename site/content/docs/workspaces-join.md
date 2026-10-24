@@ -74,7 +74,7 @@ Joining runs these steps. Each one shows a short result, such as the folder it c
 A few things to know:
 
 - **Git runs without prompts.** Orca runs git with `GIT_TERMINAL_PROMPT=0` and SSH in batch mode, so it never waits for a password. It accepts a server's host key the first time it sees it, as `ssh` does when you type "yes", and refuses a changed one.
-- **The gateway settings are for the whole machine.** The workspace's domain and certificate apply to every route on the gateway, including projects that aren't part of the workspace. Leaving the workspace doesn't change them back.
+- **Your own routes keep working.** Joining only adds the workspace's routes; the ones you added, and those from labels or a project's `orca.yaml`, stay. A short hostname such as `myapp` gets the workspace's domain. A full one outside it, such as `myapp.localhost`, keeps a certificate from Orca's own certificate authority. Leaving puts the gateway's domain, certificate, title and logo back as they were.
 - **Services behind a compose profile don't start on join.** Only services without a `profiles:` entry start. A project that lists a profiled service under `uses` starts it when you set the project up, and you can switch [profiles](/docs/stacks/#profiles) on for the shared stack on its stack page.
 - **Orca joins one workspace at a time.** Joining another one replaces the first.
 

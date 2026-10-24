@@ -338,8 +338,29 @@ fn prepare_certs(config: &GatewayConfig) -> Result<()> {
     } else if matches!(config.tls_mode, GatewayTlsMode::Custom) {
         // Write user-provided cert/key PEM to files so Caddy can read them
         write_custom_cert_files(config)?;
+        // Routes it doesn't cover (your own `app.localhost` next to a
+        // workspace's certificate) get the Orca CA's, as without one.
+        for route in config
+            .routes
+            .iter()
+            .filter(|r| r.enabled && !custom_cert_covers(config, &r.hostname))
+        {
+            generate_cert_for_hostname(&orca_core::config::certificate_name(&route.hostname))?;
+        }
     }
     Ok(())
+}
+
+/// Whether a custom certificate, which is for `*.<domain>` and the domain,
+/// covers a route's hostname. A wildcard covers one label only.
+fn custom_cert_covers(config: &GatewayConfig, hostname: &str) -> bool {
+    let host = hostname.to_ascii_lowercase();
+    let domain = config.domain.to_ascii_lowercase();
+    !host.contains('.')
+        || host == domain
+        || host
+            .strip_suffix(&format!(".{domain}"))
+            .is_some_and(|label| !label.contains('.'))
 }
 
 /// Connect gateway to a container's Docker networks.
@@ -788,6 +809,13 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
                     "key": format!("/certs/{stem}-key.pem"),
                 })
             }
+            GatewayTlsMode::Custom if !custom_cert_covers(config, &route.hostname) => {
+                let stem = cert_file_stem(&orca_core::config::certificate_name(&route.hostname));
+                serde_json::json!({
+                    "certificate": format!("/certs/{stem}.pem"),
+                    "key": format!("/certs/{stem}-key.pem"),
+                })
+            }
             GatewayTlsMode::Custom => {
                 // The custom_cert/custom_key fields hold PEM *content*, not a
                 // path. `write_custom_cert_files` writes that content to
@@ -1227,6 +1255,42 @@ mod tests {
         let cert_entry = &load_files[0];
         assert_eq!(cert_entry["certificate"], "/certs/cert.pem");
         assert_eq!(cert_entry["key"], "/certs/key.pem");
+    }
+
+    #[test]
+    fn custom_cert_routes_it_doesnt_cover_get_orca_ca_certs() {
+        // A workspace's certificate for *.local.acme.dev, next to your own
+        // app.localhost: that one keeps a certificate Orca's CA signs.
+        let config = GatewayConfig {
+            domain: "local.acme.dev".to_string(),
+            tls_mode: GatewayTlsMode::Custom,
+            routes: vec![
+                make_route("crm.local.acme.dev", "crm-1", 80),
+                make_route("app.localhost", "app-1", 3000),
+                make_route("api.crm.local.acme.dev", "api-1", 80),
+                make_route("*-shop.local.acme.dev", "shop-1", 80),
+            ],
+            ..Default::default()
+        };
+        let caddy: serde_json::Value = serde_json::from_str(&build_caddy_config(&config, &[])).unwrap();
+        let mut files: Vec<&str> = caddy["apps"]["tls"]["certificates"]["load_files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["certificate"].as_str().unwrap())
+            .collect();
+        files.sort();
+        assert_eq!(
+            files,
+            [
+                // Two labels deep: not covered by a wildcard.
+                "/certs/api.crm.local.acme.dev.pem",
+                "/certs/app.localhost.pem",
+                "/certs/cert.pem",
+                "/certs/cert.pem",
+            ]
+        );
+        assert!(custom_cert_covers(&config, "LOCAL.ACME.DEV"));
     }
 
     #[test]

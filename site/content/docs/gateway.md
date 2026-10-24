@@ -207,6 +207,8 @@ In the page's top bar:
 
 Each browser remembers these choices.
 
+A small group shares its row with others: a project with one service takes one column instead of a whole row. A [workspace](/docs/workspaces/)'s shared services come first, as a strip of small chips with a status dot, since they're tools you open now and then. The number of services running is under the title.
+
 Each card's title, description, group and icon come from the route:
 
 | Route from | Set it with |

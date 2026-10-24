@@ -185,6 +185,25 @@ struct Card {
     status: Option<(&'static str, &'static str, Option<String>)>,
 }
 
+/// A workspace's shared-service route: owned by `workspace:<name>`, with no
+/// project after it.
+fn is_shared(r: &GatewayRoute) -> bool {
+    r.owner
+        .as_deref()
+        .and_then(|o| o.strip_prefix("workspace:"))
+        .is_some_and(|rest| !rest.contains(':'))
+}
+
+/// How many columns of the page a group of `cards` takes: its own count,
+/// so small groups sit side by side, or "many" for a full row.
+fn group_size(cards: usize) -> String {
+    if cards >= 4 {
+        "many".into()
+    } else {
+        cards.max(1).to_string()
+    }
+}
+
 /// Whether a route's service runs: (class, label, running since).
 fn route_status(
     r: &GatewayRoute,
@@ -342,6 +361,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
         .flat_map(|g| g.links.iter().filter_map(|l| l.urls.get("local").map(|u| link_host(u))))
         .collect();
 
+    let mut shared_groups: std::collections::BTreeSet<String> = Default::default();
     let mut panels = String::new();
     for (i, env) in envs.iter().enumerate() {
         let is_local = env == "local";
@@ -418,13 +438,25 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             }
         }
         if is_local {
+            // A workspace's shared services (Mailpit, Grafana…): first, as a strip.
+            for r in visible.iter().filter(|r| is_shared(r)) {
+                shared_groups.insert(group_of(r));
+            }
             let mut by_group: BTreeMap<String, Vec<Card>> = BTreeMap::new();
             for r in visible.iter().filter(|r| !linked.contains(&full_host(&r.hostname))) {
                 by_group.entry(group_of(r)).or_default().push(route_card(r));
             }
-            // "Services" (routes with no project) goes last.
+            // Shared services go first, "Services" (routes with no project) last.
             let rest = by_group.remove("Services");
-            for (name, mut cards) in by_group.into_iter().chain(rest.map(|c| ("Services".to_string(), c))) {
+            let shared: Vec<(String, Vec<Card>)> = shared_groups
+                .iter()
+                .filter_map(|g| by_group.remove(g).map(|c| (g.clone(), c)))
+                .collect();
+            for (name, mut cards) in shared
+                .into_iter()
+                .chain(by_group)
+                .chain(rest.map(|c| ("Services".to_string(), c)))
+            {
                 cards.sort_by_key(|a| a.title.to_lowercase());
                 // A project whose links group has its name shows as one section.
                 match sections.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case(&name)) {
@@ -440,13 +472,15 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
                 .iter()
                 .map(|(name, cards)| {
                     format!(
-                        r#"<section class="group" data-group="{group}"><h2 role="button" tabindex="0" title="Fold or unfold">{group}</h2><div class="grid">{}</div></section>"#,
+                        r#"<section class="group{shared}" data-group="{group}" data-size="{size}"><h2 role="button" tabindex="0" title="Fold or unfold">{group}</h2><div class="grid">{}</div></section>"#,
                         cards
                             .iter()
                             .enumerate()
                             .map(|(i, c)| card_html(c, i, name))
                             .collect::<String>(),
                         group = escape_html(name),
+                        size = group_size(cards.len()),
+                        shared = if shared_groups.contains(name) { " shared" } else { "" },
                     )
                 })
                 .collect()
@@ -486,15 +520,12 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
                 .is_some_and(|s| matches!(s.status, Status::Running | Status::Starting | Status::Unhealthy))
         })
         .count();
+    // A few words after the domain, to leave the bar to the search box.
     let stats = if landing.show_status && !visible.is_empty() {
-        format!(
-            r#"<div class="stat"><b>{running}</b><span>running</span></div><div class="stat"><b>{total}</b><span>{noun}</span></div>"#,
-            total = visible.len(),
-            noun = if visible.len() == 1 { "service" } else { "services" },
-        )
+        format!(r#"<b>{running}</b> of {total} running"#, total = visible.len())
     } else {
         format!(
-            r#"<div class="stat"><b>{total}</b><span>{noun}</span></div>"#,
+            "{total} {noun}",
             total = visible.len(),
             noun = if visible.len() == 1 { "service" } else { "services" },
         )
@@ -710,20 +741,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica N
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
 .shell{max-width:1040px;margin:0 auto;padding:0 24px 48px}
 header{position:sticky;top:0;z-index:5;margin:0 calc(50% - 50vw) 26px;padding:14px 24px;background:rgba(10,14,20,.8);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.06)}
-.top{display:flex;align-items:center;gap:22px;max-width:992px;margin:0 auto}
-.brand{min-width:0;flex-shrink:0;display:flex;align-items:center;gap:14px}
+.top{display:flex;align-items:flex-start;gap:22px;max-width:992px;margin:0 auto}
+.brand{min-width:0;flex-shrink:0;display:flex;align-items:center;gap:14px;min-height:42px}
 .logo{display:block;height:26px;max-width:180px;object-fit:contain}
 .logo+div{padding-left:14px;border-left:1px solid rgba(255,255,255,.1)}
 .find{flex:1;min-width:0}
 h1{font-size:19px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;background:linear-gradient(135deg,#fff,#58a6ff 55%,#a371f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .sub{color:#8b949e;font-size:12px;margin-top:2px;white-space:nowrap}
-.stats{display:flex;gap:6px;flex-shrink:0}
-.stat{background:rgba(22,27,34,.6);border:1px solid rgba(255,255,255,.06);border-radius:9px;padding:6px 12px;display:flex;align-items:baseline;gap:6px}
-.stat b{font-size:15px}.stat span{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.6px}
+.stats::before{content:'·';margin:0 6px;color:#484f58}.stats b{color:#3fb950;font-weight:600}
 .tabs{display:flex;gap:4px;padding:3px;margin:0 auto 24px;width:fit-content;background:rgba(22,27,34,.5);border:1px solid rgba(255,255,255,.05);border-radius:12px}
 .tab{background:none;border:1px solid transparent;border-radius:9px;padding:7px 18px;color:#8b949e;font:600 13px inherit;cursor:pointer}
 .tab:hover{color:#e6edf3}.tab.active{background:rgba(88,166,255,.12);border-color:rgba(88,166,255,.25);color:#58a6ff}
-.group{margin-bottom:28px}
+.group{margin-bottom:28px;grid-column:1/-1;min-width:0}
+/* Groups share rows: one taking as many of the page's columns as it has
+   cards, so a project with one service doesn't take a whole row. */
+.panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:10px;grid-auto-flow:row dense}
+.panel>.empty{grid-column:1/-1}
+.group[data-size="1"]{grid-column:span 1}.group[data-size="2"]{grid-column:span 2}
+.group[data-size="1"] .grid{grid-template-columns:minmax(0,1fr)}.group[data-size="2"] .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+body.compact .panel{grid-template-columns:repeat(4,minmax(0,1fr))}
+/* Shared services: a strip of chips, in either layout. */
+.group.shared{grid-column:1/-1!important}
+.group.shared .grid{display:flex;flex-wrap:wrap;gap:6px}
+.group.shared .card{padding:5px 12px 5px 6px;gap:8px;align-items:center;border-radius:999px;position:static}
+.group.shared .icon{width:24px;height:24px;border-radius:50%;font-size:11px}
+.group.shared .body{display:flex;align-items:center;gap:8px;flex:none}
+.group.shared .name{font-size:13px;white-space:nowrap}
+.group.shared .desc,.group.shared .target,.group.shared .url,.group.shared .st span{display:none}
+.group.shared .st{position:static;margin:0}
+body.compact .group[data-size="3"]{grid-column:span 3}body.compact .group[data-size="3"] .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:900px){.panel,body.compact .panel{grid-template-columns:repeat(2,minmax(0,1fr))}body.compact .group[data-size="3"]{grid-column:1/-1}}
+@media(max-width:640px){.panel,body.compact .panel{grid-template-columns:minmax(0,1fr)}.group[data-size]{grid-column:1/-1}}
 .group h2{font-size:11px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px 2px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
 .card{display:flex;gap:14px;align-items:flex-start;padding:16px;border-radius:14px;background:rgba(22,27,34,.7);border:1px solid rgba(255,255,255,.06);color:inherit;text-decoration:none;transition:border-color .15s,transform .15s}
@@ -757,20 +805,20 @@ footer{text-align:center;margin-top:44px;font-size:12px;color:#484f58}footer a{c
 .search kbd,.hint kbd{font:11px "SF Mono",ui-monospace,Menlo,monospace;color:#8b949e;border:1px solid rgba(255,255,255,.12);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:rgba(255,255,255,.03)}
 .search:focus-within kbd,.search.typed kbd{display:none}
 .hint{font-size:12.5px;color:#8b949e;display:flex;gap:16px;padding-left:4px;margin-top:6px;height:20px;align-items:center;white-space:nowrap;overflow:hidden}
-@media(max-width:760px){.top{flex-wrap:wrap;gap:12px}.find{order:3;flex-basis:100%}.stats{margin-left:auto}.tools{order:4}}
+@media(max-width:760px){.top{flex-wrap:wrap;gap:12px}.find{order:3;flex-basis:100%}.tools{margin-left:auto}}
 .hint span{display:inline-flex;align-items:center;gap:6px}.hint b{color:#e6edf3;font-weight:600}
 .card.sel{border-color:rgba(88,166,255,.7);box-shadow:0 0 0 3px rgba(88,166,255,.16);transform:translateY(-2px)}
 mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
 .nores{text-align:center;padding:40px 24px;border:1px dashed rgba(255,255,255,.08);border-radius:16px;color:#8b949e;font-size:13.5px;line-height:1.6}
 .nores b{color:#e6edf3}.nores button{background:none;border:0;color:#58a6ff;font:inherit;cursor:pointer;padding:0}
-.tools{display:flex;gap:6px;flex-shrink:0;align-items:center}
+.tools{display:flex;gap:6px;flex-shrink:0;align-items:center;height:42px}
 .seg{display:flex;padding:2px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(22,27,34,.6)}
 .seg button{width:30px;height:28px;display:grid;place-items:center;background:none;border:0;border-radius:7px;color:#8b949e;cursor:pointer}
 .seg button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
 .seg button:hover{color:#e6edf3}.seg button.on{background:rgba(88,166,255,.15);color:#58a6ff}
 .chip{height:34px;padding:0 12px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(22,27,34,.6);color:#8b949e;font:600 12px inherit;cursor:pointer;white-space:nowrap}
 .chip:hover{color:#e6edf3}.chip.on{color:#3fb950;border-color:rgba(63,185,80,.35);background:rgba(63,185,80,.08)}
-.group h2{cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;width:fit-content}
+.group h2{cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;width:fit-content;max-width:100%;white-space:nowrap;overflow:hidden}
 .group h2::before{content:'';width:0;height:0;border:4px solid transparent;border-top:5px solid currentColor;border-bottom:0;opacity:.7;transition:transform .15s}
 .group.folded h2::before{transform:rotate(-90deg)}
 .group.folded h2::after{content:attr(data-n);font-weight:600;color:#6e7681;letter-spacing:0}
@@ -789,7 +837,7 @@ body.compact .group{margin-bottom:18px}body.compact .group h2{margin-bottom:8px}
 </head>
 <body>
 <div class="shell">
-<header><div class="top"><div class="brand">{logo}<div><h1>{title}</h1><p class="sub">{subtitle}</p></div></div><div class="find">{search}</div><div class="stats" id="stats">{stats}</div><div class="tools"><div class="seg" role="group" aria-label="Layout"><button type="button" data-view="cards" title="Cards" aria-label="Cards"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button><button type="button" data-view="compact" title="Compact" aria-label="Compact"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div><button type="button" class="chip" id="runonly" aria-pressed="false" title="Hide what isn't running, except while you search">Running only</button></div></div></header>
+<header><div class="top"><div class="brand">{logo}<div><h1>{title}</h1><p class="sub">{subtitle}<span class="stats" id="stats">{stats}</span></p></div></div><div class="find">{search}</div><div class="tools"><div class="seg" role="group" aria-label="Layout"><button type="button" data-view="cards" title="Cards" aria-label="Cards"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button><button type="button" data-view="compact" title="Compact" aria-label="Compact"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div><button type="button" class="chip" id="runonly" aria-pressed="false" title="Hide what isn't running, except while you search">Running only</button></div></div></header>
 <main id="content">{tabs}{panels}</main>
 <div class="nores" id="nores" hidden></div>
 <footer>Served by <a href="https://orca-desktop.com">Orca Desktop</a></footer>
@@ -896,7 +944,9 @@ body.compact .group{margin-bottom:18px}body.compact .group h2{margin-bottom:8px}
     panel().querySelectorAll('.group').forEach(function(g){
       var n=g.querySelectorAll('.card:not([hidden])').length,h=g.querySelector('h2');
       g.hidden=!n;
-      g.classList.toggle('folded',!ts.length&&!!folded[g.getAttribute('data-group')]);
+      var fold=!ts.length&&!!folded[g.getAttribute('data-group')];
+      g.classList.toggle('folded',fold);
+      g.setAttribute('data-size',fold?'1':n>=4?'many':String(n||1));
       if(h)h.setAttribute('data-n',n);
     });
     sel=ts.length?best:-1;
@@ -1079,7 +1129,9 @@ mod tests {
             ("adminer".to_string(), running("2026-10-22T09:00:00Z", Some("tools"))),
         ]);
         let html = render(&config(vec![shop, db, sleepy]), &states);
-        assert!(html.contains(r#"data-group="shop"><h2 role="button" tabindex="0" title="Fold or unfold">shop</h2>"#));
+        assert!(html.contains(
+            r#"data-group="shop" data-size="2"><h2 role="button" tabindex="0" title="Fold or unfold">shop</h2>"#
+        ));
         assert!(
             html.contains(r#">tools</h2>"#),
             "label-less routes group by compose project"
@@ -1091,7 +1143,10 @@ mod tests {
             html.contains(">Web · feat<"),
             "worktree cards read service · instance: {html}"
         );
-        assert!(html.contains("<b>2</b><span>running</span>"));
+        assert!(
+            html.contains(r#"<span class="stats" id="stats"><b>2</b> of 3 running</span>"#),
+            "{html}"
+        );
     }
 
     #[test]
@@ -1147,12 +1202,34 @@ mod tests {
         let html = render(&c, &states);
         // Group names are escaped where they're attributes too.
         assert!(
-            html.contains(r#"<section class="group" data-group="a&amp;b"><h2 role="button""#),
+            html.contains(r#"<section class="group" data-group="a&amp;b" data-size="1"><h2 role="button""#),
             "{html}"
         );
         assert!(html.contains(r#"data-st="run""#), "a running service");
         assert!(html.contains(r#"data-st="none""#), "a link with no service");
         assert!(html.contains(r#"id="runonly""#) && html.contains(r#"data-view="compact""#));
+    }
+
+    #[test]
+    fn a_workspaces_shared_services_come_first_as_a_strip() {
+        let mut shared = route("mail.local.acme.dev", "mailpit", 8025);
+        shared.owner = Some("workspace:Acme".into());
+        shared.presentation.group = Some("Shared services".into());
+        let mut crm = route("crm.local.acme.dev", "crm-app", 80);
+        crm.owner = Some("workspace:Acme:crm".into());
+        crm.presentation.group = Some("Billing".into());
+        let html = render(&config(vec![crm, shared]), &HashMap::new());
+        let strip = html
+            .find(r#"<section class="group shared" data-group="Shared services""#)
+            .expect("a shared strip");
+        assert!(
+            strip < html.find(r#"data-group="Billing""#).unwrap(),
+            "before the projects, though B < S"
+        );
+        assert!(
+            html.contains(r#"<section class="group" data-group="Billing""#),
+            "projects stay cards"
+        );
     }
 
     #[test]
