@@ -389,6 +389,12 @@ pub async fn probe_container_ports(id: String) -> Result<serde_json::Value, Stri
     post_json(&format!("/containers/{}/probe-ports", urlencoding::encode(&id))).await
 }
 
+/// Each gateway route's group and whether its service runs.
+#[tauri::command]
+pub async fn gateway_route_states() -> Result<serde_json::Value, String> {
+    get_json("/gateway/route-states").await
+}
+
 #[tauri::command]
 pub async fn container_stats(id: String) -> Result<serde_json::Value, String> {
     get_json(&format!("/containers/{}/stats", urlencoding::encode(&id))).await

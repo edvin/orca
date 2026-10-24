@@ -78,6 +78,8 @@ orca gateway config --tls-mode custom \
 
 A route maps a hostname, and optionally a path, to a container and a port. The **Routes** tab lists all of them, with a badge saying where each comes from.
 
+The table groups routes by project, like the [landing page](#the-landing-page); click a group's name to fold it. Each route shows whether its service runs: **Running**, **Stopped**, **Unhealthy**, **Paused** for a route you switched off, or **Not set up** with a **Set up** link for a [workspace](/docs/workspaces/) project that isn't on your computer yet. With more than a few routes, a search box above the table finds them by hostname, container, project or status; press <kbd>/</kbd> to jump to it.
+
 ### Added by hand
 
 On the Gateway page, **Add route** asks for a hostname, an optional path, a container and the **Container port** (the port the app listens on inside the container). On the **Containers** page and a container's detail page, **Expose via gateway** does the same for that container. When the gateway runs, **Suggested routes** lists containers with web pages that aren't routed yet.

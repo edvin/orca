@@ -185,6 +185,71 @@ struct Card {
     status: Option<(&'static str, &'static str, Option<String>)>,
 }
 
+/// Whether a route's service runs: (class, label, running since).
+fn route_status(
+    r: &GatewayRoute,
+    states: &HashMap<String, ServiceState>,
+) -> (&'static str, &'static str, Option<String>) {
+    if r.sleeping {
+        return ("sleep", "Sleeping · starts when opened", None);
+    }
+    let Some(s) = states.get(&r.container_name) else {
+        return ("off", "Not running", None);
+    };
+    match s.status {
+        Status::Running => ("run", "Running", s.started_at.clone()),
+        Status::Starting => ("warn", "Starting", s.started_at.clone()),
+        Status::Unhealthy => ("bad", "Unhealthy", s.started_at.clone()),
+        Status::Restarting => ("warn", "Restarting", None),
+        Status::Paused => ("off", "Paused", None),
+        Status::Stopped => ("off", "Stopped", None),
+        Status::NotSetUp => ("setup", "Not set up · set it up in Orca", None),
+    }
+}
+
+/// The section a route is shown under: its own group, else the project it
+/// comes from.
+fn route_group(r: &GatewayRoute, states: &HashMap<String, ServiceState>) -> String {
+    if let Some(g) = &r.presentation.group {
+        return g.clone();
+    }
+    let owner = r.owner.as_deref().unwrap_or("");
+    for prefix in ["project:", "stack:"] {
+        if let Some(p) = owner.strip_prefix(prefix) {
+            return p.to_string();
+        }
+    }
+    if let Some(rest) = owner.strip_prefix("dev:") {
+        return rest.split(':').next().unwrap_or(rest).to_string();
+    }
+    states
+        .get(&r.container_name)
+        .and_then(|s| s.project.clone())
+        .unwrap_or_else(|| "Services".to_string())
+}
+
+/// Each route's group and whether its service runs, as the landing page
+/// last saw them, for the Gateway page in Orca.
+pub fn route_states(config: &GatewayConfig) -> Vec<serde_json::Value> {
+    let states = STATES.lock().unwrap().clone().unwrap_or_default();
+    config
+        .routes
+        .iter()
+        .map(|r| {
+            let (state, label, since) = route_status(r, &states);
+            serde_json::json!({
+                "hostname": r.hostname,
+                "path": r.path,
+                "group": route_group(r, &states),
+                "state": state,
+                "label": label.split(" · ").next().unwrap_or(label),
+                "since": since,
+                "setup": states.get(&r.container_name).and_then(|s| s.setup.clone()),
+            })
+        })
+        .collect()
+}
+
 /// Render the page.
 pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) -> String {
     let domain = &config.domain;
@@ -214,26 +279,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
         .filter(|r| !r.presentation.hidden && !r.is_pattern() && !r.websocket)
         .collect();
 
-    let status_of = |r: &GatewayRoute| -> Option<(&'static str, &'static str, Option<String>)> {
-        if !landing.show_status {
-            return None;
-        }
-        if r.sleeping {
-            return Some(("sleep", "Sleeping · starts when opened", None));
-        }
-        let Some(s) = states.get(&r.container_name) else {
-            return Some(("off", "Not running", None));
-        };
-        Some(match s.status {
-            Status::Running => ("run", "Running", s.started_at.clone()),
-            Status::Starting => ("warn", "Starting", s.started_at.clone()),
-            Status::Unhealthy => ("bad", "Unhealthy", s.started_at.clone()),
-            Status::Restarting => ("warn", "Restarting", None),
-            Status::Paused => ("off", "Paused", None),
-            Status::Stopped => ("off", "Stopped", None),
-            Status::NotSetUp => ("setup", "Not set up · set it up in Orca", None),
-        })
-    };
+    let status_of = |r: &GatewayRoute| landing.show_status.then(|| route_status(r, states));
     // The route's own icon, else one its container's image picks.
     let icon_of = |r: &GatewayRoute| -> Option<String> {
         r.presentation
@@ -265,26 +311,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             status: status_of(r),
         }
     };
-    // The section a route's card is shown under: its own group, else the
-    // project it comes from.
-    let group_of = |r: &GatewayRoute| -> String {
-        if let Some(g) = &r.presentation.group {
-            return g.clone();
-        }
-        let owner = r.owner.as_deref().unwrap_or("");
-        for prefix in ["project:", "stack:"] {
-            if let Some(p) = owner.strip_prefix(prefix) {
-                return p.to_string();
-            }
-        }
-        if let Some(rest) = owner.strip_prefix("dev:") {
-            return rest.split(':').next().unwrap_or(rest).to_string();
-        }
-        states
-            .get(&r.container_name)
-            .and_then(|s| s.project.clone())
-            .unwrap_or_else(|| "Services".to_string())
-    };
+    let group_of = |r: &GatewayRoute| route_group(r, states);
 
     // Environments from `links:`; "local" first.
     let mut envs: Vec<String> = Vec::new();

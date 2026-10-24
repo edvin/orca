@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from "solid-js";
+import { createSignal, onCleanup, onMount, For, Show } from "solid-js";
 import { onIntent } from "../lib/pageIntent";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -15,7 +15,27 @@ import { iconForImage, iconSrc } from "../lib/icons";
 import { portGroups, routablePort, type PortProbe } from "../lib/ports";
 import PortChips from "../components/PortChips";
 import HelpLink from "../components/HelpLink";
+import { requestWorkspaceSetup } from "../lib/workspace";
 import "../styles/polish-a.css";
+
+/** A route's group and whether its service runs, as the landing page sees it. */
+interface RouteState {
+  hostname: string;
+  path?: string | null;
+  group: string;
+  /** run, warn, bad, sleep, off, setup */
+  state: string;
+  label: string;
+  since?: string | null;
+  /** The workspace project to set up, when it isn't yet. */
+  setup?: string | null;
+}
+
+const STATE_COLOR: Record<string, string> = {
+  run: "#3fb950", warn: "#d29922", bad: "#f85149", sleep: "#a371f7", off: "#8b949e", setup: "#58a6ff",
+};
+
+const FOLDED_KEY = "orca.gateway.folded";
 
 /** Port chips shown on a suggested route before "+N more". */
 const MAX_SUGGESTED_PORTS = 3;
@@ -177,7 +197,43 @@ export default function GatewayPage(props: GatewayPageProps) {
     } catch (e) {
       logError(`Failed to fetch gateway routes: ${e}`);
     }
+    invoke<RouteState[]>("gateway_route_states").then((s) => setRouteStates(Array.isArray(s) ? s : []), () => {});
   };
+
+  // The routes table: found by typing, grouped like the landing page, and
+  // each group folds (remembered on this machine; a search unfolds).
+  const [routeStates, setRouteStates] = createSignal<RouteState[]>([]);
+  const [routeQuery, setRouteQuery] = createSignal("");
+  const [folded, setFolded] = createSignal<Record<string, boolean>>((() => {
+    try { return JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "{}") ?? {}; } catch { return {}; }
+  })());
+  const toggleFold = (group: string) => {
+    const next = { ...folded(), [group]: !folded()[group] };
+    if (!next[group]) delete next[group];
+    setFolded(next);
+    try { localStorage.setItem(FOLDED_KEY, JSON.stringify(next)); } catch { /* not remembered */ }
+  };
+  const stateOf = (r: GatewayRoute) => routeStates().find((s) => s.hostname === r.hostname && (s.path ?? null) === (r.path ?? null));
+  const groupedRoutes = () => {
+    const terms = routeQuery().toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const by = new Map<string, GatewayRoute[]>();
+    for (const r of routes()) {
+      const st = stateOf(r);
+      const group = st?.group ?? r.presentation?.group ?? "Services";
+      const hay = [r.hostname, r.path, r.container_name, r.presentation?.title, group, st?.label, r.enabled ? "" : "paused"].join(" ").toLowerCase();
+      if (terms.some((t) => !hay.includes(t))) continue;
+      by.set(group, [...(by.get(group) ?? []), r]);
+    }
+    // As on the landing page: groups by name, "Services" last.
+    return [...by.entries()].sort(([a], [b]) => (a === "Services" ? 1 : b === "Services" ? -1 : a.localeCompare(b)));
+  };
+  let routeSearch: HTMLInputElement | undefined;
+  const onSlash = (e: KeyboardEvent) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement as HTMLElement | null)?.tagName ?? "");
+    if (e.key === "/" && !typing && activeTab() === "routes" && routeSearch) { e.preventDefault(); routeSearch.focus(); }
+  };
+  document.addEventListener("keydown", onSlash);
+  onCleanup(() => document.removeEventListener("keydown", onSlash));
 
   const fetchLinks = async () => {
     try {
@@ -924,6 +980,13 @@ export default function GatewayPage(props: GatewayPageProps) {
               </div>
             }
           >
+            <Show when={routes().length > 6}>
+              <div class="gw-route-search">
+                <input ref={routeSearch} class="form-input" type="search" placeholder="Find a route: hostname, container, project or status  ( / )"
+                  value={routeQuery()} onInput={(e) => setRouteQuery(e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === "Escape") { setRouteQuery(""); e.currentTarget.blur(); } }} />
+              </div>
+            </Show>
             <table class="table">
               <thead>
                 <tr>
@@ -935,7 +998,26 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </tr>
               </thead>
               <tbody>
-                <For each={routes()}>
+                <Show when={groupedRoutes().length === 0}>
+                  <tr><td colspan={5} style={{ color: "#8b949e", "text-align": "center", padding: "18px" }}>No route matches “{routeQuery()}”</td></tr>
+                </Show>
+                <For each={groupedRoutes()}>
+                  {([group, list]) => {
+                    const open = () => !!routeQuery().trim() || !folded()[group];
+                    return (<>
+                    <Show when={groupedRoutes().length > 1}>
+                      <tr class="gw-group-row">
+                        <td colspan={5}>
+                          <button onClick={() => toggleFold(group)} title={open() ? "Fold" : "Unfold"}>
+                            <span class="gw-fold" classList={{ folded: !open() }} />
+                            {group}
+                            <span class="gw-group-count">{list.length}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    </Show>
+                    <Show when={open()}>
+                <For each={list}>
                   {(route) => (
                     <tr>
                       <td>
@@ -971,22 +1053,24 @@ export default function GatewayPage(props: GatewayPageProps) {
                       <td class="mono" style={{ color: "#c9d1d9", "word-break": "break-all" }}>{route.container_name}</td>
                       <td class="mono">{route.port}</td>
                       <td>
-                        <span style={{
-                          display: "inline-flex",
-                          "align-items": "center",
-                          gap: "6px",
-                          color: route.enabled ? "#3fb950" : "#8b949e",
-                          "font-size": "12px",
-                        }}>
-                          <span style={{
-                            display: "inline-block",
-                            width: "6px",
-                            height: "6px",
-                            "border-radius": "50%",
-                            background: route.enabled ? "#3fb950" : "#8b949e",
-                          }} />
-                          {route.enabled ? "Active" : "Disabled"}
-                        </span>
+                        {(() => {
+                          // Whether its service runs; a paused route says so instead.
+                          const st = stateOf(route);
+                          const color = !route.enabled ? "#8b949e" : st ? STATE_COLOR[st.state] ?? "#8b949e" : "#3fb950";
+                          return (
+                            <span style={{ display: "inline-flex", "align-items": "center", gap: "6px", color, "font-size": "12px", "white-space": "nowrap" }}>
+                              <span style={{ display: "inline-block", width: "6px", height: "6px", "border-radius": "50%", background: color }} />
+                              {!route.enabled ? "Paused" : st?.label ?? "Active"}
+                              <Show when={route.enabled && st?.setup}>
+                                {(key) => (
+                                  <button class="btn-link gw-setup-link" onClick={() => { requestWorkspaceSetup(key()); props.onNavigate?.("workspace"); }}>
+                                    Set up
+                                  </button>
+                                )}
+                              </Show>
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{ "text-align": "right" }}>
                         <button
@@ -1029,6 +1113,10 @@ export default function GatewayPage(props: GatewayPageProps) {
                       </td>
                     </tr>
                   )}
+                </For>
+                    </Show>
+                    </>);
+                  }}
                 </For>
               </tbody>
             </table>

@@ -662,6 +662,13 @@ pre, code, .mono, .selectable, .log-content,
   z-index: 10;
 }
 
+/* Pages scroll in .app-main, whose padding the sticky header would stop
+   below, leaving a strip where rows show above it: stick to its very top. */
+.app-main .table thead,
+.app-main .table thead th {
+  top: -24px;
+}
+
 .table thead th {
   padding: 10px 14px;
   text-align: left;
@@ -4485,6 +4492,17 @@ tr.service-off td { opacity: 0.55; }
 .app-url-icon img { width: 14px; height: 14px; border-radius: 3px; }
 .command-item-img { width: 16px; height: 16px; border-radius: 4px; vertical-align: middle; }
 .app-card-open { font-size: 11.5px; color: #58a6ff; white-space: nowrap; margin-right: 4px; }
+
+/* The Gateway page's routes: search, and project groups that fold. */
+.gw-route-search { margin-bottom: 10px; }
+.gw-route-search .form-input { width: 100%; max-width: 460px; }
+.gw-group-row td { padding: 14px 14px 6px !important; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.gw-group-row button { display: inline-flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; cursor: pointer; color: #8b949e; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.gw-group-row button:hover { color: #e6edf3; }
+.gw-fold { width: 0; height: 0; border: 4px solid transparent; border-top: 5px solid currentColor; border-bottom: 0; transition: transform 0.15s; }
+.gw-fold.folded { transform: rotate(-90deg); }
+.gw-group-count { font-weight: 600; color: #6e7681; letter-spacing: 0; }
+.gw-setup-link { margin-left: 6px; background: none; border: 0; padding: 0; color: #58a6ff; cursor: pointer; font-size: 12px; }
 
 /* The landing page tab's "My links". */
 .my-links { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }

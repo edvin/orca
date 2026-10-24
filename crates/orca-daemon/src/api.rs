@@ -440,6 +440,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         )
         .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
         .route("/gateway/landing", get(gateway_get_landing).put(gateway_set_landing))
+        .route("/gateway/route-states", get(gateway_route_states))
         .route("/gateway/port-check", get(gateway_port_check))
         .route("/gateway/links", get(gateway_get_links).put(gateway_update_links))
         .route("/gateway/traefik-status", get(gateway_traefik_status))
@@ -8883,6 +8884,12 @@ async fn gateway_get_landing(State(state): State<Arc<AppState>>) -> Result<impl 
         "settings": gw.landing,
         "url": format!("https://{}{port}", gw.domain),
     })))
+}
+
+/// GET /gateway/route-states: each route's group and whether it runs.
+async fn gateway_route_states(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let gateway = state.config.lock().await.gateway.clone();
+    Ok(Json(crate::landing::route_states(&gateway)))
 }
 
 /// PUT /gateway/landing: save the landing page's settings and rewrite it.
