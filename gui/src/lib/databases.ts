@@ -57,6 +57,33 @@ export interface ProjectNeeds {
   databases: Requirement[];
 }
 
+/** A project's own database container. */
+export interface OwnService {
+  project: string;
+  dir: string | null;
+  service: string;
+  container: string;
+  running: boolean;
+  image: string;
+  engine: Engine;
+  version: string | null;
+  database: string | null;
+  volumes: string[];
+  /** Its orca.yaml requires a database. */
+  required: boolean;
+  /** This is the service that database `replaces`. */
+  replaced: boolean;
+  /** Where the required database comes from now. */
+  now_from: string | null;
+}
+
+export interface Imported {
+  from: string;
+  database: string;
+  snapshot_before: string | null;
+  bytes: number;
+}
+
 export interface DatabasesOverview {
   servers: DatabaseServer[];
   projects: ProjectNeeds[];
@@ -97,6 +124,9 @@ export const databasesApi = {
   snapshot: (server: string, db: string, label?: string) => call<Snapshot>("POST", `${at(server, db)}/snapshots`, { label: label || null }),
   restore: (server: string, db: string, snap: string) => call<unknown>("POST", `${at(server, db)}/snapshots/${enc(snap)}/restore`),
   deleteSnapshot: (server: string, db: string, snap: string) => call<unknown>("DELETE", `${at(server, db)}/snapshots/${enc(snap)}`),
+  ownServices: () => call<OwnService[]>("GET", "/databases/own-services"),
+  import: (server: string, db: string, container: string, sourceDb?: string | null) =>
+    call<Imported>("POST", `${at(server, db)}/import`, { container, database: sourceDb ?? null }),
   start: (server: string) => call<unknown>("POST", `/databases/servers/${enc(server)}/start`),
   stop: (server: string) => call<unknown>("POST", `/databases/servers/${enc(server)}/stop`),
 };

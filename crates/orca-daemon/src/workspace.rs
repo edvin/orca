@@ -422,17 +422,32 @@ async fn update_job(state: &Arc<AppState>, dir: PathBuf, pull: bool) -> JobHandl
                 let before = head(&dir).await;
                 let mut cmd = git();
                 cmd.arg("-C").arg(&dir).args(["pull", "--ff-only"]);
-                run_logged(&j, cmd, "git pull --ff-only").await?;
-                let pulled = record_update(&state, &dir, before).await;
-                j.done(
-                    "clone",
-                    Some(match pulled {
-                        0 => "Already up to date".to_string(),
-                        1 => "1 new change".to_string(),
-                        n => format!("{n} new changes"),
-                    }),
-                )
-                .await;
+                // A pull that can't fast-forward (local commits, a rewritten
+                // history, no network) leaves the folder as it is, and what's
+                // in it is applied, as at startup: local edits still count.
+                match run_logged(&j, cmd, "git pull --ff-only").await {
+                    Ok(()) => {
+                        let pulled = record_update(&state, &dir, before).await;
+                        j.done(
+                            "clone",
+                            Some(match pulled {
+                                0 => "Already up to date".to_string(),
+                                1 => "1 new change".to_string(),
+                                n => format!("{n} new changes"),
+                            }),
+                        )
+                        .await;
+                    }
+                    Err(e) => {
+                        let why = e.to_string();
+                        let why = why.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+                        j.skip(
+                            "clone",
+                            &format!("Couldn't pull ({why}), so the workspace is applied as it is in its folder"),
+                        )
+                        .await;
+                    }
+                }
             } else {
                 j.skip("clone", "No upstream branch: using the folder as it is").await;
             }

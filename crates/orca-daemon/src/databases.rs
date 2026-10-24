@@ -539,6 +539,29 @@ async fn wait_ready(state: &AppState, container: &str, engine: Engine) -> Result
     anyhow::bail!("the database server didn't become ready in 90 seconds: {last}")
 }
 
+/// A project's own server answering, without logging in as its admin
+/// (whose password it may not know).
+async fn wait_alive(state: &AppState, container: &str, engine: Engine) -> Result<()> {
+    let probe = match engine {
+        Engine::Postgres => r#"pg_isready -q -U "${POSTGRES_USER:-postgres}""#,
+        // ping exits 0 once the server answers, even when the login fails.
+        _ => {
+            r#"$(command -v mysqladmin || command -v mariadb-admin) ping -uping --silent >/dev/null 2>&1 || $(command -v mysqladmin || command -v mariadb-admin) ping --silent"#
+        }
+    };
+    for _ in 0..90 {
+        if crate::dev::data::exec_sh(state, container, probe).await.is_ok() {
+            // The first start runs a temporary server before the real one.
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            if crate::dev::data::exec_sh(state, container, probe).await.is_ok() {
+                return Ok(());
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    anyhow::bail!("{container} didn't start answering in 90 seconds")
+}
+
 fn free_port(from: u16, taken: &[u16]) -> u16 {
     (from..from.saturating_add(200))
         .find(|p| !taken.contains(p) && std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok())
@@ -1169,6 +1192,290 @@ pub async fn set_running(state: &AppState, id: &str, run: bool) -> Result<()> {
     }
 }
 
+// ---- Projects' own database containers ----
+
+/// A project's own database container: what a move onto a shared server
+/// starts from.
+#[derive(Debug, Serialize)]
+pub struct OwnService {
+    /// The compose project, and its folder.
+    pub project: String,
+    pub dir: Option<String>,
+    pub service: String,
+    pub container: String,
+    pub running: bool,
+    pub image: String,
+    pub engine: Engine,
+    pub version: Option<String>,
+    /// The database in it, from the image's environment, when it names one.
+    pub database: Option<String>,
+    /// Volumes holding its data.
+    pub volumes: Vec<String>,
+    /// What the project's orca.yaml says about it: required, and whether
+    /// this is the service it `replaces`.
+    pub required: bool,
+    pub replaced: bool,
+    /// Where the project's required database comes from now.
+    pub now_from: Option<String>,
+}
+
+/// The engine a database image runs, from its name.
+pub fn engine_of_image(image: &str) -> Option<Engine> {
+    let base = image.rsplit('/').next().unwrap_or(image).to_lowercase();
+    let base = base.split([':', '@']).next().unwrap_or(&base).to_string();
+    if base.contains("mariadb") {
+        Some(Engine::Mariadb)
+    } else if base.contains("mysql") || base.contains("percona") {
+        Some(Engine::Mysql)
+    } else if ["postgres", "postgis", "timescaledb", "pgvector"]
+        .iter()
+        .any(|k| base.contains(k))
+    {
+        Some(Engine::Postgres)
+    } else {
+        None
+    }
+}
+
+/// Every compose project's own MySQL, MariaDB and PostgreSQL containers,
+/// running or stopped. Servers Orca or a workspace provide aren't included.
+pub async fn own_services(state: &AppState) -> Vec<OwnService> {
+    let rt = state.rt().await;
+    let containers = rt.list_containers(true).await.unwrap_or_default();
+    let ws_shared = match state.config.lock().await.workspace.clone() {
+        Some(ws) => WorkspaceFile::load(Path::new(&ws.path))
+            .ok()
+            .map(|f| crate::workspace::shared_name(&f, Path::new(&ws.path))),
+        None => None,
+    };
+    let mut out = Vec::new();
+    for c in &containers {
+        let Some(project) = c.labels.get("com.docker.compose.project").cloned() else {
+            continue;
+        };
+        let Some(service) = c.labels.get("com.docker.compose.service").cloned() else {
+            continue;
+        };
+        if c.labels.contains_key(SERVER_LABEL) || Some(&project) == ws_shared.as_ref() {
+            continue;
+        }
+        let Some(engine) = engine_of_image(&c.image) else {
+            continue;
+        };
+        let info = rt.docker.inspect_container(&c.id, None).await.ok();
+        let env: BTreeMap<String, String> = info
+            .as_ref()
+            .and_then(|i| i.config.as_ref())
+            .and_then(|c| c.env.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|e| e.split_once('=').map(|(k, v)| (k.to_string(), v.to_string())))
+            .collect();
+        let volumes: Vec<String> = info
+            .as_ref()
+            .and_then(|i| i.mounts.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|m| m.name.or(m.source))
+            .collect();
+        let database = match engine {
+            Engine::Postgres => env
+                .get("POSTGRES_DB")
+                .or(env.get("POSTGRES_USER"))
+                .cloned()
+                .or(Some("postgres".into())),
+            _ => env.get("MYSQL_DATABASE").or(env.get("MARIADB_DATABASE")).cloned(),
+        };
+        let dir = c.labels.get("com.docker.compose.project.working_dir").cloned();
+        let (required, replaced, now_from) = match &dir {
+            Some(d) => {
+                let yaml = OrcaYaml::load(Path::new(d)).unwrap_or_default();
+                let reqs = yaml.requires.all();
+                let replaced = reqs.iter().any(|r| r.replaces.as_deref() == Some(service.as_str()));
+                let now = if reqs.is_empty() {
+                    None
+                } else {
+                    plan(state, &project, Path::new(d))
+                        .await
+                        .into_iter()
+                        .flatten()
+                        .find(|p| p.requirement.engine == engine || p.requirement.replaces.as_deref() == Some(&service))
+                        .map(|p| describe(&p.source))
+                };
+                (!reqs.is_empty(), replaced, now)
+            }
+            None => (false, false, None),
+        };
+        out.push(OwnService {
+            project,
+            dir,
+            service,
+            container: c.name.clone(),
+            running: c.state == ContainerState::Running,
+            version: db::image_version(&c.image),
+            image: c.image.clone(),
+            engine,
+            database,
+            volumes,
+            required,
+            replaced,
+            now_from,
+        });
+    }
+    out.sort_by(|a, b| (&a.project, &a.service).cmp(&(&b.project, &b.service)));
+    out
+}
+
+/// The `sed` arguments that make a MySQL-family dump load into the other
+/// one: MariaDB 11's collations and its "sandbox mode" first line, which
+/// MySQL rejects; MySQL 8's collation, which older MariaDB lacks.
+fn crossing(from: Engine, to: Engine) -> Option<&'static str> {
+    match (from, to) {
+        (Engine::Mariadb, Engine::Mysql) => Some(
+            r#"-e '/enable the sandbox mode/d' -e 's/utf8mb4_uca1400_[a-z0-9_]*/utf8mb4_0900_ai_ci/g' -e 's/utf8mb3_uca1400_[a-z0-9_]*/utf8mb3_general_ci/g'"#,
+        ),
+        (Engine::Mysql, Engine::Mariadb) => Some(r#"-e 's/utf8mb4_0900_[a-z0-9_]*/utf8mb4_unicode_520_ci/g'"#),
+        _ => None,
+    }
+}
+
+/// What an import did.
+#[derive(Debug, Serialize)]
+pub struct Imported {
+    pub from: String,
+    pub database: String,
+    /// A snapshot of what the target held before, to go back to.
+    pub snapshot_before: Option<String>,
+    pub bytes: u64,
+}
+
+/// Copy a database from a project's own container into a database Orca
+/// made on a shared or Orca server, replacing what's there (after a
+/// snapshot of it). A stopped source container is started for the copy and
+/// stopped again.
+pub async fn import(
+    state: &AppState,
+    server: &str,
+    database: &str,
+    source_container: &str,
+    source_database: Option<&str>,
+) -> Result<Imported> {
+    check_ids(server, database)?;
+    let source = own_services(state)
+        .await
+        .into_iter()
+        .find(|s| s.container == source_container)
+        .with_context(|| {
+            format!("'{source_container}' isn't a project's own database container (see find_database_services)")
+        })?;
+    let (target, engine) = server_container(state, server).await?;
+    let same_family = matches!((source.engine, engine), (Engine::Postgres, Engine::Postgres))
+        || (source.engine != Engine::Postgres && engine != Engine::Postgres);
+    if !same_family {
+        anyhow::bail!(
+            "{} is {}, and {server} is {}: an import needs the same engine",
+            source_container,
+            source.engine.name(),
+            engine.name()
+        );
+    }
+    let from_db = source_database
+        .map(str::to_string)
+        .or(source.database.clone())
+        .with_context(|| format!("{source_container} doesn't say which database it holds: give source_database"))?;
+    if from_db.is_empty()
+        || !from_db
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        anyhow::bail!("'{from_db}' isn't a database name");
+    }
+
+    let rt = state.rt().await;
+    let started = !source.running;
+    if started {
+        rt.start_container(&source.container)
+            .await
+            .context("couldn't start the source container")?;
+        wait_alive(state, &source.container, source.engine).await?;
+    }
+    let result = async {
+        // What's there now can be had back.
+        let before = snapshot(state, server, database, Some("before-import")).await.ok().map(|s| s.name);
+        let user = owner_user(state, server, database).await;
+        crate::dev::data::exec_sh(state, &target, &db::reset_cmd(engine, database, &user)?).await?;
+
+        let program = exec_program(state).await;
+        let dump = match source.engine {
+            Engine::Postgres => format!(r#"pg_dump -U "${{POSTGRES_USER:-postgres}}" --no-owner --no-acl -d "{from_db}""#),
+            // Its admin when the container knows the password; else the
+            // app's own user, which can read its database (images started
+            // with a random root password are common).
+            _ => format!(
+                r#"if [ -n "${{MYSQL_ROOT_PASSWORD:-$MARIADB_ROOT_PASSWORD}}" ]; then U=root; P="${{MYSQL_ROOT_PASSWORD:-$MARIADB_ROOT_PASSWORD}}"; else U="${{MYSQL_USER:-${{MARIADB_USER:-root}}}}"; P="${{MYSQL_PASSWORD:-$MARIADB_PASSWORD}}"; fi; $(command -v mysqldump || command -v mariadb-dump) -u"$U" ${{P:+-p"$P"}} --single-transaction --no-tablespaces --triggers "{from_db}""#
+            ),
+        };
+        let load = match engine {
+            Engine::Postgres => format!(r#"{{ echo 'SET ROLE "{user}";'; cat; }} | {}"#, db::restore_cmd(engine, database)?),
+            _ => db::restore_cmd(engine, database)?,
+        };
+        // Between MariaDB and MySQL, the dump is translated on the way.
+        let dump = match crossing(source.engine, engine) {
+            Some(sed) => format!("{{ {dump}; }} | sed {sed}"),
+            None => dump,
+        };
+        let mut src = crate::dev::ops::runtime_cli(state, program)
+            .await
+            .args(["exec", &source.container, "sh", "-c", &dump])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .context("couldn't run the dump")?;
+        let pipe: std::process::Stdio = src.stdout.take().context("no dump output")?.try_into()?;
+        let dst = crate::dev::ops::runtime_cli(state, program)
+            .await
+            .args(["exec", "-i", &target, "sh", "-c", &load])
+            .stdin(pipe)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .context("couldn't run the restore")?;
+        let (src_out, dst_out) = tokio::join!(src.wait_with_output(), dst.wait_with_output());
+        let (src_out, dst_out) = (src_out?, dst_out?);
+        if !src_out.status.success() {
+            anyhow::bail!(
+                "the dump from {} failed: {}",
+                source.container,
+                String::from_utf8_lossy(&src_out.stderr).lines().last().unwrap_or("")
+            );
+        }
+        if !dst_out.status.success() {
+            anyhow::bail!(
+                "loading into {database} failed: {}",
+                String::from_utf8_lossy(&dst_out.stderr).lines().last().unwrap_or("")
+            );
+        }
+        let size = servers_with(state, true)
+            .await
+            .into_iter()
+            .find(|s| s.id == server)
+            .and_then(|s| s.databases.into_iter().find(|d| d.name == database))
+            .and_then(|d| d.size)
+            .unwrap_or(0);
+        Ok(Imported {
+            from: format!("{}/{from_db}", source.container),
+            database: database.to_string(),
+            snapshot_before: before,
+            bytes: size,
+        })
+    }
+    .await;
+    if started {
+        let _ = rt.stop_container(&source.container, 20).await;
+    }
+    result
+}
+
 // ---- API ----
 
 use std::sync::Arc;
@@ -1183,6 +1490,7 @@ use crate::api::ApiError;
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/databases", get(overview))
+        .route("/databases/own-services", get(get_own_services))
         .route("/databases/servers/{server}/start", post(start_server))
         .route("/databases/servers/{server}/stop", post(stop_server))
         .route("/databases/{server}/{database}/connection", get(get_connection))
@@ -1199,6 +1507,7 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/databases/{server}/{database}/snapshots/{snapshot}/restore",
             post(post_restore),
         )
+        .route("/databases/{server}/{database}/import", post(post_import))
 }
 
 /// A project whose `orca.yaml` requires databases, and where each comes from.
@@ -1372,6 +1681,29 @@ async fn delete_snapshot_route(
     Ok(Json(serde_json::json!({ "deleted": snap })))
 }
 
+async fn get_own_services(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    Json(own_services(&state).await)
+}
+
+#[derive(serde::Deserialize)]
+struct ImportBody {
+    /// The project's own database container to copy from.
+    container: String,
+    /// The database in it; read from the container's environment when unset.
+    #[serde(default)]
+    database: Option<String>,
+}
+
+async fn post_import(
+    State(state): State<Arc<AppState>>,
+    UrlPath((server, database)): UrlPath<(String, String)>,
+    Json(body): Json<ImportBody>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        import(&state, &server, &database, &body.container, body.database.as_deref()).await?,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1386,6 +1718,24 @@ mod tests {
         assert!(snapshots("orca:..", "x").is_empty());
         assert!(check_snapshot_name("2026-10-24-120000.sql.gz").is_ok());
         assert!(check_snapshot_name("../a.sql.gz").is_err() && check_snapshot_name("a.txt").is_err());
+    }
+
+    #[test]
+    fn mariadb_and_mysql_dumps_are_translated() {
+        assert!(crossing(Engine::Mariadb, Engine::Mysql).unwrap().contains("uca1400"));
+        assert!(crossing(Engine::Mysql, Engine::Mariadb).unwrap().contains("0900"));
+        assert_eq!(crossing(Engine::Mysql, Engine::Mysql), None);
+        assert_eq!(crossing(Engine::Postgres, Engine::Postgres), None);
+    }
+
+    #[test]
+    fn database_images_are_recognised() {
+        assert_eq!(engine_of_image("mysql:8.0"), Some(Engine::Mysql));
+        assert_eq!(engine_of_image("docker.io/library/mariadb:11"), Some(Engine::Mariadb));
+        assert_eq!(engine_of_image("percona:8"), Some(Engine::Mysql));
+        assert_eq!(engine_of_image("postgis/postgis:16-3.4"), Some(Engine::Postgres));
+        assert_eq!(engine_of_image("redis:7"), None);
+        assert_eq!(engine_of_image("ghcr.io/umami-software/umami:postgresql-v2"), None);
     }
 
     #[test]

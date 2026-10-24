@@ -332,7 +332,34 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             parameters: json_schema(json!({})),
             category: "Workspace".into(),
         },
+        // === Orca itself: its docs ===
+        ToolDefinition {
+            name: "orca_docs".into(),
+            description: "Orca's documentation, as on orca-desktop.com/docs for this version: how workspaces, shared services, databases, the gateway, orca.yaml, profiles and worktree instances work, with every key of orca.yaml and orca-workspace.yaml. Call it without a topic for the list of pages, then read one (add section to get only part of it). Read the relevant page before writing or changing orca.yaml or orca-workspace.yaml.".into(),
+            parameters: json_schema(json!({
+                "topic": { "type": "string", "description": "A page, such as databases, orca-yaml, workspaces-reference or gateway" },
+                "section": { "type": "string", "description": "Only the section whose heading contains this, such as \"shared servers\"" }
+            })),
+            category: "Orca".into(),
+        },
         // === Databases ===
+        ToolDefinition {
+            name: "find_database_services".into(),
+            description: "Every project's own MySQL, MariaDB and PostgreSQL containers (running or stopped): project, folder, service, image, engine and version, the database in it, its volumes, and whether the project's orca.yaml already requires a database (and where it comes from now). The starting point for moving projects onto shared database servers.".into(),
+            parameters: json_schema(json!({})),
+            category: "Databases".into(),
+        },
+        ToolDefinition {
+            name: "database_import".into(),
+            description: "Copy a database from a project's own container (from find_database_services) into the database Orca made for it on a shared or Orca server, replacing what's there. Orca snapshots the target first (snapshot_before in the result) and starts a stopped source container for the copy. Use it after the project requires its database and has been started once, so the target exists. Confirm with the developer first.".into(),
+            parameters: json_schema(json!({
+                "server": { "type": "string", "description": "Target server id from list_databases" },
+                "database": { "type": "string", "description": "Target database" },
+                "container": { "type": "string", "description": "The project's own database container" },
+                "source_database": { "type": "string", "description": "The database in it, when the container doesn't name one" }
+            })),
+            category: "Databases".into(),
+        },
         ToolDefinition {
             name: "list_databases".into(),
             description: "Database servers and the databases on them: the workspace's shared servers and the ones Orca runs itself, each database's size, the project it's for and its user, and every project whose orca.yaml requires a database with where it comes from (or why it can't be provided). No passwords.".into(),

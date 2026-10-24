@@ -15,6 +15,7 @@ mod build_manager;
 mod cron_expr;
 mod databases;
 mod dev;
+mod docs;
 mod folders;
 mod gateway;
 mod gateway_sync;

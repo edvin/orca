@@ -4583,6 +4583,10 @@ tr.service-off td { opacity: 0.55; }
 .db-empty-icon { color: #58a6ff; }
 .db-empty h2 { font-size: 18px; color: #f0f6fc; margin: 12px 0 8px; }
 .db-empty p { color: #8b949e; font-size: 13.5px; line-height: 1.6; margin: 0 0 14px; }
+.db-own { display: flex; flex-direction: column; gap: 6px; }
+.db-own-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid #21262d; border-radius: 10px; background: #161b22; flex-wrap: wrap; }
+.db-own-main { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.db-own-hint { font-size: 12.5px; color: #8b949e; }
 .db-howto { margin-top: 20px; color: #8b949e; font-size: 13px; }
 .db-howto summary { cursor: pointer; color: #58a6ff; }
 .db-howto-body { margin-top: 10px; }

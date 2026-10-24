@@ -8299,18 +8299,29 @@ async fn agent_openai_proxy(
 const MCP_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
 /// Shown to agents on connect, so they know when Orca is the right tool.
-const MCP_INSTRUCTIONS: &str = "Orca manages this machine's containers, compose stacks, Kubernetes and git worktree instances. \
+const MCP_INSTRUCTIONS: &str = "Orca runs this machine's containers, compose stacks, Kubernetes and git worktree instances. \
+Its pieces: a stack is a compose project (list_stacks); a project's orca.yaml in its folder adds gateway routes (HTTPS \
+hostnames), links, hooks, worktree settings and required databases; a workspace (workspace_status) is the team's repo \
+with orca-workspace.yaml: shared services, the gateway's domain and certificate, database servers and the team's \
+projects; the gateway serves every route at https://<name>.<domain>. Orca's own docs describe all of this for this \
+version: call orca_docs, and read the relevant page (orca-yaml, workspaces-reference, databases, gateway, worktrees) \
+before writing or changing orca.yaml or orca-workspace.yaml, rather than guessing keys. \
 When the developer asks to run or set up one of their team's projects by name (\"spin up billing\"), call workspace_status: \
 if a workspace is joined it lists the team's projects; setup_project clones, configures and starts one and returns its URLs. \
 Never ask the developer to paste secrets into the chat: missing secrets are filled in on Orca's Workspace page. \
 To start a project from a folder with a compose file or orca.yaml, use deploy_project with its path; then list_stacks, \
 stack_logs and gateway_routes show how it runs and which https://*.localhost URL serves it. stack_profiles and \
 set_stack_profiles switch optional services on and off; read_orca_yaml and write_orca_yaml edit a stack's Orca settings. \
+Databases: a project's orca.yaml can require one (requires: database:), and Orca gives it a database and user of its own \
+on the workspace's shared server, its own database service, or a server Orca runs. list_databases shows them; \
+database_snapshot before risky changes; find_database_services lists projects' own database containers, and \
+database_import copies one into its shared database, for moving projects onto shared servers (read orca_docs \
+databases first, propose the plan, and snapshot before importing). \
 If you work in a git worktree of a project registered with Orca (list_projects, add_project), use instance_up with your \
 worktree path to run this branch's code (its own URLs and ports, shared databases), instance_status or instance_env to \
 find its URLs and ports, instance_logs to debug, and instance_down when done. Ask for data={\"postgres\": \"own-database\"} \
 before running migrations or writing test data, so other worktrees are not affected. Confirm with the user before \
-removing anything or stopping work they did not ask you to stop.";
+removing anything, importing over a database, or stopping work they did not ask you to stop.";
 
 /// Tools that only read state, so clients may run them without asking.
 fn mcp_read_only(name: &str) -> bool {
@@ -8342,6 +8353,8 @@ fn mcp_read_only(name: &str) -> bool {
                 | "check_workspace"
                 | "list_databases"
                 | "database_connection"
+                | "orca_docs"
+                | "find_database_services"
                 | "build_status"
                 | "workspace_status"
                 | "check_for_update"
@@ -8403,6 +8416,7 @@ pub(crate) fn deletes_data(name: &str) -> bool {
                 | "instance_db_reset"
                 | "database_reset"
                 | "database_restore"
+                | "database_import"
                 | "compose_down"
                 | "write_orca_yaml"
                 | "gateway_remove_route"

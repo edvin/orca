@@ -24,6 +24,7 @@ import {
   type DatabaseInfo,
   type DatabaseServer,
   type DatabasesOverview,
+  type OwnService,
   type Snapshot,
 } from "../lib/databases";
 
@@ -31,6 +32,7 @@ const openUrl = (url: string) => shellOpen(url).catch(() => window.open(url, "_b
 
 export default function DatabasesPage(props: { onNavigate?: (target: string) => void }) {
   const [data, { refetch }] = createResource<DatabasesOverview | null>(() => databasesApi.overview().catch(() => null));
+  const [own, { refetch: refetchOwn }] = createResource(() => databasesApi.ownServices().catch(() => [] as OwnService[]));
   const [routes] = createResource(() => invoke<GatewayRoute[]>("gateway_list_routes").catch(() => [] as GatewayRoute[]));
   const timer = setInterval(() => { if (!document.hidden) void refetch(); }, 10_000);
   onCleanup(() => clearInterval(timer));
@@ -82,6 +84,31 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
 
   const snapshot = (server: DatabaseServer, db: DatabaseInfo) =>
     run(`snap:${server.id}/${db.name}`, () => databasesApi.snapshot(server.id, db.name), `Saved a snapshot of ${db.name}`);
+
+  /** The database the project's orca.yaml requires now, on a shared or Orca
+   *  server: what its own container's data goes into. */
+  const targetOf = (o: OwnService) => {
+    const need = data()?.projects.find((p) => p.project === o.project);
+    const req = need?.databases.find((r) => r.server && (r.replaces === o.service || r.engine === o.engine));
+    const server = data()?.servers.find((s) => s.id === req?.server);
+    const db = server?.databases.find((d) => d.name === req?.database);
+    return server && db ? { server, db } : null;
+  };
+  const importInto = async (o: OwnService) => {
+    const t = targetOf(o);
+    if (!t) return;
+    const ok = await confirmDanger({
+      title: `Import ${o.project}'s data`,
+      message: `Copies ${o.database ?? "the database"} from ${o.container} (its own ${ENGINE_NAME[o.engine]}) into ${t.db.name} on ${t.server.label}, replacing what's there. Orca takes a snapshot of ${t.db.name} first, so you can restore it.${o.running ? "" : ` ${o.container} is stopped: Orca starts it for the copy and stops it again.`}`,
+      confirmLabel: "Import data",
+    });
+    if (!ok) return;
+    await run(`import:${o.container}`, async () => {
+      const r = await databasesApi.import(t.server.id, t.db.name, o.container);
+      showToast(`Copied ${r.from} into ${r.database} (${bytes(r.bytes)})`, "success");
+      await refetchOwn();
+    }, `${o.project} now has its data on ${t.server.label}`);
+  };
 
   const needsAny = () => (data()?.projects.length ?? 0) > 0;
   const serversAny = () => (data()?.servers.length ?? 0) > 0;
@@ -208,6 +235,42 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
                 </div>
               )}
             </For>
+          </Show>
+
+          {/* Projects' own database containers: what a move onto shared servers starts from */}
+          <Show when={(own() ?? []).length > 0}>
+            <div class="db-section-title">Projects' own database containers</div>
+            <div class="db-own">
+              <For each={own()}>
+                {(o) => (
+                  <div class="db-own-row">
+                    <AppIcon src={iconSrc(ENGINE_ICON[o.engine])} name={o.engine} size={22} />
+                    <div class="db-own-main">
+                      <div>
+                        <b>{o.project}</b> <span class="db-muted">· {o.service} · {ENGINE_NAME[o.engine]}{o.version ? ` ${o.version}` : ""}{o.database ? ` · ${o.database}` : ""}</span>
+                      </div>
+                      <div class="db-muted">
+                        <span class="mono">{o.container}</span> · {o.running ? "running" : "stopped"}
+                        <Show when={o.replaced && o.now_from}>{(f) => <> · its data now lives on {f()}</>}</Show>
+                      </div>
+                    </div>
+                    <Show when={o.replaced && targetOf(o)} fallback={
+                      <Show when={!o.required}>
+                        <span class="db-own-hint">
+                          Not shared yet: <HelpLink path="/docs/databases/#move-a-project-onto-a-shared-server">How to move it</HelpLink>
+                        </span>
+                      </Show>
+                    }>
+                      {(t) => (
+                        <button class="btn btn-sm btn-primary" disabled={!!busy()} title={`Copy its data into ${t().db.name} on ${t().server.label}`} onClick={() => void importInto(o)}>
+                          {busy() === `import:${o.container}` ? <Spinner size={11} /> : `Import into ${t().db.name}`}
+                        </button>
+                      )}
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
           </Show>
 
           <details class="db-howto">

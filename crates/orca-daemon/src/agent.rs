@@ -822,6 +822,27 @@ pub async fn execute_tool(
             wait_for_job(job).await
         }
         "check_workspace" => api(state, "POST", "/workspace/check", None).await,
+        "orca_docs" => crate::docs::read(
+            arguments.get("topic").and_then(|v| v.as_str()),
+            arguments.get("section").and_then(|v| v.as_str()),
+        ),
+        "find_database_services" => api(state, "GET", "/databases/own-services", None).await,
+        "database_import" => {
+            api(
+                state,
+                "POST",
+                &format!(
+                    "/databases/{}/{}/import",
+                    seg(&arguments, "server")?,
+                    seg(&arguments, "database")?
+                ),
+                Some(json!({
+                    "container": get_str(&arguments, "container")?,
+                    "database": arguments.get("source_database").and_then(|v| v.as_str()),
+                })),
+            )
+            .await
+        }
         "list_databases" => {
             let mut v = api(state, "GET", "/databases", None).await?;
             // Snapshots by name, so the tool can restore one.
