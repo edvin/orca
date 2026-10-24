@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvmf8ws8">
+<link rel="stylesheet" href="/assets/site.css?v=mvmh91h7">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvmf8ws8" defer></script>
+<script src="/assets/site.js?v=mvmh91h7" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -84,7 +84,7 @@
 <div class="table-wrap"><table><thead><tr><th>Step</th><th>What happens</th></tr></thead><tbody><tr><td><strong>Get the workspace</strong></td><td>Runs <code>git clone</code> into the folder. If the folder already holds this workspace (it has an <code>orca-workspace.yaml</code>), Orca uses it instead. If it exists, isn&#39;t empty and has no workspace file, joining stops with <em>&quot;… already exists and isn&#39;t this workspace. Choose another folder.&quot;</em></td></tr><tr><td><strong>Create the shared network</strong></td><td>Creates the workspace&#39;s Docker network if it doesn&#39;t exist. Skipped when the file names none.</td></tr><tr><td><strong>Set up the gateway</strong></td><td>Sets the <a href="/docs/gateway/">gateway</a>&#39;s domain to the workspace&#39;s domain, uses the workspace&#39;s certificate (or Orca&#39;s own certificate authority when there&#39;s none), and starts the gateway. A gateway that already runs restarts.</td></tr><tr><td><strong>Start the shared services</strong></td><td>Runs the shared compose file as its own stack, then runs the <code>hooks</code> from an <code>orca.yaml</code> next to it. Skipped when the file has no shared services.</td></tr><tr><td><strong>Add the routes</strong></td><td>Adds every route from the workspace file: the shared services&#39; and every project&#39;s.</td></tr></tbody></table></div><p>A few things to know:</p>
 <ul>
 <li><strong>Git runs without prompts.</strong> Orca runs git with <code>GIT_TERMINAL_PROMPT=0</code> and SSH in batch mode, so it never waits for a password. It accepts a server&#39;s host key the first time it sees it, as <code>ssh</code> does when you type &quot;yes&quot;, and refuses a changed one.</li>
-<li><strong>The gateway settings are for the whole machine.</strong> The workspace&#39;s domain and certificate apply to every route on the gateway, including projects that aren&#39;t part of the workspace. Leaving the workspace doesn&#39;t change them back.</li>
+<li><strong>Your own routes keep working.</strong> Joining only adds the workspace&#39;s routes; the ones you added, and those from labels or a project&#39;s <code>orca.yaml</code>, stay. A short hostname such as <code>myapp</code> gets the workspace&#39;s domain. A full one outside it, such as <code>myapp.localhost</code>, keeps a certificate from Orca&#39;s own certificate authority. Leaving puts the gateway&#39;s domain, certificate, title and logo back as they were.</li>
 <li><strong>Services behind a compose profile don&#39;t start on join.</strong> Only services without a <code>profiles:</code> entry start. A project that lists a profiled service under <code>uses</code> starts it when you set the project up, and you can switch <a href="/docs/stacks/#profiles">profiles</a> on for the shared stack on its stack page.</li>
 <li><strong>Orca joins one workspace at a time.</strong> Joining another one replaces the first.</li>
 </ul>

@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvmf8ws8">
+<link rel="stylesheet" href="/assets/site.css?v=mvmh91h7">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvmf8ws8" defer></script>
+<script src="/assets/site.js?v=mvmh91h7" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -128,7 +128,7 @@
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    cert</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">certs/local.acme.dev.crt</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    key</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">certs/local.acme.dev.key</span></span></code></pre></div><div class="table-wrap"><table><thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Meaning</th></tr></thead><tbody><tr><td><code>domain</code></td><td>string</td><td>the gateway&#39;s current domain</td><td>The domain every short hostname gets: <code>mail</code> becomes <code>mail.local.acme.dev</code>. The landing page is served at the domain itself.</td></tr><tr><td><code>title</code></td><td>string</td><td>the landing page&#39;s current title</td><td>The title of the <a href="/docs/gateway/#the-landing-page">landing page</a>, such as <code>Acme dev</code>.</td></tr><tr><td><code>logo</code></td><td>string</td><td>none</td><td>A logo beside the title on the landing page and the <strong>Workspace</strong> page: an image file in the workspace repo (SVG, PNG, WebP or JPEG, up to 64 KB), a <a href="/docs/gateway/#icons">built-in icon</a> or an <code>https://</code> URL. Both pages are dark, so use a version with light text.</td></tr><tr><td><code>certificate.cert</code></td><td>path</td><td>none</td><td>The certificate in PEM format, with its chain.</td></tr><tr><td><code>certificate.key</code></td><td>path</td><td>none</td><td>Its private key in PEM format.</td></tr></tbody></table></div><p>What Orca does with it:</p>
 <ul>
-<li>With <code>certificate</code>, the gateway uses that one certificate for every hostname (the <strong>Custom certificate</strong> TLS mode). It must cover <code>*.&lt;domain&gt;</code>, and the domain itself for the landing page.</li>
+<li>With <code>certificate</code>, the gateway uses that certificate for every hostname under the domain (the <strong>Custom certificate</strong> TLS mode). It must cover <code>*.&lt;domain&gt;</code>, and the domain itself for the landing page. Your own routes outside it, such as <code>myapp.localhost</code>, keep a certificate from Orca&#39;s own certificate authority, so they work as before you joined.</li>
 <li>With a <code>gateway</code> section but no <code>certificate</code>, the gateway uses Orca&#39;s own certificate authority (the <strong>Orca CA (automatic)</strong> mode), which issues a certificate per hostname.</li>
 <li>Without a <code>gateway</code> section, Orca keeps the gateway&#39;s current domain and TLS mode, and only makes sure it runs.</li>
 </ul>

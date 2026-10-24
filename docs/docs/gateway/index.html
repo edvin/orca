@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvmf8ws8">
+<link rel="stylesheet" href="/assets/site.css?v=mvmh91h7">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvmf8ws8" defer></script>
+<script src="/assets/site.js?v=mvmh91h7" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -161,6 +161,7 @@
 <li>Click a group&#39;s name to fold it; a folded group shows how many services it has.</li>
 </ul>
 <p>Each browser remembers these choices.</p>
+<p>A small group shares its row with others: a project with one service takes one column instead of a whole row. A <a href="/docs/workspaces/">workspace</a>&#39;s shared services come first, as a strip of small chips with a status dot, since they&#39;re tools you open now and then. The number of services running is under the title.</p>
 <p>Each card&#39;s title, description, group and icon come from the route:</p>
 <div class="table-wrap"><table><thead><tr><th>Route from</th><th>Set it with</th></tr></thead><tbody><tr><td>Added by hand</td><td><strong>Edit</strong> on the Landing page tab (or the route&#39;s edit dialog): <strong>Title</strong>, <strong>Description</strong>, <strong>Group</strong>, <strong>Icon</strong>, and <strong>Hide</strong></td></tr><tr><td>orca.yaml</td><td><code>title</code>, <code>description</code>, <code>group</code>, <code>icon</code>, <code>hidden</code> on the gateway entry</td></tr><tr><td>Labels</td><td><code>orca.route.title</code>, <code>.description</code>, <code>.group</code>, <code>.icon</code>, <code>.hidden</code> (for a named route, <code>orca.route.&lt;name&gt;.title</code> and so on)</td></tr></tbody></table></div><p>A <a href="/docs/workspaces/">workspace</a> project that isn&#39;t set up on your computer yet still gets its cards, marked <strong>Not set up · set it up in Orca</strong> with a dashed border. Clicking one opens Orca&#39;s <strong>Workspace</strong> page at that project, with its <strong>Set up</strong> button highlighted; setting it up still takes your click.</p>
 <p>Without a title, the card is named after the hostname. The group defaults to the compose project. A group of <a href="#environment-links">environment links</a> with the same name as a group of cards, such as the project&#39;s name, joins that section instead of showing as a second one. A hidden route still routes; it&#39;s only left off the page.</p>

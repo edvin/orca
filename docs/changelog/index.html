@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvmf8ws8">
+<link rel="stylesheet" href="/assets/site.css?v=mvmh91h7">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvmf8ws8" defer></script>
+<script src="/assets/site.js?v=mvmh91h7" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,23 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.59.0">
+<section class="container releases"><article class="release" id="v0.60.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.60.0">v0.60.0</a><time datetime="2026-10-24T14:09:40Z">October 24, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="a-tidier-start-page"><a class="anchor" href="#a-tidier-start-page" aria-hidden="true" tabindex="-1">#</a>A tidier start page</h2>
+<ul>
+<li><strong>Shared services as a strip.</strong> A workspace&#39;s shared services, such as Mailpit, Grafana and MinIO, come first as a row of small chips with a status dot, instead of rows of full cards.</li>
+<li><strong>Small projects share a row.</strong> A project with one or two services no longer takes a whole row: it sits next to others.</li>
+<li><strong>Room for the search box.</strong> How many services run is now under the title, so the search box gets the space, and everything in the top bar lines up.</li>
+</ul>
+<h2 id="your-own-apps-next-to-a-workspace"><a class="anchor" href="#your-own-apps-next-to-a-workspace" aria-hidden="true" tabindex="-1">#</a>Your own apps next to a workspace</h2>
+<p>When a workspace brings its own certificate, such as one for <code>*.local.acme.dev</code>, your own routes outside that domain, such as <code>myapp.localhost</code>, keep a certificate from Orca&#39;s own certificate authority. Before, they got one your browser didn&#39;t trust. Names two levels down, such as <code>api.crm.local.acme.dev</code>, which a wildcard certificate doesn&#39;t cover, get one too.</p>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.60.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.59.0">
   <div class="release-meta"><a class="release-tag" href="#v0.59.0">v0.59.0</a><time datetime="2026-10-24T13:14:58Z">October 24, 2026</time></div>
   <div class="release-body prose">
     
@@ -569,32 +585,6 @@
 <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.48.0...v0.48.1" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.48.0...v0.48.1</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.48.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.48.0">
-  <div class="release-meta"><a class="release-tag" href="#v0.48.0">v0.48.0</a><time datetime="2026-10-21T10:09:57Z">October 21, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="orca-barely-touches-docker-while-youre-not-using-it"><a class="anchor" href="#orca-barely-touches-docker-while-youre-not-using-it" aria-hidden="true" tabindex="-1">#</a>Orca barely touches Docker while you&#39;re not using it</h2>
-<p>Orca&#39;s windows each fetched their own copy of the container and image lists every few seconds, even while the window was hidden. On a Mac with the containerd image store, listing 70 images costs Docker over a CPU second, and the sidebar did it every 5 seconds just to show a count.</p>
-<p>With the dashboard open, Docker in the VM used about <strong>150% of a core</strong> on v0.47.3. On v0.48.0 it uses about <strong>5%</strong>, about the same as with no dashboard open at all.</p>
-<ul>
-<li><strong>Lists are fetched once and shared</strong> by the sidebar, dashboard and pages, and refresh the moment a container or image changes instead of on a timer.</li>
-<li><strong>Nothing polls while the window is hidden.</strong> On macOS, closing the window keeps Orca in the menu bar; it now goes quiet there.</li>
-<li><strong>Container stats come in one request</strong> for all running containers instead of one per container.</li>
-<li><strong>Kubernetes and health checks no longer start processes</strong> on every refresh (kubectl, sysctl, vm_stat, df; PowerShell on Windows).</li>
-<li><strong>Faster to open and smoother to use:</strong> pages load when you first visit them, tables update only the rows that changed, and the always-on blur effects behind the sidebar, titlebar and cards are gone.</li>
-<li><strong>Following logs is cheap:</strong> log lines arrive in batches and only the lines on screen are drawn. Following a chatty container used to keep the window&#39;s main thread busy almost all the time; now it&#39;s about 5%.</li>
-</ul>
-<h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
-<ul>
-<li><strong>Container exit and out-of-memory notifications work.</strong> Docker&#39;s events never reached Orca, so these toasts never appeared.</li>
-<li><strong>Container CPU % shows current usage.</strong> It used to show the average since the Docker VM started. Memory now matches <code>docker stats</code> (page cache excluded).</li>
-<li><strong>Orca no longer opens a new Docker event stream on every launch.</strong> Each one stayed open until the daemon restarted.</li>
-</ul>
-<p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.47.3...v0.48.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.47.3...v0.48.0</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.48.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
