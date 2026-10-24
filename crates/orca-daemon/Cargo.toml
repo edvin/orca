@@ -37,6 +37,7 @@ chrono.workspace = true
 dirs.workspace = true
 base64.workspace = true
 rcgen = { version = "0.13", features = ["x509-parser"] }
+x509-parser = "0.16"
 time = "0.3"
 serde_yaml = "0.9"
 tar = "0.4"

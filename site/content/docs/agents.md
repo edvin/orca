@@ -230,7 +230,9 @@ Orca has 74 agent tools. The same set is available over MCP, the OpenAI-compatib
 | `gateway_status` | Whether the HTTPS gateway runs, its domain, ports, certificate mode and route count. |
 | `gateway_start` | Start the gateway. |
 | `gateway_stop` | Stop the gateway. Routes stay configured. |
-| `gateway_routes` | Every route: hostname, path, container, port, and where it comes from. |
+| `gateway_routes` | Every route: hostname, path, container, port, where it comes from, and whether its service runs. |
+| `gateway_requests` | Recent requests through the gateway, newest first, with status and duration. A failed one says why in plain words, such as *nothing answers to one-crm-app: its container isn't running*. `problems` shows only failures, `query` filters by host, path, project or status. |
+| `identify_ports` | What each port a container publishes speaks: a web page with its title, or PostgreSQL, Redis, SMTP and so on. |
 | `gateway_add_route` | Route a hostname (and optional `path`) to a `container` and `port`. `shop` becomes `shop.localhost`. |
 | `gateway_remove_route` | Remove a route that was added by hand. |
 
@@ -295,6 +297,9 @@ Ask *"is my Orca up to date?"* or *"update Orca"*. When you ask about a feature 
 | `workspace_status` | The joined [workspace](/docs/workspaces/): shared services and every project, with whether it's cloned and running, its URLs and missing secrets. |
 | `setup_project` | Clone, configure and start a workspace project by its key, and return its URLs. Stops and lists missing secrets, which the developer fills in on the Workspace page. |
 | `update_workspace` | Pull the workspace file and apply it again. |
+| `join_workspace` | Join a workspace by its git URL, or a folder that has it. It changes the gateway for the whole machine, so clients ask first. |
+| `check_workspace` | What this machine still needs: gateway ports, the domain, the certificate's expiry, Orca's certificate authority, registry logins, the secret manager's CLI and access to every repository, each problem with what to do. |
+| `fetch_project_secrets` | Fill in a project's secrets from Passbolt or 1Password with your own CLI. Returns which were filled; the values never reach the AI tool. |
 
 ### Worktree projects and instances
 

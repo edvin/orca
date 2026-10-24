@@ -205,6 +205,11 @@ pub struct WorkspaceProject {
     /// the workspace repo or an https URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Shows the project with others under one name, such as `oneWebshop` for
+    /// its backend, frontend and admin: on the landing page, the Gateway
+    /// page, the dashboard and the Workspace page. Its key when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
     /// Folder under `clone_into`; the project's key when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
@@ -304,6 +309,12 @@ impl WorkspaceFile {
             }
             if p.repo.trim().is_empty() {
                 anyhow::bail!("project '{key}': `repo` is missing");
+            }
+            if p.group
+                .as_deref()
+                .is_some_and(|g| g.trim().is_empty() || g.chars().count() > 60)
+            {
+                anyhow::bail!("project '{key}': `group` must be a name of up to 60 characters");
             }
             if p.repo.starts_with('-') {
                 anyhow::bail!("project '{key}': `repo` can't start with '-'");
@@ -690,6 +701,21 @@ projects:
                 .to_string()
         };
         assert!(bad("cert: certs/wildcard.crt", "cert: ../../etc/passwd").contains("inside the folder"));
+        let grouped = EXAMPLE.replace(
+            "    uses: [mailpit, temporal]",
+            "    group: Finance\n    uses: [mailpit, temporal]",
+        );
+        assert_eq!(
+            WorkspaceFile::parse(&grouped).unwrap().projects["crm"].group.as_deref(),
+            Some("Finance")
+        );
+        assert!(
+            bad(
+                "    uses: [mailpit, temporal]",
+                "    group: \"  \"\n    uses: [mailpit, temporal]"
+            )
+            .contains("`group`")
+        );
         let logo = |l: &str| EXAMPLE.replace("  certificate:", &format!("  logo: {l}\n  certificate:"));
         assert!(
             WorkspaceFile::parse(&logo("icons/acme.svg"))

@@ -259,6 +259,7 @@ Keys use letters, digits, dashes and underscores, at most 63 characters, and don
 | `repo` | string | required | What to `git clone`. |
 | `description` | string | none | One line, shown on the card. AI tools match on it too. |
 | `icon` | string | from its images | The project's icon on the **Workspace** page and the dashboard, and for its routes that don't set their own: a built-in icon, an image file in the workspace repo or an https URL. See [Icons](/docs/gateway/#icons). |
+| `group` | string | the project's key | Shows the project with others under one name, such as `oneWebshop` for its backend, frontend and admin: one section on the landing page and the Gateway page, side by side on the dashboard and the **Workspace** page. Up to 60 characters. |
 | `path` | path | the project's key | The folder under `clone_into`. |
 | `branch` | string | the repo's default branch | The branch to check out when cloning. |
 | [`uses`](#uses) | list of strings | `[]` | Shared services to start before the project. |

@@ -10,11 +10,13 @@ import { logError } from "../lib/activityStore";
 import { SkeletonCard } from "../components/Skeleton";
 import { safeHref } from "../lib/sanitize";
 import LandingPageTab from "../components/gateway/LandingPageTab";
+import RequestsTab from "../components/gateway/RequestsTab";
 import AppIcon from "../components/AppIcon";
 import { iconForImage, iconSrc } from "../lib/icons";
 import { portGroups, routablePort, type PortProbe } from "../lib/ports";
 import PortChips from "../components/PortChips";
 import HelpLink from "../components/HelpLink";
+import { certExpiry } from "../lib/format";
 import { requestWorkspaceSetup } from "../lib/workspace";
 import "../styles/polish-a.css";
 
@@ -59,7 +61,7 @@ function friendlyStartError(raw: string): string {
   return raw;
 }
 
-type GatewayTab = "routes" | "landing" | "settings";
+type GatewayTab = "routes" | "requests" | "landing" | "settings";
 
 export default function GatewayPage(props: GatewayPageProps) {
   const [activeTab, setActiveTab] = createSignal<GatewayTab>("routes");
@@ -776,6 +778,7 @@ export default function GatewayPage(props: GatewayPageProps) {
       {/* Tab bar */}
       <div class="tab-bar" style={{ "margin-bottom": "24px" }}>
         <button class={`tab-item ${activeTab() === "routes" ? "active" : ""}`} onClick={() => setActiveTab("routes")}>Routes</button>
+        <button class={`tab-item ${activeTab() === "requests" ? "active" : ""}`} onClick={() => setActiveTab("requests")}>Requests</button>
         <button class={`tab-item ${activeTab() === "landing" ? "active" : ""}`} onClick={() => setActiveTab("landing")}>Landing page</button>
         <button class={`tab-item ${activeTab() === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>Settings</button>
       </div>
@@ -873,6 +876,9 @@ export default function GatewayPage(props: GatewayPageProps) {
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <span class="card-label">TLS</span>
                   <span class="card-value">{s().tls_mode === "orca_ca" ? "Orca CA" : "Custom"}</span>
+                  <Show when={certExpiry(s().cert_expires)}>
+                    {(e) => <span class={`cert-expiry ${e().level}`} title="When the certificate stops being valid">{e().text}</span>}
+                  </Show>
                 </div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <span class="card-label">Routes</span>
@@ -1411,6 +1417,9 @@ export default function GatewayPage(props: GatewayPageProps) {
       </Show>
 
       {/* ============ TAB 2: Landing page ============ */}
+      <Show when={activeTab() === "requests"}>
+        <RequestsTab />
+      </Show>
       <Show when={activeTab() === "landing"}>
         <LandingPageTab routes={routes()} onEditRoute={openEditRoute} onChanged={() => void refresh()} />
       </Show>

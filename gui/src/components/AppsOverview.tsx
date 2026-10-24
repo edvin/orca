@@ -62,6 +62,10 @@ interface App {
   sub?: string | null;
   /** Set by the workspace file; else the stack's routes and images pick one. */
   icon?: string | null;
+  /** A workspace project's product (its `group`), and how far up the
+   *  product sorts: by its most running project. */
+  product?: string;
+  productRank?: number;
 }
 
 interface Group {
@@ -86,7 +90,13 @@ export default function AppsOverview(props: {
   const [showHidden, setShowHidden] = createSignal(false);
   const stacks = () => props.stacks.filter((s) => !s.name.startsWith("orca-"));
   const rank = (s: ComposeProject) => (s.status === "Running" ? 0 : s.status === "Partial" ? 1 : 2);
-  const byState = (a: App, b: App) => rank(a.stack) - rank(b.stack) || a.title.localeCompare(b.title);
+  // What runs comes first; a product's projects stay together, placed by
+  // the most running of them.
+  const byState = (a: App, b: App) =>
+    (a.productRank ?? rank(a.stack)) - (b.productRank ?? rank(b.stack)) ||
+    (a.product ?? a.title).localeCompare(b.product ?? b.title) ||
+    rank(a.stack) - rank(b.stack) ||
+    a.title.localeCompare(b.title);
   const running = (s: ComposeProject) => s.services.filter((x) => x.state.toLowerCase() === "running").length;
 
   // Every stack lands in one group: the workspace's projects, a project's
@@ -108,7 +118,10 @@ export default function AppsOverview(props: {
       const apps: App[] = [];
       for (const p of ws.projects) {
         const s = take(p.stack);
-        if (s) apps.push({ stack: s, title: p.key, sub: p.description, icon: p.icon });
+        if (s) apps.push({ stack: s, title: p.key, sub: p.group ? `${p.group}${p.description ? ` · ${p.description}` : ""}` : p.description, icon: p.icon, product: p.group ?? undefined });
+      }
+      for (const a of apps.filter((x) => x.product)) {
+        a.productRank = Math.min(...apps.filter((x) => x.product === a.product).map((x) => rank(x.stack)));
       }
       out.push({
         key: "workspace",

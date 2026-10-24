@@ -52,3 +52,20 @@ function timeAgo(date: Date): string {
 export function shortId(id: string): string {
   return id.replace("sha256:", "").substring(0, 12);
 }
+
+/**
+ * A certificate's expiry as people say it, and how urgent it is: "until
+ * 15 Dec 2026", "expires in 12 days" (warn, within 30), "expired 3 days
+ * ago" (bad).
+ */
+export function certExpiry(iso: string | null | undefined): { text: string; level: "ok" | "warn" | "bad" } | null {
+  if (!iso) return null;
+  const at = new Date(iso);
+  if (isNaN(at.getTime())) return null;
+  const days = Math.floor((at.getTime() - Date.now()) / 86_400_000);
+  const date = at.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  if (days < 0) return { text: `expired ${date}`, level: "bad" };
+  if (days === 0) return { text: "expires today", level: "bad" };
+  if (days <= 30) return { text: `expires in ${days} day${days === 1 ? "" : "s"} (${date})`, level: "warn" };
+  return { text: `until ${date}`, level: "ok" };
+}

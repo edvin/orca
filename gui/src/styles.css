@@ -4426,6 +4426,7 @@ tr.service-off td { opacity: 0.55; }
 .ws-updated-close { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
 .ws-updated ul { margin: 6px 0 0; padding-left: 18px; color: #c9d1d9; }
 .ws-updated li { margin: 2px 0; }
+.ws-card-group { font-size: 10.5px; font-weight: 600; color: #8b949e; border: 1px solid #30363d; border-radius: 4px; padding: 0 5px; white-space: nowrap; }
 .ws-card.focused { border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.25); transition: box-shadow 0.3s; }
 .ws-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 10px; border: 1px solid #21262d; background: #161b22; }
 .ws-card.running { border-color: rgba(63, 185, 80, 0.3); }
@@ -4492,6 +4493,29 @@ tr.service-off td { opacity: 0.55; }
 .app-url-icon img { width: 14px; height: 14px; border-radius: 3px; }
 .command-item-img { width: 16px; height: 16px; border-radius: 4px; vertical-align: middle; }
 .app-card-open { font-size: 11.5px; color: #58a6ff; white-space: nowrap; margin-right: 4px; }
+
+/* The Gateway page's requests. */
+.gw-requests td { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; vertical-align: top; }
+.gw-req-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c9d1d9; }
+.gw-req-hint { color: #ff7b72; font-size: 12px; margin-top: 3px; white-space: normal; }
+.gw-req-failed:hover td { background: rgba(248, 81, 73, 0.05); }
+.gw-req-detail td { color: #8b949e; font-size: 11.5px; background: rgba(255, 255, 255, 0.02); white-space: pre-wrap; word-break: break-all; }
+
+/* The Workspace page's "Check this machine". */
+.ws-check { border: 1px solid #30363d; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; background: #161b22; }
+.ws-check-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: #e6edf3; }
+.ws-check-row { display: flex; gap: 10px; padding: 6px 0; font-size: 13px; border-top: 1px solid rgba(255, 255, 255, 0.04); }
+.ws-check-mark { width: 18px; flex: none; text-align: center; font-weight: 700; }
+.ws-check-row.ok .ws-check-mark { color: #3fb950; }
+.ws-check-row.warn .ws-check-mark { color: #d29922; }
+.ws-check-row.bad .ws-check-mark { color: #f85149; }
+.ws-check-fix { color: #c9d1d9; font-size: 12.5px; margin-top: 2px; }
+
+/* A certificate's expiry: quiet until a month before. */
+.cert-expiry { display: block; font-size: 11.5px; color: #8b949e; margin-top: 2px; }
+.ws-chip .cert-expiry { display: inline; margin: 0; }
+.cert-expiry.warn { color: #d29922; }
+.cert-expiry.bad { color: #f85149; }
 
 /* The Gateway page's routes: search, and project groups that fold. */
 .gw-route-search { margin-bottom: 10px; }

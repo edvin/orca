@@ -34,6 +34,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/workspace", get(status))
         .route("/workspace/join", post(join))
         .route("/workspace/suggest-folder", get(suggest_folder_route))
+        .route("/workspace/check", post(check_machine))
         .route("/workspace/update", post(update))
         .route("/workspace/leave", post(leave))
         .route("/workspace/import-haproxy", post(import_haproxy))
@@ -77,7 +78,7 @@ fn tilde(path: &Path) -> String {
 /// `git`, never prompting: credentials come from the developer's SSH agent
 /// or credential helper, and a first-time host key is accepted as `ssh`
 /// does when you type "yes".
-fn git() -> Command {
+pub(crate) fn git() -> Command {
     let mut cmd = Command::new("git");
     cmd.env("PATH", crate::dev::ops::cli_path())
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -251,6 +252,14 @@ fn suggest_folder(home: &Path, repo: &str) -> FolderSuggestion {
 #[derive(Deserialize)]
 struct SuggestQuery {
     repo: String,
+}
+
+/// POST /workspace/check: what this machine still needs for the workspace.
+async fn check_machine(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let (_, file, dir) = current(&state).await?;
+    Ok(Json(
+        serde_json::json!({ "checks": crate::workspace_check::run(&state, &file, &dir).await }),
+    ))
 }
 
 /// GET /workspace/suggest-folder?repo=…: where joining would clone it.
@@ -660,11 +669,10 @@ async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
         .filter_map(|r| to_route(r, format!("{OWNER}{}", file.name), "Shared services", None))
         .collect();
     for (key, p) in &file.projects {
-        wanted.extend(
-            p.routes
-                .iter()
-                .filter_map(|r| to_route(r, format!("{OWNER}{}:{key}", file.name), key, p.icon.as_ref())),
-        );
+        wanted.extend(p.routes.iter().filter_map(|r| {
+            let group = p.group.as_deref().map(str::trim).unwrap_or(key);
+            to_route(r, format!("{OWNER}{}:{key}", file.name), group, p.icon.as_ref())
+        }));
     }
     let n = wanted.len();
     {
@@ -766,6 +774,18 @@ fn project_urls(routes: &[WorkspaceRoute], pdir: &Path, domain: &str, https_port
     urls
 }
 
+/// The group a workspace puts the project in `dir` in, for the routes its
+/// own orca.yaml defines without one.
+pub(crate) fn project_group(workspace: &WorkspaceRef, dir: &Path) -> Option<String> {
+    let ws_dir = PathBuf::from(&workspace.path);
+    let file = WorkspaceFile::load(&ws_dir).ok()?;
+    let dir = dir.canonicalize().ok()?;
+    file.projects.iter().find_map(|(key, p)| {
+        let group = p.group.as_deref()?.trim();
+        (file.project_dir(&ws_dir, key).canonicalize().ok()? == dir).then(|| group.to_string())
+    })
+}
+
 /// The icon a workspace gives the project in `dir`, as the gateway keeps
 /// icons, for routes the project's own orca.yaml defines without one.
 pub(crate) fn project_icon(workspace: &WorkspaceRef, dir: &Path) -> Option<String> {
@@ -800,7 +820,7 @@ fn is_page(r: &WorkspaceRoute) -> bool {
 }
 
 /// Whether `docker login` was done for a registry (or a credential helper covers it).
-fn registry_logged_in(host: &str) -> bool {
+pub(crate) fn registry_logged_in(host: &str) -> bool {
     let path = home().join(".docker").join("config.json");
     let Ok(v) = std::fs::read_to_string(path)
         .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).map_err(std::io::Error::other))
@@ -850,9 +870,13 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
             })));
         }
     };
-    let (domain, https_port) = {
+    let (domain, https_port, cert_expires) = {
         let cfg = state.config.lock().await;
-        (cfg.gateway.domain.clone(), cfg.gateway.https_port)
+        (
+            cfg.gateway.domain.clone(),
+            cfg.gateway.https_port,
+            crate::gateway::custom_cert_expiry(&cfg.gateway).map(|t| t.to_rfc3339()),
+        )
     };
     let url = |r: &WorkspaceRoute| page_url(r, &domain, https_port);
 
@@ -918,6 +942,7 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
                 "urls": project_urls(&p.routes, &pdir, &domain, https_port),
                 "secrets": secrets_of(&file, key, &pdir),
                 "env_file": p.env.as_ref().map(|e| e.file().to_string()),
+                "group": p.group.as_deref().map(str::trim),
                 "icon": icon_of(p.icon.as_deref(), stack.into_iter().flat_map(|s| s.services.iter().map(|x| x.image.as_str())).collect()),
                 "worktrees": p.worktrees,
             })
@@ -934,6 +959,7 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
         "domain": domain,
         "certificate": if file.gateway.as_ref().is_some_and(|g| g.certificate.is_some()) { "workspace" } else { "orca" },
         "last_update": ws.last_update,
+        "certificate_expires": cert_expires,
         "logo": file.gateway.as_ref().and_then(|g| g.logo.as_deref())
             .and_then(|l| orca_core::icons::resolve(l, Some(&dir)).ok())
             .and_then(|l| orca_core::icons::src(&l)),

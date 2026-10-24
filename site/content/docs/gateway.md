@@ -221,6 +221,8 @@ A [workspace](/docs/workspaces/) project that isn't set up on your computer yet 
 
 Without a title, the card is named after the hostname. The group defaults to the compose project. A group of [environment links](#environment-links) with the same name as a group of cards, such as the project's name, joins that section instead of showing as a second one. A hidden route still routes; it's only left off the page.
 
+A team certificate that's about to expire is announced on the page from 30 days before, and in red once it has.
+
 ### Icons
 
 Every app gets an icon on the landing page, on the dashboard's **Your apps**, on the **Workspace** and **Gateway** pages and in the ⌘K palette.
@@ -268,6 +270,23 @@ https://github.com/search?type=code&q={query}
 Choose **Off: only find services** and the box only finds services. Switch **Search box** off to hide it.
 
 With search on, the page works well as your browser's home page: set `https://localhost` (or your gateway's domain) as the home page. Safari can also open it in every new tab. Each time you open it, you can type the name of a service or a search straight away.
+
+## Requests
+
+The **Requests** tab on the Gateway page lists recent requests through the gateway, newest first: the time, status, method, address, the route it went to, how long it took and how large the answer was. It updates every few seconds while it's open. Type in the filter to narrow it by hostname, path, project or status (`502`), and **Only problems** keeps just the failed ones. The landing page's own requests are left out.
+
+A failed request (status 502, 503 or 504, or none when nothing answered) says why, from the gateway's own log:
+
+| What the gateway logged | What it means |
+|---|---|
+| `no such host` | Nothing on the gateway's networks answers to that name: its container isn't running, or isn't on a network the gateway joined. |
+| `connection refused` | The container runs but doesn't accept connections on that port: it's still starting, or it listens on another port. |
+| A timeout | It didn't answer in time. |
+| `EOF` or `connection reset` | It closed the connection before answering, often because it crashed or restarted. |
+
+Click a failed request to see the gateway's own error. AI tools read the same list with `gateway_requests`.
+
+The requests come from the gateway's access log, which Caddy keeps in Orca's certificates folder and rotates at 10 MB.
 
 ## Sleeping routes
 

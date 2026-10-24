@@ -30,6 +30,8 @@ export interface WorkspaceProject {
   urls: string[];
   secrets: WorkspaceSecret[];
   env_file?: string | null;
+  /** The product it belongs with, such as "oneWebshop"; its key when unset. */
+  group?: string | null;
   /** The project's icon as an image src, when the workspace file sets one. */
   icon?: string | null;
   worktrees: boolean;
@@ -46,6 +48,8 @@ export interface WorkspaceStatus {
   network?: string | null;
   domain?: string;
   certificate?: "workspace" | "orca";
+  /** When the workspace's certificate expires (RFC 3339). */
+  certificate_expires?: string | null;
   /** What the last pull brought in. */
   last_update?: { at: string; commits: string[]; more: number } | null;
   /** The workspace's logo, also on the gateway's landing page. */
@@ -56,6 +60,14 @@ export interface WorkspaceStatus {
   secret_clis?: { passbolt: boolean; "1password": boolean };
   providers?: { passbolt: string | null; "1password": boolean };
   projects?: WorkspaceProject[];
+}
+
+export interface MachineCheck {
+  id: string;
+  label: string;
+  status: "ok" | "warn" | "bad" | "skip";
+  detail: string;
+  fix?: string;
 }
 
 export interface FolderSuggestion {
@@ -79,6 +91,8 @@ export const workspaceApi = {
   suggestFolder: (repo: string) => call<FolderSuggestion>("GET", `/workspace/suggest-folder?repo=${enc(repo)}`),
   join: (repo: string, folder?: string) => call<DevJob>("POST", "/workspace/join", { repo, folder: folder || null }),
   update: () => call<DevJob>("POST", "/workspace/update"),
+  /** What this machine still needs: ports, domain, certificates, logins, repo access. */
+  check: () => call<{ checks: MachineCheck[] }>("POST", "/workspace/check"),
   leave: () => call<{ left: boolean }>("POST", "/workspace/leave"),
   setup: (key: string, rerunSetup = false) =>
     call<DevJob>("POST", `/workspace/projects/${enc(key)}/setup`, { rerun_setup: rerunSetup }),

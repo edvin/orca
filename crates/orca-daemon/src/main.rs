@@ -21,6 +21,7 @@ mod landing;
 mod local_ai;
 mod port_probe;
 mod project_config;
+mod requests;
 mod secrets;
 mod stack_files;
 mod stack_profiles;
@@ -28,6 +29,7 @@ mod stack_yaml;
 mod state;
 mod update;
 mod workspace;
+mod workspace_check;
 
 use state::AppState;
 

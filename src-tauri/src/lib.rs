@@ -70,6 +70,7 @@ pub fn run() {
             commands::rename_container,
             commands::probe_container_ports,
             commands::gateway_route_states,
+            commands::gateway_requests,
             commands::update_container,
             commands::export_docker_run,
             commands::export_compose,

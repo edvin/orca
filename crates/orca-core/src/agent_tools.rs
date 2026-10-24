@@ -241,7 +241,7 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
         },
         ToolDefinition {
             name: "gateway_routes".into(),
-            description: "Every gateway route: hostname, path, container, port, whether it's enabled, and where it comes from (orca.yaml, labels, a worktree instance, or added by hand).".into(),
+            description: "Every gateway route: hostname, path, container, port, whether it's enabled, where it comes from (orca.yaml, labels, a worktree instance, a workspace, or added by hand), and whether its service runs (state: run, warn, bad, sleep, off, or setup for a workspace project not set up yet).".into(),
             parameters: json_schema(json!({})),
             category: "Gateway".into(),
         },
@@ -249,6 +249,22 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             name: "gateway_add_route".into(),
             description: "Route an HTTPS hostname (and optionally a path) to a container port through the gateway. A name without a dot gets the gateway's domain: 'shop' becomes shop.localhost. For a project, prefer gateway: entries in its orca.yaml so the team shares them.".into(),
             parameters: json_schema(json!({ "hostname": { "type": "string" }, "container": { "type": "string", "description": "Container name" }, "port": { "type": "integer", "description": "Port inside the container" }, "path": { "type": "string", "description": "Only this path, such as /api/*" } })),
+            category: "Gateway".into(),
+        },
+        ToolDefinition {
+            name: "gateway_requests".into(),
+            description: "Recent requests through the gateway, newest first: time, method, host, path, status, duration and the route. A failed one (5xx, or 0 when nothing answered) carries the gateway's error and what it means, such as 'nothing answers to one-crm-app: its container isn't running'. Use it when a page gives 502 or is slow.".into(),
+            parameters: json_schema(json!({
+                "problems": { "type": "boolean", "description": "Only failed requests (status 400 and up)" },
+                "query": { "type": "string", "description": "Words that must all appear: a hostname, path, project or status" },
+                "limit": { "type": "integer", "description": "How many, newest first (default 50)" }
+            })),
+            category: "Gateway".into(),
+        },
+        ToolDefinition {
+            name: "identify_ports".into(),
+            description: "What each port a container publishes speaks: a web page (with its title), or a protocol such as PostgreSQL, Redis, SMTP, SSH or MySQL. Connects to each port once.".into(),
+            parameters: json_schema(json!({ "container": { "type": "string", "description": "Container name or id" } })),
             category: "Gateway".into(),
         },
         ToolDefinition {
@@ -287,6 +303,27 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
                 "key": { "type": "string", "description": "The project's key, from workspace_status" },
                 "rerun_setup": { "type": "boolean", "description": "Run the setup command again even if it ran before" }
             })),
+            category: "Workspace".into(),
+        },
+        ToolDefinition {
+            name: "join_workspace".into(),
+            description: "Join a team's workspace: clone its repo (or use a folder that has it), then apply it: network, gateway domain and certificate, shared services and routes. It changes the gateway for the whole machine, so confirm with the developer first. Without a folder, Orca puts it in their code folder (where their checkouts are), and projects go beside it.".into(),
+            parameters: json_schema(json!({
+                "repo": { "type": "string", "description": "The workspace's git URL, or the path of a folder that already has orca-workspace.yaml" },
+                "folder": { "type": "string", "description": "Where to clone it, such as ~/projects/dev-workspace" }
+            })),
+            category: "Workspace".into(),
+        },
+        ToolDefinition {
+            name: "check_workspace".into(),
+            description: "Check what this machine still needs for the workspace: the gateway on ports 80 and 443, the domain pointing here, the team certificate's expiry, Orca's certificate authority trusted, the shared network, registry logins, the secret manager's CLI, and access to every project's repository. Each problem comes with what to do. Takes a few seconds (it asks the git server).".into(),
+            parameters: json_schema(json!({})),
+            category: "Workspace".into(),
+        },
+        ToolDefinition {
+            name: "fetch_project_secrets".into(),
+            description: "Fill in a workspace project's .env secrets from the team's secret manager (Passbolt or 1Password) with the developer's own CLI. Returns which were filled and which failed; the values never pass through here.".into(),
+            parameters: json_schema(json!({ "key": { "type": "string", "description": "The project's key, from workspace_status" } })),
             category: "Workspace".into(),
         },
         ToolDefinition {

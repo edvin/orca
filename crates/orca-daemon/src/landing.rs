@@ -158,10 +158,31 @@ async fn alias_map(docker: &bollard::Docker) -> HashMap<String, String> {
     map
 }
 
+/// Where the page's icons are served, and the folder in the certs volume
+/// they're written to (the only one the gateway serves besides the page).
+pub const ICON_PATH: &str = "/_orca/icons/";
+pub const ICON_DIR: &str = "landing-icons";
+
 /// Write the page with the last known container states.
 pub fn write(config: &GatewayConfig) -> std::io::Result<()> {
     let states = STATES.lock().unwrap().clone().unwrap_or_default();
-    let html = render(config, &states);
+    let (html, icons) = externalize_icons(&render(config, &states));
+    let dir = crate::gateway::certs_dir().join(ICON_DIR);
+    std::fs::create_dir_all(&dir)?;
+    for (name, bytes) in &icons {
+        let path = dir.join(name);
+        if !path.exists() {
+            std::fs::write(path, bytes)?;
+        }
+    }
+    // Icons no route uses any more.
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            if !icons.iter().any(|(n, _)| e.file_name().to_string_lossy() == n.as_str()) {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
     let mut written = WRITTEN.lock().unwrap();
     if written.as_deref() == Some(html.as_str()) {
         return Ok(());
@@ -185,6 +206,32 @@ struct Card {
     status: Option<(&'static str, &'static str, Option<String>)>,
 }
 
+/// A banner when the gateway's own certificate (a team's, for the domain)
+/// expires within a month or has expired, so nobody is surprised by it.
+fn cert_notice(config: &GatewayConfig) -> String {
+    let Some((days, expires)) = crate::gateway::custom_cert_warning(config) else {
+        return String::new();
+    };
+    let when = expires.format("%-d %B %Y");
+    let text = match days {
+        d if d < 0 => format!(
+            "The certificate for *.{} expired on {when}: browsers warn on every page until it's renewed.",
+            config.domain
+        ),
+        0 => format!("The certificate for *.{} expires today.", config.domain),
+        1 => format!("The certificate for *.{} expires tomorrow, {when}.", config.domain),
+        d => format!(
+            "The certificate for *.{} expires in {d} days, on {when}.",
+            config.domain
+        ),
+    };
+    format!(
+        r#"<div class="notice{}">{}</div>"#,
+        if days < 0 { " bad" } else { "" },
+        escape_html(&text)
+    )
+}
+
 /// A workspace's shared-service route: owned by `workspace:<name>`, with no
 /// project after it.
 fn is_shared(r: &GatewayRoute) -> bool {
@@ -192,6 +239,49 @@ fn is_shared(r: &GatewayRoute) -> bool {
         .as_deref()
         .and_then(|o| o.strip_prefix("workspace:"))
         .is_some_and(|rest| !rest.contains(':'))
+}
+
+/// The page with each embedded image (`src="data:image/…;base64,…"`) moved
+/// to a file under [`ICON_PATH`], named by its content: (page, files).
+fn externalize_icons(html: &str) -> (String, Vec<(String, Vec<u8>)>) {
+    use base64::Engine;
+    let mut out = String::with_capacity(html.len() / 4);
+    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut rest = html;
+    while let Some(i) = rest.find(r#"src="data:image/"#) {
+        let start = i + r#"src=""#.len();
+        let Some(len) = rest[start..].find('"') else { break };
+        let uri = &rest[start..start + len];
+        let ext = match uri.split(';').next().unwrap_or("") {
+            "data:image/svg+xml" => "svg",
+            "data:image/png" => "png",
+            "data:image/webp" => "webp",
+            "data:image/jpeg" => "jpg",
+            _ => "",
+        };
+        let bytes = uri
+            .split_once(";base64,")
+            .and_then(|(_, b)| base64::engine::general_purpose::STANDARD.decode(b).ok());
+        out.push_str(&rest[..start]);
+        match (ext, bytes) {
+            ("", _) | (_, None) => out.push_str(uri),
+            (ext, Some(bytes)) => {
+                // FNV-1a of the content: the same icon is one file.
+                let mut h: u64 = 0xcbf29ce484222325;
+                for b in &bytes {
+                    h = (h ^ *b as u64).wrapping_mul(0x100000001b3);
+                }
+                let name = format!("{h:016x}.{ext}");
+                out.push_str(&format!("{ICON_PATH}{name}"));
+                if !files.iter().any(|(n, _)| *n == name) {
+                    files.push((name, bytes));
+                }
+            }
+        }
+        rest = &rest[start + len..];
+    }
+    out.push_str(rest);
+    (out, files)
 }
 
 /// How many columns of the page a group of `cards` takes: its own count,
@@ -574,6 +664,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             ("subtitle", &escape_html(&subtitle)),
             ("search", &search),
             ("stats", &stats),
+            ("notice", &cert_notice(config)),
             ("tabs", &tabs),
             ("panels", &panels),
         ],
@@ -810,6 +901,8 @@ footer{text-align:center;margin-top:44px;font-size:12px;color:#484f58}footer a{c
 .card.sel{border-color:rgba(88,166,255,.7);box-shadow:0 0 0 3px rgba(88,166,255,.16);transform:translateY(-2px)}
 mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
 .nores{text-align:center;padding:40px 24px;border:1px dashed rgba(255,255,255,.08);border-radius:16px;color:#8b949e;font-size:13.5px;line-height:1.6}
+.notice{margin:0 0 20px;padding:10px 14px;border-radius:10px;border:1px solid rgba(210,153,34,.35);background:rgba(210,153,34,.08);color:#e3b341;font-size:13px}
+.notice.bad{border-color:rgba(248,81,73,.4);background:rgba(248,81,73,.08);color:#ff7b72}
 .nores b{color:#e6edf3}.nores button{background:none;border:0;color:#58a6ff;font:inherit;cursor:pointer;padding:0}
 .tools{display:flex;gap:6px;flex-shrink:0;align-items:center;height:42px}
 .seg{display:flex;padding:2px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(22,27,34,.6)}
@@ -838,7 +931,7 @@ body.compact .group{margin-bottom:18px}body.compact .group h2{margin-bottom:8px}
 <body>
 <div class="shell">
 <header><div class="top"><div class="brand">{logo}<div><h1>{title}</h1><p class="sub">{subtitle}<span class="stats" id="stats">{stats}</span></p></div></div><div class="find">{search}</div><div class="tools"><div class="seg" role="group" aria-label="Layout"><button type="button" data-view="cards" title="Cards" aria-label="Cards"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button><button type="button" data-view="compact" title="Compact" aria-label="Compact"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div><button type="button" class="chip" id="runonly" aria-pressed="false" title="Hide what isn't running, except while you search">Running only</button></div></div></header>
-<main id="content">{tabs}{panels}</main>
+<main id="content">{notice}{tabs}{panels}</main>
 <div class="nores" id="nores" hidden></div>
 <footer>Served by <a href="https://orca-desktop.com">Orca Desktop</a></footer>
 </div>
@@ -1229,6 +1322,42 @@ mod tests {
         assert!(
             html.contains(r#"<section class="group" data-group="Billing""#),
             "projects stay cards"
+        );
+    }
+
+    #[test]
+    fn a_certificate_about_to_expire_is_announced() {
+        let pem = |days: i64| {
+            let mut p = rcgen::CertificateParams::new(vec!["*.local.acme.dev".to_string()]).unwrap();
+            p.not_after = time::OffsetDateTime::now_utc() + time::Duration::days(days) + time::Duration::hours(1);
+            p.self_signed(&rcgen::KeyPair::generate().unwrap()).unwrap().pem()
+        };
+        let mut c = config(vec![route("x.local.acme.dev", "x", 80)]);
+        c.domain = "local.acme.dev".into();
+        c.tls_mode = GatewayTlsMode::Custom;
+        c.custom_cert = Some(pem(200));
+        assert!(!render(&c, &HashMap::new()).contains(r#"class="notice"#), "not yet");
+        c.custom_cert = Some(pem(12));
+        assert!(render(&c, &HashMap::new()).contains("The certificate for *.local.acme.dev expires in 12 days"));
+        c.custom_cert = Some(pem(-3));
+        let html = render(&c, &HashMap::new());
+        assert!(html.contains(r#"<div class="notice bad">"#) && html.contains("expired on"));
+    }
+
+    #[test]
+    fn icons_become_files_the_browser_caches() {
+        let svg = "data:image/svg+xml;base64,PHN2Zy8+";
+        let html = format!(
+            r#"<img src="{svg}"><img src="{svg}"><img src="https://x.dev/a.png"><img src="data:image/gif;base64,R0lG">"#
+        );
+        let (page, files) = externalize_icons(&html);
+        assert_eq!(files.len(), 1, "the same icon twice is one file");
+        assert_eq!(files[0].1, b"<svg/>");
+        let url = format!(r#"src="{ICON_PATH}{}""#, files[0].0);
+        assert_eq!(page.matches(&url).count(), 2, "{page}");
+        assert!(
+            page.contains(r#"src="https://x.dev/a.png""#) && page.contains("data:image/gif"),
+            "others stay"
         );
     }
 

@@ -734,7 +734,46 @@ pub async fn execute_tool(
         "gateway_status" => api(state, "GET", "/gateway/status", None).await,
         "gateway_start" => api(state, "POST", "/gateway/start", None).await,
         "gateway_stop" => api(state, "POST", "/gateway/stop", None).await,
-        "gateway_routes" => api(state, "GET", "/gateway/routes", None).await,
+        "gateway_routes" => {
+            // With whether each route's service runs, as the landing page shows it.
+            let mut routes = api(state, "GET", "/gateway/routes", None).await?;
+            let states = api(state, "GET", "/gateway/route-states", None)
+                .await
+                .unwrap_or_default();
+            if let (Some(routes), Some(states)) = (routes.as_array_mut(), states.as_array()) {
+                for r in routes.iter_mut() {
+                    let st = states
+                        .iter()
+                        .find(|s| s["hostname"] == r["hostname"] && s["path"] == r["path"]);
+                    if let (Some(st), Some(obj)) = (st, r.as_object_mut()) {
+                        for k in ["state", "label", "group", "setup"] {
+                            obj.insert(k.into(), st[k].clone());
+                        }
+                    }
+                }
+            }
+            Ok(routes)
+        }
+        "gateway_requests" => {
+            let mut q = format!(
+                "/gateway/requests?limit={}&problems={}",
+                arguments.get("limit").and_then(|v| v.as_u64()).unwrap_or(50).min(500),
+                arguments.get("problems").and_then(|v| v.as_bool()).unwrap_or(false)
+            );
+            if let Some(query) = arguments.get("query").and_then(|v| v.as_str()) {
+                q.push_str(&format!("&q={}", urlencoding::encode(query)));
+            }
+            api(state, "GET", &q, None).await
+        }
+        "identify_ports" => {
+            api(
+                state,
+                "POST",
+                &format!("/containers/{}/probe-ports", seg(&arguments, "container")?),
+                None,
+            )
+            .await
+        }
         "gateway_add_route" => {
             let port = arguments.get("port").and_then(|v| v.as_u64()).ok_or("Missing 'port'")?;
             let body = json!({
@@ -774,6 +813,24 @@ pub async fn execute_tool(
             api(state, "GET", &format!("/update?refresh={refresh}"), None).await
         }
         "offer_update" => api(state, "POST", "/update/prompt", None).await,
+        "join_workspace" => {
+            let body = json!({
+                "repo": get_str(&arguments, "repo")?,
+                "folder": arguments.get("folder").and_then(|v| v.as_str()),
+            });
+            let job = api(state, "POST", "/workspace/join", Some(body)).await?;
+            wait_for_job(job).await
+        }
+        "check_workspace" => api(state, "POST", "/workspace/check", None).await,
+        "fetch_project_secrets" => {
+            api(
+                state,
+                "POST",
+                &format!("/workspace/projects/{}/secrets", seg(&arguments, "key")?),
+                None,
+            )
+            .await
+        }
         "update_workspace" => {
             let job = api(state, "POST", "/workspace/update", None).await?;
             wait_for_job(job).await

@@ -351,9 +351,63 @@ fn prepare_certs(config: &GatewayConfig) -> Result<()> {
     Ok(())
 }
 
+/// When the custom certificate stops being valid: the first one in its PEM,
+/// which is the server's own (the chain follows it).
+pub fn custom_cert_expiry(config: &GatewayConfig) -> Option<chrono::DateTime<chrono::Utc>> {
+    if !matches!(config.tls_mode, GatewayTlsMode::Custom) {
+        return None;
+    }
+    cert_expiry(config.custom_cert.as_deref()?)
+}
+
+pub fn cert_expiry(pem: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    let (_, pem) = x509_parser::pem::parse_x509_pem(pem.as_bytes()).ok()?;
+    let cert = pem.parse_x509().ok()?;
+    chrono::DateTime::from_timestamp(cert.validity().not_after.timestamp(), 0)
+}
+
+/// Days until the custom certificate expires (negative once it has), when
+/// that's within `CERT_WARN_DAYS`.
+pub fn custom_cert_warning(config: &GatewayConfig) -> Option<(i64, chrono::DateTime<chrono::Utc>)> {
+    let expires = custom_cert_expiry(config)?;
+    let days = (expires - chrono::Utc::now()).num_days();
+    (days <= CERT_WARN_DAYS).then_some((days, expires))
+}
+
+/// Whether this computer trusts Orca's certificate authority, judged by
+/// verifying a certificate it signed; `None` where Orca can't tell.
+pub async fn ca_trusted() -> Option<bool> {
+    generate_cert_for_hostname("localhost").ok()?;
+    let leaf = certs_dir().join("localhost.pem");
+    let mut cmd = if cfg!(target_os = "macos") {
+        let mut c = tokio::process::Command::new("/usr/bin/security");
+        c.arg("verify-cert")
+            .arg("-c")
+            .arg(&leaf)
+            .args(["-p", "ssl", "-s", "localhost", "-L", "-q"]);
+        c
+    } else if cfg!(target_os = "linux") {
+        let mut c = tokio::process::Command::new("openssl");
+        c.args(["verify", "-CApath", "/etc/ssl/certs"]).arg(&leaf);
+        c
+    } else {
+        return None;
+    };
+    cmd.stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let status = tokio::time::timeout(std::time::Duration::from_secs(10), cmd.status())
+        .await
+        .ok()?
+        .ok()?;
+    Some(status.success())
+}
+
+/// How long before a custom certificate expires Orca starts saying so.
+pub const CERT_WARN_DAYS: i64 = 30;
+
 /// Whether a custom certificate, which is for `*.<domain>` and the domain,
 /// covers a route's hostname. A wildcard covers one label only.
-fn custom_cert_covers(config: &GatewayConfig, hostname: &str) -> bool {
+pub(crate) fn custom_cert_covers(config: &GatewayConfig, hostname: &str) -> bool {
     let host = hostname.to_ascii_lowercase();
     let domain = config.domain.to_ascii_lowercase();
     !host.contains('.')
@@ -860,8 +914,20 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
         }));
     }
 
+    // The landing page's icons, as files the browser caches instead of data
+    // inside the page it fetches again every 20 s. Only their own folder.
+    let icons_route = serde_json::json!({
+        "match": [{"path": [format!("{}*", crate::landing::ICON_PATH)]}],
+        "handle": [
+            {"handler": "headers", "response": {"set": {"Cache-Control": ["public, max-age=604800, immutable"]}}},
+            {"handler": "rewrite", "strip_path_prefix": crate::landing::ICON_PATH.trim_end_matches('/')},
+            {"handler": "file_server", "root": format!("/certs/{}", crate::landing::ICON_DIR)}
+        ]
+    });
+
     // HTTPS server: reverse proxy routes + landing page fallback
     let mut all_routes = routes;
+    all_routes.push(icons_route);
     all_routes.push(landing_route);
 
     caddy["apps"]["http"]["servers"]["gateway"] = serde_json::json!({
@@ -1120,12 +1186,15 @@ mod tests {
                 .contains(&serde_json::json!(":443"))
         );
         let routes = gateway["routes"].as_array().unwrap();
-        // Only the landing page fallback route (no reverse_proxy routes)
-        assert_eq!(routes.len(), 1);
-        // The fallback only ever serves index.html: /certs holds private keys.
-        assert_eq!(routes[0]["handle"][0]["handler"], "rewrite");
-        assert_eq!(routes[0]["handle"][0]["uri"], "/index.html");
-        assert_eq!(routes[0]["handle"][1]["handler"], "file_server");
+        // The landing page's icons and the page itself (no reverse_proxy routes)
+        assert_eq!(routes.len(), 2);
+        // Icons come only from their own folder: /certs holds private keys.
+        assert_eq!(routes[0]["match"][0]["path"][0], "/_orca/icons/*");
+        assert_eq!(routes[0]["handle"][2]["root"], "/certs/landing-icons");
+        // The fallback only ever serves index.html.
+        assert_eq!(routes[1]["handle"][0]["handler"], "rewrite");
+        assert_eq!(routes[1]["handle"][0]["uri"], "/index.html");
+        assert_eq!(routes[1]["handle"][1]["handler"], "file_server");
         // Access lines go to a rotated file, not the container output.
         let access = &caddy["logging"]["logs"]["access"];
         assert_eq!(access["writer"]["output"], "file");
@@ -1152,7 +1221,7 @@ mod tests {
             .as_array()
             .unwrap();
         // One reverse_proxy route + one landing page fallback
-        assert_eq!(routes.len(), 2);
+        assert_eq!(routes.len(), 3, "the route, the icons, the landing page");
 
         // First route should be the reverse_proxy
         let first = &routes[0];
@@ -1178,7 +1247,7 @@ mod tests {
             .as_array()
             .unwrap();
         // 2 reverse_proxy routes + 1 landing page fallback
-        assert_eq!(routes.len(), 3);
+        assert_eq!(routes.len(), 4);
 
         // The path route comes first, with host and path in one matcher set:
         // separate sets would be alternatives, and every request to the
@@ -1346,7 +1415,7 @@ mod tests {
             .as_array()
             .unwrap();
         // Only 1 reverse_proxy (app) + 1 landing page = 2 total
-        assert_eq!(routes.len(), 2);
+        assert_eq!(routes.len(), 3);
 
         // The disabled route's hostname should not appear anywhere in the config
         assert!(!json_str.contains("secret-1:9999"));

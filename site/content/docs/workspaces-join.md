@@ -88,12 +88,27 @@ Once you've joined, the **Workspace** page shows the workspace's name and descri
 - **Update**, which pulls the workspace and applies it again;
 - **Leave**, which forgets the workspace.
 
+### Check this machine
+
+**Check this machine** at the top of the page checks everything this computer needs for the workspace, and says what to do about each problem:
+
+- The gateway runs on ports 80 and 443, so addresses need no port.
+- The domain points at this computer.
+- The team certificate is valid, and for how long.
+- Orca's certificate authority is trusted, when routes need it.
+- The shared network exists.
+- You're logged in to each registry.
+- The secret manager's CLI is installed.
+- Every project's repository can be cloned with your git credentials.
+
+It asks each git server, so it takes a few seconds and only runs when you click it. AI tools run the same check with `check_workspace`.
+
 ### The summary chips
 
 | Chip | Meaning |
 |---|---|
 | `*.local.acme.dev` | The domain the gateway serves every hostname under. |
-| **Team certificate** or **Orca CA** | **Team certificate**: the certificate comes with the workspace. **Orca CA**: Orca's own certificate authority signs the names. |
+| **Team certificate** or **Orca CA** | **Team certificate**: the certificate comes with the workspace, with the date it's valid until. It turns yellow 30 days before it expires and red once it has; the gateway's landing page says so too. **Orca CA**: Orca's own certificate authority signs the names. |
 | `local-dev` | The Docker network projects join. Hidden when the workspace has none. |
 | **7/7 shared services** | How many of the shared stack's services run. Green when all of them do, yellow when some are stopped (for example services behind a profile that's off). |
 
@@ -187,13 +202,16 @@ With Orca [connected to your AI tool](/docs/agents/), ask in plain words:
 - *"which workspace projects are running?"*
 - *"pull the latest workspace"*
 
-The tool uses three of Orca's tools:
+The tool mostly uses these of Orca's tools:
 
 | Tool | What it does |
 |---|---|
 | `workspace_status` | The workspace's shared services and every project: its repo, whether it's cloned and running, its URLs and which secrets are still missing. The tool uses it to find a project by name or description. |
 | `setup_project` | Runs the six setup steps for a project by its key and waits for them, up to 20 minutes. Returns the URLs, or the missing secrets with links. `rerun_setup` runs the setup command again. |
 | `update_workspace` | Pulls the workspace and applies it again, like **Update**. |
+| `join_workspace` | Joins a workspace from scratch, so *"set me up with the Acme workspace"* works on a new machine. Your AI tool asks you first. |
+| `check_workspace` | The same check as **Check this machine** on the Workspace page. |
+| `fetch_project_secrets` | Fetches a project's secrets with your Passbolt or 1Password CLI. Only the names of the secrets reach the AI tool. |
 
 When secrets are missing, Orca's instructions tell the tool to ask you to fill them in on the **Workspace** page and then try again, and never to ask you to paste a secret into the chat. Don't paste one anyway: anything you type in a chat goes to the AI provider.
 

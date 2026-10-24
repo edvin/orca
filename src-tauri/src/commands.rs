@@ -389,6 +389,24 @@ pub async fn probe_container_ports(id: String) -> Result<serde_json::Value, Stri
     post_json(&format!("/containers/{}/probe-ports", urlencoding::encode(&id))).await
 }
 
+/// Recent requests through the gateway, newest first.
+#[tauri::command]
+pub async fn gateway_requests(
+    limit: Option<u32>,
+    problems: Option<bool>,
+    q: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut path = format!(
+        "/gateway/requests?limit={}&problems={}",
+        limit.unwrap_or(200),
+        problems.unwrap_or(false)
+    );
+    if let Some(q) = q.filter(|q| !q.trim().is_empty()) {
+        path.push_str(&format!("&q={}", urlencoding::encode(&q)));
+    }
+    get_json(&path).await
+}
+
 /// Each gateway route's group and whether its service runs.
 #[tauri::command]
 pub async fn gateway_route_states() -> Result<serde_json::Value, String> {

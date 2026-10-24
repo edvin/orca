@@ -560,6 +560,8 @@ export interface GatewayStatus {
   http_port: number;
   https_port: number;
   tls_mode: string;
+  /** When a custom certificate expires (RFC 3339). */
+  cert_expires?: string | null;
   port_conflicts?: string[];
   stack_links?: StackLinkGroup[];
   traefik_mode?: "gateway_only" | "separate_ports" | "gateway_proxies_traefik";

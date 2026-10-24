@@ -441,6 +441,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
         .route("/gateway/landing", get(gateway_get_landing).put(gateway_set_landing))
         .route("/gateway/route-states", get(gateway_route_states))
+        .route("/gateway/requests", get(gateway_requests))
         .route("/gateway/port-check", get(gateway_port_check))
         .route("/gateway/links", get(gateway_get_links).put(gateway_update_links))
         .route("/gateway/traefik-status", get(gateway_traefik_status))
@@ -8335,6 +8336,9 @@ fn mcp_read_only(name: &str) -> bool {
                 | "read_orca_yaml"
                 | "gateway_status"
                 | "gateway_routes"
+                | "gateway_requests"
+                | "identify_ports"
+                | "check_workspace"
                 | "build_status"
                 | "workspace_status"
                 | "check_for_update"
@@ -8374,6 +8378,7 @@ const MCP_ADDITIVE: &[&str] = &[
     "k8s_restart_deployment",
     "setup_project",
     "offer_update",
+    "fetch_project_secrets",
 ];
 
 /// Everything else that changes state may stop, overwrite or delete
@@ -8505,6 +8510,7 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
         "http_port": gw.http_port,
         "https_port": gw.https_port,
         "tls_mode": gw.tls_mode,
+        "cert_expires": crate::gateway::custom_cert_expiry(&gw).map(|t| t.to_rfc3339()),
         "port_conflicts": port_conflicts,
         "stack_links": gw.stack_links,
         "traefik_mode": gw.traefik_mode,
@@ -8884,6 +8890,35 @@ async fn gateway_get_landing(State(state): State<Arc<AppState>>) -> Result<impl 
         "settings": gw.landing,
         "url": format!("https://{}{port}", gw.domain),
     })))
+}
+
+#[derive(Deserialize)]
+struct RequestsQuery {
+    #[serde(default)]
+    limit: Option<usize>,
+    /// Only failed requests.
+    #[serde(default)]
+    problems: bool,
+    #[serde(default)]
+    q: Option<String>,
+    #[serde(default)]
+    landing: bool,
+}
+
+/// GET /gateway/requests: recent requests through the gateway, newest first,
+/// with why failed ones failed.
+async fn gateway_requests(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<RequestsQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let gateway = state.config.lock().await.gateway.clone();
+    let filter = crate::requests::Filter {
+        limit: q.limit.unwrap_or(200).clamp(1, 2000),
+        problems: q.problems,
+        query: q.q,
+        landing: q.landing,
+    };
+    Ok(Json(crate::requests::recent(&state, &gateway, &filter).await))
 }
 
 /// GET /gateway/route-states: each route's group and whether it runs.

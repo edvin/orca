@@ -13,6 +13,7 @@ import { iconSrc } from "../lib/icons";
 import SecretsDialog from "../components/SecretsDialog";
 import { JobProgress, JobSteps } from "../components/dev/DevBits";
 import { ago, followJob, tildify, type DevJob } from "../lib/dev";
+import { certExpiry } from "../lib/format";
 import {
   clearWorkspaceJoin,
   pendingWorkspaceJoin,
@@ -20,6 +21,7 @@ import {
   clearWorkspaceSetup,
   workspaceApi,
   type FolderSuggestion,
+  type MachineCheck,
   type WorkspaceProject,
   type WorkspaceStatus,
 } from "../lib/workspace";
@@ -94,6 +96,20 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
     setJobs(rest);
   };
 
+  // "Check this machine": asks git servers and the network, so only on click.
+  const [checks, setChecks] = createSignal<MachineCheck[] | null>(null);
+  const [checking, setChecking] = createSignal(false);
+  const runCheck = async () => {
+    setChecking(true);
+    try {
+      setChecks((await workspaceApi.check()).checks);
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setChecking(false);
+    }
+  };
+
   const update = async () => {
     const done = await track("", workspaceApi.update());
     if (done?.status === "succeeded") {
@@ -122,6 +138,10 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
         <Show when={ws()?.joined && !ws()?.error}>
           <div class="page-actions">
             <Show when={ws()?.path}>{(p) => <FolderActions path={p()} compact />}</Show>
+            <button class="btn" onClick={() => void runCheck()} disabled={checking()}
+              title="Ports, domain, certificates, logins and access to every repository">
+              {checking() ? "Checking…" : "Check this machine"}
+            </button>
             <button class="btn" onClick={() => void update()} disabled={jobs()[""]?.status === "running"}>
               {jobs()[""]?.status === "running" ? "Updating…" : "Update"}
             </button>
@@ -167,6 +187,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                   <span class="ws-chip" title="The gateway serves every project under this domain">*.{w().domain}</span>
                   <span class="ws-chip" title={w().certificate === "workspace" ? "The certificate comes with the workspace" : "Orca's own certificate authority signs the names"}>
                     {w().certificate === "workspace" ? "Team certificate" : "Orca CA"}
+                    <Show when={certExpiry(w().certificate_expires)}>{(e) => <span class={`cert-expiry ${e().level}`}> · {e().text}</span>}</Show>
                   </span>
                   <Show when={w().network}><span class="ws-chip" title="Docker network every project joins">{w().network}</span></Show>
                   <Show when={w().shared}>
@@ -176,6 +197,28 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
               </div>
 
               <Show when={jobs()[""]}>{(j) => <div class="ws-job"><JobSteps steps={j().steps} /></div>}</Show>
+
+              <Show when={checks()}>
+                {(list) => (
+                  <div class="ws-check">
+                    <div class="ws-check-head">
+                      <b>{list().some((c) => c.status === "bad") ? "This machine needs a few things" : list().some((c) => c.status === "warn") ? "Almost there" : "This machine is ready"}</b>
+                      <button class="ws-updated-close" title="Close" onClick={() => setChecks(null)}>×</button>
+                    </div>
+                    <For each={list().filter((c) => c.status !== "skip")}>
+                      {(c) => (
+                        <div class={`ws-check-row ${c.status}`}>
+                          <span class="ws-check-mark">{c.status === "ok" ? "✓" : c.status === "warn" ? "!" : "✕"}</span>
+                          <div>
+                            <div><b>{c.label}</b> <span class="ws-muted">{c.detail}</span></div>
+                            <Show when={c.fix}>{(f) => <div class="ws-check-fix">{f()}</div>}</Show>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                )}
+              </Show>
 
               <For each={(w().registries ?? []).filter((r) => !r.logged_in)}>
                 {(r) => (
@@ -207,7 +250,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                 <span class="ws-muted"> · or ask your AI tool: “spin up {w().projects?.[0]?.key ?? "a project"}”</span>
               </div>
               <div class="ws-grid">
-                <For each={w().projects}>
+                <For each={[...(w().projects ?? [])].sort((a, b) => (a.group ?? a.key).localeCompare(b.group ?? b.key) || a.key.localeCompare(b.key))}>
                   {(p) => (
                     <ProjectCard
                       project={p}
@@ -261,6 +304,7 @@ function ProjectCard(props: {
       <div class="ws-card-head">
         <AppIcon src={iconSrc(p().icon)} name={p().key} size={26} />
         <b>{p().key}</b>
+        <Show when={p().group}>{(g) => <span class="ws-card-group" title="Its group in the workspace file">{g()}</span>}</Show>
         <span class={`app-dot ${p().running ? "running" : ""}`} />
         <span class={`ws-state ${state()}`}>{p().running ? "Running" : p().cloned ? "Cloned" : "Not cloned"}</span>
       </div>

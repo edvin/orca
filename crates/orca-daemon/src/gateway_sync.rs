@@ -140,6 +140,11 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
             .as_ref()
             .filter(|_| p.yaml.gateway.iter().any(|r| r.presentation.icon.is_none()))
             .and_then(|w| crate::workspace::project_icon(w, &p.dir));
+        // And its group, so a product's projects show together.
+        let ws_group = workspace
+            .as_ref()
+            .filter(|_| p.yaml.gateway.iter().any(|r| r.presentation.group.is_none()))
+            .and_then(|w| crate::workspace::project_group(w, &p.dir));
         for r in &p.yaml.gateway {
             let Some(c) = p
                 .container_of(&r.service)
@@ -160,6 +165,9 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
                     let mut pr = with_icon(r.presentation.clone(), Some(&p.dir));
                     if pr.icon.is_none() {
                         pr.icon = ws_icon.clone();
+                    }
+                    if pr.group.is_none() {
+                        pr.group = ws_group.clone();
                     }
                     pr
                 },
