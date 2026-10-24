@@ -532,6 +532,32 @@ impl GatewayRoute {
 }
 
 /// The regex a pattern hostname matches with, anchored and case-insensitive.
+/// Whether `host` is one a route's hostname (with `*` for one label part,
+/// as in `host_pattern_regex`) stands for, case-insensitively.
+pub fn host_matches(pattern: &str, host: &str) -> bool {
+    fn rest(parts: &[&str], host: &str) -> bool {
+        let Some((first, more)) = parts.split_first() else {
+            return host.is_empty();
+        };
+        let Some(after) = host.strip_prefix(first) else {
+            return false;
+        };
+        if more.is_empty() {
+            return after.is_empty();
+        }
+        // `*`: one or more of [a-z0-9-], then the rest.
+        let run = after
+            .char_indices()
+            .take_while(|(_, c)| c.is_ascii_alphanumeric() || *c == '-')
+            .map(|(i, c)| i + c.len_utf8())
+            .collect::<Vec<_>>();
+        run.into_iter().any(|end| rest(more, &after[end..]))
+    }
+    let pattern = pattern.to_ascii_lowercase();
+    let host = host.to_ascii_lowercase();
+    rest(&pattern.split('*').collect::<Vec<_>>(), &host)
+}
+
 pub fn host_pattern_regex(hostname: &str) -> String {
     let parts: Vec<String> = hostname.split('*').map(regex_escape).collect();
     format!("(?i)^{}$", parts.join("[a-z0-9-]+"))
@@ -1103,6 +1129,16 @@ mod pattern_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hostnames_match_their_patterns() {
+        assert!(host_matches("onecrm.local.dev", "OneCRM.local.dev"));
+        assert!(host_matches("*-onehome.local.dev", "acme-onehome.local.dev"));
+        assert!(!host_matches("*-onehome.local.dev", "-onehome.local.dev"));
+        assert!(!host_matches("*-onehome.local.dev", "a.b-onehome.local.dev"));
+        assert!(host_matches("*-docs.local.dev", "my-app-docs.local.dev"));
+        assert!(!host_matches("onecrm.local.dev", "onecrm.local.dev.evil"));
+    }
 
     #[test]
     fn default_config_has_sensible_values() {

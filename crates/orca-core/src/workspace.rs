@@ -237,6 +237,54 @@ pub struct WorkspaceProject {
     pub env: Option<ProjectEnv>,
     /// Also add it to Projects, so each git worktree can run side by side.
     pub worktrees: bool,
+    /// Links with a URL per environment, shown on the landing page with the
+    /// project's routes, one tab per environment:
+    /// `- {name: oneCRM, local: onecrm, stage: https://…, prod: https://…}`.
+    #[serde(
+        deserialize_with = "workspace_links",
+        serialize_with = "serialize_workspace_links",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub links: Vec<crate::dev::schema::Link>,
+}
+
+/// `links:` as a list of `{name, <environment>: <url>…}`; entries without a
+/// name or a URL are left out.
+fn workspace_links<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<crate::dev::schema::Link>, D::Error> {
+    let value = serde_yaml::Value::deserialize(d)?;
+    Ok(value
+        .as_sequence()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let name = item.get("name")?.as_str()?.trim().to_string();
+                    let urls: BTreeMap<String, String> = item
+                        .as_mapping()?
+                        .iter()
+                        .filter_map(|(k, v)| Some((k.as_str()?.to_string(), v.as_str()?.to_string())))
+                        .filter(|(k, _)| k != "name")
+                        .collect();
+                    (!name.is_empty() && !urls.is_empty()).then_some(crate::dev::schema::Link { name, urls })
+                })
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+fn serialize_workspace_links<S: serde::Serializer>(
+    links: &[crate::dev::schema::Link],
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeSeq;
+    let mut seq = s.serialize_seq(Some(links.len()))?;
+    for l in links {
+        let mut m = BTreeMap::new();
+        m.insert("name".to_string(), l.name.clone());
+        m.extend(l.urls.clone());
+        seq.serialize_element(&m)?;
+    }
+    seq.end()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

@@ -690,8 +690,28 @@ async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
         }));
     }
     let n = wanted.len();
+    // Each project's links, under the same name as its routes.
+    let links: Vec<orca_core::config::StackLinkGroup> = file
+        .projects
+        .iter()
+        .filter(|(_, p)| !p.links.is_empty())
+        .map(|(key, p)| orca_core::config::StackLinkGroup {
+            stack: format!("{OWNER}{}:{key}", file.name),
+            group: p.group.as_deref().map(str::trim).unwrap_or(key).to_string(),
+            links: p
+                .links
+                .iter()
+                .map(|l| orca_core::config::EnvironmentLink {
+                    name: l.name.clone(),
+                    urls: l.urls.clone(),
+                })
+                .collect(),
+        })
+        .collect();
     {
         let mut cfg = state.config.lock().await;
+        cfg.gateway.stack_links.retain(|g| !g.stack.starts_with(OWNER));
+        cfg.gateway.stack_links.extend(links);
         cfg.gateway
             .routes
             .retain(|r| !r.owner.as_deref().is_some_and(|o| o.starts_with(OWNER)));
@@ -722,6 +742,7 @@ async fn leave(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, 
         cfg.gateway
             .routes
             .retain(|r| !r.owner.as_deref().is_some_and(|o| o.starts_with(OWNER)));
+        cfg.gateway.stack_links.retain(|g| !g.stack.starts_with(OWNER));
         // Put back the domain and certificate the gateway had before joining.
         if let Some(p) = &previous {
             cfg.gateway.enabled = p.enabled;
@@ -861,6 +882,21 @@ pub(crate) fn not_set_up(workspace: &WorkspaceRef) -> std::collections::HashMap<
         .keys()
         .filter(|key| !file.project_dir(&dir, key).is_dir())
         .map(|key| (format!("{OWNER}{}:{key}", file.name), key.clone()))
+        .collect()
+}
+
+/// The owner of each workspace project's routes → the project's folder.
+pub(crate) fn project_dirs(workspace: &WorkspaceRef) -> std::collections::HashMap<String, PathBuf> {
+    let dir = PathBuf::from(&workspace.path);
+    let Ok(file) = WorkspaceFile::load(&dir) else {
+        return Default::default();
+    };
+    file.projects
+        .keys()
+        .map(|key| {
+            let p = file.project_dir(&dir, key);
+            (format!("{OWNER}{}:{key}", file.name), p.canonicalize().unwrap_or(p))
+        })
         .collect()
 }
 

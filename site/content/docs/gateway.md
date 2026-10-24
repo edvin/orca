@@ -185,7 +185,7 @@ This matters for OIDC issuer URLs and other server-to-server calls by public nam
 
 ## Environment links
 
-`links:` in a project's orca.yaml lists the project's addresses per environment, such as local, staging and production. The Gateway page shows them under **Environment links**, with one tab per environment, and the landing page shows them too. A `local` link names a gateway hostname, optionally with a path; the others are full URLs. See [links](/docs/orca-yaml/#links).
+`links:` in a project's orca.yaml, or on a [workspace project](/docs/workspaces-reference/#links), lists the project's addresses per environment, such as local, staging and production. The Gateway page shows them under **Environment links**, with one tab per environment, and the landing page shows them too, with its tabs in the usual order: development, test, staging, production, then any others. A link shows only on the tabs it has a URL for. A `local` link names a gateway hostname, optionally with a path; the others are full URLs. See [links](/docs/orca-yaml/#links).
 
 ## The landing page
 
@@ -206,6 +206,18 @@ In the page's top bar:
 - Click a group's name to fold it; a folded group shows how many services it has.
 
 Each browser remembers these choices.
+
+### A project's details, and starting it from the page
+
+The **⋯** beside a project's name (it shows when you point at the group) opens its details, out of the way until you want them:
+
+- **Start**, **Stop** and **Open in Orca**. These open Orca Desktop, which does the work: the page itself can't start or stop anything, so neither can any other website. Your browser asks once whether the page may open Orca.
+- The project's **database**, when Orca gives it one (see [Databases](/docs/databases/)), with its port on your computer.
+- Each of its **services**, running or not, with the address other containers reach it at (`shop-redis-1:6379`) and its port on your computer when it publishes one (`127.0.0.1:16379`).
+
+Click an address to copy it. Passwords stay in Orca's **Databases** page.
+
+A stopped service's card is greyed out. Opening its address doesn't give an empty error: the gateway shows a page saying it isn't running, with **Start in Orca**, and opens the app by itself as soon as it answers.
 
 A small group shares its row with others: a project with one service takes one column instead of a whole row. A [workspace](/docs/workspaces/)'s shared services come first, as a strip of small chips with a status dot, since they're tools you open now and then. The number of services running is under the title.
 

@@ -1576,6 +1576,23 @@ pub async fn compose_up(name: String) -> Result<serde_json::Value, String> {
     post_json(&format!("/stacks/{}/up", urlencoding::encode(&name))).await
 }
 
+/// Start, stop or find the project behind an address on the gateway (the
+/// landing page's `orca://app?url=…` links). Returns `{stack}`.
+#[tauri::command]
+pub async fn gateway_app_action(url: String, action: String) -> Result<serde_json::Value, String> {
+    let base = daemon_url();
+    let resp = authed_client_with_timeout(600)
+        .post(format!("{base}/gateway/app"))
+        .json(&serde_json::json!({ "url": url, "action": action }))
+        .send()
+        .await
+        .map_err(|e| format!("{e}"))?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
 #[tauri::command]
 pub async fn compose_deploy_path(path: String) -> Result<serde_json::Value, String> {
     let base = daemon_url();

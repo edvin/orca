@@ -1129,9 +1129,9 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         <div class="modal-overlay"
           onMouseDown={(e) => { (e.currentTarget as any).__mdTarget = e.target; }}
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowSetupGuide(false); }}>
-          <div class="modal-content" style={{ "max-width": "600px", "max-height": "85vh", overflow: "auto" }}>
+          <div class="modal-dialog" style={{ "max-width": "600px", overflow: "auto" }}>
             <div class="modal-header">
-              <h2>{setupGuide()!.title}</h2>
+              <h2 class="modal-title">{setupGuide()!.title}</h2>
               <button class="modal-close" onClick={() => { setShowSetupGuide(false); props.onNavigate?.(`stack:${setupGuideStackName()}`); }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>

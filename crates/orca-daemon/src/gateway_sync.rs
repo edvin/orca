@@ -95,8 +95,27 @@ async fn sync(state: &AppState) -> Result<()> {
             let cfg = state.config.lock().await;
             (cfg.gateway.clone(), cfg.workspace.clone())
         };
-        let not_set_up = workspace.as_ref().map(crate::workspace::not_set_up).unwrap_or_default();
-        crate::landing::refresh(&state.rt().await.docker, &gateway, &not_set_up).await;
+        let mut ctx = crate::landing::Context {
+            not_set_up: workspace.as_ref().map(crate::workspace::not_set_up).unwrap_or_default(),
+            dirs: workspace
+                .as_ref()
+                .map(crate::workspace::project_dirs)
+                .unwrap_or_default(),
+            ..Default::default()
+        };
+        for server in crate::databases::servers_with(state, false).await {
+            for db in server.databases {
+                if let Some(dir) = db.dir {
+                    let dir = std::path::PathBuf::from(dir);
+                    let dir = dir.canonicalize().unwrap_or(dir);
+                    ctx.databases
+                        .entry(dir)
+                        .or_default()
+                        .push((db.name, server.label.clone(), server.port));
+                }
+            }
+        }
+        crate::landing::refresh(&state.rt().await.docker, &gateway, &ctx).await;
     }
     Ok(())
 }

@@ -129,6 +129,7 @@ pub fn run() {
             commands::restart_stack,
             commands::compose_up,
             commands::compose_deploy_path,
+            commands::gateway_app_action,
             commands::validate_compose,
             commands::compose_down,
             commands::compose_pull,

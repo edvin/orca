@@ -8,6 +8,7 @@
 //! anyone who can reach the gateway.
 
 use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use orca_core::config::{GatewayConfig, GatewayRoute, GatewayTlsMode};
@@ -43,15 +44,52 @@ pub enum Status {
 
 /// The last known state of each routed container, by name.
 static STATES: Mutex<Option<HashMap<String, ServiceState>>> = Mutex::new(None);
+/// What each project runs, for its group's details.
+static DETAILS: Mutex<Option<Details>> = Mutex::new(None);
 /// The page last written, to skip rewriting an unchanged one.
 static WRITTEN: Mutex<Option<String>> = Mutex::new(None);
+
+/// What the gateway sync knows besides the containers.
+#[derive(Default)]
+pub struct Context {
+    /// The owner of a workspace project's routes → the project's key, for
+    /// projects not cloned yet.
+    pub not_set_up: HashMap<String, String>,
+    /// The owner of a workspace project's routes → the project's folder.
+    pub dirs: HashMap<String, PathBuf>,
+    /// A project folder → its databases: (name, server, port on this computer).
+    pub databases: HashMap<PathBuf, Vec<(String, String, Option<u16>)>>,
+}
+
+/// The projects behind the page's groups, shown when a group's details are
+/// opened: their services and where to reach them, and their databases.
+#[derive(Debug, Clone, Default)]
+pub struct Details {
+    /// Compose project → its containers.
+    projects: BTreeMap<String, Vec<Service>>,
+    /// Project folder → compose project.
+    by_dir: HashMap<PathBuf, String>,
+    /// Route owner → project folder (workspace projects).
+    dirs: HashMap<String, PathBuf>,
+    databases: HashMap<PathBuf, Vec<(String, String, Option<u16>)>>,
+}
+
+#[derive(Debug, Clone)]
+struct Service {
+    service: String,
+    container: String,
+    running: bool,
+    /// (port inside, port on this computer).
+    ports: Vec<(u16, Option<u16>)>,
+}
 
 /// Read the state of every routed container and rewrite the page if it
 /// changed. Called by the gateway sync on container events.
 ///
 /// `not_set_up` maps the owner of a workspace project's routes to the
 /// project's key, for projects not cloned yet.
-pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig, not_set_up: &HashMap<String, String>) {
+pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig, ctx: &Context) {
+    let not_set_up = &ctx.not_set_up;
     let mut states = HashMap::new();
     let names: std::collections::BTreeSet<&str> = config.routes.iter().map(|r| r.container_name.as_str()).collect();
     // Workspace routes target network aliases (`one-crm-app`), which only
@@ -123,9 +161,65 @@ pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig, not_set_u
         );
     }
     *STATES.lock().unwrap() = Some(states);
+    *DETAILS.lock().unwrap() = Some(details(docker, ctx).await);
     if let Err(e) = write(config) {
         tracing::warn!("landing page: {e}");
     }
+}
+
+/// Every compose project's containers, running or not.
+async fn details(docker: &bollard::Docker, ctx: &Context) -> Details {
+    let mut d = Details {
+        dirs: ctx.dirs.clone(),
+        databases: ctx.databases.clone(),
+        ..Default::default()
+    };
+    let opts = bollard::container::ListContainersOptions::<String> {
+        all: true,
+        ..Default::default()
+    };
+    let Ok(list) = docker.list_containers(Some(opts)).await else {
+        return d;
+    };
+    for c in list {
+        let labels = c.labels.unwrap_or_default();
+        let (Some(project), Some(service)) = (
+            labels.get("com.docker.compose.project"),
+            labels.get("com.docker.compose.service"),
+        ) else {
+            continue;
+        };
+        if let Some(dir) = labels.get("com.docker.compose.project.working_dir") {
+            let dir = Path::new(dir);
+            d.by_dir.insert(
+                dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()),
+                project.clone(),
+            );
+        }
+        let mut ports: Vec<(u16, Option<u16>)> = c
+            .ports
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|p| p.ip.as_deref().is_none_or(|ip| !ip.contains(':')))
+            .map(|p| (p.private_port, p.public_port))
+            .collect();
+        ports.sort();
+        ports.dedup();
+        let container = c
+            .names
+            .and_then(|n| n.first().map(|n| n.trim_start_matches('/').to_string()))
+            .unwrap_or_default();
+        d.projects.entry(project.clone()).or_default().push(Service {
+            service: service.clone(),
+            container,
+            running: c.state.as_deref() == Some("running"),
+            ports,
+        });
+    }
+    for services in d.projects.values_mut() {
+        services.sort_by(|a, b| a.service.cmp(&b.service));
+    }
+    d
 }
 
 /// Network alias → container name, for every container on a user network.
@@ -166,7 +260,8 @@ pub const ICON_DIR: &str = "landing-icons";
 /// Write the page with the last known container states.
 pub fn write(config: &GatewayConfig) -> std::io::Result<()> {
     let states = STATES.lock().unwrap().clone().unwrap_or_default();
-    let (html, icons) = externalize_icons(&render(config, &states));
+    let details = DETAILS.lock().unwrap().clone().unwrap_or_default();
+    let (html, icons) = externalize_icons(&render_with(config, &states, &details));
     let dir = crate::gateway::certs_dir().join(ICON_DIR);
     std::fs::create_dir_all(&dir)?;
     for (name, bytes) in &icons {
@@ -360,7 +455,21 @@ pub fn route_states(config: &GatewayConfig) -> Vec<serde_json::Value> {
 }
 
 /// Render the page.
+#[cfg(test)]
 pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) -> String {
+    render_with(config, states, &Details::default())
+}
+
+/// A project in a group's details: what to call it, an address of its for
+/// the links into Orca, and its compose project once it has containers.
+struct GroupProject {
+    label: String,
+    url: String,
+    project: Option<String>,
+    dir: Option<PathBuf>,
+}
+
+fn render_with(config: &GatewayConfig, states: &HashMap<String, ServiceState>, details: &Details) -> String {
     let domain = &config.domain;
     let landing = &config.landing;
     let scheme = if matches!(config.tls_mode, GatewayTlsMode::Custom) || !config.routes.is_empty() {
@@ -439,7 +548,18 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
         .flat_map(|g| g.links.iter().flat_map(|l| l.urls.keys().cloned()))
         .filter(|e| e != "local")
         .collect();
-    others.sort();
+    // The usual order, from development to production; others after them.
+    let rank = |e: &str| {
+        let e = e.to_ascii_lowercase();
+        match e.as_str() {
+            _ if e.starts_with("dev") => 0,
+            "test" | "testing" | "qa" => 1,
+            _ if e.starts_with("stag") || e == "preprod" || e == "eval" => 2,
+            "prod" | "production" | "live" => 3,
+            _ => 4,
+        }
+    };
+    others.sort_by_key(|e| (rank(e), e.to_ascii_lowercase()));
     others.dedup();
     envs.extend(others);
 
@@ -450,6 +570,32 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
         .iter()
         .flat_map(|g| g.links.iter().filter_map(|l| l.urls.get("local").map(|u| link_host(u))))
         .collect();
+
+    // Each group's projects, for its details.
+    let mut group_projects: HashMap<String, Vec<GroupProject>> = HashMap::new();
+    for r in visible.iter().filter(|r| !is_shared(r)) {
+        let owner = r.owner.as_deref().unwrap_or("");
+        let dir = details.dirs.get(owner).cloned();
+        let project = states
+            .get(&r.container_name)
+            .and_then(|s| s.project.clone())
+            .or_else(|| dir.as_ref().and_then(|d| details.by_dir.get(d).cloned()));
+        let label = project
+            .clone()
+            .or_else(|| owner.rsplit(':').next().filter(|k| !k.is_empty()).map(String::from))
+            .unwrap_or_else(|| r.container_name.clone());
+        let list = group_projects.entry(group_of(r)).or_default();
+        if list.iter().any(|p| p.label == label) {
+            continue;
+        }
+        let path = r.path.as_deref().unwrap_or("").trim_end_matches('*');
+        list.push(GroupProject {
+            label,
+            url: format!("{scheme}://{}{port_suffix}{path}", full_host(&r.hostname)),
+            project,
+            dir,
+        });
+    }
 
     let mut shared_groups: std::collections::BTreeSet<String> = Default::default();
     let mut panels = String::new();
@@ -483,8 +629,10 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             let cards: Vec<Card> = group
                 .links
                 .iter()
-                .map(|link| match link.urls.get(env) {
-                    Some(raw) if is_local && !raw.contains("://") => {
+                // A link with no URL for this environment stays off its tab.
+                .filter_map(|link| link.urls.get(env).map(|raw| (link, raw)))
+                .map(|(link, raw)| match raw {
+                    raw if is_local && !raw.contains("://") => {
                         let host = link_host(raw);
                         let rest = raw.split_once('/').map(|(_, p)| format!("/{p}")).unwrap_or_default();
                         let route = routes.iter().find(|r| full_host(&r.hostname) == host);
@@ -500,7 +648,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
                             status: route.and_then(|r| status_of(r)),
                         }
                     }
-                    Some(url) => Card {
+                    url => Card {
                         title: link.name.clone(),
                         description: None,
                         url: Some(url.clone()),
@@ -508,15 +656,6 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
                             .trim_start_matches("https://")
                             .trim_start_matches("http://")
                             .to_string(),
-                        icon: None,
-                        target: None,
-                        status: None,
-                    },
-                    None => Card {
-                        title: link.name.clone(),
-                        description: None,
-                        url: None,
-                        display_url: "Not set for this environment".into(),
                         icon: None,
                         target: None,
                         status: None,
@@ -561,8 +700,13 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             sections
                 .iter()
                 .map(|(name, cards)| {
+                    let more = group_projects
+                        .get(name)
+                        .filter(|_| is_local && !shared_groups.contains(name))
+                        .map(|projects| details_html(projects, details))
+                        .unwrap_or_default();
                     format!(
-                        r#"<section class="group{shared}" data-group="{group}" data-size="{size}"><h2 role="button" tabindex="0" title="Fold or unfold">{group}</h2><div class="grid">{}</div></section>"#,
+                        r#"<section class="group{shared}" data-group="{group}" data-size="{size}"><div class="gh"><h2 role="button" tabindex="0" title="Fold or unfold">{group}</h2>{more}</div><div class="grid">{}</div></section>"#,
                         cards
                             .iter()
                             .enumerate()
@@ -668,6 +812,77 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             ("tabs", &tabs),
             ("panels", &panels),
         ],
+    )
+}
+
+/// A group's details button and panel: per project, links into Orca, its
+/// databases and its services with their addresses, each one click to copy.
+fn details_html(projects: &[GroupProject], details: &Details) -> String {
+    let link = |url: &str, action: &str, label: &str| {
+        format!(
+            r#"<a href="orca://app?do={action}&amp;url={}">{label}</a>"#,
+            escape_html(&urlencoding::encode(url))
+        )
+    };
+    let copy = |text: &str| format!(r#"<code data-copy="{0}" title="Copy">{0}</code>"#, escape_html(text));
+    let mut body = String::new();
+    for p in projects {
+        let services = p.project.as_ref().and_then(|n| details.projects.get(n));
+        let total = services.map_or(0, Vec::len);
+        let up = services.map_or(0, |s| s.iter().filter(|s| s.running).count());
+        let summary = match (total, up) {
+            (0, _) => "Not started yet".to_string(),
+            (t, u) if t == u => "Running".to_string(),
+            (_, 0) => "Stopped".to_string(),
+            (t, u) => format!("{u} of {t} running"),
+        };
+        let mut actions = String::new();
+        if up < total || total == 0 {
+            actions.push_str(&link(&p.url, "start", "Start"));
+        }
+        if up > 0 {
+            actions.push_str(&link(&p.url, "stop", "Stop"));
+        }
+        actions.push_str(&link(&p.url, "open", "Open in Orca"));
+        let mut rows = String::new();
+        let dir = p.dir.clone().or_else(|| {
+            let name = p.project.as_ref()?;
+            details.by_dir.iter().find(|(_, n)| *n == name).map(|(d, _)| d.clone())
+        });
+        let dbs = dir.as_ref().and_then(|d| details.databases.get(d));
+        for (name, server, port) in dbs.into_iter().flatten() {
+            let at = port.map(|p| copy(&format!("127.0.0.1:{p}"))).unwrap_or_default();
+            rows.push_str(&format!(
+                r#"<div class="row"><span class="k db">{}</span><span class="v"><span class="note">on {}</span>{at}</span></div>"#,
+                escape_html(name),
+                escape_html(server),
+            ));
+        }
+        for s in services.into_iter().flatten() {
+            let mut addrs = String::new();
+            for (inside, outside) in &s.ports {
+                if let Some(o) = outside {
+                    addrs.push_str(&copy(&format!("127.0.0.1:{o}")));
+                }
+                addrs.push_str(&copy(&format!("{}:{inside}", s.container)));
+            }
+            if s.ports.is_empty() {
+                addrs.push_str(&copy(&s.container));
+            }
+            rows.push_str(&format!(
+                r#"<div class="row"><span class="k"><i class="{on}"></i>{}</span><span class="v">{addrs}</span></div>"#,
+                escape_html(&s.service),
+                on = if s.running { "on" } else { "" },
+            ));
+        }
+        body.push_str(&format!(
+            r#"<div class="proj"><div class="ph"><b>{}</b><span class="pst">{}</span></div><div class="acts">{actions}</div>{rows}</div>"#,
+            escape_html(&p.label),
+            escape_html(&summary),
+        ));
+    }
+    format!(
+        r#"<button type="button" class="more" aria-expanded="false" title="Details: start or stop, addresses and ports" aria-label="Details"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button><div class="pop" hidden>{body}</div>"#
     )
 }
 
@@ -778,7 +993,7 @@ fn empty_state(local: bool) -> String {
 /// A card's title when the route sets none. A worktree instance's
 /// hostname carries its instance and project (`web-feature-x-shop`), so it
 /// becomes "Web · feature-x"; others come from the hostname.
-fn default_title(r: &GatewayRoute, host: &str) -> String {
+pub(crate) fn default_title(r: &GatewayRoute, host: &str) -> String {
     let Some(rest) = r.owner.as_deref().and_then(|o| o.strip_prefix("dev:")) else {
         return title_from_host(host);
     };
@@ -863,7 +1078,29 @@ body.compact .panel{grid-template-columns:repeat(4,minmax(0,1fr))}
 body.compact .group[data-size="3"]{grid-column:span 3}body.compact .group[data-size="3"] .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:900px){.panel,body.compact .panel{grid-template-columns:repeat(2,minmax(0,1fr))}body.compact .group[data-size="3"]{grid-column:1/-1}}
 @media(max-width:640px){.panel,body.compact .panel{grid-template-columns:minmax(0,1fr)}.group[data-size]{grid-column:1/-1}}
-.group h2{font-size:11px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px 2px}
+.group h2{font-size:11px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1px;margin:0}
+.gh{display:flex;align-items:center;gap:4px;margin:0 0 12px 2px;position:relative;min-width:0;min-height:20px}
+.more{width:26px;height:20px;flex-shrink:0;display:grid;place-items:center;background:none;border:0;border-radius:6px;color:#6e7681;cursor:pointer;opacity:0;transition:opacity .15s}
+.group:hover .more,.more:focus-visible,.more[aria-expanded="true"]{opacity:1}
+.more:hover,.more[aria-expanded="true"]{color:#e6edf3;background:rgba(255,255,255,.07)}
+.more svg{width:16px;height:16px;fill:currentColor}
+@media(pointer:coarse){.more{opacity:1}}
+.pop{position:absolute;top:calc(100% + 6px);left:0;z-index:6;width:460px;max-width:calc(100vw - 32px);max-height:min(70vh,560px);overflow:auto;padding:4px;border-radius:12px;background:#11161d;border:1px solid rgba(255,255,255,.1);box-shadow:0 18px 50px -12px rgba(0,0,0,.75)}
+.pop.right{left:auto;right:0}
+.proj{padding:10px 10px 8px}.proj+.proj{border-top:1px solid rgba(255,255,255,.06)}
+.ph{display:flex;align-items:baseline;gap:8px}.ph b{font-size:13.5px;color:#e6edf3}.pst{font-size:12px;color:#8b949e}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 8px}
+.acts a{font-size:12px;font-weight:600;color:#58a6ff;text-decoration:none;padding:4px 10px;border:1px solid rgba(88,166,255,.25);border-radius:7px}
+.acts a:hover{background:rgba(88,166,255,.1)}
+.row{display:flex;gap:10px;align-items:baseline;padding:3px 0;font-size:12.5px}
+.row .k{width:118px;flex-shrink:0;color:#c9d1d9;display:flex;align-items:center;gap:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .k i{width:6px;height:6px;border-radius:50%;background:#484f58;flex-shrink:0}.row .k i.on{background:#3fb950}
+.row .k.db{color:#d2a8ff}.row .k.db::before{content:'';width:6px;height:6px;border-radius:2px;background:#a371f7;flex-shrink:0}
+.row .v{display:flex;flex-wrap:wrap;gap:4px 6px;min-width:0;align-items:baseline}
+.row .note{color:#8b949e;font-size:12px}
+.row code{cursor:pointer;color:#a8b3bf;background:rgba(255,255,255,.05);overflow-wrap:anywhere}
+.row code:hover{color:#e6edf3;background:rgba(88,166,255,.12)}.row code.copied{color:#3fb950;background:rgba(63,185,80,.14)}
+a.card[data-st="off"] .icon{filter:grayscale(1);opacity:.5}a.card[data-st="off"] .url{color:#6e7681}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
 .card{display:flex;gap:14px;align-items:flex-start;padding:16px;border-radius:14px;background:rgba(22,27,34,.7);border:1px solid rgba(255,255,255,.06);color:inherit;text-decoration:none;transition:border-color .15s,transform .15s}
 a.card:hover{border-color:rgba(88,166,255,.35);transform:translateY(-2px)}
@@ -923,7 +1160,7 @@ body.compact .desc,body.compact .target,body.compact .st span{display:none}
 body.compact .st{position:absolute;top:50%;right:11px;margin:-4px 0 0}
 body.compact .name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.compact .url{margin-top:1px;font-size:11px}
-body.compact .group{margin-bottom:18px}body.compact .group h2{margin-bottom:8px}
+body.compact .group{margin-bottom:18px}body.compact .gh{margin-bottom:8px}
 @media(pointer:coarse){.hint,.search kbd{display:none}}
 @media(max-width:640px){.shell{padding:36px 16px 28px}h1{font-size:24px}.grid{grid-template-columns:1fr}}
 </style>
@@ -1069,7 +1306,41 @@ body.compact .group{margin-bottom:18px}body.compact .group h2{margin-bottom:8px}
     if(folded[name])delete folded[name];else folded[name]=1;
     save('orca-landing-folded',JSON.stringify(folded));apply();
   });
+  // A group's details: one open at a time, kept open through the refresh.
+  var openGroup=null;
+  function closePops(){
+    document.querySelectorAll('.pop').forEach(function(p){p.hidden=true});
+    document.querySelectorAll('.more').forEach(function(b){b.setAttribute('aria-expanded','false')});
+    openGroup=null;
+  }
+  function openPop(b){
+    closePops();
+    var p=b.nextElementSibling;if(!p)return;
+    p.hidden=false;b.setAttribute('aria-expanded','true');
+    openGroup=b.closest('.group').getAttribute('data-group');
+    p.classList.remove('right');
+    if(p.getBoundingClientRect().right>window.innerWidth-12)p.classList.add('right');
+  }
+  document.addEventListener('click',function(e){
+    var t=e.target.closest?e.target:null;if(!t)return;
+    var b=t.closest('.more');
+    if(b){if(b.getAttribute('aria-expanded')==='true')closePops();else openPop(b);return}
+    var c=t.closest('[data-copy]');
+    if(c){
+      var done=function(){c.classList.add('copied');setTimeout(function(){c.classList.remove('copied')},1200)};
+      if(navigator.clipboard)navigator.clipboard.writeText(c.getAttribute('data-copy')).then(done,function(){});
+      return;
+    }
+    if(!t.closest('.pop'))closePops();
+  });
+  function reopen(){
+    if(!openGroup)return;
+    var name=openGroup,b=null;
+    panel().querySelectorAll('.group').forEach(function(g){if(g.getAttribute('data-group')===name)b=g.querySelector('.more')});
+    if(b)openPop(b);else openGroup=null;
+  }
   document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&openGroup){closePops();return}
     var h=(e.key==='Enter'||e.key===' ')&&e.target.closest&&e.target.closest('.group h2');
     if(h){e.preventDefault();h.click()}
   });
@@ -1127,7 +1398,7 @@ body.compact .group{margin-bottom:18px}body.compact .group h2{margin-bottom:8px}
   }
   // The page swaps in fresh cards and tabs every 20 s: search them again.
   var bound=bind;
-  bind=function(){bound();document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',apply)});apply()};
+  bind=function(){bound();document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',apply)});apply();reopen()};
   bind();
   setInterval(refresh,20000);
   setInterval(function(){if(!document.hidden)uptimes()},60000);
@@ -1223,7 +1494,7 @@ mod tests {
         ]);
         let html = render(&config(vec![shop, db, sleepy]), &states);
         assert!(html.contains(
-            r#"data-group="shop" data-size="2"><h2 role="button" tabindex="0" title="Fold or unfold">shop</h2>"#
+            r#"data-group="shop" data-size="2"><div class="gh"><h2 role="button" tabindex="0" title="Fold or unfold">shop</h2>"#
         ));
         assert!(
             html.contains(r#">tools</h2>"#),
@@ -1284,6 +1555,50 @@ mod tests {
     }
 
     #[test]
+    fn a_groups_details_link_into_orca_and_list_addresses() {
+        let c = config(vec![route("shop", "shop-web-1", 80)]);
+        let states = HashMap::from([("shop-web-1".to_string(), running("2026-10-24T08:00:00Z", Some("shop")))]);
+        let dir = PathBuf::from("/code/shop");
+        let details = Details {
+            projects: BTreeMap::from([(
+                "shop".to_string(),
+                vec![
+                    Service {
+                        service: "redis".into(),
+                        container: "shop-redis-1".into(),
+                        running: false,
+                        ports: vec![(6379, Some(20379))],
+                    },
+                    Service {
+                        service: "web".into(),
+                        container: "shop-web-1".into(),
+                        running: true,
+                        ports: vec![(80, None)],
+                    },
+                ],
+            )]),
+            by_dir: HashMap::from([(dir.clone(), "shop".to_string())]),
+            dirs: HashMap::new(),
+            databases: HashMap::from([(
+                dir,
+                vec![("shop".to_string(), "percona (Acme)".to_string(), Some(23306))],
+            )]),
+        };
+        let html = render_with(&c, &states, &details);
+        assert!(html.contains(r#"<span class="pst">1 of 2 running</span>"#), "{html}");
+        assert!(
+            html.contains(r#"href="orca://app?do=start&amp;url=https%3A%2F%2Fshop.localhost">Start</a>"#),
+            "{html}"
+        );
+        assert!(html.contains(r#">Stop</a>"#) && html.contains(">Open in Orca</a>"));
+        assert!(html.contains(r#"<code data-copy="127.0.0.1:20379" title="Copy">"#));
+        assert!(html.contains(r#"data-copy="shop-redis-1:6379""#));
+        assert!(html.contains(r#"<span class="k db">shop</span><span class="v"><span class="note">on percona (Acme)</span><code data-copy="127.0.0.1:23306""#));
+        // Folded away until asked for.
+        assert!(html.contains(r#"<div class="pop" hidden>"#));
+    }
+
+    #[test]
     fn groups_fold_and_cards_say_their_state() {
         let mut c = config(vec![route("x.localhost", "x", 80)]);
         c.landing.links = vec![orca_core::config::LandingLink {
@@ -1295,7 +1610,9 @@ mod tests {
         let html = render(&c, &states);
         // Group names are escaped where they're attributes too.
         assert!(
-            html.contains(r#"<section class="group" data-group="a&amp;b" data-size="1"><h2 role="button""#),
+            html.contains(
+                r#"<section class="group" data-group="a&amp;b" data-size="1"><div class="gh"><h2 role="button""#
+            ),
             "{html}"
         );
         assert!(html.contains(r#"data-st="run""#), "a running service");
@@ -1589,6 +1906,14 @@ mod tests {
                 Some("Keycloak"),
                 Some("Single sign-on for every app"),
             ),
+            r(
+                "billing.localhost",
+                "billing-api-1",
+                8000,
+                "project:billing",
+                Some("Billing"),
+                Some("Invoices and payments"),
+            ),
         ]);
         c.landing.title = Some("Acme dev".into());
         c.landing.web_search = Some("google".into());
@@ -1643,6 +1968,16 @@ mod tests {
                 running(&ago(60 * 74), Some("telemetry")),
             ),
             ("sso-keycloak-1".to_string(), unhealthy),
+            (
+                "billing-api-1".to_string(),
+                ServiceState {
+                    status: Status::Stopped,
+                    started_at: None,
+                    project: Some("billing".into()),
+                    image: None,
+                    setup: None,
+                },
+            ),
         ]);
         // Icons: the shop's own logo from its repo, the rest from images.
         let mut states = states;
@@ -1661,6 +1996,40 @@ mod tests {
         }) {
             r.presentation.icon = Some(shop.into());
         }
-        std::fs::write(out, render(&c, &states)).unwrap();
+        let svc = |service: &str, container: &str, running: bool, ports: Vec<(u16, Option<u16>)>| Service {
+            service: service.into(),
+            container: container.into(),
+            running,
+            ports,
+        };
+        let shop_dir = PathBuf::from("/code/shop");
+        let details = Details {
+            projects: BTreeMap::from([
+                (
+                    "shop".to_string(),
+                    vec![
+                        svc("admin", "shop-admin-1", true, vec![(8080, None)]),
+                        svc("mailpit", "shop-mailpit-1", true, vec![(8025, None)]),
+                        svc("redis", "shop-redis-1", true, vec![(6379, Some(16379))]),
+                        svc("web", "shop-web-1", true, vec![(3000, None)]),
+                        svc("worker", "shop-worker-1", false, vec![]),
+                    ],
+                ),
+                (
+                    "billing".to_string(),
+                    vec![
+                        svc("api", "billing-api-1", false, vec![]),
+                        svc("queue", "billing-queue-1", false, vec![]),
+                    ],
+                ),
+            ]),
+            by_dir: HashMap::from([(shop_dir.clone(), "shop".to_string())]),
+            dirs: HashMap::new(),
+            databases: HashMap::from([(
+                shop_dir,
+                vec![("shop".to_string(), "MySQL 8.4".to_string(), Some(13306))],
+            )]),
+        };
+        std::fs::write(out, render_with(&c, &states, &details)).unwrap();
     }
 }

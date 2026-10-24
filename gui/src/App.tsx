@@ -295,6 +295,23 @@ export default function App() {
           navigate("workspace");
           break;
         }
+        case "app": {
+          // orca://app?url=<address>&do=start|stop|open: the gateway's
+          // landing page and its "isn't running" page.
+          const target = parsed.searchParams.get("url");
+          const action = parsed.searchParams.get("do") || "open";
+          if (!target || !["start", "stop", "open"].includes(action)) break;
+          const verb = action === "start" ? "Starting" : action === "stop" ? "Stopping" : "";
+          if (verb) showToast(`${verb} ${new URL(target).hostname}…`, "info");
+          try {
+            const res = await invoke("gateway_app_action", { url: target, action }) as { stack: string };
+            navigate(`stack:${res.stack}`);
+            if (verb) showToast(`${res.stack} ${action === "start" ? "started" : "stopped"}`, "success");
+          } catch (e) {
+            showToast(String(e), "error");
+          }
+          break;
+        }
         case "kubernetes":
           navigate("kubernetes");
           break;

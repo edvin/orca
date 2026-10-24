@@ -856,6 +856,41 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
         })
         .collect();
 
+    // When a route's service doesn't answer (stopped, or still starting), a
+    // page that says so, offers to start it in Orca and reloads once it's
+    // up, instead of an empty 502.
+    let down = "{http.error.status_code} >= 502 && {http.error.status_code} <= 504";
+    let error_routes: Vec<serde_json::Value> = enabled_routes
+        .iter()
+        .filter(|r| !r.websocket && !r.sleeping)
+        .map(|route| {
+            let mut matcher = serde_json::Map::new();
+            let expression = if route.is_pattern() {
+                let re = orca_core::config::host_pattern_regex(&route.hostname);
+                format!("{{http.request.host}}.matches(r'{re}') && {down}")
+            } else {
+                matcher.insert("host".into(), serde_json::json!([route.hostname.clone()]));
+                down.to_string()
+            };
+            matcher.insert("expression".into(), serde_json::json!(expression));
+            if let Some(path) = &route.path {
+                matcher.insert("path".into(), serde_json::json!([path]));
+            }
+            serde_json::json!({
+                "match": [matcher],
+                "handle": [{
+                    "handler": "static_response",
+                    "status_code": "{http.error.status_code}",
+                    "headers": {
+                        "Content-Type": ["text/html; charset=utf-8"],
+                        "Cache-Control": ["no-store"]
+                    },
+                    "body": down_page(route, &config.domain)
+                }]
+            })
+        })
+        .collect();
+
     // Add K8s ingress routes (when in gateway_proxies_traefik mode)
     for (hostname, upstream) in k8s_routes {
         routes.push(serde_json::json!({
@@ -948,6 +983,7 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     caddy["apps"]["http"]["servers"]["gateway"] = serde_json::json!({
         "listen": [":443"],
         "routes": all_routes,
+        "errors": {"routes": error_routes},
         "tls_connection_policies": [{}],
         // Access log lets Orca tell which worktree instances are in use
         // (idle stop, wake on request); written to ACCESS_LOG below.
@@ -1011,6 +1047,41 @@ fn wake_page(route: &orca_core::config::GatewayRoute) -> String {
 .box{{text-align:center;max-width:460px;padding:24px}}.spin{{width:28px;height:28px;margin:0 auto 18px;border:3px solid rgba(88,166,255,.25);border-top-color:#58a6ff;border-radius:50%;animation:s .8s linear infinite}}
 @keyframes s{{to{{transform:rotate(360deg)}}}}h1{{font-size:18px;font-weight:600;margin:0 0 8px}}p{{color:#8b949e;line-height:1.5;margin:0}}</style></head>
 <body><div class="box"><div class="spin"></div><h1>Starting {name}</h1><p>Orca stopped this worktree instance while it was unused. It is starting again; this page reloads by itself.</p></div></body></html>"#
+    )
+}
+
+/// The page for a route whose service doesn't answer: its name, a button
+/// that starts it in Orca, and a reload as soon as it answers.
+fn down_page(route: &orca_core::config::GatewayRoute, domain: &str) -> String {
+    let host = if route.hostname.contains('.') {
+        route.hostname.clone()
+    } else {
+        format!("{}.{domain}", route.hostname)
+    };
+    let name = route
+        .presentation
+        .title
+        .clone()
+        .unwrap_or_else(|| crate::landing::default_title(route, &host));
+    let name = escape_html(&name);
+    let target = escape_html(&format!("{}:{}", route.container_name, route.port));
+    let home = escape_html(&format!("https://{}", domain.trim_start_matches("*.")));
+    format!(
+        r##"<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{name} isn't running</title>
+<style>body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0e14;color:#e6edf3;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}
+.box{{text-align:center;max-width:460px;padding:24px}}.dot{{width:10px;height:10px;border-radius:50%;background:#6e7681;margin:0 auto 18px;box-shadow:0 0 0 6px rgba(110,118,129,.15)}}
+h1{{font-size:20px;font-weight:600;margin:0 0 8px}}p{{color:#8b949e;line-height:1.55;margin:0 0 22px}}code{{font:12.5px "SF Mono",ui-monospace,Menlo,monospace;color:#a8b3bf}}
+.btns{{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}}a{{text-decoration:none;font-weight:600;font-size:14px;border-radius:9px;padding:9px 18px}}
+.go{{background:#58a6ff;color:#0a0e14}}.go:hover{{background:#79b8ff}}.alt{{color:#8b949e;border:1px solid rgba(255,255,255,.12)}}.alt:hover{{color:#e6edf3}}
+.wait{{display:none;font-size:13px;color:#8b949e;margin-top:20px}}.wait.on{{display:block}}</style></head>
+<body><div class="box"><div class="dot"></div><h1>{name} isn't running</h1><p>Nothing answers at <code>{target}</code>. Start it in Orca, and this page opens it as soon as it's up.</p>
+<div class="btns"><a class="go" id="start" href="#">Start in Orca</a><a class="alt" href="{home}">All services</a></div><p class="wait" id="wait">Waiting for it to start…</p></div>
+<script>(function(){{
+var s=document.getElementById('start');s.href='orca://app?do=start&url='+encodeURIComponent(location.href);
+s.addEventListener('click',function(){{document.getElementById('wait').classList.add('on')}});
+function check(){{if(document.hidden)return;fetch(location.href,{{cache:'no-store',redirect:'manual'}}).then(function(r){{if(r.status<502||r.status>504)location.reload()}}).catch(function(){{}})}}
+setInterval(check,3000);
+}})()</script></body></html>"##
     )
 }
 

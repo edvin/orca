@@ -292,6 +292,7 @@ Keys use letters, digits, dashes and underscores, at most 63 characters, and don
 | [`routes`](#project-routes) | list | `[]` | Gateway routes for the project. |
 | [`env`](#env) | object | none | The `.env` file and the secrets it needs. |
 | [`worktrees`](#worktrees) | boolean | `false` | Also add the project to the **Worktrees** page. |
+| [`links`](#links) | list | `[]` | The project's addresses in other environments, as tabs on the landing page. |
 
 Error: *project '…': use letters, digits and dashes*.
 
@@ -377,6 +378,27 @@ Errors: *project '…': '…' is not a valid variable name*; *project '…' DB_P
 ### worktrees
 
 `true` adds the project to the **Worktrees** page when it's started, so each git worktree of it can run as its own copy with its own hostnames. The project needs a `dev:` section in its own `orca.yaml` for that. See [Worktree instances](/docs/worktrees/).
+
+### links
+
+The project's addresses in your other environments, so the landing page has a tab for each (DevTest, Test, Stage, Prod…) next to **Local**. Each link has a `name` and a URL per environment, named as you like:
+
+```yaml title="orca-workspace.yaml"
+projects:
+  shop:
+    repo: git@git.acme.dev:shop/shop.git
+    links:
+      - name: Shop
+        Test: https://shop.test.acme.dev
+        Stage: https://shop.stage.acme.dev
+        Prod: https://shop.acme.dev
+      - name: Shop Mailpit
+        Test: https://shop.test.acme.dev/_/mailpit/
+      - name: Install guide
+        local: https://wiki.acme.dev/shop/install
+```
+
+They show under the project's name, or its [`group`](#projects) when it has one. A link shows only on the tabs it has a URL for. `local` adds a link to the **Local** tab: a full URL, or a gateway hostname, which then stands in for that hostname's routes on the tab. Entries without a `name` or a URL are left out. A project's own `orca.yaml` can have [links](/docs/orca-yaml/#links) too.
 
 ## Errors
 

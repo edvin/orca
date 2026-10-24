@@ -442,6 +442,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/gateway/config", get(gateway_get_config).put(gateway_update_config))
         .route("/gateway/landing", get(gateway_get_landing).put(gateway_set_landing))
         .route("/gateway/route-states", get(gateway_route_states))
+        .route("/gateway/app", post(gateway_app_action))
         .route("/gateway/requests", get(gateway_requests))
         .route("/gateway/port-check", get(gateway_port_check))
         .route("/gateway/links", get(gateway_get_links).put(gateway_update_links))
@@ -8946,6 +8947,128 @@ async fn gateway_requests(
 }
 
 /// GET /gateway/route-states: each route's group and whether it runs.
+/// The project behind an address on the gateway: (its compose project,
+/// folder, compose file), from the route that serves it.
+async fn app_for_url(state: &AppState, url: &str) -> Result<(String, String, Option<String>), ApiError> {
+    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    let (authority, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
+    let host = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    let host = host.split(':').next().unwrap_or(host).to_ascii_lowercase();
+    let path = if path.is_empty() { "/" } else { path };
+    let (gateway, workspace) = {
+        let cfg = state.config.lock().await;
+        (cfg.gateway.clone(), cfg.workspace.clone())
+    };
+    let full = |h: &str| {
+        if h.contains('.') {
+            h.to_string()
+        } else {
+            format!("{h}.{}", gateway.domain)
+        }
+    };
+    // The route that serves it: the one with the longest path that matches.
+    let route = gateway
+        .routes
+        .iter()
+        .filter(|r| r.enabled && !r.websocket)
+        .filter(|r| orca_core::config::host_matches(&full(&r.hostname), &host))
+        .filter(|r| {
+            r.path
+                .as_deref()
+                .is_none_or(|p| path.starts_with(p.trim_end_matches('*')))
+        })
+        .max_by_key(|r| r.path.as_deref().map_or(0, str::len))
+        .ok_or_else(|| ApiError::bad_request(format!("No gateway route serves {host}")))?
+        .clone();
+    let stacks = get_stacks(state).await?;
+    let by_dir = |dir: &std::path::Path| {
+        let dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+        stacks.iter().find(|s| {
+            s.working_dir
+                .as_deref()
+                .is_some_and(|w| std::path::Path::new(w).canonicalize().ok().as_deref() == Some(dir.as_path()))
+        })
+    };
+    let owner = route.owner.clone().unwrap_or_default();
+    // A workspace project: its folder, running or not.
+    if let Some(rest) = owner.strip_prefix("workspace:")
+        && let Some((_, key)) = rest.split_once(':')
+        && let Some(ws) = &workspace
+    {
+        let ws_dir = std::path::PathBuf::from(&ws.path);
+        let file = orca_core::workspace::WorkspaceFile::load(&ws_dir).map_err(anyhow::Error::from)?;
+        let dir = file.project_dir(&ws_dir, key);
+        if !dir.is_dir() {
+            return Err(ApiError::bad_request(format!(
+                "{key} isn't set up yet: set it up on the Workspace page"
+            )));
+        }
+        if let Some(s) = by_dir(&dir) {
+            return Ok((
+                s.name.clone(),
+                s.working_dir.clone().unwrap_or_default(),
+                s.config_file.clone(),
+            ));
+        }
+        let name = crate::folders::project_name(&dir).map_err(|e| ApiError::bad_request(e.to_string()))?;
+        return Ok((name, dir.to_string_lossy().to_string(), None));
+    }
+    // A compose project's own orca.yaml or labels.
+    for prefix in ["project:", "stack:"] {
+        if let Some(name) = owner.strip_prefix(prefix) {
+            let (dir, config) = resolve_stack_dir(state, name).await?;
+            return Ok((name.to_string(), dir, config));
+        }
+    }
+    // Otherwise the container it goes to, by name.
+    let stack = stacks
+        .iter()
+        .find(|s| s.services.iter().any(|c| c.container_name == route.container_name))
+        .ok_or_else(|| ApiError::bad_request(format!("No project runs {}", route.container_name)))?;
+    Ok((
+        stack.name.clone(),
+        stack.working_dir.clone().unwrap_or_default(),
+        stack.config_file.clone(),
+    ))
+}
+
+/// POST /gateway/app {url, action}: start or stop the project behind an
+/// address on the gateway, for the landing page's links into Orca.
+async fn gateway_app_action(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, ApiError> {
+    let url = body["url"]
+        .as_str()
+        .ok_or_else(|| ApiError::bad_request("Missing 'url'"))?;
+    let (name, dir, config) = app_for_url(&state, url).await?;
+    match body["action"].as_str().unwrap_or("start") {
+        "start" => {
+            let output = crate::stack_profiles::up(&state, &name, &dir, config.as_deref()).await?;
+            if !output.success {
+                return Err(ApiError::bad_request(format!(
+                    "Starting {name} failed:\n{}",
+                    output.stderr
+                )));
+            }
+            run_stack_hooks(&state, &dir, config.as_deref()).await;
+        }
+        "stop" => {
+            let stacks = get_stacks(&state).await?;
+            if let Some(stack) = stacks.iter().find(|s| s.name == name) {
+                for service in &stack.services {
+                    if service.state == orca_core::runtime::ContainerState::Running {
+                        state.rt().await.stop_container(&service.container_id, 10).await?;
+                    }
+                }
+            }
+        }
+        "open" => {}
+        other => return Err(ApiError::bad_request(format!("Unknown action '{other}'"))),
+    }
+    Ok(Json(serde_json::json!({ "stack": name })))
+}
+
 async fn gateway_route_states(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let gateway = state.config.lock().await.gateway.clone();
     Ok(Json(crate::landing::route_states(&gateway)))
