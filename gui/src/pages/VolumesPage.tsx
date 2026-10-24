@@ -10,6 +10,7 @@ import { useSort } from "../lib/useSort";
 import { logError } from "../lib/activityStore";
 import { SkeletonRow } from "../components/Skeleton";
 import Spinner from "../components/Spinner";
+import HelpLink from "../components/HelpLink";
 
 interface VolumesPageProps {
   onNavigate?: (target: string) => void;
@@ -128,7 +129,7 @@ export default function VolumesPage(props: VolumesPageProps) {
           <div class="empty">
             <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
             <p class="empty-title">No volumes yet</p>
-            <p>A volume keeps a container's data, such as a database's files, when the container is restarted or recreated. Compose projects create the volumes they need automatically.</p>
+            <p>Volumes keep a container's data across restarts and recreates; compose projects create their own. <HelpLink path="/docs/containers/#volumes" /></p>
             <div class="empty-actions">
               <button class="btn btn-primary" onClick={() => setShowCreate(true)}>
                 Create volume

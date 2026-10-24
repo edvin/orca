@@ -108,7 +108,8 @@ pub(crate) fn escape_html(s: &str) -> String {
 pub(crate) fn sanitize_href(url: &str) -> String {
     match reqwest::Url::parse(url) {
         Ok(parsed) => match parsed.scheme() {
-            "http" | "https" | "mailto" => url.to_string(),
+            // orca: Orca's own links, such as orca://workspace?setup=crm.
+            "http" | "https" | "mailto" | "orca" => url.to_string(),
             scheme => {
                 tracing::warn!("gateway landing page: refusing URL with disallowed scheme '{scheme}' (url redacted)");
                 "#".to_string()

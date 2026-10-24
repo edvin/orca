@@ -61,7 +61,7 @@ pub async fn worktree_root(path: &Path) -> Result<PathBuf> {
 }
 
 /// The repository's worktrees. Projects are listed every few seconds (the
-/// Projects page, the dashboard, the tray), so the list is reused until git's
+/// Worktrees page, the dashboard, the tray), so the list is reused until git's
 /// own files say a worktree was added, removed or moved to another commit.
 pub async fn list_worktrees(root: &Path) -> Result<Vec<Worktree>> {
     type Cached = (Vec<(PathBuf, Option<std::time::SystemTime>)>, Instant, Vec<Worktree>);
@@ -146,7 +146,7 @@ pub async fn branches_with_gone_upstream(root: &Path) -> Vec<String> {
 }
 
 /// Whether the worktree has uncommitted changes (ignoring Orca's own folder).
-/// `git status` scans the whole worktree, and the Projects page asks for
+/// `git status` scans the whole worktree, and the Worktrees page asks for
 /// every instance every few seconds, so the answer is reused briefly.
 pub async fn is_dirty(dir: &Path) -> bool {
     static CACHE: OnceLock<Mutex<std::collections::HashMap<PathBuf, (Instant, bool)>>> = OnceLock::new();

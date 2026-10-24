@@ -51,7 +51,7 @@ The sidebar starts with the **Dashboard** and ends with **Settings**. In between
 
 | Group | Pages |
 |---|---|
-| **Develop** | **Projects**, **Containers**, **Gateway**, **App Catalog** |
+| **Develop** | **Workspace**, **Worktrees**, **Containers**, **Gateway**, **App Catalog** |
 | **Resources** | **Images**, **Builds**, **Volumes**, **Networks** |
 | **Platform** | **Kubernetes**, and **Fleet** once you've added a [remote host](/docs/remote-hosts/) |
 | **System** | **System Health**, **Activity** |

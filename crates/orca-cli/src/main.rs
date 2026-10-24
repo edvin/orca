@@ -426,7 +426,7 @@ enum WorkspaceAction {
     Join {
         /// The workspace's git URL (or a folder that already has orca-workspace.yaml)
         repo: String,
-        /// Where to clone it (default ~/code/<repo name>)
+        /// Where to clone it (default ~/code/<repo name>); projects are cloned next to it
         #[arg(long)]
         folder: Option<String>,
     },

@@ -150,7 +150,7 @@ const navGroups: { title: string | null; items: { id: Page; label: string }[] }[
     title: "Develop",
     items: [
       { id: "workspace", label: "Workspace" },
-      { id: "projects", label: "Projects" },
+      { id: "projects", label: "Worktrees" },
       { id: "containers", label: "Containers" },
       { id: "gateway", label: "Gateway" },
       { id: "templates", label: "App Catalog" },

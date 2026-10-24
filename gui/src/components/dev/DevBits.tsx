@@ -1,4 +1,4 @@
-// Small building blocks for the Projects page: job progress and the
+// Small building blocks for the Worktrees page: job progress and the
 // annotated YAML view of generated files.
 import { For, Show, JSX } from "solid-js";
 import type { JobStep, StepStatus } from "../../lib/dev";

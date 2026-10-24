@@ -130,7 +130,7 @@ The editor has a tab for each section, with forms instead of raw YAML:
 
 The status next to the tabs says whether the file is **Valid** or points to the line with an error. Click **Save** to write the file; Orca applies the changes right away.
 
-If an `orca.local.yaml` overrides some values on this machine, the tab says so. A `dev:` section for worktree instances is kept as is; edit it on the **Projects** page.
+If an `orca.local.yaml` overrides some values on this machine, the tab says so. A `dev:` section for worktree instances is kept as is; edit it on the **Worktrees** page.
 
 See the [orca.yaml reference](/docs/orca-yaml/) for every key.
 

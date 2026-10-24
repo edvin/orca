@@ -15,6 +15,7 @@ import Dropdown from "../components/Dropdown";
 import CopyButton from "../components/CopyButton";
 import K8sTerminal from "../components/K8sTerminal";
 import VirtualLogList from "../components/VirtualLogList";
+import HelpLink from "../components/HelpLink";
 import "../styles/polish-b.css";
 import type {
   ClusterStatus,
@@ -1206,8 +1207,8 @@ spec:
               <Show when={status()?.installed} fallback={
                 <>
                   <div class="hero-subtitle">
-                    Run a local Kubernetes cluster powered by k3s with Traefik ingress.
-                    Deploy, scale, and manage containerized workloads with a production-grade orchestrator.
+                    A local single-node k3s cluster with Traefik ingress.{" "}
+                    <HelpLink path="/docs/kubernetes/#enable-the-cluster" />
                   </div>
                   <div class="k8s-runtime-picker">
                     <span>Container runtime:</span>
@@ -4545,9 +4546,9 @@ spec:
                 color: "#8b949e",
                 "line-height": "1.5",
               }}>
-                Traefik is the default ingress controller for k3s. It listens on the entrypoints above
-                and routes traffic based on Ingress rules. To add custom entrypoints, edit the Traefik
-                HelmChartConfig in the kube-system namespace.
+                Traefik serves Ingress rules on the entrypoints above. To add entrypoints, edit the Traefik
+                HelmChartConfig in the kube-system namespace.{" "}
+                <HelpLink path="/docs/kubernetes/#ingress-and-traefik" />
               </div>
             </div>
             <div class="modal-footer">

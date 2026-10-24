@@ -8,6 +8,7 @@ import { confirmDanger, confirm as confirmDialog } from "../components/ConfirmDi
 import { logError } from "../lib/activityStore";
 import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
+import HelpLink from "../components/HelpLink";
 
 type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "certificates" | "privacy" | "about";
 
@@ -70,8 +71,8 @@ function CertificateAuthoritySection() {
       <h2 class="settings-section-title">Orca certificate authority</h2>
       <div class="card">
         <p style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.6" }}>
-          Orca generates a local CA to sign TLS certificates for deployed app templates.
-          Install the CA certificate to trust all Orca-deployed services.
+          Signs the TLS certificates for the gateway and app templates. Install it so browsers trust them.{" "}
+          <HelpLink path="/docs/gateway/#trust-the-orca-ca" />
         </p>
 
         <Show when={caInfo()}>
@@ -1033,7 +1034,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                     </div>
                     <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 8px 0", "line-height": "1.5" }}>
                       Add this to <span class="mono">.mcp.json</span> in a project (Claude Code) or to any MCP client that
-                      supports HTTP servers. Copying fills in your real token.
+                      supports HTTP servers. Copying fills in your real token.{" "}
+                      <HelpLink path="/docs/agents/#http-endpoint-advanced" />
                     </p>
                     <div style={{ position: "relative" }}>
                       <pre style={{
@@ -1222,7 +1224,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
           <div class="settings-section">
             <h2 class="settings-section-title">Remote hosts</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
-              Connect to remote servers running the orca-daemon. Switch between hosts from the titlebar dropdown.
+              Servers running orca-daemon. Switch between hosts from the titlebar.{" "}
+              <HelpLink path="/docs/remote-hosts/" />
             </p>
             <Show when={remoteHosts().length > 0} fallback={
               <div style={{ padding: "16px 0", color: "#8b949e" }}>No remote hosts configured.</div>
@@ -1396,39 +1399,16 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
           <div class="settings-section">
             <h2 class="settings-section-title">Auto-deploy</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
-              Push code to GitHub and your containers update automatically. Orca receives a webhook when a new image is pushed, pulls it, and redeploys matching containers with the same configuration.
+              Redeploys matching containers when GitHub or Docker Hub reports a new image.{" "}
+              <HelpLink path="/docs/auto-deploy/" />
             </p>
 
             {/* Setup guide */}
             <Show when={deployRules().length === 0}>
-              <div style={{ background: "#161b22", border: "1px solid #30363d", "border-radius": "10px", padding: "20px 24px", "margin-bottom": "20px" }}>
-                <div style={{ "font-size": "14px", "font-weight": 600, color: "#e6edf3", "margin-bottom": "16px" }}>Quick setup</div>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "14px" }}>
-                  <div style={{ display: "flex", gap: "12px", "align-items": "flex-start" }}>
-                    <span style={{ background: "#58a6ff", color: "#fff", width: "22px", height: "22px", "border-radius": "50%", display: "flex", "align-items": "center", "justify-content": "center", "font-size": "12px", "font-weight": 600, "flex-shrink": 0 }}>1</span>
-                    <div>
-                      <div style={{ "font-size": "13px", color: "#e6edf3", "font-weight": 500 }}>Create a deploy rule below</div>
-                      <div style={{ "font-size": "12px", color: "#8b949e" }}>Set the image pattern (e.g., <code style={{ color: "#58a6ff" }}>ghcr.io/myorg/myapp</code>) and tag filter (e.g., <code style={{ color: "#58a6ff" }}>v*</code> for version tags)</div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "12px", "align-items": "flex-start" }}>
-                    <span style={{ background: "#58a6ff", color: "#fff", width: "22px", height: "22px", "border-radius": "50%", display: "flex", "align-items": "center", "justify-content": "center", "font-size": "12px", "font-weight": 600, "flex-shrink": 0 }}>2</span>
-                    <div>
-                      <div style={{ "font-size": "13px", color: "#e6edf3", "font-weight": 500 }}>Add a webhook in your GitHub repo</div>
-                      <div style={{ "font-size": "12px", color: "#8b949e" }}>
-                        Go to your repo's Settings &rarr; Webhooks &rarr; Add webhook. Set the payload URL to your daemon's webhook endpoint, content type to <code style={{ color: "#58a6ff" }}>application/json</code>, and select the <strong>Packages</strong> event.
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "12px", "align-items": "flex-start" }}>
-                    <span style={{ background: "#3fb950", color: "#fff", width: "22px", height: "22px", "border-radius": "50%", display: "flex", "align-items": "center", "justify-content": "center", "font-size": "12px", "font-weight": 600, "flex-shrink": 0 }}>3</span>
-                    <div>
-                      <div style={{ "font-size": "13px", color: "#e6edf3", "font-weight": 500 }}>Push and watch</div>
-                      <div style={{ "font-size": "12px", color: "#8b949e" }}>When GitHub Actions builds and pushes your image, Orca automatically pulls it and redeploys the matching container. Check the deploy history below for results.</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <p style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
+                To set up: save a webhook secret, add a rule below, then add the webhook URL and secret to your GitHub repo or Docker Hub.{" "}
+                <HelpLink path="/docs/auto-deploy/#connect-github">Setup steps</HelpLink>
+              </p>
             </Show>
 
             <div style={{ background: "#0d1117", "border-radius": "8px", padding: "14px 16px", "margin-bottom": "16px" }}>
@@ -1666,7 +1646,8 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
           <div class="settings-section">
             <h2 class="settings-section-title">Scheduled actions</h2>
             <p style={{ "font-size": "13px", color: "#8b949e", "margin-bottom": "16px", "line-height": "1.5" }}>
-              Schedule container actions to run automatically, with standard cron expressions in this computer's local time. The daemon checks every minute.
+              Container actions on a cron schedule, in the local time of the machine the daemon runs on.{" "}
+              <HelpLink path="/docs/containers/#scheduled-actions" />
             </p>
 
             <Show when={schedules().length > 0}>
@@ -2068,9 +2049,6 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
         {/* === Certificates Tab === */}
         <Show when={tab() === "certificates"}>
           <div style={{ display: "flex", "flex-direction": "column", gap: "20px" }}>
-            <p style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6" }}>
-              Orca generates a local Certificate Authority to sign TLS certificates for the Gateway. Install the CA certificate to trust HTTPS connections.
-            </p>
             <CertificateAuthoritySection />
           </div>
         </Show>
@@ -2182,7 +2160,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             </div>
 
             <div style={{ "text-align": "center", "font-size": "12px", color: "#484f58", "padding-top": "8px" }}>
-              Full details: <a href="https://orca-desktop.com/docs/security/" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security and privacy</a> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security policy</a>
+              Full details: <HelpLink path="/docs/security/">Security and privacy</HelpLink> · <a href="https://github.com/edvin/orca/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>Security policy</a>
             </div>
           </div>
         </Show>

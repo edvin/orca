@@ -7,6 +7,7 @@ import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirm, confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
+import HelpLink from "../components/HelpLink";
 
 export default function EnvironmentPage() {
   const [status, setStatus] = createSignal<EnvironmentStatus | null>(null);
@@ -467,36 +468,13 @@ export default function EnvironmentPage() {
                   <div style={{ "font-size": "16px", "font-weight": "700", color: "#e6edf3", "margin-bottom": "8px" }}>
                     Switch to Orca runtime
                   </div>
-                  <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6", "margin-bottom": "20px" }}>
-                    You're currently using Docker Desktop's daemon. Orca can run Docker with its own lightweight runtime — less memory, no license required, zero telemetry.
-                  </div>
-
-                  {/* Comparison columns */}
-                  <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px", "margin-bottom": "20px", "max-width": "420px" }}>
-                    <div style={{
-                      background: "rgba(248, 81, 73, 0.06)",
-                      border: "1px solid rgba(248, 81, 73, 0.15)",
-                      "border-radius": "8px", padding: "14px 16px",
-                    }}>
-                      <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3", "margin-bottom": "10px" }}>Docker Desktop</div>
-                      <div style={{ "font-size": "12px", color: "#8b949e", "line-height": "1.8" }}>
-                        ~2 GB RAM<br/>License required<br/>Closed source<br/>Telemetry
-                      </div>
-                    </div>
-                    <div style={{
-                      background: "rgba(63, 185, 80, 0.06)",
-                      border: "1px solid rgba(63, 185, 80, 0.15)",
-                      "border-radius": "8px", padding: "14px 16px",
-                    }}>
-                      <div style={{ "font-weight": "600", "font-size": "13px", color: "#e6edf3", "margin-bottom": "10px" }}>Orca runtime</div>
-                      <div style={{ "font-size": "12px", color: "#3fb950", "line-height": "1.8" }}>
-                        ~200 MB RAM<br/>Free forever<br/>Open source<br/>Zero telemetry
-                      </div>
-                    </div>
+                  <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6", "margin-bottom": "8px" }}>
+                    Orca is using Docker Desktop's engine. It can run Docker in its own Lima VM instead.{" "}
+                    <HelpLink path="/docs/install/#next-to-docker-desktop" />
                   </div>
 
                   <div style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "16px" }}>
-                    Your containers and images will still be available.
+                    Containers and images in Docker Desktop are not copied over: pull or rebuild them afterwards.
                   </div>
 
                   {/* Stop Docker Desktop checkbox */}

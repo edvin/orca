@@ -14,7 +14,7 @@ Orca calls a registered git repository a **project**. Each worktree of it, inclu
 - **Per-instance services**, typically everything built from your repository, run once per worktree in a compose project called `<project>-<instance>`.
 - Each instance gets HTTPS hostnames through the [gateway](/docs/gateway/), host ports where it needs them, and a `.orca/env` file with its URLs, ports and database names.
 
-![The Projects page: shared services at the top, then one card per worktree with its own URLs, data and status](/assets/screens/worktrees.webp)
+![The Worktrees page: shared services at the top, then one card per worktree with its own URLs, data and status](/assets/screens/worktrees.webp)
 
 Orca never edits your compose files. It writes a compose override into the worktree's `.orca/` folder and passes it to `docker compose` next to your own files.
 
@@ -22,7 +22,7 @@ The app reaches shared services by their usual names: Orca connects the shared c
 
 ## Add a project
 
-On the **Projects** page, choose **Add project**, then pick any folder inside the repository or paste its path. Orca finds the main checkout and all of its worktrees. Repositories that already have compose stacks running on your machine are listed under **Found on this machine**.
+On the **Worktrees** page, choose **Add project**, then pick any folder inside the repository or paste its path. Orca finds the main checkout and all of its worktrees. Repositories that already have compose stacks running on your machine are listed under **Found on this machine**.
 
 You can get there in other ways too: the **Add a git repository** card on a fresh dashboard, or **Add a git repository for worktrees** in the command palette (Cmd+K, Ctrl+K elsewhere). When you [open a project folder](/docs/stacks/#open-a-project-folder) that is a git repository, **Also add it to Projects** adds it as a project as well as starting it.
 
@@ -76,13 +76,13 @@ dev:
     idle_stop: 2h
 ```
 
-The [orca.yaml reference](/docs/orca-yaml/#dev-worktree-instances) lists every key with its default. On the Projects page, the **orca.yaml** button edits this section as a form or as YAML.
+The [orca.yaml reference](/docs/orca-yaml/#dev-worktree-instances) lists every key with its default. On the Worktrees page, the **orca.yaml** button edits this section as a form or as YAML.
 
 Which services are shared, their data defaults, `start`, `idle_stop` and `max_running` are read from the main checkout. The rest (`dev.instance` and `dev.naming`) is read from each worktree's own `orca.yaml`, so a branch can add a service, an environment variable or a hook without touching the main branch. An `orca.local.yaml` next to it is merged on top, for settings that differ per machine.
 
 ## Shared and per-instance services
 
-The shared stack starts with the first instance, or with **Start shared** on the Projects page. Orca waits until its services are healthy before it starts an instance.
+The shared stack starts with the first instance, or with **Start shared** on the Worktrees page. Orca waits until its services are healthy before it starts an instance.
 
 **Stop shared** stops the shared stack and keeps its data volumes. Running instances lose their database until it starts again.
 
@@ -311,7 +311,7 @@ This repo runs with Orca worktree instances. Each git worktree gets its own runn
 
 When you delete a worktree folder, or its branch is deleted on the remote after a merge, the instance stays in Orca with its containers, volumes and own databases. Its card is marked **Worktree gone**, or says **remote branch deleted**.
 
-**Clean up** on the Projects page lists those instances and removes them all: containers, volumes, images, own databases, ports and `.orca` folders. Worktree folders and branches are not touched. To remove one at a time, use **Remove** on its card, or `orca down --remove` inside a worktree that still exists.
+**Clean up** on the Worktrees page lists those instances and removes them all: containers, volumes, images, own databases, ports and `.orca` folders. Worktree folders and branches are not touched. To remove one at a time, use **Remove** on its card, or `orca down --remove` inside a worktree that still exists.
 
 **Unregister** makes Orca forget a project and its instance settings. Stop its instances and shared services first; the repository itself is not touched.
 

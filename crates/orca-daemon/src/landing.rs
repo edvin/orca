@@ -24,6 +24,9 @@ pub struct ServiceState {
     pub project: Option<String>,
     /// Its image, which picks an icon when the route sets none.
     pub image: Option<String>,
+    /// A workspace project not set up on this machine yet, by key: its card
+    /// offers to set it up in Orca.
+    pub setup: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -34,6 +37,8 @@ pub enum Status {
     Restarting,
     Paused,
     Stopped,
+    /// A workspace project's service that isn't cloned yet.
+    NotSetUp,
 }
 
 /// The last known state of each routed container, by name.
@@ -43,7 +48,10 @@ static WRITTEN: Mutex<Option<String>> = Mutex::new(None);
 
 /// Read the state of every routed container and rewrite the page if it
 /// changed. Called by the gateway sync on container events.
-pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig) {
+///
+/// `not_set_up` maps the owner of a workspace project's routes to the
+/// project's key, for projects not cloned yet.
+pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig, not_set_up: &HashMap<String, String>) {
     let mut states = HashMap::new();
     let names: std::collections::BTreeSet<&str> = config.routes.iter().map(|r| r.container_name.as_str()).collect();
     // Workspace routes target network aliases (`one-crm-app`), which only
@@ -57,6 +65,24 @@ pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig) {
                     aliases = Some(alias_map(docker).await);
                 }
                 let Some(container) = aliases.as_ref().and_then(|m| m.get(name)) else {
+                    // Nothing runs it: a workspace project not set up yet?
+                    let setup = config
+                        .routes
+                        .iter()
+                        .filter(|r| r.container_name == name)
+                        .find_map(|r| not_set_up.get(r.owner.as_deref()?));
+                    if let Some(key) = setup {
+                        states.insert(
+                            name.to_string(),
+                            ServiceState {
+                                status: Status::NotSetUp,
+                                started_at: None,
+                                project: None,
+                                image: None,
+                                setup: Some(key.clone()),
+                            },
+                        );
+                    }
                     continue;
                 };
                 let Ok(info) = docker.inspect_container(container, None).await else {
@@ -92,6 +118,7 @@ pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig) {
                 started_at: state.started_at.filter(|_| status != Status::Stopped),
                 project,
                 image,
+                setup: None,
             },
         );
     }
@@ -204,6 +231,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
             Status::Restarting => ("warn", "Restarting", None),
             Status::Paused => ("off", "Paused", None),
             Status::Stopped => ("off", "Stopped", None),
+            Status::NotSetUp => ("setup", "Not set up · set it up in Orca", None),
         })
     };
     // The route's own icon, else one its container's image picks.
@@ -220,10 +248,15 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
     let route_card = |r: &GatewayRoute| -> Card {
         let host = full_host(&r.hostname);
         let path = r.path.as_deref().unwrap_or("").trim_end_matches('*');
+        // A project not set up yet opens Orca at it, where one click sets it up.
+        let setup = states.get(&r.container_name).and_then(|s| s.setup.as_deref());
         Card {
             title: r.presentation.title.clone().unwrap_or_else(|| default_title(r, &host)),
             description: r.presentation.description.clone(),
-            url: Some(format!("{scheme}://{host}{port_suffix}{path}")),
+            url: Some(match setup {
+                Some(key) => format!("orca://workspace?setup={}", urlencoding::encode(key)),
+                None => format!("{scheme}://{host}{port_suffix}{path}"),
+            }),
             display_url: format!("{host}{port_suffix}{path}"),
             icon: icon_of(r),
             target: landing
@@ -256,6 +289,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
     // Environments from `links:`; "local" first.
     let mut envs: Vec<String> = Vec::new();
     if !visible.is_empty()
+        || !landing.links.is_empty()
         || config
             .stack_links
             .iter()
@@ -285,6 +319,29 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
     for (i, env) in envs.iter().enumerate() {
         let is_local = env == "local";
         let mut sections: Vec<(String, Vec<Card>)> = Vec::new();
+        if is_local && !landing.links.is_empty() {
+            sections.push((
+                "My links".into(),
+                landing
+                    .links
+                    .iter()
+                    .map(|l| Card {
+                        title: l.title.clone(),
+                        description: l.description.clone(),
+                        url: Some(l.url.clone()),
+                        display_url: l
+                            .url
+                            .trim_start_matches("https://")
+                            .trim_start_matches("http://")
+                            .trim_end_matches('/')
+                            .to_string(),
+                        icon: None,
+                        target: None,
+                        status: None,
+                    })
+                    .collect(),
+            ));
+        }
         for group in &config.stack_links {
             let cards: Vec<Card> = group
                 .links
@@ -426,6 +483,14 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
         .filter(|t| !t.trim().is_empty())
         .unwrap_or_else(|| format!("*.{domain}{port_suffix}"));
 
+    // A joined workspace's logo, beside the title.
+    let logo = landing
+        .logo
+        .as_deref()
+        .and_then(orca_core::icons::src)
+        .map(|src| format!(r#"<img class="logo" src="{}" alt="">"#, escape_html(&src)))
+        .unwrap_or_default();
+
     let search = if landing.search {
         let web = landing.web_search_target();
         let placeholder = match &web {
@@ -447,6 +512,7 @@ pub fn render(config: &GatewayConfig, states: &HashMap<String, ServiceState>) ->
         PAGE,
         &[
             ("title", &escape_html(&title)),
+            ("logo", &logo),
             ("subtitle", &escape_html(&subtitle)),
             ("search", &search),
             ("stats", &stats),
@@ -535,6 +601,11 @@ fn card_html(c: &Card, i: usize, group: &str) -> String {
         escape_html(&search)
     );
     match &c.url {
+        // Orca's own link opens the app, not a tab.
+        Some(url) if url.starts_with("orca://") => format!(
+            r#"<a class="card setup" href="{}"{data}>{inner}</a>"#,
+            escape_html(&sanitize_href(url))
+        ),
         Some(url) => format!(
             r#"<a class="card" href="{}" target="_blank" rel="noopener"{data}>{inner}</a>"#,
             escape_html(&sanitize_href(url))
@@ -610,7 +681,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica N
 .shell{max-width:1040px;margin:0 auto;padding:0 24px 48px}
 header{position:sticky;top:0;z-index:5;margin:0 calc(50% - 50vw) 26px;padding:14px 24px;background:rgba(10,14,20,.8);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.06)}
 .top{display:flex;align-items:center;gap:22px;max-width:992px;margin:0 auto}
-.brand{min-width:0;flex-shrink:0}
+.brand{min-width:0;flex-shrink:0;display:flex;align-items:center;gap:14px}
+.logo{display:block;height:26px;max-width:180px;object-fit:contain}
+.logo+div{padding-left:14px;border-left:1px solid rgba(255,255,255,.1)}
 .find{flex:1;min-width:0}
 h1{font-size:19px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;background:linear-gradient(135deg,#fff,#58a6ff 55%,#a371f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .sub{color:#8b949e;font-size:12px;margin-top:2px;white-space:nowrap}
@@ -636,7 +709,8 @@ a.card:focus-visible{outline:2px solid #58a6ff;outline-offset:2px}
 .target{font:11px "SF Mono",ui-monospace,Menlo,monospace;color:#6e7681;margin-top:3px}
 .st{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;margin-top:3px}
 .st i{width:7px;height:7px;border-radius:50%;background:currentColor}
-.st-run{color:#3fb950}.st-warn{color:#d29922}.st-bad{color:#f85149}.st-sleep{color:#a371f7}.st-off{color:#6e7681}
+.st-run{color:#3fb950}.st-warn{color:#d29922}.st-bad{color:#f85149}.st-sleep{color:#a371f7}.st-off{color:#6e7681}.st-setup{color:#58a6ff}
+.card.setup{border-style:dashed}.card.setup .icon{opacity:.55}.card.setup .url{color:#6e7681}
 .empty{text-align:center;padding:56px 24px;border:1px dashed rgba(255,255,255,.08);border-radius:16px;background:rgba(22,27,34,.4)}
 .empty h2{font-size:15px;color:#c9d1d9;margin-bottom:6px}.empty p{font-size:13px;color:#8b949e;line-height:1.6}
 code{font:12px "SF Mono",ui-monospace,Menlo,monospace;background:rgba(88,166,255,.1);color:#58a6ff;padding:1px 5px;border-radius:4px}
@@ -666,7 +740,7 @@ mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
 </head>
 <body>
 <div class="shell">
-<header><div class="top"><div class="brand"><h1>{title}</h1><p class="sub">{subtitle}</p></div><div class="find">{search}</div><div class="stats" id="stats">{stats}</div></div></header>
+<header><div class="top"><div class="brand">{logo}<div><h1>{title}</h1><p class="sub">{subtitle}</p></div></div><div class="find">{search}</div><div class="stats" id="stats">{stats}</div></div></header>
 <main id="content">{tabs}{panels}</main>
 <div class="nores" id="nores" hidden></div>
 <footer>Served by <a href="https://orca-desktop.com">Orca Desktop</a></footer>
@@ -775,7 +849,6 @@ mark{background:rgba(88,166,255,.22);color:#fff;border-radius:3px;padding:0 1px}
     hint.textContent='';
     var v=q.value.trim();
     if(!v){
-      if(engineUrl){hint.appendChild(el('span','Type to find a service or search '+engine))}
       nores.hidden=true;return;
     }
     var a=action(false),w=engineUrl?action(true):null;
@@ -859,6 +932,7 @@ mod tests {
             started_at: Some(since.into()),
             project: project.map(Into::into),
             image: None,
+            setup: None,
         }
     }
 
@@ -966,6 +1040,60 @@ mod tests {
     }
 
     #[test]
+    fn my_links_come_first() {
+        let mut c = config(vec![route("x.localhost", "x", 80)]);
+        c.landing.links = vec![orca_core::config::LandingLink {
+            title: "Jira board".into(),
+            url: "https://jira.example.com/board/7".into(),
+            description: None,
+        }];
+        let html = render(&c, &HashMap::new());
+        let mine = html.find("<h2>My links</h2>").expect("a My links section");
+        assert!(mine < html.find("x.localhost").unwrap(), "before the services");
+        assert!(html.contains(r#"href="https://jira.example.com/board/7" target="_blank""#));
+        assert!(html.contains("jira.example.com/board/7</p>"));
+
+        // Links alone are enough for a page.
+        c.routes.clear();
+        assert!(render(&c, &HashMap::new()).contains("Jira board"));
+    }
+
+    #[test]
+    fn a_project_not_set_up_offers_orca() {
+        let c = config(vec![route("crm.localhost", "crm-app", 80)]);
+        let states = HashMap::from([(
+            "crm-app".to_string(),
+            ServiceState {
+                status: Status::NotSetUp,
+                started_at: None,
+                project: None,
+                image: None,
+                setup: Some("crm".into()),
+            },
+        )]);
+        let html = render(&c, &states);
+        assert!(
+            html.contains(r#"<a class="card setup" href="orca://workspace?setup=crm""#),
+            "{html}"
+        );
+        assert!(html.contains("Not set up · set it up in Orca"));
+        assert!(html.contains("crm.localhost"), "the address it will have");
+    }
+
+    #[test]
+    fn a_workspace_logo_sits_beside_the_title() {
+        let mut c = config(vec![route("x.localhost", "x", 80)]);
+        assert!(!render(&c, &HashMap::new()).contains(r#"class="logo""#));
+        c.landing.logo = Some("data:image/svg+xml;base64,PHN2Zy8+".into());
+        let html = render(&c, &HashMap::new());
+        assert!(html.contains(
+            r#"<div class="brand"><img class="logo" src="data:image/svg+xml;base64,PHN2Zy8+" alt=""><div><h1>"#
+        ));
+        c.landing.logo = Some(r#"https://acme.dev/logo.svg"><script>"#.into());
+        assert!(render(&c, &HashMap::new()).contains(r#"src="https://acme.dev/logo.svg&quot;&gt;&lt;script&gt;""#));
+    }
+
+    #[test]
     fn a_title_cannot_pull_in_other_parts_of_the_page() {
         let mut c = config(vec![route("x.localhost", "x", 80)]);
         c.landing.title = Some("{panels}".into());
@@ -1021,8 +1149,11 @@ mod tests {
 
         let page = render(&c, &states);
         assert!(page.contains(r#"id="q""#), "search box on by default");
-        assert!(page.contains(r#"placeholder="Find a service""#));
-        assert!(page.contains(r#"data-url="""#), "no web search unless chosen");
+        assert!(page.contains(r#"placeholder="Find a service, or search Google""#));
+        assert!(
+            page.contains(r#"data-engine="Google" data-url="https://www.google.com/search?q={query}""#),
+            "Google unless another engine is chosen"
+        );
         // The card can be found by title, hostname, description, container, status and group.
         assert!(
             page.contains(
@@ -1042,6 +1173,10 @@ mod tests {
         // Something that isn't a usable search URL is left out.
         c.landing.web_search = Some("javascript:alert(1)//{query}".into());
         assert!(render(&c, &states).contains(r#"data-url="""#));
+
+        c.landing.web_search = Some("none".into());
+        let page = render(&c, &states);
+        assert!(page.contains(r#"data-url="""#) && page.contains(r#"placeholder="Find a service""#));
 
         c.landing.search = false;
         assert!(!render(&c, &states).contains(r#"id="q""#));
@@ -1167,6 +1302,7 @@ mod tests {
             started_at: Some(ago(12)),
             project: Some("sso".into()),
             image: Some("quay.io/keycloak/keycloak:26.0".into()),
+            setup: None,
         };
         let states = HashMap::from([
             ("shop-web-1".to_string(), running(&ago(185), Some("shop"))),

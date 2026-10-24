@@ -514,7 +514,7 @@ pub async fn write(state: &AppState, project_id: &str, req: WriteRequest) -> Res
                 .ok_or_else(|| anyhow::anyhow!("orca.yaml must be a mapping at the top level"))?;
             map.insert("dev".into(), minimal_dev_value(&dev));
             let body = serde_yaml::to_string(&doc)?;
-            format!("# Orca project settings. Edit here or in Orca's Projects page.\n{body}")
+            format!("# Orca project settings. Edit here or on Orca's Worktrees page.\n{body}")
         }
         (None, None) => anyhow::bail!("nothing to write"),
     };

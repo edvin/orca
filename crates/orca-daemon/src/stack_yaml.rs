@@ -294,7 +294,7 @@ fn suggestion(name: &str, services: &[Service]) -> String {
 #     tag: {local}:dev
 
 # To run each git worktree as its own copy of the app, add this project
-# on the Projects page: it writes a dev: section here.
+# on the Worktrees page: it writes a dev: section here.
 ",
         group = name,
         local = slug(name),

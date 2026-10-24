@@ -5,6 +5,7 @@
 
 import { createSignal, For, Index, Show } from "solid-js";
 import Dropdown from "../Dropdown";
+import HelpLink from "../HelpLink";
 import { fullHost, type RouteM } from "./model";
 
 export interface StudioService {
@@ -78,8 +79,8 @@ export default function RoutesSection(props: {
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
       <p style={{ ...muted, "font-size": "13px", "line-height": "1.5" }}>
-        Each route gives a service an HTTPS hostname through Orca's gateway. WebSockets (hot reload, Reverb, Pusher) pass through
-        on every route; there's nothing to configure for them.
+        Each route gives a service an HTTPS hostname through the gateway. WebSockets work with no setup.{" "}
+        <HelpLink path="/docs/orca-yaml/#gateway" />
       </p>
 
       {/* Soketi / Pusher: browsers connect to /app/ on the page's own host. */}

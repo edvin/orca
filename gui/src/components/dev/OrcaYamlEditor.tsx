@@ -9,9 +9,7 @@ import Dropdown from "../Dropdown";
 import { devApi, instanceUrls } from "../../lib/dev";
 import type { DevConfigT, DevProject, PlanView, SetupAnalysis } from "../../lib/dev";
 import { showToast } from "../Toast";
-import { open as shellOpen } from "@tauri-apps/plugin-shell";
-
-const ORCA_YAML_REFERENCE = "https://orca-desktop.com/docs/orca-yaml/";
+import { openDocs } from "../HelpLink";
 import OrcaYamlStudio from "../orcayaml/OrcaYamlStudio";
 import { DataSection, ProfilesSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";
@@ -175,7 +173,7 @@ export default function OrcaYamlEditor(props: Props) {
           <button
             class="btn btn-sm"
             style={{ "margin-left": "auto", "margin-right": "10px" }}
-            onClick={() => shellOpen(ORCA_YAML_REFERENCE).catch(() => window.open(ORCA_YAML_REFERENCE, "_blank", "noopener,noreferrer"))}
+            onClick={() => void openDocs("/docs/orca-yaml/")}
           >
             Reference
           </button>

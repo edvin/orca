@@ -10,6 +10,7 @@ import { logError } from "../lib/activityStore";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning, updateOllamaSetup } from "../lib/ollamaSetup";
 import Spinner from "./Spinner";
 import Dropdown from "./Dropdown";
+import HelpLink from "./HelpLink";
 
 type CloudProvider = "anthropic" | "openai" | "gemini" | "custom";
 
@@ -210,8 +211,8 @@ export default function AssistantSettings() {
         <div class="assistant-head">
           <div>
             <div class="assistant-sub">
-              Optional. A chat window inside Orca, behind the ✦ button. Run it on a model on this computer: free, private,
-              and nothing leaves your machine. To use Claude or ChatGPT, connect them above instead.
+              Optional. A chat window behind the ✦ button, on a model on this computer or a cloud API key.{" "}
+              <HelpLink path="/docs/ai-assistant/" />
             </div>
           </div>
           <span class="assistant-status" classList={{ on: ready() }}>{status()}</span>

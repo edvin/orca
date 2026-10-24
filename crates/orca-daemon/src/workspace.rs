@@ -9,11 +9,13 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use axum::extract::{Path as UrlPath, State};
+use axum::extract::{Path as UrlPath, Query, State};
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use orca_core::config::{GatewayRoute, GatewayTlsMode, PreviousGateway, RoutePresentation, WorkspaceRef};
+use orca_core::config::{
+    GatewayRoute, GatewayTlsMode, PreviousGateway, RoutePresentation, WorkspaceRef, WorkspaceUpdate,
+};
 use orca_core::runtime::{ContainerRuntime, ContainerState};
 use orca_core::workspace::{self as schema, SecretRef, WorkspaceFile, WorkspaceRoute};
 use serde::Deserialize;
@@ -31,6 +33,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/workspace", get(status))
         .route("/workspace/join", post(join))
+        .route("/workspace/suggest-folder", get(suggest_folder_route))
         .route("/workspace/update", post(update))
         .route("/workspace/leave", post(leave))
         .route("/workspace/import-haproxy", post(import_haproxy))
@@ -153,22 +156,119 @@ fn shell(command: &str, dir: &Path) -> Command {
 
 /// The folder a repo URL clones into by default: `~/code/<name>`.
 fn default_clone_dir(repo: &str) -> PathBuf {
+    suggest_folder(&home(), repo).dir
+}
+
+/// Folders people commonly keep their checkouts in, under their home, in
+/// order of preference (matched ignoring case).
+const CODE_FOLDERS: &[&str] = &[
+    "code",
+    "projects",
+    "src",
+    "dev",
+    "developer",
+    "development",
+    "work",
+    "git",
+    "repos",
+    "workspace",
+    "sites",
+];
+
+/// Where to clone a workspace, which decides where its projects go (beside
+/// it): a copy of it already in a code folder, else the code folder with
+/// the most checkouts, else `~/code`.
+#[derive(Debug, PartialEq)]
+struct FolderSuggestion {
+    dir: PathBuf,
+    /// The workspace is already there: it's joined where it is.
+    existing: bool,
+    /// Git checkouts beside it.
+    checkouts: usize,
+}
+
+fn suggest_folder(home: &Path, repo: &str) -> FolderSuggestion {
     let name = repo
         .trim_end_matches('/')
         .rsplit(['/', ':'])
         .next()
         .unwrap_or("workspace")
         .trim_end_matches(".git");
-    home()
-        .join("code")
-        .join(if name.is_empty() { "workspace" } else { name })
+    let name = if name.is_empty() || name == "." || name == ".." {
+        "workspace"
+    } else {
+        name
+    };
+    let checkouts = |dir: &Path| {
+        std::fs::read_dir(dir)
+            .map(|d| d.flatten().filter(|e| e.path().join(".git").exists()).count())
+            .unwrap_or(0)
+    };
+    // The folders as they're spelled on disk (~/Projects), most preferred first.
+    let mut folders: Vec<(usize, PathBuf, usize)> = std::fs::read_dir(home)
+        .map(|d| {
+            d.flatten()
+                .filter(|e| e.path().is_dir())
+                .filter_map(|e| {
+                    let rank = CODE_FOLDERS
+                        .iter()
+                        .position(|f| e.file_name().to_string_lossy().eq_ignore_ascii_case(f))?;
+                    Some((rank, e.path(), checkouts(&e.path())))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    folders.sort_by_key(|(rank, _, _)| *rank);
+    if let Some((_, d, n)) = folders
+        .iter()
+        .find(|(_, d, _)| WorkspaceFile::find(&d.join(name)).is_some())
+    {
+        return FolderSuggestion {
+            dir: d.join(name),
+            existing: true,
+            checkouts: n.saturating_sub(1),
+        };
+    }
+    // The most checkouts; on a tie, the folder listed first.
+    match folders
+        .into_iter()
+        .filter(|(_, _, n)| *n >= 2)
+        .max_by(|a, b| a.2.cmp(&b.2).then(b.0.cmp(&a.0)))
+    {
+        Some((_, d, n)) => FolderSuggestion {
+            dir: d.join(name),
+            existing: false,
+            checkouts: n,
+        },
+        None => FolderSuggestion {
+            dir: home.join("code").join(name),
+            existing: false,
+            checkouts: 0,
+        },
+    }
+}
+
+#[derive(Deserialize)]
+struct SuggestQuery {
+    repo: String,
+}
+
+/// GET /workspace/suggest-folder?repo=…: where joining would clone it.
+async fn suggest_folder_route(Query(q): Query<SuggestQuery>) -> impl IntoResponse {
+    let s = suggest_folder(&home(), q.repo.trim());
+    Json(serde_json::json!({
+        "folder": tilde(&s.dir),
+        "parent": tilde(s.dir.parent().unwrap_or(&s.dir)),
+        "existing": s.existing,
+        "checkouts": s.checkouts,
+    }))
 }
 
 #[derive(Deserialize)]
 struct JoinBody {
     /// A git URL, or the path of a folder that already has the workspace file.
     repo: String,
-    /// Where to clone it; `~/code/<repo name>` when unset.
+    /// Where to clone it; see [`suggest_folder`] when unset.
     #[serde(default)]
     folder: Option<String>,
 }
@@ -250,6 +350,8 @@ async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) ->
                         tls_mode: cfg.gateway.tls_mode.clone(),
                         custom_cert: cfg.gateway.custom_cert.clone(),
                         custom_key: cfg.gateway.custom_key.clone(),
+                        title: cfg.gateway.landing.title.clone(),
+                        logo: cfg.gateway.landing.logo.clone(),
                     }),
                 };
                 cfg.workspace = Some(WorkspaceRef {
@@ -259,6 +361,7 @@ async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) ->
                     network: file.network.clone(),
                     setup_done: Vec::new(),
                     previous_gateway,
+                    last_update: None,
                 });
                 cfg.save()?;
             }
@@ -303,10 +406,20 @@ async fn update_job(state: &Arc<AppState>, dir: PathBuf, pull: bool) -> JobHandl
             if !pull {
                 j.done("clone", Some("Pulled when Orca started".into())).await;
             } else if has_upstream(&dir).await {
+                let before = head(&dir).await;
                 let mut cmd = git();
                 cmd.arg("-C").arg(&dir).args(["pull", "--ff-only"]);
                 run_logged(&j, cmd, "git pull --ff-only").await?;
-                j.done("clone", None).await;
+                let pulled = record_update(&state, &dir, before).await;
+                j.done(
+                    "clone",
+                    Some(match pulled {
+                        0 => "Already up to date".to_string(),
+                        1 => "1 new change".to_string(),
+                        n => format!("{n} new changes"),
+                    }),
+                )
+                .await;
             } else {
                 j.skip("clone", "No upstream branch: using the folder as it is").await;
             }
@@ -328,6 +441,42 @@ async fn update_job(state: &Arc<AppState>, dir: PathBuf, pull: bool) -> JobHandl
         }
     });
     job
+}
+
+/// Keep what a pull brought in (since `before`) for the Workspace page, and
+/// say how many commits that was.
+async fn record_update(state: &AppState, dir: &Path, before: Option<String>) -> usize {
+    let (Some(before), Some(after)) = (before, head(dir).await) else {
+        return 0;
+    };
+    if before == after {
+        return 0;
+    }
+    let mut cmd = git();
+    cmd.arg("-C")
+        .arg(dir)
+        .args(["log", "--no-merges", "--format=%s", &format!("{before}..{after}")]);
+    let subjects: Vec<String> = match cmd.output().await {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim().chars().take(200).collect())
+            .filter(|l: &String| !l.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    };
+    let total = subjects.len().max(1);
+    let mut cfg = state.config.lock().await;
+    if let Some(ws) = cfg.workspace.as_mut() {
+        ws.last_update = Some(WorkspaceUpdate {
+            at: chrono::Utc::now().to_rfc3339(),
+            more: subjects.len().saturating_sub(WorkspaceUpdate::MAX),
+            commits: subjects.into_iter().take(WorkspaceUpdate::MAX).collect(),
+        });
+        if let Err(e) = cfg.save() {
+            tracing::warn!("workspace: couldn't save what the update brought: {e}");
+        }
+    }
+    total
 }
 
 /// Whether the checkout tracks a remote branch to pull from.
@@ -372,6 +521,14 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
             if let Some(title) = g.title.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
                 gw.landing.title = Some(title.chars().take(120).collect());
             }
+            // The workspace's logo, or none: one only ever comes from a workspace.
+            gw.landing.logo = match g.logo.as_deref() {
+                Some(logo) => Some(
+                    orca_core::icons::resolve(logo, Some(dir))
+                        .map_err(|e| anyhow::anyhow!(e.replacen("icon ", "gateway logo ", 1)))?,
+                ),
+                None => None,
+            };
             match &g.certificate {
                 Some(c) => {
                     let read = |p: &str| {
@@ -545,6 +702,8 @@ async fn leave(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, 
             cfg.gateway.tls_mode = p.tls_mode.clone();
             cfg.gateway.custom_cert = p.custom_cert.clone();
             cfg.gateway.custom_key = p.custom_key.clone();
+            cfg.gateway.landing.title = p.title.clone();
+            cfg.gateway.landing.logo = p.logo.clone();
         }
         cfg.save().map_err(|e| anyhow::anyhow!("Failed to save config: {e}"))?;
         previous.map(|_| cfg.gateway.clone())
@@ -615,6 +774,20 @@ pub(crate) fn project_icon(workspace: &WorkspaceRef, dir: &Path) -> Option<Strin
             .then(|| orca_core::icons::resolve(icon, Some(&ws_dir)).ok())
             .flatten()
     })
+}
+
+/// The workspace's projects not cloned on this machine yet, by the owner of
+/// their gateway routes, for the landing page to offer setting them up.
+pub(crate) fn not_set_up(workspace: &WorkspaceRef) -> std::collections::HashMap<String, String> {
+    let dir = PathBuf::from(&workspace.path);
+    let Ok(file) = WorkspaceFile::load(&dir) else {
+        return Default::default();
+    };
+    file.projects
+        .keys()
+        .filter(|key| !file.project_dir(&dir, key).is_dir())
+        .map(|key| (format!("{OWNER}{}:{key}", file.name), key.clone()))
+        .collect()
 }
 
 /// A route one can open: not a hostname pattern or a WebSocket-only route.
@@ -756,6 +929,10 @@ async fn status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse,
         "network": file.network,
         "domain": domain,
         "certificate": if file.gateway.as_ref().is_some_and(|g| g.certificate.is_some()) { "workspace" } else { "orca" },
+        "last_update": ws.last_update,
+        "logo": file.gateway.as_ref().and_then(|g| g.logo.as_deref())
+            .and_then(|l| orca_core::icons::resolve(l, Some(&dir)).ok())
+            .and_then(|l| orca_core::icons::src(&l)),
         "shared": shared,
         "shared_urls": file.routes.iter().filter(|r| is_page(r)).map(|r| serde_json::json!({
             "title": r.title.clone().unwrap_or_else(|| r.hostname.clone()),
@@ -1138,6 +1315,7 @@ pub fn spawn(state: Arc<AppState>) {
         // all, as Update does. Otherwise only the routes.
         if before.is_some() && head(&dir).await != before {
             tracing::info!("workspace: changed upstream, applying it");
+            record_update(&state, &dir, before).await;
             update_job(&state, dir, false).await;
             return;
         }
@@ -1156,8 +1334,44 @@ pub fn spawn(state: Arc<AppState>) {
 mod tests {
     #[test]
     fn clone_folder_from_repo_url() {
-        let d = super::default_clone_dir("git@git.example.com:devops/dev-workspace.git");
-        assert!(d.ends_with("code/dev-workspace"));
-        assert!(super::default_clone_dir("https://git.example.com/a/b/").ends_with("code/b"));
+        let home = tempfile::tempdir().unwrap();
+        let s = |repo: &str| super::suggest_folder(home.path(), repo).dir;
+        assert_eq!(
+            s("git@git.example.com:devops/dev-workspace.git"),
+            home.path().join("code/dev-workspace")
+        );
+        assert_eq!(s("https://git.example.com/a/b/"), home.path().join("code/b"));
+    }
+
+    #[test]
+    fn clone_folder_follows_the_checkouts() {
+        let home = tempfile::tempdir().unwrap();
+        let repo = "git@git.example.com:team/dev-workspace.git";
+        let checkouts = |dir: &str, n: usize| {
+            for i in 0..n {
+                std::fs::create_dir_all(home.path().join(dir).join(format!("app{i}/.git"))).unwrap();
+            }
+        };
+        // One stray checkout isn't a code folder.
+        checkouts("src", 1);
+        assert_eq!(
+            super::suggest_folder(home.path(), repo).dir,
+            home.path().join("code/dev-workspace")
+        );
+
+        checkouts("projects", 3);
+        checkouts("code", 2);
+        let s = super::suggest_folder(home.path(), repo);
+        assert_eq!(
+            (s.dir, s.existing, s.checkouts),
+            (home.path().join("projects/dev-workspace"), false, 3)
+        );
+
+        // A copy of the workspace already there is joined where it is.
+        let ws = home.path().join("code/dev-workspace");
+        std::fs::create_dir_all(ws.join(".git")).unwrap();
+        std::fs::write(ws.join("orca-workspace.yaml"), "name: Dev\n").unwrap();
+        let s = super::suggest_folder(home.path(), repo);
+        assert_eq!((s.dir, s.existing, s.checkouts), (ws, true, 2));
     }
 }

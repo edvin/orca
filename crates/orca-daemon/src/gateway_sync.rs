@@ -91,8 +91,12 @@ async fn sync(state: &AppState) -> Result<()> {
     // The landing page shows which services run: refresh it on every
     // container start and stop (it's only rewritten when it changed).
     if crate::gateway::is_running(state).await.unwrap_or(false) {
-        let gateway = state.config.lock().await.gateway.clone();
-        crate::landing::refresh(&state.rt().await.docker, &gateway).await;
+        let (gateway, workspace) = {
+            let cfg = state.config.lock().await;
+            (cfg.gateway.clone(), cfg.workspace.clone())
+        };
+        let not_set_up = workspace.as_ref().map(crate::workspace::not_set_up).unwrap_or_default();
+        crate::landing::refresh(&state.rt().await.docker, &gateway, &not_set_up).await;
     }
     Ok(())
 }

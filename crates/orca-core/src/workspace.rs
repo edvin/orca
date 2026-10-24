@@ -58,6 +58,11 @@ pub struct WorkspaceGateway {
     /// The landing page's title, such as "Acme dev".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// A logo for the landing page's top bar: an image file in the
+    /// workspace repo (`icons/acme.svg`), a built-in icon or an https URL.
+    /// The page is dark, so a logo with light text reads best.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -276,6 +281,11 @@ impl WorkspaceFile {
             for p in [&c.cert, &c.key] {
                 relative_path(p).map_err(|e| anyhow::anyhow!("gateway certificate: {e}"))?;
             }
+        }
+        if let Some(l) = self.gateway.as_ref().and_then(|g| g.logo.as_deref())
+            && !(l.starts_with("https://") || l.starts_with("data:image/"))
+        {
+            relative_path(l).map_err(|e| anyhow::anyhow!("gateway logo: {e}"))?;
         }
         if let Some(s) = &self.shared {
             relative_path(&s.compose).map_err(|e| anyhow::anyhow!("shared.compose: {e}"))?;
@@ -680,6 +690,21 @@ projects:
                 .to_string()
         };
         assert!(bad("cert: certs/wildcard.crt", "cert: ../../etc/passwd").contains("inside the folder"));
+        let logo = |l: &str| EXAMPLE.replace("  certificate:", &format!("  logo: {l}\n  certificate:"));
+        assert!(
+            WorkspaceFile::parse(&logo("icons/acme.svg"))
+                .unwrap()
+                .gateway
+                .unwrap()
+                .logo
+                .is_some()
+        );
+        assert!(
+            WorkspaceFile::parse(&logo("../logo.svg"))
+                .unwrap_err()
+                .to_string()
+                .contains("gateway logo")
+        );
         assert!(bad("target: \"mailpit:8025\"", "target: mailpit").contains("alias:port"));
         assert!(bad("url: https://", "url: http://").contains("https"));
         assert!(bad("DB_PASSWORD", "DB-PASSWORD").contains("variable name"));

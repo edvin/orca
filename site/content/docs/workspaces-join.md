@@ -18,7 +18,9 @@ Open **Workspace** in the sidebar. Paste the workspace's git URL, such as `git@g
 
 ![Joining a workspace: a field for the git URL and the Join button](/assets/screens/workspace-join.webp)
 
-The workspace is cloned to `~/code/<repo name>`, so the example above goes to `~/code/dev-workspace`. To put it somewhere else, click **Clone it somewhere other than ~/code?** and enter an absolute path, such as `/Users/you/work/dev-workspace`. A path starting with `~/` works too.
+Where the workspace goes decides where its projects go: they're cloned next to it. So Orca suggests your code folder: as you type the URL, it shows where it will clone, such as *Clones to `~/projects/dev-workspace`, next to your 82 checkouts*. It looks in the usual places, `~/code`, `~/projects`, `~/src`, `~/dev`, `~/Developer` and a few more, and picks the one with the most git checkouts. Without one, it uses `~/code`. If you already have a copy of the workspace in one of them, Orca joins it where it is.
+
+To choose yourself, click **Change** and enter a path, such as `~/work/dev-workspace` or `/srv/dev/dev-workspace`. With the CLI, `orca workspace join <url>` makes the same choice, and `--folder` sets it.
 
 The steps appear under the form while they run. When they're done, the page shows the workspace.
 
@@ -121,11 +123,13 @@ Under **Projects**, each project has a card with its key, description and reposi
 
 A cloned project also has buttons that open its folder in your editor, terminal and file manager, and **Run setup again** when it has a setup command. Hover over **Run setup again** to see the command.
 
+A project that isn't set up yet also shows on the gateway's [landing page](/docs/gateway/#the-landing-page), as a card that opens this page at it.
+
 When a cloned project's `.env` lacks secrets, the card shows **N secrets to fill in**. Click it to open the [secrets dialog](/docs/workspaces-secrets/#fill-in-secrets-by-hand).
 
 While a project is being set up, the card shows a progress bar with the current step. When setup fails, the card lists every step with the one that failed, and the error under it.
 
-The page refreshes itself every 10 seconds, so a project you start or stop elsewhere updates on its own.
+The page refreshes itself every few seconds, so a project you start or stop elsewhere updates on its own.
 
 ## Set up a project
 
@@ -166,13 +170,13 @@ The record is per machine and per joined workspace. Leaving and joining again fo
 
 ### Existing checkouts are reused
 
-If the project's folder already exists, Orca doesn't clone or touch it: it uses your checkout, on whatever branch it's on, with your local changes. This means you can join a workspace after years of working on its projects; set `clone_into` in the workspace file to where your team keeps its checkouts and they're all picked up.
+If the project's folder already exists, Orca doesn't clone or touch it: it uses your checkout, on whatever branch it's on, with your local changes. This means you can join a workspace after years of working on its projects: when you join, clone the workspace into the folder where you keep your checkouts, such as `~/projects`, and they're all picked up.
 
 A project's folder is `<clone_into>/<path>`. Both come from the workspace file: `clone_into` defaults to the folder that holds the workspace, and `path` defaults to the project's key. See the [file reference](/docs/workspaces-reference/#clone_into).
 
 ### Worktree instances
 
-A project with `worktrees: true` in the workspace file is also added to the **Projects** page when it starts, so each git worktree of it can run as its own copy with its own URLs. See [Worktree instances](/docs/worktrees/).
+A project with `worktrees: true` in the workspace file is also added to the **Worktrees** page when it starts, so each git worktree of it can run as its own copy with its own URLs. See [Worktree instances](/docs/worktrees/).
 
 ## Use it from an AI tool
 
@@ -215,13 +219,15 @@ Every time Orca starts, it pulls the workspace with `git pull --ff-only`. When t
 
 The pull is fast-forward only: it never merges, rebases or touches your local changes. If you have commits of your own on the workspace's branch, or the pull fails for another reason (offline, no access), Orca keeps using what you have and tries again on the next start.
 
+After a pull that brought something new, the **Workspace** page shows **Workspace updated** with the subject of each new commit, such as *Add Gravity* or *Renew the certificate*, until you dismiss it. **Update** also says how many new changes it got.
+
 To get a change before Orca next starts, click **Update** on the **Workspace** page, run `orca workspace update`, or ask your AI tool. **Update** runs the join steps again, starting with **Get the latest workspace**, and restarts the gateway, so routes are briefly unavailable.
 
 If the workspace file has a mistake, the page shows **The workspace file has a problem** with the error, and **Update** to try again once it's fixed.
 
 ## Leave the workspace
 
-Click **Leave** on the **Workspace** page and confirm, or run `orca workspace leave`. Orca forgets the workspace, removes its routes, and puts the gateway's domain and certificate back as they were before you joined.
+Click **Leave** on the **Workspace** page and confirm, or run `orca workspace leave`. Orca forgets the workspace, removes its routes, and puts the gateway's domain, certificate, and landing page title and logo back as they were before you joined.
 
 Everything else stays: the workspace folder, the cloned projects, their `.env` files and running containers. Stop the stacks you don't need on the **Containers** page, and delete folders yourself if you want them gone.
 

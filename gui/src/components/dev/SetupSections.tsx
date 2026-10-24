@@ -20,6 +20,7 @@ import {
 import type { HostnameStyle } from "../../lib/dev";
 import type { DataChoice, DataMode, DevConfigT, SetupAnalysis, SetupService } from "../../lib/dev";
 import { DataModePicker } from "./DevBits";
+import HelpLink from "../HelpLink";
 
 export interface SectionProps {
   analysis: SetupAnalysis;
@@ -90,8 +91,8 @@ export function SharedSection(props: SectionProps) {
   return (
     <div>
       <p class="dev-step-intro">
-        Services built from your code run once per worktree, so every branch runs its own code. Infrastructure such as
-        databases usually runs once and is shared. Drag a service to change where it runs.
+        Your own code runs per worktree; databases usually run once, shared. Drag a service to move it.{" "}
+        <HelpLink path="/docs/worktrees/#shared-and-per-instance-services" />
       </p>
       <div style={{ display: "grid", "grid-template-columns": "minmax(0, 1fr) minmax(0, 1fr)", gap: "12px" }}>
         <Column shared={true} title="Runs once (shared)" hint="one copy for all worktrees" />
@@ -157,8 +158,8 @@ export function DataSection(props: SectionProps) {
   return (
     <div>
       <p class="dev-step-intro">
-        Pick what a new worktree gets by default. Shared data suits most work; a worktree that runs migrations or writes test
-        data can switch to its own database, and anyone can change it per worktree before starting.
+        The data a new worktree gets by default. Each worktree can change it before it starts.{" "}
+        <HelpLink path="/docs/worktrees/#data-modes" />
       </p>
       <Show when={shared().length === 0}>
         <div class="form-hint">Nothing is shared, so every worktree has all its data to itself.</div>
@@ -476,8 +477,8 @@ export function ReachSection(props: SectionProps) {
   return (
     <div>
       <p class="dev-step-intro">
-        Worktrees can't all use port 3000. Ports you open in a browser get their own HTTPS hostname per worktree; other ports
-        you need from your machine (debuggers, databases) get a free port picked per worktree.
+        Browser ports get an HTTPS hostname per worktree; other ports get a free host port per worktree.{" "}
+        <HelpLink path="/docs/worktrees/#ports" />
       </p>
       <div class="dev-section">
         <div class="dev-section-title">Hostnames</div>
@@ -592,8 +593,8 @@ export function ProfilesSection(props: SectionProps) {
   return (
     <div>
       <p class="dev-step-intro">
-        Services behind a compose profile are optional: each worktree picks the profiles it needs when it starts, and keeps
-        that choice. Setup commands run inside the instance's containers.
+        Each worktree picks its compose profiles when it starts. Setup commands run inside its containers.{" "}
+        <HelpLink path="/docs/profiles/" />
       </p>
       <div class="dev-section">
         <div class="dev-section-title">Profiles</div>

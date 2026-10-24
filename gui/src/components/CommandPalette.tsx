@@ -118,7 +118,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
 
   const pages: Command[] = (
     [
-      ["dashboard", "Dashboard"], ["workspace", "Workspace"], ["projects", "Projects"], ["containers", "Containers"], ["images", "Images"],
+      ["dashboard", "Dashboard"], ["workspace", "Workspace"], ["projects", "Worktrees"], ["containers", "Containers"], ["images", "Images"],
       ["builds", "Builds"], ["volumes", "Volumes"], ["networks", "Networks"], ["gateway", "Gateway"],
       ["kubernetes", "Kubernetes"], ["templates", "App Catalog"], ["fleet", "Fleet (remote hosts)"],
       ["environment", "System Health"], ["activity", "Activity"], ["settings", "Settings"],
@@ -144,7 +144,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
     }),
     ...(projects() ?? []).map((p) => ({
       id: `project-${p.id}`, name: p.id, hint: `project · ${p.instances.length} worktree${p.instances.length === 1 ? "" : "s"}`, icon: "⑂",
-      category: "Projects", action: go("projects"),
+      category: "Worktrees", action: go("projects"),
     })),
     ...containers().flatMap((c) => [
       { id: `ct-${c.id}`, name: c.name, hint: `${c.state.toLowerCase()} · ${c.image}`, icon: "▣", img: iconForImage(c.image), category: "Containers", action: go(`container:${c.id}`) },
@@ -169,7 +169,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
         .map((x) => x.c);
     // Each kind of resource gets a few rows, so one kind can't crowd out the rest.
     const found: Command[] = [];
-    for (const cat of ["Stacks", "URLs", "Projects", "Containers", "Images"]) {
+    for (const cat of ["Stacks", "URLs", "Worktrees", "Containers", "Images"]) {
       found.push(...ranked(resources().filter((r) => r.category === cat), 5));
     }
     return [...ranked(actions, 6), ...found, ...ranked(pages, 5)];

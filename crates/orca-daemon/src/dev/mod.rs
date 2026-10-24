@@ -137,9 +137,13 @@ struct AddProject {
 }
 
 async fn add_project(State(state): State<Arc<AppState>>, Json(body): Json<AddProject>) -> R<impl IntoResponse> {
-    let given = PathBuf::from(body.path.trim());
+    let path = body.path.trim();
+    let given = match path.strip_prefix("~/") {
+        Some(rest) => dirs::home_dir().unwrap_or_default().join(rest),
+        None => PathBuf::from(path),
+    };
     if !given.is_absolute() {
-        return Err(DevError::bad("path must be absolute"));
+        return Err(DevError::bad("path must be absolute, or start with ~/"));
     }
     if !given.is_dir() {
         return Err(DevError::bad(format!("{} is not a folder", given.display())));

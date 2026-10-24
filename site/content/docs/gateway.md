@@ -22,7 +22,7 @@ The Gateway page has three tabs: **Routes**, **Landing page** and **Settings**. 
 
 The default domain is `localhost`. A route named `shop` becomes `shop.localhost`, and Chrome and Firefox send every `*.localhost` name to your own machine without any DNS setup.
 
-Other programs (Safari, `curl`, scripts, test runners) use the system resolver, which may not resolve `*.localhost`. The **Projects** page warns when an instance hostname doesn't resolve on your computer.
+Other programs (Safari, `curl`, scripts, test runners) use the system resolver, which may not resolve `*.localhost`. The **Worktrees** page warns when an instance hostname doesn't resolve on your computer.
 
 ### Use your own domain
 
@@ -195,6 +195,7 @@ Open it with **Open gateway** at the top of the Gateway page. Its settings are o
 - **Show status and uptime**.
 - **Show container and port** behind each card.
 - **Search box**, and where it searches the web (see below).
+- **My links**: your own cards at the top of the page, such as your Jira board or a staging admin. Add one with a name and an address; **↑** and **↓** reorder them. They're kept on your computer only, never in a workspace or project file.
 
 Each card's title, description, group and icon come from the route:
 
@@ -203,6 +204,8 @@ Each card's title, description, group and icon come from the route:
 | Added by hand | **Edit** on the Landing page tab (or the route's edit dialog): **Title**, **Description**, **Group**, **Icon**, and **Hide** |
 | orca.yaml | `title`, `description`, `group`, `icon`, `hidden` on the gateway entry |
 | Labels | `orca.route.title`, `.description`, `.group`, `.icon`, `.hidden` (for a named route, `orca.route.<name>.title` and so on) |
+
+A [workspace](/docs/workspaces/) project that isn't set up on your computer yet still gets its cards, marked **Not set up · set it up in Orca** with a dashed border. Clicking one opens Orca's **Workspace** page at that project, with its **Set up** button highlighted; setting it up still takes your click.
 
 Without a title, the card is named after the hostname. The group defaults to the compose project. A group of [environment links](#environment-links) with the same name as a group of cards, such as the project's name, joins that section instead of showing as a second one. A hidden route still routes; it's only left off the page.
 
@@ -244,13 +247,13 @@ The landing page opens with the cursor in a search box. Type a few letters and t
 
 Under the box, the page shows what Enter and Shift+Enter will do before you press them.
 
-**Search the web** on the **Landing page** tab picks where searches go: Google, DuckDuckGo, Bing, Brave Search, Kagi, Ecosia or Startpage. **Custom URL…** takes any search address with `{query}` where the search terms go, such as your company wiki, Jira, or GitHub code search:
+Searches go to Google unless you choose otherwise. **Search the web** on the **Landing page** tab picks another engine: DuckDuckGo, Bing, Brave Search, Kagi, Ecosia or Startpage. **Custom URL…** takes any search address with `{query}` where the search terms go, such as your company wiki, Jira, or GitHub code search:
 
 ```text
 https://github.com/search?type=code&q={query}
 ```
 
-With web search off, the box only finds services. Switch **Search box** off to hide it.
+Choose **Off: only find services** and the box only finds services. Switch **Search box** off to hide it.
 
 With search on, the page works well as your browser's home page: set `https://localhost` (or your gateway's domain) as the home page. Safari can also open it in every new tab. Each time you open it, you can type the name of a service or a search straight away.
 

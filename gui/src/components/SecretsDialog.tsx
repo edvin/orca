@@ -7,6 +7,7 @@ import { createSignal, For, Show } from "solid-js";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "./Toast";
 import Spinner from "./Spinner";
+import HelpLink from "./HelpLink";
 import { workspaceApi, type WorkspaceProject, type WorkspaceSecret } from "../lib/workspace";
 
 const PROVIDER: Record<string, string> = { passbolt: "Passbolt", "1password": "1Password" };
@@ -67,7 +68,8 @@ export default function SecretsDialog(props: {
         <div class="modal-body">
           <p class="secrets-intro">
             These go into <span class="mono">{props.project.dir.split(/[\\/]/).pop()}/{envFile()}</span> on this computer and nowhere else.
-            Open each one in your secret manager, copy the value and paste it here.
+            Open each one in your secret manager, copy the value and paste it here.{" "}
+            <HelpLink path="/docs/workspaces-secrets/#fill-in-secrets-by-hand" />
           </p>
           <Show when={canFetch()}>
             <div class="secrets-fetch">

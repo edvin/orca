@@ -19,6 +19,7 @@ import { recordMetrics, getCpuHistory, getMemoryHistory, getMetricsHistory } fro
 import { copyToClipboard } from "../lib/clipboard";
 import Breadcrumb from "../components/Breadcrumb";
 import Dropdown from "../components/Dropdown";
+import HelpLink from "../components/HelpLink";
 import { logError } from "../lib/activityStore";
 
 interface ContainerDetailPageProps {
@@ -1326,7 +1327,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
             <div class="detail-info-section">
               <h3 class="detail-section-title">Resource limits</h3>
               <p style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "16px" }}>
-                Configure memory and CPU limits for this container. Changes apply immediately to the running container.
+                Changes apply to the running container right away.{" "}
+                <HelpLink path="/docs/containers/#change-resource-limits-live" />
               </p>
 
               <div style={{ display: "flex", "flex-direction": "column", gap: "16px", "max-width": "480px" }}>
@@ -1595,7 +1597,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
               </Show>
               <h3 class="detail-section-title" style={{ "margin-top": "24px" }}>Export filesystem to tar</h3>
               <p style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "12px" }}>
-                Export the container's filesystem as a tar archive. This captures the current state of all files in the container.
+                Saves the container's files, as they are now, to a tar archive.{" "}
+                <HelpLink path="/docs/containers/#export-a-container" />
               </p>
               <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
                 <input

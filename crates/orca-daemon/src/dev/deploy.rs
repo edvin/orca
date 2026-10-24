@@ -1304,7 +1304,7 @@ pub async fn resolve_path(state: &AppState, path: &Path) -> Result<(String, Stri
     }
     .ok_or_else(|| {
         anyhow::anyhow!(
-            "this repository ({}) is not registered with Orca. Add it in Orca's Projects page, or run `orca projects add {}`",
+            "this repository ({}) is not registered with Orca. Add it on Orca's Worktrees page, or run `orca projects add {}`",
             root.display(),
             root.display()
         )

@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import OrcaYamlStudio, { type RouteStatus, type StudioService } from "./orcayaml/OrcaYamlStudio";
 import { showToast } from "./Toast";
+import HelpLink from "./HelpLink";
 import { safeHref } from "../lib/sanitize";
 
 interface Report {
@@ -74,9 +75,8 @@ export default function StackOrcaYaml(props: { stackName: string }) {
               <div class="card" style={{ display: "flex", "flex-direction": "column", gap: "10px", "max-width": "720px" }}>
                 <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>This stack has no orca.yaml yet</div>
                 <div style={{ color: "#c9d1d9", "font-size": "13px", "line-height": "1.6" }}>
-                  An <span class="mono">orca.yaml</span> next to the compose file gives the stack HTTPS hostnames through the
-                  gateway, links to its other environments, build targets and setup commands. Orca reads it whenever the stack
-                  runs, however it was started, so commit it and everyone on the team gets the same setup.
+                  Gives the stack HTTPS hostnames, environment links, build targets and setup commands. Commit it to share the setup.{" "}
+                  <HelpLink path="/docs/orca-yaml/" />
                 </div>
                 <div>
                   <button class="btn btn-primary" onClick={() => setDraft(r().suggestion ?? "")}>Create orca.yaml</button>
@@ -92,7 +92,7 @@ export default function StackOrcaYaml(props: { stackName: string }) {
             </Show>
             <Show when={r().has_dev}>
               <div style={muted}>
-                This file also has a <span class="mono">dev:</span> section for worktree instances; edit it on the Projects page. It is kept as is here.
+                This file also has a <span class="mono">dev:</span> section for worktree instances; edit it on the Worktrees page. It is kept as is here.
               </div>
             </Show>
 

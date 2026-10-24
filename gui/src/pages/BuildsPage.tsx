@@ -5,6 +5,7 @@ import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import { SkeletonRow } from "../components/Skeleton";
+import HelpLink from "../components/HelpLink";
 import { requestIntent } from "../lib/pageIntent";
 import "../styles/polish-b.css";
 
@@ -970,7 +971,7 @@ export default function BuildsPage(props: BuildsPageProps) {
         }>
           <div class="empty">
             <p class="empty-title">No builds yet</p>
-            <p>Build an image from a Dockerfile and its history, logs and timings show up here. Builds started with the CLI appear too.</p>
+            <p>History, logs and timings of image builds, including builds from the CLI. <HelpLink path="/docs/images-and-builds/#the-builds-page" /></p>
             <div class="empty-actions">
               <button class="btn btn-primary" onClick={startBuild}>
                 Build an image

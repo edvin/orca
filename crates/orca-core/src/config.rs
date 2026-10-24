@@ -205,6 +205,25 @@ pub struct WorkspaceRef {
     /// The gateway's domain and TLS before joining, put back on leaving.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous_gateway: Option<PreviousGateway>,
+    /// What the last pull brought in, for "Workspace updated" on its page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_update: Option<WorkspaceUpdate>,
+}
+
+/// The commits a workspace pull brought in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceUpdate {
+    /// When (RFC 3339).
+    pub at: String,
+    /// Their subjects, newest first; at most [`WorkspaceUpdate::MAX`].
+    pub commits: Vec<String>,
+    /// How many more there were.
+    #[serde(default)]
+    pub more: usize,
+}
+
+impl WorkspaceUpdate {
+    pub const MAX: usize = 8;
 }
 
 /// What joining a workspace changed on the gateway.
@@ -217,6 +236,11 @@ pub struct PreviousGateway {
     pub custom_cert: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_key: Option<String>,
+    /// The landing page's title and logo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
 }
 
 /// A scheduled container action (e.g., restart every Sunday).
@@ -300,6 +324,10 @@ pub struct LandingConfig {
     /// Page heading; "Orca Gateway" when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// A logo beside the heading, as icons are kept: a `data:` URL, an
+    /// https URL or a built-in icon name. Set by a joined workspace.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
     /// Line under the heading; the gateway's domain when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<String>,
@@ -312,9 +340,22 @@ pub struct LandingConfig {
     pub search: bool,
     /// Where the search box searches the web when no service matches: an
     /// engine from [`WEB_SEARCH_ENGINES`] or a URL with `{query}` in it.
-    /// Unset, the box only searches the page.
+    /// Unset, Google; [`WEB_SEARCH_OFF`], only the page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub web_search: Option<String>,
+    /// Your own links, shown first ("My links"): kept on this machine, never
+    /// in a workspace or project file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<LandingLink>,
+}
+
+/// A link of your own on the landing page.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct LandingLink {
+    pub title: String,
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Web search engines the landing page knows by name: (id, name, URL).
@@ -336,7 +377,11 @@ impl LandingConfig {
     /// The web search as (name, URL with `{query}`), when one is set and
     /// valid. A custom URL is named after its host.
     pub fn web_search_target(&self) -> Option<(String, String)> {
-        let spec = self.web_search.as_deref()?.trim();
+        // Google unless another engine, or none ("none"), was chosen.
+        let spec = self.web_search.as_deref().map(str::trim).unwrap_or("google");
+        if spec == WEB_SEARCH_OFF {
+            return None;
+        }
         if let Some((_, name, url)) = WEB_SEARCH_ENGINES.iter().find(|(id, _, _)| *id == spec) {
             return Some((name.to_string(), url.to_string()));
         }
@@ -353,6 +398,9 @@ impl LandingConfig {
     }
 }
 
+/// `web_search` when the box only finds services.
+pub const WEB_SEARCH_OFF: &str = "none";
+
 /// A custom web search: an http(s) URL with `{query}` where the search goes.
 pub fn valid_search_url(url: &str) -> bool {
     (url.starts_with("https://") || url.starts_with("http://"))
@@ -367,11 +415,13 @@ impl Default for LandingConfig {
     fn default() -> Self {
         Self {
             title: None,
+            logo: None,
             subtitle: None,
             show_status: true,
             show_targets: true,
             search: true,
             web_search: None,
+            links: Vec::new(),
         }
     }
 }

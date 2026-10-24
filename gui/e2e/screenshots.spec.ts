@@ -513,13 +513,13 @@ test.describe("Orca Desktop Screenshots", () => {
     }
   });
   test("25 - Projects board", async ({ page }) => {
-    await navigateTo(page, "Projects");
+    await navigateTo(page, "Worktrees");
     await page.waitForTimeout(1500);
     await screenshot(page, "25-projects");
   });
 
   test("26 - Projects instance detail", async ({ page }) => {
-    await navigateTo(page, "Projects");
+    await navigateTo(page, "Worktrees");
     await page.waitForTimeout(1500);
     const running = page.locator(".dev-card.dev-card-running").first();
     const card = (await running.isVisible({ timeout: 1000 }).catch(() => false)) ? running : page.locator(".dev-card").first();
@@ -538,7 +538,7 @@ test.describe("Orca Desktop Screenshots", () => {
   });
 
   test("27 - Projects start dialog", async ({ page }) => {
-    await navigateTo(page, "Projects");
+    await navigateTo(page, "Worktrees");
     await page.waitForTimeout(1500);
     const start = page.locator(".dev-card .btn-primary", { hasText: "Start" }).first();
     if (await start.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -548,7 +548,7 @@ test.describe("Orca Desktop Screenshots", () => {
     }
   });
   test("28 - Projects setup wizard", async ({ page }) => {
-    await navigateTo(page, "Projects");
+    await navigateTo(page, "Worktrees");
     await page.waitForTimeout(1500);
     await page.getByRole("button", { name: "orca.yaml" }).click();
     await page.waitForTimeout(2500);
@@ -560,7 +560,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("28c - Projects hostname picker", async ({ page }) => {
     // Read-only: switches the picker in the form but never saves.
-    await navigateTo(page, "Projects");
+    await navigateTo(page, "Worktrees");
     await page.waitForTimeout(1500);
     await page.getByRole("button", { name: "orca.yaml" }).click();
     await page.waitForTimeout(2500);
@@ -576,7 +576,7 @@ test.describe("Orca Desktop Screenshots", () => {
   });
 
   test("29 - Projects data and env tabs", async ({ page }) => {
-    await navigateTo(page, "Projects");
+    await navigateTo(page, "Worktrees");
     await page.waitForTimeout(1500);
     const card = page.locator(".dev-card.dev-card-running").first();
     if (await card.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -594,7 +594,7 @@ test.describe("Orca Desktop Screenshots", () => {
   // against a real daemon. The wizard shot needs a project without a dev:
   // section to already be registered.
   test("30 - Projects add dialog and setup wizard", async ({ page }) => {
-    await navigateTo(page, "Projects");
+    await navigateTo(page, "Worktrees");
     await page.waitForTimeout(1200);
     await page.getByRole("button", { name: "Add project" }).click();
     await page.waitForTimeout(1500);
@@ -623,7 +623,7 @@ test.describe("Orca Desktop Screenshots", () => {
     }
   });
   test("31 - Projects topology and dashboard", async ({ page }) => {
-    await navigateTo(page, "Projects");
+    await navigateTo(page, "Worktrees");
     await page.waitForTimeout(1500);
     const tab = page.locator(".dev-project-tab", { hasText: "myapp" });
     if (await tab.isVisible({ timeout: 800 }).catch(() => false)) await tab.click();

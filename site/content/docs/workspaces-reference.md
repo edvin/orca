@@ -34,8 +34,6 @@ routes:
   - { hostname: mail, target: "mailpit:8025", title: Mailpit }
   - { hostname: "*", target: "soketi:6001", websocket: true }
 
-clone_into: ~/code/acme
-
 registries:
   - registry.acme.dev
 
@@ -74,7 +72,7 @@ projects:
 | [`gateway`](#gateway) | object | none | The gateway's domain and certificate. |
 | [`shared`](#shared) | object | none | The shared services' compose file. |
 | [`routes`](#routes) | list | `[]` | Gateway routes for the shared services. |
-| [`clone_into`](#clone_into) | string | the workspace's parent folder | Where projects are cloned. |
+| [`clone_into`](#clone_into) | string | the workspace's parent folder | Where projects are cloned. Usually left out. |
 | [`registries`](#registries) | list of strings | `[]` | Image registries developers must be logged in to. |
 | [`secrets`](#secrets) | object | none | The secret managers that references point into. |
 | [`projects`](#projects) | map | `{}` | The team's projects, by key. |
@@ -108,12 +106,13 @@ Error: *network '…' is not a valid Docker network name*.
 
 ## gateway
 
-The [gateway](/docs/gateway/)'s domain, certificate and landing page title, applied to Orca's gateway on join and **Update**.
+The [gateway](/docs/gateway/)'s domain, certificate, and landing page title and logo, applied to Orca's gateway on join and **Update**.
 
 ```yaml
 gateway:
   domain: local.acme.dev
   title: Acme dev
+  logo: icons/acme-logo.svg
   certificate:
     cert: certs/local.acme.dev.crt
     key: certs/local.acme.dev.key
@@ -123,6 +122,7 @@ gateway:
 |---|---|---|---|
 | `domain` | string | the gateway's current domain | The domain every short hostname gets: `mail` becomes `mail.local.acme.dev`. The landing page is served at the domain itself. |
 | `title` | string | the landing page's current title | The title of the [landing page](/docs/gateway/#the-landing-page), such as `Acme dev`. |
+| `logo` | string | none | A logo beside the title on the landing page and the **Workspace** page: an image file in the workspace repo (SVG, PNG, WebP or JPEG, up to 64 KB), a [built-in icon](/docs/gateway/#icons) or an `https://` URL. Both pages are dark, so use a version with light text. |
 | `certificate.cert` | path | none | The certificate in PEM format, with its chain. |
 | `certificate.key` | path | none | Its private key in PEM format. |
 
@@ -200,14 +200,17 @@ Errors: *routes: '…' is not a valid hostname*; *routes: '…': target must be 
 
 The folder projects are cloned into. Each project goes to `<clone_into>/<path>`.
 
+**Default, and usually best:** the folder that contains the workspace. Developers keep code in different places, such as `~/projects`, `~/code` or `/srv/dev`, and each one clones the workspace into theirs: with the workspace at `~/projects/dev-workspace`, projects go to `~/projects/<path>`.
+
+Set it only when everyone on the team uses the same folder, because it applies to everyone:
+
 ```yaml
 clone_into: ~/code/acme
 ```
 
-- `~/…` is your home folder, an absolute path is used as it is, and a relative path is relative to the workspace folder.
-- **Default:** the folder that contains the workspace. With the workspace at `~/code/dev-workspace`, projects go to `~/code/<key>`.
+`~/…` is your home folder, an absolute path is used as it is, and a relative path is relative to the workspace folder.
 
-If a project's folder already exists, setup uses it as it is. Point `clone_into` at the folder where your team already keeps its checkouts, and existing checkouts are picked up.
+If a project's folder already exists, setup uses it as it is, so checkouts that sit next to the workspace are picked up.
 
 ## registries
 
@@ -262,7 +265,7 @@ Keys use letters, digits, dashes and underscores, at most 63 characters, and don
 | [`setup`](#setup) | string | none | A command run once per machine after cloning. |
 | [`routes`](#project-routes) | list | `[]` | Gateway routes for the project. |
 | [`env`](#env) | object | none | The `.env` file and the secrets it needs. |
-| [`worktrees`](#worktrees) | boolean | `false` | Also add the project to **Projects**, for worktree instances. |
+| [`worktrees`](#worktrees) | boolean | `false` | Also add the project to the **Worktrees** page. |
 
 Error: *project '…': use letters, digits and dashes*.
 
@@ -347,7 +350,7 @@ Errors: *project '…': '…' is not a valid variable name*; *project '…' DB_P
 
 ### worktrees
 
-`true` adds the project to the **Projects** page when it's started, so each git worktree of it can run as its own copy with its own hostnames. The project needs a `dev:` section in its own `orca.yaml` for that. See [Worktree instances](/docs/worktrees/).
+`true` adds the project to the **Worktrees** page when it's started, so each git worktree of it can run as its own copy with its own hostnames. The project needs a `dev:` section in its own `orca.yaml` for that. See [Worktree instances](/docs/worktrees/).
 
 ## Errors
 

@@ -5,11 +5,10 @@
 import { createResource, createSignal, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import type { GatewayRoute, LandingSettings } from "../../lib/types";
+import type { GatewayRoute, LandingLink, LandingSettings } from "../../lib/types";
 import { showToast } from "../Toast";
 import Dropdown from "../Dropdown";
-
-const REFERENCE = "https://orca-desktop.com/docs/gateway/#the-landing-page";
+import HelpLink from "../HelpLink";
 
 interface Props {
   routes: GatewayRoute[];
@@ -21,7 +20,7 @@ const muted = { color: "#8b949e", "font-size": "12px" } as const;
 
 /** The engines the page knows by name; anything else is a custom URL. Mirrors WEB_SEARCH_ENGINES in Rust. */
 const ENGINES = [
-  { value: "", label: "Off: only find services" },
+  { value: "none", label: "Off: only find services" },
   { value: "google", label: "Google" },
   { value: "duckduckgo", label: "DuckDuckGo" },
   { value: "bing", label: "Bing" },
@@ -32,6 +31,8 @@ const ENGINES = [
   { value: "custom", label: "Custom URL…" },
 ];
 const isEngine = (v: string | null | undefined) => !!v && ENGINES.some((e) => e.value === v && v !== "custom");
+/** Google unless another engine, or "none", was chosen. */
+const DEFAULT_ENGINE = "google";
 const validCustom = (v: string) => /^https?:\/\/\S+$/.test(v) && v.includes("{query}");
 
 /** The section a route is shown under, as the page decides it. */
@@ -140,7 +141,7 @@ export default function LandingPageTab(props: Props) {
   // "custom" chosen but no URL saved yet: show the field.
   const [pickedCustom, setPickedCustom] = createSignal(false);
   const engineChoice = (s: LandingSettings) =>
-    pickedCustom() ? "custom" : !s.web_search ? "" : isEngine(s.web_search) ? s.web_search : "custom";
+    pickedCustom() ? "custom" : !s.web_search ? DEFAULT_ENGINE : isEngine(s.web_search) ? s.web_search : "custom";
   const saveCustom = (s: LandingSettings) => {
     const v = (customUrl() ?? s.web_search ?? "").trim();
     if (!v || v === s.web_search) {
@@ -165,8 +166,8 @@ export default function LandingPageTab(props: Props) {
         <div style={{ flex: "1", "min-width": "260px" }}>
           <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>A page that lists every routed service</div>
           <div style={{ ...muted, "margin-top": "4px", "font-size": "13px", "line-height": "1.5" }}>
-            Anyone who can reach the gateway sees it at its domain: each service as a card, grouped by project, with whether it
-            runs and for how long. It keeps itself up to date while open.
+            Each service as a card, with whether it runs, at the gateway's domain.{" "}
+            <HelpLink path="/docs/gateway/#the-landing-page" />
           </div>
         </div>
         <Show when={landing()?.url}>
@@ -215,8 +216,7 @@ export default function LandingPageTab(props: Props) {
               <div>
                 <div class="landing-search-title">Search box</div>
                 <div class="landing-search-sub">
-                  Type a few letters to find a service by name, hostname, project or status, and press Enter to open it. A hostname
-                  like <span class="mono">github.com</span> goes straight there. Press <kbd>/</kbd> to jump to the box.
+                  Find a service and press Enter to open it; anything else searches the web. <kbd>/</kbd> jumps to it.
                 </div>
               </div>
               <div class="settings-toggle" role="switch" aria-checked={s().search} tabIndex={0} aria-label="Search box"
@@ -239,7 +239,7 @@ export default function LandingPageTab(props: Props) {
                   onChange={(v) => {
                     if (v === "custom") { setPickedCustom(true); return; }
                     setPickedCustom(false);
-                    void save({ web_search: v || null });
+                    void save({ web_search: v });
                   }}
                 />
               </div>
@@ -275,14 +275,16 @@ export default function LandingPageTab(props: Props) {
         )}
       </Show>
 
+      <Show when={landing()?.settings}>
+        {(s) => <MyLinks links={s().links ?? []} saving={saving()} onSave={(links) => save({ links })} />}
+      </Show>
+
       <div>
         <div style={{ display: "flex", "align-items": "baseline", gap: "12px", "margin-bottom": "10px", "flex-wrap": "wrap" }}>
           <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>On the page</h3>
           <span style={muted}>
-            Routes you added here are edited here. Others take their title, description, group and icon from where they come from:{" "}
-            <span class="mono">title:</span> in orca.yaml or <span class="mono">orca.route.title</span> labels.{" "}
-            <button class="btn-link" style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", padding: "0", "font-size": "12px" }}
-              onClick={() => openUrl(REFERENCE)}>How</button>
+            Routes from labels or orca.yaml are titled there.{" "}
+            <HelpLink path="/docs/gateway/#the-landing-page">How</HelpLink>
           </span>
         </div>
         <Show when={groups().length > 0} fallback={<div style={muted}>No routes yet. Add one on the Routes tab and it appears here.</div>}>
@@ -323,6 +325,54 @@ export default function LandingPageTab(props: Props) {
           </For>
         </Show>
       </div>
+    </div>
+  );
+}
+
+/** Your own cards at the top of the page: a Jira board, a staging admin. */
+function MyLinks(props: { links: LandingLink[]; saving: boolean; onSave: (links: LandingLink[]) => Promise<unknown> | void }) {
+  const [title, setTitle] = createSignal("");
+  const [url, setUrl] = createSignal("");
+  const add = async () => {
+    const t = title().trim();
+    let u = url().trim();
+    if (!t || !u) return;
+    if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+    await props.onSave([...props.links, { title: t, url: u }]);
+    setTitle("");
+    setUrl("");
+  };
+  const remove = (i: number) => props.onSave(props.links.filter((_, j) => j !== i));
+  const move = (i: number, by: number) => {
+    const next = [...props.links];
+    const [l] = next.splice(i, 1);
+    next.splice(i + by, 0, l);
+    void props.onSave(next);
+  };
+  return (
+    <div class="card" style={{ padding: "14px 16px" }}>
+      <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>My links</div>
+      <div style={{ ...muted, "margin-top": "2px" }}>Your own cards at the top of the page. Kept on this computer only.</div>
+      <Show when={props.links.length > 0}>
+        <div class="my-links">
+          <For each={props.links}>
+            {(l, i) => (
+              <div class="my-link">
+                <b>{l.title}</b>
+                <span class="mono" title={l.url}>{l.url.replace(/^https?:\/\//, "")}</span>
+                <button class="icon-btn" title="Move up" disabled={i() === 0 || props.saving} onClick={() => move(i(), -1)}>↑</button>
+                <button class="icon-btn" title="Move down" disabled={i() === props.links.length - 1 || props.saving} onClick={() => move(i(), 1)}>↓</button>
+                <button class="icon-btn" title="Remove" disabled={props.saving} onClick={() => void remove(i())}>×</button>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+      <form class="my-link-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+        <input class="form-input" placeholder="Name, such as Jira board" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} />
+        <input class="form-input mono" placeholder="https://…" value={url()} onInput={(e) => setUrl(e.currentTarget.value)} />
+        <button class="btn" type="submit" disabled={props.saving || !title().trim() || !url().trim()}>Add link</button>
+      </form>
     </div>
   );
 }

@@ -204,8 +204,6 @@ Some guidance:
 Add each project under `projects`, one at a time. A full entry:
 
 ```yaml title="orca-workspace.yaml"
-clone_into: ~/code/acme
-
 registries:
   - registry.acme.dev
 
@@ -233,7 +231,7 @@ Go through the keys for each project:
 - **`repo`**: the URL people clone it with. SSH URLs work with each developer's own key.
 - **`description`**: one line. AI tools match on it, so name what the project is, not only its codename: *"Invoices, payments and dunning"*.
 - **`path`**: only if the folder should be named differently from the key.
-- **`clone_into`** (top level): where projects go. If your team already keeps checkouts in one place, such as `~/code/acme`, use that: existing checkouts are picked up as they are.
+- **Where projects go:** next to the workspace, in the folder each developer cloned it into. Someone who keeps code in `~/projects` clones the workspace there and gets `~/projects/billing`; their existing checkouts are picked up as they are. Leave out `clone_into` unless everyone on the team really uses the same folder.
 - **`uses`**: the shared services it needs, by their service name in `compose.yaml`.
 - **`setup`**: the one-time command a new developer runs today, such as `just setup`.
 - **`routes`**: its hostnames. See [Routes](/docs/workspaces-routes/) for paths, patterns and WebSockets.
@@ -368,8 +366,6 @@ gateway:
 shared:
   compose: compose.yaml
   name: acme-shared
-
-clone_into: ~/code/acme
 
 registries:
   - registry.acme.dev

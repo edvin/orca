@@ -6,6 +6,7 @@ import { devApi } from "../../lib/dev";
 import type { DevConfigT, DevProject, SetupAnalysis } from "../../lib/dev";
 import { showToast } from "../Toast";
 import { YamlView } from "./DevBits";
+import HelpLink from "../HelpLink";
 import { DataSection, ProfilesSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";
 
@@ -65,7 +66,8 @@ export default function SetupWizard(props: Props) {
           <div>
             <div class="modal-title">Set up {props.project.id} for worktrees</div>
             <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "3px" }}>
-              Saved as the <span class="mono">dev:</span> section of orca.yaml, so teammates and every worktree get the same setup.
+              Saved as the <span class="mono">dev:</span> section of orca.yaml, so teammates and every worktree get the same setup.{" "}
+              <HelpLink path="/docs/worktrees/#the-setup-wizard" />
             </div>
           </div>
           <button class="modal-close" onClick={props.onClose}>×</button>

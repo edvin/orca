@@ -11,7 +11,8 @@ import Breadcrumb from "../components/Breadcrumb";
 import YamlEditor from "../components/YamlEditor";
 import StackOrcaYaml from "../components/StackOrcaYaml";
 import Dropdown from "../components/Dropdown";
-import StackProfiles, { PROFILES_DOC } from "../components/StackProfiles";
+import StackProfiles from "../components/StackProfiles";
+import HelpLink from "../components/HelpLink";
 import type { StackProfilesReport } from "../lib/types";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { logError } from "../lib/activityStore";
@@ -67,7 +68,6 @@ export default function StackDetailPage(props: StackDetailPageProps) {
     hasProfiles()
       ? profiles()!.services.filter((s) => s.profiles.length > 0 && !stack()?.services.some((c) => c.name === s.name))
       : [];
-  const openProfilesDoc = () => shellOpen(PROFILES_DOC).catch(() => window.open(PROFILES_DOC, "_blank", "noopener,noreferrer"));
 
   const saveProfiles = async (list: string[], apply: boolean) => {
     setProfilesBusy(true);
@@ -343,7 +343,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
         {/* Services tab */}
         <Show when={activeTab() === "services"}>
           <Show when={hasProfiles()}>
-            <StackProfiles report={profiles()!} busy={profilesBusy()} onSave={(l, a) => void saveProfiles(l, a)} onOpenDocs={openProfilesDoc} />
+            <StackProfiles report={profiles()!} busy={profilesBusy()} onSave={(l, a) => void saveProfiles(l, a)} />
           </Show>
           <Show
             when={stack() && stack()!.services.length > 0}
@@ -502,7 +502,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
             <Show when={!profiles.loading && !hasProfiles() && stack()!.services.length > 2}>
               <div style={{ color: "#6e7681", "font-size": "12px", "margin-top": "12px" }}>
                 Not every service needed every time? Put optional ones behind a compose profile and switch them on here.{" "}
-                <button class="link-btn" onClick={openProfilesDoc}>How</button>
+                <HelpLink path="/docs/profiles/#make-a-service-optional">How</HelpLink>
               </div>
             </Show>
           </Show>

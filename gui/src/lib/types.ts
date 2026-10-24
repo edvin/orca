@@ -610,8 +610,16 @@ export interface LandingSettings {
   show_targets: boolean;
   /** A search box that narrows the cards; Enter opens the best match. */
   search: boolean;
-  /** An engine id ("google", …) or a URL with {query}; none: the box only searches the page. */
+  /** An engine id ("google", …), "none", or a URL with {query}; unset: Google. */
   web_search?: string | null;
+  /** Your own links, shown first on the page; kept on this machine. */
+  links?: LandingLink[];
+}
+
+export interface LandingLink {
+  title: string;
+  url: string;
+  description?: string | null;
 }
 
 export interface GatewayConfig {

@@ -8896,12 +8896,28 @@ async fn gateway_set_landing(
     };
     landing.title = clean(landing.title);
     landing.subtitle = clean(landing.subtitle);
+    if landing.links.len() > 100 {
+        return Err(ApiError::bad_request("Up to 100 links"));
+    }
+    for l in &mut landing.links {
+        l.title = l.title.trim().chars().take(80).collect();
+        l.url = l.url.trim().to_string();
+        l.description = clean(l.description.take());
+        let web = l.url.starts_with("https://") || l.url.starts_with("http://");
+        if l.title.is_empty() || !web || crate::gateway::sanitize_href(&l.url) == "#" || l.url.len() > 2000 {
+            return Err(ApiError::bad_request(format!(
+                "A link needs a name and an http(s) address: '{}' isn't one",
+                l.url
+            )));
+        }
+    }
     landing.web_search = landing
         .web_search
         .map(|w| w.trim().to_string())
         .filter(|w| !w.is_empty());
     if let Some(w) = &landing.web_search {
-        let known = orca_core::config::WEB_SEARCH_ENGINES.iter().any(|(id, _, _)| id == w);
+        let known = w == orca_core::config::WEB_SEARCH_OFF
+            || orca_core::config::WEB_SEARCH_ENGINES.iter().any(|(id, _, _)| id == w);
         if !known && !orca_core::config::valid_search_url(w) {
             return Err(ApiError::bad_request(
                 "A custom web search must be an http(s) URL with {query} where the search terms go, \

@@ -6,8 +6,7 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { StackProfilesReport } from "../lib/types";
 import ProfileCards from "./ProfileCards";
-
-export const PROFILES_DOC = "https://orca-desktop.com/docs/profiles/";
+import HelpLink from "./HelpLink";
 
 const muted = { color: "#8b949e", "font-size": "12px" } as const;
 
@@ -22,7 +21,6 @@ export default function StackProfiles(props: {
   report: StackProfilesReport;
   busy: boolean;
   onSave: (profiles: string[], apply: boolean) => void;
-  onOpenDocs: () => void;
 }) {
   const [selected, setSelected] = createSignal<string[]>([]);
   createEffect(() => setSelected([...props.report.active]));
@@ -60,9 +58,8 @@ export default function StackProfiles(props: {
       <div style={{ display: "flex", "align-items": "baseline", gap: "10px", "flex-wrap": "wrap" }}>
         <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>Profiles</div>
         <div style={{ ...muted, flex: "1", "min-width": "240px" }}>
-          Optional parts of this stack, from the compose file. Pick what you need; Orca remembers it on this machine and starts
-          the same set every time.{" "}
-          <button class="link-btn" onClick={() => props.onOpenDocs()}>How profiles work</button>
+          Optional services from the compose file. Orca remembers your pick on this machine.{" "}
+          <HelpLink path="/docs/profiles/">How profiles work</HelpLink>
         </div>
       </div>
 

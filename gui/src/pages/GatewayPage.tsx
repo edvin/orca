@@ -14,6 +14,7 @@ import AppIcon from "../components/AppIcon";
 import { iconForImage, iconSrc } from "../lib/icons";
 import { portGroups, routablePort, type PortProbe } from "../lib/ports";
 import PortChips from "../components/PortChips";
+import HelpLink from "../components/HelpLink";
 import "../styles/polish-a.css";
 
 /** Port chips shown on a suggested route before "+N more". */
@@ -530,7 +531,7 @@ export default function GatewayPage(props: GatewayPageProps) {
         return { label: "Edit in orca.yaml", title: `Open the ${name} stack`, target: `stack:${name}` };
       }
     }
-    if (owner.startsWith("dev:")) return { label: "Projects", title: "Managed by a worktree instance: open Projects", target: "projects" };
+    if (owner.startsWith("dev:")) return { label: "Worktrees", title: "Managed by a worktree instance: open Worktrees", target: "projects" };
     return null;
   };
 
@@ -868,38 +869,10 @@ export default function GatewayPage(props: GatewayPageProps) {
                     <h2 style={{ color: "#e6edf3", "font-size": "16px", "font-weight": "600", margin: "0" }}>Orca Gateway</h2>
                   </div>
                   <p style={{ color: "#8b949e", "font-size": "13px", "line-height": "1.6", margin: "0 0 16px 0" }}>
-                    Orca Gateway is a managed reverse proxy that gives your containers clean hostnames with automatic TLS.
+                    Gives containers trusted HTTPS hostnames, such as <span class="mono" style={{ color: "#3fb950" }}>https://webmail.localhost</span> instead of <span class="mono">http://localhost:8095</span>.{" "}
+                    <HelpLink path="/docs/gateway/" />
                   </p>
-                  <div style={{
-                    background: "#161b22",
-                    "border-radius": "8px",
-                    padding: "12px 16px",
-                    "margin-bottom": "16px",
-                    "font-family": "'SF Mono', 'Fira Code', monospace",
-                    "font-size": "13px",
-                    "line-height": "1.8",
-                  }}>
-                    <div style={{ color: "#8b949e" }}>Instead of: <span style={{ color: "#f85149" }}>http://localhost:8095</span></div>
-                    <div style={{ color: "#8b949e" }}>Access at: <span style={{ color: "#3fb950" }}>https://webmail.localhost</span></div>
-                  </div>
-                  <div style={{ display: "flex", "flex-direction": "column", gap: "8px", color: "#c9d1d9", "font-size": "13px" }}>
-                    <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                      <span style={{ color: "#3fb950" }}>&#x2022;</span> Automatic HTTPS via the Orca Certificate Authority
-                    </div>
-                    <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                      <span style={{ color: "#3fb950" }}>&#x2022;</span> .localhost domains work in all browsers
-                    </div>
-                    <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                      <span style={{ color: "#3fb950" }}>&#x2022;</span> Custom domains for teams (*.local.company.dev)
-                    </div>
-                    <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                      <span style={{ color: "#3fb950" }}>&#x2022;</span> WebSocket, SSE, HTTP/2 proxied transparently
-                    </div>
-                    <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                      <span style={{ color: "#3fb950" }}>&#x2022;</span> orca.yaml in your repo auto-registers routes
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "8px", "margin-top": "20px" }}>
+                  <div style={{ display: "flex", gap: "8px" }}>
                     <button class="btn btn-primary" onClick={handleStart} disabled={starting()}>
                       {starting() ? "Starting..." : "Start gateway"}
                     </button>
@@ -907,32 +880,17 @@ export default function GatewayPage(props: GatewayPageProps) {
                 </div>
               </div>
 
-              <div class="card">
-                <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600", margin: "0 0 12px 0" }}>Prerequisites</h3>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "10px", color: "#c9d1d9", "font-size": "13px" }}>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <span style={{ color: "#58a6ff", "font-weight": "600", "flex-shrink": "0" }}>1.</span>
-                    <span>
-                      Install the Orca CA certificate for trusted TLS.{" "}
-                      <button
-                        class="btn-link"
-                        style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "13px", padding: "0" }}
-                        onClick={() => props.onNavigate?.("settings:certificates")}
-                      >
-                        Settings &rarr; Certificates &rarr; Download CA
-                      </button>
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <span style={{ color: "#58a6ff", "font-weight": "600", "flex-shrink": "0" }}>2.</span>
-                    <span>Start the Gateway (pulls caddy:2-alpine, ~40MB)</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <span style={{ color: "#58a6ff", "font-weight": "600", "flex-shrink": "0" }}>3.</span>
-                    <span>Expose containers via the container detail page or here</span>
-                  </div>
-                </div>
-              </div>
+              <p style={{ color: "#8b949e", "font-size": "13px", margin: "0" }}>
+                The first start pulls caddy:2-alpine (about 40 MB). For trusted HTTPS, install the Orca CA in{" "}
+                <button
+                  class="btn-link"
+                  style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "13px", padding: "0" }}
+                  onClick={() => props.onNavigate?.("settings:certificates")}
+                >
+                  Settings &rarr; Certificates
+                </button>
+                .
+              </p>
             </div>
           }
         >
@@ -1075,8 +1033,9 @@ export default function GatewayPage(props: GatewayPageProps) {
               </tbody>
             </table>
             <p style={{ color: "#6e7681", "font-size": "12px", "margin-top": "8px" }}>
-              These hostnames also work from inside containers that share a network with a routed container: a backend can call <span class="mono">https://{routes()[0]?.hostname}</span> through the gateway, as the browser does.
-              {" "}They're also listed, with whether each one runs, on the gateway's{" "}
+              Containers on a routed container's network reach these hostnames too.{" "}
+              <HelpLink path="/docs/gateway/#hostnames-inside-containers" />
+              {" "}· All of them are on the{" "}
               <button class="btn-link" style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", padding: "0", "font-size": "12px" }} onClick={() => setActiveTab("landing")}>landing page</button>.
             </p>
           </Show>
@@ -1356,7 +1315,8 @@ export default function GatewayPage(props: GatewayPageProps) {
             </div>
 
             <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "10px" }}>
-              Environment links are configured in your project's <code style={{ background: "#161b22", padding: "2px 6px", "border-radius": "4px", "font-size": "11px" }}>orca.yaml</code>
+              Environment links come from your project's <code style={{ background: "#161b22", padding: "2px 6px", "border-radius": "4px", "font-size": "11px" }}>orca.yaml</code>.{" "}
+              <HelpLink path="/docs/gateway/#environment-links" />
             </p>
           </div>
         </Show>

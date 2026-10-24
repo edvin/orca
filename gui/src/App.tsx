@@ -5,7 +5,7 @@ import { onOrcaEvent } from "./lib/events";
 import { addEvent } from "./lib/activityStore";
 import { lazy } from "solid-js";
 import { openFolderDialog, openFolderTarget } from "./lib/openFolder";
-import { requestWorkspaceJoin } from "./lib/workspace";
+import { requestWorkspaceJoin, requestWorkspaceSetup } from "./lib/workspace";
 const AiWindow = lazy(() => import("./components/AiWindow"));
 // Pages load on first visit: together with xterm and CodeMirror they made
 // one 1.6 MB bundle that was parsed before the first paint.
@@ -285,6 +285,9 @@ export default function App() {
           // orca://workspace?repo=<git url>: the link a team puts in its wiki.
           const repo = parsed.searchParams.get("repo");
           if (repo) requestWorkspaceJoin(repo);
+          // orca://workspace?setup=<project>: a "Not set up" card on the landing page.
+          const setup = parsed.searchParams.get("setup");
+          if (setup) requestWorkspaceSetup(setup);
           navigate("workspace");
           break;
         }
@@ -489,7 +492,7 @@ export default function App() {
         const title = `${who} ${what[data.action] ?? data.action} ${data.instance} (${data.project})`;
         const detail = [data.url, data.message?.split("\n")[0]].filter(Boolean).join(" · ") || undefined;
         addEvent({ type: "dev.instance", title, detail, severity: data.succeeded ? "info" : "error" });
-        // The Projects page already reports what the user did there.
+        // The Worktrees page already reports what the user did there.
         if (data.source !== "ui" || !data.succeeded) {
           showToast(title, data.succeeded ? "info" : "error", {
             label: "Open Projects",

@@ -11,11 +11,14 @@ import AppIcon from "../components/AppIcon";
 import { iconSrc } from "../lib/icons";
 import SecretsDialog from "../components/SecretsDialog";
 import { JobProgress, JobSteps } from "../components/dev/DevBits";
-import { followJob, type DevJob } from "../lib/dev";
+import { ago, followJob, type DevJob } from "../lib/dev";
 import {
   clearWorkspaceJoin,
   pendingWorkspaceJoin,
+  pendingWorkspaceSetup,
+  clearWorkspaceSetup,
   workspaceApi,
+  type FolderSuggestion,
   type WorkspaceProject,
   type WorkspaceStatus,
 } from "../lib/workspace";
@@ -28,6 +31,32 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
   // The job running per project ("" for the workspace itself).
   const [jobs, setJobs] = createSignal<Record<string, DevJob>>({});
   const [secretsFor, setSecretsFor] = createSignal<WorkspaceProject | null>(null);
+
+  // A landing page "Not set up" card: show that project and its Set up button.
+  const [focused, setFocused] = createSignal<string | null>(null);
+  createEffect(on([pendingWorkspaceSetup, () => ws()?.projects], ([key, projects]) => {
+    if (!key || !projects) return;
+    clearWorkspaceSetup();
+    if (!projects.some((p) => p.key === key)) {
+      showToast(`The workspace has no project called ${key}`, "error");
+      return;
+    }
+    setFocused(key);
+    requestAnimationFrame(() => document.getElementById(`ws-project-${key}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    setTimeout(() => setFocused((k) => (k === key ? null : k)), 4000);
+  }));
+
+  // "Workspace updated", until dismissed (per update, on this machine).
+  const SEEN_KEY = "orca.workspace.seenUpdate";
+  const [seenUpdate, setSeenUpdate] = createSignal((() => { try { return localStorage.getItem(SEEN_KEY); } catch { return null; } })());
+  const dismissUpdate = (at: string) => {
+    setSeenUpdate(at);
+    try { localStorage.setItem(SEEN_KEY, at); } catch { /* the banner just comes back */ }
+  };
+  const freshUpdate = () => {
+    const u = ws()?.last_update;
+    return u && u.at !== seenUpdate() && u.commits.length > 0 ? u : null;
+  };
 
   const timer = setInterval(() => { if (!document.hidden && !Object.values(jobs()).some((j) => j.status === "running")) void refetch(); }, 5_000);
   onCleanup(() => clearInterval(timer));
@@ -76,7 +105,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
   const leave = async () => {
     const ok = await confirmDialog({
       title: "Leave the workspace?",
-      message: "Orca forgets the workspace, removes its routes and puts the gateway's domain and certificate back as they were. The cloned projects, their .env files and running services stay.",
+      message: "Orca forgets the workspace, removes its routes and puts the gateway's domain, certificate, title and logo back as they were. The cloned projects, their .env files and running services stay.",
       confirmLabel: "Leave",
       danger: true,
     });
@@ -111,10 +140,27 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                 <button class="btn btn-sm" onClick={() => void update()}>Update</button>
               </div>
             }>
+              <Show when={freshUpdate()}>
+                {(u) => (
+                  <div class="ws-updated">
+                    <div class="ws-updated-head">
+                      <b>Workspace updated {ago(u().at)}</b>
+                      <button class="ws-updated-close" title="Dismiss" onClick={() => dismissUpdate(u().at)}>×</button>
+                    </div>
+                    <ul>
+                      <For each={u().commits}>{(c) => <li>{c}</li>}</For>
+                      <Show when={u().more > 0}><li class="ws-muted">and {u().more} more</li></Show>
+                    </ul>
+                  </div>
+                )}
+              </Show>
               <div class="ws-hero">
-                <div>
-                  <div class="ws-name">{w().name}</div>
-                  <Show when={w().description}><div class="ws-desc">{w().description}</div></Show>
+                <div class="ws-brand">
+                  <Show when={w().logo}>{(src) => <img class="ws-logo" src={src()} alt="" />}</Show>
+                  <div>
+                    <div class="ws-name">{w().name}</div>
+                    <Show when={w().description}><div class="ws-desc">{w().description}</div></Show>
+                  </div>
                 </div>
                 <div class="ws-facts">
                   <span class="ws-chip" title="The gateway serves every project under this domain">*.{w().domain}</span>
@@ -168,6 +214,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                       onSetup={(rerun) => void setup(p, rerun)}
                       onSecrets={() => setSecretsFor(p)}
                       onNavigate={props.onNavigate}
+                      focused={focused() === p.key}
                     />
                   )}
                 </For>
@@ -202,13 +249,14 @@ function ProjectCard(props: {
   onSetup: (rerun: boolean) => void;
   onSecrets: () => void;
   onNavigate?: (target: string) => void;
+  focused?: boolean;
 }) {
   const p = () => props.project;
   const busy = () => props.job?.status === "running";
   const missing = () => p().secrets.filter((s) => !s.filled);
   const state = () => (p().running ? "running" : p().cloned ? "cloned" : "new");
   return (
-    <div class="ws-card" classList={{ running: p().running }}>
+    <div class="ws-card" id={`ws-project-${p().key}`} classList={{ running: p().running, focused: props.focused }}>
       <div class="ws-card-head">
         <AppIcon src={iconSrc(p().icon)} name={p().key} size={26} />
         <b>{p().key}</b>
@@ -265,6 +313,24 @@ function JoinPanel(props: { onJoined: () => void }) {
   const [folder, setFolder] = createSignal("");
   const [showFolder, setShowFolder] = createSignal(false);
   const [job, setJob] = createSignal<DevJob | null>(null);
+  const [suggested, setSuggested] = createSignal<FolderSuggestion | null>(null);
+
+  // Where it'll go, once a repo is typed: beside the user's checkouts, or
+  // their copy of it. A local folder is joined where it is.
+  let suggestTimer: ReturnType<typeof setTimeout> | undefined;
+  createEffect(on(repo, (r) => {
+    clearTimeout(suggestTimer);
+    const url = r.trim();
+    if (!url || url.startsWith("/") || url.startsWith("~") || url.startsWith(".")) { setSuggested(null); return; }
+    suggestTimer = setTimeout(() => {
+      workspaceApi.suggestFolder(url).then((s) => { if (repo().trim() === url) setSuggested(s); }, () => setSuggested(null));
+    }, 300);
+  }));
+  onCleanup(() => clearTimeout(suggestTimer));
+  const changeFolder = () => {
+    setFolder(suggested()?.folder ?? "");
+    setShowFolder(true);
+  };
 
   // An orca://workspace?repo=… link fills the form in.
   createEffect(on(pendingWorkspaceJoin, (r) => {
@@ -302,10 +368,24 @@ function JoinPanel(props: { onJoined: () => void }) {
         <button class="btn btn-primary" type="submit" disabled={!repo().trim() || running()}>{running() ? "Joining…" : "Join"}</button>
       </form>
       <Show when={showFolder()} fallback={
-        <button class="ai-connect-more" onClick={() => setShowFolder(true)}>Clone it somewhere other than ~/code?</button>
+        <Show when={suggested()} fallback={
+          <button class="ai-connect-more" onClick={changeFolder}>Keep your code somewhere other than ~/code?</button>
+        }>
+          {(s) => (
+            <p class="ws-muted ws-join-where">
+              <Show when={s().existing} fallback={
+                <>Clones to <span class="mono">{s().folder}</span>{s().checkouts > 0 ? `, next to your ${s().checkouts} checkouts` : ""}; projects go to <span class="mono">{s().parent}</span> too. </>
+              }>
+                Uses your copy in <span class="mono">{s().folder}</span>; projects go beside it in <span class="mono">{s().parent}</span>.{" "}
+              </Show>
+              <button class="btn-link" onClick={changeFolder} disabled={running()}>Change</button>
+            </p>
+          )}
+        </Show>
       }>
-        <input class="form-input mono ws-join-folder" placeholder="/Users/you/work/dev-workspace" value={folder()}
+        <input class="form-input mono ws-join-folder" placeholder="~/projects/dev-workspace" value={folder()}
           onInput={(e) => setFolder(e.currentTarget.value)} disabled={running()} />
+        <p class="ws-muted ws-join-hint">Projects are cloned next to the workspace, so put it where your checkouts are: ones already there are used as they are.</p>
       </Show>
       <Show when={job()}>
         {(j) => (

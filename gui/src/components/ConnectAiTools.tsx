@@ -5,6 +5,7 @@
 import { createResource, createSignal, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
+import HelpLink from "./HelpLink";
 
 interface ClientStatus {
   id: string;
@@ -72,8 +73,8 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
         <div>
           <div class="ai-connect-title">Connect your AI tools</div>
           <div class="ai-connect-sub">
-            Claude and other AI tools can then run, inspect and fix your containers, stacks and worktree instances. One click, no
-            API keys or tokens: they run Orca's own <span class="mono">orca mcp</span>.
+            Lets Claude and other AI tools run, inspect and fix what runs here. No API key needed.{" "}
+            <HelpLink path="/docs/agents/" />
           </div>
         </div>
       </div>

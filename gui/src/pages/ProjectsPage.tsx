@@ -3,6 +3,7 @@
 // shared services on top, one card per worktree below.
 import { createSignal, createMemo, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import HelpLink from "../components/HelpLink";
 import { showToast } from "../components/Toast";
 import { confirm, confirmDanger } from "../components/ConfirmDialog";
 import { useRefresh } from "../lib/useRefresh";
@@ -275,10 +276,10 @@ export default function ProjectsPage(props: Props) {
     <div>
       <div class="page-header">
         <div>
-          <h1 class="page-title">Projects</h1>
+          <h1 class="page-title">Worktrees</h1>
           <div class="dev-subtitle">
-            Run every git worktree of a project side by side, each with its own URLs and ports. Databases and other
-            infrastructure run once and are shared.
+            Every git worktree of a project, running side by side.{" "}
+            <HelpLink path="/docs/worktrees/" />
           </div>
         </div>
         <Show when={(projects()?.length ?? 0) > 0}>
@@ -598,21 +599,20 @@ function EmptyState(props: {
   return (
     <div class="dev-empty" style={props.compact ? { padding: "8px 0 0" } : undefined}>
       <Show when={!props.compact}>
-        <Illustration />
-        <h2>One running copy of your app per worktree</h2>
-        <p>
-          Working with several branches or AI agents at once? Add a repository and Orca runs each of its git worktrees as
-          its own instance, with its own URLs and ports, while databases and other infrastructure run once and are shared.
-          Your compose files are never changed.
-        </p>
+        <div class="dev-empty-intro">
+          <Illustration />
+          <div>
+            <h2>One running copy of your app per worktree</h2>
+            <p>
+              Each worktree gets its own URLs and ports; databases run once and are shared. Your compose files stay as
+              they are.
+            </p>
+          </div>
+        </div>
       </Show>
       <Show when={props.compact}>
         <p style={{ "margin-bottom": "14px" }}>Pick any folder inside a git repository; Orca finds the main checkout and all its worktrees.</p>
       </Show>
-      <button class="btn btn-primary btn-lg" disabled={props.adding} onClick={props.onPick}>
-        Choose a repository…
-      </button>
-      <div style={{ color: "#6e7681", "font-size": "12px", margin: "14px 0 8px" }}>or paste a path</div>
       <form
         class="dev-path-input"
         onSubmit={(e) => {
@@ -620,10 +620,13 @@ function EmptyState(props: {
           props.onAdd(props.pathInput);
         }}
       >
+        <button class="btn btn-primary" type="button" disabled={props.adding} onClick={props.onPick}>
+          Choose a repository…
+        </button>
         <input
           class="form-input mono"
           style={{ flex: 1 }}
-          placeholder="/home/you/code/myapp"
+          placeholder="or paste a path: ~/code/myapp"
           value={props.pathInput}
           onInput={(e) => props.setPathInput(e.currentTarget.value)}
         />

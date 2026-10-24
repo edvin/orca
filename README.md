@@ -288,7 +288,7 @@ Orca reads `orca.yaml` from every compose project it can see, however it was sta
 
 Every key is described in the [orca.yaml reference](docs/orca-yaml.md). The **orca.yaml** tab on a stack's page shows what Orca read and applied, and creates a first `orca.yaml` from the stack's running services.
 
-The same file holds `dev:` for worktree instances (one running copy of the app per git worktree); when Orca finds a repo whose `orca.yaml` has one, the Projects page offers to add it.
+The same file holds `dev:` for worktree instances (one running copy of the app per git worktree); when Orca finds a repo whose `orca.yaml` has one, the Worktrees page offers to add it.
 
 A stack can also run setup commands after every `up` (database migrations, creating buckets, registering search attributes). Each is `"service: command"`, run in that service with `sh -c`, so make them safe to repeat:
 

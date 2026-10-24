@@ -163,7 +163,7 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
                 <Show when={f().git}>
                   <label class="open-folder-check">
                     <input type="checkbox" checked={addProject()} onChange={(e) => setAddProject(e.currentTarget.checked)} />
-                    <span>Also add it to <b>Projects</b>, so each git worktree of it can run side by side</span>
+                    <span>Also add it to <b>Worktrees</b>, so each git worktree of it can run side by side</span>
                   </label>
                 </Show>
 

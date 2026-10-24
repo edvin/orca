@@ -10,6 +10,7 @@ import type { DataInfo, DataMode, DevInstance, DevJob, DevProject, PlanView } fr
 import { confirm, confirmDanger } from "../ConfirmDialog";
 import { DataModePicker, JobSteps, StatusDot, YamlView } from "./DevBits";
 import { usePoller } from "../../lib/poller";
+import HelpLink from "../HelpLink";
 
 type Tab = "overview" | "logs" | "env" | "data" | "override" | "settings";
 
@@ -536,9 +537,8 @@ function Env(props: { project: DevProject; inst: DevInstance }) {
       <Show when={plan()}>
         <div class="dev-explainer">
           <div>
-            Two places see this instance: <b>containers</b> reach other services by name (<span class="mono">postgres:5432</span>),
-            and <b>your machine</b> (tests, scripts, agents) uses the URLs and host ports in <span class="mono">.orca/env</span>.
-            Values Orca set or changed are marked.
+            Containers reach services by name; your machine uses the URLs and ports in <span class="mono">.orca/env</span>. Values Orca set are marked.{" "}
+            <HelpLink path="/docs/worktrees/#environment-and-orcaenv" />
           </div>
         </div>
         <div class="dev-section">

@@ -4,6 +4,7 @@
 
 import { Index, Show } from "solid-js";
 import Dropdown from "../Dropdown";
+import HelpLink from "../HelpLink";
 import type { BuildM, HookM, LinkGroupM, LinkM } from "./model";
 import type { StudioService } from "./RoutesSection";
 
@@ -27,9 +28,8 @@ export function LinksSection(props: { groups: LinkGroupM[]; projectName: string;
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
       <p style={intro}>
-        Links to this project in each environment, on the Gateway page and the landing page, one tab per environment.{" "}
-        <span class="mono">local</span> takes a gateway hostname, with a path if you like (<span class="mono">shop/admin</span>); other
-        environments take full URLs.
+        Links per environment: <span class="mono">local</span> takes a gateway hostname (<span class="mono">shop/admin</span>), the others full URLs.{" "}
+        <HelpLink path="/docs/orca-yaml/#links" />
       </p>
       <Index each={props.groups}>
         {(g, gi) => (
@@ -99,8 +99,8 @@ export function HooksSection(props: { hooks: HookM[]; services: StudioService[];
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
       <p style={intro}>
-        Commands run inside a service's container after every start from Orca, in order, with <span class="mono">sh -c</span>. They run on
-        every start, so make them safe to repeat: <span class="mono">--force</span>, <span class="mono">|| true</span>, <span class="mono">IF NOT EXISTS</span>.
+        Run in a service's container after every start from Orca, so make them safe to repeat: <span class="mono">--force</span>, <span class="mono">|| true</span>, <span class="mono">IF NOT EXISTS</span>.{" "}
+        <HelpLink path="/docs/orca-yaml/#hooks" />
       </p>
       <Index each={props.hooks}>
         {(h, i) => (

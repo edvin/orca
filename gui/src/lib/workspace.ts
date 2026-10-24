@@ -46,6 +46,10 @@ export interface WorkspaceStatus {
   network?: string | null;
   domain?: string;
   certificate?: "workspace" | "orca";
+  /** What the last pull brought in. */
+  last_update?: { at: string; commits: string[]; more: number } | null;
+  /** The workspace's logo, also on the gateway's landing page. */
+  logo?: string | null;
   shared?: { name: string; running: number; total: number } | null;
   shared_urls?: { title: string; url: string; icon?: string | null }[];
   registries?: { host: string; logged_in: boolean }[];
@@ -54,12 +58,25 @@ export interface WorkspaceStatus {
   projects?: WorkspaceProject[];
 }
 
+export interface FolderSuggestion {
+  /** Where the workspace goes, as ~/… */
+  folder: string;
+  /** Where its projects go: the folder that holds it. */
+  parent: string;
+  /** A copy of the workspace is already there; it's joined where it is. */
+  existing: boolean;
+  /** Git checkouts in that folder. */
+  checkouts: number;
+}
+
 const call = <T>(method: string, path: string, body?: unknown) =>
   invoke<T>("workspace_api", { method, path, body: body ?? null });
 const enc = encodeURIComponent;
 
 export const workspaceApi = {
   status: () => call<WorkspaceStatus>("GET", "/workspace"),
+  /** Where joining `repo` would clone it: next to the user's checkouts, or a copy already there. */
+  suggestFolder: (repo: string) => call<FolderSuggestion>("GET", `/workspace/suggest-folder?repo=${enc(repo)}`),
   join: (repo: string, folder?: string) => call<DevJob>("POST", "/workspace/join", { repo, folder: folder || null }),
   update: () => call<DevJob>("POST", "/workspace/update"),
   leave: () => call<{ left: boolean }>("POST", "/workspace/leave"),
@@ -79,3 +96,13 @@ const [pendingJoin, setPendingJoin] = createSignal<string | null>(null);
 export const pendingWorkspaceJoin = pendingJoin;
 export const requestWorkspaceJoin = (repo: string) => setPendingJoin(repo);
 export const clearWorkspaceJoin = () => setPendingJoin(null);
+
+/**
+ * A project to set up, from an orca://workspace?setup=<key> link (the
+ * landing page's "Not set up" cards). The Workspace page shows it; setting
+ * it up still takes a click.
+ */
+const [pendingSetup, setPendingSetup] = createSignal<string | null>(null);
+export const pendingWorkspaceSetup = pendingSetup;
+export const requestWorkspaceSetup = (key: string) => setPendingSetup(key);
+export const clearWorkspaceSetup = () => setPendingSetup(null);
