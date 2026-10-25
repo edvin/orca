@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvnl9uam">
+<link rel="stylesheet" href="/assets/site.css?v=mvnnrm7o">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvnl9uam" defer></script>
+<script src="/assets/site.js?v=mvnnrm7o" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -94,7 +94,7 @@
 <span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> gateway</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> routes</span></span>
 <span class="line"><span style="--shiki-light:#953800;--shiki-dark:#FFA657">orca</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> gateway</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> remove</span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF"> shop.localhost</span></span></code></pre></div><p>Routes you add by hand can be edited, paused and removed on the Routes tab.</p>
 <h3 id="orcayaml"><a class="anchor" href="#orcayaml" aria-hidden="true" tabindex="-1">#</a>orca.yaml</h3>
-<p>A compose project can declare its routes in an <code>orca.yaml</code> next to its compose file. They exist while the service runs, whether the project was started from Orca or with <code>docker compose up</code>:</p>
+<p>A compose project can declare its routes in an <code>orca.yaml</code> next to its compose file. They exist while the service&#39;s container does, running or stopped, whether the project was started from Orca or with <code>docker compose up</code>:</p>
 <div class="code has-title"><div class="code-title"><span>orca.yaml</span></div><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">gateway</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
 <span class="line"><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">  - </span><span style="--shiki-light:#116329;--shiki-dark:#7EE787">hostname</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">shop</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    service</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">web</span></span>
@@ -113,7 +113,7 @@
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      orca.route.api</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">api.{domain}</span><span style="--shiki-light:#6E7781;--shiki-dark:#8B949E">   # more routes, each with its own name</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      orca.route.api.port</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"8080"</span></span>
 <span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">      orca.route.api.path</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">/v1*</span></span></code></pre></div><p>Traefik labels work as well. Each <code>traefik.http.routers.&lt;name&gt;.rule</code> with <code>Host(...)</code>, and optionally <code>PathPrefix(...)</code> or <code>Path(...)</code>, becomes a route to the router&#39;s <code>loadbalancer.server.port</code>. <code>traefik.enable=false</code> opts a container out. When neither the labels nor the image name a single port, Orca uses port 80.</p>
-<p>Routes from orca.yaml and labels are added when the container starts and removed when it stops. To change one, change its source; you can still pause it on the Gateway page. A route from an <code>orca.yaml</code> has an <strong>Edit in orca.yaml</strong> link that opens its stack&#39;s page, where the <strong>orca.yaml</strong> tab edits the file.</p>
+<p>Routes from orca.yaml and labels are added when the container is created and removed when it&#39;s removed. While it&#39;s stopped, its card stays on the landing page, greyed out, and its address shows a page saying it isn&#39;t running, with <strong>Start in Orca</strong>. To change one, change its source; you can still pause it on the Gateway page. A route from an <code>orca.yaml</code> has an <strong>Edit in orca.yaml</strong> link that opens its stack&#39;s page, where the <strong>orca.yaml</strong> tab edits the file.</p>
 <h3 id="templates"><a class="anchor" href="#templates" aria-hidden="true" tabindex="-1">#</a>Templates</h3>
 <p>Templates from the app catalog that define routes register them when you deploy them. The badge reads <strong>stack</strong>.</p>
 <h3 id="worktree-instances"><a class="anchor" href="#worktree-instances" aria-hidden="true" tabindex="-1">#</a>Worktree instances</h3>

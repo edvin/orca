@@ -12,6 +12,7 @@ export const SHOTS = {
   editor: "feature-editor",
   openFolder: "open-folder",
   workspace: "workspace",
+  databases: "databases",
   palette: "palette",
 };
 
@@ -30,6 +31,7 @@ export const F = {
   bot: '<svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg>',
   box: '<svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>',
   layers: '<svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>',
+  database: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>',
   shield: '<svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>',
   helm: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
   grid: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -212,6 +214,26 @@ hooks:
 <section class="section feature alt">
   <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
+      <span class="eyebrow">${F.database} Databases</span>
+      <h2>One database server for the whole team</h2>
+      <p>Instead of a MySQL or Postgres container in every project, a project says which database it needs in its <code>orca.yaml</code>, and gets a database and a user of its own on the team's shared server. Or on one Orca runs, when the team has none.</p>
+      <ul class="checks">
+        <li>MySQL, Percona Server, MariaDB or PostgreSQL, in the versions you run in production</li>
+        <li>The connection goes into the project's <code>.env</code>; its own database container stays down</li>
+        <li>Connect, snapshot, restore or reset any database from the <strong>Databases</strong> page</li>
+        <li>Moving over? Import copies a project's data across, or ask Claude to move them all</li>
+      </ul>
+      <a class="link-arrow" href="/docs/databases/">How shared databases work ${ICONS.arrow}</a>
+    </div>
+    <div class="feature-visual reveal">
+      ${windowFrame(shot(SHOTS.databases, "The Databases page: the team's shared MySQL and PostgreSQL servers, and each project's database on them"), "Orca — Databases")}
+    </div>
+  </div>
+</section>
+
+<section class="section feature">
+  <div class="container feature-grid">
+    <div class="feature-copy reveal">
       <span class="eyebrow">${F.gateway} Gateway</span>
       <h2>Every service gets a real HTTPS name</h2>
       <p>A managed gateway routes <code>shop.localhost</code>, <code>api.localhost</code> or your team's own domain to the right container, with certificates from Orca's own certificate authority.</p>
@@ -229,8 +251,8 @@ hooks:
   </div>
 </section>
 
-<section class="section feature">
-  <div class="container feature-grid">
+<section class="section feature alt">
+  <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.branch} Worktree instances</span>
       <h2>A running copy of your app for every branch</h2>
@@ -249,8 +271,8 @@ hooks:
   </div>
 </section>
 
-<section class="section feature alt">
-  <div class="container feature-grid reverse">
+<section class="section feature">
+  <div class="container feature-grid">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.code} orca.yaml</span>
       <h2>One file sets up the project for everyone</h2>
@@ -269,8 +291,8 @@ hooks:
   </div>
 </section>
 
-<section class="section feature" id="agents">
-  <div class="container feature-grid">
+<section class="section feature alt" id="agents">
+  <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.bot} Agents</span>
       <h2>Your AI runs Orca. One click to connect.</h2>

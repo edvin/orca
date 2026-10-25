@@ -375,12 +375,38 @@ hooks:
         cloned: false, set_up: false, stack: null, running: false, uses: [], setup: null, urls: ["https://partner-api.local.acme.dev"], secrets: [], worktrees: false },
     ],
   };
+  // Shared database servers from the workspace, each project with its own
+  // database and user on them.
+  const db = (name, project, size, snapshots = 0) =>
+    ({ name, size, project, dir: `${HOME}/${project}`, user: name, seed: null, snapshots });
+  const need = (project, engine, database, server, from) =>
+    ({ project, dir: `${HOME}/${project}`, running: true, databases: [{ engine, version: null, database, user: database, server, source: { kind: "workspace" }, from, replaces: "db" }] });
+  const DATABASES = {
+    snapshot_dir: "~/Library/Application Support/orca/database-snapshots",
+    servers: [
+      { id: "workspace:mysql", source: "workspace", label: "mysql (acme)", engine: "mysql", version: "8.4.6", running: true, container: "acme-shared-mysql-1", port: 13306,
+        databases: [db("shop", "shop", 48_300_000, 2), db("billing", "billing", 12_900_000, 1), db("wordpress", "website", 3_100_000)] },
+      { id: "workspace:postgres", source: "workspace", label: "postgres (acme)", engine: "postgres", version: "17.6", running: true, container: "acme-shared-postgres-1", port: 15432,
+        databases: [db("analytics", "analytics", 21_400_000), db("gitea", "git", 9_600_000, 1)] },
+    ],
+    projects: [
+      need("shop", "mysql", "shop", "workspace:mysql", "the workspace's mysql (MySQL)"),
+      need("billing", "mysql", "billing", "workspace:mysql", "the workspace's mysql (MySQL)"),
+      need("website", "mysql", "wordpress", "workspace:mysql", "the workspace's mysql (MySQL)"),
+      need("analytics", "postgres", "analytics", "workspace:postgres", "the workspace's postgres (PostgreSQL)"),
+      need("git", "postgres", "gitea", "workspace:postgres", "the workspace's postgres (PostgreSQL)"),
+    ],
+  };
   window.__TAURI_INTERNALS__ = {
     invoke: async (cmd, args) => {
       if (cmd === "all_container_stats") return stats();
       if (cmd === "container_stats") return stats().find((s) => s.container_id === args?.id) ?? stats()[0];
       if (cmd === "dev_api") return devApi(args);
       if (cmd === "workspace_api") return args?.path === "/workspace" ? (window.__WS_EMPTY ? { joined: false } : WORKSPACE) : {};
+      if (cmd === "databases_api") {
+        if (args?.path?.startsWith("/databases/own-services")) return [];
+        return args?.path?.split("?")[0] === "/databases" ? DATABASES : {};
+      }
       if (cmd === "inspect_container") {
         const c = containers.find((x) => x.id === args?.id || x.name === args?.id) ?? containers[0];
         return { ...c, exit_code: 0, oom_killed: false, started_at: new Date(Date.now() - 3 * 3600e3).toISOString(),
@@ -427,7 +453,7 @@ const SHOTS = {
     return { clip: content };
   },
   async worktrees(page) {
-    await nav(page, "Projects");
+    await nav(page, "Worktrees");
     return { clip: content };
   },
   async "container-detail"(page) {
@@ -514,6 +540,11 @@ const SHOTS = {
     const box = await page.locator(".ws-join").boundingBox();
     return { clip: { x: box.x - 40, y: box.y - 40, width: box.width + 80, height: box.height + 80 } };
   },
+  async databases(page) {
+    await nav(page, "Databases");
+    await page.waitForTimeout(1500);
+    return {};
+  },
   async kubernetes(page) {
     await nav(page, "Kubernetes");
     await page.waitForTimeout(2500);
@@ -527,7 +558,7 @@ const SHOTS = {
     return { clip: content };
   },
   async "start-dialog"(page) {
-    await nav(page, "Projects");
+    await nav(page, "Worktrees");
     const card = page.locator(".dev-card", { hasText: "spike-search" });
     await card.click();
     await page.waitForTimeout(1200);
@@ -559,7 +590,7 @@ for (const [name, fn] of Object.entries(SHOTS)) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: "dark" });
   await ctx.addInitScript(installMock, TEMPLATES);
   const page = await ctx.newPage();
-  page.on("pageerror", (e) => console.log("  pageerror", name, e.message));
+  page.on("pageerror", (e) => console.log("  pageerror", name, e.message, (e.stack || "").split("\n").slice(1, 3).join(" | ")));
   await page.goto(BASE);
   await page.addStyleTag({ content: "body { background: #0a0e14 !important; } *::-webkit-scrollbar { display: none; }" });
   await page.waitForTimeout(2500);
