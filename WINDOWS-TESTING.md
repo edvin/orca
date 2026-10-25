@@ -64,7 +64,7 @@ Tick each, and note what happened where it didn't.
 - [x] `wsl --terminate orca`: within ~30 s the daemon brings it back and Docker answers again (keepalive in `crates/orca-daemon/src/main.rs`). *32 s; with the gateway running, about a second.*
 - [x] `wsl --shutdown`: the same, and **Diagnose** on System Health reconnects. *From PowerShell: 40 s later `orca` was running again, `docker ps` answered, `/settings/reconnect` said `connected: true`, and `cmd.exe /c ver` still ran in Ubuntu-24.04 (interop survived).*
 - [x] Quitting Orca and starting it again connects without a setup step.
-- [ ] Cold start (after `wsl --shutdown`, or a reboot): the app opens at once (the daemon answers within seconds) and connects to the engine in the background within about a minute and a half. *Only with `orca` stopped and the WSL VM running: the daemon listened and was connected about 4 s after it started.*
+- [x] Cold start (after `wsl --shutdown`, or a reboot): the app opens at once (the daemon answers within seconds) and connects to the engine in the background within about a minute and a half. *After `wsl --shutdown` with the daemon stopped (no WSL VM running): `/health` answered and System Health's Docker Runtime passed within 10 s and 15 s of starting the daemon (upper bounds: the commands were typed one by one). A reboot wasn't tested: that would also start WSL's service cold.*
 
 ### 3. Projects and paths
 - [x] A compose project in `C:\Users\<you>\code\app` (with a relative bind mount like `./src:/src`) starts from **Open folder**; the bind mount shows the files.

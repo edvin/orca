@@ -146,7 +146,10 @@ checkout's `target\debug`.
   in it failed the same way for 90 s. `wsl --terminate Ubuntu-24.04`
   fixed it, and it stayed fine afterwards with the share loop running.
   The cause is unknown.
-- **Cold boot (2)**: next, with the user.
+- **Cold start (2)**: daemon stopped, then `wsl --shutdown` (no WSL VM),
+  then the daemon started: `/health` answered within 10 s and Docker
+  Runtime passed within 15 s (upper bounds: typed one line at a time).
+  Not a reboot, so WSL's service itself was already up.
 
 ## What still fails, or wasn't tested
 
@@ -165,8 +168,8 @@ checkout's `target\debug`.
 - **Docker Desktop in Windows-containers mode (6)**: not tested. The test
   install is per-user, and those can't switch ("windows containers have been
   disabled for this installation").
-- **Cold boot, mirrored networking (2, 4)**: not tested. `wsl --shutdown`
-  passed in the PowerShell round.
+- **A reboot, mirrored networking (2, 4)**: not tested. `wsl --shutdown`
+  and a cold start after it passed in the PowerShell round.
 - **Uninstall (8)**: not run (no installer: `tauri-cli` isn't installed).
   The hook now runs `undo-integration.cmd`, which was tested on its own.
 - **`redis:2`** didn't come over in the move: it's a layerless 7.94 kB stub in
