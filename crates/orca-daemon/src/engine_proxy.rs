@@ -130,7 +130,10 @@ async fn read_head<R: AsyncRead + Unpin>(r: &mut BufReader<R>) -> std::io::Resul
             return if head.is_empty() {
                 Ok(None)
             } else {
-                Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "request cut short"))
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "request cut short",
+                ))
             };
         }
         if head.ends_with(b"\r\n\r\n") || head == b"\r\n" {
@@ -141,7 +144,10 @@ async fn read_head<R: AsyncRead + Unpin>(r: &mut BufReader<R>) -> std::io::Resul
             return Ok(Some(head));
         }
         if head.len() > MAX_HEAD {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "request head too large"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "request head too large",
+            ));
         }
     }
 }
@@ -164,7 +170,10 @@ impl Head {
         let mut parts = first.split(' ');
         let (method, path) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
         if method.is_empty() || path.is_empty() {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "not an HTTP request"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "not an HTTP request",
+            ));
         }
         let mut h = Head {
             method: method.to_string(),
@@ -256,7 +265,10 @@ async fn read_chunked<R: AsyncRead + Unpin>(r: &mut BufReader<R>) -> std::io::Re
             }
         }
         if body.len() + size > MAX_JSON {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "request body too large"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "request body too large",
+            ));
         }
         let start = body.len();
         body.resize(start + size, 0);
@@ -276,7 +288,10 @@ where
         let mut line = Vec::new();
         r.read_until(b'\n', &mut line).await?;
         if line.is_empty() {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "chunked body cut short"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "chunked body cut short",
+            ));
         }
         w.write_all(&line).await?;
         let size_text = String::from_utf8_lossy(&line);
@@ -326,7 +341,9 @@ fn rewrite_body(path: &str, body: &[u8], rewrite: &Rewrite) -> Option<Vec<u8>> {
             }
         }
     } else if route.ends_with("/volumes/create")
-        && v.pointer("/DriverOpts/o").and_then(|o| o.as_str()).is_some_and(|o| o.contains("bind"))
+        && v.pointer("/DriverOpts/o")
+            .and_then(|o| o.as_str())
+            .is_some_and(|o| o.contains("bind"))
         && let Some(dev) = v.pointer("/DriverOpts/device").and_then(|d| d.as_str())
         && let Some(new) = rewrite(dev)
     {
@@ -339,7 +356,11 @@ fn rewrite_body(path: &str, body: &[u8], rewrite: &Rewrite) -> Option<Vec<u8>> {
 /// A `src:dst[:opts]` bind with its source rewritten. The source can hold a
 /// colon itself (`C:\code`), so it ends at the first `:/` after the drive.
 fn rewrite_bind(bind: &str, rewrite: &Rewrite) -> Option<String> {
-    let start = if bind.len() > 2 && bind.as_bytes()[1] == b':' { 2 } else { 0 };
+    let start = if bind.len() > 2 && bind.as_bytes()[1] == b':' {
+        2
+    } else {
+        0
+    };
     let i = bind[start..].find(":/").map(|i| i + start)?;
     let (src, rest) = (&bind[..i], &bind[i..]);
     rewrite(src).map(|s| format!("{s}{rest}"))
@@ -405,7 +426,9 @@ fn tls_config() -> std::io::Result<Arc<rustls::ClientConfig>> {
 pub async fn connect_engine() -> std::io::Result<Engine> {
     let tcp = tokio::net::TcpStream::connect(("127.0.0.1", orca_backend_common::wsl::PORT)).await?;
     let name = rustls::pki_types::ServerName::try_from("localhost").expect("valid name");
-    let tls = tokio_rustls::TlsConnector::from(tls_config()?).connect(name, tcp).await?;
+    let tls = tokio_rustls::TlsConnector::from(tls_config()?)
+        .connect(name, tcp)
+        .await?;
     Ok(Engine { tls, closing: false })
 }
 
@@ -440,7 +463,10 @@ impl AsyncWrite for Engine {
         std::pin::Pin::new(&mut self.tls).poll_write(cx, buf)
     }
 
-    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
         std::pin::Pin::new(&mut self.tls).poll_flush(cx)
     }
 
@@ -579,11 +605,21 @@ mod tests {
                 ]
             }
         });
-        let out = rewrite_body("/v1.47/containers/create?name=x", &serde_json::to_vec(&body).unwrap(), &windows()).unwrap();
+        let out = rewrite_body(
+            "/v1.47/containers/create?name=x",
+            &serde_json::to_vec(&body).unwrap(),
+            &windows(),
+        )
+        .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(
             v["HostConfig"]["Binds"],
-            serde_json::json!(["/mnt/c/code/app:/app", "/mnt/c/data:/data:ro", "named:/x", "/etc/hosts:/h:ro"])
+            serde_json::json!([
+                "/mnt/c/code/app:/app",
+                "/mnt/c/data:/data:ro",
+                "named:/x",
+                "/etc/hosts:/h:ro"
+            ])
         );
         assert_eq!(
             v["HostConfig"]["Mounts"][0]["Source"],
@@ -594,7 +630,8 @@ mod tests {
 
     #[test]
     fn bind_volumes_get_engine_paths() {
-        let body = serde_json::json!({"Name": "src", "DriverOpts": {"type": "none", "o": "bind", "device": r"C:\code"}});
+        let body =
+            serde_json::json!({"Name": "src", "DriverOpts": {"type": "none", "o": "bind", "device": r"C:\code"}});
         let out = rewrite_body("/volumes/create", &serde_json::to_vec(&body).unwrap(), &windows()).unwrap();
         let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(v["DriverOpts"]["device"], "/mnt/c/code");
@@ -630,7 +667,10 @@ mod tests {
         ur.read_to_end(&mut got).await.unwrap();
         let got = String::from_utf8(got).unwrap();
         assert!(!got.to_ascii_lowercase().contains("transfer-encoding"), "{got}");
-        assert!(got.contains("Content-Length: 40\r\n\r\n{\"HostConfig\":{\"Binds\":[\"/mnt/c/x:/x\"]}}"), "{got}");
+        assert!(
+            got.contains("Content-Length: 40\r\n\r\n{\"HostConfig\":{\"Binds\":[\"/mnt/c/x:/x\"]}}"),
+            "{got}"
+        );
     }
 
     #[tokio::test]
@@ -655,7 +695,11 @@ mod tests {
             .expect("the client side closed")
             .unwrap();
         assert!(back.ends_with(b"bye"));
-        tokio::time::timeout(std::time::Duration::from_secs(5), proxy).await.expect("proxy done").unwrap().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), proxy)
+            .await
+            .expect("proxy done")
+            .unwrap()
+            .unwrap();
     }
 
     #[test]
@@ -705,7 +749,10 @@ mod tests {
         let got = String::from_utf8(got).unwrap();
         assert!(got.contains(r#"{"HostConfig":{"Binds":["/mnt/c/x:/x"]}}"#), "{got}");
         assert!(got.contains("Content-Length: 40\r\n"), "{got}");
-        assert!(got.contains("3\r\nabc\r\n0\r\n\r\nGET /_ping HTTP/1.1\r\n\r\n"), "{got}");
+        assert!(
+            got.contains("3\r\nabc\r\n0\r\n\r\nGET /_ping HTTP/1.1\r\n\r\n"),
+            "{got}"
+        );
 
         uw.write_all(b"HTTP/1.1 200 OK\r\n\r\n").await.unwrap();
         uw.shutdown().await.unwrap();

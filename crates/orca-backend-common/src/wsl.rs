@@ -130,7 +130,9 @@ pub fn engine_path(path: &str) -> Option<String> {
                 // its own `docker` sends.
                 format!("/{inner}")
             } else {
-                format!("{DISTROS_DIR}/{distro}/{inner}").trim_end_matches('/').to_string()
+                format!("{DISTROS_DIR}/{distro}/{inner}")
+                    .trim_end_matches('/')
+                    .to_string()
             });
         }
     }
@@ -165,7 +167,11 @@ pub fn to_host_path(engine: &str) -> String {
     if engine.starts_with("/mnt/") && b.len() >= 6 && b[5].is_ascii_alphabetic() && (b.len() == 6 || b[6] == b'/') {
         let drive = (b[5] as char).to_ascii_uppercase();
         let rest = engine[6..].replace('/', "\\");
-        return if rest.is_empty() { format!("{drive}:\\") } else { format!("{drive}:{rest}") };
+        return if rest.is_empty() {
+            format!("{drive}:\\")
+        } else {
+            format!("{drive}:{rest}")
+        };
     }
     if let Some(d) = distro_of(engine) {
         let rest = &engine[DISTROS_DIR.len() + 1 + d.len()..];
@@ -222,7 +228,11 @@ pub fn engine_arg(arg: &str) -> String {
         return format!("{flag}={p}");
     }
     // type=bind,source=C:\x,target=/y (`--mount`)
-    if arg.contains(',') && arg.split(',').any(|kv| kv.starts_with("source=") || kv.starts_with("src=")) {
+    if arg.contains(',')
+        && arg
+            .split(',')
+            .any(|kv| kv.starts_with("source=") || kv.starts_with("src="))
+    {
         let parts: Vec<String> = arg
             .split(',')
             .map(|kv| match kv.split_once('=') {
@@ -297,7 +307,12 @@ pub fn engine_invocation(
     cwd: Option<&str>,
     envs: &[(String, Option<String>)],
 ) -> Vec<String> {
-    let mut out = vec!["-d".to_string(), DISTRO.to_string(), "-u".to_string(), "root".to_string()];
+    let mut out = vec![
+        "-d".to_string(),
+        DISTRO.to_string(),
+        "-u".to_string(),
+        "root".to_string(),
+    ];
     if let Some(dir) = cwd.and_then(engine_path) {
         out.push("--cd".into());
         out.push(dir);
@@ -345,7 +360,12 @@ pub fn for_engine(cmd: tokio::process::Command) -> tokio::process::Command {
     let cwd = std.get_current_dir().map(|d| d.to_string_lossy().to_string());
     let envs: Vec<(String, Option<String>)> = std
         .get_envs()
-        .map(|(k, v)| (k.to_string_lossy().to_string(), v.map(|v| v.to_string_lossy().to_string())))
+        .map(|(k, v)| {
+            (
+                k.to_string_lossy().to_string(),
+                v.map(|v| v.to_string_lossy().to_string()),
+            )
+        })
         .collect();
     let invocation = engine_invocation(&program, &args, cwd.as_deref(), &envs);
     // A folder in another distro: share that distro first (it may have
@@ -419,7 +439,13 @@ impl Certs {
 pub fn ensure_certs(dir: &Path) -> Result<Certs> {
     static MAKING: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let certs = Certs { dir: dir.to_path_buf() };
-    let all = [certs.ca(), certs.cert(), certs.key(), certs.server_cert(), certs.server_key()];
+    let all = [
+        certs.ca(),
+        certs.cert(),
+        certs.key(),
+        certs.server_cert(),
+        certs.server_key(),
+    ];
     if all.iter().all(|p| p.exists()) {
         return Ok(certs);
     }
@@ -442,9 +468,11 @@ pub fn ensure_certs(dir: &Path) -> Result<Certs> {
     let ca_cert = ca.self_signed(&ca_key)?;
 
     let mut server = rcgen::CertificateParams::new(vec!["localhost".to_string()])?;
-    server.subject_alt_names.push(rcgen::SanType::IpAddress(std::net::IpAddr::V4(
-        std::net::Ipv4Addr::LOCALHOST,
-    )));
+    server
+        .subject_alt_names
+        .push(rcgen::SanType::IpAddress(std::net::IpAddr::V4(
+            std::net::Ipv4Addr::LOCALHOST,
+        )));
     server.distinguished_name.push(rcgen::DnType::CommonName, "Orca engine");
     server.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
     server.not_before = now;
@@ -646,9 +674,7 @@ pub fn distro_context_script(certs: &str) -> String {
 
 /// Run as a distro's own user to stop using Orca's engine.
 pub fn distro_context_off() -> String {
-    format!(
-        "docker context use default >/dev/null 2>&1; docker context rm -f {DISTRO_CONTEXT} >/dev/null 2>&1; true"
-    )
+    format!("docker context use default >/dev/null 2>&1; docker context rm -f {DISTRO_CONTEXT} >/dev/null 2>&1; true")
 }
 
 /// Run in Orca's distro: the integrated distro's `/home` at `/home`, once
@@ -671,7 +697,9 @@ pub const HOME_UNBIND: &str = "mountpoint -q /home && umount -l /home; true";
 pub fn valid_distro_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// Distro names from `wsl --list --quiet` (UTF-16 or UTF-8, with or
@@ -706,7 +734,9 @@ pub fn ports_in_bind_errors(text: &str) -> std::collections::BTreeSet<u16> {
         .skip(1)
         .filter_map(|rest| {
             let addr = rest.split('/').next()?;
-            rest[addr.len()..].starts_with("/tcp: address already in use").then_some(())?;
+            rest[addr.len()..]
+                .starts_with("/tcp: address already in use")
+                .then_some(())?;
             addr.rsplit(':').next()?.parse().ok()
         })
         .collect()
@@ -867,7 +897,10 @@ mod win {
     }
 
     pub async fn distros() -> Vec<String> {
-        run(&["--list", "--quiet"]).await.map(|o| parse_distros(&o)).unwrap_or_default()
+        run(&["--list", "--quiet"])
+            .await
+            .map(|o| parse_distros(&o))
+            .unwrap_or_default()
     }
 
     pub async fn running_distros() -> Vec<String> {
@@ -1046,7 +1079,10 @@ mod win {
         .await??;
         let location = dir.join("distro");
         std::fs::create_dir_all(&location)?;
-        let (tar_s, location_s) = (tar.to_string_lossy().to_string(), location.to_string_lossy().to_string());
+        let (tar_s, location_s) = (
+            tar.to_string_lossy().to_string(),
+            location.to_string_lossy().to_string(),
+        );
         let imported = run_for(&["--import", DISTRO, &location_s, &tar_s, "--version", "2"], LONG).await;
         let _ = std::fs::remove_file(&tar);
         imported?;
@@ -1061,7 +1097,9 @@ mod win {
             let bytes = std::fs::read(&src)?;
             sh(DISTRO, &format!("cat > /etc/docker/orca/{dst}"), Some(&bytes)).await?;
         }
-        sh_long(DISTRO, &provision_script()).await.context("setting up Docker failed")?;
+        sh_long(DISTRO, &provision_script())
+            .await
+            .context("setting up Docker failed")?;
 
         say(">>> Starting it with systemd".into());
         terminate().await;
@@ -1139,7 +1177,9 @@ mod win {
         set_integrated(Some(distro.to_string()));
         sh(distro, &share_script(distro), None).await.ok();
         bind_home().await;
-        say(format!("    docker in {distro} now uses Orca's engine (context {DISTRO_CONTEXT})"));
+        say(format!(
+            "    docker in {distro} now uses Orca's engine (context {DISTRO_CONTEXT})"
+        ));
         Ok(())
     }
 
@@ -1169,7 +1209,12 @@ mod win {
         if ours.exists() {
             return Some(ours);
         }
-        let out = Command::new("where.exe").arg("docker").creation_flags(NO_WINDOW).output().await.ok()?;
+        let out = Command::new("where.exe")
+            .arg("docker")
+            .creation_flags(NO_WINDOW)
+            .output()
+            .await
+            .ok()?;
         String::from_utf8_lossy(&out.stdout)
             .lines()
             .next()
@@ -1197,8 +1242,13 @@ mod win {
                 let dir = cli_dir();
                 std::fs::create_dir_all(&dir)?;
                 let path = dir.join(&zip);
-                download(&http, &format!("https://download.docker.com/win/static/stable/x86_64/{zip}"), &path, say)
-                    .await?;
+                download(
+                    &http,
+                    &format!("https://download.docker.com/win/static/stable/x86_64/{zip}"),
+                    &path,
+                    say,
+                )
+                .await?;
                 // In single quotes for PowerShell, a ' doubled (C:\Users\O'Brien).
                 let q = |p: &Path| p.display().to_string().replace('\'', "''");
                 // The zip's dockerd.exe (Windows containers) isn't kept.
@@ -1224,7 +1274,10 @@ mod win {
                 dir.join("docker.exe")
             }
         };
-        let plugins = dirs::home_dir().context("no home folder")?.join(".docker").join("cli-plugins");
+        let plugins = dirs::home_dir()
+            .context("no home folder")?
+            .join(".docker")
+            .join("cli-plugins");
         let compose = plugins.join("docker-compose.exe");
         let has_compose = Command::new(&docker)
             .args(["compose", "version"])
@@ -1236,7 +1289,13 @@ mod win {
             say(">>> Downloading docker compose".into());
             std::fs::create_dir_all(&plugins)?;
             let base = "https://github.com/docker/compose/releases/latest/download/docker-compose-windows-x86_64.exe";
-            let sha = http.get(format!("{base}.sha256")).send().await?.error_for_status()?.text().await?;
+            let sha = http
+                .get(format!("{base}.sha256"))
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
             download(&http, base, &compose, say).await?;
             let want = sha.split_whitespace().next().unwrap_or_default().to_lowercase();
             if sha256_file(&compose).await? != want {
@@ -1298,8 +1357,15 @@ mod win {
     /// `docker` in PowerShell back to its default context.
     pub async fn unintegrate_powershell() -> Result<()> {
         if let Some(docker) = docker_exe().await {
-            for args in [["context", "use", "default"].as_slice(), &["context", "rm", "-f", "orca"]] {
-                let _ = Command::new(&docker).args(args).creation_flags(NO_WINDOW).output().await;
+            for args in [
+                ["context", "use", "default"].as_slice(),
+                &["context", "rm", "-f", "orca"],
+            ] {
+                let _ = Command::new(&docker)
+                    .args(args)
+                    .creation_flags(NO_WINDOW)
+                    .output()
+                    .await;
             }
         }
         Ok(())
@@ -1459,7 +1525,10 @@ mod tests {
 
     #[test]
     fn windows_folders_as_the_engine_sees_them() {
-        assert_eq!(engine_path(r"C:\Users\me\code\app").as_deref(), Some("/mnt/c/Users/me/code/app"));
+        assert_eq!(
+            engine_path(r"C:\Users\me\code\app").as_deref(),
+            Some("/mnt/c/Users/me/code/app")
+        );
         assert_eq!(engine_path(r"d:\work\").as_deref(), Some("/mnt/d/work"));
         assert_eq!(engine_path("C:/x").as_deref(), Some("/mnt/c/x"));
         assert_eq!(engine_path("C:").as_deref(), Some("/mnt/c"));
@@ -1482,7 +1551,10 @@ mod tests {
     fn engine_paths_back_to_windows_paths() {
         assert_eq!(to_host_path("/mnt/c/code/app"), r"C:\code\app");
         assert_eq!(to_host_path("/mnt/d"), r"D:\");
-        assert_eq!(to_host_path("/mnt/wsl/orca/distros/Ubuntu/home/me"), r"\\wsl.localhost\Ubuntu\home\me");
+        assert_eq!(
+            to_host_path("/mnt/wsl/orca/distros/Ubuntu/home/me"),
+            r"\\wsl.localhost\Ubuntu\home\me"
+        );
         assert_eq!(to_host_path("/srv/x"), r"\\wsl.localhost\orca\srv\x");
         assert_eq!(to_host_path(r"C:\x"), r"C:\x");
         for p in [r"C:\code\app", r"\\wsl.localhost\Ubuntu\home\me"] {
@@ -1536,13 +1608,29 @@ mod tests {
             "docker",
             &args,
             Some(r"C:\code\app"),
-            &[("COMPOSE_PROFILES".into(), Some("web".into())), ("PATH".into(), Some("x".into()))],
+            &[
+                ("COMPOSE_PROFILES".into(), Some("web".into())),
+                ("PATH".into(), Some("x".into())),
+            ],
         );
         assert_eq!(
             inv,
             [
-                "-d", "orca", "-u", "root", "--cd", "/mnt/c/code/app", "--exec", "env", "COMPOSE_PROFILES=web",
-                "docker", "compose", "-f", "/mnt/c/code/app/compose.yaml", "up", "-d"
+                "-d",
+                "orca",
+                "-u",
+                "root",
+                "--cd",
+                "/mnt/c/code/app",
+                "--exec",
+                "env",
+                "COMPOSE_PROFILES=web",
+                "docker",
+                "compose",
+                "-f",
+                "/mnt/c/code/app/compose.yaml",
+                "up",
+                "-d"
             ]
         );
     }
@@ -1551,7 +1639,10 @@ mod tests {
     fn the_integrated_distros_home_is_at_home() {
         // A name no other test uses: the setting is shared by tests running at once.
         set_integrated(Some("IntegTest".into()));
-        assert_eq!(engine_path(r"\\wsl.localhost\IntegTest\home\me\app").as_deref(), Some("/home/me/app"));
+        assert_eq!(
+            engine_path(r"\\wsl.localhost\IntegTest\home\me\app").as_deref(),
+            Some("/home/me/app")
+        );
         assert_eq!(
             engine_path(r"\\wsl.localhost\IntegTest\opt\x").as_deref(),
             Some("/mnt/wsl/orca/distros/IntegTest/opt/x")
@@ -1571,7 +1662,10 @@ mod tests {
     fn the_images_shortcuts_are_turned_off_in_place() {
         let tar_with = |conf: &[u8]| {
             let mut b = tar::Builder::new(Vec::new());
-            for (path, data) in [("./etc/hostname", &b"ubuntu\n"[..]), ("./etc/wsl-distribution.conf", conf)] {
+            for (path, data) in [
+                ("./etc/hostname", &b"ubuntu\n"[..]),
+                ("./etc/wsl-distribution.conf", conf),
+            ] {
                 let mut h = tar::Header::new_gnu();
                 h.set_size(data.len() as u64);
                 h.set_mode(0o644);
@@ -1633,7 +1727,9 @@ mod tests {
                    address already in use";
         assert_eq!(ports_in_bind_errors(err), [80].into_iter().collect());
         assert!(ports_in_bind_errors("Bind for 0.0.0.0:80 failed: port is already allocated").is_empty());
-        assert!(another_k3s_message(Some("Ubuntu-24.04"), 6443).contains("WSL distro Ubuntu-24.04: it holds port 6443"));
+        assert!(
+            another_k3s_message(Some("Ubuntu-24.04"), 6443).contains("WSL distro Ubuntu-24.04: it holds port 6443")
+        );
     }
 
     #[test]

@@ -28,7 +28,9 @@ use crate::state::AppState;
 const DESKTOP_OS: &str = "Docker Desktop";
 
 fn home() -> String {
-    dirs::home_dir().map(|h| h.to_string_lossy().to_string()).unwrap_or_default()
+    dirs::home_dir()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_default()
 }
 
 /// Where an engine is reached.
@@ -220,7 +222,10 @@ pub fn known_engines() -> Vec<(&'static str, String)> {
             ("Colima", format!("{h}/.colima/default/docker.sock")),
             ("Colima (docker)", format!("{h}/.colima/docker/docker.sock")),
             ("Rancher Desktop", format!("{h}/.rd/docker.sock")),
-            ("Podman", format!("{h}/.local/share/containers/podman/machine/podman.sock")),
+            (
+                "Podman",
+                format!("{h}/.local/share/containers/podman/machine/podman.sock"),
+            ),
             ("Lima (default)", format!("{h}/.lima/default/sock/docker.sock")),
             ("Lima (colima)", format!("{h}/.lima/colima/sock/docker.sock")),
             ("Docker socket", "/var/run/docker.sock".to_string()),
@@ -294,7 +299,10 @@ async fn usable(e: &Endpoint, name: &str, log: &mut Vec<String>) -> Option<bolla
     if let Endpoint::Unix(p) | Endpoint::Pipe(p) = e
         && is_desktop_socket(p)
     {
-        log.push(format!("{name} ({}) is Docker Desktop's engine, which Orca doesn't use", e.shown()));
+        log.push(format!(
+            "{name} ({}) is Docker Desktop's engine, which Orca doesn't use",
+            e.shown()
+        ));
         return None;
     }
     let Some(docker) = e.ping().await else {
@@ -302,7 +310,10 @@ async fn usable(e: &Endpoint, name: &str, log: &mut Vec<String>) -> Option<bolla
         return None;
     };
     if is_desktop(&docker).await {
-        log.push(format!("{name} ({}) is Docker Desktop's engine, which Orca doesn't use", e.shown()));
+        log.push(format!(
+            "{name} ({}) is Docker Desktop's engine, which Orca doesn't use",
+            e.shown()
+        ));
         return None;
     }
     log.push(format!("{name} ({}) answers", e.shown()));
@@ -588,7 +599,9 @@ async fn set_integration(
     #[cfg(not(windows))]
     {
         let _ = (state, want);
-        Err(ApiError::bad_request("Only on Windows: elsewhere `docker` uses Orca's engine already."))
+        Err(ApiError::bad_request(
+            "Only on Windows: elsewhere `docker` uses Orca's engine already.",
+        ))
     }
     #[cfg(windows)]
     {
@@ -604,10 +617,14 @@ async fn set_integration(
         }
         if have.distro != want.distro {
             if let Some(old) = &have.distro {
-                wsl::unintegrate(old).await.map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
+                wsl::unintegrate(old)
+                    .await
+                    .map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
             }
             if let Some(new) = &want.distro {
-                wsl::integrate(new, &say).await.map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
+                wsl::integrate(new, &say)
+                    .await
+                    .map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
             }
         }
         if have.powershell != want.powershell {
@@ -698,7 +715,9 @@ async fn choose(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if let EngineChoice::Socket { path, name } = &mut choice {
         if cfg!(windows) {
-            return Err(ApiError::bad_request("On Windows Orca runs its own engine, in its WSL distro."));
+            return Err(ApiError::bad_request(
+                "On Windows Orca runs its own engine, in its WSL distro.",
+            ));
         }
         let p = path.trim().trim_start_matches("unix://").to_string();
         if p.is_empty() || !p.starts_with('/') {
@@ -710,10 +729,14 @@ async fn choose(
             ));
         }
         let Some(docker) = ping(&p).await else {
-            return Err(ApiError::bad_request(format!("No engine answers at {p}. Start it first.")));
+            return Err(ApiError::bad_request(format!(
+                "No engine answers at {p}. Start it first."
+            )));
         };
         if is_desktop(&docker).await {
-            return Err(ApiError::bad_request("That is Docker Desktop's engine, which Orca doesn't use."));
+            return Err(ApiError::bad_request(
+                "That is Docker Desktop's engine, which Orca doesn't use.",
+            ));
         }
         if name.is_none() {
             *name = Some(engine_name(&p));
@@ -732,7 +755,9 @@ async fn choose(
     if let Some((rt, _)) = connected {
         state.swap_runtime(rt).await;
     }
-    Ok(Json(serde_json::json!({ "connected": ok, "choice": choice, "log": log })))
+    Ok(Json(
+        serde_json::json!({ "connected": ok, "choice": choice, "log": log }),
+    ))
 }
 
 #[cfg(test)]
@@ -768,13 +793,19 @@ mod tests {
         assert_eq!(engine_name(&orca_socket()), "Orca");
         assert_eq!(engine_name(&format!("{h}/.orbstack/run/docker.sock")), "OrbStack");
         assert_eq!(engine_name(&format!("{h}/.docker/run/docker.sock")), "Docker Desktop");
-        assert_eq!(engine_name(&format!("{h}/.lima/orca-demo/sock/docker.sock")), "Lima VM orca-demo");
+        assert_eq!(
+            engine_name(&format!("{h}/.lima/orca-demo/sock/docker.sock")),
+            "Lima VM orca-demo"
+        );
         assert_eq!(engine_name("/tmp/x.sock"), "/tmp/x.sock");
     }
 
     #[test]
     fn endpoints_read_docker_host() {
-        assert_eq!(Endpoint::parse("unix:///x.sock"), Some(Endpoint::Unix("/x.sock".into())));
+        assert_eq!(
+            Endpoint::parse("unix:///x.sock"),
+            Some(Endpoint::Unix("/x.sock".into()))
+        );
         assert_eq!(
             Endpoint::parse(r"npipe://\\.\pipe\docker_engine"),
             Some(Endpoint::Pipe("//./pipe/docker_engine".into()))
@@ -797,6 +828,9 @@ mod tests {
                 name: None
             }
         );
-        assert_eq!(serde_json::to_string(&EngineChoice::Orca).unwrap(), r#"{"kind":"orca"}"#);
+        assert_eq!(
+            serde_json::to_string(&EngineChoice::Orca).unwrap(),
+            r#"{"kind":"orca"}"#
+        );
     }
 }

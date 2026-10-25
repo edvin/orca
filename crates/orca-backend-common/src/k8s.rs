@@ -10,7 +10,13 @@
 // it unreachable there and its `return` needless.
 #![cfg_attr(
     windows,
-    allow(clippy::needless_return, unreachable_code, unused_imports, unused_variables, dead_code)
+    allow(
+        clippy::needless_return,
+        unreachable_code,
+        unused_imports,
+        unused_variables,
+        dead_code
+    )
 )]
 
 use std::path::PathBuf;
@@ -1136,8 +1142,12 @@ impl K3sManager {
                 send("    This downloads the k3s binary (~60MB)\n".into()).await;
 
                 let install_cmd = k3s_install_cmd(runtime, "");
-                let install_result =
-                    run_cmd_streaming("wsl", &["-d", "orca", "-u", "root", "--exec", "sh", "-c", &install_cmd], &tx).await;
+                let install_result = run_cmd_streaming(
+                    "wsl",
+                    &["-d", "orca", "-u", "root", "--exec", "sh", "-c", &install_cmd],
+                    &tx,
+                )
+                .await;
 
                 match install_result {
                     Ok(_) => send("\n>>> k3s installed in WSL2\n".into()).await,
@@ -1667,7 +1677,16 @@ impl K8sManager for K3sManager {
                             // Fallback: pkill
                             tracing::info!("k3s still running after 6s, trying pkill");
                             let _ = Command::new("wsl")
-                                .args(["-d", "orca", "-u", "root", "--exec", "sh", "-c", "pkill -f 'k3s server' || true"])
+                                .args([
+                                    "-d",
+                                    "orca",
+                                    "-u",
+                                    "root",
+                                    "--exec",
+                                    "sh",
+                                    "-c",
+                                    "pkill -f 'k3s server' || true",
+                                ])
                                 .status()
                                 .await;
                         } else if i == 9 {
@@ -1745,7 +1764,17 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             Command::new("wsl")
-                .args(["-d", "orca", "-u", "root", "--exec", "systemctl", "enable", "--now", "k3s"])
+                .args([
+                    "-d",
+                    "orca",
+                    "-u",
+                    "root",
+                    "--exec",
+                    "systemctl",
+                    "enable",
+                    "--now",
+                    "k3s",
+                ])
                 .status()
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to start k3s via WSL: {e}"))?;
@@ -2451,7 +2480,8 @@ impl K8sManager for K3sManager {
             let dep_arg = format!("deployment/{name}");
             let output = Command::new("wsl")
                 .args([
-                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "rollout", "restart", &dep_arg, "-n", namespace,
+                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "rollout", "restart", &dep_arg, "-n",
+                    namespace,
                 ])
                 .output()
                 .await?;
@@ -2531,7 +2561,9 @@ impl K8sManager for K3sManager {
         let tail = tail.map(|t| t.min(100_000));
         #[cfg(target_os = "windows")]
         {
-            let mut cmd_args = vec!["-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "logs", name, "-n", namespace];
+            let mut cmd_args = vec![
+                "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "logs", name, "-n", namespace,
+            ];
             let container_arg;
             if let Some(c) = container {
                 container_arg = format!("--container={c}");
@@ -2621,7 +2653,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let mut child = Command::new("wsl")
-                .args(["-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "apply", "-f", "-"])
+                .args([
+                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "apply", "-f", "-",
+                ])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -2721,7 +2755,9 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let mut child = Command::new("wsl")
-                .args(["-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "delete", "-f", "-"])
+                .args([
+                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "delete", "-f", "-",
+                ])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -2826,7 +2862,18 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "create", "namespace", name])
+                .args([
+                    "-d",
+                    "orca",
+                    "-u",
+                    "root",
+                    "--exec",
+                    "k3s",
+                    "kubectl",
+                    "create",
+                    "namespace",
+                    name,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -2856,7 +2903,18 @@ impl K8sManager for K3sManager {
         #[cfg(target_os = "windows")]
         {
             let output = Command::new("wsl")
-                .args(["-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "delete", "namespace", name])
+                .args([
+                    "-d",
+                    "orca",
+                    "-u",
+                    "root",
+                    "--exec",
+                    "k3s",
+                    "kubectl",
+                    "delete",
+                    "namespace",
+                    name,
+                ])
                 .output()
                 .await?;
             if !output.status.success() {
@@ -3095,7 +3153,8 @@ impl K8sManager for K3sManager {
         let output = {
             Command::new("wsl")
                 .args([
-                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "rollout", "history", &dep_arg, "-n", namespace,
+                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "rollout", "history", &dep_arg, "-n",
+                    namespace,
                 ])
                 .output()
                 .await?
@@ -3622,7 +3681,8 @@ impl K8sManager for K3sManager {
             let sts_arg = format!("statefulset/{name}");
             let output = Command::new("wsl")
                 .args([
-                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "rollout", "restart", &sts_arg, "-n", namespace,
+                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "rollout", "restart", &sts_arg, "-n",
+                    namespace,
                 ])
                 .output()
                 .await?;
@@ -4654,7 +4714,18 @@ impl K3sManager {
         #[cfg(target_os = "windows")]
         let output = {
             Command::new("wsl")
-                .args(["-d", "orca", "-u", "root", "--exec", "helm", "uninstall", name, "-n", namespace])
+                .args([
+                    "-d",
+                    "orca",
+                    "-u",
+                    "root",
+                    "--exec",
+                    "helm",
+                    "uninstall",
+                    name,
+                    "-n",
+                    namespace,
+                ])
                 .output()
                 .await?
         };
@@ -5229,7 +5300,8 @@ impl K3sManager {
         {
             let output = Command::new("wsl")
                 .args([
-                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "get", kind, name, "-n", namespace, "-o", "yaml",
+                    "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "get", kind, name, "-n", namespace, "-o",
+                    "yaml",
                 ])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())

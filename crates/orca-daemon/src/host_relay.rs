@@ -104,7 +104,11 @@ async fn answers(ip: &str, port: u16) -> bool {
 #[cfg(windows)]
 async fn answers_at(addr: std::net::SocketAddr) -> bool {
     matches!(
-        tokio::time::timeout(std::time::Duration::from_millis(500), tokio::net::TcpStream::connect(addr)).await,
+        tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            tokio::net::TcpStream::connect(addr)
+        )
+        .await,
         Ok(Ok(_))
     )
 }

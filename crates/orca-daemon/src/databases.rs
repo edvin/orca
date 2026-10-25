@@ -2233,7 +2233,11 @@ mod tests {
         let main = dir.path().join("docker-compose.yml").to_string_lossy().to_string();
         set_compose_file(dir.path(), std::slice::from_ref(&main)).unwrap();
         let text = std::fs::read_to_string(&env).unwrap();
-        let (sep, sep_line) = if cfg!(windows) { (';', "COMPOSE_PATH_SEPARATOR=;\n") } else { (':', "") };
+        let (sep, sep_line) = if cfg!(windows) {
+            (';', "COMPOSE_PATH_SEPARATOR=;\n")
+        } else {
+            (':', "")
+        };
         assert!(
             text.contains(&format!(
                 "COMPOSE_FILE=docker-compose.yml{sep}.orca/databases.override.yaml\n{sep_line}"

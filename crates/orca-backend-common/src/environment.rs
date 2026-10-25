@@ -528,7 +528,11 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             match action {
                 "repair_wsl_engine" => crate::wsl::repair(&say).await?,
                 "recreate_wsl_engine" => {
-                    send(format!(">>> Removing the {} distro and everything in it", crate::wsl::DISTRO)).await;
+                    send(format!(
+                        ">>> Removing the {} distro and everything in it",
+                        crate::wsl::DISTRO
+                    ))
+                    .await;
                     crate::wsl::remove().await.ok();
                     crate::wsl::create(&say).await?
                 }
@@ -613,9 +617,13 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     nvidia-ctk runtime configure --runtime=docker && \
                     systemctl restart docker
                 "#;
-                run_cmd_streaming("wsl", &["-d", "orca", "-u", "root", "--exec", "bash", "-c", script], &tx)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit installation failed: {e}"))?;
+                run_cmd_streaming(
+                    "wsl",
+                    &["-d", "orca", "-u", "root", "--exec", "bash", "-c", script],
+                    &tx,
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit installation failed: {e}"))?;
             }
 
             #[cfg(not(target_os = "windows"))]
@@ -1570,7 +1578,6 @@ async fn check_wsl2_enabled() -> HealthCheck {
     }
 }
 
-
 // --- Leaving Docker Desktop (macOS only) ---
 
 /// Switch Docker CLI to use the Orca Lima runtime context.
@@ -1759,7 +1766,19 @@ async fn check_nvidia_gpu() -> HealthCheck {
             let gpu = gpu_name.trim().lines().next().unwrap_or("").to_string();
             // Check for NVIDIA Container Toolkit
             let toolkit = if cfg!(target_os = "windows") {
-                run_cmd("wsl", &["-d", "orca", "-u", "root", "--exec", "nvidia-container-cli", "--version"]).await
+                run_cmd(
+                    "wsl",
+                    &[
+                        "-d",
+                        "orca",
+                        "-u",
+                        "root",
+                        "--exec",
+                        "nvidia-container-cli",
+                        "--version",
+                    ],
+                )
+                .await
             } else {
                 run_cmd("nvidia-container-cli", &["--version"]).await
             };
@@ -1858,7 +1877,13 @@ pub async fn check_environment(other_engine: Option<&str>) -> EnvironmentStatus 
                     if std::path::Path::new(&socket).exists()
                         && let Ok(version) = run_cmd(
                             "docker",
-                            &["-H", &format!("unix://{socket}"), "info", "--format", "{{.ServerVersion}}"],
+                            &[
+                                "-H",
+                                &format!("unix://{socket}"),
+                                "info",
+                                "--format",
+                                "{{.ServerVersion}}",
+                            ],
                         )
                         .await
                         && !version.trim().is_empty()
@@ -2125,9 +2150,9 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             #[cfg(target_os = "windows")]
             {
                 // Orca's WSL distro: start it, and Docker in it.
-                crate::wsl::connect(30).await.ok_or_else(|| {
-                    anyhow::anyhow!("Orca's engine didn't start. Use Repair on System Health.")
-                })?;
+                crate::wsl::connect(30)
+                    .await
+                    .ok_or_else(|| anyhow::anyhow!("Orca's engine didn't start. Use Repair on System Health."))?;
                 Ok("Orca's engine is running.".to_string())
             }
             #[cfg(target_os = "macos")]
@@ -2761,7 +2786,9 @@ async fn has_nvidia_smi() -> bool {
     *PROBE
         .get_or_init(|| async {
             if cfg!(target_os = "windows") {
-                run_cmd("wsl", &["-d", "orca", "-u", "root", "--exec", "nvidia-smi", "-L"]).await.is_ok()
+                run_cmd("wsl", &["-d", "orca", "-u", "root", "--exec", "nvidia-smi", "-L"])
+                    .await
+                    .is_ok()
             } else {
                 run_cmd("nvidia-smi", &["-L"]).await.is_ok()
             }

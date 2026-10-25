@@ -15,8 +15,8 @@ mod api;
 mod build_manager;
 mod cron_expr;
 mod databases;
-mod dev;
 mod desktop;
+mod dev;
 mod docs;
 mod engine;
 #[cfg(any(windows, test))]

@@ -798,7 +798,10 @@ fn host_alias(docker_host: Option<&str>) -> Vec<String> {
         // Orca's WSL distro: Windows is WSL's NAT gateway; with mirrored
         // networking (no gateway found) the engine's own host-gateway.
         let ip = WINDOWS_HOST_IP.lock().unwrap().clone();
-        vec![format!("host.docker.internal:{}", ip.as_deref().unwrap_or("host-gateway"))]
+        vec![format!(
+            "host.docker.internal:{}",
+            ip.as_deref().unwrap_or("host-gateway")
+        )]
     } else if cfg!(target_os = "linux") {
         vec!["host.docker.internal:host-gateway".to_string()]
     } else if docker_host.is_some_and(|h| h.contains("/.lima/")) {

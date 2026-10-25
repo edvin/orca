@@ -4266,7 +4266,8 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
             .env("TERM", "xterm-256color")
             .env("COLORTERM", "truecolor")
             .args([
-                "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--", "sh",
+                "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--",
+                "sh",
             ])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())

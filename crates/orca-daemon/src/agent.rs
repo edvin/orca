@@ -282,10 +282,9 @@ pub async fn execute_tool(
         }
 
         "environment_status" => {
-            let status = orca_backend_common::environment::check_environment(
-                crate::api::other_engine(state).await.as_deref(),
-            )
-            .await;
+            let status =
+                orca_backend_common::environment::check_environment(crate::api::other_engine(state).await.as_deref())
+                    .await;
             Ok(serde_json::to_value(status).unwrap_or_default())
         }
 

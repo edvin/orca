@@ -2856,7 +2856,8 @@ pub async fn engine_api(
     }
     // Starting Docker Desktop waits for it; a plan sizes every volume.
     // Installing a Docker CLI for /engine/integration takes a few minutes too.
-    let secs = if route == "/docker-desktop/start" || route == "/docker-desktop/plan" || route == "/engine/integration" {
+    let secs = if route == "/docker-desktop/start" || route == "/docker-desktop/plan" || route == "/engine/integration"
+    {
         600
     } else {
         120
@@ -3295,7 +3296,12 @@ fn wsl2_with_resources(existing: &str, memory: &str, processors: &str, swap: &st
             }
             continue;
         }
-        let key = trimmed.split('=').next().unwrap_or_default().trim().to_ascii_lowercase();
+        let key = trimmed
+            .split('=')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
         if in_wsl2 && ours.contains(&key.as_str()) {
             continue;
         }
