@@ -51,72 +51,86 @@ the default distro (`Ubuntu-24.04`) on 2375, and no Docker Desktop.
 | `70946a3` | After Docker Desktop's WSL integration, a distro's `~/.docker/contexts` is **a link to Windows' own** (it was here). The distro's context `orca` (TCP) replaced PowerShell's `orca` (the path-rewriting pipe): `docker run -v C:\…` in PowerShell then failed with `invalid mode: /w`. Switching the distro off would also have deleted PowerShell's context. The distro's context is `orca-wsl` now. |
 | `b37fa1a` | **Settings → WSL2 resources** rewrote `[wsl2]` with only memory, processors and swap: here it would have dropped `nestedVirtualization=true`, and `networkingMode=mirrored` wherever it's set. Only those three keys are replaced now (case-insensitively: this file has `Memory=64GB`). |
 
+### Second round (your decisions)
+
+| Commit | Change |
+|---|---|
+| `58faf02` | CI's Linux job failed at **Rustfmt**: most of the branch's new code had never been through `cargo fmt` with the repo's `rustfmt.toml`. Formatting only. In a `rust:1` container on Orca's engine, Linux clippy is clean and all tests pass. |
+| `79126d8` | **What another distro holds.** `ss -ltnHp` in `orca` lists every listener in WSL's shared namespace, but process names only for `orca`'s own, so a listener without one is another distro's. Kubernetes is refused while 6443 or 10250 is held that way (the distro named, via `pgrep -x k3s-server` in each). The gateway's port checks say `Port 80 (HTTP) is in use inside WSL (another distro)`. A compose/Docker error with `failed to bind host port …: address already in use` gets that line too, for every stack start. Dev projects don't pick such a port. |
+| `525be84` | **Uninstall undoes the integrations.** The daemon keeps `%LOCALAPPDATA%\orca-engine\undo-integration.cmd` matching what's on (it's removed when nothing is), and the NSIS uninstall hook runs it if it exists. |
+| `d46edc6` | **Firewall warning.** Each host relay is checked from inside `orca` (`bash -c '</dev/tcp/<windows ip>/<port>'`): when it starts, every minute, and every 5 s while blocked. Until it connects, System Health shows "Windows Firewall blocks containers from reaching dev servers on this computer (port …): allow Orca Desktop (orca-daemon.exe) on the WSL network…", with the steps. |
+
+How each was tested on this machine:
+
+- **k3s**: with Ubuntu-24.04's k3s running, enabling Kubernetes stops at once with:
+  `Another Kubernetes (k3s) is running in your WSL distro Ubuntu-24.04: it holds port 6443, and every WSL distro shares one network. Stop it to use Orca's: wsl -d Ubuntu-24.04 -u root -- systemctl disable --now k3s`.
+  Nothing was installed in `orca`, and your k3s kept running.
+- **Ports**: with `python3 -m http.server 18090` running in Ubuntu-24.04,
+  `/gateway/port-check?http_port=18090` says
+  `Port 18090 (HTTP) is in use inside WSL (another distro)`. A stack
+  publishing 18090 fails with Docker's error and then
+  `Port 18090 is in use inside WSL (another distro): stop what listens there in your other WSL distro, or change the port.`
+- **Undo script**: both integrations on, then the script run exactly as the
+  hook runs it (`cmd.exe /c ""%LOCALAPPDATA%\orca-engine\undo-integration.cmd""`):
+  Windows' context `default`, `orca` gone, `orca-engine\cli` off the user
+  PATH, Ubuntu-24.04's context `default`, and `orca-wsl` gone. A second run
+  does no harm (exit 0). With Windows' context switched to `desktop-linux`
+  first, it stays `desktop-linux`. Turning both off removes the script, and
+  a PowerShell-only script has no `wsl.exe` line. The uninstaller itself
+  wasn't run (no installer build here).
+- **Firewall**: I couldn't switch the allow rule off (this session isn't
+  elevated). Instead I ran a copy of the same daemon from another folder,
+  which no rule allows. Its relay was blocked, and the log said
+  `Containers can't reach the relay on 172.29.0.1:5174: Windows Firewall blocks it`.
+  The warning appeared, and the gateway answered 502. Back on the allowed
+  build, the warning cleared and the route answered 200. Windows showed a
+  prompt for the copy; left unanswered, it added two **Block** rules for the
+  copy's path, which is what Cancel does. Removing them needs admin (see the
+  checklist below).
+- **user@0 (8)**: masking `user@0.service` doesn't silence it. WSL still
+  tries to start the session on the first command of each boot and prints
+  the same line, now because the unit is masked. Unmasked again; left as is.
+
 ## What still fails, or wasn't tested
 
-- **Kubernetes (5): not tested, on purpose.** This machine's Ubuntu-24.04 runs
-  its own k3s (`systemctl is-active k3s`: active), holding `*:6443` and
-  `*:10250` and the `cni0` and `flannel.1` interfaces in the namespace `orca`
-  shares. A k3s in `orca` would at best fail to bind 6443, and at worst
-  rewire `cni0` under the user's cluster. Note that the `orca` kube context
-  in `~/.kube/config` (see `CLAUDE.md`) points at 127.0.0.1:6443, which is
+- **Kubernetes (5)**: refused here, as decided, because Ubuntu-24.04 runs
+  its own k3s. Orca's k3s itself (pods, a pod terminal) is untested, as that
+  would mean stopping your k3s. Note that the `orca` kube context in
+  `~/.kube/config` (see `CLAUDE.md`) points at 127.0.0.1:6443, which is
   that k3s.
-- **The gateway can't start while an earlier Orca's Docker runs.** Its
-  `orca-caddy` holds 80/443:
-  `failed to bind host port 0.0.0.0:80/tcp: address already in use`.
-  `port_conflicts` stays empty, because it binds on Windows, not in WSL's
-  namespace. It works once the move's "Stop … when done" ran. The same goes
-  for any port the user's own distro publishes.
+- **The gateway can't start while an earlier Orca's Docker runs** (its
+  `orca-caddy` holds 80/443). It now says so, and works once the move's
+  "Stop … when done" ran.
+- Templates' port check (`check_ports` in `src-tauri/src/commands.rs`) still
+  binds on Windows only. A template whose port another distro holds now
+  fails at start, with the WSL line in the error, rather than before.
 - **Docker Desktop (6)**: not installed here, so not tested.
 - **`wsl --shutdown`, cold boot, mirrored networking (2, 4)**: not tested.
   The session ran inside a WSL distro, and `--shutdown` would have ended it.
-- **Uninstall (8)**: not run (no installer: `tauri-cli` isn't installed). The
-  hook is right as far as it goes, but it leaves PowerShell's docker context
-  on `orca`, whose pipe is gone, and `%LOCALAPPDATA%\orca-engine\cli` on the
-  user PATH. So `docker` in PowerShell fails after uninstalling. A distro's
-  `orca-wsl` context stays too, pointing at a port nothing answers.
+- **Uninstall (8)**: not run (no installer: `tauri-cli` isn't installed).
+  The hook now runs `undo-integration.cmd`, which was tested on its own.
 - **Interactive `docker run -it` / `exec -it`, and Ctrl+C on `logs -f`**:
   these need a real console.
 - **`redis:2`** didn't come over in the move: it's a layerless 7.94 kB stub in
   the old engine, and Docker Hub no longer serves its digest
   (`failed to resolve reference "docker.io/library/redis@sha256:7568…": not found`).
   It's reported as such, which is right.
-- Cosmetic: every `wsl -d orca …` prints
+- Cosmetic: the first `wsl -d orca …` after each boot prints
   `wsl: Failed to start the systemd user session for 'root'`. systemd 259's
   `user@0.service` fails in WSL (`Failed to spawn executor: Device or
-  resource busy`). Docker doesn't need it.
-- Cosmetic: the move's steps still say "in Docker Desktop" when the source
-  is the earlier Orca's Docker ("Stop what uses the volumes, in Docker
-  Desktop").
+  resource busy`), and masking it doesn't help (see above). Docker doesn't
+  need it.
 - The CA isn't trusted by Windows until the user trusts it (a Windows
   prompt). `https://app.localhost` worked with `-k`.
 
-## Decisions for you
+## Decisions
 
-1. **A k3s already in the user's distro.** Orca's k3s would share its ports
-   and interfaces. Options: refuse with a clear message when 6443 answers
-   from WSL; or run Orca's k3s with its own ports and CIDRs
-   (`--https-listen-port`, `--cluster-cidr`, `--service-cidr`, a flannel
-   interface of its own), plus a kubeconfig that follows.
-2. **Ports the user's own distros hold** (80/443 above, or any service of
-   theirs). The port check could also look from inside `orca`, e.g. `ss -ltn`
-   in the distro. Your call whether that's worth it.
-3. **The addresses**: `orca0` 10.213.0.0/24 and pool 10.214.0.0/16. They keep
-   clear of k3s (10.42/10.43), WSL's NAT (172.16/12) and its DNS
-   (10.255.255.254), but could meet a VPN's 10.x routes. Pick others if you
-   know better ones. And `--live-restore` is now on for Orca's engine
-   (containers keep running while dockerd restarts; no swarm).
-4. **The distro's context name** `orca-wsl` (was `orca`). I updated
-   `site/content/docs/platforms.md` and the checklist; the built `docs/`
-   HTML isn't regenerated.
-5. **Uninstall**: should it put PowerShell's context back to `default` and
-   take `orca-engine\cli` off the PATH, and do the same in the integrated
-   distro? I didn't write NSIS I couldn't run.
-6. From the original list, still open:
-   - *One distro at a time*: unchanged.
-   - *`.wslconfig`*: fixed (`b37fa1a`).
-   - *Windows on ARM*: unchanged.
-   - *`crates/orca-backend-windows`*: the engine works without it, so it can
-     go. I left it, as you asked to decide that.
+Decided in the second round, and done: (1) refuse while another k3s runs;
+(2) name ports held inside WSL; (3) keep `orca0`, the pool and
+`--live-restore`; (4) keep `orca-wsl`; (5) uninstall undoes the
+integrations; (6) "Stop … when done" keeps disabling the earlier Docker. You
+removed `crates/orca-backend-windows`. Still open from the original list:
+one distro at a time for `docker`, and Windows on ARM.
 
 ## For the core Orca agent
 
@@ -147,6 +161,13 @@ Things that cost time here and aren't visible from the code:
   `src-tauri/binaries/orca-x86_64-pc-windows-msvc.exe` (copy of
   `target\debug\orca.exe`). Clippy on Windows is clean; please keep it so,
   as `#[cfg(windows)]` code only fails there.
+- **Another distro's ports**: `wsl::ports_held_elsewhere()` (listeners with no
+  process in `ss -ltnHp` from inside `orca`). Use it in any new port check on
+  Windows; binding on Windows' side doesn't see WSL's namespace.
+- **The undo script**: anything new the integrations set up outside Orca
+  also belongs in `wsl::undo_integration_script`, which the uninstaller runs.
+- **Formatting**: CI's Linux job runs `cargo fmt --all -- --check`; run
+  `cargo fmt --all` before pushing.
 - `curl.exe` can't test the engine's TLS port (Schannel won't load PEM
   keys). Use curl in a distro, or `docker --tlsverify -H tcp://127.0.0.1:2376`.
 
@@ -170,4 +191,85 @@ Things that cost time here and aren't visible from the code:
   `orca` in use. Turn it off in Settings → Engine, or `docker context use
   default`.
 - Windows Firewall has allow rules for the debug `orca-daemon.exe` (someone
-  answered the prompt).
+  answered the prompt), and two Block rules for a deleted test copy (see the
+  checklist below).
+- PowerShell's integration is on, and Ubuntu-24.04's is off.
+  `undo-integration.cmd` matches that.
+
+## For you to run: what I couldn't from inside WSL
+
+In PowerShell, with the branch's Orca running (`cargo tauri dev`, or the
+daemon from `target\debug`). Each step says what it should show.
+
+**1. `wsl --shutdown` (section 2).**
+
+```powershell
+wsl --shutdown
+Start-Sleep 40
+wsl -l -v            # orca: Running (the daemon started it again)
+docker ps            # lists the gateway and projects (context orca)
+```
+
+On System Health, **Diagnose** should end with "Connected successfully — no
+restart needed." Then, in Ubuntu, `cmd.exe /c ver` should print the Windows
+version: interop survived `orca`'s shutdown.
+
+**2. Cold start (section 2).** Reboot, then open Orca at once:
+
+```powershell
+Measure-Command { curl.exe -s http://127.0.0.1:9477/api/v1/health } | Select-Object TotalSeconds
+# well under a second once the window is up; {"status":"ok",...}
+```
+
+System Health's **Docker Runtime** should turn green within about a minute
+and a half, with no setup step.
+
+**3. Mirrored networking (section 4).**
+
+```powershell
+Copy-Item $env:USERPROFILE\.wslconfig $env:USERPROFILE\.wslconfig.bak
+Add-Content $env:USERPROFILE\.wslconfig "`nnetworkingMode=mirrored"   # under [wsl2]: check the file
+wsl --shutdown; Start-Sleep 40
+wsl -d orca -- wslinfo --networking-mode      # mirrored
+docker run --rm alpine getent hosts host.docker.internal   # the engine's host-gateway address, not 172.x
+```
+
+With a route to a dev server on Windows (`npx vite`, port 5173): it should
+open through the gateway, and the daemon log should have **no**
+`Relaying …` line for it. Note what doesn't work. Then put it back:
+
+```powershell
+Move-Item -Force $env:USERPROFILE\.wslconfig.bak $env:USERPROFILE\.wslconfig
+wsl --shutdown
+```
+
+**4. Interactive docker (section 4b).**
+
+```powershell
+docker run -it --rm alpine sh        # a "/ #" prompt; type: echo hi, then exit
+docker run -d --name it-test alpine sleep 300
+docker exec -it it-test sh           # a prompt; exit returns
+docker rm -f it-test
+cd C:\Users\EdvinSyse\code\psapp
+docker compose logs -f               # follows; Ctrl+C returns to the prompt within a second
+```
+
+**5. Windows Terminal.** Open it and look at the new-tab dropdown: there
+should be no `orca` profile. (WSL's own fragment isn't made any more, but
+Terminal's built-in WSL generator lists every distro unless hidden.)
+
+**6. Uninstall (section 8)**, with an installer built from this branch:
+
+```powershell
+wsl -l -v                                         # orca: Stopped, still listed
+Test-Path $env:LOCALAPPDATA\orca-engine           # True
+docker context show                               # default (if docker.exe is still on your PATH)
+[Environment]::GetEnvironmentVariable('Path','User') -split ';' | Select-String orca-engine   # nothing
+```
+
+**7. The test copy's firewall rules** (admin PowerShell):
+
+```powershell
+Get-NetFirewallApplicationFilter | Where-Object Program -like '*orca-ecc-tools\fwtest*' | Get-NetFirewallRule | Remove-NetFirewallRule
+```
+

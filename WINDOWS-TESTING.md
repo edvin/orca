@@ -75,8 +75,8 @@ Tick each, and note what happened where it didn't.
 - [x] **Run container** with a Windows folder as a volume mounts it (`C:\…` becomes `/mnt/c/…`).
 
 ### 4. Gateway and networking
-- [x] The gateway starts and `https://<app>.localhost` (or your domain) opens from a Windows browser. *From Windows with `curl.exe -k`; the CA wasn't in Windows' store yet (trusting it is a separate step that shows a Windows prompt). While an earlier Orca's Docker still runs in the default distro, the gateway can't start: its `orca-caddy` holds 80/443 in the namespace both share, and `port_conflicts` doesn't see it (it checks Windows' side). The move's "Stop … when done" clears it.*
-- [x] A route to a dev server running on Windows itself that listens on **localhost only** works, both IPv4 (`127.0.0.1`) and IPv6-only (`npx vite` often binds `::1` only, port 5173): the daemon log says `Relaying <ip>:5173 to Windows' localhost:5173`. Windows may ask to allow `orca-daemon.exe` on the network once: allow it. **If you click Cancel, note what happens**: the relay can't tell, containers just can't connect. *Firewall allow rules for the dev build's `orca-daemon.exe` exist, so a prompt was answered; Cancel not tried.*
+- [x] The gateway starts and `https://<app>.localhost` (or your domain) opens from a Windows browser. *From Windows with `curl.exe -k`; the CA wasn't in Windows' store yet (trusting it is a separate step that shows a Windows prompt). While an earlier Orca's Docker still runs in the default distro, the gateway can't start: its `orca-caddy` holds 80/443 in the namespace both share. The gateway's port check now says `Port 80 (HTTP) is in use inside WSL (another distro)`, and a stack whose port another distro holds says so in its error (tested with a listener in Ubuntu-24.04). The move's "Stop … when done" clears it.*
+- [x] A route to a dev server running on Windows itself that listens on **localhost only** works, both IPv4 (`127.0.0.1`) and IPv6-only (`npx vite` often binds `::1` only, port 5173): the daemon log says `Relaying <ip>:5173 to Windows' localhost:5173`. Windows may ask to allow `orca-daemon.exe` on the network once: allow it. **If you click Cancel, note what happens**: the relay can't tell, containers just can't connect. *Firewall allow rules for the dev build's `orca-daemon.exe` exist, so a prompt was answered. Blocked (a copy of the daemon no rule allows, whose prompt was left unanswered, so Windows added Block rules as Cancel does): containers get a 502, and System Health now says "Windows Firewall blocks containers from reaching dev servers on this computer (port …)" with the steps, until it works again.*
 - [x] Stop the dev server: within ~5 s the relay lets the port go (log), so a server started next on `0.0.0.0` gets the port.
 - [x] A server listening on all interfaces: no relay (it's reachable directly).
 - [ ] With `.wslconfig` `networkingMode=mirrored` (then `wsl --shutdown`): `wsl -d orca -- wslinfo --networking-mode` says `mirrored`; there's no relay and the alias is `host-gateway`. Note what works. *Not tested: needs `wsl --shutdown` (see 2).*
@@ -98,7 +98,7 @@ Tick each, and note what happened where it didn't.
 - [x] Switching back to **None** sets Ubuntu's context back to `default`.
 
 ### 5. Kubernetes
-- [ ] Enabling Kubernetes installs k3s in `orca` (not in your default distro); pods list; a pod terminal opens. *Not tested on purpose: this machine's Ubuntu-24.04 runs its own k3s, holding 6443, 10250, `cni0` and `flannel.1` in the network namespace `orca` shares. See the report.*
+- [ ] Enabling Kubernetes installs k3s in `orca` (not in your default distro); pods list; a pod terminal opens. *Not tested: this machine's Ubuntu-24.04 runs its own k3s. Orca now refuses while another k3s holds 6443 or 10250, naming the distro (tested here); Orca's own k3s would need that one stopped.*
 
 ### 6. Moving from Docker Desktop
 *Not tested: Docker Desktop isn't installed on the test machine.*
@@ -118,7 +118,7 @@ On a machine that ran Orca 0.65 or older (Docker in the default distro on 2375):
 - [x] **Stop … when done** disables that Docker in the default distro (not uninstalled).
 
 ### 8. Uninstall
-- [ ] Uninstalling stops `orca` but keeps it (`wsl -l -v`), and `%LOCALAPPDATA%\orca-engine` stays. *Not run (no installer build here: `tauri-cli` isn't installed). The hook reads right; see the report for what it leaves behind.*
+- [ ] Uninstalling stops `orca` but keeps it (`wsl -l -v`), and `%LOCALAPPDATA%\orca-engine` stays. *Not run (no installer build here: `tauri-cli` isn't installed). The hook now also runs `%LOCALAPPDATA%\orca-engine\undo-integration.cmd`, tested directly: contexts back to `default`, `orca`/`orca-wsl` removed, the CLI off the PATH. Steps for you at the end of the report.*
 
 ## Found by review and fixed before testing (worth checking)
 
