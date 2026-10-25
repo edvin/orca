@@ -101,16 +101,17 @@ Tick each, and note what happened where it didn't.
 - [ ] Enabling Kubernetes installs k3s in `orca` (not in your default distro); pods list; a pod terminal opens. *Not tested: this machine's Ubuntu-24.04 runs its own k3s. Orca now refuses while another k3s holds 6443 or 10250, naming the distro (tested here); Orca's own k3s would need that one stopped.*
 
 ### 6. Moving from Docker Desktop
-*Not tested: Docker Desktop isn't installed on the test machine.*
+*Tested with Docker Desktop 4.96.3, installed for one user (`%LOCALAPPDATA%\Programs\DockerDesktop`), engine 29.9.2.*
 
 With Docker Desktop installed and running, with a compose project started from PowerShell (`C:\…`), one started from Ubuntu through Docker Desktop's WSL integration (`/home/…`), a named volume with data (e.g. Postgres) and a `docker run` container:
-- [ ] System Health shows the **Docker Desktop** card; **See what comes over** lists them, sizes and free space (free space = the least of the distro's and the Windows drive's).
-- [ ] **Bring them over**: every step done; Postgres data is there in Orca; both projects are recreated and running (the `/home/…` one is found in your Ubuntu distro).
-- [ ] Docker Desktop's data is untouched (its containers are stopped).
-- [ ] **Quit Docker Desktop when done** quits it (it tries `docker desktop stop`, then asks its window to close).
-- [ ] Running it again skips what already came over.
-- [ ] Skipping a project (untick it) leaves it running in Docker Desktop with its volume; unticking **Volumes** leaves projects that need them in Docker Desktop, running (none are recreated on empty volumes).
-- [ ] Docker Desktop in **Windows containers** mode isn't taken for a source (only its Linux engine is).
+- [x] System Health shows the **Docker Desktop** card; **See what comes over** lists them, sizes and free space (free space = the least of the distro's and the Windows drive's). *The card didn't show at first: Orca looked for Docker Desktop in Program Files only. Fixed. Free space 412 GB, C:'s.*
+- [x] **Bring them over**: every step done; Postgres data is there in Orca; both projects are recreated and running (the `/home/…` one is found in your Ubuntu distro). *The `docker run` container stays in Docker Desktop: it's listed apart from the projects, and isn't recreated.*
+- [x] Docker Desktop's data is untouched (its containers are stopped).
+- [x] **Quit Docker Desktop when done** quits it (it tries `docker desktop stop`, then asks its window to close). *`docker desktop stop` from the per-user install; it took about 13 s.*
+- [x] Running it again skips what already came over.
+- [x] Skipping a project (untick it) leaves it running in Docker Desktop with its volume; unticking **Volumes** leaves projects that need them in Docker Desktop, running (none are recreated on empty volumes).
+- [ ] Docker Desktop in **Windows containers** mode isn't taken for a source (only its Linux engine is). *Not tested: a per-user install can't switch ("windows containers have been disabled for this installation").*
+- [x] *(Found here.)* After the move, PowerShell's `docker` uses Orca's engine. *Docker Desktop makes `desktop-linux` current when it's installed, and the move's switch step did nothing on Windows. Fixed: it switches to `orca` when PowerShell's integration made that context.*
 
 ### 7. Moving from an earlier Orca
 On a machine that ran Orca 0.65 or older (Docker in the default distro on 2375):

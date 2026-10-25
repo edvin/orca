@@ -60,6 +60,27 @@ the default distro (`Ubuntu-24.04`) on 2375, and no Docker Desktop.
 | `525be84` | **Uninstall undoes the integrations.** The daemon keeps `%LOCALAPPDATA%\orca-engine\undo-integration.cmd` matching what's on (it's removed when nothing is), and the NSIS uninstall hook runs it if it exists. |
 | `d46edc6` | **Firewall warning.** Each host relay is checked from inside `orca` (`bash -c '</dev/tcp/<windows ip>/<port>'`): when it starts, every minute, and every 5 s while blocked. Until it connects, System Health shows "Windows Firewall blocks containers from reaching dev servers on this computer (port …): allow Orca Desktop (orca-daemon.exe) on the WSL network…", with the steps. |
 
+### Third round: Docker Desktop (section 6)
+
+Docker Desktop 4.96.3 was installed for one user (`%LOCALAPPDATA%\Programs\DockerDesktop`),
+with WSL integration on for Ubuntu-24.04. In it: a compose project from
+PowerShell (`C:\Users\EdvinSyse\code\ddapp`: nginx with a `./src` bind, and
+Postgres with a row in the `ddapp_pgdata` volume), one from Ubuntu
+(`~/dd-ubuntu-app`, a `./src` bind), and a `docker run` container.
+
+| Commit | Fix |
+|---|---|
+| `1924dea` | Orca looked for Docker Desktop in Program Files only, so a per-user install got **no Docker Desktop card at all** (`installed: false` while running), and Quit and Start couldn't find it. Both locations now. |
+| `9421f8d` | Installing Docker Desktop makes its `desktop-linux` context current, and the move's "Point the docker command at Orca's engine" step did nothing on Windows, so PowerShell's `docker` still went to Docker Desktop after a move. It now switches from `desktop-linux` (or `default`) to `orca`, when PowerShell's integration made that context. |
+
+The rest worked as the checklist says:
+- **Skip:** skipping `ddapp` moved only `dd-ubuntu-app`, found at `/mnt/wsl/orca/distros/Ubuntu-24.04/…`. `ddapp` kept running in Docker Desktop, with its volume.
+- **Volumes unticked:** `ddapp` stayed in Docker Desktop, running, and wasn't recreated.
+- **The full move:** it copied the volume (`kept across the move` is in Orca's Postgres) and recreated `ddapp`. Docker Desktop's containers were stopped and its volume left alone.
+- **A rerun:** 0 bytes needed, nothing done.
+- **Quit:** Docker Desktop's processes are gone and `docker-desktop` is stopped, while Orca still serves both projects.
+- **`docker run` container:** stays in Docker Desktop (the plan lists it apart).
+
 How each was tested on this machine:
 
 - **k3s**: with Ubuntu-24.04's k3s running, enabling Kubernetes stops at once with:
@@ -105,7 +126,9 @@ How each was tested on this machine:
   (`GET /ports/held-in-wsl`), and names ports another distro holds before
   deploying (`636fc24`). The endpoint was tested with a listener in
   Ubuntu-24.04; the Catalog dialog itself wasn't clicked through.
-- **Docker Desktop (6)**: not installed here, so not tested.
+- **Docker Desktop in Windows-containers mode (6)**: not tested. The test
+  install is per-user, and those can't switch ("windows containers have been
+  disabled for this installation").
 - **`wsl --shutdown`, cold boot, mirrored networking (2, 4)**: not tested.
   The session ran inside a WSL distro, and `--shutdown` would have ended it.
 - **Uninstall (8)**: not run (no installer: `tauri-cli` isn't installed).
@@ -194,7 +217,14 @@ Things that cost time here and aren't visible from the code:
 - Windows Firewall has allow rules for the debug `orca-daemon.exe` (someone
   answered the prompt), and two Block rules for a deleted test copy (see the
   checklist below).
-- PowerShell's integration is on, and Ubuntu-24.04's is off.
+- Docker Desktop is installed (per user), quit by the move, with its WSL
+  integration on for Ubuntu-24.04 (so `/var/run/docker.sock` there is
+  Docker Desktop's, dead while it's stopped). Its `ddapp`, `dd-ubuntu-app`
+  and `dd-standalone` containers and the `ddapp_pgdata` volume are still in
+  it; `ddapp` and `dd-ubuntu-app` also run in Orca now. It set
+  `credsStore: desktop` in `%USERPROFILE%\.docker\config.json`, which
+  docker.exe needs Docker Desktop's `resources\bin` on the PATH for.
+- PowerShell's integration is on (context `orca`, set by the move), and Ubuntu-24.04's is off.
   `undo-integration.cmd` matches that.
 
 ## For you to run: what I couldn't from inside WSL
