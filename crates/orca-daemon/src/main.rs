@@ -636,6 +636,53 @@ async fn ensure_static_usernet(name: &str) {
     }
 }
 
+/// Containers that were running when Orca restarted its VM to change its
+/// config, started again by [`finalize_lima_runtime`].
+#[cfg(target_os = "macos")]
+static RUNNING_BEFORE_RESTART: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(target_os = "macos")]
+async fn note_running_containers(vm_name: &str) {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let socket = format!("{home}/.lima/{vm_name}/sock/docker.sock");
+    let Ok(docker) = bollard::Docker::connect_with_socket(&socket, 10, bollard::API_DEFAULT_VERSION) else {
+        return;
+    };
+    let Ok(list) = docker
+        .list_containers(None::<bollard::container::ListContainersOptions<String>>)
+        .await
+    else {
+        return;
+    };
+    let ids: Vec<String> = list.into_iter().filter_map(|c| c.id).collect();
+    tracing::info!(
+        "Lima VM '{vm_name}': {} containers running before the restart",
+        ids.len()
+    );
+    *RUNNING_BEFORE_RESTART.lock().unwrap() = ids;
+}
+
+/// Whether a Lima config forwards the guest's 0.0.0.0 ports to the host: a
+/// `portForwards` entry with `guestIP` 0.0.0.0, `guestIPMustBeZero`, and no
+/// `ignore`. Read as YAML: `limactl edit` writes `guestIP: 0.0.0.0` without
+/// quotes, which a text match for the quoted form never saw, so every
+/// reconcile added the rule again and restarted the VM for it.
+#[cfg(target_os = "macos")]
+fn has_zero_port_forward(yaml: &str) -> bool {
+    let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(yaml) else {
+        return false;
+    };
+    doc.get("portForwards")
+        .and_then(|p| p.as_sequence())
+        .is_some_and(|rules| {
+            rules.iter().any(|r| {
+                r.get("guestIP").and_then(|v| v.as_str()) == Some("0.0.0.0")
+                    && r.get("guestIPMustBeZero").and_then(|v| v.as_bool()) == Some(true)
+                    && r.get("ignore").and_then(|v| v.as_bool()) != Some(true)
+            })
+        })
+}
+
 /// Extract a Lima VM name from a forwarded docker socket path of the form
 /// `~/.lima/<vm>/sock/docker.sock`. Returns `None` for non-Lima sockets
 /// (Docker Desktop, Colima, …) so callers only self-heal actual Lima VMs.
@@ -651,6 +698,19 @@ fn lima_vm_from_socket(socket_path: &str) -> Option<String> {
 /// `connect_via_lima` so the self-heal can't be forgotten on a new branch.
 #[cfg(target_os = "macos")]
 async fn finalize_lima_runtime(name: &str, docker: bollard::Docker) -> Arc<orca_backend_common::BollardRuntime> {
+    // Start again what ran before Orca restarted the VM (restart policies
+    // already brought some back; starting a running container is a no-op).
+    let before = std::mem::take(&mut *RUNNING_BEFORE_RESTART.lock().unwrap());
+    if !before.is_empty() {
+        let d = docker.clone();
+        tokio::spawn(async move {
+            for id in before {
+                if let Err(e) = d.start_container::<String>(&id, None).await {
+                    tracing::debug!("Could not start {id} again after the VM restart: {e}");
+                }
+            }
+        });
+    }
     // Fire-and-forget — same rationale as the native-connect arm above: a
     // wedged `limactl shell` here must not block `connect_via_lima` from
     // returning, since that would stall daemon startup.
@@ -788,10 +848,7 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
     let mut patches: Vec<(&str, bool, &str)> = vec![
         (
             "port forwarding (0.0.0.0 → host)",
-            // Check: must have guestIP 0.0.0.0 with guestIPMustBeZero: true and NO ignore: true
-            yaml_content.contains("guestIP: \"0.0.0.0\"")
-                && yaml_content.contains("guestIPMustBeZero: true")
-                && !yaml_content.contains("ignore: true"),
+            has_zero_port_forward(&yaml_content),
             r#".portForwards += [{"guestIP": "0.0.0.0", "guestIPMustBeZero": true, "guestPortRange": [1, 65535], "hostIP": "127.0.0.1", "proto": "tcp"}]"#,
         ),
         (
@@ -866,6 +923,9 @@ async fn reconcile_lima_config(vm_name: &str, is_running: bool) -> bool {
     // `limactl edit` would fail too.
     if is_running {
         tracing::info!("Stopping Lima VM '{vm_name}' to apply config updates...");
+        // Containers without a restart policy don't come back by themselves:
+        // note what runs now, and start it again once the VM is up.
+        note_running_containers(vm_name).await;
         let stop_ok = matches!(
             Command::new("limactl")
                 .env("PATH", &path_env)
@@ -1231,6 +1291,33 @@ fn bind_addr(bind: &str, port: u16) -> anyhow::Result<SocketAddr> {
             .map_err(|_| anyhow::anyhow!("--bind '{bind}' is not an IP address or localhost"))?
     };
     Ok(SocketAddr::new(ip, port))
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod reconcile_tests {
+    use super::has_zero_port_forward;
+
+    #[test]
+    fn sees_the_port_forward_as_limactl_writes_it() {
+        let unquoted = "portForwards:\n- guestSocket: \"/run/user/{{.UID}}/docker.sock\"\n  hostSocket: \"{{.Dir}}/sock/docker.sock\"\n- guestIP: 0.0.0.0\n  guestIPMustBeZero: true\n  guestPortRange:\n  - 1\n  - 65535\n  hostIP: 127.0.0.1\n  proto: tcp\n";
+        assert!(has_zero_port_forward(unquoted));
+        assert!(has_zero_port_forward(
+            &unquoted.replace("guestIP: 0.0.0.0", "guestIP: \"0.0.0.0\"")
+        ));
+        assert!(!has_zero_port_forward(
+            &unquoted.replace("proto: tcp", "proto: tcp\n  ignore: true")
+        ));
+        assert!(!has_zero_port_forward(
+            "portForwards:\n- guestSocket: /x\n  hostSocket: /y\n"
+        ));
+        assert!(!has_zero_port_forward("mounts: []\n"));
+        // The user's own VM config.
+        if let Ok(home) = std::env::var("HOME")
+            && let Ok(real) = std::fs::read_to_string(format!("{home}/.lima/orca/lima.yaml"))
+        {
+            assert!(has_zero_port_forward(&real));
+        }
+    }
 }
 
 #[cfg(test)]
