@@ -264,6 +264,7 @@ Paths are relative to `/api/v1`. `{id}` accepts a container or image ID or name.
 | GET, PUT | `/gateway/landing` | Read or update the landing page settings. |
 | GET, PUT | `/gateway/links` | Read or update stack link groups. |
 | GET | `/gateway/port-check` | Check whether the HTTP and HTTPS ports are free. |
+| GET | `/ports/held-in-wsl` | Windows: the ports another WSL distro listens on (taken for Orca's engine too). Empty elsewhere. |
 | GET | `/gateway/traefik-status` | Status of the k3s Traefik integration. |
 | PUT | `/gateway/traefik-mode` | Set how the gateway works with k3s Traefik. |
 | POST | `/gateway/dismiss-suggestion` | Dismiss a route suggestion. |

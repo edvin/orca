@@ -360,9 +360,16 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         const hostPorts = deployPorts().filter((p) => p.host).map((p) => parseInt(p.host)).filter((p) => !isNaN(p));
         if (hostPorts.length > 0) {
           try {
-            const result = await invoke("check_ports", { ports: hostPorts }) as { conflicts: number[] };
-            if (result.conflicts && result.conflicts.length > 0) {
-              showToast(`Port${result.conflicts.length > 1 ? "s" : ""} ${result.conflicts.join(", ")} already in use. Change the port mappings and try again.`, "error");
+            const result = await invoke("check_ports", { ports: hostPorts }) as { conflicts: number[]; in_wsl?: number[] };
+            const here = result.conflicts ?? [];
+            const inWsl = result.in_wsl ?? [];
+            if (here.length > 0 || inWsl.length > 0) {
+              const ports = (list: number[]) => `Port${list.length > 1 ? "s" : ""} ${list.join(", ")}`;
+              const parts = [
+                ...(here.length > 0 ? [`${ports(here)} already in use.`] : []),
+                ...(inWsl.length > 0 ? [`${ports(inWsl)} in use inside WSL (another distro).`] : []),
+              ];
+              showToast(`${parts.join(" ")} Change the port mappings and try again.`, "error");
               return;
             }
           } catch { /* port check failed, proceed anyway */ }

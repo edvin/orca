@@ -449,6 +449,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/gateway/app", post(gateway_app_action))
         .route("/gateway/requests", get(gateway_requests))
         .route("/gateway/port-check", get(gateway_port_check))
+        .route("/ports/held-in-wsl", get(ports_held_in_wsl))
         .route("/gateway/links", get(gateway_get_links).put(gateway_update_links))
         .route("/gateway/traefik-status", get(gateway_traefik_status))
         .route("/gateway/traefik-mode", put(gateway_set_traefik_mode))
@@ -8818,6 +8819,20 @@ async fn gateway_set_landing(
     };
     crate::landing::write(&gateway).map_err(|e| anyhow::anyhow!("Could not write the landing page: {e}"))?;
     Ok(Json(serde_json::json!({ "settings": gateway.landing })))
+}
+
+/// Windows: the ports another WSL distro listens on. They're taken for
+/// Orca's engine too (every distro shares one network), and a check that
+/// binds on Windows doesn't see them. Empty elsewhere.
+async fn ports_held_in_wsl() -> Json<serde_json::Value> {
+    #[cfg(windows)]
+    let ports: Vec<u16> = orca_backend_common::wsl::ports_held_elsewhere()
+        .await
+        .into_iter()
+        .collect();
+    #[cfg(not(windows))]
+    let ports: Vec<u16> = Vec::new();
+    Json(serde_json::json!({ "ports": ports }))
 }
 
 async fn gateway_port_check(

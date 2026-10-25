@@ -3958,7 +3958,21 @@ pub async fn check_ports(ports: Vec<u16>) -> Result<serde_json::Value, String> {
             Err(_) => conflicts.push(*port),
         }
     }
-    Ok(serde_json::json!({ "conflicts": conflicts }))
+    // Windows: a port another WSL distro holds is taken for Orca's engine
+    // too, and binding here doesn't see it; the daemon checks from WSL.
+    let mut in_wsl = Vec::new();
+    if cfg!(windows)
+        && let Ok(held) = get_json::<serde_json::Value>("/ports/held-in-wsl").await
+        && let Some(held) = held["ports"].as_array()
+    {
+        let held: Vec<u64> = held.iter().filter_map(|p| p.as_u64()).collect();
+        in_wsl = ports
+            .iter()
+            .copied()
+            .filter(|p| held.contains(&u64::from(*p)) && !conflicts.contains(p))
+            .collect();
+    }
+    Ok(serde_json::json!({ "conflicts": conflicts, "in_wsl": in_wsl }))
 }
 
 // --- Remote Host Management ---
