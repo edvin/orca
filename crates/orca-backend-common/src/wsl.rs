@@ -685,6 +685,22 @@ pub fn newest_cli_zip(index: &str) -> Option<String> {
         .map(|(_, s)| s)
 }
 
+/// The Windows x64 buildx in a GitHub release (its API's JSON): where to
+/// download it, and its sha256. buildx's own `checksums.txt` leaves Windows
+/// out; GitHub gives every asset's digest.
+pub fn windows_buildx(release: &serde_json::Value) -> Option<(String, String)> {
+    release["assets"].as_array()?.iter().find_map(|a| {
+        let name = a["name"].as_str()?;
+        let url = a["browser_download_url"].as_str()?;
+        let sha = a["digest"].as_str()?.strip_prefix("sha256:")?;
+        (name.starts_with("buildx-v")
+            && name.ends_with(".windows-amd64.exe")
+            && url.starts_with("https://github.com/docker/buildx/releases/download/")
+            && sha.len() == 64)
+            .then(|| (url.to_string(), sha.to_lowercase()))
+    })
+}
+
 // --- Windows: making, starting and reaching the distro --------------------------
 
 #[cfg(windows)]
@@ -1173,6 +1189,33 @@ mod win {
                 anyhow::bail!("the compose download doesn't match its checksum; try again");
             }
         }
+        // BuildKit for `docker build`: without buildx it falls back to the
+        // legacy builder.
+        let has_buildx = Command::new(&docker)
+            .args(["buildx", "version"])
+            .creation_flags(NO_WINDOW)
+            .output()
+            .await
+            .is_ok_and(|o| o.status.success());
+        if !has_buildx {
+            say(">>> Downloading docker buildx".into());
+            std::fs::create_dir_all(&plugins)?;
+            let release: serde_json::Value = http
+                .get("https://api.github.com/repos/docker/buildx/releases/latest")
+                .header(reqwest::header::USER_AGENT, "orca")
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await?;
+            let (url, want) = windows_buildx(&release).context("no buildx for Windows in its latest release")?;
+            let buildx = plugins.join("docker-buildx.exe");
+            download(&http, &url, &buildx, say).await?;
+            if sha256_file(&buildx).await? != want {
+                let _ = std::fs::remove_file(&buildx);
+                anyhow::bail!("the buildx download doesn't match its checksum; try again");
+            }
+        }
         say(">>> Adding the docker context orca".into());
         let run = |args: &[&str]| {
             let mut c = Command::new(&docker);
@@ -1454,6 +1497,22 @@ mod tests {
         assert!(files[1].1.starts_with(DISTRIBUTION_CONF));
         assert_eq!(files[1].1.len(), original.len());
         assert!(!files[1].1.contains("oobe"));
+    }
+
+    #[test]
+    fn finds_buildx_for_windows_in_a_release() {
+        let sha = "fd2e18501910dd535ea3aa7f69010b3cfdfba0f47aa27674124554386dfa26f3";
+        let base = "https://github.com/docker/buildx/releases/download/v0.38.1";
+        let release = serde_json::json!({"assets": [
+            {"name": "buildx-v0.38.1.linux-amd64", "browser_download_url": format!("{base}/buildx-v0.38.1.linux-amd64"), "digest": format!("sha256:{sha}")},
+            {"name": "buildx-v0.38.1.windows-amd64.exe.sbom.json", "browser_download_url": format!("{base}/x"), "digest": format!("sha256:{sha}")},
+            {"name": "buildx-v0.38.1.windows-amd64.exe", "browser_download_url": format!("{base}/buildx-v0.38.1.windows-amd64.exe"), "digest": format!("sha256:{}", sha.to_uppercase())},
+        ]});
+        assert_eq!(
+            windows_buildx(&release),
+            Some((format!("{base}/buildx-v0.38.1.windows-amd64.exe"), sha.to_string()))
+        );
+        assert_eq!(windows_buildx(&serde_json::json!({"assets": []})), None);
     }
 
     #[test]
