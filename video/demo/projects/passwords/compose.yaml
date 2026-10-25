@@ -1,0 +1,9 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    environment:
+      DOMAIN: https://vault.acme.localhost
+      SIGNUPS_ALLOWED: "false"
+    volumes: [data:/data]
+volumes:
+  data:

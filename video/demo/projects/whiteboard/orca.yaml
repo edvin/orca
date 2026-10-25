@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: draw, service: excalidraw, port: 80, title: Whiteboard, description: Sketch it out together }

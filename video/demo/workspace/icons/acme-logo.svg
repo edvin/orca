@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 40" fill="none">
+  <path d="M6 32 20 6l14 26" stroke="#7aa2f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13 22h14" stroke="#bb9af7" stroke-width="5" stroke-linecap="round"/>
+  <text x="44" y="30" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="27" font-weight="700" letter-spacing="-0.5" fill="#e6edf3">acme</text>
+</svg>

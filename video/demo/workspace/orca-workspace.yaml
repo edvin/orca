@@ -8,6 +8,7 @@ network: acme
 gateway:
   domain: acme.localhost
   title: Acme dev
+  logo: icons/acme-logo.svg
 
 shared:
   compose: compose.yaml
@@ -20,29 +21,64 @@ routes:
 
 clone_into: ~/code/acme
 
+# One MariaDB and one Postgres for every app: a project whose orca.yaml
+# requires a database gets one of its own on the matching server.
+databases:
+  mariadb: { engine: mariadb, service: mariadb }
+  postgres: { engine: postgres, service: postgres }
+
 projects:
   website:
+    group: Marketing
     repo: https://git.acme.dev/acme/website.git
     description: The marketing site, on WordPress
     icon: wordpress
+    links:
+      - { name: Website, Staging: "https://staging.acme.example", Production: "https://acme.example" }
+  analytics:
+    group: Marketing
+    repo: https://git.acme.dev/acme/analytics.git
+    description: Privacy-friendly web analytics (Umami)
+    icon: icons/umami.svg
+    links:
+      - { name: Analytics, Production: "https://analytics.acme.example" }
   git:
+    group: Engineering
     repo: https://git.acme.dev/acme/git.git
     description: Our own Git server (Gitea)
     icon: gitea
+    links:
+      - { name: Git, Production: "https://git.acme.example" }
   automations:
+    group: Engineering
     repo: https://git.acme.dev/acme/automations.git
     description: Workflows and integrations (n8n)
     icon: n8n
     uses: [mailpit]
-  analytics:
-    repo: https://git.acme.dev/acme/analytics.git
-    description: Privacy-friendly web analytics (Umami)
-    icon: icons/umami.svg
   status:
+    group: Engineering
     repo: https://git.acme.dev/acme/status.git
     description: Uptime monitoring and status pages (Uptime Kuma)
     icon: icons/uptime-kuma.svg
+    links:
+      - { name: Status page, Production: "https://status.acme.example" }
   notes:
+    group: Team tools
     repo: https://git.acme.dev/acme/notes.git
     description: The team's notes (Memos)
     icon: icons/memos.svg
+  whiteboard:
+    group: Team tools
+    repo: https://git.acme.dev/acme/whiteboard.git
+    description: A shared whiteboard (Excalidraw)
+    icon: icons/excalidraw.svg
+  passwords:
+    group: Team tools
+    repo: https://git.acme.dev/acme/passwords.git
+    description: The team's password vault (Vaultwarden)
+    icon: icons/vaultwarden.svg
+  files:
+    group: Team tools
+    repo: https://git.acme.dev/acme/files.git
+    description: Shared files (File Browser)
+    icon: icons/filebrowser.svg

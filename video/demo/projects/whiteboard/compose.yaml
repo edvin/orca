@@ -1,0 +1,3 @@
+services:
+  excalidraw:
+    image: excalidraw/excalidraw:latest

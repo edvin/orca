@@ -4,6 +4,20 @@ services:
     environment:
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__server__ROOT_URL: https://git.acme.localhost/
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: db:5432
+      GITEA__database__NAME: gitea
+      GITEA__database__USER: gitea
+      GITEA__database__PASSWD: gitea
+    depends_on: [db]
     volumes: [data:/data]
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: gitea
+      POSTGRES_USER: gitea
+      POSTGRES_PASSWORD: gitea
+    volumes: [db:/var/lib/postgresql/data]
 volumes:
   data:
+  db:

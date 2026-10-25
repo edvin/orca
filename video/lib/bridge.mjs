@@ -53,7 +53,7 @@ export function commandTable() {
       const p = parsePath(m[2].replace(/^&/, ""));
       const used = new Set((p ?? []).filter((x) => typeof x !== "string").map((x) => x.arg));
       if (p) table[name] = { method: m[1], path: p, body: m[3] === "Some" ? argNames.filter((a) => !used.has(camel(a))) : null };
-    } else if (/daemon_call\(\s*&method\s*,\s*&path\s*,\s*body\s*\)/.test(body)) {
+    } else if (/daemon_call(?:_with_timeout)?\(\s*&method\s*,\s*&path\s*,\s*body\s*[,)]/.test(body)) {
       table[name] = { generic: true };
     } else if ((m = body.match(/\.(get|post|put|patch|delete)\(\s*(format!\("\{base\}[\s\S]*?\))\s*\)/))) {
       const p = parsePath(m[2]);

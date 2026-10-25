@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: files, service: filebrowser, port: 80, title: Files, description: Shared files and uploads }

@@ -1,0 +1,2 @@
+gateway:
+  - { hostname: vault, service: vaultwarden, port: 80, title: Passwords, description: The team's shared vault }

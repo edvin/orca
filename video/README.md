@@ -29,7 +29,7 @@ the `claude` CLI signed in.
 |---|---|
 | `script.mjs` | The scenes: what's said (`say`, `s.say()`) and what happens (`run`). Start here. |
 | `demo-env.sh` | The demo machine: its own Lima VM (`orca-demo`), its own Orca daemon on port 9478 with its config in `~/.orca-demo`, and the `acme` workspace from `demo/` served as `https://git.acme.dev/acme/*.git`. Your own Orca, its daemon and containers are never touched. |
-| `demo/` | The made-up company: a workspace (Mailpit, Grafana, Adminer) and six projects that are real open-source apps (WordPress, Gitea, n8n, Umami, Uptime Kuma, Memos). |
+| `demo/` | The made-up company: a workspace (its logo, Mailpit, Grafana, Adminer, and a shared MariaDB and Postgres) and nine projects that are real open-source apps (WordPress, Gitea, n8n, Umami, Uptime Kuma, Memos, Excalidraw, Vaultwarden, File Browser), in three groups. |
 | `record.mjs` | Serves the GUI with Vite, runs it in Chromium inside `lib/stage.html` (window frames, cursor, terminal pane, title cards) and captures frames at 2560×1440. |
 | `lib/bridge.mjs` | Turns the GUI's Tauri `invoke()` calls into the daemon REST calls the Tauri commands make, read from `src-tauri/src/commands.rs` each time. A command it can't map is listed after the scene. |
 | `lib/claude.mjs` | A headless Claude Code session with only the demo daemon's Orca MCP server (`--strict-mcp-config`, no other tools), streamed into the terminal pane. |

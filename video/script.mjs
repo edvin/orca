@@ -135,19 +135,48 @@ export default [
   },
   {
     id: "landing",
-    say: "Every app also lands on your start page, with live status and the right icon on every card. Type to find any service, or search the web.",
-    tail: 1.5,
+    before: `sh '${ROOT}/lib/prepare-apps.sh'`,
+    say: "Every app also lands on your team's start page, grouped the way the team works, with live status and the right icon on every card.",
+    tail: 1.2,
     async run(s) {
-      await s.lower({ n: "6", title: "Your start page", sub: "https://acme.localhost" });
+      await s.lower({ n: "6", title: "Your team's start page", sub: "https://acme.localhost" });
       await s.layout("browser");
       await s.browse("https://acme.localhost");
       await s.sleep(2500);
+      await s.hover(".group[data-group='Engineering'] .gh", { where: "site" });
+      await s.click(".group[data-group='Engineering'] .more", { where: "site" });
+      await s.say("Open a project's details for its addresses, or to start it.");
+      await s.sleep(3200);
+      await s.press("Escape", { where: "site" });
+      await s.click(".tab[data-env='Production']", { where: "site" });
+      await s.say("Staging and production are a click away, too.");
+      await s.sleep(2400);
+      await s.click(".tab[data-env='local']", { where: "site" });
+      await s.sleep(600);
       s.highlight("search");
       await s.type("#q", "analy", { where: "site", delay: 140 });
+      await s.say("Type to find any service, and press enter to go there.");
       await s.sleep(1200);
       await s.press("Enter", { where: "site" });
-      await s.say("Press enter, and you're there.");
       await s.sleep(3000);
+    },
+  },
+  {
+    id: "databases",
+    say: "Every one of these apps still runs its own database. The workspace shares one MariaDB and one Postgres for the whole team, so ask Claude to move them over.",
+    tail: 1.5,
+    async run(s) {
+      await s.lower({ n: "7", title: "One database server for the team", sub: "Each app gets a database of its own on it" });
+      await s.layout("split");
+      await s.claude("Our apps each run their own database container. Move them onto the workspace's shared MariaDB and Postgres, copy their data over, and check that the apps still work.", {
+        onWorking: () => s.say("Claude gives each app a database and a user of its own on the shared servers, restarts it there, and copies its data across, after taking a snapshot."),
+      });
+      await s.layout("app");
+      await s.open("Databases");
+      await s.sleep(2200);
+      s.highlight("databases");
+      await s.say("The Databases page shows where every app's data lives now, and connects, snapshots or restores it in a click.", { wait: true });
+      await s.sleep(1500);
     },
   },
   {
@@ -156,9 +185,10 @@ export default [
     tail: 1.5,
     before: "docker stop $(docker ps -q --filter label=com.docker.compose.project=notes)",
     async run(s) {
-      await s.lower({ n: "7", title: "Something broke?", sub: "Claude finds out why and fixes it" });
+      await s.lower({ n: "8", title: "Something broke?", sub: "Claude finds out why and fixes it" });
       await s.layout("split-browser");
       await s.browse("https://notes.acme.localhost");
+      await s.say("Even the broken page says what's wrong: nothing answers behind that address.");
       await s.claude("notes.acme.localhost isn't loading. Can you find out why and fix it?", {
         onWorking: () => s.say("Claude checks the gateway, the workspace and the container itself, works out what happened, and fixes it."),
       });
@@ -173,7 +203,7 @@ export default [
     say: "Back in Orca, the dashboard groups every app by where it comes from, with its icon and its addresses one click away.",
     tail: 1.5,
     async run(s) {
-      await s.lower({ n: "8", title: "Every app at a glance" });
+      await s.lower({ n: "9", title: "Every app at a glance" });
       await s.layout("app");
       await s.open("Dashboard");
       await s.sleep(2000);

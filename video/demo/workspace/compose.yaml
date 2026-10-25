@@ -15,6 +15,27 @@ services:
     image: adminer:5
     networks: [acme]
 
+  # The team's database servers: each app gets a database and a user of its
+  # own on them (orca-workspace.yaml, databases:). Started when one needs it.
+  mariadb:
+    profiles: [mariadb]
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: acme-dev
+    volumes: [mariadb:/var/lib/mysql]
+    networks: [acme]
+  postgres:
+    profiles: [postgres]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: acme-dev
+    volumes: [postgres:/var/lib/postgresql/data]
+    networks: [acme]
+
 networks:
   acme:
     external: true
+
+volumes:
+  mariadb:
+  postgres:
