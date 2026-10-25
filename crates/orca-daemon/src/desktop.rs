@@ -1660,7 +1660,7 @@ fn volumes_of<'a>(
 
 /// Point the user's `docker` command at Orca's engine, when it points at
 /// Docker Desktop's: the `lima-orca` context on macOS, the `default` one on
-/// Linux. Windows has no `docker` command of Orca's to point.
+/// Linux, and PowerShell's `orca` context on Windows.
 async fn switch_cli(target: &Target) -> Result<Option<String>> {
     if cfg!(target_os = "macos") {
         if target.host != format!("unix://{}", engine::orca_socket()) {
@@ -1676,6 +1676,7 @@ async fn switch_cli(target: &Target) -> Result<Option<String>> {
         // PowerShell's docker: onto Orca's `orca` context, when its
         // integration (Settings → Engine) made one, from Docker Desktop's
         // (`desktop-linux`, or `default`: Docker Desktop's pipe on Windows).
+        // Then off Docker Desktop's credential helper, if it's gone.
         let _ = target;
         let Some(docker) = orca_backend_common::wsl::docker_exe().await else {
             return Ok(None);
@@ -1685,20 +1686,23 @@ async fn switch_cli(target: &Target) -> Result<Option<String>> {
             c.args(args).creation_flags(0x08000000); // CREATE_NO_WINDOW
             c
         };
-        let current = run(&["context", "show"]).output().await?;
-        let current = String::from_utf8_lossy(&current.stdout).trim().to_string();
-        if !["desktop-linux", "default"].contains(&current.as_str())
-            || !run(&["context", "inspect", "orca"]).output().await?.status.success()
-        {
+        if !run(&["context", "inspect", "orca"]).output().await?.status.success() {
             return Ok(None);
         }
-        let out = run(&["context", "use", "orca"]).output().await?;
-        if !out.status.success() {
-            bail!("{}", String::from_utf8_lossy(&out.stderr).trim());
+        let mut done = Vec::new();
+        let current = run(&["context", "show"]).output().await?;
+        let current = String::from_utf8_lossy(&current.stdout).trim().to_string();
+        if ["desktop-linux", "default"].contains(&current.as_str()) {
+            let out = run(&["context", "use", "orca"]).output().await?;
+            if !out.status.success() {
+                bail!("{}", String::from_utf8_lossy(&out.stderr).trim());
+            }
+            done.push("`docker` in PowerShell now talks to Orca's engine (context orca)".to_string());
         }
-        Ok(Some(
-            "`docker` in PowerShell now talks to Orca's engine (context orca)".into(),
-        ))
+        if let Some(creds) = orca_backend_common::wsl::fix_creds_store(&reqwest::Client::new(), &|_| {}).await? {
+            done.push(creds);
+        }
+        Ok((!done.is_empty()).then(|| done.join(". ")))
     }
     #[cfg(not(windows))]
     {

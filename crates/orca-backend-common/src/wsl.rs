@@ -816,6 +816,29 @@ pub fn windows_buildx(release: &serde_json::Value) -> Option<(String, String)> {
     })
 }
 
+/// The credential helper Docker's `config.json` names in `credsStore`
+/// (`desktop` for `docker-credential-desktop.exe`), if any.
+pub fn creds_store(config: &str) -> Option<String> {
+    let cfg: serde_json::Value = serde_json::from_str(config).ok()?;
+    cfg["credsStore"].as_str().filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+/// `config.json` with `credsStore` set to `wincred`, every other key kept
+/// as it was. `None` when it isn't a JSON object.
+pub fn with_wincred(config: &str) -> Option<String> {
+    let mut cfg: serde_json::Value = serde_json::from_str(config).ok()?;
+    cfg.as_object_mut()?.insert("credsStore".into(), "wincred".into());
+    serde_json::to_string_pretty(&cfg).ok()
+}
+
+/// `name`'s sha256 in a `checksums.txt` (`<sha256> *<name>` lines).
+pub fn checksum_for(sums: &str, name: &str) -> Option<String> {
+    sums.lines().find_map(|l| {
+        let (sha, file) = l.split_once(char::is_whitespace)?;
+        (file.trim().trim_start_matches('*') == name && sha.len() == 64).then(|| sha.to_lowercase())
+    })
+}
+
 // --- Windows: making, starting and reaching the distro --------------------------
 
 #[cfg(windows)]
@@ -1294,13 +1317,7 @@ mod win {
                 let out = powershell(&script).output().await?;
                 anyhow::ensure!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr).trim());
                 let _ = std::fs::remove_file(&path);
-                // On the user's PATH, after anything already there.
-                let add = format!(
-                    "$p=[Environment]::GetEnvironmentVariable('Path','User'); if (-not ($p -split ';' -contains '{d}')) \
-                     {{ [Environment]::SetEnvironmentVariable('Path', ($p.TrimEnd(';') + ';{d}'), 'User') }}",
-                    d = dir.display().to_string().replace('\'', "''")
-                );
-                powershell(&add).output().await?;
+                add_to_user_path(&dir).await?;
                 dir.join("docker.exe")
             }
         };
@@ -1381,7 +1398,117 @@ mod win {
         anyhow::ensure!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr).trim());
         run(&["context", "use", "orca"]).output().await?;
         say("    docker in PowerShell now uses Orca's engine (context orca)".into());
+        if let Some(done) = fix_creds_store(&http, say).await? {
+            say(format!("    {done}"));
+        }
         Ok(())
+    }
+
+    /// `dir` on the user's PATH, after anything already there.
+    async fn add_to_user_path(dir: &Path) -> Result<()> {
+        let add = format!(
+            "$p=[Environment]::GetEnvironmentVariable('Path','User'); if (-not ($p -split ';' -contains '{d}')) \
+             {{ [Environment]::SetEnvironmentVariable('Path', ($p.TrimEnd(';') + ';{d}'), 'User') }}",
+            d = dir.display().to_string().replace('\'', "''")
+        );
+        powershell(&add).output().await?;
+        Ok(())
+    }
+
+    /// The folders on the PATH a new PowerShell gets (the machine's, then
+    /// the user's), which is where its docker.exe looks for credential
+    /// helpers. The daemon's own PATH may be older than that.
+    async fn user_path() -> Option<Vec<PathBuf>> {
+        let out = powershell(
+            "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + \
+             [Environment]::GetEnvironmentVariable('Path','User')",
+        )
+        .output()
+        .await
+        .ok()
+        .filter(|o| o.status.success())?;
+        let dirs: Vec<PathBuf> = String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .split(';')
+            .map(|d| d.trim().trim_matches('"'))
+            .filter(|d| !d.is_empty())
+            .map(PathBuf::from)
+            .collect();
+        (!dirs.is_empty()).then_some(dirs)
+    }
+
+    /// The docker-credential-helpers release wincred comes from.
+    const WINCRED: &str = "v0.9.9";
+
+    /// Docker Desktop leaves `"credsStore": "desktop"` in
+    /// `~\.docker\config.json`, and once its `resources\bin` is gone from
+    /// the PATH every `docker pull` fails (`docker-credential-desktop.exe`:
+    /// executable file not found). When the helper `credsStore` names isn't
+    /// on the PATH, it becomes `wincred` (Windows' Credential Manager), with
+    /// `config.json.orca-backup` kept and `docker-credential-wincred.exe`
+    /// downloaded into [`cli_dir`] if it's missing too. What was done, or
+    /// `None` when nothing needed doing.
+    pub async fn fix_creds_store(
+        http: &reqwest::Client,
+        say: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<Option<String>> {
+        let dir = match std::env::var_os("DOCKER_CONFIG") {
+            Some(d) => PathBuf::from(d),
+            None => dirs::home_dir().context("no home folder")?.join(".docker"),
+        };
+        let file = dir.join("config.json");
+        let Ok(config) = std::fs::read_to_string(&file) else {
+            return Ok(None);
+        };
+        let Some(store) = creds_store(&config) else {
+            return Ok(None);
+        };
+        // Without the PATH, a helper that's there would look missing.
+        let Some(path) = user_path().await else {
+            return Ok(None);
+        };
+        let found = |name: &str| {
+            path.iter()
+                .any(|d| d.join(format!("docker-credential-{name}.exe")).is_file())
+        };
+        if found(&store) {
+            return Ok(None);
+        }
+        if !found("wincred") {
+            say(">>> Downloading docker-credential-wincred".into());
+            let name = format!("docker-credential-wincred-{WINCRED}.windows-amd64.exe");
+            let base = format!("https://github.com/docker/docker-credential-helpers/releases/download/{WINCRED}");
+            let sums = http
+                .get(format!("{base}/checksums.txt"))
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            let want = checksum_for(&sums, &name).context("wincred isn't in its release's checksums.txt")?;
+            let cli = cli_dir();
+            std::fs::create_dir_all(&cli)?;
+            let helper = cli.join("docker-credential-wincred.exe");
+            download(http, &format!("{base}/{name}"), &helper, say).await?;
+            if sha256_file(&helper).await? != want {
+                let _ = std::fs::remove_file(&helper);
+                anyhow::bail!("the docker-credential-wincred download doesn't match its checksum; try again");
+            }
+            add_to_user_path(&cli).await?;
+        }
+        if store == "wincred" {
+            return Ok(Some("docker-credential-wincred.exe is on the PATH again".into()));
+        }
+        let fixed = with_wincred(&config).context("~\\.docker\\config.json isn't a JSON object")?;
+        std::fs::copy(&file, dir.join("config.json.orca-backup"))?;
+        let tmp = dir.join("config.json.orca-new");
+        std::fs::write(&tmp, fixed)?;
+        std::fs::rename(&tmp, &file)?;
+        Ok(Some(format!(
+            "docker's credsStore was `{store}`, and docker-credential-{store}.exe isn't on the PATH: it's \
+             `wincred` now (Windows' Credential Manager; the old file is config.json.orca-backup). \
+             Logins kept in `{store}` don't come over: run `docker login` again for private registries."
+        )))
     }
 
     /// `docker` in PowerShell back to its default context.
@@ -1559,6 +1686,40 @@ mod win {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn credentials_move_to_wincred_keeping_the_rest() {
+        let cfg = r#"{"auths":{"https://index.docker.io/v1/":{}},"credsStore":"desktop","currentContext":"orca","plugins":{"x":{"a":"1"}}}"#;
+        assert_eq!(creds_store(cfg).as_deref(), Some("desktop"));
+        let fixed = with_wincred(cfg).unwrap();
+        assert_eq!(creds_store(&fixed).as_deref(), Some("wincred"));
+        let (a, b): (serde_json::Value, serde_json::Value) = (
+            serde_json::from_str(cfg).unwrap(),
+            serde_json::from_str(&fixed).unwrap(),
+        );
+        let keys = |v: &serde_json::Value| v.as_object().unwrap().keys().cloned().collect::<Vec<_>>();
+        assert_eq!(keys(&a), keys(&b));
+        assert_eq!(a["plugins"], b["plugins"]);
+        assert_eq!(a["auths"], b["auths"]);
+        assert_eq!(creds_store(r#"{"credsStore":""}"#), None);
+        assert_eq!(creds_store(r#"{"auths":{}}"#), None);
+        assert_eq!(creds_store("not json"), None);
+        assert_eq!(with_wincred("[]"), None);
+    }
+
+    #[test]
+    fn finds_a_checksum() {
+        let sums = "2b27d34ad2065a3413740b59359dac56f2e1bd00a40629de51e29fa30cf1390f *docker-credential-osxkeychain-v0.9.9.darwin-amd64\n\
+                    5675C7F677F48BEB66713CDFDF67503332F0CE4CF19220022C128634F49625F0 *docker-credential-wincred-v0.9.9.windows-amd64.exe\n";
+        assert_eq!(
+            checksum_for(sums, "docker-credential-wincred-v0.9.9.windows-amd64.exe").as_deref(),
+            Some("5675c7f677f48beb66713cdfdf67503332f0ce4cf19220022c128634f49625f0")
+        );
+        assert_eq!(
+            checksum_for(sums, "docker-credential-wincred-v0.9.9.windows-arm64.exe"),
+            None
+        );
+    }
 
     #[test]
     fn picks_the_newest_point_release() {
