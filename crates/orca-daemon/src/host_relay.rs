@@ -31,15 +31,41 @@ pub fn host_ports(config: &OrcaConfig) -> BTreeSet<u16> {
         .collect()
 }
 
+/// The relayed ports containers can't reach: Windows Firewall blocks the
+/// WSL network from the daemon, which the relay itself can't tell.
+#[cfg(windows)]
+static BLOCKED: std::sync::Mutex<BTreeSet<u16>> = std::sync::Mutex::new(BTreeSet::new());
+
+/// The System Health warning while the firewall blocks a relayed port.
+#[cfg(windows)]
+pub fn firewall_warning() -> Option<String> {
+    let blocked = BLOCKED.lock().unwrap();
+    (!blocked.is_empty()).then(|| firewall_message(&blocked))
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn firewall_message(ports: &BTreeSet<u16>) -> String {
+    let ports: Vec<String> = ports.iter().map(u16::to_string).collect();
+    format!(
+        "Windows Firewall blocks containers from reaching dev servers on this computer (port {}): allow Orca \
+         Desktop (orca-daemon.exe) on the WSL network. In Windows Security, open Firewall & network protection, \
+         Allow an app through firewall, Change settings, and tick orca-daemon.exe for Public and Private (Allow \
+         another app… adds it from Orca Desktop's folder if it isn't listed).",
+        ports.join(", ")
+    )
+}
+
 /// Keep a relay listening for every routed host port, checking every few
 /// seconds for routes added or removed and for Windows' address changing.
 #[cfg(windows)]
 pub async fn run(state: std::sync::Arc<crate::state::AppState>) {
     use std::collections::BTreeMap;
+    use std::time::{Duration, Instant};
     use tokio::task::JoinHandle;
 
     let mut relays: BTreeMap<u16, JoinHandle<()>> = BTreeMap::new();
     let mut bound_ip: Option<String> = None;
+    let mut checked: BTreeMap<u16, Instant> = BTreeMap::new();
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         let ip = crate::gateway::windows_host_ip();
@@ -76,7 +102,38 @@ pub async fn run(state: std::sync::Arc<crate::state::AppState>) {
                 Err(e) => tracing::info!("Could not relay port {port} for containers: {e}"),
             }
         }
+        // Whether containers get through to each relay: when it starts,
+        // every minute, and every round while blocked (to see a fix soon).
+        checked.retain(|p, _| relays.contains_key(p));
+        let was = BLOCKED.lock().unwrap().clone();
+        let mut blocked = BTreeSet::new();
+        for &port in relays.keys() {
+            let due = was.contains(&port) || checked.get(&port).is_none_or(|t| t.elapsed() > Duration::from_secs(60));
+            if !due {
+                continue;
+            }
+            checked.insert(port, Instant::now());
+            if !reached_from_engine(&ip, port).await {
+                if !was.contains(&port) {
+                    tracing::warn!("Containers can't reach the relay on {ip}:{port}: Windows Firewall blocks it");
+                }
+                blocked.insert(port);
+            }
+        }
+        *BLOCKED.lock().unwrap() = blocked;
     }
+}
+
+/// Whether a connection from inside Orca's distro reaches `ip:port`.
+#[cfg(windows)]
+async fn reached_from_engine(ip: &str, port: u16) -> bool {
+    if ip.parse::<std::net::Ipv4Addr>().is_err() {
+        return true;
+    }
+    let probe = format!("timeout 3 bash -c '</dev/tcp/{ip}/{port}'");
+    orca_backend_common::wsl::sh(orca_backend_common::wsl::DISTRO, &probe, None)
+        .await
+        .is_ok()
 }
 
 /// Where a server on this computer's localhost answers for `port`.
@@ -160,5 +217,6 @@ mod tests {
             route("HOST.docker.internal", 8000, true),
         ];
         assert_eq!(host_ports(&c), BTreeSet::from([3000, 8000]));
+        assert!(firewall_message(&BTreeSet::from([5173, 3000])).contains("(port 3000, 5173): allow Orca Desktop"));
     }
 }

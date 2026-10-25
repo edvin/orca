@@ -4548,6 +4548,10 @@ pub(crate) async fn system_health_report(state: &AppState, refresh: bool) -> orc
         rt.cached_disk_usage()
     };
     let mut health = orca_backend_common::environment::check_system_health(connected, disk).await;
+    #[cfg(windows)]
+    if let Some(w) = crate::host_relay::firewall_warning() {
+        health.warnings.push(w);
+    }
 
     if connected {
         if let Ok(version) = rt.server_version().await {
