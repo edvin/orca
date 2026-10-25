@@ -159,15 +159,21 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
           <div class="page-actions">
             <Show when={!ws()?.error}>
               <Show when={ws()?.path}>{(p) => <FolderActions path={p()} compact />}</Show>
-              <button class="btn" onClick={() => void runCheck()} disabled={checking()}
+              <button class="btn btn-iconed" onClick={() => void runCheck()} disabled={checking()}
                 title="Ports, domain, certificates, logins and access to every repository">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6Z" /><path d="m9 12 2 2 4-4" /></svg>
                 {checking() ? "Checking…" : "Check this machine"}
               </button>
-              <button class="btn" onClick={() => void update()} disabled={jobs()[""]?.status === "running"}>
+              <button class="btn btn-iconed" onClick={() => void update()} disabled={jobs()[""]?.status === "running"}
+                title="Pull the workspace and apply it: shared services, routes, gateway">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v5h-5" /></svg>
                 {jobs()[""]?.status === "running" ? "Updating…" : "Update"}
               </button>
             </Show>
-            <button class="btn" onClick={() => void leave()}>Leave</button>
+            <button class="btn btn-iconed" onClick={() => void leave()} title="Leave the workspace: its routes go, your projects and their containers stay">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="m10 16-4-4 4-4" /><path d="M6 12h10" /></svg>
+              Leave
+            </button>
           </div>
         </Show>
       </div>

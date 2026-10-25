@@ -5,7 +5,7 @@
     "description": "The world's most advanced open source relational database",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 12c0 1.66 4 3 9 3s9-1.34 9-3\"/></svg>",
     "category": "Database",
-    "image": "postgres:16-alpine",
+    "image": "postgres:18-alpine",
     "default_ports": [
       "5432:5432"
     ],
@@ -14,10 +14,10 @@
       "POSTGRES_DB=mydb"
     ],
     "default_volumes": [
-      "pgdata:/var/lib/postgresql/data"
+      "pgdata:/var/lib/postgresql"
     ],
     "restart_policy": "unless-stopped",
-    "notes": "Connect with: psql -h localhost -U postgres -d mydb",
+    "notes": "Connect with: psql -h localhost -U postgres -d mydb. PostgreSQL 18 keeps its data in a version folder under /var/lib/postgresql, so a later major version can sit next to it.",
     "is_builtin": true
   },
   {
@@ -26,7 +26,7 @@
     "description": "Popular open source relational database",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 12c0 1.66 4 3 9 3s9-1.34 9-3\"/><path d=\"M3 8.5c0 1.66 4 3 9 3s9-1.34 9-3\"/></svg>",
     "category": "Database",
-    "image": "mysql:8",
+    "image": "mysql:9.7",
     "default_ports": [
       "3306:3306"
     ],
@@ -38,7 +38,7 @@
       "mysqldata:/var/lib/mysql"
     ],
     "restart_policy": "unless-stopped",
-    "notes": "Connect with: mysql -h 127.0.0.1 -u root -p",
+    "notes": "Connect with: mysql -h 127.0.0.1 -u root -p MySQL 9.7 is the current LTS; use mysql:8.4 for apps that still need mysql_native_password.",
     "is_builtin": true
   },
   {
@@ -47,7 +47,7 @@
     "description": "In-memory data store, cache, and message broker",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\" transform=\"rotate(45 12 12)\"/><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"16\"/><line x1=\"8\" y1=\"12\" x2=\"16\" y2=\"12\"/></svg>",
     "category": "Database",
-    "image": "redis:alpine",
+    "image": "redis:8-alpine",
     "default_ports": [
       "6379:6379"
     ],
@@ -65,7 +65,7 @@
     "description": "Document-oriented NoSQL database",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M17 8c0 4-5 8-5 14 0-6-5-10-5-14a5 5 0 0 1 10 0z\"/><path d=\"M12 22v-8\"/></svg>",
     "category": "Database",
-    "image": "mongo:7",
+    "image": "mongo:8",
     "default_ports": [
       "27017:27017"
     ],
@@ -86,7 +86,7 @@
     "description": "High-performance web server and reverse proxy",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z\"/></svg>",
     "category": "Web Server",
-    "image": "nginx:alpine",
+    "image": "nginx:stable-alpine",
     "default_ports": [
       "8080:80"
     ],
@@ -102,7 +102,7 @@
     "description": "Fast web server with automatic HTTPS",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/><circle cx=\"12\" cy=\"16\" r=\"1\"/></svg>",
     "category": "Web Server",
-    "image": "caddy:alpine",
+    "image": "caddy:2-alpine",
     "default_ports": [
       "80:80",
       "443:443"
@@ -157,24 +157,17 @@
   {
     "id": "minio",
     "name": "MinIO",
-    "description": "S3-compatible object storage",
+    "description": "S3-compatible object storage (Chainguard build: MinIO no longer publishes images)",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z\"/></svg>",
     "category": "Storage",
-    "image": "minio/minio:latest",
-    "default_ports": [
-      "9000:9000",
-      "9001:9001"
-    ],
-    "default_env": [
-      "MINIO_ROOT_USER=minioadmin",
-      "MINIO_ROOT_PASSWORD=minioadmin"
-    ],
-    "default_volumes": [
-      "miniodata:/data"
-    ],
+    "image": "cgr.dev/chainguard/minio:latest",
+    "default_ports": [],
+    "default_env": [],
+    "default_volumes": [],
     "restart_policy": "unless-stopped",
-    "notes": "Console at http://localhost:9001",
-    "is_builtin": true
+    "notes": "API at http://localhost:9000, console at http://localhost:9001 (minioadmin / the password in the compose file). MinIO stopped publishing images in 2025 and its Docker Hub images were removed in September 2026; this uses Chainguard's free build. RustFS is an actively developed alternative.",
+    "is_builtin": true,
+    "compose_yaml": "services:\n  minio:\n    image: cgr.dev/chainguard/minio:latest\n    command: [\"server\", \"/data\", \"--console-address\", \":9001\"]\n    ports:\n      - '9000:9000'\n      - '9001:9001'\n    environment:\n      MINIO_ROOT_USER: minioadmin\n      MINIO_ROOT_PASSWORD: changeme123\n    volumes:\n      - miniodata:/data\n    restart: unless-stopped\nvolumes:\n  miniodata:\n"
   },
   {
     "id": "phpmyadmin",
@@ -213,20 +206,20 @@
     "is_builtin": true
   },
   {
-    "id": "mailhog",
-    "name": "MailHog",
-    "description": "Email testing tool for developers",
+    "id": "mailpit",
+    "name": "Mailpit",
+    "description": "Catches the email your apps send, with a web UI and an API",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z\"/><polyline points=\"22,6 12,13 2,6\"/></svg>",
     "category": "Tools",
-    "image": "mailhog/mailhog:latest",
+    "image": "axllent/mailpit:latest",
     "default_ports": [
       "1025:1025",
       "8025:8025"
     ],
     "default_env": [],
     "default_volumes": [],
-    "restart_policy": "no",
-    "notes": "SMTP on port 1025, Web UI at http://localhost:8025",
+    "restart_policy": "unless-stopped",
+    "notes": "Point your app at SMTP localhost:1025; read the mail at http://localhost:8025. Replaces MailHog, which is no longer maintained.",
     "is_builtin": true
   },
   {
@@ -278,7 +271,7 @@
     "description": "Message broker with management UI",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/><path d=\"M8 10h8\"/><path d=\"M8 14h4\"/></svg>",
     "category": "Message Queue",
-    "image": "rabbitmq:3-management",
+    "image": "rabbitmq:4-management",
     "default_ports": [
       "5672:5672",
       "15672:15672"
@@ -300,7 +293,7 @@
     "description": "Distributed search and analytics engine",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><line x1=\"21\" y1=\"21\" x2=\"16.65\" y2=\"16.65\"/></svg>",
     "category": "Search",
-    "image": "elasticsearch:8.15.0",
+    "image": "elasticsearch:9.4.3",
     "default_ports": [
       "9200:9200"
     ],
@@ -358,7 +351,7 @@
   {
     "id": "openclaw",
     "name": "OpenClaw",
-    "description": "Personal AI assistant \u2014 connects to WhatsApp, Telegram, Slack, and more",
+    "description": "Personal AI assistant — connects to WhatsApp, Telegram, Slack, and more",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"10\" rx=\"2\"/><path d=\"M12 2a4 4 0 0 0-4 4v5h8V6a4 4 0 0 0-4-4z\"/><circle cx=\"9\" cy=\"16\" r=\"1\"/><circle cx=\"15\" cy=\"16\" r=\"1\"/></svg>",
     "category": "AI",
     "image": "ghcr.io/openclaw/openclaw:latest",
@@ -385,7 +378,7 @@
     "description": "Community-developed MySQL fork",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 9c0 1.66 4 3 9 3s9-1.34 9-3\"/><path d=\"M3 14c0 1.66 4 3 9 3s9-1.34 9-3\"/></svg>",
     "category": "Database",
-    "image": "mariadb:11",
+    "image": "mariadb:12.3",
     "default_ports": [
       "3306:3306"
     ],
@@ -397,7 +390,7 @@
       "mariadb-data:/var/lib/mysql"
     ],
     "restart_policy": "unless-stopped",
-    "notes": "Connect with: mariadb -h 127.0.0.1 -u root -p",
+    "notes": "Connect with: mariadb -h 127.0.0.1 -u root -p MariaDB 12.3 is the 2026 LTS.",
     "is_builtin": true
   },
   {
@@ -415,7 +408,7 @@
       "ollama-models:/root/.ollama"
     ],
     "restart_policy": "unless-stopped",
-    "notes": "After starting, pull a model with tool support:\n  docker exec ollama ollama pull qwen2.5:7b\n\nThen in Settings \u2192 AI, select 'Ollama (Local)' \u2014 or click 'Set up Ollama' for automatic setup.\n\nNo API key needed.",
+    "notes": "After starting, pull a model with tool support:\n  docker exec ollama ollama pull qwen2.5:7b\n\nThen in Settings → AI, select 'Ollama (Local)' — or click 'Set up Ollama' for automatic setup.\n\nNo API key needed.",
     "is_builtin": true
   },
   {
@@ -460,7 +453,7 @@
     "description": "Open-source Redis fork maintained by the Linux Foundation. Drop-in Redis replacement.",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\" transform=\"rotate(45 12 12)\"/><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"16\"/><line x1=\"8\" y1=\"12\" x2=\"16\" y2=\"12\"/></svg>",
     "category": "Database",
-    "image": "valkey/valkey:latest",
+    "image": "valkey/valkey:9-alpine",
     "default_ports": [
       "6379:6379"
     ],
@@ -526,7 +519,7 @@
       "plausible-data:/var/lib/plausible"
     ],
     "restart_policy": "unless-stopped",
-    "notes": "Dashboard at http://localhost:8000. Requires a PostgreSQL and ClickHouse database \u2014 see docs for full setup.",
+    "notes": "Dashboard at http://localhost:8000. Requires a PostgreSQL and ClickHouse database — see docs for full setup.",
     "is_builtin": true
   },
   {
@@ -560,7 +553,7 @@
     "restart_policy": "unless-stopped",
     "notes": "WordPress at http://localhost:8080. Database password is auto-generated.",
     "is_builtin": true,
-    "compose_yaml": "version: '3.8'\nservices:\n  wordpress:\n    image: wordpress:latest\n    ports:\n      - '8080:80'\n    environment:\n      WORDPRESS_DB_HOST: db\n      WORDPRESS_DB_PASSWORD: changeme\n    depends_on:\n      - db\n    restart: unless-stopped\n  db:\n    image: mysql:8\n    environment:\n      MYSQL_ROOT_PASSWORD: changeme\n      MYSQL_DATABASE: wordpress\n    volumes:\n      - wp-db:/var/lib/mysql\n    restart: unless-stopped\nvolumes:\n  wp-db:\n"
+    "compose_yaml": "services:\n  wordpress:\n    image: wordpress:latest\n    ports:\n      - '8080:80'\n    environment:\n      WORDPRESS_DB_HOST: db\n      WORDPRESS_DB_PASSWORD: changeme\n    depends_on:\n      - db\n    restart: unless-stopped\n  db:\n    image: mysql:8.4\n    environment:\n      MYSQL_ROOT_PASSWORD: changeme\n      MYSQL_DATABASE: wordpress\n    volumes:\n      - wp-db:/var/lib/mysql\n    restart: unless-stopped\nvolumes:\n  wp-db:\n"
   },
   {
     "id": "gitea-postgres",
@@ -575,7 +568,7 @@
     "restart_policy": "unless-stopped",
     "notes": "Gitea at http://localhost:3000, SSH on port 2222. Database password is auto-generated.",
     "is_builtin": true,
-    "compose_yaml": "version: '3.8'\nservices:\n  gitea:\n    image: gitea/gitea:latest\n    ports:\n      - '3000:3000'\n      - '2222:22'\n    environment:\n      GITEA__database__DB_TYPE: postgres\n      GITEA__database__HOST: db:5432\n      GITEA__database__NAME: gitea\n      GITEA__database__USER: gitea\n      GITEA__database__PASSWD: changeme\n    depends_on:\n      - db\n    volumes:\n      - gitea-data:/data\n    restart: unless-stopped\n  db:\n    image: postgres:16-alpine\n    environment:\n      POSTGRES_USER: gitea\n      POSTGRES_PASSWORD: changeme\n      POSTGRES_DB: gitea\n    volumes:\n      - gitea-db:/var/lib/postgresql/data\n    restart: unless-stopped\nvolumes:\n  gitea-data:\n  gitea-db:\n"
+    "compose_yaml": "services:\n  gitea:\n    image: gitea/gitea:latest\n    ports:\n      - '3000:3000'\n      - '2222:22'\n    environment:\n      GITEA__database__DB_TYPE: postgres\n      GITEA__database__HOST: db:5432\n      GITEA__database__NAME: gitea\n      GITEA__database__USER: gitea\n      GITEA__database__PASSWD: changeme\n    depends_on:\n      - db\n    volumes:\n      - gitea-data:/data\n    restart: unless-stopped\n  db:\n    image: postgres:18-alpine\n    environment:\n      POSTGRES_USER: gitea\n      POSTGRES_PASSWORD: changeme\n      POSTGRES_DB: gitea\n    volumes:\n      - gitea-db:/var/lib/postgresql\n    restart: unless-stopped\nvolumes:\n  gitea-data:\n  gitea-db:\n"
   },
   {
     "id": "webmail-stalwart",
@@ -590,9 +583,12 @@
     "restart_policy": "unless-stopped",
     "notes": "",
     "is_builtin": true,
-    "compose_yaml": "services:\n  stalwart:\n    image: stalwartlabs/mail-server:latest\n    ports:\n      - '8080:8080'\n      - '25:25'\n      - '587:587'\n      - '465:465'\n      - '143:143'\n      - '993:993'\n      - '4190:4190'\n    volumes:\n      - stalwart_data:/opt/stalwart-mail\n    restart: unless-stopped\n\n  webmail:\n    image: ghcr.io/massive-hosting/webmail:latest\n    ports:\n      - '8095:8095'\n    env_file: .env\n    environment:\n      STALWART_URL: http://stalwart:8080\n      WEBMAIL_DATABASE_URL: postgres://webmail:changeme@postgres:5432/webmail?sslmode=disable\n      VALKEY_URL: redis://valkey:6379/0\n    depends_on:\n      postgres:\n        condition: service_healthy\n      valkey:\n        condition: service_started\n      stalwart:\n        condition: service_started\n    restart: unless-stopped\n\n  postgres:\n    image: postgres:17-alpine\n    environment:\n      POSTGRES_DB: webmail\n      POSTGRES_USER: webmail\n      POSTGRES_PASSWORD: changeme\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n    healthcheck:\n      test: ['CMD-SHELL', 'pg_isready -U webmail']\n      interval: 5s\n      timeout: 3s\n      retries: 5\n    restart: unless-stopped\n\n  valkey:\n    image: valkey/valkey:8-alpine\n    restart: unless-stopped\n\nvolumes:\n  stalwart_data:\n  pgdata:\n",
+    "compose_yaml": "services:\n  stalwart:\n    image: stalwartlabs/mail-server:latest\n    ports:\n      - '8080:8080'\n      - '25:25'\n      - '587:587'\n      - '465:465'\n      - '143:143'\n      - '993:993'\n      - '4190:4190'\n    volumes:\n      - stalwart_data:/opt/stalwart-mail\n    restart: unless-stopped\n\n  webmail:\n    image: ghcr.io/massive-hosting/webmail:latest\n    ports:\n      - '8095:8095'\n    env_file: .env\n    environment:\n      STALWART_URL: http://stalwart:8080\n      WEBMAIL_DATABASE_URL: postgres://webmail:changeme@postgres:5432/webmail?sslmode=disable\n      VALKEY_URL: redis://valkey:6379/0\n    depends_on:\n      postgres:\n        condition: service_healthy\n      valkey:\n        condition: service_started\n      stalwart:\n        condition: service_started\n    restart: unless-stopped\n\n  postgres:\n    image: postgres:17-alpine\n    environment:\n      POSTGRES_DB: webmail\n      POSTGRES_USER: webmail\n      POSTGRES_PASSWORD: changeme\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n    healthcheck:\n      test: ['CMD-SHELL', 'pg_isready -U webmail']\n      interval: 5s\n      timeout: 3s\n      retries: 5\n    restart: unless-stopped\n\n  valkey:\n    image: valkey/valkey:9-alpine\n    restart: unless-stopped\n\nvolumes:\n  stalwart_data:\n  pgdata:\n",
     "generated_env": {
-      "SECRET_ENCRYPTION_KEY": { "type": "random_hex", "length": 64 }
+      "SECRET_ENCRYPTION_KEY": {
+        "type": "random_hex",
+        "length": 64
+      }
     },
     "setup_guide": {
       "title": "Webmail + Stalwart Setup",
@@ -616,11 +612,11 @@
         },
         {
           "title": "Log in and configure Stalwart",
-          "description": "In the Stalwart admin UI, log in with username 'admin' and the password from the logs. Then go to Management \u2192 Directory \u2192 Accounts to create email accounts (e.g. you@example.com)."
+          "description": "In the Stalwart admin UI, log in with username 'admin' and the password from the logs. Then go to Management → Directory → Accounts to create email accounts (e.g. you@example.com)."
         },
         {
           "title": "Set the admin token",
-          "description": "In Stalwart admin UI, go to Settings \u2192 Authentication \u2192 Fallback Admin Secret and copy the token. Paste it below so the webmail can authenticate with Stalwart.",
+          "description": "In Stalwart admin UI, go to Settings → Authentication → Fallback Admin Secret and copy the token. Paste it below so the webmail can authenticate with Stalwart.",
           "type": "set_env",
           "env_key": "STALWART_ADMIN_TOKEN",
           "label": "Paste the Stalwart admin token here"
@@ -641,17 +637,177 @@
       ]
     },
     "gateway_routes": [
-      { "hostname": "webmail", "service": "webmail", "port": 8095 },
-      { "hostname": "mail-admin", "service": "stalwart", "port": 8080 }
+      {
+        "hostname": "webmail",
+        "service": "webmail",
+        "port": 8095
+      },
+      {
+        "hostname": "mail-admin",
+        "service": "stalwart",
+        "port": 8080
+      }
     ],
     "links": [
       {
         "group": "Mail",
         "links": [
-          { "name": "Webmail", "urls": { "local": "webmail" } },
-          { "name": "Admin Panel", "urls": { "local": "mail-admin" } }
+          {
+            "name": "Webmail",
+            "urls": {
+              "local": "webmail"
+            }
+          },
+          {
+            "name": "Admin Panel",
+            "urls": {
+              "local": "mail-admin"
+            }
+          }
         ]
       }
     ]
+  },
+  {
+    "id": "rustfs",
+    "name": "RustFS",
+    "description": "S3-compatible object storage, an open-source MinIO alternative",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 8 12 3 3 8v8l9 5 9-5Z\"/><path d=\"M3 8l9 5 9-5M12 13v8\"/></svg>",
+    "category": "Storage",
+    "image": "rustfs/rustfs:latest",
+    "default_ports": [],
+    "default_env": [],
+    "default_volumes": [],
+    "restart_policy": "unless-stopped",
+    "notes": "API at http://localhost:9000, console at http://localhost:9001. Change the access and secret keys in the compose file before storing anything real.",
+    "is_builtin": true,
+    "compose_yaml": "services:\n  rustfs:\n    image: rustfs/rustfs:latest\n    command: [\"/data\"]\n    ports:\n      - '9000:9000'\n      - '9001:9001'\n    environment:\n      RUSTFS_ACCESS_KEY: rustfs\n      RUSTFS_SECRET_KEY: changeme123\n      RUSTFS_ADDRESS: ':9000'\n      RUSTFS_CONSOLE_ADDRESS: ':9001'\n      RUSTFS_CONSOLE_ENABLE: 'true'\n    volumes:\n      - rustfs-data:/data\n    restart: unless-stopped\nvolumes:\n  rustfs-data:\n"
+  },
+  {
+    "id": "keycloak",
+    "name": "Keycloak",
+    "description": "Single sign-on and identity: OIDC, SAML, users and roles",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"8\" cy=\"15\" r=\"4\"/><path d=\"m11 12 9-9M17 6l3 3M14 9l2 2\"/></svg>",
+    "category": "Security",
+    "image": "quay.io/keycloak/keycloak:latest",
+    "default_ports": [],
+    "default_env": [],
+    "default_volumes": [],
+    "restart_policy": "unless-stopped",
+    "notes": "Admin console at http://localhost:8080 (admin / changeme). Runs in development mode: for trying things out, not production.",
+    "is_builtin": true,
+    "compose_yaml": "services:\n  keycloak:\n    image: quay.io/keycloak/keycloak:latest\n    command: [\"start-dev\"]\n    ports:\n      - '8080:8080'\n    environment:\n      KC_BOOTSTRAP_ADMIN_USERNAME: admin\n      KC_BOOTSTRAP_ADMIN_PASSWORD: changeme\n    volumes:\n      - keycloak-data:/opt/keycloak/data\n    restart: unless-stopped\nvolumes:\n  keycloak-data:\n"
+  },
+  {
+    "id": "temporal",
+    "name": "Temporal (dev server)",
+    "description": "Durable workflows: Temporal server and Web UI in one container",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>",
+    "category": "Development",
+    "image": "temporalio/temporal:latest",
+    "default_ports": [],
+    "default_env": [],
+    "default_volumes": [],
+    "restart_policy": "unless-stopped",
+    "notes": "Workers connect to localhost:7233; the Web UI is at http://localhost:8233. Uses SQLite in a volume: for development, not production.",
+    "is_builtin": true,
+    "compose_yaml": "services:\n  temporal:\n    image: temporalio/temporal:latest\n    command: [\"server\", \"start-dev\", \"--ip\", \"0.0.0.0\", \"--db-filename\", \"/data/temporal.db\"]\n    ports:\n      - '7233:7233'\n      - '8233:8233'\n    volumes:\n      - temporal-data:/data\n    restart: unless-stopped\nvolumes:\n  temporal-data:\n"
+  },
+  {
+    "id": "clickhouse",
+    "name": "ClickHouse",
+    "description": "Column-oriented database for analytics and logs",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4v16M8 4v16M12 4v16M16 4v16M20 10v4\"/></svg>",
+    "category": "Database",
+    "image": "clickhouse/clickhouse-server:26.8",
+    "default_ports": [
+      "8123:8123",
+      "9000:9000"
+    ],
+    "default_env": [
+      "CLICKHOUSE_USER=default",
+      "CLICKHOUSE_PASSWORD=changeme",
+      "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1"
+    ],
+    "default_volumes": [
+      "clickhouse-data:/var/lib/clickhouse"
+    ],
+    "restart_policy": "unless-stopped",
+    "notes": "HTTP interface and Play UI at http://localhost:8123/play; native protocol on 9000. 26.8 is the current LTS.",
+    "is_builtin": true
+  },
+  {
+    "id": "kafka",
+    "name": "Apache Kafka",
+    "description": "Event streaming, single node in KRaft mode (no ZooKeeper)",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"5\" r=\"2\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><circle cx=\"12\" cy=\"19\" r=\"2\"/><circle cx=\"19\" cy=\"8.5\" r=\"2\"/><circle cx=\"19\" cy=\"15.5\" r=\"2\"/><path d=\"M12 7v3M12 14v3M13.8 11l3.4-1.6M13.8 13l3.4 1.6\"/></svg>",
+    "category": "Message Queue",
+    "image": "apache/kafka:4.2.1",
+    "default_ports": [
+      "9092:9092"
+    ],
+    "default_env": [],
+    "default_volumes": [],
+    "restart_policy": "unless-stopped",
+    "notes": "Broker at localhost:9092. The image's defaults run a single KRaft node, good for development.",
+    "is_builtin": true
+  },
+  {
+    "id": "jaeger",
+    "name": "Jaeger",
+    "description": "Distributed tracing: receives OpenTelemetry and shows traces",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12h4l3-7 4 14 3-7h4\"/></svg>",
+    "category": "Monitoring",
+    "image": "jaegertracing/jaeger:latest",
+    "default_ports": [
+      "16686:16686",
+      "4317:4317",
+      "4318:4318"
+    ],
+    "default_env": [],
+    "default_volumes": [],
+    "restart_policy": "unless-stopped",
+    "notes": "UI at http://localhost:16686. Send OTLP to localhost:4317 (gRPC) or http://localhost:4318 (HTTP). Traces are kept in memory.",
+    "is_builtin": true
+  },
+  {
+    "id": "qdrant",
+    "name": "Qdrant",
+    "description": "Vector database for embeddings and semantic search",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3 4 7.5v9L12 21l8-4.5v-9Z\"/><path d=\"m12 12 8-4.5M12 12v9M12 12 4 7.5\"/></svg>",
+    "category": "AI",
+    "image": "qdrant/qdrant:latest",
+    "default_ports": [
+      "6333:6333",
+      "6334:6334"
+    ],
+    "default_env": [],
+    "default_volumes": [
+      "qdrant-data:/qdrant/storage"
+    ],
+    "restart_policy": "unless-stopped",
+    "notes": "REST API at http://localhost:6333, dashboard at http://localhost:6333/dashboard, gRPC on 6334.",
+    "is_builtin": true
+  },
+  {
+    "id": "pgadmin",
+    "name": "pgAdmin",
+    "description": "Web admin for PostgreSQL",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"/><path d=\"M3 12c0 1.66 4 3 9 3s9-1.34 9-3\"/></svg>",
+    "category": "Tools",
+    "image": "dpage/pgadmin4:latest",
+    "default_ports": [
+      "5050:80"
+    ],
+    "default_env": [
+      "PGADMIN_DEFAULT_EMAIL=admin@example.com",
+      "PGADMIN_DEFAULT_PASSWORD=changeme"
+    ],
+    "default_volumes": [
+      "pgadmin-data:/var/lib/pgadmin"
+    ],
+    "restart_policy": "unless-stopped",
+    "notes": "At http://localhost:5050 (admin@example.com / changeme). Reach a database on this computer as host.docker.internal.",
+    "is_builtin": true
   }
 ]

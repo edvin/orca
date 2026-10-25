@@ -703,6 +703,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     "AI": { bg: "rgba(163, 113, 247, 0.1)", color: "#a371f7", border: "rgba(163, 113, 247, 0.15)" },
     "Analytics": { bg: "rgba(210, 169, 34, 0.1)", color: "#d29922", border: "rgba(210, 169, 34, 0.15)" },
     "Automation": { bg: "rgba(63, 185, 80, 0.1)", color: "#3fb950", border: "rgba(63, 185, 80, 0.15)" },
+    "Security": { bg: "rgba(248, 81, 73, 0.1)", color: "#f85149", border: "rgba(248, 81, 73, 0.15)" },
   };
 
   const TemplateCard = (props: { template: AppTemplate }) => {
