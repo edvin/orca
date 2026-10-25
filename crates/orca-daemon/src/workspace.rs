@@ -138,8 +138,9 @@ async fn run_logged(job: &JobHandle, mut cmd: Command, shown: &str) -> Result<()
     Ok(())
 }
 
-/// A shell command from the workspace file (`setup: just setup`), in `dir`.
-fn shell(command: &str, dir: &Path) -> Command {
+/// A shell command from the workspace file (`setup: just setup`) or an
+/// orca.yaml (`seed:`), in `dir`: `sh -c`, or `cmd /C` on Windows.
+pub(crate) fn shell(command: &str, dir: &Path) -> Command {
     let mut cmd = if cfg!(windows) {
         let mut c = Command::new("cmd");
         c.args(["/C", command]);

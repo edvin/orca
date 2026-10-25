@@ -733,7 +733,7 @@
       "clickhouse-data:/var/lib/clickhouse"
     ],
     "restart_policy": "unless-stopped",
-    "notes": "HTTP interface and Play UI at http://localhost:8123/play; native protocol on 9000. 26.8 is the current LTS.",
+    "notes": "HTTP interface and Play UI at http://localhost:8123/play; native protocol on 9000. 26.8 is the current LTS. On Intel and AMD machines it needs a CPU from about 2015 or later (x86-64-v3); Apple Silicon and other ARM machines are fine.",
     "is_builtin": true
   },
   {
@@ -807,7 +807,7 @@
       "pgadmin-data:/var/lib/pgadmin"
     ],
     "restart_policy": "unless-stopped",
-    "notes": "At http://localhost:5050 (admin@example.com / changeme). Reach a database on this computer as host.docker.internal.",
+    "notes": "At http://localhost:5050 (admin@example.com / changeme). A database in another container: its container name, with both on one network. One on this computer: host.docker.internal with Docker Desktop, or 172.17.0.1 with Docker on Linux.",
     "is_builtin": true
   }
 ]

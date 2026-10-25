@@ -1535,10 +1535,7 @@ pub async fn reset(state: &AppState, server: &str, database: &str) -> Result<Opt
         return Ok(None);
     };
     let dir = owner.map(|o| o.dir).unwrap_or_default();
-    let out = tokio::process::Command::new("sh")
-        .args(["-c", &seed])
-        .current_dir(&dir)
-        .env("PATH", crate::dev::ops::cli_path())
+    let out = crate::workspace::shell(&seed, Path::new(&dir))
         .output()
         .await
         .with_context(|| format!("couldn't run `{seed}`"))?;

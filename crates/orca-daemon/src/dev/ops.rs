@@ -275,6 +275,11 @@ pub async fn runtime_cli(state: &AppState, program: &str) -> Command {
 }
 
 pub(crate) fn cli_path() -> String {
+    // Windows finds docker.exe on its own PATH; the folders below are
+    // macOS and Linux ones, and ':' isn't its separator.
+    if cfg!(windows) {
+        return std::env::var("PATH").unwrap_or_default();
+    }
     let home = std::env::var("HOME").unwrap_or_default();
     let mut dirs: Vec<String> = [
         "/opt/homebrew/bin",
