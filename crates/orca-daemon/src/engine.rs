@@ -644,6 +644,10 @@ async fn set_integration(
             };
             cfg.save()?;
         }
+        // For the uninstaller, which can't ask the daemon to undo them.
+        if let Err(e) = wsl::write_undo_integration(want.powershell, want.distro.as_deref()).await {
+            tracing::warn!("Could not write {}: {e}", wsl::undo_integration_path().display());
+        }
         let log = log.lock().unwrap().clone();
         Ok(Json(serde_json::json!({ "ok": true, "log": log })))
     }

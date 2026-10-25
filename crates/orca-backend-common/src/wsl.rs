@@ -757,6 +757,36 @@ pub fn another_k3s_message(distro: Option<&str>, port: u16) -> String {
     }
 }
 
+/// `undo-integration.cmd`: what turning the integrations off does, for the
+/// uninstaller (which can't ask the daemon). PowerShell's context back to
+/// `default` if it's still `orca`, `orca` removed and `cli` off the user
+/// PATH (with `docker`, the docker.exe the integration used); in `distro`,
+/// its context back to `default` and [`DISTRO_CONTEXT`] removed.
+pub fn undo_integration_script(docker: Option<&Path>, cli: &Path, distro: Option<&str>) -> String {
+    // In single quotes for PowerShell, a ' doubled (C:\Users\O'Brien).
+    let q = |p: &Path| p.display().to_string().replace('\'', "''");
+    let mut lines = vec![
+        "@echo off".to_string(),
+        "rem Written by Orca Desktop: undoes what Settings > General > Engine set up for docker".to_string(),
+        "rem outside Orca. Orca's uninstaller runs it; running it again does no harm.".to_string(),
+    ];
+    if let Some(docker) = docker {
+        lines.push(format!(
+            "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$d = '{d}'; \
+             if (Test-Path -LiteralPath $d) {{ if ((& $d context show 2>$null) -eq 'orca') {{ & $d context use default *> $null }}; \
+             & $d context rm -f orca *> $null }}; $cli = '{cli}'; $p = [Environment]::GetEnvironmentVariable('Path', 'User'); \
+             if ($p) {{ [Environment]::SetEnvironmentVariable('Path', (($p -split ';') | Where-Object {{ $_ -and $_ -ne $cli }}) -join ';', 'User') }}\"",
+            d = q(docker),
+            cli = q(cli)
+        ));
+    }
+    if let Some(d) = distro.filter(|d| valid_distro_name(d)) {
+        lines.push(format!("wsl.exe -d {d} --exec sh -c \"{}\"", distro_context_off()));
+    }
+    lines.push(String::new());
+    lines.join("\r\n")
+}
+
 /// The newest `docker-X.Y.Z.zip` in download.docker.com's Windows index.
 pub fn newest_cli_zip(index: &str) -> Option<String> {
     index
@@ -1371,6 +1401,28 @@ mod win {
         Ok(())
     }
 
+    /// Where [`undo_integration_script`] is kept.
+    pub fn undo_integration_path() -> PathBuf {
+        data_dir().join("undo-integration.cmd")
+    }
+
+    /// Keep `undo-integration.cmd` matching the integrations now on, or
+    /// remove it when none are.
+    pub async fn write_undo_integration(powershell: bool, distro: Option<&str>) -> Result<()> {
+        let path = undo_integration_path();
+        if !powershell && distro.is_none() {
+            let _ = std::fs::remove_file(&path);
+            return Ok(());
+        }
+        let docker = if powershell { docker_exe().await } else { None };
+        let script = undo_integration_script(docker.as_deref(), &cli_dir(), distro);
+        std::fs::create_dir_all(data_dir())?;
+        let tmp = path.with_extension("cmd.new");
+        std::fs::write(&tmp, script)?;
+        std::fs::rename(&tmp, &path)?;
+        Ok(())
+    }
+
     /// Delete the distro and everything in it.
     pub async fn remove() -> Result<()> {
         run(&["--unregister", DISTRO]).await.map(|_| ())
@@ -1730,6 +1782,24 @@ mod tests {
         assert!(
             another_k3s_message(Some("Ubuntu-24.04"), 6443).contains("WSL distro Ubuntu-24.04: it holds port 6443")
         );
+    }
+
+    #[test]
+    fn the_undo_script_undoes_both_integrations() {
+        let s = undo_integration_script(
+            Some(Path::new(r"C:\Users\O'Brien\AppData\Local\orca-engine\cli\docker.exe")),
+            Path::new(r"C:\Users\O'Brien\AppData\Local\orca-engine\cli"),
+            Some("Ubuntu-24.04"),
+        );
+        assert!(s.starts_with("@echo off\r\n"));
+        assert!(s.contains(r"$d = 'C:\Users\O''Brien\AppData\Local\orca-engine\cli\docker.exe'"));
+        assert!(s.contains("-eq 'orca') { & $d context use default"));
+        assert!(s.contains("& $d context rm -f orca *> $null"));
+        assert!(s.contains("wsl.exe -d Ubuntu-24.04 --exec sh -c \"docker context use default"));
+        assert!(s.contains("docker context rm -f orca-wsl"));
+        let only_distro = undo_integration_script(None, Path::new("C:\\x"), Some("Debian"));
+        assert!(!only_distro.contains("powershell"));
+        assert!(!undo_integration_script(None, Path::new("C:\\x"), Some("x; rm -rf /")).contains("wsl.exe"));
     }
 
     #[test]
