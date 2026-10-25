@@ -3255,53 +3255,82 @@ pub async fn save_wsl_config(memory: String, processors: String, swap: String) -
     let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
-        // Read existing config and preserve non-wsl2 sections
         let existing = if config_path.exists() {
             std::fs::read_to_string(&config_path).map_err(|e| format!("Failed to read .wslconfig: {e}"))?
         } else {
             String::new()
         };
-
-        let mut other_sections = String::new();
-        let mut in_wsl2_section = false;
-        for line in existing.lines() {
-            let trimmed = line.trim();
-            if trimmed.eq_ignore_ascii_case("[wsl2]") {
-                in_wsl2_section = true;
-                continue;
-            }
-            if trimmed.starts_with('[') {
-                in_wsl2_section = false;
-            }
-            if !in_wsl2_section {
-                other_sections.push_str(line);
-                other_sections.push('\n');
-            }
-        }
-
-        // Build new content with [wsl2] section first
-        let mut content = String::from("[wsl2]\n");
-        if !memory.is_empty() {
-            content.push_str(&format!("memory={memory}\n"));
-        }
-        if !processors.is_empty() {
-            content.push_str(&format!("processors={processors}\n"));
-        }
-        if !swap.is_empty() {
-            content.push_str(&format!("swap={swap}\n"));
-        }
-        content.push('\n');
-        content.push_str(other_sections.trim_start());
-
-        std::fs::write(&config_path, content.trim_end_matches('\n'))
-            .map_err(|e| format!("Failed to write .wslconfig: {e}"))?;
-
+        let content = wsl2_with_resources(&existing, &memory, &processors, &swap);
+        std::fs::write(&config_path, content).map_err(|e| format!("Failed to write .wslconfig: {e}"))?;
         Ok(())
     })
     .await
     .map_err(|e| format!("spawn_blocking join failed: {e}"))??;
 
     Ok(())
+}
+
+/// `.wslconfig` with `memory`, `processors` and `swap` in `[wsl2]` set (an
+/// empty one left out), and everything else in it as it was: the user's
+/// other `[wsl2]` keys (`networkingMode`, `nestedVirtualization`, …) and
+/// other sections.
+fn wsl2_with_resources(existing: &str, memory: &str, processors: &str, swap: &str) -> String {
+    let ours = ["memory", "processors", "swap"];
+    let set: Vec<String> = [("memory", memory), ("processors", processors), ("swap", swap)]
+        .iter()
+        .filter(|(_, v)| !v.is_empty())
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut in_wsl2 = false;
+    let mut found = false;
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_wsl2 = trimmed.eq_ignore_ascii_case("[wsl2]");
+            out.push(line.to_string());
+            if in_wsl2 && !found {
+                found = true;
+                out.extend(set.iter().cloned());
+            }
+            continue;
+        }
+        let key = trimmed.split('=').next().unwrap_or_default().trim().to_ascii_lowercase();
+        if in_wsl2 && ours.contains(&key.as_str()) {
+            continue;
+        }
+        out.push(line.to_string());
+    }
+    if !found {
+        let mut section = vec!["[wsl2]".to_string()];
+        section.extend(set);
+        if !out.is_empty() {
+            section.push(String::new());
+        }
+        out.splice(0..0, section);
+    }
+    let mut text = out.join("\n");
+    text.push('\n');
+    text
+}
+
+#[cfg(test)]
+mod wslconfig_tests {
+    use super::wsl2_with_resources;
+
+    #[test]
+    fn resources_are_set_and_the_rest_is_kept() {
+        let existing = "[wsl2]\nnestedVirtualization=true\nMemory=64GB\nnetworkingMode=mirrored\n\n[experimental]\nautoMemoryReclaim=gradual\n";
+        assert_eq!(
+            wsl2_with_resources(existing, "16GB", "8", ""),
+            "[wsl2]\nmemory=16GB\nprocessors=8\nnestedVirtualization=true\nnetworkingMode=mirrored\n\n[experimental]\nautoMemoryReclaim=gradual\n"
+        );
+        assert_eq!(wsl2_with_resources("", "4GB", "", ""), "[wsl2]\nmemory=4GB\n");
+        assert_eq!(
+            wsl2_with_resources("[experimental]\nx=1\n", "4GB", "", "0"),
+            "[wsl2]\nmemory=4GB\nswap=0\n\n[experimental]\nx=1\n"
+        );
+    }
 }
 
 // --- General Settings ---
