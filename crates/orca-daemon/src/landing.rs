@@ -664,8 +664,13 @@ fn render_with(config: &GatewayConfig, states: &HashMap<String, ServiceState>, d
                     },
                 })
                 .collect();
+            // Projects that share a group (a workspace's `group:`) share
+            // its section.
             if !cards.is_empty() {
-                sections.push((group.group.clone(), cards));
+                match sections.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case(&group.group)) {
+                    Some((_, existing)) => existing.extend(cards),
+                    None => sections.push((group.group.clone(), cards)),
+                }
             }
         }
         if is_local {
@@ -1561,6 +1566,29 @@ mod tests {
         assert!(!html.contains(r#"class="st st-"#), "status hidden");
         // The linked route shows once, as the link.
         assert_eq!(html.matches("https://storefront.localhost").count(), 1);
+    }
+
+    #[test]
+    fn projects_in_one_group_share_its_section_on_every_tab() {
+        let link = |name: &str, url: &str| EnvironmentLink {
+            name: name.into(),
+            urls: [("Production".to_string(), url.to_string())].into_iter().collect(),
+        };
+        let mut c = config(vec![]);
+        c.stack_links = vec![
+            StackLinkGroup {
+                stack: "workspace:acme:website".into(),
+                group: "Marketing".into(),
+                links: vec![link("Website", "https://acme.example")],
+            },
+            StackLinkGroup {
+                stack: "workspace:acme:analytics".into(),
+                group: "Marketing".into(),
+                links: vec![link("Analytics", "https://analytics.acme.example")],
+            },
+        ];
+        let html = render(&c, &HashMap::new());
+        assert_eq!(html.matches(r#"data-group="Marketing""#).count(), 1, "{html}");
     }
 
     #[test]

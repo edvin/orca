@@ -6,7 +6,8 @@ services:
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
-    depends_on: [db]
+    depends_on:
+      db: { condition: service_healthy }
   db:
     image: mariadb:11
     environment:
@@ -14,6 +15,10 @@ services:
       MARIADB_USER: wordpress
       MARIADB_PASSWORD: wordpress
       MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      retries: 30
     volumes: [db:/var/lib/mysql]
 volumes:
   db:

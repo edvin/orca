@@ -9,7 +9,9 @@ services:
       GITEA__database__NAME: gitea
       GITEA__database__USER: gitea
       GITEA__database__PASSWD: gitea
-    depends_on: [db]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: unless-stopped
     volumes: [data:/data]
   db:
     image: postgres:17-alpine
@@ -17,6 +19,10 @@ services:
       POSTGRES_DB: gitea
       POSTGRES_USER: gitea
       POSTGRES_PASSWORD: gitea
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      retries: 30
     volumes: [db:/var/lib/postgresql/data]
 volumes:
   data:
