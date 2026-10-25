@@ -155,14 +155,26 @@ async fn default_distro() -> Option<String> {
     None
 }
 
+/// Windows: Docker Desktop's folder. Installed for all users it's in
+/// Program Files; installed for one user, in `%LOCALAPPDATA%\Programs`.
+fn desktop_dir() -> Option<std::path::PathBuf> {
+    let all = std::env::var("ProgramFiles")
+        .ok()
+        .map(|pf| Path::new(&pf).join(r"Docker\Docker"));
+    let user = dirs::data_local_dir().map(|d| d.join(r"Programs\DockerDesktop"));
+    [all, user]
+        .into_iter()
+        .flatten()
+        .find(|d| d.join("Docker Desktop.exe").exists())
+}
+
 /// Whether Docker Desktop is installed (or something stands in for it).
 fn desktop_installed() -> bool {
     if std::env::var("ORCA_DOCKER_DESKTOP_SOCKET").is_ok_and(|p| !p.is_empty()) {
         return true;
     }
     if cfg!(windows) {
-        let pf = std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into());
-        Path::new(&pf).join(r"Docker\Docker\Docker Desktop.exe").exists()
+        desktop_dir().is_some()
     } else if cfg!(target_os = "macos") {
         Path::new("/Applications/Docker.app").exists()
             || dirs::home_dir().is_some_and(|h| h.join("Applications/Docker.app").exists())
@@ -1707,13 +1719,14 @@ async fn stop_source(from: From) -> Result<()> {
             } else if cfg!(windows) {
                 // Docker Desktop's own way out first (it stops its engine
                 // cleanly); only then ask its window to close.
-                let pf = std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into());
-                let cli = Path::new(&pf).join(r"Docker\Docker\resources\bin\docker.exe");
-                let stopped = tokio::process::Command::new(&cli)
-                    .args(["desktop", "stop"])
-                    .output()
-                    .await
-                    .is_ok_and(|o| o.status.success());
+                let stopped = match desktop_dir() {
+                    Some(dir) => tokio::process::Command::new(dir.join(r"resources\bin\docker.exe"))
+                        .args(["desktop", "stop"])
+                        .output()
+                        .await
+                        .is_ok_and(|o| o.status.success()),
+                    None => false,
+                };
                 if !stopped {
                     let _ = tokio::process::Command::new("taskkill")
                         .args(["/IM", "Docker Desktop.exe"])
@@ -1852,12 +1865,11 @@ async fn start_desktop(Query(q): Query<FromQuery>) -> Result<Json<serde_json::Va
             #[cfg(not(windows))]
             false
         }
-        From::Desktop if cfg!(windows) => {
-            let pf = std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into());
-            tokio::process::Command::new(Path::new(&pf).join(r"Docker\Docker\Docker Desktop.exe"))
+        From::Desktop if cfg!(windows) => desktop_dir().is_some_and(|dir| {
+            tokio::process::Command::new(dir.join("Docker Desktop.exe"))
                 .spawn()
                 .is_ok()
-        }
+        }),
         From::Desktop if cfg!(target_os = "macos") => tokio::process::Command::new("open")
             .args(["-a", "Docker"])
             .status()
