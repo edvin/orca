@@ -630,6 +630,18 @@ pub fn share_script(distro: &str) -> String {
     format!("mkdir -p '{target}' && (mountpoint -q '{target}' || mount --bind / '{target}')")
 }
 
+/// Run in Orca's distro: the names of `distros` whose root is already
+/// shared under [`DISTROS_DIR`] (mounted, and holding a root file system).
+pub fn shared_check_script(distros: &[String]) -> String {
+    distros
+        .iter()
+        .filter(|d| valid_distro_name(d))
+        .map(|d| format!("mountpoint -q '{DISTROS_DIR}/{d}' && [ -d '{DISTROS_DIR}/{d}/etc' ] && echo '{d}'"))
+        .collect::<Vec<_>>()
+        .join("; ")
+        + "; true"
+}
+
 /// Run as root in a distro that will use Orca's engine: a Docker CLI with
 /// compose and buildx, from Docker's packages, unless it has one of its own.
 /// Docker Desktop's `docker` (a link into its distro) doesn't count: it goes
@@ -1063,8 +1075,24 @@ mod win {
 
     /// Let the engine reach folders in the other running distros.
     pub async fn share_distros() {
-        for d in running_distros().await {
-            if d.eq_ignore_ascii_case(DISTRO) || d.starts_with("docker-desktop") {
+        let others: Vec<String> = running_distros()
+            .await
+            .into_iter()
+            .filter(|d| !d.eq_ignore_ascii_case(DISTRO) && !d.starts_with("docker-desktop"))
+            .collect();
+        if others.is_empty() {
+            return;
+        }
+        // Which are shared already, seen from Orca's own distro (WSL's
+        // /mnt/wsl is the same for all): only the others get a command run
+        // in them, so a user's distro is entered once per start, not on
+        // every round.
+        let shared: Vec<String> = sh(DISTRO, &shared_check_script(&others), None)
+            .await
+            .map(|o| o.lines().map(str::to_string).collect())
+            .unwrap_or_default();
+        for d in others {
+            if shared.contains(&d) {
                 continue;
             }
             if let Err(e) = sh(&d, &share_script(&d), None).await {
@@ -1961,6 +1989,16 @@ mod tests {
         let only_distro = undo_integration_script(None, Path::new("C:\\x"), Some("Debian"));
         assert!(!only_distro.contains("powershell"));
         assert!(!undo_integration_script(None, Path::new("C:\\x"), Some("x; rm -rf /")).contains("wsl.exe"));
+    }
+
+    #[test]
+    fn checks_which_distros_are_shared_from_orcas_own() {
+        let s = shared_check_script(&["Ubuntu".into(), "bad name".into()]);
+        assert!(s.contains(
+            "mountpoint -q '/mnt/wsl/orca/distros/Ubuntu' && [ -d '/mnt/wsl/orca/distros/Ubuntu/etc' ] && echo 'Ubuntu'"
+        ));
+        assert!(!s.contains("bad name"));
+        assert!(s.ends_with("; true"));
     }
 
     #[test]
