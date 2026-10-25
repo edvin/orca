@@ -197,35 +197,35 @@ Things that cost time here and aren't visible from the code:
 
 ## State of the test machine
 
-- The installed Orca 0.65 (GUI and daemon) is stopped. Its daemon was
-  replaced by the branch's debug daemon, which still runs:
-  `C:\Users\EdvinSyse\Projects\orca-ecc\target\debug\orca-daemon.exe`, PID in
-  `C:\Users\EdvinSyse\Projects\orca-ecc-tools\daemon.pid`, logs next to it.
-  Starting the installed 0.65 again would look for the Docker that the move
-  disabled.
-- Distro `orca` (Ubuntu 26.04.1) runs, with the moved images and volumes, the
-  gateway, `orca-postgres-17`, and the test projects in
-  `C:\Users\EdvinSyse\code\{app,dbapp,psapp}`.
-- Ubuntu-24.04: its Docker is disabled (`systemctl disable --now docker
-  docker.socket`, by the move) but installed; `systemctl enable --now docker`
-  brings it back. Its docker context is `default` again. Its root stays
-  bind-mounted at `/mnt/wsl/orca/distros/Ubuntu-24.04` until WSL shuts down.
-- PowerShell: `docker.exe` in `%LOCALAPPDATA%\orca-engine\cli` (on the user
-  PATH), compose and buildx in `%USERPROFILE%\.docker\cli-plugins`, context
-  `orca` in use. Turn it off in Settings → Engine, or `docker context use
-  default`.
-- Windows Firewall has allow rules for the debug `orca-daemon.exe` (someone
-  answered the prompt), and two Block rules for a deleted test copy (see the
-  checklist below).
-- Docker Desktop is installed (per user), quit by the move, with its WSL
-  integration on for Ubuntu-24.04 (so `/var/run/docker.sock` there is
-  Docker Desktop's, dead while it's stopped). Its `ddapp`, `dd-ubuntu-app`
-  and `dd-standalone` containers and the `ddapp_pgdata` volume are still in
-  it; `ddapp` and `dd-ubuntu-app` also run in Orca now. It set
-  `credsStore: desktop` in `%USERPROFILE%\.docker\config.json`, which
-  docker.exe needs Docker Desktop's `resources\bin` on the PATH for.
-- PowerShell's integration is on (context `orca`, set by the move), and Ubuntu-24.04's is off.
-  `undo-integration.cmd` matches that.
+Cleaned up after testing (2026-10-25):
+
+- **Kept:** the `orca` distro (stopped), with what came over from the earlier
+  Orca: its images, and the `mariadb-data`, `redisdata`, `caddyconfig` and
+  `caddydata` volumes. Also `%LOCALAPPDATA%\orca-engine` (`certs`, `distro`,
+  and the downloaded Ubuntu image in `images`), and the config's record of
+  that move (`earlier_engine`).
+- **Removed:**
+  - The test projects, their volumes and folders.
+  - Orca's PostgreSQL 17 server and its records in the config.
+  - The test snapshots.
+  - The gateway and its route.
+  - The test and CI images and volumes.
+  - The PowerShell integration: off; `orca-engine\cli` and
+    `undo-integration.cmd` are gone.
+  - The dev daemon and its keepalives.
+  - The Windows clone and tools I built from.
+- **Docker Desktop:** you uninstalled it. Its leftovers are removed:
+  - On Windows: `%LOCALAPPDATA%\Docker`, `%APPDATA%\Docker`,
+    `%USERPROFILE%\.docker` and the `docker-desktop` Start menu folder.
+  - In Ubuntu-24.04: `~/.docker/{desktop,run}`, its `contexts` and
+    `features.json` links, `/root/.docker/desktop` and
+    `/var/lib/docker-desktop`.
+  - The config's record of the Docker Desktop move.
+  - `C:\ProgramData\DockerDesktop` (install logs) needs admin; see below.
+- **Ubuntu-24.04's Docker** (the earlier Orca's) is disabled by the move but
+  installed: `sudo systemctl enable --now docker.socket docker` brings it
+  back. Its `~/.docker/config.json` and `buildx` are left as they were.
+- **The installed Orca 0.65** is stopped. Starting it looks for that Docker.
 
 ## For you to run: what I couldn't from inside WSL
 
@@ -298,9 +298,15 @@ docker context show                               # default (if docker.exe is st
 [Environment]::GetEnvironmentVariable('Path','User') -split ';' | Select-String orca-engine   # nothing
 ```
 
-**7. The test copy's firewall rules** (admin PowerShell):
+**7. Leftovers that need admin** (admin PowerShell): the firewall rules for
+the dev build and its test copy (both folders are deleted), and Docker
+Desktop's install logs.
 
 ```powershell
-Get-NetFirewallApplicationFilter | Where-Object Program -like '*orca-ecc-tools\fwtest*' | Get-NetFirewallRule | Remove-NetFirewallRule
+Get-NetFirewallApplicationFilter | Where-Object Program -like '*\projects\orca-ecc*' | Get-NetFirewallRule | Remove-NetFirewallRule
+Remove-Item -Recurse -Force C:\ProgramData\DockerDesktop
 ```
+
+Steps 1–6 need the branch's Orca, from a fresh build (the debug build used
+here is deleted).
 
