@@ -102,7 +102,7 @@ Routes you add by hand can be edited, paused and removed on the Routes tab.
 
 ### orca.yaml
 
-A compose project can declare its routes in an `orca.yaml` next to its compose file. They exist while the service runs, whether the project was started from Orca or with `docker compose up`:
+A compose project can declare its routes in an `orca.yaml` next to its compose file. They exist while the service's container does, running or stopped, whether the project was started from Orca or with `docker compose up`:
 
 ```yaml title="orca.yaml"
 gateway:
@@ -134,7 +134,7 @@ services:
 
 Traefik labels work as well. Each `traefik.http.routers.<name>.rule` with `Host(...)`, and optionally `PathPrefix(...)` or `Path(...)`, becomes a route to the router's `loadbalancer.server.port`. `traefik.enable=false` opts a container out. When neither the labels nor the image name a single port, Orca uses port 80.
 
-Routes from orca.yaml and labels are added when the container starts and removed when it stops. To change one, change its source; you can still pause it on the Gateway page. A route from an `orca.yaml` has an **Edit in orca.yaml** link that opens its stack's page, where the **orca.yaml** tab edits the file.
+Routes from orca.yaml and labels are added when the container is created and removed when it's removed. While it's stopped, its card stays on the landing page, greyed out, and its address shows a page saying it isn't running, with **Start in Orca**. To change one, change its source; you can still pause it on the Gateway page. A route from an `orca.yaml` has an **Edit in orca.yaml** link that opens its stack's page, where the **orca.yaml** tab edits the file.
 
 ### Templates
 

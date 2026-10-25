@@ -230,7 +230,7 @@ databases:
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `engine` | string | required | `mysql`, `mariadb` or `postgres`. |
+| `engine` | string | required | `mysql`, `percona`, `mariadb` or `postgres`. |
 | `service` | string | required | The service in the [shared](#shared) compose file. |
 | `version` | string | from the image tag | Its version, matched against what projects accept. |
 

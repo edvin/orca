@@ -1608,7 +1608,9 @@ pub fn engine_of_image(image: &str) -> Option<Engine> {
     let base = base.split([':', '@']).next().unwrap_or(&base).to_string();
     if base.contains("mariadb") {
         Some(Engine::Mariadb)
-    } else if base.contains("mysql") || base.contains("percona") {
+    } else if base.contains("percona") {
+        Some(Engine::Percona)
+    } else if base.contains("mysql") {
         Some(Engine::Mysql)
     } else if ["postgres", "postgis", "timescaledb", "pgvector"]
         .iter()
@@ -1714,10 +1716,10 @@ pub async fn own_services(state: &AppState) -> Vec<OwnService> {
 /// MySQL rejects; MySQL 8's collation, which older MariaDB lacks.
 fn crossing(from: Engine, to: Engine) -> Option<&'static str> {
     match (from, to) {
-        (Engine::Mariadb, Engine::Mysql) => Some(
+        (Engine::Mariadb, Engine::Mysql | Engine::Percona) => Some(
             r#"-e '/enable the sandbox mode/d' -e 's/utf8mb4_uca1400_[a-z0-9_]*/utf8mb4_0900_ai_ci/g' -e 's/utf8mb3_uca1400_[a-z0-9_]*/utf8mb3_general_ci/g'"#,
         ),
-        (Engine::Mysql, Engine::Mariadb) => Some(
+        (Engine::Mysql | Engine::Percona, Engine::Mariadb) => Some(
             r#"-e 's/utf8mb4_0900_[a-z0-9_]*/utf8mb4_unicode_520_ci/g' -e 's#/\*!80016 DEFAULT ENCRYPTION=.N. \*/##g'"#,
         ),
         _ => None,
@@ -2250,6 +2252,8 @@ mod tests {
         assert!(crossing(Engine::Mariadb, Engine::Mysql).unwrap().contains("uca1400"));
         assert!(crossing(Engine::Mysql, Engine::Mariadb).unwrap().contains("0900"));
         assert_eq!(crossing(Engine::Mysql, Engine::Mysql), None);
+        assert_eq!(crossing(Engine::Percona, Engine::Mysql), None);
+        assert!(crossing(Engine::Mariadb, Engine::Percona).is_some());
         assert_eq!(crossing(Engine::Postgres, Engine::Postgres), None);
     }
 
@@ -2257,7 +2261,13 @@ mod tests {
     fn database_images_are_recognised() {
         assert_eq!(engine_of_image("mysql:8.0"), Some(Engine::Mysql));
         assert_eq!(engine_of_image("docker.io/library/mariadb:11"), Some(Engine::Mariadb));
-        assert_eq!(engine_of_image("percona:8"), Some(Engine::Mysql));
+        assert_eq!(engine_of_image("percona:8"), Some(Engine::Percona));
+        assert_eq!(
+            engine_of_image(
+                "git.dogado.net:443/dependency-proxy/dependency_proxy/containers/percona/percona-server:8.0.37-29.1-multi"
+            ),
+            Some(Engine::Percona)
+        );
         assert_eq!(engine_of_image("postgis/postgis:16-3.4"), Some(Engine::Postgres));
         assert_eq!(engine_of_image("redis:7"), None);
         assert_eq!(engine_of_image("ghcr.io/umami-software/umami:postgresql-v2"), None);

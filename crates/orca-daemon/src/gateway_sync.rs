@@ -3,7 +3,7 @@
 //! - **Routes from labels.** A container can ask for gateway routes in its
 //!   own labels (`orca.route…`, or Traefik's `traefik.http.routers…`), so an
 //!   app declares its hostnames in its own compose file. They are added while
-//!   the container runs and removed when it stops, owned by
+//!   the container exists (running or stopped) and removed with it, owned by
 //!   `label:<container>`.
 //! - **Hostnames inside containers.** The gateway joins every routed
 //!   container's networks with every routed hostname as a network alias, so
@@ -150,10 +150,15 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
     let domain = state.config.lock().await.gateway.domain.clone();
     let projects = crate::project_config::discover(&all);
 
-    // From each running project's orca.yaml, then from labels.
+    // From each project's orca.yaml, then from labels: while its containers
+    // exist, running or stopped, so a stopped app keeps its card and its
+    // address says it isn't running. Running ones first, so they keep a
+    // hostname two projects ask for.
     let mut wanted: Vec<GatewayRoute> = Vec::new();
     let workspace = state.config.lock().await.workspace.clone();
-    for p in projects.iter().filter(|p| p.running()) {
+    let mut projects_in_order: Vec<_> = projects.iter().collect();
+    projects_in_order.sort_by_key(|p| !p.running());
+    for p in projects_in_order {
         // A workspace project's own icon, for its routes that set none.
         let ws_icon = workspace
             .as_ref()
@@ -165,10 +170,7 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
             .filter(|_| p.yaml.gateway.iter().any(|r| r.presentation.group.is_none()))
             .and_then(|w| crate::workspace::project_group(w, &p.dir));
         for r in &p.yaml.gateway {
-            let Some(c) = p
-                .container_of(&r.service)
-                .filter(|c| c.state == ContainerState::Running)
-            else {
+            let Some(c) = p.container_of(&r.service) else {
                 continue;
             };
             wanted.push(GatewayRoute {
@@ -193,7 +195,9 @@ async fn sync_label_routes(state: &AppState) -> Result<()> {
             });
         }
     }
-    for c in all.iter().filter(|c| c.state == ContainerState::Running) {
+    let mut labelled: Vec<_> = all.iter().collect();
+    labelled.sort_by_key(|c| c.state != ContainerState::Running);
+    for c in labelled {
         // Worktree instances get their routes from `orca.yaml`, and their
         // compose labels are copied into every instance; the gateway is ours.
         if c.labels.contains_key(orca_core::dev::LABEL_PROJECT) || c.labels.contains_key("orca.role") {

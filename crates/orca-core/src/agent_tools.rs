@@ -345,7 +345,7 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
         // === Databases ===
         ToolDefinition {
             name: "find_database_services".into(),
-            description: "Every project's own MySQL, MariaDB and PostgreSQL containers (running or stopped): project, folder, service, image, engine and version, the database in it, its volumes, and whether the project's orca.yaml already requires a database (and where it comes from now). The starting point for moving projects onto shared database servers.".into(),
+            description: "Every project's own MySQL, Percona Server, MariaDB and PostgreSQL containers (running or stopped): project, folder, service, image, engine and version, the database in it, its volumes, and whether the project's orca.yaml already requires a database (and where it comes from now). The starting point for moving projects onto shared database servers.".into(),
             parameters: json_schema(json!({})),
             category: "Databases".into(),
         },

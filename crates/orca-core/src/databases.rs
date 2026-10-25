@@ -16,6 +16,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum Engine {
     Mysql,
+    /// Percona Server for MySQL: MySQL-compatible, its own engine so a
+    /// project can ask for it (as it runs in production) or for MySQL proper.
+    Percona,
     Mariadb,
     Postgres,
 }
@@ -24,6 +27,7 @@ impl Engine {
     pub fn name(self) -> &'static str {
         match self {
             Engine::Mysql => "MySQL",
+            Engine::Percona => "Percona Server",
             Engine::Mariadb => "MariaDB",
             Engine::Postgres => "PostgreSQL",
         }
@@ -32,6 +36,7 @@ impl Engine {
     pub fn id(self) -> &'static str {
         match self {
             Engine::Mysql => "mysql",
+            Engine::Percona => "percona",
             Engine::Mariadb => "mariadb",
             Engine::Postgres => "postgres",
         }
@@ -49,13 +54,17 @@ impl Engine {
     pub fn versions(self) -> &'static [&'static str] {
         match self {
             Engine::Mysql => &["8.4", "8.0", "5.7"],
+            Engine::Percona => &["8.4", "8.0"],
             Engine::Mariadb => &["11.4", "10.11", "10.6"],
             Engine::Postgres => &["17", "16", "15", "14", "13"],
         }
     }
 
     pub fn image(self, version: &str) -> String {
-        format!("{}:{version}", self.id())
+        match self {
+            Engine::Percona => format!("percona/percona-server:{version}"),
+            _ => format!("{}:{version}", self.id()),
+        }
     }
 
     /// The longest user name the engine allows.
@@ -66,8 +75,10 @@ impl Engine {
         }
     }
 
-    /// Whether a server of `self` satisfies a requirement for `wanted`:
-    /// MariaDB stands in for MySQL only when asked for by name.
+    /// Whether a server of `self` satisfies a requirement for `wanted`: only
+    /// the same engine. MySQL, Percona Server and MariaDB are compatible
+    /// enough to be mistaken for each other, so a project gets the one it
+    /// names.
     pub fn serves(self, wanted: Engine) -> bool {
         self == wanted
     }
@@ -231,7 +242,7 @@ impl Connection {
     pub fn url(&self) -> String {
         let scheme = match self.engine {
             Engine::Postgres => "postgresql",
-            Engine::Mysql | Engine::Mariadb => "mysql",
+            Engine::Mysql | Engine::Percona | Engine::Mariadb => "mysql",
         };
         format!(
             "{scheme}://{}:{}@{}:{}/{}",
@@ -406,7 +417,7 @@ pub fn provision_cmd(
                  {PG} -c 'REVOKE CONNECT, TEMPORARY ON DATABASE \"{db}\" FROM PUBLIC'"
             )
         }
-        Engine::Mysql | Engine::Mariadb => {
+        Engine::Mysql | Engine::Percona | Engine::Mariadb => {
             let mut sql = format!(
                 "CREATE DATABASE IF NOT EXISTS `{db}`; CREATE USER IF NOT EXISTS '{user}'@'%' IDENTIFIED BY '{password}'; ALTER USER '{user}'@'%' IDENTIFIED BY '{password}'; GRANT ALL PRIVILEGES ON `{db}`.* TO '{user}'@'%';"
             );
@@ -431,7 +442,9 @@ pub fn reset_cmd(engine: Engine, db: &str, user: &str) -> anyhow::Result<String>
         Engine::Postgres => format!(
             "{PG} -c 'DROP DATABASE IF EXISTS \"{db}\" WITH (FORCE)' && {PG} -c 'CREATE DATABASE \"{db}\" OWNER \"{user}\"'"
         ),
-        Engine::Mysql | Engine::Mariadb => format!("{MY} -e 'DROP DATABASE IF EXISTS `{db}`; CREATE DATABASE `{db}`;'"),
+        Engine::Mysql | Engine::Percona | Engine::Mariadb => {
+            format!("{MY} -e 'DROP DATABASE IF EXISTS `{db}`; CREATE DATABASE `{db}`;'")
+        }
     })
 }
 
@@ -440,7 +453,7 @@ pub fn drop_cmd(engine: Engine, db: &str) -> anyhow::Result<String> {
     check(db)?;
     Ok(match engine {
         Engine::Postgres => format!("{PG} -c 'DROP DATABASE IF EXISTS \"{db}\" WITH (FORCE)'"),
-        Engine::Mysql | Engine::Mariadb => format!("{MY} -e 'DROP DATABASE IF EXISTS `{db}`'"),
+        Engine::Mysql | Engine::Percona | Engine::Mariadb => format!("{MY} -e 'DROP DATABASE IF EXISTS `{db}`'"),
     })
 }
 
@@ -450,7 +463,7 @@ pub fn list_cmd(engine: Engine) -> String {
         Engine::Postgres => format!(
             "{PG} -tAF '\t' -c \"SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate = false AND datname <> 'postgres' ORDER BY 1\""
         ),
-        Engine::Mysql | Engine::Mariadb => format!(
+        Engine::Mysql | Engine::Percona | Engine::Mariadb => format!(
             "{MY} -N -B -e \"SELECT s.schema_name, COALESCE(SUM(t.data_length + t.index_length), 0) FROM information_schema.schemata s LEFT JOIN information_schema.tables t ON t.table_schema = s.schema_name WHERE s.schema_name NOT IN ('mysql','information_schema','performance_schema','sys') GROUP BY s.schema_name ORDER BY 1\""
         ),
     }
@@ -461,7 +474,7 @@ pub fn dump_cmd(engine: Engine, db: &str) -> anyhow::Result<String> {
     check(db)?;
     Ok(match engine {
         Engine::Postgres => format!("{PGDUMP} -d \"{db}\""),
-        Engine::Mysql | Engine::Mariadb => format!("{MYDUMP} \"{db}\""),
+        Engine::Mysql | Engine::Percona | Engine::Mariadb => format!("{MYDUMP} \"{db}\""),
     })
 }
 
@@ -470,7 +483,7 @@ pub fn restore_cmd(engine: Engine, db: &str) -> anyhow::Result<String> {
     check(db)?;
     Ok(match engine {
         Engine::Postgres => format!(r#"psql -v ON_ERROR_STOP=1 -q -U "${{POSTGRES_USER:-postgres}}" -d "{db}""#),
-        Engine::Mysql | Engine::Mariadb => format!("{MY} \"{db}\""),
+        Engine::Mysql | Engine::Percona | Engine::Mariadb => format!("{MY} \"{db}\""),
     })
 }
 
@@ -481,7 +494,7 @@ pub fn server_env(engine: Engine, root_password: &str) -> Vec<(String, String)> 
             ("POSTGRES_USER".into(), "postgres".into()),
             ("POSTGRES_PASSWORD".into(), root_password.into()),
         ],
-        Engine::Mysql => vec![("MYSQL_ROOT_PASSWORD".into(), root_password.into())],
+        Engine::Mysql | Engine::Percona => vec![("MYSQL_ROOT_PASSWORD".into(), root_password.into())],
         Engine::Mariadb => vec![("MARIADB_ROOT_PASSWORD".into(), root_password.into())],
     }
 }
@@ -535,6 +548,9 @@ mod tests {
         assert!(r.accepts(Engine::Mysql, Some("8.4")));
         assert!(!r.accepts(Engine::Mysql, Some("5.7")));
         assert!(!r.accepts(Engine::Mariadb, Some("11.4")), "MariaDB only when asked for");
+        assert!(!r.accepts(Engine::Percona, Some("8.4")), "Percona only when asked for");
+        assert!(req(Engine::Percona, Some("8.0")).accepts(Engine::Percona, Some("8.0.37")));
+        assert_eq!(Engine::Percona.image("8.4"), "percona/percona-server:8.4");
         assert!(
             r.accepts(Engine::Mysql, None),
             "an unknown version is taken at its word"

@@ -3,11 +3,11 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-export type Engine = "mysql" | "mariadb" | "postgres";
+export type Engine = "mysql" | "percona" | "mariadb" | "postgres";
 
-export const ENGINE_NAME: Record<Engine, string> = { mysql: "MySQL", mariadb: "MariaDB", postgres: "PostgreSQL" };
-/** Built-in icon per engine. */
-export const ENGINE_ICON: Record<Engine, string> = { mysql: "mysql", mariadb: "mariadb", postgres: "postgresql" };
+export const ENGINE_NAME: Record<Engine, string> = { mysql: "MySQL", percona: "Percona Server", mariadb: "MariaDB", postgres: "PostgreSQL" };
+/** Built-in icon per engine (Percona Server is MySQL underneath). */
+export const ENGINE_ICON: Record<Engine, string> = { mysql: "mysql", percona: "mysql", mariadb: "mariadb", postgres: "postgresql" };
 
 export interface DatabaseInfo {
   name: string;
@@ -149,7 +149,7 @@ export function bytes(n: number | null | undefined): string {
 /** The snippet a project adds to its orca.yaml to get a database. */
 export const REQUIRE_SNIPPET = `requires:
   database:
-    engine: mysql          # mysql, mariadb or postgres
+    engine: mysql          # mysql, percona, mariadb or postgres
     version: ">=8.0"       # optional
     replaces: db           # its own compose service, if it has one
     env:                   # how the app wants it; DATABASE_URL when left out

@@ -50,7 +50,7 @@ requires:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `engine` | required | `mysql`, `mariadb` or `postgres`. A MariaDB server is only used for `engine: mariadb`. |
+| `engine` | required | `mysql`, `percona`, `mariadb` or `postgres`. A project only gets the engine it names: MySQL, Percona Server and MariaDB are close enough to be mistaken for each other, so ask for the one you run in production. |
 | `version` | any | The versions the project works with: `8` (any 8.x), `>=8.0`, `>=14, <18`, `^8.0` (same major), `~10.6` (same minor). Separate several with commas. |
 | `name` | the project's name | The database's name: lowercase letters, digits and `_`. |
 | `replaces` | none | The project's own compose service that this database stands in for, usually `db`. |
@@ -108,13 +108,13 @@ services:
 
 | Key | Meaning |
 |---|---|
-| `engine` | `mysql`, `mariadb` or `postgres`. |
+| `engine` | `mysql`, `percona`, `mariadb` or `postgres`. |
 | `service` | The service in the shared compose file. |
 | `version` | Its version, for matching projects' `version:`. When left out, Orca reads it from the running image's tag. |
 
 The server starts the first time a project needs it, like any shared service. Orca runs its commands inside the server's container and reads the admin login from the container's own environment (`MYSQL_ROOT_PASSWORD`, `MARIADB_ROOT_PASSWORD`, or `POSTGRES_USER` and `POSTGRES_PASSWORD`), so it never needs to be told the admin password. Set one of those on a shared server: Orca needs the admin login to create databases and users, so a server started with `MYSQL_RANDOM_ROOT_PASSWORD` can't be shared.
 
-Any image of the engine works, so the shared server can be the one production runs: Percona Server is `engine: mysql`, with `version:` set to the MySQL version it's built on.
+Any image of the engine works, so the shared server can be the one production runs, from your own registry too. Percona Server is `engine: percona`, and only projects that ask for `percona` get a database on it.
 
 Server settings go on the shared service, as its `command:` or a config file it mounts, and apply to every project on it:
 
@@ -156,6 +156,7 @@ With no workspace server and no database of its own, the project gets one of Orc
 | Engine | Versions |
 |---|---|
 | MySQL | 8.4, 8.0, 5.7 |
+| Percona Server | 8.4, 8.0 (`percona/percona-server`) |
 | MariaDB | 11.4, 10.11, 10.6 |
 | PostgreSQL | 17, 16, 15, 14, 13 |
 
@@ -208,7 +209,7 @@ The copy streams straight from one container into the other, so even a large dat
 
 Stored routines and views lose their `DEFINER`, as the user it names doesn't exist on the new server; they run as the server's admin instead.
 
-**Between MariaDB and MySQL**, the copy is translated on the way: MariaDB 11's `utf8mb4_uca1400_…` collations become MySQL's `utf8mb4_0900_ai_ci`, and the first line MariaDB's dumps start with, which MySQL rejects, is left out. Going the other way, MySQL 8's `utf8mb4_0900_…` collations become `utf8mb4_unicode_520_ci`, and its `DEFAULT ENCRYPTION` comments are left out. PostgreSQL copies into PostgreSQL only.
+**Between MariaDB and MySQL or Percona Server**, the copy is translated on the way: MariaDB 11's `utf8mb4_uca1400_…` collations become MySQL's `utf8mb4_0900_ai_ci`, and the first line MariaDB's dumps start with, which MySQL rejects, is left out. Going the other way, MySQL 8's `utf8mb4_0900_…` collations become `utf8mb4_unicode_520_ci`, and its `DEFAULT ENCRYPTION` comments are left out. MySQL and Percona Server copy into each other as they are. PostgreSQL copies into PostgreSQL only.
 
 **A container with a random admin password**, such as one started with `MARIADB_RANDOM_ROOT_PASSWORD`, is read with the app's own user instead (`MYSQL_USER` or `MARIADB_USER`, with its password), which can read its own database.
 

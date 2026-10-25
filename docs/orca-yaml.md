@@ -9,7 +9,7 @@ The quickest way to start one is the **orca.yaml** tab on a stack's page in Orca
 Docker Compose labels every container with the folder its project was started from. Orca reads the `orca.yaml` in that folder for every compose project it can see, however it was started: from Orca, or with `docker compose up` in a terminal. When the file changes, Orca applies the change straight away.
 
 - A project is found once it has containers, so start it once.
-- **Routes** exist while their service runs and go away when it stops.
+- **Routes** exist while their service's container does. While it's stopped, its address shows a page saying it isn't running.
 - **Links** and **build targets** show up as soon as the project has containers, running or not.
 - **Hooks** run after every start from Orca (the stack page, `orca deploy`, or an AI agent). Orca can't run them after a `docker compose up` in a terminal.
 - **Databases** (`requires:`) are made before every start from Orca. After that, a `docker compose up` in a terminal uses them too: Orca points `COMPOSE_FILE` in `.env` at the override that leaves the replaced database service out.
@@ -168,7 +168,7 @@ What the project needs from the machine it runs on. Today that's a database: Orc
 ```yaml
 requires:
   database:
-    engine: mysql            # mysql, mariadb or postgres
+    engine: mysql            # mysql, percona, mariadb or postgres
     version: ">=8.0"         # optional: 8, >=8.0, >=14, <18, ^8.0, ~10.6
     replaces: db             # its own compose service this stands in for
     env:                     # what goes into .env; DATABASE_URL: "{url}" when left out
@@ -183,7 +183,7 @@ requires:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `engine` | required | `mysql`, `mariadb` or `postgres`. |
+| `engine` | required | `mysql`, `percona`, `mariadb` or `postgres`: only that engine. |
 | `version` | any | The versions the project works with. |
 | `name` | the project's name | The database's name: lowercase letters, digits and `_`. |
 | `replaces` | none | The project's own database service. When a shared or Orca server is used, it doesn't start, and the services that depended on it get the connection. |
