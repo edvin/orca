@@ -17,9 +17,9 @@ const LOGO = "data:image/png;base64," + fs.readFileSync(path.join(ROOT, "../site
  * `word`, from `from` seconds after its highlight.
  */
 export const coldOpen = {
-  say: "Open any project, and it's running, at its own address. See every container, live. Ask your AI for the rest. And when something breaks, it gets fixed.",
+  say: "Start any project in one click, at its own web address. See every container, live. Ask your AI for the rest. And when something breaks, it gets fixed.",
   cuts: [
-    { word: "Open", scene: "folder", highlight: "running", from: -0.4 },
+    { word: "Start", scene: "folder", highlight: "running", from: -0.4 },
     { word: "See", scene: "containers", highlight: "logs", from: 0.4 },
     { word: "Ask", scene: "ask", highlight: "claude-working", from: 0.2 },
     { word: "And", scene: "fix", highlight: "fixed", from: -2 },
@@ -50,7 +50,7 @@ export default [
   // --- Your machine ---------------------------------------------------------
   {
     id: "folder",
-    say: "Start with any project on your machine. Open its folder, and Orca starts it, and gives it its own address.",
+    say: "Start with any project on your machine. Open its folder: Orca shows what's inside, and one click starts it at its own address.",
     tail: 1.2,
     async run(s) {
       await s.card(null);

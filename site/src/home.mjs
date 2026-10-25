@@ -174,7 +174,7 @@ hooks:
   <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.rocket} Get going</span>
-      <h2>Open a folder. It's running.</h2>
+      <h2>Any project folder, one click from running</h2>
       <p>Point Orca at a project and it shows what's inside before it starts anything: the compose file, its services and profiles, the <code>orca.yaml</code>, and whether it's a git repository you can run per worktree.</p>
       <ul class="checks">
         <li>Open a folder, or drop it on Orca's window. No compose file yet? Orca writes a first one</li>
