@@ -664,11 +664,6 @@ export interface HealthCheck {
   details: string | null;
 }
 
-export interface DockerDesktopStatus {
-  installed: boolean;
-  active: boolean;
-  orca_runtime_available: boolean;
-}
 
 // --- Builds ---
 

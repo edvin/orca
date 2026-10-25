@@ -502,92 +502,13 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
     tracing::info!("run_fix_streaming: action={action}");
     match action {
         "install_docker" => {
+            // Windows: Orca's own WSL distro (see `wsl`), not the user's.
             #[cfg(target_os = "windows")]
             {
-                send(">>> Checking WSL status...".into()).await;
-                if let Ok(v) = run_cmd("wsl", &["--version"]).await {
-                    for line in v.lines() {
-                        send(line.to_string()).await;
-                    }
-                }
-
-                send("\n>>> Probing WSL...".into()).await;
-                let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"])
-                    .await
-                    .map_err(|e| anyhow::anyhow!("WSL not available: {e}"))?;
-                if !probe.contains("wsl-ok") {
-                    anyhow::bail!("No WSL distro found. Install Ubuntu from the Microsoft Store.");
-                }
-                send("WSL is ready.\n".into()).await;
-
-                // Check if Docker is already installed
-                send(">>> Checking for existing Docker installation...".into()).await;
-                if let Ok(v) = run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
-                    send(format!("Docker found: {v}")).await;
-                    send(">>> Configuring TCP listener...".into()).await;
-                    let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                        "mkdir -p /etc/systemd/system/docker.service.d && \
-                         echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
-                         systemctl daemon-reload 2>/dev/null"
-                    ]).await;
-                    send(">>> Starting Docker service...".into()).await;
-                    let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await;
-                    send("Docker started.".into()).await;
-                    return Ok(());
-                }
-
-                send("Docker not installed. Running install script...\n".into()).await;
-
-                // Stop existing daemon
-                let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "stop"]).await;
-
-                // Stream the install script
-                send(">>> Downloading and running Docker install script...".into()).await;
-                send("    (this will take a minute or two)\n".into()).await;
-                run_cmd_streaming(
-                    "wsl",
-                    &[
-                        "-u",
-                        "root",
-                        "--",
-                        "bash",
-                        "-c",
-                        "curl -fsSL https://get.docker.com | sh",
-                    ],
-                    &tx,
-                )
-                .await
-                .map_err(|e| anyhow::anyhow!("Install failed: {e}"))?;
-
-                send("\n>>> Adding user to docker group...".into()).await;
-                let _ = run_cmd(
-                    "wsl",
-                    &[
-                        "-u",
-                        "root",
-                        "--",
-                        "bash",
-                        "-c",
-                        "DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && usermod -aG docker \"$DEFAULT_USER\"",
-                    ],
-                )
-                .await;
-
-                send(">>> Configuring TCP listener...".into()).await;
-                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "mkdir -p /etc/systemd/system/docker.service.d && \
-                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
-                     systemctl daemon-reload 2>/dev/null"
-                ]).await;
-
-                send(">>> Starting Docker service...".into()).await;
-                let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await;
-
-                send(">>> Verifying...".into()).await;
-                match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
-                    Ok(v) => send(format!("{v}\n\nDocker installed successfully!")).await,
-                    Err(e) => send(format!("Verification failed: {e}")).await,
-                }
+                let say = |m: String| {
+                    let _ = tx.try_send(m);
+                };
+                crate::wsl::create(&say).await?;
             }
 
             #[cfg(not(target_os = "windows"))]
@@ -597,6 +518,22 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     .await
                     .map_err(|e| anyhow::anyhow!("Install failed: {e}"))?;
                 send("\nDocker installed successfully!".into()).await;
+            }
+        }
+        #[cfg(target_os = "windows")]
+        "setup_wsl_engine" | "repair_wsl_engine" | "recreate_wsl_engine" => {
+            let say = |m: String| {
+                let _ = tx.try_send(m);
+            };
+            match action {
+                "repair_wsl_engine" => crate::wsl::repair(&say).await?,
+                "recreate_wsl_engine" => {
+                    send(format!(">>> Removing the {} distro and everything in it", crate::wsl::DISTRO)).await;
+                    crate::wsl::remove().await.ok();
+                    crate::wsl::create(&say).await?
+                }
+                _ if crate::wsl::exists().await => crate::wsl::repair(&say).await?,
+                _ => crate::wsl::create(&say).await?,
             }
         }
         "install_docker_linux" => {
@@ -666,8 +603,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
 
             #[cfg(target_os = "windows")]
             {
-                send("Installing inside WSL2...\n".into()).await;
-                // Re-apply TCP override after nvidia-ctk (it may modify Docker config)
+                send("Installing inside Orca's WSL distro...\n".into()).await;
                 let script = r#"
                     curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null && \
                     curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
@@ -675,12 +611,9 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                         tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null && \
                     apt-get update && apt-get install -y nvidia-container-toolkit && \
                     nvidia-ctk runtime configure --runtime=docker && \
-                    mkdir -p /etc/systemd/system/docker.service.d && \
-                    echo -e '[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
-                    systemctl daemon-reload && \
                     systemctl restart docker
                 "#;
-                run_cmd_streaming("wsl", &["-u", "root", "--", "bash", "-c", script], &tx)
+                run_cmd_streaming("wsl", &["-d", "orca", "-u", "root", "--", "bash", "-c", script], &tx)
                     .await
                     .map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit installation failed: {e}"))?;
             }
@@ -710,7 +643,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 let check = {
                     #[cfg(target_os = "windows")]
                     {
-                        run_cmd("wsl", &["-u", "root", "--", "docker", "info"]).await
+                        run_cmd("wsl", &["-d", "orca", "-u", "root", "--", "docker", "info"]).await
                     }
                     #[cfg(not(target_os = "windows"))]
                     {
@@ -1633,96 +1566,8 @@ async fn check_wsl2_enabled() -> HealthCheck {
     }
 }
 
-async fn check_docker_desktop() -> HealthCheck {
-    // Check if Docker Desktop is installed by looking for its specific markers
-    let desktop_installed = if cfg!(target_os = "macos") {
-        std::path::Path::new("/Applications/Docker.app").exists()
-    } else if cfg!(target_os = "windows") {
-        std::path::Path::new(&format!(
-            "{}\\Docker\\Docker\\Docker Desktop.exe",
-            std::env::var("ProgramFiles").unwrap_or_default()
-        ))
-        .exists()
-    } else if cfg!(target_os = "linux") {
-        std::path::Path::new("/opt/docker-desktop").exists()
-    } else {
-        false
-    };
 
-    if desktop_installed {
-        HealthCheck {
-            name: "Docker Desktop".to_string(),
-            description: "Detected — Orca shares the same Docker daemon".to_string(),
-            status: CheckStatus::Pass,
-            fix_action: None,
-            details: Some("Docker Desktop is installed alongside Orca".to_string()),
-        }
-    } else {
-        // Don't show Docker Desktop as a check at all when not installed —
-        // we don't want to promote it, Orca is the replacement
-        HealthCheck {
-            name: "Docker Desktop".to_string(),
-            description: "Not installed".to_string(),
-            status: CheckStatus::Pass, // Pass, not Warning — absence is fine
-            fix_action: None,
-            details: None, // No details, keeps it quiet
-        }
-    }
-}
-
-// --- Docker Desktop migration (macOS only) ---
-
-/// Status of Docker Desktop relative to the Orca Lima runtime.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct DockerDesktopStatus {
-    /// Docker Desktop is installed on this machine.
-    pub installed: bool,
-    /// Docker Desktop's context is the currently active Docker context.
-    pub active: bool,
-    /// The Orca Lima VM exists and could be used as the runtime.
-    pub orca_runtime_available: bool,
-}
-
-/// Check whether Docker Desktop is installed and whether its context is active.
-#[cfg(target_os = "macos")]
-pub async fn docker_desktop_status() -> DockerDesktopStatus {
-    let installed = std::path::Path::new("/Applications/Docker.app").exists();
-
-    // Check the active Docker context name
-    let active = match run_cmd("docker", &["context", "inspect", "--format", "{{.Name}}"]).await {
-        Ok(name) => {
-            let name = name.trim();
-            // "desktop-linux" is Docker Desktop's default context on macOS.
-            // "default" can also mean Docker Desktop if Docker Desktop is installed
-            // and no other context has been created.
-            name == "desktop-linux" || (name == "default" && installed)
-        }
-        Err(_) => false,
-    };
-
-    // Check whether the lima-orca context exists (or the Orca Lima VM is available)
-    let orca_runtime_available = if let Ok(home) = std::env::var("HOME") {
-        let socket = format!("{home}/.lima/orca/sock/docker.sock");
-        std::path::Path::new(&socket).exists()
-    } else {
-        false
-    };
-
-    DockerDesktopStatus {
-        installed,
-        active,
-        orca_runtime_available,
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-pub async fn docker_desktop_status() -> DockerDesktopStatus {
-    DockerDesktopStatus {
-        installed: false,
-        active: false,
-        orca_runtime_available: false,
-    }
-}
+// --- Leaving Docker Desktop (macOS only) ---
 
 /// Switch Docker CLI to use the Orca Lima runtime context.
 #[cfg(target_os = "macos")]
@@ -1797,6 +1642,56 @@ pub async fn stop_docker_desktop() -> anyhow::Result<()> {
     Err(anyhow::anyhow!("Stopping Docker Desktop is only supported on macOS"))
 }
 
+/// Orca's engine on Windows: its WSL distro, and Docker in it answering.
+#[cfg(target_os = "windows")]
+async fn check_wsl_engine() -> HealthCheck {
+    use crate::wsl;
+    if !wsl::exists().await {
+        return HealthCheck {
+            name: "Docker Runtime".to_string(),
+            description: format!(
+                "Orca runs Docker in a WSL distro of its own, {}, made from Ubuntu {}. Click Fix to set it up \
+                 (a few minutes). Your own distros aren't changed.",
+                wsl::DISTRO,
+                wsl::UBUNTU_RELEASE
+            ),
+            status: CheckStatus::Fail,
+            fix_action: Some("setup_wsl_engine".to_string()),
+            details: None,
+        };
+    }
+    let answering = match wsl::client(10) {
+        Ok(d) => d.ping().await.is_ok(),
+        Err(_) => false,
+    };
+    if answering {
+        HealthCheck {
+            name: "Docker Runtime".to_string(),
+            description: format!("Docker is running in Orca's WSL distro, {}", wsl::DISTRO),
+            status: CheckStatus::Pass,
+            fix_action: None,
+            details: Some(wsl::address()),
+        }
+    } else {
+        HealthCheck {
+            name: "Docker Runtime".to_string(),
+            description: format!(
+                "Orca's WSL distro, {}, is there but Docker in it isn't answering. Click Fix to repair it \
+                 (images and volumes are kept).",
+                wsl::DISTRO
+            ),
+            status: CheckStatus::Fail,
+            fix_action: Some("repair_wsl_engine".to_string()),
+            details: None,
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn check_wsl_engine() -> HealthCheck {
+    unreachable!("Windows only")
+}
+
 async fn check_podman_socket() -> HealthCheck {
     // Check rootless socket first, then root socket
     let uid = std::env::var("UID")
@@ -1840,6 +1735,8 @@ async fn check_nvidia_gpu() -> HealthCheck {
         run_cmd(
             "wsl",
             &[
+                "-d",
+                "orca",
                 "-u",
                 "root",
                 "--",
@@ -1858,7 +1755,7 @@ async fn check_nvidia_gpu() -> HealthCheck {
             let gpu = gpu_name.trim().lines().next().unwrap_or("").to_string();
             // Check for NVIDIA Container Toolkit
             let toolkit = if cfg!(target_os = "windows") {
-                run_cmd("wsl", &["-u", "root", "--", "nvidia-container-cli", "--version"]).await
+                run_cmd("wsl", &["-d", "orca", "-u", "root", "--", "nvidia-container-cli", "--version"]).await
             } else {
                 run_cmd("nvidia-container-cli", &["--version"]).await
             };
@@ -1897,8 +1794,10 @@ async fn check_nvidia_gpu() -> HealthCheck {
     }
 }
 
-/// Run all environment checks for the current platform.
-pub async fn check_environment() -> EnvironmentStatus {
+/// Run all environment checks for the current platform. On macOS
+/// `other_engine` is the socket of an engine picked instead of Orca's VM;
+/// either way Docker Desktop's engine doesn't count, as Orca never uses it.
+pub async fn check_environment(other_engine: Option<&str>) -> EnvironmentStatus {
     let platform = detect_platform();
     let mut checks = Vec::new();
 
@@ -1921,51 +1820,50 @@ pub async fn check_environment() -> EnvironmentStatus {
             }
         }
         "macos" => {
-            // Always check if Docker is actually running — regardless of Docker Desktop
-            // First try `docker info` which respects DOCKER_HOST and the active context
-            let docker_running = match run_cmd("docker", &["info", "--format", "{{.ServerVersion}}"]).await {
-                Ok(version) => Some(version.trim().to_string()),
-                Err(_) => {
-                    // docker info failed — the Docker context may be stale (pointing
-                    // to a dead Docker Desktop socket). Try known Lima sockets directly.
-                    let mut found_version = None;
-                    if let Ok(home) = std::env::var("HOME") {
-                        for vm in &["orca", "docker", "default", "colima"] {
-                            let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
-                            if std::path::Path::new(&socket).exists() {
-                                let host_arg = format!("unix://{socket}");
-                                if let Ok(version) =
-                                    run_cmd("docker", &["-H", &host_arg, "info", "--format", "{{.ServerVersion}}"])
-                                        .await
-                                {
-                                    let v = version.trim().to_string();
-                                    if !v.is_empty() {
-                                        found_version = Some(v);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        // Also try Colima default socket
-                        if found_version.is_none() {
-                            let colima_sock = format!("{home}/.colima/default/docker.sock");
-                            if std::path::Path::new(&colima_sock).exists() {
-                                let host_arg = format!("unix://{colima_sock}");
-                                if let Ok(version) =
-                                    run_cmd("docker", &["-H", &host_arg, "info", "--format", "{{.ServerVersion}}"])
-                                        .await
-                                {
-                                    let v = version.trim().to_string();
-                                    if !v.is_empty() {
-                                        found_version = Some(v);
-                                    }
-                                }
-                            }
-                        }
+            if let Some(sock) = other_engine {
+                let host = format!("unix://{}", sock.trim_start_matches("unix://"));
+                checks.push(
+                    match run_cmd("docker", &["-H", &host, "info", "--format", "{{.ServerVersion}}"]).await {
+                        Ok(version) => HealthCheck {
+                            name: "Docker Runtime".to_string(),
+                            description: "The engine picked in Settings is running".to_string(),
+                            status: CheckStatus::Pass,
+                            fix_action: None,
+                            details: Some(format!("Server version: {} at {sock}", version.trim())),
+                        },
+                        Err(_) => HealthCheck {
+                            name: "Docker Runtime".to_string(),
+                            description: format!(
+                                "The engine picked in Settings isn't answering at {sock}. Start it, \
+                                 or switch to Orca's engine in Settings."
+                            ),
+                            status: CheckStatus::Fail,
+                            fix_action: None,
+                            details: None,
+                        },
+                    },
+                );
+                return finish_environment(platform.clone(), checks);
+            }
+            // Orca's own VM: the CLI's context may point at Docker Desktop,
+            // whose engine Orca doesn't use, so ask the VM's socket.
+            let mut docker_running = None;
+            if let Ok(home) = std::env::var("HOME") {
+                for vm in &["orca", "docker"] {
+                    let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
+                    if std::path::Path::new(&socket).exists()
+                        && let Ok(version) = run_cmd(
+                            "docker",
+                            &["-H", &format!("unix://{socket}"), "info", "--format", "{{.ServerVersion}}"],
+                        )
+                        .await
+                        && !version.trim().is_empty()
+                    {
+                        docker_running = Some(version.trim().to_string());
+                        break;
                     }
-                    found_version
                 }
-            };
+            }
 
             // Is there an Orca-managed Lima VM on an outdated base? Read from the
             // host-side generation marker, so this works even when the VM is
@@ -2109,62 +2007,12 @@ pub async fn check_environment() -> EnvironmentStatus {
             }
         }
         "windows" => {
-            checks.push(check_wsl2_enabled().await);
-            // Check if Docker is installed inside WSL
-            let wsl_docker = match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
-                Ok(version) => HealthCheck {
-                    name: "Docker Runtime".to_string(),
-                    description: "Docker is installed in WSL2".to_string(),
-                    status: CheckStatus::Pass,
-                    fix_action: None,
-                    details: Some(version.trim().to_string()),
-                },
-                Err(_) => HealthCheck {
-                    name: "Docker Runtime".to_string(),
-                    description: "Docker not found in WSL2".to_string(),
-                    status: CheckStatus::Fail,
-                    fix_action: Some("install_docker".to_string()),
-                    details: Some("Install Docker inside WSL2".to_string()),
-                },
-            };
-            let docker_installed = wsl_docker.status == CheckStatus::Pass;
-            checks.push(wsl_docker);
-
-            // Check if Docker daemon is actually running
-            if docker_installed {
-                match run_cmd(
-                    "wsl",
-                    &["-u", "root", "--", "docker", "info", "--format", "{{.ServerVersion}}"],
-                )
-                .await
-                {
-                    Ok(version) => {
-                        checks.push(HealthCheck {
-                            name: "Docker Service".to_string(),
-                            description: "Docker daemon is running in WSL2".to_string(),
-                            status: CheckStatus::Pass,
-                            fix_action: None,
-                            details: Some(format!("Server version: {}", version.trim())),
-                        });
-                    }
-                    Err(_) => {
-                        checks.push(HealthCheck {
-                            name: "Docker Service".to_string(),
-                            description: "Docker daemon is not running".to_string(),
-                            status: CheckStatus::Fail,
-                            fix_action: Some("start_docker".to_string()),
-                            details: Some("Click Fix to start Docker in WSL2".to_string()),
-                        });
-                    }
-                }
+            let wsl = check_wsl2_enabled().await;
+            let wsl_ok = wsl.status == CheckStatus::Pass;
+            checks.push(wsl);
+            if wsl_ok {
+                checks.push(check_wsl_engine().await);
             }
-
-            // Only show Docker Desktop if it's actually installed
-            let dd = check_docker_desktop().await;
-            if dd.details.is_some() {
-                checks.push(dd);
-            }
-
             // GPU check
             let gpu = check_nvidia_gpu().await;
             if gpu.details.is_some() {
@@ -2174,13 +2022,15 @@ pub async fn check_environment() -> EnvironmentStatus {
         _ => {}
     }
 
+    finish_environment(platform, checks)
+}
+
+/// The status from the checks: ready when a container runtime is.
+fn finish_environment(platform: String, checks: Vec<HealthCheck>) -> EnvironmentStatus {
     // Environment is ready if a container runtime is available
     // Docker Desktop counts only if it's actually installed (has details)
     let ready = checks.iter().any(|c| {
         if c.name.contains("Runtime") && c.status == CheckStatus::Pass {
-            return true;
-        }
-        if c.name == "Docker Desktop" && c.status == CheckStatus::Pass && c.details.is_some() {
             return true;
         }
         false
@@ -2270,19 +2120,11 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
         "start_docker" => {
             #[cfg(target_os = "windows")]
             {
-                // On Windows, configure TCP listener and start Docker inside WSL2
-                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "mkdir -p /etc/systemd/system/docker.service.d && \
-                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
-                     systemctl daemon-reload 2>/dev/null; \
-                     service docker start"
-                ]).await
-                    .map_err(|e| anyhow::anyhow!(
-                        "Failed to start Docker in WSL2.\n\n\
-                         Make sure Docker is installed in WSL2.\n\n\
-                         Error: {e}"
-                    ))?;
-                Ok("Docker started in WSL2 with TCP listener.\n\nRestart Orca Desktop to connect.".to_string())
+                // Orca's WSL distro: start it, and Docker in it.
+                crate::wsl::connect(30).await.ok_or_else(|| {
+                    anyhow::anyhow!("Orca's engine didn't start. Use Repair on System Health.")
+                })?;
+                Ok("Orca's engine is running.".to_string())
             }
             #[cfg(target_os = "macos")]
             {
@@ -2379,165 +2221,14 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             ))
         }
         "install_docker" => {
-            // On Windows: install Docker inside the default WSL2 distro
+            // Windows: Orca's own WSL distro, made with output streamed.
             #[cfg(target_os = "windows")]
             {
-                // Collect diagnostics so we can debug issues
-                let mut log = String::new();
-
-                // Check WSL version
-                log.push_str(">>> Checking WSL status...\n");
-                match run_cmd("wsl", &["--version"]).await {
-                    Ok(v) => log.push_str(&format!("{v}\n")),
-                    Err(e) => log.push_str(&format!("wsl --version failed: {e}\n")),
-                }
-
-                // List distros for diagnostics
-                log.push_str("\n>>> Listing WSL distros...\n");
-                match run_cmd("wsl", &["--list", "--verbose"]).await {
-                    Ok(v) => log.push_str(&format!("{v}\n")),
-                    Err(e) => log.push_str(&format!("wsl --list failed: {e}\n")),
-                }
-
-                // Use the default WSL distro (no -d flag) to avoid UTF-16 distro name issues.
-                // First verify WSL can run a simple command.
-                log.push_str("\n>>> Probing WSL...\n");
-                let probe = run_cmd("wsl", &["-u", "root", "--", "echo", "wsl-ok"])
-                    .await
-                    .map_err(|e| {
-                        anyhow::anyhow!(
-                            "No WSL2 Linux distribution found.\n\n\
-                         To install Docker on Windows, Orca needs a Linux environment via WSL2.\n\n\
-                         How to set up WSL2:\n\
-                         1. Open the Microsoft Store app\n\
-                         2. Search for \"Ubuntu\" and click Install\n\
-                         3. Launch Ubuntu once to complete setup (create a username and password)\n\
-                         4. Come back here and click Install again\n\n\
-                         Alternatively, run this in PowerShell (as Administrator):\n\
-                         wsl --install -d Ubuntu\n\n\
-                         Error details: {e}"
-                        )
-                    })?;
-
-                log.push_str(&format!("Probe result: '{}'\n", probe));
-
-                if !probe.contains("wsl-ok") {
-                    anyhow::bail!(
-                        "{log}\n\
-                         WSL2 is installed but no Linux distribution is configured.\n\n\
-                         Please install a Linux distribution:\n\
-                         1. Open the Microsoft Store app\n\
-                         2. Search for \"Ubuntu\" and click Install\n\
-                         3. Launch Ubuntu once to complete setup (create a username and password)\n\
-                         4. Come back here and click Install again"
-                    );
-                }
-
-                // Check if Docker is already installed
-                log.push_str("\n>>> Checking if Docker is already installed in WSL...\n");
-                match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
-                    Ok(v) => {
-                        log.push_str(&format!("Docker already installed: {v}\n"));
-                        log.push_str("\n>>> Checking if Docker daemon is running...\n");
-                        match run_cmd("wsl", &["-u", "root", "--", "docker", "info"]).await {
-                            Ok(info) => {
-                                log.push_str("Docker daemon is running.\n");
-                                log.push_str(&format!("{}\n", info.lines().take(5).collect::<Vec<_>>().join("\n")));
-                                return Ok(format!("{log}\nDocker is already installed and running."));
-                            }
-                            Err(_) => {
-                                log.push_str("Docker daemon is not running.\n");
-                                // Ensure TCP listener is configured
-                                log.push_str("Configuring TCP listener...\n");
-                                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                                    "mkdir -p /etc/systemd/system/docker.service.d && \
-                                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
-                                     systemctl daemon-reload 2>/dev/null"
-                                ]).await;
-                                log.push_str("Restarting Docker with TCP listener...\n");
-                                match run_cmd("wsl", &["-u", "root", "--", "service", "docker", "restart"]).await {
-                                    Ok(o) => log.push_str(&format!("{o}\n")),
-                                    Err(e) => log.push_str(&format!("Failed to restart: {e}\n")),
-                                }
-                                // Verify
-                                match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
-                                    Ok(v) => return Ok(format!("{log}\nDocker started: {v}")),
-                                    Err(e) => log.push_str(&format!("Still not working: {e}\n")),
-                                }
-                            }
-                        }
-                    }
-                    Err(_) => log.push_str("Docker not installed yet.\n"),
-                }
-
-                // Install Docker using the official convenience script, running as root.
-                log.push_str("\n>>> Stopping any existing Docker service...\n");
-                let _ = run_cmd("wsl", &["-u", "root", "--", "service", "docker", "stop"]).await;
-                let _ = run_cmd(
-                    "wsl",
-                    &["-u", "root", "--", "bash", "-c", "pkill dockerd 2>/dev/null || true"],
-                )
-                .await;
-
-                log.push_str(">>> Downloading Docker install script...\n");
-                match run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh 2>&1 && echo 'Download OK' || echo 'Download FAILED'"
-                ]).await {
-                    Ok(o) => log.push_str(&format!("{o}\n")),
-                    Err(e) => {
-                        log.push_str(&format!("Download failed: {e}\n"));
-                        anyhow::bail!("{log}\n\nFailed to download Docker install script. Check your internet connection.");
-                    }
-                }
-
-                log.push_str("\n>>> Running install script (this takes a while)...\n");
-                match run_cmd("wsl", &["-u", "root", "--", "bash", "-c", "sh /tmp/get-docker.sh 2>&1"]).await {
-                    Ok(o) => log.push_str(&format!("{o}\n")),
-                    Err(e) => {
-                        log.push_str(&format!("Install script failed: {e}\n"));
-                        anyhow::bail!(
-                            "{log}\n\n\
-                             Docker install script failed.\n\n\
-                             You can try installing manually:\n\
-                             1. Open Ubuntu from the Start menu\n\
-                             2. Run: curl -fsSL https://get.docker.com | sudo sh"
-                        );
-                    }
-                }
-
-                log.push_str("\n>>> Adding user to docker group...\n");
-                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1) && usermod -aG docker \"$DEFAULT_USER\" 2>&1 && echo \"Added $DEFAULT_USER to docker group\""
-                ]).await.map(|o| log.push_str(&format!("{o}\n")));
-
-                // Configure Docker to also listen on TCP so orca-daemon on
-                // the Windows host can connect to it
-                log.push_str("\n>>> Configuring Docker TCP listener for Orca...\n");
-                let _ = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
-                    "mkdir -p /etc/systemd/system/docker.service.d && \
-                     echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
-                     systemctl daemon-reload 2>/dev/null; \
-                     echo 'TCP listener configured on port 2375'"
-                ]).await.map(|o| log.push_str(&format!("{o}\n")));
-
-                log.push_str("\n>>> Starting Docker service...\n");
-                match run_cmd("wsl", &["-u", "root", "--", "service", "docker", "start"]).await {
-                    Ok(o) => log.push_str(&format!("{o}\n")),
-                    Err(e) => log.push_str(&format!("Failed to start Docker: {e}\n")),
-                }
-
-                log.push_str("\n>>> Verifying installation...\n");
-                match run_cmd("wsl", &["-u", "root", "--", "docker", "--version"]).await {
-                    Ok(v) => {
-                        log.push_str(&format!("{v}\n"));
-                        log.push_str(">>> Docker installed and started successfully\n");
-                    }
-                    Err(e) => {
-                        log.push_str(&format!("Verification failed: {e}\n"));
-                        log.push_str("Docker may have installed but the daemon may not have started.\n");
-                    }
-                }
-
+                let lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+                let l = lines.clone();
+                let say = move |m: String| l.lock().unwrap().push(m);
+                crate::wsl::create(&say).await?;
+                let log = lines.lock().unwrap().join("\n");
                 Ok(log)
             }
             #[cfg(not(target_os = "windows"))]
@@ -2601,7 +2292,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
         }
         "install_nvidia_toolkit" => {
             #[cfg(target_os = "windows")]
-            let output = run_cmd("wsl", &["-u", "root", "--", "bash", "-c",
+            let output = run_cmd("wsl", &["-d", "orca", "-u", "root", "--", "bash", "-c",
                 "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null && \
                  curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null && \
                  apt-get update && apt-get install -y nvidia-container-toolkit && \
@@ -2627,6 +2318,8 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             let output = run_cmd(
                 "wsl",
                 &[
+                    "-d",
+                    "orca",
                     "-u",
                     "root",
                     "--",
@@ -3060,7 +2753,7 @@ async fn has_nvidia_smi() -> bool {
     *PROBE
         .get_or_init(|| async {
             if cfg!(target_os = "windows") {
-                run_cmd("wsl", &["-u", "root", "--", "nvidia-smi", "-L"]).await.is_ok()
+                run_cmd("wsl", &["-d", "orca", "-u", "root", "--", "nvidia-smi", "-L"]).await.is_ok()
             } else {
                 run_cmd("nvidia-smi", &["-L"]).await.is_ok()
             }
@@ -3076,6 +2769,8 @@ async fn get_gpu_info() -> Option<GpuInfo> {
         run_cmd(
             "wsl",
             &[
+                "-d",
+                "orca",
                 "-u",
                 "root",
                 "--",

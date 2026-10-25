@@ -22,7 +22,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 async-stream.workspace = true
 axum = { version = "0.8", features = ["ws"] }
-bollard = "0.18"
+bollard = { version = "0.18", features = ["ssl"] }
 clap = { version = "4", features = ["derive"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 tokio-stream.workspace = true

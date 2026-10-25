@@ -15,7 +15,9 @@ mod build_manager;
 mod cron_expr;
 mod databases;
 mod dev;
+mod desktop;
 mod docs;
+mod engine;
 mod folders;
 mod gateway;
 mod gateway_sync;
@@ -101,7 +103,7 @@ async fn main() -> anyhow::Result<()> {
     // Try to connect to container runtime, but don't fail if unavailable.
     // The daemon must start even without Docker/Podman so the GUI can
     // show the Environment page and help the user install prerequisites.
-    let runtime = connect_runtime().await;
+    let runtime = connect_runtime(&mut config).await;
 
     // Start the Docker event listener. The inner broadcast::Receiver is
     // bound to whichever BollardRuntime we subscribed to. When
@@ -111,6 +113,23 @@ async fn main() -> anyhow::Result<()> {
     let (events_tx, _) = broadcast::channel(256);
     let k8s = Arc::new(orca_backend_common::k8s::K3sManager::from_env());
     let state = Arc::new(AppState::new(config, runtime, k8s, events_tx.clone(), api_token));
+
+    // Windows: keep Orca's WSL distro running (WSL stops a distro soon after
+    // its last process exits) and let the engine reach folders in distros
+    // started since.
+    #[cfg(windows)]
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                if state.rt().await.host.as_deref() == Some(orca_backend_common::wsl::address().as_str()) {
+                    orca_backend_common::wsl::keep_running().await;
+                    orca_backend_common::wsl::share_distros().await;
+                }
+            }
+        });
+    }
 
     {
         let state_for_events = state.clone();
@@ -216,166 +235,26 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Connect to the container runtime, trying platform-appropriate methods.
-async fn connect_runtime() -> Arc<orca_backend_common::BollardRuntime> {
+/// Connect to the engine Orca uses (see `engine::connect`), never Docker
+/// Desktop's; a choice made on this start is saved. Without one, a client
+/// that fails on use: System Health guides the setup.
+async fn connect_runtime(config: &mut orca_core::config::OrcaConfig) -> Arc<orca_backend_common::BollardRuntime> {
     tracing::info!("Searching for container runtime...");
-
-    // Log what socket paths we'll check
-    let home = std::env::var("HOME").unwrap_or_default();
-    if let Ok(host) = std::env::var("DOCKER_HOST") {
-        tracing::info!("DOCKER_HOST is set: {host}");
-    } else {
-        tracing::info!("DOCKER_HOST is not set");
+    let before = config.engine.clone();
+    let mut log = Vec::new();
+    let connected = engine::connect(&mut config.engine, &mut log).await;
+    for line in &log {
+        tracing::info!("Engine: {line}");
     }
-
-    // Log Docker context
-    let extended_path = format!(
-        "/opt/homebrew/bin:/usr/local/bin:/opt/homebrew/sbin:/usr/local/sbin:{}",
-        std::env::var("PATH").unwrap_or_default()
-    );
-    if let Ok(output) = std::process::Command::new("docker")
-        .env("PATH", &extended_path)
-        .args([
-            "context",
-            "inspect",
-            "--format",
-            "{{.Name}} -> {{.Endpoints.docker.Host}}",
-        ])
-        .output()
+    if config.engine != before
+        && let Err(e) = config.save()
     {
-        if output.status.success() {
-            let ctx = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            tracing::info!("Docker context: {ctx}");
-        } else {
-            tracing::debug!("Docker context not available");
-        }
+        tracing::warn!("Could not save the engine choice: {e}");
     }
-
-    // Log candidate socket paths
-    let socket_candidates = vec![
-        "/var/run/docker.sock".to_string(),
-        format!("{home}/.docker/run/docker.sock"),
-        format!("{home}/.docker/desktop/docker.sock"),
-        format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock"),
-        format!("{home}/.lima/orca/sock/docker.sock"),
-        format!("{home}/.lima/docker/sock/docker.sock"),
-        format!("{home}/.lima/default/sock/docker.sock"),
-        format!("{home}/.lima/colima/sock/docker.sock"),
-        format!("{home}/.colima/default/docker.sock"),
-        format!("{home}/.colima/docker/docker.sock"),
-    ];
-    for path in &socket_candidates {
-        let exists = std::path::Path::new(path).exists();
-        tracing::info!("Socket {path}: {}", if exists { "exists" } else { "not found" });
-    }
-
-    // 1. Try native socket connection (Linux, macOS, or Docker Desktop on Windows)
-    match orca_backend_native::NativeBackend::connect().await {
-        Ok(native) => {
-            let socket_path = native.socket_path.display().to_string();
-            // On macOS the "native" socket is usually the Lima-forwarded
-            // docker.sock, so this path connects to an already-running Lima VM
-            // without going through connect_via_lima — where the
-            // IPv4-forwarding self-heal lives. Run it here too, or a VM that is
-            // simply up (the common case) never gets healed: only freshly
-            // created or recovered VMs would.
-            #[cfg(target_os = "macos")]
-            {
-                // Fire-and-forget: never block the connect path on `limactl
-                // shell`. A wedged VM here would otherwise hang daemon startup
-                // and surface as "Daemon restart failed" in the UI.
-                if let Some(vm) = lima_vm_from_socket(&socket_path) {
-                    tokio::spawn(async move {
-                        ensure_ip_forward(&vm).await;
-                        ensure_sme_masked(&vm).await;
-                        ensure_static_usernet(&vm).await;
-                    });
-                }
-            }
-            let rt = Arc::new(native.runtime);
-            let kind = rt.detect_runtime().await;
-            tracing::info!("Connected to {kind:?} runtime via socket: {socket_path}");
-            return rt;
-        }
-        Err(e) => {
-            tracing::warn!("Native socket connection failed: {e}");
-        }
-    }
-
-    // 2. On macOS, try starting the Lima VM if it exists
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(rt) = connect_via_lima().await {
-            return rt;
-        }
-    }
-
-    // 3. On Windows, try connecting via TCP to Docker in WSL2
-    #[cfg(target_os = "windows")]
-    {
-        // Try named pipe (Docker Desktop)
-        if let Ok(docker) = bollard::Docker::connect_with_named_pipe_defaults() {
-            if docker.ping().await.is_ok() {
-                tracing::info!("Connected to Docker via Windows named pipe");
-                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
-            }
-        }
-
-        // Try TCP on localhost:2375 (Docker in WSL2 with TCP listener)
-        if let Ok(docker) =
-            bollard::Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION)
-        {
-            if docker.ping().await.is_ok() {
-                tracing::info!("Connected to Docker via TCP (localhost:2375)");
-                return Arc::new(orca_backend_common::BollardRuntime::new(docker));
-            }
-        }
-    }
-
-    // On Windows, try to start Docker inside WSL2 before giving up
-    #[cfg(target_os = "windows")]
-    {
-        tracing::info!("Attempting to start Docker in WSL2...");
-        // Configure TCP listener and start Docker service inside WSL
-        let _ = tokio::process::Command::new("wsl")
-            .args(["-u", "root", "--", "bash", "-c",
-                "mkdir -p /etc/systemd/system/docker.service.d && \
-                 echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' > /etc/systemd/system/docker.service.d/override.conf && \
-                 systemctl daemon-reload 2>/dev/null; \
-                 service docker start"
-            ])
-            .output()
-            .await;
-
-        // Wait for Docker to start with TCP listener — retry every 2s for up to 15s
-        for attempt in 1..=7 {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            tracing::info!("WSL2 Docker connection attempt {attempt}/7...");
-
-            // Try TCP
-            if let Ok(docker) =
-                bollard::Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION)
-            {
-                if docker.ping().await.is_ok() {
-                    tracing::info!(
-                        "Connected to Docker via TCP after starting WSL2 Docker service (attempt {attempt})"
-                    );
-                    return Arc::new(orca_backend_common::BollardRuntime::new(docker));
-                }
-            }
-
-            // Try socket via WSL interop
-            if let Ok(docker) = bollard::Docker::connect_with_local_defaults() {
-                if docker.ping().await.is_ok() {
-                    tracing::info!(
-                        "Connected to Docker via socket after starting WSL2 Docker service (attempt {attempt})"
-                    );
-                    return Arc::new(orca_backend_common::BollardRuntime::new(docker));
-                }
-            }
-        }
-
-        tracing::warn!("Docker in WSL2 could not be started automatically after 7 attempts");
+    if let Some((rt, method)) = connected {
+        let kind = rt.detect_runtime().await;
+        tracing::info!("Connected to {kind:?} runtime via {method}");
+        return rt;
     }
 
     tracing::warn!("No container runtime available");

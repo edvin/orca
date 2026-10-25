@@ -14,6 +14,7 @@ import { useContainerStats } from "../lib/statsStore";
 
 import TimeChart from "../components/TimeChart";
 import AiNudge from "../components/AiNudge";
+import DesktopNudge from "../components/DesktopNudge";
 import AppsOverview from "../components/AppsOverview";
 import { workspaceApi, type WorkspaceStatus } from "../lib/workspace";
 import { openFolderDialog } from "../lib/openFolder";
@@ -244,6 +245,7 @@ export default function DashboardPage(props: DashboardPageProps) {
         onNavigate={props.onNavigate}
       />
 
+      <DesktopNudge onNavigate={props.onNavigate} />
       <AiNudge onNavigate={props.onNavigate} />
 
       {/* Summary cards — each resolves independently */}

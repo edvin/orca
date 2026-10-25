@@ -65,15 +65,25 @@ If the VM is stopped when the daemon starts, the daemon starts it. If it doesn't
 
 Change CPUs, memory and disk in **Settings** > **General** > **Virtual machine**, then click **Apply changes**. This restarts the VM and stops running containers. Memory must be at least 2 GB and no more than your Mac has; disk must be at least 10 GB.
 
-## Windows: WSL2
+## Windows: a WSL distro of Orca's own
 
-On Windows, Docker runs in your default WSL2 distro.
+On Windows, Docker runs in a WSL2 distro named `orca`, which Orca makes and looks after. Your own distros aren't changed, and Docker Desktop's engine is never used.
 
-- First-start setup installs Docker in that distro and adds a systemd override so `dockerd` listens on its normal socket and on `tcp://127.0.0.1:2375`.
-- The daemon connects to Docker Desktop's named pipe first if Docker Desktop is running, and otherwise to `localhost:2375`.
-- If neither answers when the daemon starts, it starts Docker in WSL and retries for about 15 seconds.
+| | |
+|---|---|
+| Base | Ubuntu 26.04 LTS, from Ubuntu's newest WSL image, checked against its published checksum |
+| Kernel | WSL's own (Microsoft's Linux kernel), shared by all distros |
+| Where | `%LOCALAPPDATA%\orca-engine` (the distro's disk, the image, the engine's certificates) |
+| Engine | Docker Engine from get.docker.com, run by systemd |
+| Reached at | `127.0.0.1:2376`, mutual TLS: only clients with Orca's certificate get in |
 
-The TCP listener is bound to `127.0.0.1` inside WSL. Uninstalling Orca removes the override.
+- `docker` and `docker compose` run inside the distro, so Orca needs no `docker.exe` on Windows.
+- Folders on a drive (`C:\code\app`) are at `/mnt/c/code/app` in the distro.
+- A folder inside another distro (`\\wsl.localhost\Ubuntu\home\me\app`) is reached through WSL's shared `/mnt/wsl`: Orca bind-mounts that distro's root at `/mnt/wsl/orca/distros/Ubuntu` while it runs. Nothing is installed or written in that distro.
+- WSL stops a distro soon after its last program exits, so the daemon keeps one running in `orca`.
+- Containers reach Windows at `host.docker.internal`.
+
+**Rebuild engine** on System Health deletes the distro and makes it again from Ubuntu's newest image. Containers, images and volumes in it are lost.
 
 ### WSL2 resources
 
@@ -96,7 +106,19 @@ The daemon uses the first socket that responds, in this order:
 3. `/var/run/docker.sock`
 4. Rootless Podman at `/run/user/<uid>/podman/podman.sock`, then `/run/podman/podman.sock`
 
-On macOS the same search also finds Docker Desktop, Colima and other Lima VMs, which is how Orca can work with an engine you already have.
+## Which engine
+
+Orca never uses Docker Desktop's engine, on any platform. See [Moving from Docker Desktop](/docs/docker-desktop/).
+
+- **macOS**: Orca's VM, or another engine picked in **Settings** > **General** > **Engine**.
+- **Windows**: Orca's WSL distro.
+- **Linux**: the first of the sockets above that answers, or another socket picked in **Settings** > **General** > **Engine**.
+
+### macOS
+
+On macOS, Orca uses its own VM, `orca`. To use another engine instead, such as OrbStack or Colima, pick it in **Settings** > **General** > **Engine**, or give its socket path there. Orca never uses Docker Desktop's engine: see [Moving from Docker Desktop](/docs/docker-desktop/).
+
+An engine picked in Settings that isn't answering is reported on System Health; Orca doesn't fall back to another one. A `DOCKER_HOST` set in the daemon's own environment wins over the choice.
 
 ## Where files live
 

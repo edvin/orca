@@ -41,11 +41,11 @@ The VM gets 4 CPUs and memory sized from your Mac: half of its RAM, between 4 an
 
 ### Windows
 
-Orca runs Docker inside WSL2.
+Orca runs Docker in a WSL2 distro of its own, named `orca`. Your own distros aren't changed.
 
 - If WSL2 is not active, the **WSL2** check offers to install it (`wsl --install`). You may need to restart Windows afterwards.
-- Orca uses your default WSL distro. If you don't have one, install Ubuntu from the Microsoft Store and launch it once to create your Linux user.
-- The **Docker Runtime** step installs Docker in that distro with the official script from get.docker.com, adds your Linux user to the `docker` group, and makes Docker listen on `127.0.0.1:2375` so Orca can reach it from Windows.
+- The **Docker Runtime** step downloads Ubuntu 26.04 LTS's newest WSL image from releases.ubuntu.com, checks it against Ubuntu's published checksum, and makes the `orca` distro from it in `%LOCALAPPDATA%\orca-engine`. It then installs Docker Engine with the official script from get.docker.com. This takes a few minutes.
+- Docker listens on `127.0.0.1:2376` with mutual TLS: only clients with Orca's certificate can use it.
 
 ### Linux
 
@@ -67,9 +67,9 @@ What the release builds and setup need:
 
 You don't have to uninstall Docker Desktop first.
 
-- **macOS**: if Docker Desktop's engine is the active Docker context, Orca connects to it. System Health then shows a **Switch to Orca runtime** card. **Switch to Orca runtime** sets up the Lima VM if needed, switches the Docker context to `lima-orca` and restarts the Orca daemon. Tick **Also stop Docker Desktop to free resources** to quit Docker Desktop at the same time. Images and containers from Docker Desktop are not copied into the VM: you pull or rebuild them there.
-- **Windows**: Orca connects to Docker Desktop's engine when it is running, and otherwise to Docker in WSL2.
-- **Linux**: Orca uses the first runtime socket that responds, starting with `DOCKER_HOST` and the active Docker context.
+- **macOS**: Orca runs Docker in its own VM and never uses Docker Desktop's engine. System Health offers to bring Docker Desktop's images, volumes and compose projects over, once, or to start fresh. See [Moving from Docker Desktop](/docs/docker-desktop/).
+- **Windows**: Orca runs Docker in its own WSL distro and never uses Docker Desktop's engine. System Health offers to bring Docker Desktop's things over, and those of the Docker an earlier Orca installed in your default distro.
+- **Linux**: Orca uses this computer's Docker or Podman, and never Docker Desktop's engine.
 
 ## Updates
 
@@ -102,7 +102,13 @@ Homebrew and the packages setup installed (`lima`, `docker`, `docker-compose`, `
 
 ### Windows
 
-Uninstall **Orca Desktop** from **Settings** > **Apps** in Windows. The uninstaller removes the `orca://` link handler, its `PATH` entry, `%LOCALAPPDATA%\orca`, and the Docker TCP listener it added in WSL. It keeps your settings in `%APPDATA%\orca`; delete that folder to remove them too. Docker stays installed in your WSL distro.
+Uninstall **Orca Desktop** from **Settings** > **Apps** in Windows. The uninstaller removes the `orca://` link handler, its `PATH` entry and `%LOCALAPPDATA%\orca`, and stops Orca's `orca` distro. It keeps your settings in `%APPDATA%\orca`; delete that folder to remove them too.
+
+The `orca` distro, with your images and volumes, stays in `%LOCALAPPDATA%\orca-engine`. To remove it:
+
+```bash
+wsl --unregister orca
+```
 
 ### Linux
 

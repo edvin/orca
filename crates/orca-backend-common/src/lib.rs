@@ -16,6 +16,7 @@ pub mod networks;
 pub mod search;
 pub mod templates;
 pub mod volumes;
+pub mod wsl;
 
 /// How long the engine version is reused before asking the engine again.
 const VERSION_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
@@ -84,6 +85,12 @@ impl BollardRuntime {
     }
 
     /// Record the unix socket this runtime is connected through.
+    /// The engine's address for child CLIs (`unix://…`, `tcp://…`).
+    pub fn with_host(mut self, host: impl Into<String>) -> Self {
+        self.host = Some(host.into());
+        self
+    }
+
     pub fn with_socket(mut self, path: impl AsRef<std::path::Path>) -> Self {
         self.host = Some(format!("unix://{}", path.as_ref().display()));
         self

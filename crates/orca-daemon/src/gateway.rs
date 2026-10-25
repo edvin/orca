@@ -518,14 +518,7 @@ fn to_docker_mount_path(path: &std::path::Path) -> String {
     let s = path.to_string_lossy();
     #[cfg(target_os = "windows")]
     {
-        // Convert Windows path like C:\Users\foo to /mnt/c/Users/foo
-        if s.len() >= 3 && s.as_bytes()[1] == b':' {
-            let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
-            let rest = s[2..].replace('\\', "/");
-            return format!("/mnt/{drive}{rest}");
-        }
-        // Already a unix-style path or relative
-        return s.replace('\\', "/");
+        orca_backend_common::wsl::engine_path(&s).unwrap_or_else(|| s.replace('\\', "/"))
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -758,6 +751,14 @@ pub async fn ensure_host_alias(state: &AppState, config: &GatewayConfig) -> Resu
     Ok(())
 }
 
+/// Windows as seen from Orca's WSL distro, found when the engine connects.
+static WINDOWS_HOST_IP: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn set_windows_host_ip(ip: Option<String>) {
+    *WINDOWS_HOST_IP.lock().unwrap() = ip;
+}
+
 /// `/etc/hosts` entry that lets the gateway reach this computer as
 /// `host.docker.internal` (host dev servers, Traefik).
 ///
@@ -767,7 +768,12 @@ pub async fn ensure_host_alias(state: &AppState, config: &GatewayConfig) -> Resu
 /// fixed user-network gateway, so pin that. Docker Desktop resolves the name
 /// itself.
 fn host_alias(docker_host: Option<&str>) -> Vec<String> {
-    if cfg!(target_os = "linux") {
+    if cfg!(windows) {
+        // Orca's WSL distro: Windows is WSL's NAT gateway; with mirrored
+        // networking (no gateway found) the engine's own host-gateway.
+        let ip = WINDOWS_HOST_IP.lock().unwrap().clone();
+        vec![format!("host.docker.internal:{}", ip.as_deref().unwrap_or("host-gateway"))]
+    } else if cfg!(target_os = "linux") {
         vec!["host.docker.internal:host-gateway".to_string()]
     } else if docker_host.is_some_and(|h| h.contains("/.lima/")) {
         vec!["host.docker.internal:192.168.5.2".to_string()]

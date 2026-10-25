@@ -94,7 +94,7 @@ pub(crate) fn git() -> Command {
 }
 
 /// Run a command, every output line into the job's log.
-async fn run_logged(job: &JobHandle, mut cmd: Command, shown: &str) -> Result<()> {
+pub(crate) async fn run_logged(job: &JobHandle, mut cmd: Command, shown: &str) -> Result<()> {
     job.log(format!("$ {shown}")).await;
     let mut child = cmd
         .stdout(Stdio::piped())

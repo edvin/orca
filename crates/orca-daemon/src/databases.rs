@@ -10,6 +10,7 @@
 //! the project's own service, an override keeps that service from starting,
 //! without touching the project's compose file.
 
+use orca_backend_common::wsl::OnEngine;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -1062,6 +1063,7 @@ async fn services_of(state: &AppState, dir: &Path, files: &[String]) -> BTreeMap
         .await
         .current_dir(dir)
         .args(&args)
+        .on_engine()
         .output()
         .await;
     let v = match out {
@@ -1405,6 +1407,7 @@ pub async fn snapshot(state: &AppState, server: &str, database: &str, label: Opt
     let out = crate::dev::ops::runtime_cli(state, exec_program(state).await)
         .await
         .args(["exec", &container, "sh", "-c", &cmd])
+        .on_engine()
         .output()
         .await
         .context("couldn't run the dump")?;
@@ -1462,6 +1465,7 @@ pub async fn restore(state: &AppState, server: &str, database: &str, snapshot: &
     let mut child = crate::dev::ops::runtime_cli(state, exec_program(state).await)
         .await
         .args(["exec", "-i", &container, "sh", "-c", &cmd])
+        .on_engine()
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
@@ -1915,6 +1919,7 @@ async fn copy_database(
     let mut src = crate::dev::ops::runtime_cli(state, program)
         .await
         .args(["exec", &source.container, "sh", "-c", &dump])
+        .on_engine()
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -1923,6 +1928,7 @@ async fn copy_database(
     let dst = crate::dev::ops::runtime_cli(state, program)
         .await
         .args(["exec", "-i", target, "sh", "-c", &load])
+        .on_engine()
         .stdin(pipe)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())

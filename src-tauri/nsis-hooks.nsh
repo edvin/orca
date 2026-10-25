@@ -27,7 +27,10 @@
   DeleteRegKey HKCU "Software\Classes\orca"
   ; Remove cached/runtime data but keep config (API keys, settings, etc.)
   RMDir /r "$LOCALAPPDATA\orca"
-  ; Remove Docker TCP override from WSL (best effort)
+  ; Stop Orca's engine distro. It and its images and volumes are kept, in
+  ; %LOCALAPPDATA%\orca-engine; remove them with: wsl --unregister orca
+  nsExec::ExecToLog 'wsl --terminate orca'
+  ; An earlier Orca's Docker TCP override in the default distro (best effort)
   nsExec::ExecToLog 'wsl -u root -- rm -f /etc/systemd/system/docker.service.d/override.conf'
   nsExec::ExecToLog 'wsl -u root -- systemctl daemon-reload'
   ; Remove from user PATH

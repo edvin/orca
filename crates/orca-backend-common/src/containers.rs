@@ -36,10 +36,16 @@ impl ContainerRuntime for BollardRuntime {
             .volumes
             .iter()
             .map(|v| {
-                if v.read_only {
-                    format!("{}:{}:ro", v.source, v.target)
+                // A Windows folder, as Orca's WSL engine sees it.
+                let source = if cfg!(windows) {
+                    crate::wsl::engine_path(&v.source).unwrap_or_else(|| v.source.clone())
                 } else {
-                    format!("{}:{}", v.source, v.target)
+                    v.source.clone()
+                };
+                if v.read_only {
+                    format!("{source}:{}:ro", v.target)
+                } else {
+                    format!("{source}:{}", v.target)
                 }
             })
             .collect();

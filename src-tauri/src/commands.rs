@@ -2835,21 +2835,23 @@ pub async fn env_fix_stream(app: tauri::AppHandle, action: String) -> Result<(),
     Ok(())
 }
 
-// --- Docker Desktop Migration ---
+// --- Engine and Docker Desktop (macOS) ---
 
+/// The engine Orca uses (`/engine`) and bringing Docker Desktop's things
+/// over (`/docker-desktop/...`).
 #[tauri::command]
-pub async fn docker_desktop_status() -> Result<serde_json::Value, String> {
-    get_json("/environment/docker-desktop-status").await
-}
-
-#[tauri::command]
-pub async fn switch_to_orca_runtime() -> Result<serde_json::Value, String> {
-    post_json("/environment/switch-to-orca").await
-}
-
-#[tauri::command]
-pub async fn stop_docker_desktop() -> Result<serde_json::Value, String> {
-    post_json("/environment/stop-docker-desktop").await
+pub async fn engine_api(
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let route = path.split('?').next().unwrap_or(&path);
+    if !(route == "/engine" || route == "/docker-desktop" || route.starts_with("/docker-desktop/")) || path.contains("..") {
+        return Err("invalid engine API path".into());
+    }
+    // Starting Docker Desktop waits for it; a plan sizes every volume.
+    let secs = if route == "/docker-desktop/start" || route == "/docker-desktop/plan" { 300 } else { 120 };
+    daemon_call_with_timeout(&method, &path, body, secs).await
 }
 
 // --- Templates ---

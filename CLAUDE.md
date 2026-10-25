@@ -145,6 +145,12 @@ kubectl config set-context orca --cluster=orca --user=orca
 - All inline styles matching dark theme (#0a0e14 bg, #e6edf3 text, #58a6ff accent)
 - Template icons are inline SVG strings rendered via innerHTML, not text or emoji
 
+## Pending Windows testing
+
+The engine clean cut (branch `engine-clean-cut`) gives Windows a new engine:
+Docker in Orca's own WSL distro, `orca`. It hasn't run on Windows yet. On a
+Windows machine, follow `WINDOWS-TESTING.md`.
+
 ## Pending macOS Debugging
 
 These issues only reproduce on macOS and need debugging with dev tools:

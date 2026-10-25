@@ -14,7 +14,8 @@ Open **System Health** in the sidebar. Each check shows its status, and a failin
 |---|---|
 | **Set up Docker** | Runs first-start setup again for your platform. Shown when Orca can't reach Docker. |
 | **Recreate VM** | macOS only. Deletes the Lima VM and builds a fresh one on the current base. Containers, images and volumes in it are lost. |
-| **Restart Docker & Orca** | Restarts Docker, then restarts the Orca daemon so it reconnects. On macOS it stops and starts the Lima VM; on Windows it starts Docker in WSL2; on Linux it starts the Docker service with `systemctl`. |
+| **Rebuild engine** | Windows only. Deletes Orca's `orca` WSL distro and makes it again from Ubuntu's newest WSL image. Containers, images and volumes in it are lost. |
+| **Restart Docker & Orca** | Restarts Docker, then restarts the Orca daemon so it reconnects. On macOS it stops and starts the Lima VM; on Windows it starts Orca's WSL distro and Docker in it; on Linux it starts the Docker service with `systemctl`. |
 | **Diagnose** | Tries every way Orca knows to reach Docker and shows the log in **Connection diagnostics**. If it finds a working connection, Orca switches to it without a restart. |
 | **Re-check** | Runs the checks again. |
 
@@ -56,7 +57,7 @@ Click **Open System Health** in the banner. The failing check there says what's 
 
 ## Docker not found
 
-System Health shows **Docker Runtime** failing with **No container runtime found** (Linux), **Docker not found in WSL2** (Windows) or **Docker is not running** (macOS, before setup). Click **Install** or **Fix** to run setup for your platform. What it does is described in [Install Orca](/docs/install/#first-start).
+System Health shows **Docker Runtime** failing with **No container runtime found** (Linux), **Orca runs Docker in a WSL distro of its own** (Windows) or **Docker is not running** (macOS, before setup). Click **Install** or **Fix** to run setup for your platform. What it does is described in [Install Orca](/docs/install/#first-start).
 
 Platform-specific cases:
 
@@ -67,9 +68,8 @@ Platform-specific cases:
   sudo systemctl start docker
   ```
 - **Linux, Docker Group check fails.** After **Fix** adds you to the `docker` group, log out and back in for it to apply.
-- **Windows, no WSL distro.** Install Ubuntu from the Microsoft Store and launch it once to create your Linux user, then click **Re-check**.
 - **Windows, WSL2 not enabled.** **Fix** runs `wsl --install`. Restart Windows when it asks you to.
-- **Windows, Docker Service not running.** **Fix** starts Docker in WSL2 with the TCP listener Orca uses.
+- **Windows, Docker in Orca's distro isn't answering.** **Fix** repairs the `orca` distro in place: it sets Docker up again and restarts it. Images and volumes are kept.
 
 ## macOS: the Docker VM won't come up
 

@@ -1,5 +1,6 @@
 //! Git and compose plumbing for dev instances.
 
+use orca_backend_common::wsl::OnEngine;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::OnceLock;
@@ -318,6 +319,7 @@ pub async fn compose(state: &AppState, dir: &Path, args: &[String], job: Option<
         .arg(sub)
         .args(args)
         .current_dir(dir)
+        .on_engine()
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
