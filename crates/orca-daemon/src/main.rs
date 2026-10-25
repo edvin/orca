@@ -230,7 +230,7 @@ async fn main() -> anyhow::Result<()> {
     // TCP mode (default, works on all platforms)
     let addr = bind_addr(&args.bind, args.port)?;
     tracing::info!("Orca daemon listening on {addr}");
-    let listener = match tokio::net::TcpListener::bind(addr).await {
+    let listener = match listen(addr) {
         Ok(l) => l,
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
             // Check if another daemon is already running
@@ -1206,6 +1206,16 @@ async fn run_scheduler(state: Arc<state::AppState>) {
             }
         }
     }
+}
+
+/// A listening socket child processes don't inherit. Tokio's (mio's) are
+/// inheritable on Windows, so every `wsl.exe` the daemon starts would hold
+/// the port too, and the keepalive (which outlives the daemon) would keep it
+/// from starting again. std's are made with `WSA_FLAG_NO_HANDLE_INHERIT`.
+pub(crate) fn listen(addr: impl std::net::ToSocketAddrs) -> std::io::Result<tokio::net::TcpListener> {
+    let l = std::net::TcpListener::bind(addr)?;
+    l.set_nonblocking(true)?;
+    tokio::net::TcpListener::from_std(l)
 }
 
 /// The address `--bind` names: an IPv4 or IPv6 address (brackets optional)

@@ -68,7 +68,7 @@ pub async fn run(state: std::sync::Arc<crate::state::AppState>) {
             if answers(&ip, port).await {
                 continue; // listens on every interface: reachable as it is
             }
-            match tokio::net::TcpListener::bind((ip.as_str(), port)).await {
+            match crate::listen((ip.as_str(), port)) {
                 Ok(listener) => {
                     tracing::info!("Relaying {ip}:{port} to Windows' localhost:{port} for containers");
                     relays.insert(port, tokio::spawn(relay(listener, port)));
