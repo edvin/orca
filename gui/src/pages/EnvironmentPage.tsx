@@ -664,8 +664,7 @@ export default function EnvironmentPage() {
                 "font-family": "'JetBrains Mono NF', monospace",
                 "font-size": "12px", "line-height": "1.6",
                 color: "#c9d1d9", "white-space": "pre-wrap",
-                "word-break": "break-all", "max-height": "450px",
-                "min-height": "120px", overflow: "auto",
+                "word-break": "break-all", height: "min(450px, 60vh)", overflow: "auto",
                 background: "#0d1117",
               }}>{diagnoseLog()}</pre>
             </div>
@@ -710,8 +709,7 @@ export default function EnvironmentPage() {
                 "font-family": "'JetBrains Mono NF', monospace",
                 "font-size": "12px", "line-height": "1.6",
                 color: "#c9d1d9", "white-space": "pre-wrap",
-                "word-break": "break-all", "max-height": "500px",
-                "min-height": "150px", overflow: "auto",
+                "word-break": "break-all", height: "min(500px, 60vh)", overflow: "auto",
                 background: "#0d1117",
               }} ref={logRef}>{actionLog()}</pre>
             </div>
