@@ -58,7 +58,7 @@ export function downloadButton(ctx, cls = "btn-lg") {
 }
 
 /** The tour video on YouTube (video/ in the repo records it). */
-const TOUR_VIDEO = "13pnOR7eGtY";
+const TOUR_VIDEO = "tKGItWX_V4c";
 
 export function homePage(ctx) {
   const v = ctx.latest?.tag ?? "";
@@ -127,14 +127,14 @@ hooks:
   <div class="container">
     <div class="section-head reveal">
       <span class="eyebrow">See it in action</span>
-      <h2>Orca in two and a half minutes</h2>
+      <h2>Orca in four minutes</h2>
       <p>Recorded from the real app: a project folder that just runs, every container live, a whole team set up from one repo, and Claude setting up and fixing apps through Orca.</p>
     </div>
     <div class="video-embed reveal" data-youtube="${TOUR_VIDEO}">
-      <button class="video-play" type="button" aria-label="Play the video: Orca in two and a half minutes">
+      <button class="video-play" type="button" aria-label="Play the video: Orca in four minutes">
         <img src="/assets/screens/tour-poster.webp" alt="" width="1600" height="900" loading="lazy" decoding="async">
         <span class="video-btn" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
-        <span class="video-len">2:26</span>
+        <span class="video-len">3:50</span>
       </button>
     </div>
     <p class="video-note">The video plays from YouTube once you start it. <a href="https://youtu.be/${TOUR_VIDEO}">Watch it on YouTube</a></p>
