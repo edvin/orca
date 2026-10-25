@@ -227,6 +227,8 @@ function searchEntries(doc) {
       .trim();
     out.push({
       t: doc.title,
+      // The sidebar's name for the page ("Profiles"), when it differs.
+      ...(!heading && doc.nav && doc.nav !== doc.title ? { n: doc.nav } : {}),
       h: heading,
       u: `/docs/${doc.slug}/${heading ? `#${slugify(heading)}` : ""}`,
       s: doc.section,

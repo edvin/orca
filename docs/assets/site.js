@@ -144,7 +144,7 @@
   const load = async () => {
     if (index) return index;
     const res = await fetch("/assets/search.json");
-    index = (await res.json()).map((e) => ({ ...e, lt: e.t.toLowerCase(), lh: e.h.toLowerCase(), lx: e.x.toLowerCase() }));
+    index = (await res.json()).map((e) => ({ ...e, lt: e.t.toLowerCase(), ln: (e.n ?? "").toLowerCase(), lh: e.h.toLowerCase(), lx: e.x.toLowerCase() }));
     return index;
   };
   const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -157,10 +157,14 @@
     for (const w of words) if (w.length > 1) s = s.replace(new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"), "<mark>$1</mark>");
     return s;
   };
+  // "stacks" and "stack" are the same word to a reader.
+  const stem = (w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+  const stems = (text) => text.split(/[^a-z0-9.]+/).filter(Boolean).map(stem);
   const search = async (q) => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) { results.innerHTML = ""; results.classList.remove("none"); items = []; return; }
     const idx = await load();
+    const want = words.map(stem);
     const scored = [];
     for (const e of idx) {
       let score = 0;
@@ -171,7 +175,14 @@
         score += (inT ? 6 : 0) + (inH ? 8 : 0) + (inX ? 1 : 0);
         if (e.lh.startsWith(w)) score += 4;
       }
-      if (all) scored.push([score - (e.h ? 0 : 1), e]);
+      if (!all) continue;
+      // A page about what you typed comes first: its title has every word
+      // (most when it's all the title says), then a section headed by it.
+      const title = stems(e.lt), nav = stems(e.ln), heading = stems(e.lh);
+      const names = (t) => t.length && want.every((w) => t.includes(w));
+      if (!e.h && (names(title) || names(nav))) score += [title, nav].some((t) => t.length === want.length && names(t)) ? 60 : 40;
+      if (e.h && heading.length === want.length && want.every((w) => heading.includes(w))) score += 20;
+      scored.push([score - (e.h ? 0 : 1), e]);
     }
     scored.sort((a, b) => b[0] - a[0]);
     items = scored.slice(0, 12).map(([, e]) => e);
