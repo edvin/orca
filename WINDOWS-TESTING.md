@@ -45,60 +45,64 @@ Remove-Item -Recurse $env:LOCALAPPDATA\orca-engine
 
 ## Checklist
 
+Tested on Windows 11 (26200) with WSL 2 on kernel 6.6, 2026-10-25; results and fixes in `WINDOWS-REPORT.md`. The daemon was driven through the API the GUI calls, not the GUI itself.
+
 Tick each, and note what happened where it didn't.
 
 ### 1. Setting up the engine
-- [ ] With no `orca` distro, the app opens on **System Health**: **Docker Runtime** fails with "Orca runs Docker in a WSL distro of its own…". **Fix** streams: finding the image, downloading (percent), checksum, making the distro, setting up Docker, starting with systemd, "Docker … is running in the orca distro".
-- [ ] `wsl -l -v` lists `orca`, version 2. Your own distros are unchanged (no Docker installed in them by this).
-- [ ] `wsl -d orca -- docker version` works; `wsl -d orca -- cat /etc/orca-generation` prints `1`.
-- [ ] No first-run user prompt appeared, and there's no "Ubuntu" Start menu entry or Windows Terminal profile for `orca`.
-- [ ] Setup didn't hang on apt: cloud-init is waited for, apt waits for its lock, and `systemd-networkd-wait-online` is masked. If it did hang, note the last lines.
-- [ ] Docker's TLS flags are in `/etc/systemd/system/docker.service.d/orca.conf`, not `daemon.json` (`wsl -d orca -- cat /etc/docker/daemon.json` may not exist).
-- [ ] TLS: `curl.exe -s https://127.0.0.1:2376/_ping` fails (no client cert). With the cert it says `OK`:
-      `curl.exe --cacert %LOCALAPPDATA%\orca-engine\certs\ca.pem --cert %LOCALAPPDATA%\orca-engine\certs\cert.pem --key %LOCALAPPDATA%\orca-engine\certs\key.pem https://127.0.0.1:2376/_ping`
-- [ ] Dashboard and Containers work; the header shows Docker connected.
+- [x] With no `orca` distro, the app opens on **System Health**: **Docker Runtime** fails with "Orca runs Docker in a WSL distro of its own…". **Fix** streams: finding the image, downloading (percent), checksum, making the distro, setting up Docker, starting with systemd, "Docker … is running in the orca distro".
+- [x] `wsl -l -v` lists `orca`, version 2. Your own distros are unchanged (no Docker installed in them by this).
+- [x] `wsl -d orca -- docker version` works; `wsl -d orca -- cat /etc/orca-generation` prints `1`.
+- [x] No first-run user prompt appeared, and there's no "Ubuntu" Start menu entry or Windows Terminal profile for `orca`. *Failed at first: `wsl --import` reads the image's `/etc/wsl-distribution.conf` and made both (`orca.lnk`, a `Microsoft.WSL` Terminal fragment); removing the file after import is too late. Fixed. Not checked: whether Windows Terminal's own WSL profile generator lists `orca` next time it starts.*
+- [x] Setup didn't hang on apt: cloud-init is waited for, apt waits for its lock, and `systemd-networkd-wait-online` is masked. If it did hang, note the last lines.
+- [x] Docker's TLS flags are in `/etc/systemd/system/docker.service.d/orca.conf`, not `daemon.json` (`wsl -d orca -- cat /etc/docker/daemon.json` may not exist).
+- [x] TLS: without a client cert the engine refuses; with it, `_ping` says `OK`. *`curl.exe` can't show the second half: Windows' curl (and Git's) use Schannel, which can't load PEM keys (`schannel: Failed to import cert file`). From a WSL distro:*
+      `C=/mnt/c/Users/<you>/AppData/Local/orca-engine/certs; curl --cacert $C/ca.pem --cert $C/cert.pem --key $C/key.pem https://127.0.0.1:2376/_ping`
+- [x] Dashboard and Containers work; the header shows Docker connected. *(Through their API: `/system/health`, `/containers`, `/engine`.)*
 
 ### 2. Staying up
-- [ ] `wsl --terminate orca`: within ~30 s the daemon brings it back and Docker answers again (keepalive in `crates/orca-daemon/src/main.rs`).
-- [ ] `wsl --shutdown`: the same, and **Diagnose** on System Health reconnects.
-- [ ] Quitting Orca and starting it again connects without a setup step.
-- [ ] Cold start (after `wsl --shutdown`, or a reboot): the app opens at once (the daemon answers within seconds) and connects to the engine in the background within about a minute and a half.
+- [x] `wsl --terminate orca`: within ~30 s the daemon brings it back and Docker answers again (keepalive in `crates/orca-daemon/src/main.rs`). *32 s; with the gateway running, about a second.*
+- [ ] `wsl --shutdown`: the same, and **Diagnose** on System Health reconnects. *Not tested: the session testing this ran inside a WSL distro, which `--shutdown` would have ended. Diagnose (`/settings/reconnect`) itself works.*
+- [x] Quitting Orca and starting it again connects without a setup step.
+- [ ] Cold start (after `wsl --shutdown`, or a reboot): the app opens at once (the daemon answers within seconds) and connects to the engine in the background within about a minute and a half. *Only with `orca` stopped and the WSL VM running: the daemon listened and was connected about 4 s after it started.*
 
 ### 3. Projects and paths
-- [ ] A compose project in `C:\Users\<you>\code\app` (with a relative bind mount like `./src:/src`) starts from **Open folder**; the bind mount shows the files.
-- [ ] Its stack page shows the compose file (the editor isn't empty), and its `orca.yaml` is found: Orca reads the project's folder back as `C:\…` from compose's labels.
-- [ ] A compose project inside your Ubuntu distro, opened as `\\wsl.localhost\Ubuntu\home\<you>\app`, starts too: the engine reaches it at `/mnt/wsl/orca/distros/Ubuntu/…` (`wsl -d orca -- ls /mnt/wsl/orca/distros`).
-- [ ] A project using a shared database (COMPOSE_FILE with `.orca/databases.override.yaml`) starts: the `;` list becomes a Linux `:` list.
-- [ ] Database snapshot, import and restore (`docker exec` piping) work.
-- [ ] **Run container** with a Windows folder as a volume mounts it (`C:\…` becomes `/mnt/c/…`).
+- [x] A compose project in `C:\Users\<you>\code\app` (with a relative bind mount like `./src:/src`) starts from **Open folder**; the bind mount shows the files.
+- [x] Its stack page shows the compose file (the editor isn't empty), and its `orca.yaml` is found: Orca reads the project's folder back as `C:\…` from compose's labels.
+- [x] A compose project inside your Ubuntu distro, opened as `\\wsl.localhost\Ubuntu\home\<you>\app`, starts too: the engine reaches it at `/mnt/wsl/orca/distros/Ubuntu/…` (`wsl -d orca -- ls /mnt/wsl/orca/distros`).
+- [x] A project using a shared database (COMPOSE_FILE with `.orca/databases.override.yaml`) starts: the `;` list becomes a Linux `:` list. *Orca's own start passes `-f`; but compose run in Linux that reads the `.env` itself (a WSL terminal) took `compose.yaml;.orca/…` for one file. Fixed: `COMPOSE_PATH_SEPARATOR=;` goes with the list.*
+- [x] Database snapshot, import and restore (`docker exec` piping) work.
+- [x] **Run container** with a Windows folder as a volume mounts it (`C:\…` becomes `/mnt/c/…`).
 
 ### 4. Gateway and networking
-- [ ] The gateway starts and `https://<app>.localhost` (or your domain) opens from a Windows browser.
-- [ ] A route to a dev server running on Windows itself that listens on **localhost only** works, both IPv4 (`127.0.0.1`) and IPv6-only (`npx vite` often binds `::1` only, port 5173): the daemon log says `Relaying <ip>:5173 to Windows' localhost:5173`. Windows may ask to allow `orca-daemon.exe` on the network once: allow it. **If you click Cancel, note what happens**: the relay can't tell, containers just can't connect.
-- [ ] Stop the dev server: within ~5 s the relay lets the port go (log), so a server started next on `0.0.0.0` gets the port.
-- [ ] A server listening on all interfaces: no relay (it's reachable directly).
-- [ ] With `.wslconfig` `networkingMode=mirrored` (then `wsl --shutdown`): `wsl -d orca -- wslinfo --networking-mode` says `mirrored`; there's no relay and the alias is `host-gateway`. Note what works.
+- [x] The gateway starts and `https://<app>.localhost` (or your domain) opens from a Windows browser. *From Windows with `curl.exe -k`; the CA wasn't in Windows' store yet (trusting it is a separate step that shows a Windows prompt). While an earlier Orca's Docker still runs in the default distro, the gateway can't start: its `orca-caddy` holds 80/443 in the namespace both share, and `port_conflicts` doesn't see it (it checks Windows' side). The move's "Stop … when done" clears it.*
+- [x] A route to a dev server running on Windows itself that listens on **localhost only** works, both IPv4 (`127.0.0.1`) and IPv6-only (`npx vite` often binds `::1` only, port 5173): the daemon log says `Relaying <ip>:5173 to Windows' localhost:5173`. Windows may ask to allow `orca-daemon.exe` on the network once: allow it. **If you click Cancel, note what happens**: the relay can't tell, containers just can't connect. *Firewall allow rules for the dev build's `orca-daemon.exe` exist, so a prompt was answered; Cancel not tried.*
+- [x] Stop the dev server: within ~5 s the relay lets the port go (log), so a server started next on `0.0.0.0` gets the port.
+- [x] A server listening on all interfaces: no relay (it's reachable directly).
+- [ ] With `.wslconfig` `networkingMode=mirrored` (then `wsl --shutdown`): `wsl -d orca -- wslinfo --networking-mode` says `mirrored`; there's no relay and the alias is `host-gateway`. Note what works. *Not tested: needs `wsl --shutdown` (see 2).*
 
 ### 4b. `docker` from PowerShell and from a distro
 **Settings → General → Engine:**
-- [ ] Tick **PowerShell and Command Prompt**, **Apply**. Without Docker Desktop installed, it downloads `docker.exe` into `%LOCALAPPDATA%\orca-engine\cli` (on your user PATH; open a new terminal) and the compose plugin into `%USERPROFILE%\.docker\cli-plugins`.
-- [ ] In a new PowerShell: `docker context ls` shows `orca *` (`npipe:////./pipe/orca_docker`), and:
-  - `docker run --rm alpine echo hi` prints `hi` **and returns** (the proxy closes the pipe when the container ends: a named pipe can't half-close).
+- [x] Tick **PowerShell and Command Prompt**, **Apply**. Without Docker Desktop installed, it downloads `docker.exe` into `%LOCALAPPDATA%\orca-engine\cli` (on your user PATH; open a new terminal) and the compose plugin into `%USERPROFILE%\.docker\cli-plugins`. *Now buildx too, and the zip's unused `dockerd.exe` (92 MB) isn't kept.*
+- [x] In a new PowerShell: `docker context ls` shows `orca *` (`npipe:////./pipe/orca_docker`), and:
+  - `docker run --rm alpine echo hi` prints `hi` **and returns**. *Printed nothing at first (see the report).*
   - `echo hi | docker run --rm -i alpine cat` prints `hi` and returns (stdin's end reaches the container: the pipe is in message mode).
-  - `docker run -it --rm alpine sh` gives an interactive shell; `exit` returns. Same for `docker exec -it <container> sh`.
-  - `docker run --rm -v ${PWD}:/w alpine ls /w` lists the current folder (path rewritten by the proxy).
-  - `docker compose up` in a project with `./src:/src` works; `docker compose logs -f` follows and Ctrl+C returns.
-  - `docker build .` (BuildKit) works.
-  - With Orca's engine stopped (`wsl --terminate orca`, quickly): `docker ps` says "Orca's engine isn't running…".
-- [ ] Pick your Ubuntu distro, **Apply**: it installs `docker-ce-cli` and the compose plugin there if needed (replacing Docker Desktop's dangling `docker` link), and adds context `orca`.
-- [ ] In Ubuntu: `docker context ls` shows `orca-wsl *`; `cd ~/code/app && docker compose up -d` works with bind mounts; `wsl -d orca -- ls /home` shows your Ubuntu home.
-- [ ] Orca's Containers page shows those containers, and stopping the project from Orca works (its folder `/home/<you>/app` is the same path in Orca's distro).
-- [ ] Switching back to **None** sets Ubuntu's context back to `default`.
+  - `docker run -it --rm alpine sh` gives an interactive shell; `exit` returns. Same for `docker exec -it <container> sh`. *Not tested: needs a real console.*
+  - `docker run --rm -v ${PWD}:/w alpine ls /w` lists the current folder (path rewritten by the proxy). *Also `-v ${PWD}\src:/s` and `--mount`; a 30 MB `docker cp` both ways is intact.*
+  - `docker compose up` in a project with `./src:/src` works; `docker compose logs -f` follows and Ctrl+C returns. *Ctrl+C not tested.*
+  - `docker build .` (BuildKit) works. *Failed twice: no buildx (the legacy builder ran), then BuildKit's streams ended through the pipe. Both fixed.*
+  - With Orca's engine stopped (`wsl --terminate orca`, quickly): `docker ps` says "Orca's engine isn't running…". *`orca` comes back within a second, so tested with dockerd stopped in it.*
+- [x] Pick your Ubuntu distro, **Apply**: it installs `docker-ce-cli` and the compose plugin there if needed (replacing Docker Desktop's dangling `docker` link), and adds context `orca-wsl`. *Was `orca`, which replaced PowerShell's (see the report).*
+- [x] In Ubuntu: `docker context ls` shows `orca-wsl *`; `cd ~/code/app && docker compose up -d` works with bind mounts; `wsl -d orca -- ls /home` shows your Ubuntu home.
+- [x] Orca's Containers page shows those containers, and stopping the project from Orca works (its folder `/home/<you>/app` is the same path in Orca's distro).
+- [x] Switching back to **None** sets Ubuntu's context back to `default`.
 
 ### 5. Kubernetes
-- [ ] Enabling Kubernetes installs k3s in `orca` (not in your default distro); pods list; a pod terminal opens.
+- [ ] Enabling Kubernetes installs k3s in `orca` (not in your default distro); pods list; a pod terminal opens. *Not tested on purpose: this machine's Ubuntu-24.04 runs its own k3s, holding 6443, 10250, `cni0` and `flannel.1` in the network namespace `orca` shares. See the report.*
 
 ### 6. Moving from Docker Desktop
+*Not tested: Docker Desktop isn't installed on the test machine.*
+
 With Docker Desktop installed and running, with a compose project started from PowerShell (`C:\…`), one started from Ubuntu through Docker Desktop's WSL integration (`/home/…`), a named volume with data (e.g. Postgres) and a `docker run` container:
 - [ ] System Health shows the **Docker Desktop** card; **See what comes over** lists them, sizes and free space (free space = the least of the distro's and the Windows drive's).
 - [ ] **Bring them over**: every step done; Postgres data is there in Orca; both projects are recreated and running (the `/home/…` one is found in your Ubuntu distro).
@@ -110,18 +114,18 @@ With Docker Desktop installed and running, with a compose project started from P
 
 ### 7. Moving from an earlier Orca
 On a machine that ran Orca 0.65 or older (Docker in the default distro on 2375):
-- [ ] Upgrading to this build opens **System Health** with setup; after setup a second card, **Docker in Ubuntu**, offers to bring that Docker's things over, and does.
-- [ ] **Stop … when done** disables that Docker in the default distro (not uninstalled).
+- [x] Upgrading to this build opens **System Health** with setup; after setup a second card, **Docker in Ubuntu**, offers to bring that Docker's things over, and does. *("Docker in Ubuntu-24.04".) 14 of 15 images, all 4 volumes (MariaDB's 149 MB intact), free space the least of the two. `redis:2` didn't come over: it's a layerless 8 kB stub there, and Docker Hub no longer has its digest. A rerun needs 0 bytes. The steps still say "in Docker Desktop" for this source.*
+- [x] **Stop … when done** disables that Docker in the default distro (not uninstalled).
 
 ### 8. Uninstall
-- [ ] Uninstalling stops `orca` but keeps it (`wsl -l -v`), and `%LOCALAPPDATA%\orca-engine` stays.
+- [ ] Uninstalling stops `orca` but keeps it (`wsl -l -v`), and `%LOCALAPPDATA%\orca-engine` stays. *Not run (no installer build here: `tauri-cli` isn't installed). The hook reads right; see the report for what it leaves behind.*
 
 ## Found by review and fixed before testing (worth checking)
 
 An adversarial review of this branch found these; all are fixed, but they're
 the riskiest parts:
 
-- The proxy closes the client pipe when the engine ends an attached stream, and serves the pipe in message mode for `CloseWrite` (stdin's end).
+- The proxy closes the client pipe when the engine ends an attached stream, and serves the pipe in message mode for `CloseWrite` (stdin's end). *Its end now reads the pipe as bytes: read as messages, mio lost data (see the report).*
 - Compose labels hold Linux paths; Orca translates them back (`host_labels`).
 - `\\?\` paths from `canonicalize()` are understood.
 - Daemon startup doesn't wait on WSL; every `wsl.exe` call has a time limit.
