@@ -47,7 +47,8 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
 
   /** Follow a move started earlier (the page was left while it ran). */
   const resume = async () => {
-    const running = (await devApi.jobs("docker-desktop").catch(() => [])).find((j) => j.status === "running");
+    const scope = from() === "desktop" ? "docker-desktop" : "docker-desktop-earlier";
+    const running = (await devApi.jobs(scope).catch(() => [])).find((j) => j.status === "running");
     if (running) void follow(running);
   };
 
@@ -148,9 +149,18 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
     const c = toCopy();
     return plan() !== null && c.images.length + c.volumes.length + c.projects.length + (plan()!.networks.length) === 0;
   };
+  /** What the ticked options need, as the daemon counts it. */
+  const needed = () => {
+    const c = toCopy();
+    const p = plan();
+    if (!p) return 0;
+    const imageBytes = images() ? Math.min(total(c.images.map((i) => i.size)), p.bytes_needed) : 0;
+    const volumeBytes = volumes() ? total(c.volumes.filter((v) => v.action === "copy").map((v) => v.size)) : 0;
+    return imageBytes + volumeBytes;
+  };
   const shortSpace = () => {
     const p = plan();
-    return !!p && p.bytes_free !== null && p.bytes_needed > Math.max(0, p.bytes_free - 2 * 1024 ** 3);
+    return !!p && p.bytes_free !== null && needed() > Math.max(0, p.bytes_free - 2 * 1024 ** 3);
   };
   const outcome = () => job()?.result as unknown as MoveOutcome | undefined;
   const toggleSkip = (name: string, on: boolean) =>
@@ -266,7 +276,7 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
                     </Show>
                   </div>
                   <div class={shortSpace() ? "ddm-error" : "ddm-muted"}>
-                    Needs about {formatBytes(p.bytes_needed)}
+                    Needs about {formatBytes(needed())}
                     <Show when={p.bytes_free !== null}>; Orca's engine has {formatBytes(p.bytes_free!)} free</Show>.
                     <Show when={shortSpace()}> Free some space, or leave the images out: they can be pulled again.</Show>
                   </div>

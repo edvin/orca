@@ -98,6 +98,12 @@ pub fn engine_path(path: &str) -> Option<String> {
     if path.starts_with('/') {
         return Some(path.to_string());
     }
+    // canonicalize() on Windows gives `\\?\C:\…` and `\\?\UNC\server\…`.
+    let path = if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else {
+        path.strip_prefix(r"\\?\").unwrap_or(path).to_string()
+    };
     let p = path.replace('\\', "/");
     for unc in ["//wsl.localhost/", "//wsl$/"] {
         if p.len() >= unc.len() && p[..unc.len()].eq_ignore_ascii_case(unc) {
@@ -128,6 +134,60 @@ pub fn engine_path(path: &str) -> Option<String> {
     Some(format!("/mnt/{}{rest}", drive.to_ascii_lowercase()))
 }
 
+/// A path in Orca's distro as Windows sees it, the other way round from
+/// [`engine_path`]: `/mnt/c/code/app` is `C:\code\app`, a path in another
+/// distro (or the integrated distro's `/home`) is `\\wsl.localhost\<distro>\…`,
+/// and any other path is in Orca's own distro. Compose, which runs in the
+/// distro, records its project folders this way. Off Windows: as it is.
+pub fn host_path(engine: &str) -> String {
+    if !cfg!(windows) {
+        return engine.to_string();
+    }
+    to_host_path(engine)
+}
+
+/// [`host_path`] on any platform (for tests).
+pub fn to_host_path(engine: &str) -> String {
+    if !engine.starts_with('/') {
+        return engine.to_string();
+    }
+    let unc = |distro: &str, rest: &str| format!(r"\\wsl.localhost\{distro}{}", rest.replace('/', "\\"));
+    let b = engine.as_bytes();
+    if engine.starts_with("/mnt/") && b.len() >= 6 && b[5].is_ascii_alphabetic() && (b.len() == 6 || b[6] == b'/') {
+        let drive = (b[5] as char).to_ascii_uppercase();
+        let rest = engine[6..].replace('/', "\\");
+        return if rest.is_empty() { format!("{drive}:\\") } else { format!("{drive}:{rest}") };
+    }
+    if let Some(d) = distro_of(engine) {
+        let rest = &engine[DISTROS_DIR.len() + 1 + d.len()..];
+        return unc(d, rest);
+    }
+    if (engine == "/home" || engine.starts_with("/home/"))
+        && let Some(d) = integrated()
+    {
+        return unc(&d, engine);
+    }
+    unc(DISTRO, engine)
+}
+
+/// Compose's path labels on a container (its project's folder, compose
+/// files and env files), as Windows paths: see [`host_path`].
+pub fn host_labels(mut labels: std::collections::HashMap<String, String>) -> std::collections::HashMap<String, String> {
+    if !cfg!(windows) {
+        return labels;
+    }
+    for key in [
+        "com.docker.compose.project.working_dir",
+        "com.docker.compose.project.config_files",
+        "com.docker.compose.project.environment_file",
+    ] {
+        if let Some(v) = labels.get_mut(key) {
+            *v = v.split(',').map(|p| host_path(p.trim())).collect::<Vec<_>>().join(",");
+        }
+    }
+    labels
+}
+
 /// The other distro a path inside `/mnt/wsl/orca/distros/` is in.
 pub fn distro_of(engine_path: &str) -> Option<&str> {
     engine_path
@@ -151,6 +211,20 @@ pub fn engine_arg(arg: &str) -> String {
         && let Some(p) = engine_path_strict(value)
     {
         return format!("{flag}={p}");
+    }
+    // type=bind,source=C:\x,target=/y (`--mount`)
+    if arg.contains(',') && arg.split(',').any(|kv| kv.starts_with("source=") || kv.starts_with("src=")) {
+        let parts: Vec<String> = arg
+            .split(',')
+            .map(|kv| match kv.split_once('=') {
+                Some((k @ ("source" | "src"), v)) => match engine_path_strict(v) {
+                    Some(p) => format!("{k}={p}"),
+                    None => kv.to_string(),
+                },
+                _ => kv.to_string(),
+            })
+            .collect();
+        return parts.join(",");
     }
     // C:\src:/dst[:ro], a bind mount
     if arg.len() > 3 {
@@ -264,8 +338,21 @@ pub fn for_engine(cmd: tokio::process::Command) -> tokio::process::Command {
         .get_envs()
         .map(|(k, v)| (k.to_string_lossy().to_string(), v.map(|v| v.to_string_lossy().to_string())))
         .collect();
+    let invocation = engine_invocation(&program, &args, cwd.as_deref(), &envs);
+    // A folder in another distro: share that distro first (it may have
+    // started since the last round of sharing).
+    let distros: std::collections::BTreeSet<String> = invocation
+        .iter()
+        .filter_map(|a| {
+            let path = a.split_once('=').map_or(a.as_str(), |(_, v)| v);
+            distro_of(path.split(':').next().unwrap_or(path)).map(str::to_string)
+        })
+        .collect();
+    for d in distros {
+        share_blocking(&d);
+    }
     let mut out = tokio::process::Command::new("wsl.exe");
-    out.args(engine_invocation(&program, &args, cwd.as_deref(), &envs))
+    out.args(&invocation)
         // wsl.exe's own messages in UTF-8, not UTF-16.
         .env("WSL_UTF8", "1");
     #[cfg(windows)]
@@ -273,6 +360,24 @@ pub fn for_engine(cmd: tokio::process::Command) -> tokio::process::Command {
         out.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     out
+}
+
+/// Share `distro` with the engine now ([`share_script`]), waiting for it: for
+/// the places that need a folder in it straight away.
+pub fn share_blocking(distro: &str) {
+    #[cfg(windows)]
+    if valid_distro_name(distro) {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("wsl.exe")
+            .args(["-d", distro, "-u", "root", "--exec", "sh", "-c", &share_script(distro)])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000)
+            .status();
+    }
+    #[cfg(not(windows))]
+    let _ = distro;
 }
 
 /// The files the daemon and the engine need for mutual TLS.
@@ -303,13 +408,19 @@ impl Certs {
 /// localhost) and the client certificate the daemon uses, once. Existing
 /// files are kept, so the engine and its clients keep matching.
 pub fn ensure_certs(dir: &Path) -> Result<Certs> {
+    static MAKING: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let certs = Certs { dir: dir.to_path_buf() };
     let all = [certs.ca(), certs.cert(), certs.key(), certs.server_cert(), certs.server_key()];
     if all.iter().all(|p| p.exists()) {
         return Ok(certs);
     }
+    let _making = MAKING.lock().unwrap_or_else(|e| e.into_inner());
+    if all.iter().all(|p| p.exists()) {
+        return Ok(certs);
+    }
     std::fs::create_dir_all(dir)?;
-    let now = time::OffsetDateTime::now_utc();
+    // A day back: the WSL VM's clock can lag Windows' a little.
+    let now = time::OffsetDateTime::now_utc() - time::Duration::days(1);
     let later = now + time::Duration::days(365 * 20);
 
     let mut ca = rcgen::CertificateParams::new(Vec::<String>::new())?;
@@ -340,12 +451,19 @@ pub fn ensure_certs(dir: &Path) -> Result<Certs> {
     let client_key = rcgen::KeyPair::generate()?;
     let client_cert = client.signed_by(&client_key, &ca_cert, &ca_key)?;
 
-    // The CA's key isn't kept: nothing else is ever signed with it.
-    std::fs::write(certs.ca(), ca_cert.pem())?;
-    std::fs::write(certs.server_cert(), server_cert.pem())?;
-    std::fs::write(certs.server_key(), server_key.serialize_pem())?;
-    std::fs::write(certs.cert(), client_cert.pem())?;
-    std::fs::write(certs.key(), client_key.serialize_pem())?;
+    // The CA's key isn't kept: nothing else is ever signed with it. Each
+    // file is written whole under another name, then renamed into place.
+    for (path, pem) in [
+        (certs.ca(), ca_cert.pem()),
+        (certs.server_cert(), server_cert.pem()),
+        (certs.server_key(), server_key.serialize_pem()),
+        (certs.cert(), client_cert.pem()),
+        (certs.key(), client_key.serialize_pem()),
+    ] {
+        let tmp = path.with_extension("pem.new");
+        std::fs::write(&tmp, pem)?;
+        std::fs::rename(&tmp, &path)?;
+    }
     Ok(certs)
 }
 
@@ -368,28 +486,30 @@ appendWindowsPath=false
 [user]
 default=root
 EOF
+# On a fresh image cloud-init may still be setting up, holding apt's lock.
+command -v cloud-init >/dev/null 2>&1 && cloud-init status --wait >/dev/null 2>&1 || true
+# Waiting for "network online" can hang for minutes in WSL; nothing here needs it.
+systemctl mask systemd-networkd-wait-online.service >/dev/null 2>&1 || ln -sf /dev/null /etc/systemd/system/systemd-networkd-wait-online.service
+APT="apt-get -q -y -o DPkg::Lock::Timeout=600"
 if ! command -v dockerd >/dev/null 2>&1; then
-  apt-get update -q
-  apt-get install -y -q ca-certificates curl
-  curl -fsSL https://get.docker.com | sh
+  # Docker's own packages (get.docker.com would stop to recommend Docker Desktop in WSL).
+  . /etc/os-release
+  $APT update
+  $APT install ca-certificates curl
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$ID ${{UBUNTU_CODENAME:-$VERSION_CODENAME}} stable" > /etc/apt/sources.list.d/docker.list
+  $APT update
+  $APT install docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin
 fi
-command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 || apt-get install -y -q docker-compose-plugin
-mkdir -p /etc/docker /etc/systemd/system/docker.service.d
-cat > /etc/docker/daemon.json <<'EOF'
-{{
-  "hosts": ["unix:///var/run/docker.sock", "tcp://127.0.0.1:{PORT}"],
-  "tls": true,
-  "tlsverify": true,
-  "tlscacert": "/etc/docker/orca/ca.pem",
-  "tlscert": "/etc/docker/orca/server-cert.pem",
-  "tlskey": "/etc/docker/orca/server-key.pem"
-}}
-EOF
-# The packaged unit passes -H fd://, which clashes with "hosts" above.
+mkdir -p /etc/systemd/system/docker.service.d
+# dockerd on its socket and on the TLS port. In the unit, not daemon.json,
+# so tools that edit daemon.json (nvidia-ctk) keep their settings.
 cat > /etc/systemd/system/docker.service.d/orca.conf <<'EOF'
 [Service]
 ExecStart=
-ExecStart=/usr/bin/dockerd --containerd=/run/containerd/containerd.sock
+ExecStart=/usr/bin/dockerd --containerd=/run/containerd/containerd.sock -H unix:///var/run/docker.sock -H tcp://127.0.0.1:{PORT} --tlsverify --tlscacert=/etc/docker/orca/ca.pem --tlscert=/etc/docker/orca/server-cert.pem --tlskey=/etc/docker/orca/server-key.pem
 EOF
 chmod 600 /etc/docker/orca/server-key.pem
 mkdir -p {DISTROS_DIR}
@@ -481,19 +601,6 @@ pub fn parse_distros(out: &str) -> Vec<String> {
         .collect()
 }
 
-/// Whether a `wsl --version` output is at least `2.4.10`, which installs a
-/// `.wsl` image with `--install --from-file`. Unknown counts as older.
-pub fn wsl_can_install_from_file(version_out: &str) -> bool {
-    version_out
-        .lines()
-        .find_map(|l| {
-            let v = l.split(':').nth(1)?.trim();
-            let mut n = v.split('.').map(|p| p.trim().parse::<u32>().ok());
-            Some((n.next()??, n.next()??, n.next()?.unwrap_or(0)))
-        })
-        .is_some_and(|v| v >= (2, 4, 10))
-}
-
 /// The newest `docker-X.Y.Z.zip` in download.docker.com's Windows index.
 pub fn newest_cli_zip(index: &str) -> Option<String> {
     index
@@ -529,15 +636,29 @@ mod win {
         c
     }
 
+    /// How long a quick wsl.exe call may take: WSL can hang, and the
+    /// daemon must not hang with it.
+    const QUICK: Duration = Duration::from_secs(30);
+    /// Setting Docker up (apt, downloads) takes a while.
+    const LONG: Duration = Duration::from_secs(1800);
+
     /// `wsl.exe args…`: its output, or what it said went wrong.
     pub async fn run(args: &[&str]) -> Result<String> {
-        let out = wsl()
+        run_for(args, QUICK).await
+    }
+
+    /// [`run`] with its own time limit (`--import` of a large image).
+    pub async fn run_for(args: &[&str], limit: Duration) -> Result<String> {
+        let fut = wsl()
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output()
+            .kill_on_drop(true)
+            .output();
+        let out = tokio::time::timeout(limit, fut)
             .await
+            .map_err(|_| anyhow::anyhow!("wsl {} didn't finish in {}s", args.join(" "), limit.as_secs()))?
             .context("could not run wsl.exe")?;
         let text = |b: &[u8]| String::from_utf8_lossy(b).replace('\0', "").trim().to_string();
         if out.status.success() {
@@ -548,13 +669,43 @@ mod win {
         }
     }
 
-    /// A shell script run as root in `distro`, its input from `stdin`.
+    /// A shell script run as root in `distro`, its input from `stdin`; a
+    /// quick one (see [`sh_long`]).
     pub async fn sh(distro: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
-        let mut child = wsl()
-            .args(["-d", distro, "-u", "root", "--exec", "sh", "-c", script])
+        sh_for(distro, None, script, stdin, QUICK).await
+    }
+
+    /// [`sh`] for setting Docker up: a much longer time limit.
+    pub async fn sh_long(distro: &str, script: &str) -> Result<String> {
+        sh_for(distro, None, script, None, LONG).await
+    }
+
+    /// A shell script in `distro` as `user` (root when `None`, the distro's
+    /// own user when `Some("")`).
+    async fn sh_for(
+        distro: &str,
+        user: Option<&str>,
+        script: &str,
+        stdin: Option<&[u8]>,
+        limit: Duration,
+    ) -> Result<String> {
+        let mut cmd = wsl();
+        cmd.args(["-d", distro]);
+        match user {
+            None => {
+                cmd.args(["-u", "root"]);
+            }
+            Some("") => {}
+            Some(u) => {
+                cmd.args(["-u", u]);
+            }
+        }
+        let mut child = cmd
+            .args(["--exec", "sh", "-c", script])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            .kill_on_drop(true)
             .spawn()
             .context("could not run wsl.exe")?;
         let mut input = child.stdin.take().expect("piped");
@@ -562,7 +713,9 @@ mod win {
             input.write_all(bytes).await?;
         }
         drop(input);
-        let out = child.wait_with_output().await?;
+        let out = tokio::time::timeout(limit, child.wait_with_output())
+            .await
+            .map_err(|_| anyhow::anyhow!("a command in {distro} didn't finish in {}s", limit.as_secs()))??;
         let text = |b: &[u8]| String::from_utf8_lossy(b).trim().to_string();
         if out.status.success() {
             Ok(text(&out.stdout))
@@ -598,7 +751,8 @@ mod win {
     static KEEPALIVE: std::sync::OnceLock<tokio::sync::Mutex<Option<tokio::process::Child>>> =
         std::sync::OnceLock::new();
 
-    /// Start the distro and keep it running while the daemon does.
+    /// Start the distro and keep it running while the daemon does. Its stdin
+    /// is a pipe kept open (wsl.exe ends at once on a null stdin).
     pub async fn keep_running() {
         let slot = KEEPALIVE.get_or_init(|| tokio::sync::Mutex::new(None));
         let mut child = slot.lock().await;
@@ -609,7 +763,7 @@ mod win {
         }
         match wsl()
             .args(["-d", DISTRO, "-u", "root", "--exec", "sleep", "infinity"])
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .kill_on_drop(false)
@@ -618,6 +772,21 @@ mod win {
             Ok(c) => *child = Some(c),
             Err(e) => tracing::warn!("Could not start the {DISTRO} distro: {e}"),
         }
+    }
+
+    /// End the keepalive (before stopping the distro), so the next
+    /// [`keep_running`] starts a fresh one.
+    async fn stop_keepalive() {
+        let slot = KEEPALIVE.get_or_init(|| tokio::sync::Mutex::new(None));
+        if let Some(mut c) = slot.lock().await.take() {
+            let _ = c.kill().await;
+        }
+    }
+
+    /// Stop the distro (to restart it with systemd, or repair it).
+    pub async fn terminate() {
+        stop_keepalive().await;
+        run(&["--terminate", DISTRO]).await.ok();
     }
 
     /// A client for the engine, with the daemon's certificate.
@@ -633,14 +802,18 @@ mod win {
         )?)
     }
 
-    /// Start the distro and wait up to `secs` for its engine to answer.
+    /// Start the distro and wait up to about `secs` for its engine to
+    /// answer; past half of it, ask systemd to start Docker once.
     pub async fn connect(secs: u64) -> Option<bollard::Docker> {
         if !exists().await {
             return None;
         }
         keep_running().await;
         let docker = client(120).ok()?;
-        for _ in 0..secs.max(1) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(secs.max(1));
+        let nudge_at = tokio::time::Instant::now() + Duration::from_secs(secs / 2);
+        let mut nudged = false;
+        loop {
             if matches!(
                 tokio::time::timeout(Duration::from_secs(2), docker.ping()).await,
                 Ok(Ok(_))
@@ -648,18 +821,16 @@ mod win {
                 share_distros().await;
                 return Some(docker);
             }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-        // Up but Docker isn't: ask systemd to start it once.
-        let _ = sh(DISTRO, START_SCRIPT, None).await;
-        for _ in 0..20 {
-            if docker.ping().await.is_ok() {
-                share_distros().await;
-                return Some(docker);
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                return None;
+            }
+            if !nudged && now >= nudge_at {
+                nudged = true;
+                let _ = sh(DISTRO, START_SCRIPT, None).await;
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        None
     }
 
     /// Let the engine reach folders in the other running distros.
@@ -678,6 +849,10 @@ mod win {
     /// Make the distro from Ubuntu's newest WSL image, set Docker up in it
     /// and start it. `say` reports progress.
     pub async fn create(say: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
+        anyhow::ensure!(
+            std::env::consts::ARCH == "x86_64",
+            "Orca's engine needs an x64 PC: Ubuntu publishes its WSL image for x64 only."
+        );
         let dir = data_dir();
         std::fs::create_dir_all(dir.join("images"))?;
         let certs = ensure_certs(&certs_dir())?;
@@ -705,19 +880,32 @@ mod win {
         }
 
         say(format!(">>> Making the {DISTRO} distro"));
+        // `--import` of a plain tar works on every WSL 2, and (unlike
+        // `--install --from-file`) adds no Start menu entry or first-run setup.
+        let tar = dir.join("images").join("ubuntu.tar");
+        say("    Unpacking the image".into());
+        let (from, to) = (image.clone(), tar.clone());
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let mut input = std::io::BufReader::new(std::fs::File::open(&from)?);
+            let mut out = std::fs::File::create(&to)?;
+            let mut magic = [0u8; 2];
+            std::io::Read::read_exact(&mut input, &mut magic)?;
+            let input = std::io::Read::chain(std::io::Cursor::new(magic), input);
+            if magic == [0x1f, 0x8b] {
+                std::io::copy(&mut flate2::read::GzDecoder::new(input), &mut out)?;
+            } else {
+                let mut input = input;
+                std::io::copy(&mut input, &mut out)?;
+            }
+            Ok(())
+        })
+        .await??;
         let location = dir.join("distro");
-        let image_s = image.to_string_lossy().to_string();
-        let location_s = location.to_string_lossy().to_string();
-        let version = run(&["--version"]).await.unwrap_or_default();
-        if wsl_can_install_from_file(&version) {
-            run(&[
-                "--install", "--from-file", &image_s, "--name", DISTRO, "--location", &location_s, "--no-launch",
-            ])
-            .await?;
-        } else {
-            std::fs::create_dir_all(&location)?;
-            run(&["--import", DISTRO, &location_s, &image_s, "--version", "2"]).await?;
-        }
+        std::fs::create_dir_all(&location)?;
+        let (tar_s, location_s) = (tar.to_string_lossy().to_string(), location.to_string_lossy().to_string());
+        let imported = run_for(&["--import", DISTRO, &location_s, &tar_s, "--version", "2"], LONG).await;
+        let _ = std::fs::remove_file(&tar);
+        imported?;
 
         say(">>> Setting up Docker (a few minutes)".into());
         sh(DISTRO, "mkdir -p /etc/docker/orca", None).await?;
@@ -729,10 +917,10 @@ mod win {
             let bytes = std::fs::read(&src)?;
             sh(DISTRO, &format!("cat > /etc/docker/orca/{dst}"), Some(&bytes)).await?;
         }
-        sh(DISTRO, &provision_script(), None).await.context("setting up Docker failed")?;
+        sh_long(DISTRO, &provision_script()).await.context("setting up Docker failed")?;
 
         say(">>> Starting it with systemd".into());
-        run(&["--terminate", DISTRO]).await.ok();
+        terminate().await;
         keep_running().await;
         sh(DISTRO, START_SCRIPT, None).await?;
         say(">>> Waiting for Docker".into());
@@ -751,7 +939,7 @@ mod win {
     pub async fn repair(say: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
         let certs = ensure_certs(&certs_dir())?;
         say(format!(">>> Repairing the {DISTRO} distro"));
-        run(&["--terminate", DISTRO]).await.ok();
+        terminate().await;
         sh(DISTRO, "mkdir -p /etc/docker/orca", None).await?;
         for (src, dst) in [
             (certs.ca(), "ca.pem"),
@@ -761,8 +949,8 @@ mod win {
             let bytes = std::fs::read(&src)?;
             sh(DISTRO, &format!("cat > /etc/docker/orca/{dst}"), Some(&bytes)).await?;
         }
-        sh(DISTRO, &provision_script(), None).await?;
-        run(&["--terminate", DISTRO]).await.ok();
+        sh_long(DISTRO, &provision_script()).await?;
+        terminate().await;
         keep_running().await;
         sh(DISTRO, START_SCRIPT, None).await?;
         match connect(60).await {
@@ -791,7 +979,7 @@ mod win {
         anyhow::ensure!(valid_distro_name(distro), "not a distro name: {distro}");
         anyhow::ensure!(!distro.eq_ignore_ascii_case(DISTRO), "that is Orca's own distro");
         say(format!(">>> Checking for a Docker CLI in {distro}"));
-        match sh(distro, DISTRO_CLI_SCRIPT, None).await {
+        match sh_long(distro, DISTRO_CLI_SCRIPT).await {
             Ok(_) => {}
             Err(e) if e.to_string().contains("exit status: 3") || e.to_string().trim().is_empty() => {
                 anyhow::bail!(
@@ -803,16 +991,7 @@ mod win {
         }
         let certs = engine_path(&certs_dir().to_string_lossy()).context("the certificates' folder")?;
         say(format!(">>> Pointing {distro}'s docker at Orca's engine"));
-        let out = wsl()
-            .args(["-d", distro, "--exec", "sh", "-c", &distro_context_script(&certs)])
-            .stdin(Stdio::null())
-            .output()
-            .await?;
-        anyhow::ensure!(
-            out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
+        sh_for(distro, Some(""), &distro_context_script(&certs), None, QUICK).await?;
         set_integrated(Some(distro.to_string()));
         sh(distro, &share_script(distro), None).await.ok();
         bind_home().await;
@@ -823,11 +1002,7 @@ mod win {
     /// `distro`'s `docker` back to its own default.
     pub async fn unintegrate(distro: &str) -> Result<()> {
         anyhow::ensure!(valid_distro_name(distro), "not a distro name: {distro}");
-        let _ = wsl()
-            .args(["-d", distro, "--exec", "sh", "-c", DISTRO_CONTEXT_OFF])
-            .stdin(Stdio::null())
-            .output()
-            .await;
+        let _ = sh_for(distro, Some(""), DISTRO_CONTEXT_OFF, None, QUICK).await;
         set_integrated(None);
         sh(DISTRO, HOME_UNBIND, None).await.map(|_| ())
     }
@@ -880,13 +1055,15 @@ mod win {
                 let path = dir.join(&zip);
                 download(&http, &format!("https://download.docker.com/win/static/stable/x86_64/{zip}"), &path, say)
                     .await?;
+                // In single quotes for PowerShell, a ' doubled (C:\Users\O'Brien).
+                let q = |p: &Path| p.display().to_string().replace('\'', "''");
                 let script = format!(
                     "$ErrorActionPreference='Stop'; Expand-Archive -Force -LiteralPath '{}' -DestinationPath '{}'; \
                      Move-Item -Force '{}' '{}'",
-                    path.display(),
-                    dir.display(),
-                    dir.join("docker").join("docker.exe").display(),
-                    dir.join("docker.exe").display()
+                    q(&path),
+                    q(&dir),
+                    q(&dir.join("docker").join("docker.exe")),
+                    q(&dir.join("docker.exe"))
                 );
                 let out = powershell(&script).output().await?;
                 anyhow::ensure!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr).trim());
@@ -895,7 +1072,7 @@ mod win {
                 let add = format!(
                     "$p=[Environment]::GetEnvironmentVariable('Path','User'); if (-not ($p -split ';' -contains '{d}')) \
                      {{ [Environment]::SetEnvironmentVariable('Path', ($p.TrimEnd(';') + ';{d}'), 'User') }}",
-                    d = dir.display()
+                    d = dir.display().to_string().replace('\'', "''")
                 );
                 powershell(&add).output().await?;
                 dir.join("docker.exe")
@@ -964,6 +1141,13 @@ mod win {
     /// `host.docker.internal`. `None` with mirrored networking, where
     /// containers reach Windows through the engine's `host-gateway`.
     pub async fn windows_ip() -> Option<String> {
+        // In mirrored mode the default route is the LAN's router, not Windows.
+        let mode = sh(DISTRO, "wslinfo --networking-mode 2>/dev/null || true", None)
+            .await
+            .unwrap_or_default();
+        if mode.trim().eq_ignore_ascii_case("mirrored") {
+            return None;
+        }
         let route = sh(DISTRO, "ip route show default", None).await.ok()?;
         route
             .split_whitespace()
@@ -1075,6 +1259,27 @@ mod tests {
     }
 
     #[test]
+    fn engine_paths_back_to_windows_paths() {
+        assert_eq!(to_host_path("/mnt/c/code/app"), r"C:\code\app");
+        assert_eq!(to_host_path("/mnt/d"), r"D:\");
+        assert_eq!(to_host_path("/mnt/wsl/orca/distros/Ubuntu/home/me"), r"\\wsl.localhost\Ubuntu\home\me");
+        assert_eq!(to_host_path("/srv/x"), r"\\wsl.localhost\orca\srv\x");
+        assert_eq!(to_host_path(r"C:\x"), r"C:\x");
+        for p in [r"C:\code\app", r"\\wsl.localhost\Ubuntu\home\me"] {
+            assert_eq!(to_host_path(&engine_path(p).unwrap()), p);
+        }
+        assert_eq!(engine_path(r"\\?\C:\code\app").as_deref(), Some("/mnt/c/code/app"));
+        assert_eq!(
+            engine_path(r"\\?\UNC\wsl.localhost\Ubuntu\x").as_deref(),
+            Some("/mnt/wsl/orca/distros/Ubuntu/x")
+        );
+        assert_eq!(
+            engine_arg(r"type=bind,source=C:\code,target=/app,readonly"),
+            "type=bind,source=/mnt/c/code,target=/app,readonly"
+        );
+    }
+
+    #[test]
     fn arguments_with_windows_paths_are_translated() {
         assert_eq!(engine_arg(r"C:\code\app\compose.yaml"), "/mnt/c/code/app/compose.yaml");
         assert_eq!(engine_arg(r"--env-file=C:\code\.env"), "--env-file=/mnt/c/code/.env");
@@ -1177,18 +1382,10 @@ mod tests {
     }
 
     #[test]
-    fn knows_when_wsl_installs_wsl_images() {
-        assert!(wsl_can_install_from_file("WSL version: 2.4.10.0\nKernel version: 6.6.36.6-1"));
-        assert!(wsl_can_install_from_file("WSL-Version: 3.0.2.0"));
-        assert!(!wsl_can_install_from_file("WSL version: 2.3.26.0"));
-        assert!(!wsl_can_install_from_file(""));
-    }
-
-    #[test]
     fn the_setup_script_configures_tls_on_the_port() {
         let s = provision_script();
-        assert!(s.contains("tcp://127.0.0.1:2376"));
-        assert!(s.contains("\"tlsverify\": true"));
+        assert!(s.contains("-H tcp://127.0.0.1:2376 --tlsverify"));
+        assert!(!s.contains("> /etc/docker/daemon.json"));
         assert!(s.contains("systemd=true"));
     }
 }

@@ -4266,7 +4266,7 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
             .env("TERM", "xterm-256color")
             .env("COLORTERM", "truecolor")
             .args([
-                "-d", "orca", "-u", "root", "--", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--", "sh",
+                "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--", "sh",
             ])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -7703,8 +7703,11 @@ async fn cleanup(
         } else {
             "docker"
         };
-        match tokio::process::Command::new(runtime_cmd)
+        // Orca's engine, not whatever the user's docker context says.
+        match crate::dev::ops::runtime_cli(&state, runtime_cmd)
+            .await
             .args(["builder", "prune", "-f"])
+            .on_engine()
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()

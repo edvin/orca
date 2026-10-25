@@ -22,26 +22,53 @@ const MAX_HEAD: usize = 64 * 1024;
 const MAX_JSON: usize = 16 * 1024 * 1024;
 
 /// Proxy one client connection to `upstream` until either side closes.
+///
+/// When the engine closes (a container's attached stream ended), the whole
+/// client connection is closed: a Windows named pipe can't be half-closed,
+/// and `docker.exe` only sees the end of an `attach` when the pipe closes.
+/// When the client ends its requests (stdin's end, after `CloseWrite`), the
+/// engine gets a half-close and its responses keep coming until it's done;
+/// a client that went away (an error) ends everything.
 pub async fn serve<C, U>(client: C, upstream: U, rewrite: Rewrite) -> std::io::Result<()>
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let (cr, mut cw) = tokio::io::split(client);
-    let (mut ur, mut uw) = tokio::io::split(upstream);
-    // Responses go back as they come, raw: also after an upgrade.
-    let responses = tokio::spawn(async move {
+    let (mut ur, uw) = tokio::io::split(upstream);
+    let responses = async move {
         let _ = tokio::io::copy(&mut ur, &mut cw).await;
         let _ = cw.shutdown().await;
-    });
-    let mut cr = BufReader::new(cr);
-    let result = forward_requests(&mut cr, &mut uw, &rewrite).await;
-    let _ = uw.shutdown().await;
-    let _ = responses.await;
-    result
+        // Dropping the halves here (with the request side, below) closes
+        // the client connection.
+    };
+    let requests = forward_requests(BufReader::new(cr), uw, rewrite);
+    tokio::pin!(responses, requests);
+    tokio::select! {
+        _ = &mut responses => Ok(()),
+        r = &mut requests => match r {
+            Ok(()) => {
+                responses.await;
+                Ok(())
+            }
+            Err(e) => Err(e),
+        },
+    }
 }
 
-async fn forward_requests<R, W>(cr: &mut BufReader<R>, uw: &mut W, rewrite: &Rewrite) -> std::io::Result<()>
+/// Forward requests until the client stops sending, then half-close the
+/// engine's side.
+async fn forward_requests<R, W>(mut cr: BufReader<R>, mut uw: W, rewrite: Rewrite) -> std::io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    let r = forward(&mut cr, &mut uw, &rewrite).await;
+    let _ = uw.shutdown().await;
+    r
+}
+
+async fn forward<R, W>(cr: &mut BufReader<R>, uw: &mut W, rewrite: &Rewrite) -> std::io::Result<()>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -51,11 +78,18 @@ where
             return Ok(()); // the client closed between requests
         };
         let req = Head::parse(&head)?;
-        if req.chunked {
+        if req.chunked && req.rewritable() {
+            // A create request sent chunked (some SDKs do): read it whole to
+            // rewrite it, and send it on with a length.
+            let body = read_chunked(cr).await?;
+            let new = rewrite_body(&req.path, &body, rewrite).unwrap_or(body);
+            uw.write_all(&with_length(&without_chunked(&head), new.len())).await?;
+            uw.write_all(&new).await?;
+        } else if req.chunked {
             uw.write_all(&head).await?;
             copy_chunked(cr, uw).await?;
         } else if req.length > 0 {
-            if req.rewritable() && req.length <= MAX_JSON {
+            if req.rewritable() {
                 let mut body = vec![0u8; req.length];
                 cr.read_exact(&mut body).await?;
                 match rewrite_body(&req.path, &body, rewrite) {
@@ -89,7 +123,9 @@ where
 async fn read_head<R: AsyncRead + Unpin>(r: &mut BufReader<R>) -> std::io::Result<Option<Vec<u8>>> {
     let mut head = Vec::new();
     loop {
-        let n = r.read_until(b'\n', &mut head).await?;
+        // Never more than MAX_HEAD in all, even on a line with no end.
+        let room = (MAX_HEAD + 1).saturating_sub(head.len()) as u64;
+        let n = (&mut *r).take(room).read_until(b'\n', &mut head).await?;
         if n == 0 {
             return if head.is_empty() {
                 Ok(None)
@@ -118,7 +154,6 @@ struct Head {
     length: usize,
     chunked: bool,
     upgrade: bool,
-    json: bool,
 }
 
 impl Head {
@@ -137,28 +172,31 @@ impl Head {
             length: 0,
             chunked: false,
             upgrade: false,
-            json: false,
         };
         for line in lines {
             let Some((k, v)) = line.split_once(':') else { continue };
             let (k, v) = (k.trim().to_ascii_lowercase(), v.trim().to_ascii_lowercase());
             match k.as_str() {
-                "content-length" => h.length = v.parse().unwrap_or(0),
+                "content-length" => {
+                    h.length = v
+                        .parse()
+                        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "bad Content-Length"))?
+                }
                 "transfer-encoding" => h.chunked = v.contains("chunked"),
                 "upgrade" => h.upgrade = true,
                 "connection" => h.upgrade |= v.contains("upgrade"),
-                "content-type" => h.json = v.contains("json"),
                 _ => {}
             }
         }
         Ok(h)
     }
 
-    /// A request whose JSON body can carry host paths.
+    /// A request whose JSON body can carry host paths (and is small
+    /// enough to read whole).
     fn rewritable(&self) -> bool {
         let route = self.path.split('?').next().unwrap_or_default();
         self.method == "POST"
-            && (self.json || self.length > 0)
+            && self.length <= MAX_JSON
             && (route.ends_with("/containers/create") || route.ends_with("/volumes/create"))
     }
 }
@@ -178,6 +216,54 @@ fn with_length(head: &[u8], n: usize) -> Vec<u8> {
         }
     }
     out.into_bytes()
+}
+
+/// The head without its Transfer-Encoding, with a Content-Length to set.
+fn without_chunked(head: &[u8]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(head);
+    let mut out = String::with_capacity(text.len() + 20);
+    for line in text.split_inclusive("\r\n") {
+        if line
+            .split_once(':')
+            .is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case("transfer-encoding"))
+        {
+            continue;
+        }
+        if line == "\r\n" {
+            out.push_str("Content-Length: 0\r\n");
+        }
+        out.push_str(line);
+    }
+    out.into_bytes()
+}
+
+/// A chunked body, read whole (up to MAX_JSON).
+async fn read_chunked<R: AsyncRead + Unpin>(r: &mut BufReader<R>) -> std::io::Result<Vec<u8>> {
+    let mut body = Vec::new();
+    loop {
+        let mut line = Vec::new();
+        (&mut *r).take(1024).read_until(b'\n', &mut line).await?;
+        let size_text = String::from_utf8_lossy(&line);
+        let size = usize::from_str_radix(size_text.trim().split(';').next().unwrap_or("").trim(), 16)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "bad chunk size"))?;
+        if size == 0 {
+            loop {
+                let mut t = Vec::new();
+                (&mut *r).take(MAX_HEAD as u64).read_until(b'\n', &mut t).await?;
+                if t == b"\r\n" || t.is_empty() {
+                    return Ok(body);
+                }
+            }
+        }
+        if body.len() + size > MAX_JSON {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "request body too large"));
+        }
+        let start = body.len();
+        body.resize(start + size, 0);
+        r.read_exact(&mut body[start..]).await?;
+        let mut crlf = [0u8; 2];
+        r.read_exact(&mut crlf).await?;
+    }
 }
 
 /// Pass a chunked body through as it is, stopping after its last chunk.
@@ -266,9 +352,14 @@ fn rewrite_bind(bind: &str, rewrite: &Rewrite) -> Option<String> {
 #[cfg(windows)]
 pub const PIPE: &str = r"\\.\pipe\orca_docker";
 
-/// A Windows path as Orca's WSL engine sees it; Linux paths are left alone.
+/// A Windows path as Orca's WSL engine sees it; Linux paths are left alone,
+/// except compose's old `/c/…` form (`COMPOSE_CONVERT_WINDOWS_PATHS`).
 pub fn windows_rewrite() -> Rewrite {
     Arc::new(|p: &str| {
+        let b = p.as_bytes();
+        if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b'/' {
+            return Some(format!("/mnt/{}{}", (b[1] as char).to_ascii_lowercase(), &p[2..]));
+        }
         if p.starts_with('/') {
             None
         } else {
@@ -277,12 +368,19 @@ pub fn windows_rewrite() -> Rewrite {
     })
 }
 
-/// A TLS connection to Orca's engine with the daemon's client certificate.
+/// The TLS client setup with the daemon's certificate, read once. The
+/// certificates are made with the engine (never here: making new ones would
+/// no longer match the engine's).
 #[cfg(windows)]
-pub async fn connect_engine() -> std::io::Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
+fn tls_config() -> std::io::Result<Arc<rustls::ClientConfig>> {
+    static CONFIG: std::sync::OnceLock<Arc<rustls::ClientConfig>> = std::sync::OnceLock::new();
+    if let Some(c) = CONFIG.get() {
+        return Ok(c.clone());
+    }
     use std::io::{Error, ErrorKind};
-    let certs = orca_backend_common::wsl::ensure_certs(&orca_backend_common::wsl::certs_dir())
-        .map_err(|e| Error::other(e.to_string()))?;
+    let certs = orca_backend_common::wsl::Certs {
+        dir: orca_backend_common::wsl::certs_dir(),
+    };
     let read_certs = |p: std::path::PathBuf| -> std::io::Result<Vec<rustls::pki_types::CertificateDer<'static>>> {
         let mut r = std::io::BufReader::new(std::fs::File::open(p)?);
         rustls_pemfile::certs(&mut r).collect()
@@ -299,41 +397,77 @@ pub async fn connect_engine() -> std::io::Result<tokio_rustls::client::TlsStream
         .with_root_certificates(roots)
         .with_client_auth_cert(read_certs(certs.cert())?, key)
         .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", orca_backend_common::wsl::PORT)).await?;
-    let name = rustls::pki_types::ServerName::try_from("localhost").expect("valid name");
-    tokio_rustls::TlsConnector::from(Arc::new(config)).connect(name, tcp).await
+    Ok(CONFIG.get_or_init(|| Arc::new(config)).clone())
 }
 
-/// Serve [`PIPE`] for as long as the daemon runs. Only this Windows user
-/// (and administrators) can open it, and remote clients are refused.
+/// A TLS connection to Orca's engine with the daemon's client certificate.
+#[cfg(windows)]
+pub async fn connect_engine() -> std::io::Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
+    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", orca_backend_common::wsl::PORT)).await?;
+    let name = rustls::pki_types::ServerName::try_from("localhost").expect("valid name");
+    tokio_rustls::TlsConnector::from(tls_config()?).connect(name, tcp).await
+}
+
+/// What a client gets when Orca's engine isn't answering: a reply it shows.
+#[cfg(windows)]
+fn engine_down() -> Vec<u8> {
+    let body = r#"{"message":"Orca's engine isn't running. Open Orca, or repair the engine on System Health."}"#;
+    format!(
+        "HTTP/1.1 502 Bad Gateway\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .into_bytes()
+}
+
+/// Serve [`PIPE`] for as long as the daemon runs. The pipe has Windows'
+/// default security: other users can't write to it, so only this user (and
+/// administrators) can send requests; remote clients are refused. Message
+/// mode, as Docker's own pipe, so `docker.exe` can signal the end of stdin
+/// (`CloseWrite` sends an empty message, read here as end of input).
 #[cfg(windows)]
 pub async fn serve_pipe() {
-    use tokio::net::windows::named_pipe::ServerOptions;
-    let mut first = true;
-    loop {
-        let server = match ServerOptions::new()
-            .first_pipe_instance(first)
+    use tokio::net::windows::named_pipe::{PipeMode, ServerOptions};
+    let options = |first: bool| {
+        let mut o = ServerOptions::new();
+        o.first_pipe_instance(first)
             .reject_remote_clients(true)
-            .create(PIPE)
-        {
-            Ok(s) => s,
+            .pipe_mode(PipeMode::Message);
+        o
+    };
+    let mut server = loop {
+        match options(true).create(PIPE) {
+            Ok(s) => break s,
             Err(e) => {
                 tracing::warn!("Could not open {PIPE}: {e}");
                 tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            }
+        }
+    };
+    loop {
+        if let Err(e) = server.connect().await {
+            tracing::debug!("{PIPE}: {e}");
+        }
+        // The next instance before handing this one off, so the name never
+        // goes away (and can't be taken in between).
+        let next = match options(false).create(PIPE) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("Could not open another {PIPE}: {e}");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 continue;
             }
         };
-        first = false;
-        if let Err(e) = server.connect().await {
-            tracing::debug!("{PIPE}: {e}");
-            continue;
-        }
+        let client = std::mem::replace(&mut server, next);
         tokio::spawn(async move {
             match connect_engine().await {
                 Ok(up) => {
-                    let _ = serve(server, up, windows_rewrite()).await;
+                    let _ = serve(client, up, windows_rewrite()).await;
                 }
-                Err(e) => tracing::debug!("{PIPE}: Orca's engine isn't answering: {e}"),
+                Err(e) => {
+                    tracing::debug!("{PIPE}: Orca's engine isn't answering: {e}");
+                    let mut client = client;
+                    let _ = client.write_all(&engine_down()).await;
+                }
             }
         });
     }
@@ -402,12 +536,69 @@ mod tests {
     }
 
     #[test]
+    fn composes_old_drive_paths_get_engine_paths() {
+        let r = windows();
+        assert_eq!(r("/c/Users/me/app").as_deref(), Some("/mnt/c/Users/me/app"));
+        assert_eq!(r("/home/me").as_deref(), None);
+        assert_eq!(r(r"C:\x").as_deref(), Some("/mnt/c/x"));
+    }
+
+    #[tokio::test]
+    async fn chunked_creates_are_rewritten_too() {
+        let (client, proxy_client) = tokio::io::duplex(64 * 1024);
+        let (proxy_up, upstream) = tokio::io::duplex(64 * 1024);
+        tokio::spawn(serve(proxy_client, proxy_up, windows()));
+        let (_cr, mut cw) = tokio::io::split(client);
+        let (mut ur, _uw) = tokio::io::split(upstream);
+        let body = br#"{"HostConfig":{"Binds":["C:\\x:/x"]}}"#;
+        let mut req = b"POST /v1.47/containers/create HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        req.extend_from_slice(format!("{:x}\r\n", 10).as_bytes());
+        req.extend_from_slice(&body[..10]);
+        req.extend_from_slice(format!("\r\n{:x}\r\n", body.len() - 10).as_bytes());
+        req.extend_from_slice(&body[10..]);
+        req.extend_from_slice(b"\r\n0\r\n\r\n");
+        cw.write_all(&req).await.unwrap();
+        cw.shutdown().await.unwrap();
+        let mut got = Vec::new();
+        ur.read_to_end(&mut got).await.unwrap();
+        let got = String::from_utf8(got).unwrap();
+        assert!(!got.to_ascii_lowercase().contains("transfer-encoding"), "{got}");
+        assert!(got.contains("Content-Length: 40\r\n\r\n{\"HostConfig\":{\"Binds\":[\"/mnt/c/x:/x\"]}}"), "{got}");
+    }
+
+    #[tokio::test]
+    async fn the_client_connection_closes_when_the_engine_does() {
+        // An attached stream: the engine ends it; the client must see the end
+        // although it never stopped sending (a named pipe can't half-close).
+        let (client, proxy_client) = tokio::io::duplex(64 * 1024);
+        let (proxy_up, upstream) = tokio::io::duplex(64 * 1024);
+        let proxy = tokio::spawn(serve(proxy_client, proxy_up, windows()));
+        let (mut cr, mut cw) = tokio::io::split(client);
+        cw.write_all(b"POST /containers/x/attach?stream=1 HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
+            .await
+            .unwrap();
+        let (mut ur, mut uw) = tokio::io::split(upstream);
+        let mut head = vec![0u8; 10];
+        ur.read_exact(&mut head).await.unwrap();
+        uw.write_all(b"HTTP/1.1 101 UPGRADED\r\n\r\nbye").await.unwrap();
+        uw.shutdown().await.unwrap();
+        let mut back = Vec::new();
+        tokio::time::timeout(std::time::Duration::from_secs(5), cr.read_to_end(&mut back))
+            .await
+            .expect("the client side closed")
+            .unwrap();
+        assert!(back.ends_with(b"bye"));
+        tokio::time::timeout(std::time::Duration::from_secs(5), proxy).await.expect("proxy done").unwrap().unwrap();
+    }
+
+    #[test]
     fn reads_request_heads() {
         let h = Head::parse(
             b"POST /v1.47/containers/create HTTP/1.1\r\nHost: docker\r\nContent-Type: application/json\r\nContent-Length: 12\r\n\r\n",
         )
         .unwrap();
         assert!(h.rewritable() && !h.upgrade && h.length == 12);
+        assert!(Head::parse(b"POST / HTTP/1.1\r\nContent-Length: x\r\n\r\n").is_err());
         let a = Head::parse(
             b"POST /v1.47/containers/x/attach?stream=1 HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n",
         )

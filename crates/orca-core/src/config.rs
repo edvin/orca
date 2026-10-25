@@ -250,6 +250,10 @@ pub struct DockerDesktopMove {
     /// rest and not these again.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub volumes_done: Vec<String>,
+    /// Volumes whose copy started and didn't finish: made again next time.
+    /// Only these are ever removed from Orca's engine by a move.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub volumes_partial: Vec<String>,
 }
 
 /// A joined workspace: where its repo was cloned, and what was applied from

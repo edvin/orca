@@ -613,7 +613,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     nvidia-ctk runtime configure --runtime=docker && \
                     systemctl restart docker
                 "#;
-                run_cmd_streaming("wsl", &["-d", "orca", "-u", "root", "--", "bash", "-c", script], &tx)
+                run_cmd_streaming("wsl", &["-d", "orca", "-u", "root", "--exec", "bash", "-c", script], &tx)
                     .await
                     .map_err(|e| anyhow::anyhow!("NVIDIA Container Toolkit installation failed: {e}"))?;
             }
@@ -643,7 +643,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 let check = {
                     #[cfg(target_os = "windows")]
                     {
-                        run_cmd("wsl", &["-d", "orca", "-u", "root", "--", "docker", "info"]).await
+                        run_cmd("wsl", &["-d", "orca", "-u", "root", "--exec", "docker", "info"]).await
                     }
                     #[cfg(not(target_os = "windows"))]
                     {
@@ -1739,7 +1739,7 @@ async fn check_nvidia_gpu() -> HealthCheck {
                 "orca",
                 "-u",
                 "root",
-                "--",
+                "--exec",
                 "nvidia-smi",
                 "--query-gpu=name",
                 "--format=csv,noheader",
@@ -1755,7 +1755,7 @@ async fn check_nvidia_gpu() -> HealthCheck {
             let gpu = gpu_name.trim().lines().next().unwrap_or("").to_string();
             // Check for NVIDIA Container Toolkit
             let toolkit = if cfg!(target_os = "windows") {
-                run_cmd("wsl", &["-d", "orca", "-u", "root", "--", "nvidia-container-cli", "--version"]).await
+                run_cmd("wsl", &["-d", "orca", "-u", "root", "--exec", "nvidia-container-cli", "--version"]).await
             } else {
                 run_cmd("nvidia-container-cli", &["--version"]).await
             };
@@ -2292,7 +2292,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
         }
         "install_nvidia_toolkit" => {
             #[cfg(target_os = "windows")]
-            let output = run_cmd("wsl", &["-d", "orca", "-u", "root", "--", "bash", "-c",
+            let output = run_cmd("wsl", &["-d", "orca", "-u", "root", "--exec", "bash", "-c",
                 "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null && \
                  curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null && \
                  apt-get update && apt-get install -y nvidia-container-toolkit && \
@@ -2322,7 +2322,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                     "orca",
                     "-u",
                     "root",
-                    "--",
+                    "--exec",
                     "bash",
                     "-c",
                     "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash",
@@ -2753,7 +2753,7 @@ async fn has_nvidia_smi() -> bool {
     *PROBE
         .get_or_init(|| async {
             if cfg!(target_os = "windows") {
-                run_cmd("wsl", &["-d", "orca", "-u", "root", "--", "nvidia-smi", "-L"]).await.is_ok()
+                run_cmd("wsl", &["-d", "orca", "-u", "root", "--exec", "nvidia-smi", "-L"]).await.is_ok()
             } else {
                 run_cmd("nvidia-smi", &["-L"]).await.is_ok()
             }
@@ -2773,7 +2773,7 @@ async fn get_gpu_info() -> Option<GpuInfo> {
                 "orca",
                 "-u",
                 "root",
-                "--",
+                "--exec",
                 "nvidia-smi",
                 "--query-gpu=name,memory.used,memory.total,utilization.gpu",
                 "--format=csv,noheader,nounits",

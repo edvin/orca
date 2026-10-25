@@ -95,8 +95,14 @@ async fn source(from: From) -> Option<Source> {
     let long = 24 * 3600;
     match from {
         From::Desktop => {
+            let stand_in = std::env::var("ORCA_DOCKER_DESKTOP_SOCKET").is_ok_and(|p| !p.is_empty());
             for e in engine::desktop_endpoints() {
-                if e.ping().await.is_some() {
+                if let Some(d) = e.ping().await {
+                    // `docker_engine` is also Docker Engine for Windows
+                    // containers, and Docker Desktop's own in that mode.
+                    if !stand_in && !(engine::is_desktop(&d).await && linux_engine(&d).await) {
+                        continue;
+                    }
                     let docker = e.client(long).ok()?;
                     return Some(Source {
                         endpoint: e,
@@ -124,6 +130,11 @@ async fn source(from: From) -> Option<Source> {
             })
         }
     }
+}
+
+/// Whether an engine runs Linux containers.
+async fn linux_engine(d: &Docker) -> bool {
+    d.info().await.ok().and_then(|i| i.os_type).is_some_and(|o| o == "linux")
 }
 
 /// The user's default WSL distro, where an earlier Orca put Docker.
@@ -185,9 +196,12 @@ async fn orca_engine(state: &AppState) -> Result<Target> {
         let engine::Endpoint::Unix(p) = &endpoint else {
             bail!("Orca's engine isn't running");
         };
-        vm = Some(lima_vm(p).context(
-            "Orca is using another engine (Settings → Engine). Switch to Orca's engine to bring things over.",
-        )?);
+        let v = lima_vm(p)
+            .filter(|v| v == "orca" || v == "docker" || std::env::var("DOCKER_HOST").is_ok())
+            .context(
+                "Orca is using another engine (Settings → Engine). Switch to Orca's engine to bring things over.",
+            )?;
+        vm = Some(v);
     } else if cfg!(windows) && host != orca_backend_common::wsl::address() {
         bail!("Orca's engine isn't running. Set it up on System Health first.");
     }
@@ -284,6 +298,9 @@ async fn local_dir(dir: &str) -> String {
 pub struct PlanImage {
     pub id: String,
     pub tags: Vec<String>,
+    /// Tags Orca's engine doesn't have yet: only these are loaded, so a tag
+    /// already there keeps pointing where it does.
+    pub missing: Vec<String>,
     /// For an image with no tag, pulled pinned by its digest.
     pub digests: Vec<String>,
     pub size: u64,
@@ -413,11 +430,14 @@ pub async fn plan(state: &AppState, src: &Source, from: From) -> Result<Plan> {
     let target = &target_engine.docker;
     let source = &src.docker;
     let version = source.version().await.ok().and_then(|v| v.version);
-    let done: BTreeSet<String> = record(&mut *state.config.lock().await, from)
-        .volumes_done
-        .iter()
-        .cloned()
-        .collect();
+    let (done, partial): (BTreeSet<String>, BTreeSet<String>) = {
+        let mut cfg = state.config.lock().await;
+        let r = record(&mut cfg, from);
+        (
+            r.volumes_done.iter().cloned().collect(),
+            r.volumes_partial.iter().cloned().collect(),
+        )
+    };
 
     // Images, one entry per image with all its tags.
     let in_orca_images = image_names(target).await?;
@@ -433,14 +453,16 @@ pub async fn plan(state: &AppState, src: &Source, from: From) -> Result<Plan> {
         if tags.is_empty() && i.repo_digests.is_empty() {
             continue; // dangling: nothing names it
         }
+        let missing: Vec<String> = tags.iter().filter(|t| !in_orca_images.contains(*t)).cloned().collect();
         let in_orca = if tags.is_empty() {
             i.repo_digests.iter().all(|d| in_orca_images.contains(d))
         } else {
-            tags.iter().all(|t| in_orca_images.contains(t))
+            missing.is_empty()
         };
         images.push(PlanImage {
             id: i.id,
             tags,
+            missing,
             digests: i.repo_digests,
             size: i.size.max(0) as u64,
             in_orca,
@@ -476,10 +498,12 @@ pub async fn plan(state: &AppState, src: &Source, from: From) -> Result<Plan> {
         } else {
             ("copy", None)
         };
-        let in_orca = target_volumes.get(&v.name).map(|t| {
+        // Only a copy this move recorded as started and not finished is
+        // "partial" (made again); anything else already there is left alone.
+        let in_orca = target_volumes.get(&v.name).map(|_| {
             if done.contains(&v.name) {
                 "done"
-            } else if t.labels.contains_key(MOVED_LABEL) {
+            } else if partial.contains(&v.name) {
                 "partial"
             } else {
                 "theirs"
@@ -647,6 +671,11 @@ fn to_stop(
 struct TarTally {
     header: Vec<u8>,
     skip: u64,
+    /// An extended (PAX) header's records being read: they can carry the
+    /// next entry's real size (8 GiB and up), with 0 in its own header.
+    pax: Option<Vec<u8>>,
+    pax_left: u64,
+    next_size: Option<u64>,
     entries: u64,
     bytes: u64,
     ended: bool,
@@ -657,8 +686,18 @@ impl TarTally {
         while !data.is_empty() && !self.ended {
             if self.skip > 0 {
                 let n = self.skip.min(data.len() as u64) as usize;
+                if let Some(pax) = self.pax.as_mut() {
+                    let keep = self.pax_left.min(n as u64) as usize;
+                    pax.extend_from_slice(&data[..keep]);
+                    self.pax_left -= keep as u64;
+                }
                 self.skip -= n as u64;
                 data = &data[n..];
+                if self.skip == 0
+                    && let Some(pax) = self.pax.take()
+                {
+                    self.next_size = pax_size(&pax);
+                }
                 continue;
             }
             let n = (512 - self.header.len()).min(data.len());
@@ -672,10 +711,20 @@ impl TarTally {
                 self.ended = true;
                 return;
             }
-            let size = tar_size(&h[124..136]);
+            let header_size = tar_size(&h[124..136]);
+            let kind = h[156];
+            let size = match kind {
+                b'x' | b'g' | b'L' | b'K' => header_size,
+                _ => self.next_size.take().unwrap_or(header_size),
+            };
             self.skip = size.div_ceil(512) * 512;
-            match h[156] {
-                // Long names and extended headers describe the next entry.
+            match kind {
+                // A PAX header for the next entry: read its records.
+                b'x' if size > 0 && size <= 1 << 20 => {
+                    self.pax = Some(Vec::with_capacity(size as usize));
+                    self.pax_left = size;
+                }
+                // Long names and global headers describe what follows.
                 b'x' | b'g' | b'L' | b'K' => {}
                 b'0' | b'\0' | b'7' => {
                     self.entries += 1;
@@ -685,6 +734,14 @@ impl TarTally {
             }
         }
     }
+}
+
+/// The `size` record of PAX extended header data (`"27 size=10737418240\n"`).
+fn pax_size(data: &[u8]) -> Option<u64> {
+    let text = String::from_utf8_lossy(data);
+    text.lines()
+        .filter_map(|l| l.split_once(' ').map(|(_, kv)| kv))
+        .find_map(|kv| kv.strip_prefix("size=")?.trim().parse().ok())
 }
 
 /// A tar header's size field: octal, or base-256 for large files.
@@ -803,7 +860,7 @@ async fn pull(docker: &Docker, image: &str) -> Result<()> {
 /// Stream an image (all its tags) from one engine into the other.
 async fn copy_image(source: &Docker, target: &Docker, image: &PlanImage) -> Result<&'static str> {
     if !image.tags.is_empty() {
-        let names: Vec<&str> = image.tags.iter().map(String::as_str).collect();
+        let names: Vec<&str> = image.missing.iter().map(String::as_str).collect();
         let failed: Arc<StdMutex<Option<String>>> = Arc::default();
         let f = failed.clone();
         let tar = source
@@ -834,13 +891,20 @@ async fn copy_image(source: &Docker, target: &Docker, image: &PlanImage) -> Resu
         // multi-platform image is missing, say): pull it again if it came
         // from a registry.
         let err = err.unwrap_or_else(|| "it didn't arrive".into());
-        if image.digests.is_empty() {
-            bail!(err);
-        }
-        for name in &image.tags {
-            pull(target, name)
+        for tag in &image.missing {
+            // The very same image, by its digest, not whatever the tag
+            // points at today (a newer database could upgrade its data).
+            let Some(digest) = digest_for(tag, &image.digests) else {
+                bail!("{err}; it has no registry digest to pull it again by");
+            };
+            pull(target, &digest)
                 .await
                 .map_err(|e| anyhow::anyhow!("{err}; pulling it again failed too: {e:#}"))?;
+            let (repo, t) = split_tag(tag);
+            target
+                .tag_image(&digest, Some(bollard::image::TagImageOptions { repo, tag: t }))
+                .await
+                .with_context(|| format!("could not tag {digest} as {tag}"))?;
         }
         return Ok("pulled again");
     }
@@ -848,6 +912,20 @@ async fn copy_image(source: &Docker, target: &Docker, image: &PlanImage) -> Resu
         pull(target, name).await?;
     }
     Ok("pulled again")
+}
+
+/// `repo` and `tag` of `repo:tag` (a registry port isn't a tag).
+fn split_tag(tag: &str) -> (&str, &str) {
+    match tag.rsplit_once(':') {
+        Some((repo, t)) if !t.contains('/') => (repo, t),
+        _ => (tag, "latest"),
+    }
+}
+
+/// The `repo@sha256:…` among `digests` for `tag`'s repository.
+fn digest_for(tag: &str, digests: &[String]) -> Option<String> {
+    let (repo, _) = split_tag(tag);
+    digests.iter().find(|d| d.split_once('@').is_some_and(|(r, _)| r == repo)).cloned()
 }
 
 async fn arrived(target: &Docker, image: &PlanImage) -> bool {
@@ -858,6 +936,18 @@ async fn arrived(target: &Docker, image: &PlanImage) -> bool {
         }
     }
     true
+}
+
+/// A volume's driver options for Orca's engine: Docker Desktop on Windows
+/// sees `C:\` at `/run/desktop/mnt/host/c`, Orca's WSL engine at `/mnt/c`.
+fn target_options(options: &HashMap<String, String>) -> HashMap<String, String> {
+    let mut out = options.clone();
+    if let Some(dev) = out.get_mut("device")
+        && let Some(rest) = dev.strip_prefix("/run/desktop/mnt/host/")
+    {
+        *dev = format!("/mnt/{rest}");
+    }
+    out
 }
 
 /// A volume's archive from a helper container, tallied as it streams.
@@ -880,10 +970,11 @@ async fn copy_volume(
     images: (&str, &str),
 ) -> Result<(u64, u64)> {
     if volume.in_orca == Some("partial") {
+        // Recorded as started by this move and never finished: made again.
         target
             .remove_volume(&volume.name, None)
             .await
-            .context("could not remove the half-copied volume to copy it again")?;
+            .context("could not remove the half-copied volume to copy it again (is it in use?)")?;
     }
     let mut labels = volume.labels.clone();
     labels.insert(MOVED_LABEL.into(), "docker-desktop".into());
@@ -891,7 +982,7 @@ async fn copy_volume(
         .create_volume(CreateVolumeOptions {
             name: volume.name.clone(),
             driver: volume.driver.clone(),
-            driver_opts: volume.options.clone(),
+            driver_opts: target_options(&volume.options),
             labels,
         })
         .await
@@ -1041,7 +1132,30 @@ fn gib(bytes: u64) -> String {
     }
 }
 
+/// Bring things over. A move that fails part way starts the containers it
+/// stopped in the source again.
 async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Result<Outcome> {
+    let mut stopped = Vec::new();
+    let from = req.from;
+    let result = move_things(state, job.clone(), req, &mut stopped).await;
+    if result.is_err()
+        && !stopped.is_empty()
+        && let Some(src) = source(from).await
+    {
+        for name in &stopped {
+            job.log(format!("Starting {name} again in {}", src.name)).await;
+            let _ = src.docker.start_container::<String>(name, None).await;
+        }
+    }
+    result
+}
+
+async fn move_things(
+    state: Arc<AppState>,
+    job: JobHandle,
+    req: MoveRequest,
+    stopped: &mut Vec<String>,
+) -> Result<Outcome> {
     let mut out = Outcome::default();
 
     job.start("check").await;
@@ -1056,6 +1170,26 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
     clear_helpers(target).await;
     let plan = plan(&state, &src, req.from).await?;
     let skip: BTreeSet<String> = req.skip.iter().cloned().collect();
+    let containers = all_containers(source).await?;
+    // Volumes only projects left in the source use stay there with them
+    // (and their containers keep running).
+    let skipped_only = |v: &PlanVolume| {
+        if v.project.as_ref().is_some_and(|p| skip.contains(p)) {
+            return true;
+        }
+        let users: Vec<&bollard::models::ContainerSummary> = containers
+            .iter()
+            .filter(|c| {
+                c.mounts.iter().flatten().any(|m| {
+                    m.typ == Some(bollard::models::MountPointTypeEnum::VOLUME) && m.name.as_deref() == Some(&v.name)
+                })
+            })
+            .collect();
+        !users.is_empty()
+            && users
+                .iter()
+                .all(|c| label(&c.labels, "com.docker.compose.project").is_some_and(|p| skip.contains(p)))
+    };
     let images: Vec<&PlanImage> = if req.images {
         plan.images.iter().filter(|i| !i.in_orca).collect()
     } else {
@@ -1064,7 +1198,7 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
     let vols: Vec<&PlanVolume> = if req.volumes {
         plan.volumes
             .iter()
-            .filter(|v| v.action != "skip" && !matches!(v.in_orca, Some("done" | "theirs")))
+            .filter(|v| v.action != "skip" && !matches!(v.in_orca, Some("done" | "theirs")) && !skipped_only(v))
             .collect()
     } else {
         Vec::new()
@@ -1082,14 +1216,39 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
             .iter()
             .map(|c| format!("Container {c}: not part of a compose project, so not recreated")),
     );
-    let projects: Vec<&PlanProject> = if req.projects {
-        plan.projects
+    // A project comes over only with its data: every named volume it uses
+    // is copied now or in Orca already. Others stay (and keep running) in
+    // the source, rather than starting on new, empty volumes.
+    let will_have: BTreeSet<&str> = plan
+        .volumes
+        .iter()
+        .filter(|v| matches!(v.in_orca, Some("done" | "theirs")) || vols.iter().any(|c| c.name == v.name))
+        .map(|v| v.name.as_str())
+        .collect();
+    let named: BTreeSet<&str> = plan.volumes.iter().map(|v| v.name.as_str()).collect();
+    let mut projects: Vec<&PlanProject> = Vec::new();
+    if req.projects {
+        for p in plan
+            .projects
             .iter()
             .filter(|p| !skip.contains(&p.name) && !p.in_orca && p.problem.is_none())
-            .collect()
-    } else {
-        Vec::new()
-    };
+        {
+            let staying: Vec<&str> = volumes_of(&containers, &plan.volumes, &p.name)
+                .into_iter()
+                .map(String::as_str)
+                .filter(|v| named.contains(v) && !will_have.contains(v))
+                .collect();
+            if staying.is_empty() {
+                projects.push(p);
+            } else {
+                out.left.push(format!(
+                    "Project {}: not recreated, as its volume {} isn't coming over",
+                    p.name,
+                    staying.join(", ")
+                ));
+            }
+        }
+    }
     let needed = images.iter().map(|i| i.size).sum::<u64>().min(plan.bytes_needed)
         + vols.iter().filter(|v| v.action == "copy").filter_map(|v| v.size).sum::<u64>();
     if let Some(free) = plan.bytes_free
@@ -1117,7 +1276,6 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
 
     // Stop what uses the volumes, so they are copied at rest.
     job.start("stop").await;
-    let containers = all_containers(source).await?;
     let moving_projects: Vec<PlanProject> = projects.iter().map(|p| (*p).clone()).collect();
     let copied: Vec<PlanVolume> = vols
         .iter()
@@ -1131,6 +1289,7 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
             .stop_container(name, Some(StopContainerOptions { t: 30 }))
             .await
             .with_context(|| format!("could not stop {name} in {from_name}"))?;
+        stopped.push(name.clone());
     }
     if stop.is_empty() {
         job.skip("stop", "Nothing that moves is running").await;
@@ -1176,7 +1335,6 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
 
     job.start("volumes").await;
     let mut copied_ok = BTreeSet::new();
-    let mut failed_volumes = BTreeSet::new();
     if vols.is_empty() {
         job.skip("volumes", if req.volumes { "None to copy" } else { "Left out" })
             .await;
@@ -1196,6 +1354,19 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
                 v.size.map(|s| format!(" ({})", gib(s))).unwrap_or_default()
             ))
             .await;
+            // Recorded before the volume is made: only a copy recorded as
+            // started (and not finished) is ever made again by a later move.
+            {
+                let mut cfg = state.config.lock().await;
+                let m = record(&mut cfg, req.from);
+                if !m.volumes_partial.contains(&v.name) {
+                    m.volumes_partial.push(v.name.clone());
+                }
+                if let Err(e) = cfg.save() {
+                    out.problems.push(format!("Volume {}: could not record the copy: {e}", v.name));
+                    continue;
+                }
+            }
             match copy_volume(source, target, v, (&helpers.0, &helpers.1)).await {
                 Ok((files, bytes)) => {
                     out.volumes += 1;
@@ -1206,15 +1377,17 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
                     }
                     let mut cfg = state.config.lock().await;
                     let m = record(&mut cfg, req.from);
+                    m.volumes_partial.retain(|n| n != &v.name);
                     if !m.volumes_done.contains(&v.name) {
                         m.volumes_done.push(v.name.clone());
                     }
-                    let _ = cfg.save();
+                    if let Err(e) = cfg.save() {
+                        job.log(format!("  Could not record {} as copied: {e}", v.name)).await;
+                    }
                 }
                 Err(e) => {
                     job.log(format!("  {}: not copied: {e:#}", v.name)).await;
                     out.problems.push(format!("Volume {}: {e:#}", v.name));
-                    failed_volumes.insert(v.name.clone());
                 }
             }
         }
@@ -1253,21 +1426,28 @@ async fn run_move(state: Arc<AppState>, job: JobHandle, req: MoveRequest) -> Res
         job.skip("projects", if req.projects { "None to recreate" } else { "Left out" })
             .await;
     } else {
+        // A project only starts on its own data: one whose named volumes
+        // aren't all in Orca (one failed, or volumes were left out) stays
+        // in the source, or compose would start it on new, empty ones.
+        let named: BTreeSet<&str> = plan.volumes.iter().map(|v| v.name.as_str()).collect();
+        let present: BTreeSet<String> = volumes(target).await?.into_iter().map(|v| v.name).collect();
         for p in &projects {
-            // A database started on half its files could make things worse:
-            // a project whose volumes didn't all arrive stays in Docker Desktop.
-            let missing: Vec<&String> = volumes_of(&containers, &plan.volumes, &p.name)
+            let missing: Vec<&str> = volumes_of(&containers, &plan.volumes, &p.name)
                 .into_iter()
-                .filter(|v| failed_volumes.contains(*v))
+                .map(String::as_str)
+                .filter(|v| named.contains(v) && !present.contains(*v))
                 .collect();
             if !missing.is_empty() {
-                let names: Vec<&str> = missing.iter().map(|v| v.as_str()).collect();
-                job.log(format!("Project {}: not recreated, as {} didn't come over", p.name, names.join(", ")))
-                    .await;
+                job.log(format!(
+                    "Project {}: not recreated, as {} isn't in Orca's engine",
+                    p.name,
+                    missing.join(", ")
+                ))
+                .await;
                 out.problems.push(format!(
                     "Project {}: not recreated, as its volume {} didn't come over",
                     p.name,
-                    names.join(", ")
+                    missing.join(", ")
                 ));
                 continue;
             }
@@ -1446,8 +1626,20 @@ async fn stop_source(from: From) -> Result<()> {
                     .await
                     .map_err(|e| anyhow::anyhow!("{e}"))
             } else if cfg!(windows) {
-                for exe in ["Docker Desktop.exe", "com.docker.backend.exe"] {
-                    let _ = tokio::process::Command::new("taskkill").args(["/IM", exe, "/F"]).output().await;
+                // Docker Desktop's own way out first (it stops its engine
+                // cleanly); only then ask its window to close.
+                let pf = std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into());
+                let cli = Path::new(&pf).join(r"Docker\Docker\resources\bin\docker.exe");
+                let stopped = tokio::process::Command::new(&cli)
+                    .args(["desktop", "stop"])
+                    .output()
+                    .await
+                    .is_ok_and(|o| o.status.success());
+                if !stopped {
+                    let _ = tokio::process::Command::new("taskkill")
+                        .args(["/IM", "Docker Desktop.exe"])
+                        .output()
+                        .await;
                 }
                 Ok(())
             } else {
@@ -1610,8 +1802,18 @@ async fn move_route(
     if MOVING.swap(true, Ordering::SeqCst) {
         return Err(ApiError::bad_request("Already bringing things over from Docker Desktop"));
     }
+    // Released however the move ends (even a panic).
+    struct Moving;
+    impl Drop for Moving {
+        fn drop(&mut self) {
+            MOVING.store(false, Ordering::SeqCst);
+        }
+    }
     let job = JobHandle::create(
-        "docker-desktop",
+        match req.from {
+            From::Desktop => "docker-desktop",
+            From::Earlier => "docker-desktop-earlier",
+        },
         None,
         "move",
         &[
@@ -1629,11 +1831,11 @@ async fn move_route(
     .await;
     let j = job.clone();
     tokio::spawn(async move {
+        let _moving = Moving;
         match run_move(state, j.clone(), req).await {
             Ok(out) => j.succeed(Some(serde_json::to_value(out).unwrap_or_default())).await,
             Err(e) => j.fail(&e).await,
         }
-        MOVING.store(false, Ordering::SeqCst);
     });
     Ok((axum::http::StatusCode::ACCEPTED, Json(job.snapshot().await)).into_response())
 }
@@ -1702,6 +1904,39 @@ mod tests {
         let mut tally = TarTally::default();
         tally.feed(&t[..1500]);
         assert!(!tally.ended);
+    }
+
+    #[test]
+    fn pax_sizes_count_for_the_next_entry() {
+        // dockerd (Go's archive/tar) puts sizes of 8 GiB and up in a PAX
+        // record, with 0 in the entry's own header.
+        let rec = b"13 size=1000\n";
+        let mut t = header("././@PaxHeader", b'x', rec.len() as u64);
+        let mut data = rec.to_vec();
+        data.resize(512, 0);
+        t.extend(data);
+        t.extend(header("orca-move/big", b'0', 0));
+        t.extend(vec![7u8; 1024]);
+        t.extend(vec![0u8; 1024]);
+        let mut tally = TarTally::default();
+        for c in t.chunks(100) {
+            tally.feed(c);
+        }
+        assert_eq!((tally.entries, tally.bytes, tally.ended), (1, 1000, true));
+    }
+
+    #[test]
+    fn images_come_back_by_digest() {
+        let digests = vec!["postgres@sha256:abc".to_string(), "registry.acme.dev:5000/tools/x@sha256:def".to_string()];
+        assert_eq!(digest_for("postgres:16", &digests).as_deref(), Some("postgres@sha256:abc"));
+        assert_eq!(
+            digest_for("registry.acme.dev:5000/tools/x:1", &digests).as_deref(),
+            Some("registry.acme.dev:5000/tools/x@sha256:def")
+        );
+        assert_eq!(digest_for("mysql:8", &digests), None);
+        assert_eq!(split_tag("registry.acme.dev:5000/tools/x"), ("registry.acme.dev:5000/tools/x", "latest"));
+        let opts = HashMap::from([("device".to_string(), "/run/desktop/mnt/host/c/code".to_string())]);
+        assert_eq!(target_options(&opts)["device"], "/mnt/c/code");
     }
 
     #[test]

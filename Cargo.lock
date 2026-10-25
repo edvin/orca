@@ -3386,6 +3386,7 @@ dependencies = [
  "bollard",
  "chrono",
  "dirs",
+ "flate2",
  "futures-util",
  "k8s-openapi",
  "kube",

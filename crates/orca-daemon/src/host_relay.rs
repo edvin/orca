@@ -3,10 +3,15 @@
 //!
 //! Containers reach Windows at `host.docker.internal`, which Orca maps to
 //! Windows' address on WSL's virtual network. A dev server bound to
-//! `127.0.0.1` isn't on that network, so for each port a gateway route sends
+//! `localhost` isn't on that network, so for each port a gateway route sends
 //! to `host.docker.internal`, the daemon listens on that address and passes
-//! connections on to `127.0.0.1:<port>`. A server that already listens on
-//! every interface keeps the port (binding it fails) and needs no relay.
+//! connections on to the server on `127.0.0.1` or `::1` (Node and Vite often
+//! listen on `::1` only).
+//!
+//! Only while it's needed: the relay listens when the server answers on
+//! localhost but not on WSL's address, and stops when the server does. So a
+//! server started later on every interface finds the port free, and one
+//! that already listens there is reached directly.
 
 use std::collections::BTreeSet;
 
@@ -46,38 +51,80 @@ pub async fn run(state: std::sync::Arc<crate::state::AppState>) {
         }
         let Some(ip) = ip else { continue };
         let want = host_ports(&*state.config.lock().await);
-        relays.retain(|port, t| {
-            let keep = want.contains(port) && !t.is_finished();
-            if !keep {
+        let mut keep = BTreeMap::new();
+        for (port, t) in std::mem::take(&mut relays) {
+            // Gone from the routes, or the server stopped: let the port go.
+            if want.contains(&port) && !t.is_finished() && local_server(port).await.is_some() {
+                keep.insert(port, t);
+            } else {
                 t.abort();
             }
-            keep
-        });
+        }
+        relays = keep;
         for port in want {
-            if relays.contains_key(&port) {
+            if relays.contains_key(&port) || local_server(port).await.is_none() {
                 continue;
+            }
+            if answers(&ip, port).await {
+                continue; // listens on every interface: reachable as it is
             }
             match tokio::net::TcpListener::bind((ip.as_str(), port)).await {
                 Ok(listener) => {
                     tracing::info!("Relaying {ip}:{port} to Windows' localhost:{port} for containers");
                     relays.insert(port, tokio::spawn(relay(listener, port)));
                 }
-                // Something listens on every interface already: reachable as it is.
-                Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {}
-                Err(e) => tracing::debug!("Could not relay port {port}: {e}"),
+                Err(e) => tracing::info!("Could not relay port {port} for containers: {e}"),
             }
         }
     }
 }
 
+/// Where a server on this computer's localhost answers for `port`.
+#[cfg(windows)]
+async fn local_server(port: u16) -> Option<std::net::SocketAddr> {
+    for addr in [
+        std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+        std::net::SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port)),
+    ] {
+        if answers_at(addr).await {
+            return Some(addr);
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+async fn answers(ip: &str, port: u16) -> bool {
+    match ip.parse::<std::net::IpAddr>() {
+        Ok(ip) => answers_at(std::net::SocketAddr::new(ip, port)).await,
+        Err(_) => false,
+    }
+}
+
+#[cfg(windows)]
+async fn answers_at(addr: std::net::SocketAddr) -> bool {
+    matches!(
+        tokio::time::timeout(std::time::Duration::from_millis(500), tokio::net::TcpStream::connect(addr)).await,
+        Ok(Ok(_))
+    )
+}
+
 #[cfg(windows)]
 async fn relay(listener: tokio::net::TcpListener, port: u16) {
     loop {
-        let Ok((mut inbound, _)) = listener.accept().await else {
-            continue;
+        let (mut inbound, _) = match listener.accept().await {
+            Ok(c) => c,
+            Err(e) => {
+                // Out of handles, or the WSL adapter went away: don't spin.
+                tracing::debug!("Relay for port {port}: {e}");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
         };
         tokio::spawn(async move {
-            if let Ok(mut out) = tokio::net::TcpStream::connect(("127.0.0.1", port)).await {
+            if let Some(addr) = local_server(port).await
+                && let Ok(mut out) = tokio::net::TcpStream::connect(addr).await
+            {
                 let _ = tokio::io::copy_bidirectional(&mut inbound, &mut out).await;
             }
         });

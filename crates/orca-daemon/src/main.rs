@@ -131,12 +131,24 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(host_relay::run(state.clone()));
         let state = state.clone();
         tokio::spawn(async move {
+            use orca_backend_common::wsl;
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-                if state.rt().await.host.as_deref() == Some(orca_backend_common::wsl::address().as_str()) {
-                    orca_backend_common::wsl::keep_running().await;
-                    orca_backend_common::wsl::share_distros().await;
+                if state.rt().await.host.as_deref() == Some(wsl::address().as_str()) {
+                    wsl::keep_running().await;
+                    wsl::share_distros().await;
+                    // WSL's NAT address changes when WSL restarts.
+                    gateway::set_windows_host_ip(wsl::windows_ip().await);
+                } else if wsl::exists().await {
+                    // Not connected at startup (a cold WSL takes a while):
+                    // keep trying here, with the API already up.
+                    if let Some(docker) = wsl::connect(90).await {
+                        gateway::set_windows_host_ip(wsl::windows_ip().await);
+                        state.swap_runtime(engine::Endpoint::OrcaWsl.runtime(docker)).await;
+                        tracing::info!("Connected to Orca's engine (WSL distro {})", wsl::DISTRO);
+                        continue;
+                    }
                 }
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             }
         });
     }
@@ -270,13 +282,11 @@ async fn connect_runtime(config: &mut orca_core::config::OrcaConfig) -> Arc<orca
     tracing::warn!("No container runtime available");
     tracing::warn!("Daemon will start without runtime — Environment page will guide setup");
 
-    // Create a fallback connection that will error on use
+    // A client that fails on use. Not the platform defaults: those reach
+    // Docker Desktop's socket or pipe, which Orca never uses.
     Arc::new(orca_backend_common::BollardRuntime::new(
-        bollard::Docker::connect_with_local_defaults().unwrap_or_else(|_| {
-            bollard::Docker::connect_with_defaults().unwrap_or_else(|_| {
-                bollard::Docker::connect_with_http_defaults().expect("failed to create fallback Docker client")
-            })
-        }),
+        bollard::Docker::connect_with_http("http://127.0.0.1:9", 5, bollard::API_DEFAULT_VERSION)
+            .expect("a client for an address that never answers"),
     ))
 }
 

@@ -323,7 +323,10 @@ pub async fn connect(
     choice: &mut Option<EngineChoice>,
     log: &mut Vec<String>,
 ) -> Option<(Arc<orca_backend_common::BollardRuntime>, String)> {
-    if let Ok(host) = std::env::var("DOCKER_HOST")
+    // Not on Windows: there `docker` runs in Orca's distro, which never
+    // sees the daemon's DOCKER_HOST, so the two would disagree.
+    if !cfg!(windows)
+        && let Ok(host) = std::env::var("DOCKER_HOST")
         && let Some(e) = Endpoint::parse(&host)
         && let Some(docker) = usable(&e, "DOCKER_HOST", log).await
     {
@@ -336,7 +339,9 @@ pub async fn connect(
 
     #[cfg(target_os = "macos")]
     if choice.is_none() {
-        *choice = Some(decide(log).await);
+        // Undecided stays undecided when nothing answers yet (OrbStack still
+        // starting at login): the next start decides again.
+        *choice = decide(log).await;
     }
     if let Some(EngineChoice::Socket { path, name }) = choice.clone() {
         if cfg!(windows) {
@@ -364,7 +369,9 @@ async fn own_engine(log: &mut Vec<String>) -> Option<(Arc<orca_backend_common::B
     Some((rt, format!("Orca's VM ({})", orca_socket())))
 }
 
-/// Orca's own engine: its `orca` WSL distro.
+/// Orca's own engine: its `orca` WSL distro. Briefly: the daemon must
+/// answer the app within seconds, and a cold WSL can take longer; it keeps
+/// trying in the background (see `main`).
 #[cfg(windows)]
 async fn own_engine(log: &mut Vec<String>) -> Option<(Arc<orca_backend_common::BollardRuntime>, String)> {
     use orca_backend_common::wsl;
@@ -376,10 +383,12 @@ async fn own_engine(log: &mut Vec<String>) -> Option<(Arc<orca_backend_common::B
         return None;
     }
     log.push(format!("Starting Orca's engine (WSL distro {})", wsl::DISTRO));
-    let Some(docker) = wsl::connect(30).await else {
+    let Some(docker) = wsl::connect(6).await else {
         log.push(format!(
-            "Orca's engine isn't answering on {}: repair it on System Health",
-            wsl::address()
+            "Orca's engine isn't answering on {} yet. If it stays that way, repair it on System Health \
+             (another program using port {} also stops it).",
+            wsl::address(),
+            wsl::PORT
         ));
         return None;
     };
@@ -418,10 +427,10 @@ async fn own_engine(log: &mut Vec<String>) -> Option<(Arc<orca_backend_common::B
 /// picked whatever answered first): an existing Orca VM, else the engine that
 /// would have been picked, unless that was Docker Desktop's.
 #[cfg(target_os = "macos")]
-async fn decide(log: &mut Vec<String>) -> EngineChoice {
+async fn decide(log: &mut Vec<String>) -> Option<EngineChoice> {
     if crate::find_lima_vm().await.is_some() {
         log.push("Orca's VM exists: using it".into());
-        return EngineChoice::Orca;
+        return Some(EngineChoice::Orca);
     }
     let mut paths: Vec<String> = context_socket().into_iter().collect();
     paths.extend(known_engines().into_iter().map(|(_, p)| p));
@@ -434,14 +443,14 @@ async fn decide(log: &mut Vec<String>) -> EngineChoice {
         {
             let name = engine_name(&path);
             log.push(format!("Keeping the engine Orca used before: {name} ({path})"));
-            return EngineChoice::Socket {
+            return Some(EngineChoice::Socket {
                 path: path.clone(),
                 name: Some(name),
-            };
+            });
         }
     }
-    log.push("No engine yet: Orca's VM is set up on the Environment page".into());
-    EngineChoice::Orca
+    log.push("No engine answers yet: Orca's VM is set up on System Health".into());
+    None
 }
 
 /// Orca's VM self-heals (IP forwarding, SME mask, static usernet) on a
@@ -672,7 +681,10 @@ async fn status(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
         "connected": connected,
         "socket": host.as_deref().map(|h| h.trim_start_matches("unix://")),
         "name": host.as_deref().map(engine_name),
-        "from_env": std::env::var("DOCKER_HOST").is_ok(),
+        // DOCKER_HOST only counts when the daemon is connected through it.
+        "from_env": !cfg!(windows)
+            && std::env::var("DOCKER_HOST").ok().and_then(|h| Endpoint::parse(&h)).map(|e| e.host())
+                == host.clone(),
         "orca_vm": orca_vm,
         "others": others,
         "platform": if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" },

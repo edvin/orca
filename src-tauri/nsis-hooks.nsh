@@ -27,12 +27,12 @@
   DeleteRegKey HKCU "Software\Classes\orca"
   ; Remove cached/runtime data but keep config (API keys, settings, etc.)
   RMDir /r "$LOCALAPPDATA\orca"
-  ; Stop Orca's engine distro. It and its images and volumes are kept, in
-  ; %LOCALAPPDATA%\orca-engine; remove them with: wsl --unregister orca
+  ; An earlier Orca's Docker TCP override in the default distro (best effort).
+  ; Not when the default distro is Orca's own (it has /etc/orca-generation).
+  nsExec::ExecToLog 'wsl -u root --exec sh -c "[ -f /etc/orca-generation ] || { rm -f /etc/systemd/system/docker.service.d/override.conf; systemctl daemon-reload; }"'
+  ; Then stop Orca's engine distro. It and its images and volumes are kept,
+  ; in %LOCALAPPDATA%\orca-engine; remove them with: wsl --unregister orca
   nsExec::ExecToLog 'wsl --terminate orca'
-  ; An earlier Orca's Docker TCP override in the default distro (best effort)
-  nsExec::ExecToLog 'wsl -u root -- rm -f /etc/systemd/system/docker.service.d/override.conf'
-  nsExec::ExecToLog 'wsl -u root -- systemctl daemon-reload'
   ; Remove from user PATH
   nsExec::ExecToLog 'powershell -NoProfile -Command "$p = [Environment]::GetEnvironmentVariable(\"Path\", \"User\"); $p = ($p -split \";\" | Where-Object { $_ -ne \"$INSTDIR\" }) -join \";\"; [Environment]::SetEnvironmentVariable(\"Path\", $p, \"User\")"'
 !macroend

@@ -2846,7 +2846,12 @@ pub async fn engine_api(
     body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let route = path.split('?').next().unwrap_or(&path);
-    if !(route == "/engine" || route == "/docker-desktop" || route.starts_with("/docker-desktop/")) || path.contains("..") {
+    if !(route == "/engine"
+        || route == "/engine/integration"
+        || route == "/docker-desktop"
+        || route.starts_with("/docker-desktop/"))
+        || path.contains("..")
+    {
         return Err("invalid engine API path".into());
     }
     // Starting Docker Desktop waits for it; a plan sizes every volume.
