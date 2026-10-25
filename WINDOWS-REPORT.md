@@ -112,6 +112,42 @@ How each was tested on this machine:
   tries to start the session on the first command of each boot and prints
   the same line, now because the unit is masked. Unmasked again; left as is.
 
+### PowerShell round
+
+Run from a Claude Code session in PowerShell (`WINDOWS-POWERSHELL.md`), on
+the same machine after it was cleaned up: Docker Desktop uninstalled, the
+`orca-ecc` checkout and test projects gone. The daemon ran from this
+checkout's `target\debug`.
+
+| Commit | Fix |
+|---|---|
+| `a855f8c` | **`docker pull` failed once Docker Desktop was gone**: its `"credsStore": "desktop"` stays in `%USERPROFILE%\.docker\config.json`, and without its `resources\bin` on the PATH docker.exe can't run `docker-credential-desktop`. PowerShell's integration, and the move's switch to context `orca`, now set `credsStore` to `wincred` when the helper it names isn't on the PATH a new PowerShell gets (machine + user PATH from the registry). The file is copied to `config.json.orca-backup` first, and every other key is kept. Docker's Windows CLI zip has only `docker.exe` and `dockerd.exe`, so `docker-credential-wincred` v0.9.9 (pinned) is downloaded into `orca-engine\cli`, checked against its release's `checksums.txt`. The log says logins kept in `desktop` don't come over. |
+
+- **wincred fix**: with Docker Desktop's `config.json` written by hand,
+  `docker pull alpine` failed (`docker-credential-desktop: executable file not found in %PATH%`);
+  the integration rewrote it, and the pull worked. `docker login` to a local
+  `registry:2` with basic auth stored into Credential Manager
+  (`LegacyGeneric:target=127.0.0.1:5999`), with no secret in `config.json`.
+  The move's call wasn't run (no Docker Desktop to move from); it calls
+  the same `wsl::fix_creds_store`.
+- **`wsl --shutdown`**: `orca` was running again 40 s later, `docker ps`
+  answered, `/settings/reconnect` said `connected: true`, and
+  `cmd.exe /c ver` ran in Ubuntu-24.04.
+- **Interactive docker** (by the user, in PowerShell): `run -it`,
+  `exec -it`, and Ctrl+C on `compose logs -f` all work.
+- **Windows Terminal**: no `orca` profile (dropdown and `settings.json`).
+- **Firewall**: the test copy's Block rules were removed (admin PowerShell).
+- **Mirrored networking**: skipped, as decided.
+- **Seen once, not reproduced**: about 10 minutes after the shutdown,
+  Ubuntu-24.04 (listed as Running) failed every `wsl -d` with
+  `Catastrophic failure, Wsl/Service/E_UNEXPECTED`, including the Store
+  launcher that Terminal's "Ubuntu 24.04.1 LTS" profile uses. `orca`
+  kept working. Orca's 30 s `share_script` (`mountpoint`/`mount --bind`)
+  in it failed the same way for 90 s. `wsl --terminate Ubuntu-24.04`
+  fixed it, and it stayed fine afterwards with the share loop running.
+  The cause is unknown.
+- **Cold boot (2)**: next, with the user.
+
 ## What still fails, or wasn't tested
 
 - **Kubernetes (5)**: refused here, as decided, because Ubuntu-24.04 runs
@@ -129,12 +165,10 @@ How each was tested on this machine:
 - **Docker Desktop in Windows-containers mode (6)**: not tested. The test
   install is per-user, and those can't switch ("windows containers have been
   disabled for this installation").
-- **`wsl --shutdown`, cold boot, mirrored networking (2, 4)**: not tested.
-  The session ran inside a WSL distro, and `--shutdown` would have ended it.
+- **Cold boot, mirrored networking (2, 4)**: not tested. `wsl --shutdown`
+  passed in the PowerShell round.
 - **Uninstall (8)**: not run (no installer: `tauri-cli` isn't installed).
   The hook now runs `undo-integration.cmd`, which was tested on its own.
-- **Interactive `docker run -it` / `exec -it`, and Ctrl+C on `logs -f`**:
-  these need a real console.
 - **`redis:2`** didn't come over in the move: it's a layerless 7.94 kB stub in
   the old engine, and Docker Hub no longer serves its digest
   (`failed to resolve reference "docker.io/library/redis@sha256:7568…": not found`).
@@ -226,6 +260,12 @@ Cleaned up after testing (2026-10-25):
   installed: `sudo systemctl enable --now docker.socket docker` brings it
   back. Its `~/.docker/config.json` and `buildx` are left as they were.
 - **The installed Orca 0.65** is stopped. Starting it looks for that Docker.
+- **Since then (PowerShell round):** the branch's daemon runs from
+  `Projects\orca\target\debug`; PowerShell's integration is on again
+  (context `orca`, `orca-engine\cli` with `docker.exe` and
+  `docker-credential-wincred.exe`, `%USERPROFILE%\.docker\config.json` with
+  `credsStore: wincred`); the firewall's Block rules for the test copy are
+  removed.
 
 ## For you to run: what I couldn't from inside WSL
 

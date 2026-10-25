@@ -62,7 +62,7 @@ Tick each, and note what happened where it didn't.
 
 ### 2. Staying up
 - [x] `wsl --terminate orca`: within ~30 s the daemon brings it back and Docker answers again (keepalive in `crates/orca-daemon/src/main.rs`). *32 s; with the gateway running, about a second.*
-- [ ] `wsl --shutdown`: the same, and **Diagnose** on System Health reconnects. *Not tested: the session testing this ran inside a WSL distro, which `--shutdown` would have ended. Diagnose (`/settings/reconnect`) itself works.*
+- [x] `wsl --shutdown`: the same, and **Diagnose** on System Health reconnects. *From PowerShell: 40 s later `orca` was running again, `docker ps` answered, `/settings/reconnect` said `connected: true`, and `cmd.exe /c ver` still ran in Ubuntu-24.04 (interop survived).*
 - [x] Quitting Orca and starting it again connects without a setup step.
 - [ ] Cold start (after `wsl --shutdown`, or a reboot): the app opens at once (the daemon answers within seconds) and connects to the engine in the background within about a minute and a half. *Only with `orca` stopped and the WSL VM running: the daemon listened and was connected about 4 s after it started.*
 
@@ -79,7 +79,7 @@ Tick each, and note what happened where it didn't.
 - [x] A route to a dev server running on Windows itself that listens on **localhost only** works, both IPv4 (`127.0.0.1`) and IPv6-only (`npx vite` often binds `::1` only, port 5173): the daemon log says `Relaying <ip>:5173 to Windows' localhost:5173`. Windows may ask to allow `orca-daemon.exe` on the network once: allow it. **If you click Cancel, note what happens**: the relay can't tell, containers just can't connect. *Firewall allow rules for the dev build's `orca-daemon.exe` exist, so a prompt was answered. Blocked (a copy of the daemon no rule allows, whose prompt was left unanswered, so Windows added Block rules as Cancel does): containers get a 502, and System Health now says "Windows Firewall blocks containers from reaching dev servers on this computer (port …)" with the steps, until it works again.*
 - [x] Stop the dev server: within ~5 s the relay lets the port go (log), so a server started next on `0.0.0.0` gets the port.
 - [x] A server listening on all interfaces: no relay (it's reachable directly).
-- [ ] With `.wslconfig` `networkingMode=mirrored` (then `wsl --shutdown`): `wsl -d orca -- wslinfo --networking-mode` says `mirrored`; there's no relay and the alias is `host-gateway`. Note what works. *Not tested: needs `wsl --shutdown` (see 2).*
+- [ ] With `.wslconfig` `networkingMode=mirrored` (then `wsl --shutdown`): `wsl -d orca -- wslinfo --networking-mode` says `mirrored`; there's no relay and the alias is `host-gateway`. Note what works. *Skipped: Orca supports mirrored mode only in part, and says so.*
 
 ### 4b. `docker` from PowerShell and from a distro
 **Settings → General → Engine:**
@@ -87,11 +87,13 @@ Tick each, and note what happened where it didn't.
 - [x] In a new PowerShell: `docker context ls` shows `orca *` (`npipe:////./pipe/orca_docker`), and:
   - `docker run --rm alpine echo hi` prints `hi` **and returns**. *Printed nothing at first (see the report).*
   - `echo hi | docker run --rm -i alpine cat` prints `hi` and returns (stdin's end reaches the container: the pipe is in message mode).
-  - `docker run -it --rm alpine sh` gives an interactive shell; `exit` returns. Same for `docker exec -it <container> sh`. *Not tested: needs a real console.*
+  - `docker run -it --rm alpine sh` gives an interactive shell; `exit` returns. Same for `docker exec -it <container> sh`. *Both work, run by hand in a PowerShell window.*
   - `docker run --rm -v ${PWD}:/w alpine ls /w` lists the current folder (path rewritten by the proxy). *Also `-v ${PWD}\src:/s` and `--mount`; a 30 MB `docker cp` both ways is intact.*
-  - `docker compose up` in a project with `./src:/src` works; `docker compose logs -f` follows and Ctrl+C returns. *Ctrl+C not tested.*
+  - `docker compose up` in a project with `./src:/src` works; `docker compose logs -f` follows and Ctrl+C returns. *Ctrl+C returns at once (by hand in PowerShell).*
   - `docker build .` (BuildKit) works. *Failed twice: no buildx (the legacy builder ran), then BuildKit's streams ended through the pipe. Both fixed.*
   - With Orca's engine stopped (`wsl --terminate orca`, quickly): `docker ps` says "Orca's engine isn't running…". *`orca` comes back within a second, so tested with dockerd stopped in it.*
+- [x] *(Found here.)* With Docker Desktop gone, `docker pull` and `docker login` work: Docker Desktop leaves `"credsStore": "desktop"` in `%USERPROFILE%\.docker\config.json`, and without its `resources\bin` on the PATH every pull failed (`docker-credential-desktop: executable file not found`). *Fixed: the integration (and the move's switch) sets it to `wincred`, keeping `config.json.orca-backup`, and downloads `docker-credential-wincred.exe` into `orca-engine\cli` (the CLI zip has none). Tested: pull failed, then worked; a login to a local registry went into Credential Manager. Logins kept in `desktop` don't come over, and the log says so.*
+- [x] Windows Terminal's new-tab dropdown has no `orca` profile. *None in the dropdown or in Terminal's `settings.json`, and WSL's fragment folder is empty.*
 - [x] Pick your Ubuntu distro, **Apply**: it installs `docker-ce-cli` and the compose plugin there if needed (replacing Docker Desktop's dangling `docker` link), and adds context `orca-wsl`. *Was `orca`, which replaced PowerShell's (see the report).*
 - [x] In Ubuntu: `docker context ls` shows `orca-wsl *`; `cd ~/code/app && docker compose up -d` works with bind mounts; `wsl -d orca -- ls /home` shows your Ubuntu home.
 - [x] Orca's Containers page shows those containers, and stopping the project from Orca works (its folder `/home/<you>/app` is the same path in Orca's distro).
