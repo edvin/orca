@@ -771,16 +771,35 @@ export default function GatewayPage(props: GatewayPageProps) {
               </button>
             }
           >
-            <button class="btn" onClick={handleStop} style={{ color: "#f85149", "border-color": "#f85149" }}>
-              Stop gateway
+            <button class="btn btn-iconed" onClick={handleStop} title="Stop the gateway: its addresses stop answering until you start it again">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+              Stop
             </button>
           </Show>
-          <button class="btn" onClick={refresh}>Refresh</button>
+          <button class="btn btn-icon gw-refresh" onClick={refresh} data-tip="Refresh" aria-label="Refresh">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v5h-5" /></svg>
+          </button>
         </div>
       </div>
 
+      {/* The gateway at a glance, on every tab. */}
+      <Show when={status()?.running ? status() : undefined}>
+        {(s) => (
+          <div class="gw-glance">
+            <span class="ws-chip ok" title="The gateway's container runs">● Running</span>
+            <button class="ws-chip gw-chip-link" onClick={() => openUrl(landingUrl())} title="Every routed name is under this domain. Click to open the landing page.">*.{s().domain}</button>
+            <span class="ws-chip" title={s().tls_mode === "orca_ca" ? "Orca's own certificate authority signs the names" : "A certificate you or your workspace provided"}>
+              {s().tls_mode === "orca_ca" ? "Orca CA" : "Team certificate"}
+              <Show when={certExpiry(s().cert_expires)}>{(e) => <> · <span class={`cert-expiry ${e().level}`}>{e().text}</span></>}</Show>
+            </span>
+            <span class="ws-chip" title="HTTP and HTTPS ports on this computer">:{s().http_port} · :{s().https_port}</span>
+            <span class="ws-chip" title={s().container_id ? `Container ${s().container_id?.substring(0, 12)}` : undefined}>{s().routes_active} routes</span>
+          </div>
+        )}
+      </Show>
+
       {/* Tab bar */}
-      <div class="tab-bar" style={{ "margin-bottom": "24px" }}>
+      <div class="tab-bar" style={{ "margin-bottom": "16px" }}>
         <button class={`tab-item ${activeTab() === "routes" ? "active" : ""}`} onClick={() => setActiveTab("routes")}>Routes</button>
         <button class={`tab-item ${activeTab() === "requests" ? "active" : ""}`} onClick={() => setActiveTab("requests")}>Requests</button>
         <button class={`tab-item ${activeTab() === "landing" ? "active" : ""}`} onClick={() => setActiveTab("landing")}>Landing page</button>
@@ -853,70 +872,6 @@ export default function GatewayPage(props: GatewayPageProps) {
         <Show when={!statusLoaded() && status() === null}>
           <SkeletonCard height="100px" />
           <div style={{ height: "16px" }} />
-        </Show>
-
-        {/* Status Card (when running) */}
-        <Show when={status()?.running ? status() : undefined}>
-          {(s) => (
-            <div class="card" style={{ "margin-bottom": "20px" }}>
-              <div style={{ display: "grid", "grid-template-columns": "repeat(4, 1fr)", gap: "16px 24px", "font-size": "13px" }}>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">Status</span>
-                  <span class="card-value" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
-                    <span style={{
-                      display: "inline-block",
-                      width: "8px",
-                      height: "8px",
-                      "border-radius": "50%",
-                      background: "#3fb950",
-                    }} />
-                    Running
-                  </span>
-                </div>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">Domain</span>
-                  <span class="card-value">*.{s().domain}</span>
-                </div>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">TLS</span>
-                  <span class="card-value">{s().tls_mode === "orca_ca" ? "Orca CA" : "Custom"}</span>
-                  <Show when={certExpiry(s().cert_expires)}>
-                    {(e) => <span class={`cert-expiry ${e().level}`} title="When the certificate stops being valid">{e().text}</span>}
-                  </Show>
-                </div>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">Routes</span>
-                  <span class="card-value">{s().routes_active} active</span>
-                </div>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">HTTP port</span>
-                  <span class="card-value mono">:{s().http_port}</span>
-                </div>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">HTTPS port</span>
-                  <span class="card-value mono">:{s().https_port}</span>
-                </div>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                  <span class="card-label">Landing page</span>
-                  <span class="card-value">
-                    <button
-                      class="btn-link"
-                      style={{ color: "#58a6ff", background: "none", border: "none", cursor: "pointer", "font-size": "13px", padding: "0" }}
-                      onClick={() => openUrl(landingUrl())}
-                    >
-                      {landingUrl()}
-                    </button>
-                  </span>
-                </div>
-                <Show when={s().container_id}>
-                  <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                    <span class="card-label">Container ID</span>
-                    <span class="card-value mono" style={{ "font-size": "11px" }}>{s().container_id?.substring(0, 12)}</span>
-                  </div>
-                </Show>
-              </div>
-            </div>
-          )}
         </Show>
 
         {/* Routes Table or Onboarding */}

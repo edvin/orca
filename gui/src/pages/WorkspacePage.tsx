@@ -160,7 +160,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
             <Show when={!ws()?.error}>
               <Show when={ws()?.path}>{(p) => <FolderActions path={p()} compact />}</Show>
               <button class="btn btn-iconed" onClick={() => void runCheck()} disabled={checking()}
-                title="Ports, domain, certificates, logins and access to every repository">
+                title="Checks that this computer is ready for the workspace: ports, domain, certificate, registry logins and access to every repository. It only looks.">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6Z" /><path d="m9 12 2 2 4-4" /></svg>
                 {checking() ? "Checking…" : "Check this machine"}
               </button>
@@ -226,7 +226,19 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
 
               <Show when={jobs()[""]}>{(j) => <div class="ws-job"><JobSteps steps={j().steps} /></div>}</Show>
 
-              <Show when={checks()}>
+              <Show when={checking()}>
+                <div class="ws-check">
+                  <div class="ws-check-head">
+                    <b>Checking this machine…</b>
+                  </div>
+                  <div class="ws-muted ws-check-what">
+                    Whether the gateway can use ports 80 and 443, {w().domain ? <>*.{w().domain} </> : "the domain "}reaches this computer,
+                    the certificate is trusted, you're logged in to the image registries, and you can reach each project's git repository.
+                    It only looks: nothing is changed.
+                  </div>
+                </div>
+              </Show>
+              <Show when={!checking() && checks()}>
                 {(list) => (
                   <div class="ws-check">
                     <div class="ws-check-head">
@@ -342,7 +354,11 @@ function ProjectCard(props: {
       <div class="ws-card-head">
         <AppIcon src={iconSrc(p().icon)} name={p().key} size={26} />
         <Show when={canOpen()} fallback={<b>{p().key}</b>}>
-          <button class="ws-card-name" onClick={open} title={p().stack ? "Open its stack: services, logs, settings" : "See what's in its folder: services, profiles, orca.yaml"}>{p().key}</button>
+          <span class="ws-card-name">
+            <button class="stack-link" onClick={open} title={p().stack ? "Open its stack: services, logs, compose file and orca.yaml" : "See what's in its folder: services, profiles, orca.yaml"}>
+              {p().key}<span class="stack-link-chevron">›</span>
+            </button>
+          </span>
         </Show>
         <Show when={p().group}>{(g) => <span class="ws-card-group" title="Its group in the workspace file">{g()}</span>}</Show>
         <span class={`app-dot ${p().running ? "running" : ""}`} />
@@ -389,9 +405,6 @@ function ProjectCard(props: {
           <button class="btn btn-sm btn-primary" disabled={busy()} onClick={() => props.onSetup(false)}>
             {busy() ? "Working…" : p().cloned ? "Start" : "Set up"}
           </button>
-        </Show>
-        <Show when={canOpen()}>
-          <button class="btn btn-sm" onClick={open}>{p().stack ? "Open stack" : "Details"}</button>
         </Show>
         <Show when={p().cloned}><FolderActions path={p().dir} compact /></Show>
         <Show when={p().cloned && p().setup && !busy()}>
