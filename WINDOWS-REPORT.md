@@ -101,9 +101,10 @@ How each was tested on this machine:
 - **The gateway can't start while an earlier Orca's Docker runs** (its
   `orca-caddy` holds 80/443). It now says so, and works once the move's
   "Stop … when done" ran.
-- Templates' port check (`check_ports` in `src-tauri/src/commands.rs`) still
-  binds on Windows only. A template whose port another distro holds now
-  fails at start, with the WSL line in the error, rather than before.
+- The App Catalog's port check (`check_ports`) now also asks the daemon
+  (`GET /ports/held-in-wsl`), and names ports another distro holds before
+  deploying (`636fc24`). The endpoint was tested with a listener in
+  Ubuntu-24.04; the Catalog dialog itself wasn't clicked through.
 - **Docker Desktop (6)**: not installed here, so not tested.
 - **`wsl --shutdown`, cold boot, mirrored networking (2, 4)**: not tested.
   The session ran inside a WSL distro, and `--shutdown` would have ended it.
