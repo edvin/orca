@@ -10,7 +10,6 @@ name = "orca-daemon"
 path = "src/main.rs"
 
 [dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
 orca-core.workspace = true
 orca-backend-common.workspace = true
 orca-backend-native.workspace = true
@@ -38,6 +37,7 @@ dirs.workspace = true
 base64.workspace = true
 rcgen = { version = "0.13", features = ["x509-parser"] }
 x509-parser = "0.16"
+sha2 = "0.10"
 time = "0.3"
 serde_yaml = "0.9"
 tar = "0.4"
@@ -51,5 +51,10 @@ rand = { workspace = true }
 rustls = { version = "0.23", features = ["ring"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
 rustls-pemfile = "2"
+
+# Vendored so cross builds (aarch64 Linux) need no system OpenSSL for
+# native-tls. Windows uses schannel, so it needs neither OpenSSL nor Perl.
+[target.'cfg(not(windows))'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]

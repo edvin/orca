@@ -9035,28 +9035,17 @@ async fn ca_certificate() -> Result<impl IntoResponse, ApiError> {
 async fn ca_info() -> Result<impl IntoResponse, ApiError> {
     let (cert_pem, _) = get_or_create_ca().await?;
 
-    let x509 = openssl::x509::X509::from_pem(cert_pem.as_bytes())
+    let (_, pem) = x509_parser::pem::parse_x509_pem(cert_pem.as_bytes())
+        .map_err(|e| anyhow::anyhow!("Failed to parse CA certificate: {e}"))?;
+    let x509 = pem
+        .parse_x509()
         .map_err(|e| anyhow::anyhow!("Failed to parse CA certificate: {e}"))?;
 
-    let subject = x509
-        .subject_name()
-        .entries()
-        .map(|e| {
-            format!(
-                "{}={}",
-                e.object().nid().short_name().unwrap_or("?"),
-                e.data().as_utf8().map(|s| s.to_string()).unwrap_or_default()
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
+    let subject = x509.subject().to_string();
+    let expires = x509.validity().not_after.to_string();
 
-    let expires = x509.not_after().to_string();
-
-    let fingerprint = x509
-        .digest(openssl::hash::MessageDigest::sha256())
-        .map_err(|e| anyhow::anyhow!("Failed to compute fingerprint: {e}"))?;
-    let fingerprint_hex = fingerprint
+    use sha2::Digest;
+    let fingerprint_hex = sha2::Sha256::digest(&pem.contents)
         .iter()
         .map(|b| format!("{b:02X}"))
         .collect::<Vec<_>>()
