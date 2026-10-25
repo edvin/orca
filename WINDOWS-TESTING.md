@@ -91,7 +91,7 @@ Tick each, and note what happened where it didn't.
   - `docker build .` (BuildKit) works.
   - With Orca's engine stopped (`wsl --terminate orca`, quickly): `docker ps` says "Orca's engine isn't running…".
 - [ ] Pick your Ubuntu distro, **Apply**: it installs `docker-ce-cli` and the compose plugin there if needed (replacing Docker Desktop's dangling `docker` link), and adds context `orca`.
-- [ ] In Ubuntu: `docker context ls` shows `orca *`; `cd ~/code/app && docker compose up -d` works with bind mounts; `wsl -d orca -- ls /home` shows your Ubuntu home.
+- [ ] In Ubuntu: `docker context ls` shows `orca-wsl *`; `cd ~/code/app && docker compose up -d` works with bind mounts; `wsl -d orca -- ls /home` shows your Ubuntu home.
 - [ ] Orca's Containers page shows those containers, and stopping the project from Orca works (its folder `/home/<you>/app` is the same path in Orca's distro).
 - [ ] Switching back to **None** sets Ubuntu's context back to `default`.
 

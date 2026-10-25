@@ -624,21 +624,32 @@ apt-get update -q
 apt-get install -y -q docker-ce-cli docker-compose-plugin docker-buildx-plugin
 "#;
 
-/// Run as a distro's own user: a `docker` context `orca` for Orca's engine,
-/// with the client certificate in `certs` (a path in that distro), in use.
+/// The distro's `docker` context for Orca's engine. Not `orca`, the one
+/// PowerShell's goes by: after Docker Desktop's WSL integration a distro's
+/// `~/.docker/contexts` is a link to Windows' own, so a context `orca` made
+/// in the distro would replace PowerShell's (which goes through the
+/// path-rewriting pipe) and removing it would remove PowerShell's.
+pub const DISTRO_CONTEXT: &str = "orca-wsl";
+
+/// Run as a distro's own user: a `docker` context [`DISTRO_CONTEXT`] for
+/// Orca's engine, with the client certificate in `certs` (a path in that
+/// distro), in use.
 pub fn distro_context_script(certs: &str) -> String {
     format!(
-        "docker context rm -f orca >/dev/null 2>&1 || true\n\
-         docker context create orca --description \"Orca's engine\" \
+        "docker context rm -f {DISTRO_CONTEXT} >/dev/null 2>&1 || true\n\
+         docker context create {DISTRO_CONTEXT} --description \"Orca's engine\" \
          --docker \"host={host},ca={certs}/ca.pem,cert={certs}/cert.pem,key={certs}/key.pem\" >/dev/null\n\
-         docker context use orca >/dev/null\n",
+         docker context use {DISTRO_CONTEXT} >/dev/null\n",
         host = address()
     )
 }
 
 /// Run as a distro's own user to stop using Orca's engine.
-pub const DISTRO_CONTEXT_OFF: &str =
-    "docker context use default >/dev/null 2>&1; docker context rm -f orca >/dev/null 2>&1; true";
+pub fn distro_context_off() -> String {
+    format!(
+        "docker context use default >/dev/null 2>&1; docker context rm -f {DISTRO_CONTEXT} >/dev/null 2>&1; true"
+    )
+}
 
 /// Run in Orca's distro: the integrated distro's `/home` at `/home`, once
 /// that distro is shared (see [`share_script`]).
@@ -1062,7 +1073,7 @@ mod win {
     }
 
     /// Let `distro`'s `docker` use Orca's engine: a Docker CLI if it has
-    /// none, and an `orca` context in use. Its `/home` shows up at `/home`
+    /// none, and an `orca-wsl` context in use. Its `/home` shows up at `/home`
     /// in Orca's distro, so bind mounts from it just work.
     pub async fn integrate(distro: &str, say: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
         anyhow::ensure!(valid_distro_name(distro), "not a distro name: {distro}");
@@ -1084,14 +1095,14 @@ mod win {
         set_integrated(Some(distro.to_string()));
         sh(distro, &share_script(distro), None).await.ok();
         bind_home().await;
-        say(format!("    docker in {distro} now uses Orca's engine (context orca)"));
+        say(format!("    docker in {distro} now uses Orca's engine (context {DISTRO_CONTEXT})"));
         Ok(())
     }
 
     /// `distro`'s `docker` back to its own default.
     pub async fn unintegrate(distro: &str) -> Result<()> {
         anyhow::ensure!(valid_distro_name(distro), "not a distro name: {distro}");
-        let _ = sh_for(distro, Some(""), DISTRO_CONTEXT_OFF, None, QUICK).await;
+        let _ = sh_for(distro, Some(""), &distro_context_off(), None, QUICK).await;
         set_integrated(None);
         sh(DISTRO, HOME_UNBIND, None).await.map(|_| ())
     }
@@ -1460,6 +1471,8 @@ mod tests {
         );
         set_integrated(None);
         assert!(distro_context_script("/mnt/c/certs").contains("host=tcp://127.0.0.1:2376,ca=/mnt/c/certs/ca.pem"));
+        assert!(distro_context_script("/c").contains("docker context use orca-wsl"));
+        assert!(!distro_context_off().contains("rm -f orca "));
         assert!(home_bind_script("Ubuntu").contains("mount --rbind '/mnt/wsl/orca/distros/Ubuntu/home' /home"));
     }
 

@@ -88,7 +88,7 @@ On Windows, Docker runs in a WSL2 distro named `orca`, which Orca makes and look
 In **Settings** > **General** > **Engine**, let `docker` use Orca's engine:
 
 - **PowerShell and Command Prompt.** Orca uses the `docker.exe` you have, or downloads Docker's own CLI and compose plugin, and adds a `docker context` named `orca`. It reaches the engine through Orca's named pipe, which rewrites Windows paths in bind mounts (`-v C:\code\app:/app`) to the engine's (`/mnt/c/code/app`), as Docker Desktop does.
-- **One WSL distro.** Orca installs Docker's CLI there if it has none (Debian and Ubuntu), and adds a `docker` context named `orca`. That distro's `/home` is at the same path for the engine, so `docker compose up` in `~/code/app` and its bind mounts work as they did with Docker Desktop. Paths outside `/home` in that distro aren't shared.
+- **One WSL distro.** Orca installs Docker's CLI there if it has none (Debian and Ubuntu), and adds a `docker` context named `orca-wsl` (not `orca`: after Docker Desktop's WSL integration a distro shares its contexts with Windows). That distro's `/home` is at the same path for the engine, so `docker compose up` in `~/code/app` and its bind mounts work as they did with Docker Desktop. Paths outside `/home` in that distro aren't shared.
 
 **Rebuild engine** on System Health deletes the distro and makes it again from Ubuntu's newest image. Containers, images and volumes in it are lost.
 
