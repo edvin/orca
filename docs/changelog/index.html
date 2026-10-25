@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvnp7h7k">
+<link rel="stylesheet" href="/assets/site.css?v=mvnqh0qn">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvnp7h7k" defer></script>
+<script src="/assets/site.js?v=mvnqh0qn" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,47 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.64.1">
+<section class="container releases"><article class="release" id="v0.65.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.65.0">v0.65.0</a><time datetime="2026-10-25T11:16:11Z">October 25, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="percona-server-as-its-own-engine"><a class="anchor" href="#percona-server-as-its-own-engine" aria-hidden="true" tabindex="-1">#</a>Percona Server, as its own engine</h2>
+<p><code>engine: percona</code> joins <code>mysql</code>, <code>mariadb</code> and <code>postgres</code> in <code>requires:</code>. A project gets exactly the engine it names, so a team that runs Percona in production can ask for it, and one that wants MySQL proper gets MySQL:</p>
+<div class="code"><button class="copy" type="button" aria-label="Copy code"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><pre class="shiki shiki-themes github-light-default github-dark-default" style="--shiki-light:#1f2328;--shiki-dark:#e6edf3;--shiki-light-bg:#ffffff;--shiki-dark-bg:#0d1117" tabindex="0"><code><span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">requires</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">  database</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">:</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    engine</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">percona</span></span>
+<span class="line"><span style="--shiki-light:#116329;--shiki-dark:#7EE787">    version</span><span style="--shiki-light:#1F2328;--shiki-dark:#E6EDF3">: </span><span style="--shiki-light:#0A3069;--shiki-dark:#A5D6FF">"8.0"</span></span></code></pre></div><ul>
+<li><strong>Workspace servers:</strong> a workspace&#39;s shared Percona server is <code>engine: percona</code> too.</li>
+<li><strong>Run by Orca:</strong> with no Percona server around, Orca runs Percona 8.4 or 8.0 itself, from <code>percona/percona-server</code>.</li>
+<li><strong>Recognised by image:</strong> Percona images are recognised as Percona everywhere, also from your own registry or proxy.</li>
+<li><strong>Imports:</strong> from MariaDB, the copy is translated for Percona as for MySQL.</li>
+</ul>
+<h2 id="stopped-apps-keep-their-place"><a class="anchor" href="#stopped-apps-keep-their-place" aria-hidden="true" tabindex="-1">#</a>Stopped apps keep their place</h2>
+<p>A project&#39;s routes, from its <code>orca.yaml</code> or its container labels, now stay while its containers exist, running or stopped. They used to go when the container stopped.</p>
+<ul>
+<li>On the start page, a stopped app&#39;s card stays, greyed out.</li>
+<li>Its address shows Orca&#39;s page saying it isn&#39;t running, with <strong>Start in Orca</strong>, instead of a browser connection error.</li>
+</ul>
+<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
+<ul>
+<li><strong>Start page:</strong> projects in the same group share one section on every environment tab, instead of one section each.</li>
+<li><strong>Windows:</strong><ul>
+<li>A database&#39;s seed command runs with <code>cmd</code>, as workspace setup commands do.</li>
+<li>Orca no longer garbles the first entry of your <code>PATH</code> when it runs <code>docker</code> and compose.</li>
+</ul>
+</li>
+<li><strong>orca-desktop.com:</strong><ul>
+<li>Searching the docs puts the page about what you typed first: &quot;workspaces&quot;, &quot;stack&quot;, &quot;databases&quot;.</li>
+<li>The homepage has a section on shared databases, and every screenshot shows the current app.</li>
+</ul>
+</li>
+<li><strong>App Catalog:</strong> pgAdmin&#39;s notes cover Docker on Linux, and ClickHouse&#39;s mention its CPU requirement.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.65.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.64.1">
   <div class="release-meta"><a class="release-tag" href="#v0.64.1">v0.64.1</a><time datetime="2026-10-25T08:36:00Z">October 25, 2026</time></div>
   <div class="release-body prose">
     
@@ -572,38 +612,6 @@
 </ul>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.52.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.52.0">
-  <div class="release-meta"><a class="release-tag" href="#v0.52.0">v0.52.0</a><time datetime="2026-10-22T23:17:38Z">October 23, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="your-start-page-search-on-the-landing-page"><a class="anchor" href="#your-start-page-search-on-the-landing-page" aria-hidden="true" tabindex="-1">#</a>Your start page: search on the landing page</h2>
-<p>The gateway&#39;s landing page at <code>https://localhost</code> now opens with the cursor in a search box. Set it as your browser&#39;s home page, and every new start puts your services one keystroke away.</p>
-<ul>
-<li><p><strong>Find any service as you type.</strong> Search by name, hostname, description, project, container or status: <code>mail</code>, <code>admin</code> and even <code>unhealthy</code> all work. The matching text is highlighted, and <strong>Enter</strong> opens the best match.</p>
-</li>
-<li><p><strong>Search the web from the same box.</strong> Choose Google, DuckDuckGo, Bing, Brave Search, Kagi, Ecosia or Startpage on the Gateway&#39;s <strong>Landing page</strong> tab. When no service matches, Enter searches there; <strong>Shift+Enter</strong> always does.</p>
-</li>
-<li><p><strong>Or your own search.</strong> <strong>Custom URL…</strong> takes any search address with <code>{query}</code> in it: your company wiki, Jira, or GitHub code search (<code>https://github.com/search?type=code&amp;q={query}</code>).</p>
-</li>
-<li><p><strong>Go straight to a site.</strong> Type something like <code>github.com/acme/shop</code> and Enter opens it.</p>
-</li>
-<li><p><strong>All from the keyboard.</strong></p>
-<ul>
-<li><strong>↑ ↓</strong> choose between matches.</li>
-<li><strong>Ctrl/⌘+Enter</strong> opens in a new tab.</li>
-<li><strong>/</strong> or <strong>Ctrl/⌘+K</strong> jumps to the box from anywhere on the page.</li>
-<li><strong>Esc</strong> clears it.</li>
-</ul>
-<p>A hint under the box tells you what Enter will do before you press it.</p>
-</li>
-</ul>
-<p>The search box is on by default and only finds services until you pick a web search. Switch it off on the <strong>Landing page</strong> tab if you don&#39;t want it. The tab also shows the address to use as your browser&#39;s home page.</p>
-<p>Thanks to Yannick for the idea!</p>
-<p><strong>Docs:</strong> <a href="https://orca-desktop.com/docs/gateway/#search-and-using-it-as-your-start-page">Search, and using it as your start page</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.52.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
