@@ -735,6 +735,8 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                             let link = format!("{plugins_dir}/docker-compose");
                             #[cfg(unix)]
                             let _ = std::os::unix::fs::symlink(&bin, &link);
+                            #[cfg(not(unix))]
+                            let _ = (bin, link);
                             send("    Docker Compose plugin linked.\n".into()).await;
                         }
                     }
@@ -749,6 +751,8 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                             let link = format!("{plugins_dir}/docker-buildx");
                             #[cfg(unix)]
                             let _ = std::os::unix::fs::symlink(&bin, &link);
+                            #[cfg(not(unix))]
+                            let _ = (bin, link);
                             send("    Docker Buildx plugin linked.\n".into()).await;
                         }
                     }
@@ -2398,6 +2402,8 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                             let _ = std::fs::remove_file(&link);
                             #[cfg(unix)]
                             let _ = std::os::unix::fs::symlink(&bin, &link);
+                            #[cfg(not(unix))]
+                            let _ = (bin, link);
                         }
                     }
                     // Link docker-buildx as CLI plugin
@@ -2411,6 +2417,8 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                             let _ = std::fs::remove_file(&link);
                             #[cfg(unix)]
                             let _ = std::os::unix::fs::symlink(&bin, &link);
+                            #[cfg(not(unix))]
+                            let _ = (bin, link);
                         }
                     }
                 }

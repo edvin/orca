@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -58,6 +59,7 @@ struct Args {
     bind: String,
 }
 
+#[cfg(unix)]
 fn default_socket_path() -> PathBuf {
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
         .map(PathBuf::from)

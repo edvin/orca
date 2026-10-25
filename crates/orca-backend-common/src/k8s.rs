@@ -5,6 +5,14 @@
 //! runs inside the machine (native on Linux, Lima VM on macOS,
 //! WSL2 on Windows).
 
+// On Windows most operations return early from a `#[cfg(windows)]` block
+// (k3s in Orca's WSL distro, through kubectl), which leaves the code after
+// it unreachable there and its `return` needless.
+#![cfg_attr(
+    windows,
+    allow(clippy::needless_return, unreachable_code, unused_imports, unused_variables, dead_code)
+)]
+
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};

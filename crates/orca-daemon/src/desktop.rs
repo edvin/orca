@@ -100,7 +100,7 @@ async fn source(from: From) -> Option<Source> {
                 if let Some(d) = e.ping().await {
                     // `docker_engine` is also Docker Engine for Windows
                     // containers, and Docker Desktop's own in that mode.
-                    if !stand_in && !(engine::is_desktop(&d).await && linux_engine(&d).await) {
+                    if !(stand_in || (engine::is_desktop(&d).await && linux_engine(&d).await)) {
                         continue;
                     }
                     let docker = e.client(long).ok()?;

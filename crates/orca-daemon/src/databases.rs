@@ -229,7 +229,7 @@ async fn existing(
 ) -> Option<Source> {
     let dbs = state.config.lock().await.databases.clone();
     for (server, owners) in &dbs.databases {
-        if !owners.get(database).is_some_and(|o| o.project == project) {
+        if owners.get(database).is_none_or(|o| o.project != project) {
             continue;
         }
         if let Some(id) = server.strip_prefix("orca:") {
