@@ -248,28 +248,57 @@ pub struct WorkspaceProject {
     pub links: Vec<crate::dev::schema::Link>,
 }
 
-/// `links:` as a list of `{name, <environment>: <url>…}`; entries without a
-/// name or a URL are left out.
+/// `links:` as a list of `{name, <environment>: <url>…}`. Anything else is
+/// an error naming what's wrong, rather than a link quietly left out.
 fn workspace_links<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<crate::dev::schema::Link>, D::Error> {
+    use serde::de::Error;
     let value = serde_yaml::Value::deserialize(d)?;
-    Ok(value
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
+    let items = value
         .as_sequence()
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| {
-                    let name = item.get("name")?.as_str()?.trim().to_string();
-                    let urls: BTreeMap<String, String> = item
-                        .as_mapping()?
-                        .iter()
-                        .filter_map(|(k, v)| Some((k.as_str()?.to_string(), v.as_str()?.to_string())))
-                        .filter(|(k, _)| k != "name")
-                        .collect();
-                    (!name.is_empty() && !urls.is_empty()).then_some(crate::dev::schema::Link { name, urls })
-                })
-                .collect()
+        .ok_or_else(|| D::Error::custom("`links` must be a list of {name, <environment>: <url>}"))?;
+    items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let n = i + 1;
+            let map = item
+                .as_mapping()
+                .ok_or_else(|| D::Error::custom(format!("links: entry {n} must be {{name, <environment>: <url>}}")))?;
+            let mut name = None;
+            let mut urls = BTreeMap::new();
+            for (k, v) in map {
+                let k = k
+                    .as_str()
+                    .ok_or_else(|| D::Error::custom(format!("links: entry {n} has a key that isn't text")))?;
+                let v = v
+                    .as_str()
+                    .ok_or_else(|| D::Error::custom(format!("links: entry {n}: `{k}` must be text")))?;
+                match k {
+                    "name" => name = Some(v.trim().to_string()),
+                    "url" => {
+                        return Err(D::Error::custom(format!(
+                            "links: entry {n}: use an environment name, such as local or prod, instead of url"
+                        )));
+                    }
+                    _ => {
+                        urls.insert(k.to_string(), v.to_string());
+                    }
+                }
+            }
+            let name = name
+                .filter(|n| !n.is_empty())
+                .ok_or_else(|| D::Error::custom(format!("links: entry {n} needs a `name`")))?;
+            if urls.is_empty() {
+                return Err(D::Error::custom(format!(
+                    "links: '{name}' needs a URL for at least one environment, such as `prod: https://…`"
+                )));
+            }
+            Ok(crate::dev::schema::Link { name, urls })
         })
-        .unwrap_or_default())
+        .collect()
 }
 
 fn serialize_workspace_links<S: serde::Serializer>(
@@ -329,6 +358,10 @@ impl WorkspaceFile {
         if self.name.trim().is_empty() {
             anyhow::bail!("`name` is missing");
         }
+        // Routes are owned by `workspace:<name>:<project>`.
+        if self.name.contains(':') {
+            anyhow::bail!("`name` can't contain ':'");
+        }
         if let Some(n) = &self.network
             && !valid_dns_name(n)
         {
@@ -371,6 +404,15 @@ impl WorkspaceFile {
         for r in &self.routes {
             check_route(r).map_err(|e| anyhow::anyhow!("routes: {e}"))?;
         }
+        let mut folders: BTreeMap<String, &String> = BTreeMap::new();
+        for (key, p) in &self.projects {
+            let folder = folder_of(p.path.as_deref().unwrap_or(key));
+            if let Some(other) = folders.insert(folder.clone(), key) {
+                anyhow::bail!(
+                    "projects '{other}' and '{key}' would both be cloned into '{folder}': give one a different `path`"
+                );
+            }
+        }
         for (key, p) in &self.projects {
             if !valid_dns_name(key) {
                 anyhow::bail!("project '{key}': use letters, digits and dashes");
@@ -400,6 +442,9 @@ impl WorkspaceFile {
             }
             if let Some(path) = &p.path {
                 relative_path(path).map_err(|e| anyhow::anyhow!("project '{key}' path: {e}"))?;
+                if folder_of(path).is_empty() {
+                    anyhow::bail!("project '{key}' path: '{path}' is the projects folder itself; name a folder in it");
+                }
             }
             for r in &p.routes {
                 check_route(r).map_err(|e| anyhow::anyhow!("project '{key}' routes: {e}"))?;
@@ -496,6 +541,18 @@ fn expand_home(p: &str, workspace_dir: &Path) -> PathBuf {
 }
 
 /// A path inside the workspace or project: relative, no `..`.
+/// A relative folder as compared: `./a/b/` and `a/b` are the same.
+fn folder_of(p: &str) -> String {
+    Path::new(p)
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(n) => Some(n.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 fn relative_path(p: &str) -> anyhow::Result<()> {
     let path = Path::new(p);
     if p.is_empty() || path.is_absolute() || path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
@@ -696,14 +753,36 @@ pub fn set_env_values(text: &str, values: &BTreeMap<String, String>) -> String {
             out.push(format!("{k}={}", quote(v)));
         }
     }
-    let mut s = out.join("\n");
-    s.push('\n');
+    // A file with Windows line endings keeps them.
+    let nl = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut s = out.join(nl);
+    s.push_str(nl);
     s
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn err(yaml: &str) -> String {
+        WorkspaceFile::parse(yaml).unwrap_err().to_string()
+    }
+
+    #[test]
+    fn names_folders_and_links_are_checked() {
+        assert!(err("name: 'a:b'\n").contains("can't contain ':'"));
+        let two = "name: a\nprojects:\n  x: { repo: r }\n  y: { repo: s, path: ./x/ }\n";
+        assert!(err(two).contains("would both be cloned into 'x'"), "{}", err(two));
+        assert!(err("name: a\nprojects:\n  x: { repo: r, path: . }\n").contains("projects folder itself"));
+        let links = |l: &str| format!("name: a\nprojects:\n  x:\n    repo: r\n    links: {l}\n");
+        assert!(err(&links("{ a: b }")).contains("must be a list"));
+        assert!(err(&links("[{ name: CRM, url: 'https://x' }]")).contains("instead of url"));
+        assert!(err(&links("[{ name: CRM, prod: 3 }]")).contains("`prod` must be text"));
+        assert!(err(&links("[{ prod: 'https://x' }]")).contains("needs a `name`"));
+        assert!(err(&links("[{ name: CRM }]")).contains("at least one environment"));
+        let ok = WorkspaceFile::parse(&links("[{ name: CRM, Stage: 'https://s', local: crm }]")).unwrap();
+        assert_eq!(ok.projects["x"].links[0].urls.len(), 2);
+    }
 
     #[test]
     fn env_values_are_read_and_written_in_place() {

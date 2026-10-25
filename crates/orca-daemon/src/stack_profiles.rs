@@ -53,7 +53,17 @@ pub async fn up(state: &AppState, name: &str, dir: &str, config: Option<&str>) -
         tracing::info!("{name}: {m}")
     })
     .await?;
-    let config = with_databases.as_deref().or(config);
+    // Without a server now, the override it was started with last time
+    // (kept in its containers' labels) is left out.
+    let without_override = config.map(|c| {
+        c.split(',')
+            .filter(|f| !f.trim().ends_with(crate::databases::OVERRIDE_FILE))
+            .collect::<Vec<_>>()
+            .join(",")
+    });
+    let config = with_databases
+        .as_deref()
+        .or(without_override.as_deref().filter(|c| !c.is_empty()));
     let profiles = state.config.lock().await.stack_profiles.get(name).cloned();
     let output = match profiles {
         // Never chosen: whatever compose runs by default.
@@ -67,9 +77,6 @@ pub async fn up(state: &AppState, name: &str, dir: &str, config: Option<&str>) -
             state.rt().await.compose_args(dir, config, &args).await?
         }
     };
-    if output.success {
-        crate::databases::after_up(state, name, std::path::Path::new(dir)).await;
-    }
     Ok(output)
 }
 

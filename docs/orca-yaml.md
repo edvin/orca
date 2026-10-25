@@ -178,7 +178,7 @@ requires:
       DB_USERNAME: "{user}"
       DB_PASSWORD: "{password}"
     privileges: [create]     # optional: may create databases named <name>_…
-    seed: php artisan migrate --seed   # optional: run after a reset
+    seed: docker compose exec -T app php artisan migrate --seed   # optional: run after a reset
 ```
 
 | Key | Default | Meaning |
@@ -188,8 +188,8 @@ requires:
 | `name` | the project's name | The database's name: lowercase letters, digits and `_`. |
 | `replaces` | none | The project's own database service. When a shared or Orca server is used, it doesn't start, and the services that depended on it get the connection. |
 | `env` | `DATABASE_URL: "{url}"` | Variables for `.env`, with `{host}`, `{port}`, `{name}`, `{user}`, `{password}` and `{url}` filled in. |
-| `privileges` | none | `[create]`: the project's user may create and drop databases named `<name>_…`. |
-| `seed` | none | Run in the project folder after **Reset** on the **Databases** page. |
+| `privileges` | none | `[create]`: the project's user may create and drop databases of its own, named `<name>_…` (on PostgreSQL, any name). They come along on Import and go on Reset. |
+| `seed` | none | Run in the project folder, on your computer, after **Reset** on the **Databases** page; use `docker compose exec -T <service> …` to run it where the database's name resolves. |
 
 For several databases, list them under `databases:` with the same keys. A `requires:` with a mistake is left out, with a warning on the stack's **orca.yaml** tab.
 

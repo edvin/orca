@@ -4871,10 +4871,16 @@ pub async fn databases_api(
     path: String,
     body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    if !(path == "/databases" || path.starts_with("/databases/")) || path.contains("..") {
+    let route = path.split('?').next().unwrap_or(&path);
+    if !(route == "/databases" || route.starts_with("/databases/")) || path.contains("..") {
         return Err("invalid databases API path".into());
     }
-    daemon_call(&method, &path, body).await
+    // Copying, restoring, dumping or seeding a large database takes minutes.
+    let long = method == "POST"
+        && ["/import", "/restore", "/snapshots", "/reset"]
+            .iter()
+            .any(|s| route.ends_with(s));
+    daemon_call_with_timeout(&method, &path, body, if long { 3600 } else { 120 }).await
 }
 
 /// What Orca would start from a folder: compose files, services, profiles,
@@ -4897,10 +4903,19 @@ pub async fn create_compose_in_folder(path: String, content: String) -> Result<s
 
 /// One request to the daemon API with a JSON body; errors carry its message.
 async fn daemon_call(method: &str, path: &str, body: Option<serde_json::Value>) -> Result<serde_json::Value, String> {
+    // Long timeout: plans run `docker compose config`, which can be slow.
+    daemon_call_with_timeout(method, path, body, 120).await
+}
+
+async fn daemon_call_with_timeout(
+    method: &str,
+    path: &str,
+    body: Option<serde_json::Value>,
+    secs: u64,
+) -> Result<serde_json::Value, String> {
     let base = daemon_url();
     let url = format!("{base}{path}");
-    // Long timeout: plans run `docker compose config`, which can be slow.
-    let c = authed_client_with_timeout(120);
+    let c = authed_client_with_timeout(secs);
     let req = match method {
         "GET" => c.get(&url),
         "POST" => c.post(&url),

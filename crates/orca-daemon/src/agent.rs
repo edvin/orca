@@ -1256,7 +1256,7 @@ fn secretish(name: &str) -> bool {
 /// Line by line: `KEY=value` and `key: value` with a secret-looking key,
 /// passwords in URLs, and the values of a Kubernetes Secret's `data:` and
 /// `stringData:`.
-fn redact_text(s: &str) -> String {
+pub fn redact_text(s: &str) -> String {
     let secret_manifest = s.lines().any(|l| l.trim() == "kind: Secret");
     let mut in_data = false;
     let mut out = String::with_capacity(s.len());

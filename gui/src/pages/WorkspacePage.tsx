@@ -54,7 +54,9 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
   const [dbNeeds, { refetch: refetchDbs }] = createResource(() => databasesApi.quick().then((o) => o.projects).catch(() => [] as ProjectNeeds[]));
   const dbTimer = setInterval(() => { if (!document.hidden) void refetchDbs(); }, 15_000);
   onCleanup(() => clearInterval(dbTimer));
-  const dbsOf = (dir: string) => (dbNeeds() ?? []).find((n) => n.dir === dir || n.dir.endsWith(dir.replace(/^~/, "")))?.databases ?? [];
+  // The same folder, whether written with ~ or in full, with or without a trailing slash.
+  const samePath = (p: string) => tildify(p).replace(/\/+$/, "");
+  const dbsOf = (dir: string) => (dbNeeds() ?? []).find((n) => samePath(n.dir) === samePath(dir))?.databases ?? [];
 
   // "Workspace updated", until dismissed (per update, on this machine).
   const SEEN_KEY = "orca.workspace.seenUpdate";
@@ -120,6 +122,15 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
   const update = async () => {
     const done = await track("", workspaceApi.update());
     if (done?.status === "succeeded") {
+      // A pull that didn't work is skipped, not failed: say so, and keep the
+      // steps showing why. ("No upstream branch" is skipped too, and fine.)
+      const pull = done.steps.find((st) => st.key === "clone");
+      const pullFailed = pull?.status === "failed" || (pull?.status === "skipped" && /^Couldn't pull/.test(pull.detail ?? ""));
+      if (pullFailed) {
+        const why = pull?.detail?.match(/^Couldn't pull \((.*)\)/)?.[1] ?? pull?.detail ?? "unknown error";
+        showToast(`Couldn't pull the workspace: ${why}. Applied it as it is in its folder.`, "info");
+        return;
+      }
       showToast("Workspace up to date", "success");
       const { [""]: _, ...rest } = jobs();
       setJobs(rest);
@@ -142,16 +153,19 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
     <div class="workspace-page">
       <div class="page-header">
         <h1 class="page-title">Workspace</h1>
-        <Show when={ws()?.joined && !ws()?.error}>
+        {/* Leave stays even when the workspace file is broken. */}
+        <Show when={ws()?.joined}>
           <div class="page-actions">
-            <Show when={ws()?.path}>{(p) => <FolderActions path={p()} compact />}</Show>
-            <button class="btn" onClick={() => void runCheck()} disabled={checking()}
-              title="Ports, domain, certificates, logins and access to every repository">
-              {checking() ? "Checking…" : "Check this machine"}
-            </button>
-            <button class="btn" onClick={() => void update()} disabled={jobs()[""]?.status === "running"}>
-              {jobs()[""]?.status === "running" ? "Updating…" : "Update"}
-            </button>
+            <Show when={!ws()?.error}>
+              <Show when={ws()?.path}>{(p) => <FolderActions path={p()} compact />}</Show>
+              <button class="btn" onClick={() => void runCheck()} disabled={checking()}
+                title="Ports, domain, certificates, logins and access to every repository">
+                {checking() ? "Checking…" : "Check this machine"}
+              </button>
+              <button class="btn" onClick={() => void update()} disabled={jobs()[""]?.status === "running"}>
+                {jobs()[""]?.status === "running" ? "Updating…" : "Update"}
+              </button>
+            </Show>
             <button class="btn" onClick={() => void leave()}>Leave</button>
           </div>
         </Show>

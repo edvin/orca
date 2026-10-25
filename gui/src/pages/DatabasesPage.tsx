@@ -31,7 +31,18 @@ import {
 const openUrl = (url: string) => shellOpen(url).catch(() => window.open(url, "_blank", "noopener,noreferrer"));
 
 export default function DatabasesPage(props: { onNavigate?: (target: string) => void }) {
-  const [data, { refetch }] = createResource<DatabasesOverview | null>(() => databasesApi.overview().catch(() => null));
+  // A failed load keeps what was shown before, and says why.
+  const [loadError, setLoadError] = createSignal<string | null>(null);
+  const [data, { refetch }] = createResource<DatabasesOverview | null>(async (_, { value }) => {
+    try {
+      const o = await databasesApi.overview();
+      setLoadError(null);
+      return o;
+    } catch (e) {
+      setLoadError(String(e));
+      return value ?? null;
+    }
+  });
   const [own, { refetch: refetchOwn }] = createResource(() => databasesApi.ownServices().catch(() => [] as OwnService[]));
   const [routes] = createResource(() => invoke<GatewayRoute[]>("gateway_list_routes").catch(() => [] as GatewayRoute[]));
   const timer = setInterval(() => { if (!document.hidden) void refetch(); }, 10_000);
@@ -39,7 +50,15 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
 
   const [busy, setBusy] = createSignal<string | null>(null);
   const [connection, setConnection] = createSignal<{ server: DatabaseServer; db: DatabaseInfo; info: ConnectionInfo } | null>(null);
-  const [snapshotsFor, setSnapshotsFor] = createSignal<{ server: DatabaseServer; db: DatabaseInfo } | null>(null);
+  // By id, looked up in the polled overview, so the dialog follows the server
+  // starting and stopping.
+  const [snapshotsFor, setSnapshotsFor] = createSignal<{ serverId: string; dbName: string } | null>(null);
+  const snapshotsTarget = () => {
+    const t = snapshotsFor();
+    const server = t && data()?.servers.find((s) => s.id === t.serverId);
+    const db = server?.databases.find((d) => d.name === t!.dbName);
+    return server && db ? { server, db } : null;
+  };
 
   /** The workspace's phpMyAdmin or pgAdmin, when it routes one. */
   const adminTool = (s: DatabaseServer) => {
@@ -89,7 +108,9 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
    *  server: what its own container's data goes into. */
   const targetOf = (o: OwnService) => {
     const need = data()?.projects.find((p) => p.project === o.project);
-    const req = need?.databases.find((r) => r.server && (r.replaces === o.service || r.engine === o.engine));
+    // The one that replaces this service, else one of the same engine.
+    const req = need?.databases.find((r) => r.server && r.replaces === o.service)
+      ?? need?.databases.find((r) => r.server && r.engine === o.engine);
     const server = data()?.servers.find((s) => s.id === req?.server);
     const db = server?.databases.find((d) => d.name === req?.database);
     return server && db ? { server, db } : null;
@@ -125,8 +146,17 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
         </div>
       </div>
 
+      <Show when={loadError()}>
+        {(err) => (
+          <div class="card" style={{ "max-width": "800px", "margin-bottom": "16px", "border-color": "rgba(248,81,73,0.4)" }}>
+            <div style={{ color: "#f85149", "font-weight": "600", "font-size": "14px", "margin-bottom": "6px" }}>Databases could not load</div>
+            <div style={{ color: "#c9d1d9", "font-size": "13px" }}>{err()}</div>
+            <button class="btn btn-sm" style={{ "margin-top": "10px" }} disabled={data.loading} onClick={() => void refetch()}>Try again</button>
+          </div>
+        )}
+      </Show>
       <Show when={data() !== undefined} fallback={<div class="db-muted">Loading…</div>}>
-        <Show when={needsAny() || serversAny()} fallback={<GetStarted />}>
+        <Show when={needsAny() || serversAny()} fallback={<Show when={data()}><GetStarted /></Show>}>
           {/* What each project needs, and where it comes from */}
           <Show when={needsAny()}>
             <div class="db-section-title">Projects</div>
@@ -217,7 +247,7 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
                                 <button class="btn btn-sm" disabled={!s.running || !!busy()} onClick={() => void snapshot(s, d)}>
                                   {busy() === `snap:${s.id}/${d.name}` ? <Spinner size={11} /> : "Snapshot"}
                                 </button>
-                                <button class="btn btn-sm" onClick={() => setSnapshotsFor({ server: s, db: d })}>
+                                <button class="btn btn-sm" onClick={() => setSnapshotsFor({ serverId: s.id, dbName: d.name })}>
                                   Restore{d.snapshots ? ` (${d.snapshots})` : ""}
                                 </button>
                                 <Show when={d.project}>
@@ -283,8 +313,8 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
       <Show when={connection()}>
         {(c) => <ConnectionDialog {...c()} onClose={() => setConnection(null)} />}
       </Show>
-      <Show when={snapshotsFor()}>
-        {(t) => <SnapshotsDialog {...t()} onClose={() => { setSnapshotsFor(null); void refetch(); }} />}
+      <Show when={snapshotsTarget()}>
+        {(t) => <SnapshotsDialog server={t().server} db={t().db} onClose={() => { setSnapshotsFor(null); void refetch(); }} />}
       </Show>
     </div>
   );
@@ -336,7 +366,7 @@ function Field(props: { label: string; value: string; secret?: boolean }) {
   return (
     <div class="db-field">
       <span class="db-field-label">{props.label}</span>
-      <span class="mono db-field-value">{shown() ? props.value : "••••••••••••"}</span>
+      <span class="mono db-field-value" title={shown() ? props.value : undefined}>{shown() ? props.value : "••••••••••••"}</span>
       <Show when={props.secret}>
         <button class="btn btn-sm" onClick={() => setShown(!shown())}>{shown() ? "Hide" : "Show"}</button>
       </Show>
@@ -390,12 +420,20 @@ function SnapshotsDialog(props: { server: DatabaseServer; db: DatabaseInfo; onCl
     });
     if (ok) await act(() => databasesApi.restore(props.server.id, props.db.name, s.name), `${props.db.name} restored`);
   };
+  const remove = async (s: Snapshot) => {
+    const ok = await confirmDanger({
+      title: "Delete snapshot",
+      message: `The snapshot of ${props.db.name} from ${new Date(s.at * 1000).toLocaleString()} (${s.name}) is deleted from this computer, and can't be restored after that.`,
+      confirmLabel: "Delete snapshot",
+    });
+    if (ok) await act(() => databasesApi.deleteSnapshot(props.server.id, props.db.name, s.name), "Snapshot deleted");
+  };
   return (
     <div class="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy()) props.onClose(); }}>
       <div class="modal-dialog db-dialog">
         <div class="modal-header">
           <h2 class="modal-title">Snapshots of {props.db.name}</h2>
-          <button class="modal-close" onClick={props.onClose}>×</button>
+          <button class="modal-close" disabled={busy()} onClick={() => { if (!busy()) props.onClose(); }}>×</button>
         </div>
         <div class="modal-body">
           <form class="db-snap-new" onSubmit={(e) => { e.preventDefault(); void act(() => databasesApi.snapshot(props.server.id, props.db.name, label()), "Snapshot saved").then(() => setLabel("")); }}>
@@ -412,7 +450,7 @@ function SnapshotsDialog(props: { server: DatabaseServer; db: DatabaseInfo; onCl
                       <div class="db-muted mono">{s.name} · {bytes(s.bytes)}</div>
                     </div>
                     <button class="btn btn-sm btn-primary" disabled={busy() || !props.server.running} onClick={() => void restore(s)}>Restore</button>
-                    <button class="btn btn-sm" disabled={busy()} onClick={() => void act(() => databasesApi.deleteSnapshot(props.server.id, props.db.name, s.name), "Snapshot deleted")}>Delete</button>
+                    <button class="btn btn-sm" disabled={busy()} onClick={() => void remove(s)}>Delete</button>
                   </div>
                 )}
               </For>

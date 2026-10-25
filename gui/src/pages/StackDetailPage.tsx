@@ -67,7 +67,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
   /** Services behind a profile that is off, so they have no container. */
   const offServices = () =>
     hasProfiles()
-      ? profiles()!.services.filter((s) => s.profiles.length > 0 && !stack()?.services.some((c) => c.name === s.name))
+      ? (profiles()?.services ?? []).filter((s) => s.profiles.length > 0 && !stack()?.services.some((c) => c.name === s.name))
       : [];
 
   const saveProfiles = async (list: string[], apply: boolean) => {

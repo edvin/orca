@@ -33,7 +33,7 @@ import Titlebar from "./components/Titlebar";
 import StatusBar from "./components/StatusBar";
 import Sidebar from "./components/Sidebar";
 import ToastContainer, { showToast } from "./components/Toast";
-import ConfirmDialog from "./components/ConfirmDialog";
+import ConfirmDialog, { confirm } from "./components/ConfirmDialog";
 import DashboardPage from "./pages/DashboardPage";
 import ConnectionScreen from "./components/ConnectionScreen";
 import ConnectionBanner from "./components/ConnectionBanner";
@@ -155,9 +155,15 @@ export default function App() {
   };
 
   const handleGlobalKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
-      const overlay = document.querySelector(".modal-overlay") as HTMLElement | null;
-      if (overlay) {
+    // Escape closes the topmost dialog only. Skipped when something already
+    // handled it (the confirm dialog answers it and is gone by now, so the
+    // overlay found below would be the dialog behind it), and for layers that
+    // handle Escape themselves.
+    if (e.key === "Escape" && !e.defaultPrevented) {
+      const layers = [...document.querySelectorAll<HTMLElement>(".modal-overlay, [data-own-escape]")]
+        .filter((el) => el.getClientRects().length > 0);
+      const overlay = layers[layers.length - 1];
+      if (overlay && !overlay.hasAttribute("data-own-escape")) {
         const closeBtn = overlay.querySelector(".modal-close") as HTMLElement | null;
         if (closeBtn) closeBtn.click();
       }
@@ -228,6 +234,8 @@ export default function App() {
     }
   };
 
+  // orca://app start/stop requests still running, by "<do>:<url>".
+  const appActionsInFlight = new Set<string>();
   const handleDeepLink = async (url: string) => {
     // Parse orca:// and docker-desktop:// URLs and navigate accordingly
     if (url.startsWith("docker-desktop://")) {
@@ -298,17 +306,34 @@ export default function App() {
         case "app": {
           // orca://app?url=<address>&do=start|stop|open: the gateway's
           // landing page and its "isn't running" page.
+          // Any website can fire it, so stopping asks first, and a second
+          // start or stop of the same app while one runs is ignored.
           const target = parsed.searchParams.get("url");
           const action = parsed.searchParams.get("do") || "open";
           if (!target || !["start", "stop", "open"].includes(action)) break;
+          let appHost = target;
+          try { appHost = new URL(target).hostname || target; } catch { /* shown as given */ }
           const verb = action === "start" ? "Starting" : action === "stop" ? "Stopping" : "";
-          if (verb) showToast(`${verb} ${new URL(target).hostname}…`, "info");
+          const key = `${action}:${target}`;
+          if (verb && appActionsInFlight.has(key)) {
+            showToast(`Already ${verb.toLowerCase()} ${appHost}…`, "info");
+            break;
+          }
+          if (verb) appActionsInFlight.add(key);
           try {
+            if (action === "stop" && !await confirm({
+              title: `Stop ${appHost}'s project?`,
+              message: `A link asked Orca to stop the project that serves ${appHost}.`,
+              confirmLabel: "Stop project",
+            })) break;
+            if (verb) showToast(`${verb} ${appHost}…`, "info");
             const res = await invoke("gateway_app_action", { url: target, action }) as { stack: string };
             navigate(`stack:${res.stack}`);
             if (verb) showToast(`${res.stack} ${action === "start" ? "started" : "stopped"}`, "success");
           } catch (e) {
             showToast(String(e), "error");
+          } finally {
+            appActionsInFlight.delete(key);
           }
           break;
         }

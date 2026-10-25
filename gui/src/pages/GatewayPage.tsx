@@ -215,9 +215,13 @@ export default function GatewayPage(props: GatewayPageProps) {
     setFolded(next);
     try { localStorage.setItem(FOLDED_KEY, JSON.stringify(next)); } catch { /* not remembered */ }
   };
+  // The search box shows only with more than a few routes; once it hides, a
+  // query left in it no longer filters.
+  const routeSearchShown = () => routes().length > 6;
+  const activeRouteQuery = () => (routeSearchShown() ? routeQuery() : "");
   const stateOf = (r: GatewayRoute) => routeStates().find((s) => s.hostname === r.hostname && (s.path ?? null) === (r.path ?? null));
   const groupedRoutes = () => {
-    const terms = routeQuery().toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const terms = activeRouteQuery().toLowerCase().trim().split(/\s+/).filter(Boolean);
     const by = new Map<string, GatewayRoute[]>();
     for (const r of routes()) {
       const st = stateOf(r);
@@ -986,7 +990,7 @@ export default function GatewayPage(props: GatewayPageProps) {
               </div>
             }
           >
-            <Show when={routes().length > 6}>
+            <Show when={routeSearchShown()}>
               <div class="gw-route-search">
                 <input ref={routeSearch} class="form-input" type="search" placeholder="Find a route: hostname, container, project or status  ( / )"
                   value={routeQuery()} onInput={(e) => setRouteQuery(e.currentTarget.value)}
@@ -1005,11 +1009,11 @@ export default function GatewayPage(props: GatewayPageProps) {
               </thead>
               <tbody>
                 <Show when={groupedRoutes().length === 0}>
-                  <tr><td colspan={5} style={{ color: "#8b949e", "text-align": "center", padding: "18px" }}>No route matches “{routeQuery()}”</td></tr>
+                  <tr><td colspan={5} style={{ color: "#8b949e", "text-align": "center", padding: "18px" }}>No route matches “{activeRouteQuery()}”</td></tr>
                 </Show>
                 <For each={groupedRoutes()}>
                   {([group, list]) => {
-                    const open = () => !!routeQuery().trim() || !folded()[group];
+                    const open = () => !!activeRouteQuery().trim() || !folded()[group];
                     return (<>
                     <Show when={groupedRoutes().length > 1}>
                       <tr class="gw-group-row">

@@ -111,6 +111,10 @@ fn parse(lines: &[String], gateway: &GatewayConfig, filter: &Filter) -> Vec<Requ
         if !filter.landing && host == domain {
             continue;
         }
+        // The "isn't running" page asking whether its app is up yet.
+        if uri.contains("_orca_wait=1") {
+            continue;
+        }
         let status = v["status"].as_u64().unwrap_or(0) as u16;
         if filter.problems && status != 0 && status < 400 {
             continue;
@@ -306,6 +310,7 @@ mod tests {
             line(3.0, "crm.local.acme.dev", "/api/users", 502),
             line(2.0, "local.acme.dev", "/", 200),
             line(1.0, "crm.local.acme.dev:443", "/", 200),
+            line(0.5, "crm.local.acme.dev", "/orders?_orca_wait=1", 502),
             "not json".into(),
         ];
         let all = parse(
@@ -316,7 +321,11 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(all.len(), 2, "the landing page's own requests are left out");
+        assert_eq!(
+            all.len(),
+            2,
+            "the landing page's own requests, and the down page's checks, are left out"
+        );
         assert_eq!(
             (all[0].route.as_deref(), all[0].status, all[0].ms),
             (Some("CRM API"), 502, 12.3)

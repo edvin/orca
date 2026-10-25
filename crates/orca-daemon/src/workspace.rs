@@ -391,7 +391,16 @@ async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) ->
 
 /// POST /workspace/update: pull the workspace and apply it again.
 async fn update(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
-    let (_, _, dir) = current(&state).await?;
+    // Only the folder: the file is read after the pull, so a broken file
+    // is fixed by pulling the fix.
+    let ws = state
+        .config
+        .lock()
+        .await
+        .workspace
+        .clone()
+        .ok_or_else(|| ApiError::bad_request("No workspace joined yet"))?;
+    let dir = PathBuf::from(&ws.path);
     let job = update_job(&state, dir, true).await;
     Ok(accepted(job).await)
 }
@@ -526,6 +535,44 @@ async fn head(dir: &Path) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+/// The `origin` remote of a git checkout.
+async fn origin(dir: &Path) -> Option<String> {
+    let mut cmd = git();
+    cmd.arg("-C").arg(dir).args(["remote", "get-url", "origin"]);
+    let out = cmd.output().await.ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Whether two git remotes name the same repository, however written:
+/// `git@host:group/app.git`, `ssh://git@host:22/group/app`,
+/// `https://host/group/app/`.
+fn same_repo(a: &str, b: &str) -> bool {
+    fn normal(url: &str) -> String {
+        let mut u = url.trim().trim_end_matches('/');
+        u = u.strip_suffix(".git").unwrap_or(u).trim_end_matches('/');
+        let scheme = u.find("://");
+        if let Some(i) = scheme {
+            u = &u[i + 3..];
+        }
+        let u = u.rsplit_once('@').map(|(_, rest)| rest).unwrap_or(u);
+        let (host, path) = match scheme {
+            Some(_) => u.split_once('/').unwrap_or((u, "")),
+            // scp form: host:path. A local path has no host.
+            None => match u.split_once(':') {
+                Some((h, p)) if !h.contains('/') => (h, p),
+                _ => ("", u),
+            },
+        };
+        // A port isn't part of which repository it is.
+        let host = host.split(':').next().unwrap_or(host).to_ascii_lowercase();
+        format!("{host}/{}", path.trim_start_matches('/'))
+    }
+    normal(a) == normal(b)
+}
+
 /// Make this machine match the workspace file: network, gateway, shared
 /// services, routes. Safe to run again.
 async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Path) -> Result<()> {
@@ -539,6 +586,19 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
     }
 
     job.start("gateway").await;
+    // A logo that can't be used is left out, rather than stopping the rest.
+    let logo = match file.gateway.as_ref().and_then(|g| g.logo.as_deref()) {
+        Some(spec) => match orca_core::icons::resolve(spec, Some(dir)) {
+            Ok(src) => Some(src),
+            Err(e) => {
+                let why = e.replacen("icon ", "gateway logo ", 1);
+                tracing::warn!("workspace: {why}");
+                job.log(format!("Left out the {why}")).await;
+                None
+            }
+        },
+        None => None,
+    };
     let gateway = {
         let mut cfg = state.config.lock().await;
         let gw = &mut cfg.gateway;
@@ -550,17 +610,11 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
                 gw.landing.title = Some(title.chars().take(120).collect());
             }
             // The workspace's logo, or none: one only ever comes from a workspace.
-            gw.landing.logo = match g.logo.as_deref() {
-                Some(logo) => Some(
-                    orca_core::icons::resolve(logo, Some(dir))
-                        .map_err(|e| anyhow::anyhow!(e.replacen("icon ", "gateway logo ", 1)))?,
-                ),
-                None => None,
-            };
+            gw.landing.logo = logo;
             match &g.certificate {
                 Some(c) => {
                     let read = |p: &str| {
-                        std::fs::read_to_string(dir.join(p))
+                        std::fs::read_to_string(inside(dir, p)?)
                             .with_context(|| format!("can't read the certificate file {p}"))
                     };
                     gw.custom_cert = Some(read(&c.cert)?);
@@ -625,6 +679,20 @@ async fn apply(state: &AppState, job: &JobHandle, file: &WorkspaceFile, dir: &Pa
     let n = sync_routes(state, file).await?;
     job.done("routes", Some(format!("{n} routes"))).await;
     Ok(())
+}
+
+/// A file of the workspace, refusing one that leads outside its folder,
+/// through a symlink too.
+fn inside(dir: &Path, rel: &str) -> Result<PathBuf> {
+    let path = dir
+        .join(rel)
+        .canonicalize()
+        .with_context(|| format!("{rel} doesn't exist in the workspace"))?;
+    let root = dir.canonicalize()?;
+    if !path.starts_with(&root) {
+        anyhow::bail!("{rel} leads outside the workspace folder");
+    }
+    Ok(path)
 }
 
 pub(crate) fn shared_name(file: &WorkspaceFile, dir: &Path) -> String {
@@ -729,6 +797,14 @@ async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
         );
         cfg.save()?;
     }
+    // The running gateway gets the new routes now: its own sync only pushes
+    // what labels and orca.yaml files change.
+    if crate::gateway::is_running(state).await.unwrap_or(false) {
+        let gateway = state.config.lock().await.gateway.clone();
+        if let Err(e) = crate::gateway::apply_config(&gateway).await {
+            tracing::warn!("workspace: couldn't update the gateway's routes: {e:#}");
+        }
+    }
     crate::gateway_sync::routes_changed();
     Ok(n)
 }
@@ -816,8 +892,14 @@ pub(crate) fn project_group(workspace: &WorkspaceRef, dir: &Path) -> Option<Stri
     let ws_dir = PathBuf::from(&workspace.path);
     let file = WorkspaceFile::load(&ws_dir).ok()?;
     let dir = dir.canonicalize().ok()?;
+    // Its group, else its key: the name its workspace routes go under.
     file.projects.iter().find_map(|(key, p)| {
-        let group = p.group.as_deref()?.trim();
+        let group = p
+            .group
+            .as_deref()
+            .map(str::trim)
+            .filter(|g| !g.is_empty())
+            .unwrap_or(key);
         (file.project_dir(&ws_dir, key).canonicalize().ok()? == dir).then(|| group.to_string())
     })
 }
@@ -1106,6 +1188,21 @@ async fn setup(
         let r: Result<serde_json::Value> = async {
             j.start("clone").await;
             if pdir.is_dir() {
+                // Only the project's own checkout: a folder of the same
+                // name may hold something else entirely.
+                match origin(&pdir).await {
+                    Some(o) if same_repo(&o, &project.repo) => {}
+                    Some(o) => anyhow::bail!(
+                        "{} is a checkout of {o}, not of {}. Move that folder, or give the project a `path:` in the workspace file.",
+                        tilde(&pdir),
+                        project.repo
+                    ),
+                    None => anyhow::bail!(
+                        "{} already exists but isn't a git checkout of {}. Move it aside, or give the project a `path:` in the workspace file.",
+                        tilde(&pdir),
+                        project.repo
+                    ),
+                }
                 j.done("clone", Some(format!("Already in {}", tilde(&pdir)))).await;
             } else {
                 if let Some(parent) = pdir.parent() {
@@ -1502,4 +1599,16 @@ mod tests {
         let s = super::suggest_folder(home.path(), repo);
         assert_eq!((s.dir, s.existing, s.checkouts), (ws, true, 2));
     }
+}
+
+#[test]
+fn remotes_are_the_same_repo_however_written() {
+    let r = "git@git.acme.dev:crm/onecrm.git";
+    assert!(same_repo(r, "ssh://git@git.acme.dev/crm/onecrm"));
+    assert!(same_repo(r, "ssh://git@Git.Acme.dev:22/crm/onecrm.git/"));
+    assert!(same_repo(r, "https://git.acme.dev/crm/onecrm"));
+    assert!(same_repo(r, "https://user:token@git.acme.dev/crm/onecrm.git"));
+    assert!(!same_repo(r, "git@git.acme.dev:crm/other.git"));
+    assert!(!same_repo(r, "git@github.com:crm/onecrm.git"));
+    assert!(same_repo("/srv/git/shop", "/srv/git/shop.git"));
 }

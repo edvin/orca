@@ -119,8 +119,8 @@ pub struct DatabaseRequirement {
     /// databases named `<name>_…`, for tests that make their own.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub privileges: Vec<Privilege>,
-    /// A command run in the project folder after its database is created or
-    /// reset, such as `php artisan migrate --seed`.
+    /// A command run in the project folder after its database is reset,
+    /// such as `docker compose exec -T app php artisan migrate --seed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<String>,
 }
@@ -182,6 +182,15 @@ impl DatabaseRequirement {
             .iter()
             .copied()
             .find(|v| self.version.as_deref().is_none_or(|want| version_matches(want, v)))
+    }
+
+    /// The variables it sets in the project's `.env`.
+    pub fn env_keys(&self) -> Vec<String> {
+        if self.env.is_empty() {
+            vec!["DATABASE_URL".to_string()]
+        } else {
+            self.env.keys().cloned().collect()
+        }
     }
 
     /// The variables for the project's `.env`.
@@ -393,7 +402,8 @@ pub fn provision_cmd(
             format!(
                 "{PG} -c \"$(cat <<'SQL'\n{role}\nSQL\n)\" && \
                  ({PG} -tAc \"SELECT 1 FROM pg_database WHERE datname='{db}'\" | grep -q 1 || {PG} -c 'CREATE DATABASE \"{db}\" OWNER \"{user}\"') && \
-                 {PG} -c 'ALTER DATABASE \"{db}\" OWNER TO \"{user}\"'"
+                 {PG} -c 'ALTER DATABASE \"{db}\" OWNER TO \"{user}\"' && \
+                 {PG} -c 'REVOKE CONNECT, TEMPORARY ON DATABASE \"{db}\" FROM PUBLIC'"
             )
         }
         Engine::Mysql | Engine::Mariadb => {

@@ -99,28 +99,30 @@ pub async fn refresh(docker: &bollard::Docker, config: &GatewayConfig, ctx: &Con
         let info = match docker.inspect_container(name, None).await {
             Ok(info) => info,
             Err(_) => {
+                // A workspace project not set up yet: nothing can run it, so
+                // there's no need to look through every container's aliases.
+                let setup = config
+                    .routes
+                    .iter()
+                    .filter(|r| r.container_name == name)
+                    .find_map(|r| not_set_up.get(r.owner.as_deref()?));
+                if let Some(key) = setup {
+                    states.insert(
+                        name.to_string(),
+                        ServiceState {
+                            status: Status::NotSetUp,
+                            started_at: None,
+                            project: None,
+                            image: None,
+                            setup: Some(key.clone()),
+                        },
+                    );
+                    continue;
+                }
                 if aliases.is_none() {
                     aliases = Some(alias_map(docker).await);
                 }
                 let Some(container) = aliases.as_ref().and_then(|m| m.get(name)) else {
-                    // Nothing runs it: a workspace project not set up yet?
-                    let setup = config
-                        .routes
-                        .iter()
-                        .filter(|r| r.container_name == name)
-                        .find_map(|r| not_set_up.get(r.owner.as_deref()?));
-                    if let Some(key) = setup {
-                        states.insert(
-                            name.to_string(),
-                            ServiceState {
-                                status: Status::NotSetUp,
-                                started_at: None,
-                                project: None,
-                                image: None,
-                                setup: Some(key.clone()),
-                            },
-                        );
-                    }
                     continue;
                 };
                 let Ok(info) = docker.inspect_container(container, None).await else {
@@ -703,7 +705,7 @@ fn render_with(config: &GatewayConfig, states: &HashMap<String, ServiceState>, d
                     let more = group_projects
                         .get(name)
                         .filter(|_| is_local && !shared_groups.contains(name))
-                        .map(|projects| details_html(projects, details))
+                        .map(|projects| details_html(projects, details, landing.show_targets))
                         .unwrap_or_default();
                     format!(
                         r#"<section class="group{shared}" data-group="{group}" data-size="{size}"><div class="gh"><h2 role="button" tabindex="0" title="Fold or unfold">{group}</h2>{more}</div><div class="grid">{}</div></section>"#,
@@ -741,7 +743,7 @@ fn render_with(config: &GatewayConfig, states: &HashMap<String, ServiceState>, d
                 )
             })
             .collect();
-        format!(r#"<nav class="tabs">{buttons}</nav>"#)
+        buttons
     } else {
         String::new()
     };
@@ -817,7 +819,7 @@ fn render_with(config: &GatewayConfig, states: &HashMap<String, ServiceState>, d
 
 /// A group's details button and panel: per project, links into Orca, its
 /// databases and its services with their addresses, each one click to copy.
-fn details_html(projects: &[GroupProject], details: &Details) -> String {
+fn details_html(projects: &[GroupProject], details: &Details, show_targets: bool) -> String {
     let link = |url: &str, action: &str, label: &str| {
         format!(
             r#"<a href="orca://app?do={action}&amp;url={}">{label}</a>"#,
@@ -850,15 +852,20 @@ fn details_html(projects: &[GroupProject], details: &Details) -> String {
             details.by_dir.iter().find(|(_, n)| *n == name).map(|(d, _)| d.clone())
         });
         let dbs = dir.as_ref().and_then(|d| details.databases.get(d));
+        // Containers, ports and addresses only when the page shows them
+        // ("Show container and port"): anyone who reaches it can read it.
         for (name, server, port) in dbs.into_iter().flatten() {
-            let at = port.map(|p| copy(&format!("127.0.0.1:{p}"))).unwrap_or_default();
+            let at = port
+                .filter(|_| show_targets)
+                .map(|p| copy(&format!("127.0.0.1:{p}")))
+                .unwrap_or_default();
             rows.push_str(&format!(
                 r#"<div class="row"><span class="k db">{}</span><span class="v"><span class="note">on {}</span>{at}</span></div>"#,
                 escape_html(name),
                 escape_html(server),
             ));
         }
-        for s in services.into_iter().flatten() {
+        for s in services.into_iter().flatten().filter(|_| show_targets) {
             let mut addrs = String::new();
             for (inside, outside) in &s.ports {
                 if let Some(o) = outside {
@@ -1055,9 +1062,11 @@ header{position:sticky;top:0;z-index:5;margin:0 calc(50% - 50vw) 26px;padding:14
 h1{font-size:19px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;background:linear-gradient(135deg,#fff,#58a6ff 55%,#a371f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .sub{color:#8b949e;font-size:12px;margin-top:2px;white-space:nowrap}
 .stats::before{content:'·';margin:0 6px;color:#484f58}.stats b{color:#3fb950;font-weight:600}
-.tabs{display:flex;gap:4px;padding:3px;margin:0 auto 24px;width:fit-content;background:rgba(22,27,34,.5);border:1px solid rgba(255,255,255,.05);border-radius:12px}
-.tab{background:none;border:1px solid transparent;border-radius:9px;padding:7px 18px;color:#8b949e;font:600 13px inherit;cursor:pointer}
-.tab:hover{color:#e6edf3}.tab.active{background:rgba(88,166,255,.12);border-color:rgba(88,166,255,.25);color:#58a6ff}
+/* Environments: a compact switch in the top bar, beside the layout. */
+.tabs{display:flex;padding:2px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(22,27,34,.6)}
+.tabs:empty{display:none}
+.tab{height:28px;padding:0 10px;background:none;border:0;border-radius:7px;color:#8b949e;font:600 12px inherit;cursor:pointer;white-space:nowrap}
+.tab:hover{color:#e6edf3}.tab.active{background:rgba(88,166,255,.15);color:#58a6ff}
 .group{margin-bottom:28px;grid-column:1/-1;min-width:0}
 /* Groups share rows: one taking as many of the page's columns as it has
    cards, so a project with one service doesn't take a whole row. */
@@ -1167,8 +1176,8 @@ body.compact .group{margin-bottom:18px}body.compact .gh{margin-bottom:8px}
 </head>
 <body>
 <div class="shell">
-<header><div class="top"><div class="brand">{logo}<div><h1>{title}</h1><p class="sub">{subtitle}<span class="stats" id="stats">{stats}</span></p></div></div><div class="find">{search}</div><div class="tools"><div class="seg" role="group" aria-label="Layout"><button type="button" data-view="cards" title="Cards" aria-label="Cards"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button><button type="button" data-view="compact" title="Compact" aria-label="Compact"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div><button type="button" class="chip" id="runonly" aria-pressed="false" title="Hide what isn't running, except while you search">Running only</button></div></div></header>
-<main id="content">{notice}{tabs}{panels}</main>
+<header><div class="top"><div class="brand">{logo}<div><h1>{title}</h1><p class="sub">{subtitle}<span class="stats" id="stats">{stats}</span></p></div></div><div class="find">{search}</div><div class="tools"><nav class="tabs" id="envs" aria-label="Environment">{tabs}</nav><div class="seg" role="group" aria-label="Layout"><button type="button" data-view="cards" title="Cards" aria-label="Cards"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button><button type="button" data-view="compact" title="Compact" aria-label="Compact"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div><button type="button" class="chip" id="runonly" aria-pressed="false" title="Hide what isn't running, except while you search">Running only</button></div></div></header>
+<main id="content">{notice}{panels}</main>
 <div class="nores" id="nores" hidden></div>
 <footer>Served by <a href="https://orca-desktop.com">Orca Desktop</a></footer>
 </div>
@@ -1217,7 +1226,7 @@ body.compact .group{margin-bottom:18px}body.compact .gh{margin-bottom:8px}
     fetch(location.pathname,{cache:'no-store'}).then(function(r){return r.ok?r.text():null}).then(function(html){
       if(!html)return;
       var doc=new DOMParser().parseFromString(html,'text/html');
-      ['content','stats'].forEach(function(id){var n=doc.getElementById(id);if(n)document.getElementById(id).innerHTML=n.innerHTML});
+      ['content','stats','envs'].forEach(function(id){var n=doc.getElementById(id);if(n)document.getElementById(id).innerHTML=n.innerHTML});
       bind();
     }).catch(function(){});
   }
@@ -1596,6 +1605,17 @@ mod tests {
         assert!(html.contains(r#"<span class="k db">shop</span><span class="v"><span class="note">on percona (Acme)</span><code data-copy="127.0.0.1:23306""#));
         // Folded away until asked for.
         assert!(html.contains(r#"<div class="pop" hidden>"#));
+
+        // "Show container and port" off: the links stay, the addresses go.
+        let mut c = c;
+        c.landing.show_targets = false;
+        let html = render_with(&c, &states, &details);
+        assert!(html.contains(">Open in Orca</a>"));
+        assert!(!html.contains("data-copy="), "{html}");
+        assert!(
+            html.contains(r#"<span class="note">on percona (Acme)</span></span>"#),
+            "{html}"
+        );
     }
 
     #[test]

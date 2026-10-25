@@ -40,18 +40,26 @@ export default function RequestsTab() {
   const [requests, setRequests] = createSignal<GatewayRequest[] | null>(null);
   const [query, setQuery] = createSignal("");
   const [problems, setProblems] = createSignal(false);
-  const [open, setOpen] = createSignal<number | null>(null);
+  // The expanded row, by what the request was rather than where it is in the
+  // list: new requests push the old ones down every few seconds.
+  const [open, setOpen] = createSignal<string | null>(null);
+  const keyOf = (r: GatewayRequest) => `${r.at}-${r.method}-${r.host}-${r.uri}-${r.status}-${r.ms}`;
 
+  // Only the latest call's answer counts: a slow one from before the filter
+  // changed must not replace the newer list.
+  let seq = 0;
   const load = () => {
     if (document.hidden) return;
+    const n = ++seq;
     invoke<GatewayRequest[]>("gateway_requests", { limit: 300, problems: problems(), q: query() || null })
-      .then((r) => setRequests(Array.isArray(r) ? r : []), () => setRequests([]));
+      .then((r) => { if (n === seq) setRequests(Array.isArray(r) ? r : []); }, () => { if (n === seq) setRequests([]); });
   };
   // Live while the tab is open.
   onMount(load);
   const timer = setInterval(load, 3000);
   onCleanup(() => clearInterval(timer));
   let debounce: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(debounce));
   const onQuery = (v: string) => {
     setQuery(v);
     clearTimeout(debounce);
@@ -92,10 +100,10 @@ export default function RequestsTab() {
               </thead>
               <tbody>
                 <For each={list()}>
-                  {(r, i) => (
+                  {(r) => (
                     <>
-                      <tr classList={{ "gw-req-failed": !!r.error, open: open() === i() }}
-                        onClick={() => r.error && setOpen(open() === i() ? null : i())} style={{ cursor: r.error ? "pointer" : "default" }}>
+                      <tr classList={{ "gw-req-failed": !!r.error, open: open() === keyOf(r) }}
+                        onClick={() => r.error && setOpen(open() === keyOf(r) ? null : keyOf(r))} style={{ cursor: r.error ? "pointer" : "default" }}>
                         <td class="mono" style={{ color: "#8b949e", "white-space": "nowrap" }}>{time(r.at)}</td>
                         <td class="mono" style={{ color: statusColor(r.status), "font-weight": "600" }}>{r.status || "—"}</td>
                         <td style={{ "min-width": "0", "max-width": "520px" }}>
@@ -113,7 +121,7 @@ export default function RequestsTab() {
                         </td>
                         <td class="mono" style={{ "text-align": "right", color: "#8b949e" }}>{size(r.size)}</td>
                       </tr>
-                      <Show when={open() === i() && r.error}>
+                      <Show when={open() === keyOf(r) && r.error}>
                         <tr class="gw-req-detail"><td colspan={6} class="mono">{r.error}</td></tr>
                       </Show>
                     </>

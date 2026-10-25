@@ -215,9 +215,9 @@ The **⋯** beside a project's name (it shows when you point at the group) opens
 - The project's **database**, when Orca gives it one (see [Databases](/docs/databases/)), with its port on your computer.
 - Each of its **services**, running or not, with the address other containers reach it at (`shop-redis-1:6379`) and its port on your computer when it publishes one (`127.0.0.1:16379`).
 
-Click an address to copy it. Passwords stay in Orca's **Databases** page.
+Click an address to copy it. Passwords stay in Orca's **Databases** page. With **Show container and port** switched off, the details keep the summary and the links into Orca but leave out containers, addresses and ports, as the cards do; anyone who can reach the gateway can open the page.
 
-A stopped service's card is greyed out. Opening its address doesn't give an empty error: the gateway shows a page saying it isn't running, with **Start in Orca**, and opens the app by itself as soon as it answers.
+A stopped service's card is greyed out. Opening its address doesn't give an empty error: the gateway shows a page saying it isn't running, with **Start in Orca**, and opens the app by itself as soon as it answers. The page checks every few seconds; those checks stay out of the **Requests** tab.
 
 A small group shares its row with others: a project with one service takes one column instead of a whole row. A [workspace](/docs/workspaces/)'s shared services come first, as a strip of small chips with a status dot, since they're tools you open now and then. The number of services running is under the title.
 

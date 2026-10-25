@@ -89,7 +89,14 @@ pub fn resolve(spec: &str, base: Option<&Path>) -> Result<String, String> {
         if rel.is_absolute() || rel.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
             return Err(format!("icon {spec}: use a path inside the folder"));
         }
-        let path = base.join(rel);
+        // Symlinks included: the file must really be inside the folder.
+        let path = base
+            .join(rel)
+            .canonicalize()
+            .map_err(|_| format!("icon {spec}: no such file"))?;
+        if !base.canonicalize().is_ok_and(|b| path.starts_with(b)) {
+            return Err(format!("icon {spec}: use a path inside the folder"));
+        }
         let len = std::fs::metadata(&path)
             .map_err(|_| format!("icon {spec}: no such file"))?
             .len();
@@ -123,6 +130,23 @@ pub fn src(icon: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_out_of_the_folder_is_refused() {
+        let root = std::env::temp_dir().join(format!("orca-icons-{}", std::process::id()));
+        let (outside, dir) = (root.join("outside"), root.join("ws"));
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(outside.join("secret.png"), b"x").unwrap();
+        let _ = std::os::unix::fs::symlink(outside.join("secret.png"), dir.join("logo.png"));
+        std::fs::write(dir.join("real.png"), b"x").unwrap();
+        let refused = resolve("logo.png", Some(&dir));
+        let fine = resolve("real.png", Some(&dir));
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(refused.unwrap_err().contains("inside the folder"));
+        assert!(fine.is_ok());
+    }
 
     #[test]
     fn images_pick_icons() {

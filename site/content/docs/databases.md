@@ -20,11 +20,13 @@ Once a database exists, it stays on its server: when your team adds a shared ser
 
 On the chosen server, Orca:
 
-- creates a database named after the project (`onecrm`), and a **user of its own** with a generated password, allowed into that database only;
+- creates a database named after the project (`onecrm`) or its `name:`, and a **user of its own** with a generated password, allowed into that database only;
 - writes the connection into the project's `.env`;
-- with `replaces:`, keeps the project's own database service from starting, and sets the connection on the services that depended on it, including those behind a profile.
+- with `replaces:`, keeps the project's own database service from starting, sets the connection on the services that depended on it (including those behind a profile), and puts the project's services on the servers' network, `orca-databases`, so the database's name resolves however the project is started.
 
 `replaces:` works with an override file in the project's `.orca/` folder, which leaves the service out. Orca also points `COMPOSE_FILE` in `.env` at it, so a `docker compose up` in a terminal, or a `just up` or `make up` that runs one, leaves the database out too. A `COMPOSE_FILE` the project sets itself is kept, with the override added at the end. When the project stops using a shared server, Orca takes the override out again.
+
+The values Orca replaces in `.env` are kept in `.orca/` and put back when the project goes back to its own database (`database: own`, or `requires:` removed), and the start's output names the variables it set. Two projects can't use the same database name on a server: give one a `name:`.
 
 Orca does this every time the project starts, so a missing database or user is made again, and it's safe to repeat. A [workspace](/docs/workspaces/) project gets it during setup, in the **Create its database** step, before its setup command runs, so migrations in that command find their database.
 
@@ -53,8 +55,8 @@ requires:
 | `name` | the project's name | The database's name: lowercase letters, digits and `_`. |
 | `replaces` | none | The project's own compose service that this database stands in for, usually `db`. |
 | `env` | `DATABASE_URL: "{url}"` | The variables to write into `.env`, with placeholders filled in (see below). |
-| `privileges` | none | `[create]` lets the project's user create and drop databases named `<name>_…`, for test suites that make their own. |
-| `seed` | none | A command run in the project's folder after its database is reset, such as `php artisan migrate --seed`. |
+| `privileges` | none | `[create]` lets the project's user create and drop databases of its own, such as one per tenant or per test run. On MySQL and MariaDB they must be named `<name>_…`; PostgreSQL can't limit the name, so there the user may create any database. Orca treats `<name>_…` databases as the project's: they come along on **Import**, and **Reset** drops them. |
+| `seed` | none | A command run in the project's folder, on your computer, after **Reset**. It reaches the database through the app's container, so run it there: `docker compose exec -T app php artisan migrate --seed`. |
 
 A project that needs more than one database lists them under `databases:` instead of `database:`, each with the same keys.
 
@@ -129,7 +131,7 @@ services:
 
 A project that needs settings the others shouldn't get keeps its own database service, with [`database: own`](#choose-per-project-in-the-workspace).
 
-When a project starts, the servers it uses join its networks, so its services reach them by name whatever networks the project uses.
+Every database server is on a network of its own, `orca-databases`, and Orca's override puts the project's services on it too, so they reach the server by name whatever networks the project uses, also after a `docker compose down` and `up` in a terminal.
 
 ### Choose per project in the workspace
 
@@ -170,13 +172,13 @@ For each database:
 
 - **Connect** shows the host, port, database, user and password, and a URL for database tools such as TablePlus, DBeaver or DataGrip, each with a copy button. The password stays hidden until you click **Show**.
 - **Snapshot** saves a compressed SQL dump on this computer. **Restore** lists the snapshots, takes a new one with an optional label such as `before-migration`, and restores or deletes one.
-- **Reset** empties the database and runs the project's `seed` command, when it has one.
+- **Reset** empties the database (and the project's own `<name>_…` databases, with `privileges: [create]`), then runs its `seed` command, when it has one.
 
 A project's database also shows on its stack page, above its services, and on its card on the **Workspace** page. The dashboard counts databases and servers once there are any.
 
 ### Snapshots
 
-Snapshots are `.sql.gz` files in Orca's data folder on this computer: `~/Library/Application Support/orca/database-snapshots` on macOS, `~/.local/share/orca/database-snapshots` on Linux. Restoring one empties the database first, then loads the snapshot; on PostgreSQL the tables belong to the project's user again afterwards. Each database's snapshots are in a folder of their own, such as `database-snapshots/workspace-mysql/onecrm`; copy one into the same folder on a colleague's computer, and they can restore it there.
+Snapshots are `.sql.gz` files in Orca's data folder on this computer: `~/Library/Application Support/orca/database-snapshots` on macOS, `~/.local/share/orca/database-snapshots` on Linux. A snapshot holds the one database, not the `<name>_…` databases a project makes itself. Restoring one takes a snapshot of what's there first (`before-restore`), empties the database, then loads the snapshot; on PostgreSQL the tables belong to the project's user again afterwards. Each database's snapshots are in a folder of their own, such as `database-snapshots/workspace-mysql/onecrm`; copy one into the same folder on a colleague's computer, and they can restore it there.
 
 ## Move a project onto a shared server
 
@@ -199,12 +201,14 @@ A project that runs its own database today keeps its data in that container's vo
    ```
 
 3. **Start the project** from Orca. It now gets an empty database on the shared server, and its own database container no longer starts.
-4. **Copy its data over.** On the **Databases** page, its row under **Projects' own database containers** now has **Import into wordpress**. Orca takes a snapshot of the new database first, starts the old container for the copy if it's stopped, copies the data in, and stops the old container again.
+4. **Copy its data over.** On the **Databases** page, its row under **Projects' own database containers** now has **Import into wordpress**. Orca takes a snapshot of the new database first (and stops if it can't), starts the old container for the copy if it's stopped, checks it can read the database, copies the data in with its triggers and stored routines, and stops the old container again. With `privileges: [create]`, the project's own `<name>_…` databases come along too, such as one per tenant.
 5. **Check the app**, then remove the old container and its volume when you're sure you won't need them. Until then, they're your way back.
 
 The copy streams straight from one container into the other, so even a large database never sits in memory or on disk on the way.
 
-**Between MariaDB and MySQL**, the copy is translated on the way: MariaDB 11's `utf8mb4_uca1400_…` collations become MySQL's `utf8mb4_0900_ai_ci`, and the first line MariaDB's dumps start with, which MySQL rejects, is left out. Going the other way, MySQL 8's `utf8mb4_0900_…` collations become `utf8mb4_unicode_520_ci`. PostgreSQL copies into PostgreSQL only.
+Stored routines and views lose their `DEFINER`, as the user it names doesn't exist on the new server; they run as the server's admin instead.
+
+**Between MariaDB and MySQL**, the copy is translated on the way: MariaDB 11's `utf8mb4_uca1400_…` collations become MySQL's `utf8mb4_0900_ai_ci`, and the first line MariaDB's dumps start with, which MySQL rejects, is left out. Going the other way, MySQL 8's `utf8mb4_0900_…` collations become `utf8mb4_unicode_520_ci`, and its `DEFAULT ENCRYPTION` comments are left out. PostgreSQL copies into PostgreSQL only.
 
 **A container with a random admin password**, such as one started with `MARIADB_RANDOM_ROOT_PASSWORD`, is read with the app's own user instead (`MYSQL_USER` or `MARIADB_USER`, with its password), which can read its own database.
 
@@ -226,7 +230,7 @@ It edits the workspace repo on your machine; your teammates get the shared serve
 
 ## Users and passwords
 
-Every project gets its own user on each server, named after the project and allowed into its own databases only. Its password is generated the first time, kept in Orca's settings on this computer, written into the project's `.env`, and never committed. Another project can't read or change it.
+Every project gets its own user on each server, named after the project (or its database's `name:`) and allowed into its own databases only. Its password is generated the first time, kept in Orca's settings on this computer, written into the project's `.env`, and never committed. Another project can't read or change it.
 
 Orca's admin access is used only to create databases and users and to reset or restore them. It's never written into a project.
 
@@ -249,7 +253,13 @@ So you can ask *"snapshot onecrm's database, then run the migration"*, *"that we
 
 ## Troubleshooting
 
-**The app can't reach its database.** Check that the app reads the connection from `.env`, or uses `replaces:` so Orca sets it on the service. The host is the server's container name, which works on any of the project's networks once the project has started through Orca.
+**The app can't reach its database.** Check that the app reads the connection from `.env`, or uses `replaces:` so Orca sets it on the service. The host is the server's container name, on the `orca-databases` network, which Orca's override puts the project's services on. Start the project from Orca once after adding `requires:`, so the override exists.
+
+**The test suite's own database stopped working.** A test database service that takes its settings from the same `.env` variables as the app (a `<<: *mysql` copy with `MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}`) now gets the shared server's values. Give it settings of its own in the compose file, matching what the tests connect with.
+
+**`docker compose up` fails with "COMPOSE_FILE … no such file".** `.orca/databases.override.yaml` was deleted while `.env` still points at it. Start the project from Orca once, which writes it again, or remove the `COMPOSE_FILE` line Orca added. The override needs Docker Compose 2.24.4 or newer.
+
+**"… is already used by the project in …: give it a `name:` of its own".** Two projects would get the same database, usually because their folders have the same name (two `backend` checkouts). Set `name:` in one project's `requires:`.
 
 **A project still starts its own database.** Without `replaces:`, Orca doesn't know which service is the database; add `replaces: db`. With it, the project uses its own service when the workspace has no matching server: check the **Projects** list on the **Databases** page for where its database comes from.
 

@@ -93,19 +93,23 @@ export default function LandingPageTab(props: Props) {
   const [landing, { mutate }] = createResource(() => invoke<{ settings: LandingSettings; url: string }>("gateway_get_landing"));
   const [saving, setSaving] = createSignal(false);
 
-  const save = async (patch: Partial<LandingSettings>) => {
+  /** Whether it saved: a failure shows a toast and keeps what the user typed. */
+  const save = async (patch: Partial<LandingSettings>): Promise<boolean> => {
     const current = landing()?.settings;
-    if (!current) return;
+    if (!current) return false;
     const settings = { ...current, ...patch };
     setSaving(true);
     try {
       const r = await invoke<{ settings: LandingSettings }>("gateway_set_landing", { settings });
       mutate((l) => (l ? { ...l, settings: r.settings } : l));
       showToast("Landing page updated", "success");
+      return true;
     } catch (e) {
       showToast(`Could not save: ${e}`, "error");
+      return false;
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const setHidden = async (r: GatewayRoute, hidden: boolean) => {
@@ -330,7 +334,7 @@ export default function LandingPageTab(props: Props) {
 }
 
 /** Your own cards at the top of the page: a Jira board, a staging admin. */
-function MyLinks(props: { links: LandingLink[]; saving: boolean; onSave: (links: LandingLink[]) => Promise<unknown> | void }) {
+function MyLinks(props: { links: LandingLink[]; saving: boolean; onSave: (links: LandingLink[]) => Promise<boolean> }) {
   const [title, setTitle] = createSignal("");
   const [url, setUrl] = createSignal("");
   const add = async () => {
@@ -338,7 +342,7 @@ function MyLinks(props: { links: LandingLink[]; saving: boolean; onSave: (links:
     let u = url().trim();
     if (!t || !u) return;
     if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
-    await props.onSave([...props.links, { title: t, url: u }]);
+    if (!(await props.onSave([...props.links, { title: t, url: u }]))) return;
     setTitle("");
     setUrl("");
   };

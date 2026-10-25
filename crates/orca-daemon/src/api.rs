@@ -6078,7 +6078,7 @@ async fn ai_ask(
     let catalog: Vec<_> = orca_core::agent_tools::tool_catalog()
         .into_iter()
         .filter(|t| !local || crate::local_ai::LOCAL_TOOLS.contains(&t.name.as_str()))
-        .filter(|t| !deletes_data(&t.name))
+        .filter(|t| !assistant_refuses(&t.name))
         .collect();
     let anthropic_tools: Vec<serde_json::Value> = catalog
         .iter()
@@ -7286,7 +7286,7 @@ async fn call_anthropic_with_tools(
                         Err(e) => serde_json::json!({
                             "type": "tool_result",
                             "tool_use_id": tool_id,
-                            "content": format!("Error: {e}"),
+                            "content": format!("Error: {}", crate::agent::redact_text(&e)),
                             "is_error": true,
                         }),
                     };
@@ -8309,7 +8309,7 @@ version: call orca_docs, and read the relevant page (orca-yaml, workspaces-refer
 before writing or changing orca.yaml or orca-workspace.yaml, rather than guessing keys. \
 When the developer asks to run or set up one of their team's projects by name (\"spin up billing\"), call workspace_status: \
 if a workspace is joined it lists the team's projects; setup_project clones, configures and starts one and returns its URLs. \
-Never ask the developer to paste secrets into the chat: missing secrets are filled in on Orca's Workspace page. \
+Never ask the developer to paste secrets into the chat: fetch_project_secrets fills in what a workspace's secret manager holds, and the rest is filled in on Orca's Workspace page. \
 To start a project from a folder with a compose file or orca.yaml, use deploy_project with its path; then list_stacks, \
 stack_logs and gateway_routes show how it runs and which https://*.localhost URL serves it. stack_profiles and \
 set_stack_profiles switch optional services on and off; read_orca_yaml and write_orca_yaml edit a stack's Orca settings. \
@@ -8374,7 +8374,19 @@ async fn assistant_tool(
             "{name} deletes data, so the built-in assistant can't run it. Ask the user to do it in Orca."
         ));
     }
+    if assistant_refuses(name) {
+        return Err(format!(
+            "{name} clones a repo and runs its commands, so the built-in assistant can't run it. Ask the user to do it on the Workspace page."
+        ));
+    }
     crate::agent::execute_tool(state, name, args).await
+}
+
+/// Tools the built-in assistant, which runs without asking, doesn't get:
+/// those that delete data, and those that fetch a repo and run what it
+/// says (text in logs or pages it reads could steer it there).
+fn assistant_refuses(name: &str) -> bool {
+    deletes_data(name) || matches!(name, "join_workspace" | "setup_project")
 }
 
 /// Tools that change things but only add or start: nothing is lost.
@@ -8491,13 +8503,18 @@ async fn agent_mcp(
             let params = body.get("params").cloned().unwrap_or_default();
             let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
             let arguments = params.get("arguments").cloned().unwrap_or(serde_json::json!({}));
+            // Secrets (container environments, passwords in URLs) stay on
+            // this machine: the client sends what it gets to its model.
             match crate::agent::execute_tool(&state, tool_name, arguments).await {
                 Ok(result) => reply(serde_json::json!({
-                    "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }],
+                    "content": [{
+                        "type": "text",
+                        "text": serde_json::to_string_pretty(&crate::agent::redact_secrets(&result)).unwrap_or_default(),
+                    }],
                     "isError": false,
                 })),
                 Err(err) => reply(serde_json::json!({
-                    "content": [{ "type": "text", "text": err }],
+                    "content": [{ "type": "text", "text": crate::agent::redact_text(&err) }],
                     "isError": true,
                 })),
             }
@@ -8966,20 +8983,36 @@ async fn app_for_url(state: &AppState, url: &str) -> Result<(String, String, Opt
             format!("{h}.{}", gateway.domain)
         }
     };
-    // The route that serves it: the one with the longest path that matches.
-    let route = gateway
+    // The route that serves it, as the gateway picks it: exact hostnames
+    // before patterns, the more specific pattern first, a route with a path
+    // before one without, the longer path first. A path ending in `*` is a
+    // prefix; any other must match exactly.
+    let path_matches = |p: &str| {
+        let lower = path.to_ascii_lowercase();
+        match p.strip_suffix('*') {
+            Some(prefix) => lower.starts_with(&prefix.to_ascii_lowercase()),
+            None => lower == p.to_ascii_lowercase(),
+        }
+    };
+    let mut candidates: Vec<&orca_core::config::GatewayRoute> = gateway
         .routes
         .iter()
         .filter(|r| r.enabled && !r.websocket)
         .filter(|r| orca_core::config::host_matches(&full(&r.hostname), &host))
-        .filter(|r| {
-            r.path
-                .as_deref()
-                .is_none_or(|p| path.starts_with(p.trim_end_matches('*')))
-        })
-        .max_by_key(|r| r.path.as_deref().map_or(0, str::len))
-        .ok_or_else(|| ApiError::bad_request(format!("No gateway route serves {host}")))?
-        .clone();
+        .filter(|r| r.path.as_deref().is_none_or(path_matches))
+        .collect();
+    candidates.sort_by_key(|r| {
+        (
+            r.is_pattern(),
+            std::cmp::Reverse(r.hostname.replace('*', "").len()),
+            r.path.is_none(),
+            std::cmp::Reverse(r.path.as_deref().map_or(0, |p| p.trim_end_matches('*').len())),
+        )
+    });
+    let route = (*candidates
+        .first()
+        .ok_or_else(|| ApiError::bad_request(format!("No gateway route serves {host}")))?)
+    .clone();
     let stacks = get_stacks(state).await?;
     let by_dir = |dir: &std::path::Path| {
         let dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
@@ -8996,7 +9029,7 @@ async fn app_for_url(state: &AppState, url: &str) -> Result<(String, String, Opt
         && let Some(ws) = &workspace
     {
         let ws_dir = std::path::PathBuf::from(&ws.path);
-        let file = orca_core::workspace::WorkspaceFile::load(&ws_dir).map_err(anyhow::Error::from)?;
+        let file = orca_core::workspace::WorkspaceFile::load(&ws_dir)?;
         let dir = file.project_dir(&ws_dir, key);
         if !dir.is_dir() {
             return Err(ApiError::bad_request(format!(
@@ -9010,7 +9043,12 @@ async fn app_for_url(state: &AppState, url: &str) -> Result<(String, String, Opt
                 s.config_file.clone(),
             ));
         }
-        let name = crate::folders::project_name(&dir).map_err(|e| ApiError::bad_request(e.to_string()))?;
+        // Not started yet: the name its compose file gives it, else the
+        // folder's, as `docker compose` names it.
+        let name = match compose_project_name(state, &dir).await {
+            Some(n) => n,
+            None => crate::folders::project_name(&dir).map_err(|e| ApiError::bad_request(e.to_string()))?,
+        };
         return Ok((name, dir.to_string_lossy().to_string(), None));
     }
     // A compose project's own orca.yaml or labels.
@@ -9030,6 +9068,24 @@ async fn app_for_url(state: &AppState, url: &str) -> Result<(String, String, Opt
         stack.working_dir.clone().unwrap_or_default(),
         stack.config_file.clone(),
     ))
+}
+
+/// The project name `docker compose` gives a folder's stack (its compose
+/// file's `name:`, or the folder's), when compose can read it.
+async fn compose_project_name(state: &AppState, dir: &std::path::Path) -> Option<String> {
+    let program = match state.rt().await.detect_runtime().await {
+        orca_core::runtime::RuntimeKind::Podman => "podman",
+        orca_core::runtime::RuntimeKind::Docker => "docker",
+    };
+    let out = crate::dev::ops::runtime_cli(state, program)
+        .await
+        .current_dir(dir)
+        .args(["compose", "config", "--format", "json"])
+        .output()
+        .await
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+    v["name"].as_str().filter(|n| !n.is_empty()).map(String::from)
 }
 
 /// POST /gateway/app {url, action}: start or stop the project behind an
@@ -9055,11 +9111,13 @@ async fn gateway_app_action(
         }
         "stop" => {
             let stacks = get_stacks(&state).await?;
-            if let Some(stack) = stacks.iter().find(|s| s.name == name) {
-                for service in &stack.services {
-                    if service.state == orca_core::runtime::ContainerState::Running {
-                        state.rt().await.stop_container(&service.container_id, 10).await?;
-                    }
+            let stack = stacks
+                .iter()
+                .find(|s| s.name == name)
+                .ok_or_else(|| ApiError::bad_request(format!("{name} isn't running")))?;
+            for service in &stack.services {
+                if service.state == orca_core::runtime::ContainerState::Running {
+                    state.rt().await.stop_container(&service.container_id, 10).await?;
                 }
             }
         }
@@ -9279,7 +9337,7 @@ async fn gateway_set_traefik_mode(
 }
 
 /// Build K8s proxy route entries for Caddy when in gateway_proxies_traefik mode.
-async fn build_k8s_proxy_routes(
+pub(crate) async fn build_k8s_proxy_routes(
     k8s: &orca_backend_common::k8s::K3sManager,
     traefik_http_port: u16,
 ) -> Vec<(String, String)> {

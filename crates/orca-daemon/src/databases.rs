@@ -80,8 +80,26 @@ pub async fn plan(state: &AppState, project: &str, dir: &Path) -> Vec<Result<Pla
     }
     let workspace = workspace_for(state, dir).await;
     let mut out = Vec::new();
+    let owners = state.config.lock().await.databases.databases.clone();
     for req in yaml.requires.all() {
-        out.push(resolve(state, project, req, workspace.as_ref()).await);
+        let resolved = resolve(state, project, req, workspace.as_ref()).await.and_then(|p| {
+            // Another project's database by the same name stays theirs.
+            let other = p
+                .source
+                .server_id()
+                .and_then(|id| owners.get(&id)?.get(&p.database))
+                .filter(|o| !same_dir(Path::new(&o.dir), dir));
+            match other {
+                Some(o) => Err(format!(
+                    "its database {} on {} is already used by the project in {}: give it a `name:` of its own in orca.yaml",
+                    p.database,
+                    describe(&p.source),
+                    o.dir
+                )),
+                None => Ok(p),
+            }
+        });
+        out.push(resolved);
     }
     out
 }
@@ -118,7 +136,9 @@ async fn resolve(
     ws: Option<&WorkspaceCtx>,
 ) -> Result<Plan, String> {
     let database = req.name.clone().unwrap_or_else(|| db::ident(project, 63));
-    let user = db::user_name(project, req.engine);
+    // Named after the database when the project names it, so two projects
+    // in folders of the same name don't share a user.
+    let user = db::user_name(req.name.as_deref().unwrap_or(project), req.engine);
     let plan = |source: Source| Plan {
         requirement: req.clone(),
         source,
@@ -269,20 +289,52 @@ pub async fn prepare(
     log: &(dyn Fn(String) + Send + Sync),
 ) -> Result<Option<String>> {
     let plans = plan(state, project, dir).await;
+    let env_name = env_file(state, dir).await;
     if plans.is_empty() {
+        // Only when orca.yaml really has no `requires:` any more: one with a
+        // mistake in it isn't a reason to move the project's data.
+        if !mentions_requires(dir) {
+            restore_env(dir, &env_name, None)?;
+        }
         unset_compose_file(dir)?;
         return Ok(None);
     }
+    let plans: Vec<Plan> = plans
+        .into_iter()
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|e| anyhow::anyhow!("{project}'s database: {e}"))?;
+    if plans.iter().filter(|p| p.requirement.env.is_empty()).count() > 1 {
+        anyhow::bail!("{project}'s databases would all set DATABASE_URL: give each one its own `env:` in orca.yaml");
+    }
     let mut replaced = Vec::new();
+    let mut uses_server = false;
     for p in plans {
-        let p = p.map_err(|e| anyhow::anyhow!("{project}'s database: {e}"))?;
         let Some(server_id) = p.source.server_id() else {
             if let Source::Own { why, .. } = &p.source {
                 log(format!("Database: {why}."));
+                // Back to the project's own database: its settings too.
+                restore_env(dir, &env_name, Some(&p.requirement.env_keys()))?;
             }
             continue;
         };
         let (container, engine, host) = ensure_server(state, &p.source, log).await?;
+        // A shared server whose version wasn't known until it started.
+        if let Source::Workspace {
+            version: None, service, ..
+        } = &p.source
+            && let Some(ws) = workspace_for(state, dir).await
+            && let Some(v) = running_version(state, &ws, service).await
+            && !p.requirement.accepts(engine, Some(&v))
+        {
+            anyhow::bail!(
+                "{project} needs {} {}, and {} runs {v}",
+                engine.name(),
+                p.requirement.version.as_deref().unwrap_or(""),
+                describe(&p.source)
+            );
+        }
+        join_db_network(state, &container).await?;
+        uses_server = true;
         let password = user_password(state, &server_id, &p.user).await?;
         log(format!(
             "Database: {} for {} on {}",
@@ -307,7 +359,18 @@ pub async fn prepare(
             password,
         };
         let env = p.requirement.env_values(&conn);
-        write_env(dir, &env_file(state, dir).await, &env)?;
+        let changed = write_env(dir, &env_name, &env)?;
+        if !changed.is_empty() && tracked_by_git(dir, &env_name) {
+            log(format!(
+                "Database: {env_name} is tracked by git, and now holds a generated password: keep it out of commits"
+            ));
+        }
+        if !changed.is_empty() {
+            log(format!(
+                "Database: {} set in {env_name}; what they held before is put back if {project} stops using the database server",
+                changed.join(", ")
+            ));
+        }
         if let Some(svc) = &p.requirement.replaces {
             replaced.push(Replaced {
                 service: svc.clone(),
@@ -316,7 +379,7 @@ pub async fn prepare(
             });
         }
     }
-    if replaced.is_empty() {
+    if !uses_server {
         unset_compose_file(dir)?;
         return Ok(None);
     }
@@ -332,7 +395,24 @@ pub async fn prepare(
             .collect(),
     };
     let override_path = write_override(state, dir, &files, &replaced).await?;
-    if env_file(state, dir).await == ".env" {
+    // A replaced service still running from before stops; its data stays
+    // in its volume, for an import.
+    let rt = state.rt().await;
+    for c in rt.list_containers(false).await.unwrap_or_default() {
+        let label = |k: &str| c.labels.get(k).map(String::as_str);
+        if label("com.docker.compose.project") == Some(project)
+            && replaced
+                .iter()
+                .any(|r| Some(r.service.as_str()) == label("com.docker.compose.service"))
+        {
+            log(format!(
+                "Database: stopping {}, which the shared server stands in for; its data stays in its volume",
+                c.name
+            ));
+            let _ = rt.stop_container(&c.id, 20).await;
+        }
+    }
+    if env_name == ".env" {
         set_compose_file(dir, &files)?;
     }
     let path = override_path.to_string_lossy().to_string();
@@ -344,27 +424,6 @@ pub async fn prepare(
             .collect::<Vec<_>>()
             .join(","),
     ))
-}
-
-/// After the stack starts: its database servers join its networks, so its
-/// services reach them by name whatever networks the project uses.
-pub async fn after_up(state: &AppState, project: &str, dir: &Path) {
-    let ws = workspace_for(state, dir).await;
-    for p in plan(state, project, dir).await.into_iter().flatten() {
-        let container = match &p.source {
-            Source::Orca { id, .. } => Some(container_name(id)),
-            Source::Workspace { service, .. } => match &ws {
-                Some(ws) => workspace_container(state, ws, service).await.map(|c| c.name),
-                None => None,
-            },
-            Source::Own { .. } => None,
-        };
-        if let Some(c) = container
-            && let Err(e) = join_stack_networks(state, &c, project).await
-        {
-            tracing::warn!("database server {c}: couldn't join {project}'s networks: {e}");
-        }
-    }
 }
 
 pub fn describe(source: &Source) -> String {
@@ -510,10 +569,14 @@ async fn ensure_orca_server(
         // Back after a restart of the machine, like the projects using it.
         restart_policy: Some("unless-stopped".into()),
     };
-    let cid = rt
-        .create_container(opts)
-        .await
-        .context("couldn't create the database server")?;
+    let cid = match rt.create_container(opts).await {
+        Ok(cid) => cid,
+        // Another project starting at the same time made it first.
+        Err(e) => match rt.list_containers(true).await?.into_iter().find(|c| c.name == name) {
+            Some(c) => c.id,
+            None => return Err(e).context("couldn't create the database server"),
+        },
+    };
     rt.start_container(&cid).await?;
     Ok(())
 }
@@ -622,19 +685,165 @@ async fn env_file(state: &AppState, dir: &Path) -> String {
         .unwrap_or_else(|| ".env".into())
 }
 
-fn write_env(dir: &Path, file: &str, values: &BTreeMap<String, String>) -> Result<()> {
+/// The values Orca replaced in a project's env file, to put back when it
+/// goes back to its own database: key → its earlier value (none when it
+/// wasn't set).
+const ENV_BEFORE_FILE: &str = "databases.env-before.json";
+
+fn env_before(dir: &Path) -> BTreeMap<String, Option<String>> {
+    std::fs::read_to_string(dir.join(".orca").join(ENV_BEFORE_FILE))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+fn save_env_before(dir: &Path, before: &BTreeMap<String, Option<String>>) -> Result<()> {
+    let orca_dir = dir.join(".orca");
+    let path = orca_dir.join(ENV_BEFORE_FILE);
+    if before.is_empty() {
+        let _ = std::fs::remove_file(path);
+        return Ok(());
+    }
+    std::fs::create_dir_all(&orca_dir)?;
+    let ignore = orca_dir.join(".gitignore");
+    if !ignore.exists() {
+        std::fs::write(&ignore, "*\n")?;
+    }
+    write_private(&path, &serde_json::to_string_pretty(before)?)
+}
+
+/// Write a file that may hold passwords: readable by its owner only when
+/// it's new, keeping the mode of one that exists (an app container may
+/// read a mounted `.env` as another user), and through a symlink.
+fn write_private(path: &Path, text: &str) -> Result<()> {
+    let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let mode = std::fs::metadata(&path).ok().map(|m| m.permissions());
+    let tmp = path.with_extension("orca-tmp");
+    std::fs::write(&tmp, text)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = mode.unwrap_or_else(|| std::fs::Permissions::from_mode(0o600));
+        let _ = std::fs::set_permissions(&tmp, perms);
+    }
+    #[cfg(not(unix))]
+    let _ = mode;
+    std::fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// Set `values` in the env file, keeping what each key held before the
+/// first time Orca sets it. Returns the keys whose value changed.
+fn write_env(dir: &Path, file: &str, values: &BTreeMap<String, String>) -> Result<Vec<String>> {
     let path = dir.join(file);
     let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let updated = orca_core::workspace::set_env_values(&text, values);
-    if updated != text {
-        let tmp = path.with_extension("orca-tmp");
-        std::fs::write(&tmp, updated)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
+    let mut before = env_before(dir);
+    let mut changed = Vec::new();
+    for (k, v) in values {
+        // Set but empty counts as set: it's put back empty.
+        let had = orca_core::workspace::env_value(&text, k).or_else(|| {
+            text.lines()
+                .map(|l| l.trim_start().trim_start_matches("export ").trim_start())
+                .any(|l| l.split_once('=').is_some_and(|(key, _)| key.trim() == k))
+                .then(String::new)
+        });
+        if had.as_ref() != Some(v) {
+            changed.push(k.clone());
+            before.entry(k.clone()).or_insert(had);
         }
-        std::fs::rename(&tmp, &path)?;
+    }
+    if changed.is_empty() {
+        return Ok(changed);
+    }
+    save_env_before(dir, &before)?;
+    write_private(&path, &orca_core::workspace::set_env_values(&text, values))?;
+    Ok(changed)
+}
+
+/// Put back the values Orca replaced (only `keys`, when given).
+fn restore_env(dir: &Path, file: &str, keys: Option<&[String]>) -> Result<()> {
+    let mut before = env_before(dir);
+    let back: BTreeMap<String, Option<String>> = before
+        .iter()
+        .filter(|(k, _)| keys.is_none_or(|ks| ks.contains(k)))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    if back.is_empty() {
+        return Ok(());
+    }
+    let path = dir.join(file);
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let set: BTreeMap<String, String> = back.iter().filter_map(|(k, v)| Some((k.clone(), v.clone()?))).collect();
+    let mut updated = orca_core::workspace::set_env_values(&text, &set);
+    let unset: Vec<&String> = back.iter().filter(|(_, v)| v.is_none()).map(|(k, _)| k).collect();
+    if !unset.is_empty() {
+        let mut out: Vec<&str> = updated
+            .lines()
+            .filter(|l| {
+                let l = l.trim_start();
+                let l = l.strip_prefix("export ").unwrap_or(l);
+                !l.split_once('=')
+                    .is_some_and(|(k, _)| unset.iter().any(|u| u.as_str() == k.trim()))
+            })
+            .collect();
+        out.push("");
+        updated = out.join(if updated.contains("\r\n") { "\r\n" } else { "\n" });
+    }
+    write_private(&path, &updated)?;
+    for k in back.keys() {
+        before.remove(k);
+    }
+    save_env_before(dir, &before)
+}
+
+/// Whether the project's orca.yaml has a `requires:` key, valid or not.
+fn mentions_requires(dir: &Path) -> bool {
+    ["orca.yaml", "orca.yml", "orca.local.yaml"].iter().any(|f| {
+        std::fs::read_to_string(dir.join(f))
+            .ok()
+            .and_then(|t| serde_yaml::from_str::<serde_yaml::Value>(&t).ok())
+            .is_some_and(|v| v.get("requires").is_some())
+    })
+}
+
+fn tracked_by_git(dir: &Path, file: &str) -> bool {
+    std::process::Command::new("git")
+        .args(["ls-files", "--error-unmatch", "--", file])
+        .current_dir(dir)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+fn same_dir(a: &Path, b: &Path) -> bool {
+    let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    canon(a) == canon(b)
+}
+
+/// The network every database server is on, and every service of a
+/// project using one: `docker compose up` in a terminal reaches it too.
+pub const DB_NETWORK: &str = "orca-databases";
+
+async fn join_db_network(state: &AppState, container: &str) -> Result<()> {
+    use orca_core::network::NetworkManager;
+    let rt = state.rt().await;
+    let net = match NetworkManager::inspect(rt.as_ref(), DB_NETWORK).await {
+        Ok(n) => n,
+        Err(_) => NetworkManager::create(rt.as_ref(), DB_NETWORK, "bridge")
+            .await
+            .context("couldn't create the databases' network")?,
+    };
+    let _ = net;
+    let joined = rt
+        .docker
+        .inspect_container(container, None)
+        .await
+        .ok()
+        .and_then(|i| i.network_settings.and_then(|n| n.networks))
+        .is_some_and(|n| n.contains_key(DB_NETWORK));
+    if !joined {
+        NetworkManager::connect(rt.as_ref(), DB_NETWORK, container).await?;
     }
     Ok(())
 }
@@ -644,7 +853,8 @@ fn write_env(dir: &Path, file: &str, values: &BTreeMap<String, String>) -> Resul
 /// services out too.
 const OVERRIDE_ENTRY: &str = ".orca/databases.override.yaml";
 /// The comment above a `COMPOSE_FILE` Orca added, so it can take it out again.
-const COMPOSE_FILE_NOTE: &str = "# Added by Orca: leaves out the database services a shared server replaces.";
+pub(crate) const COMPOSE_FILE_NOTE: &str =
+    "# Added by Orca: the database server's settings (.orca/databases.override.yaml).";
 
 fn compose_sep() -> char {
     if cfg!(windows) { ';' } else { ':' }
@@ -669,15 +879,22 @@ fn set_compose_file(dir: &Path, files: &[String]) -> Result<()> {
         .collect();
     list.push(OVERRIDE_ENTRY.to_string());
     let value = list.join(&sep.to_string());
-    let has_key = text.lines().any(|l| l.trim_start().starts_with("COMPOSE_FILE="));
+    let has_key = text.lines().any(|l| {
+        let l = l.trim_start();
+        l.strip_prefix("export ")
+            .unwrap_or(l)
+            .trim_start()
+            .starts_with("COMPOSE_FILE=")
+    });
     let updated = if has_key {
         orca_core::workspace::set_env_values(&text, &BTreeMap::from([("COMPOSE_FILE".to_string(), value)]))
     } else {
+        let nl = if text.contains("\r\n") { "\r\n" } else { "\n" };
         let mut t = text.clone();
         if !t.is_empty() && !t.ends_with('\n') {
-            t.push('\n');
+            t.push_str(nl);
         }
-        t.push_str(&format!("\n{COMPOSE_FILE_NOTE}\nCOMPOSE_FILE={value}\n"));
+        t.push_str(&format!("{nl}{COMPOSE_FILE_NOTE}{nl}COMPOSE_FILE={value}{nl}"));
         t
     };
     if updated != text {
@@ -700,7 +917,9 @@ fn unset_compose_file(dir: &Path) -> Result<()> {
     let lines: Vec<&str> = text.lines().collect();
     let mut out: Vec<String> = Vec::new();
     for (i, line) in lines.iter().enumerate() {
-        let Some(v) = line.trim_start().strip_prefix("COMPOSE_FILE=") else {
+        let unexported = line.trim_start();
+        let unexported = unexported.strip_prefix("export ").unwrap_or(unexported).trim_start();
+        let Some(v) = unexported.strip_prefix("COMPOSE_FILE=") else {
             out.push(line.to_string());
             continue;
         };
@@ -719,8 +938,9 @@ fn unset_compose_file(dir: &Path) -> Result<()> {
             .collect();
         out.push(format!("COMPOSE_FILE={}", kept.join(&sep.to_string())));
     }
-    let mut updated = out.join("\n");
-    updated.push('\n');
+    let nl = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut updated = out.join(nl);
+    updated.push_str(nl);
     std::fs::write(&path, updated)?;
     Ok(())
 }
@@ -740,41 +960,72 @@ struct Replaced {
 async fn write_override(state: &AppState, dir: &Path, files: &[String], replaced: &[Replaced]) -> Result<PathBuf> {
     let names: Vec<&str> = replaced.iter().map(|r| r.service.as_str()).collect();
     let mut yaml = String::from(
-        "# Written by Orca: these services' databases come from a shared server,\n# so they don't start. Delete this file to run them again.\nservices:\n",
+        "# Written by Orca before each start: these services' databases come from\n\
+         # a database server, so they don't start. To run them again, remove\n\
+         # `requires:` from orca.yaml (or set `database: own` in the workspace).\n\
+         services:\n",
     );
     for r in replaced {
         yaml.push_str(&format!(
             "  # Its database is on {}.\n  {}:\n    profiles: [orca-replaced]\n",
-            r.from, r.service
+            r.from,
+            serde_json::to_string(&r.service)?
         ));
     }
-    for (svc, deps) in dependents(state, dir, files).await {
-        let kept: Vec<&String> = deps.iter().filter(|d| !names.contains(&d.as_str())).collect();
-        if kept.len() == deps.len() {
+    for (svc, info) in services_of(state, dir, files).await {
+        if names.contains(&svc.as_str()) {
             continue;
         }
-        yaml.push_str(&format!("  {svc}:\n"));
-        if kept.is_empty() {
-            yaml.push_str("    depends_on: !reset []\n");
-        } else {
-            yaml.push_str(&format!(
-                "    depends_on: !override [{}]\n",
-                kept.iter().map(|d| d.as_str()).collect::<Vec<_>>().join(", ")
-            ));
-        }
-        let env: BTreeMap<&String, &String> = replaced
-            .iter()
-            .filter(|r| deps.contains(&r.service))
-            .flat_map(|r| r.env.iter())
-            .collect();
-        if !env.is_empty() {
-            yaml.push_str("    environment:\n");
-            for (k, v) in env {
-                // JSON strings are valid YAML, and quote anything a value holds.
-                yaml.push_str(&format!("      {k}: {}\n", serde_json::to_string(v)?));
+        let mut block = String::new();
+        let lost: Vec<&String> = info.depends_on.keys().filter(|d| names.contains(&d.as_str())).collect();
+        if !lost.is_empty() {
+            let kept: Vec<(&String, &serde_json::Value)> = info
+                .depends_on
+                .iter()
+                .filter(|(d, _)| !names.contains(&d.as_str()))
+                .collect();
+            if kept.is_empty() {
+                block.push_str("    depends_on: !reset []\n");
+            } else {
+                // The ones that stay, with their conditions (service_healthy…).
+                block.push_str("    depends_on: !override\n");
+                for (d, cond) in kept {
+                    block.push_str(&format!(
+                        "      {}: {}\n",
+                        serde_json::to_string(d)?,
+                        serde_json::to_string(cond)?
+                    ));
+                }
+            }
+            let env: BTreeMap<&String, &String> = replaced
+                .iter()
+                .filter(|r| info.depends_on.contains_key(&r.service))
+                .flat_map(|r| r.env.iter())
+                .collect();
+            if !env.is_empty() {
+                block.push_str("    environment:\n");
+                for (k, v) in env {
+                    // JSON strings are valid YAML, and quote anything a value holds.
+                    block.push_str(&format!("      {k}: {}\n", serde_json::to_string(v)?));
+                }
             }
         }
+        // On the servers' network too, so the database's name resolves
+        // however the project is started.
+        if let Some(networks) = &info.networks {
+            block.push_str("    networks:\n");
+            for n in networks.iter().filter(|n| n.as_str() != DB_NETWORK) {
+                block.push_str(&format!("      {}: {{}}\n", serde_json::to_string(n)?));
+            }
+            block.push_str(&format!("      {DB_NETWORK}: {{}}\n"));
+        }
+        if !block.is_empty() {
+            yaml.push_str(&format!("  {}:\n{block}", serde_json::to_string(&svc)?));
+        }
     }
+    yaml.push_str(&format!(
+        "networks:\n  {DB_NETWORK}:\n    name: {DB_NETWORK}\n    external: true\n"
+    ));
     let orca_dir = dir.join(".orca");
     std::fs::create_dir_all(&orca_dir)?;
     let ignore = orca_dir.join(".gitignore");
@@ -786,30 +1037,49 @@ async fn write_override(state: &AppState, dir: &Path, files: &[String], replaced
     Ok(path)
 }
 
-/// Each service's `depends_on`, in every profile, from the project's compose
-/// files as compose resolves them.
-async fn dependents(state: &AppState, dir: &Path, files: &[String]) -> BTreeMap<String, Vec<String>> {
+/// A service as compose resolves it: what it depends on (with each
+/// dependency's condition), and its networks (none when it shares another's
+/// network stack, `network_mode`).
+struct ServiceInfo {
+    depends_on: BTreeMap<String, serde_json::Value>,
+    networks: Option<Vec<String>>,
+}
+
+/// Every service of the project's compose files, in every profile (one
+/// switched on later depends on the database too).
+async fn services_of(state: &AppState, dir: &Path, files: &[String]) -> BTreeMap<String, ServiceInfo> {
     let mut args = vec!["compose".to_string()];
     for f in files.iter().filter(|f| !f.ends_with(OVERRIDE_FILE)) {
         args.extend(["-f".into(), f.clone()]);
     }
-    // Every profile's services: one switched on later depends on it too.
     args.extend(["--profile".into(), "*".into()]);
     args.extend(["config".into(), "--format".into(), "json".into()]);
     let program = match state.rt().await.detect_runtime().await {
         orca_core::runtime::RuntimeKind::Podman => "podman",
         orca_core::runtime::RuntimeKind::Docker => "docker",
     };
-    let Ok(out) = crate::dev::ops::runtime_cli(state, program)
+    let out = crate::dev::ops::runtime_cli(state, program)
         .await
         .current_dir(dir)
         .args(&args)
         .output()
-        .await
-    else {
-        return BTreeMap::new();
+        .await;
+    let v = match out {
+        Ok(o) if o.status.success() => serde_json::from_slice::<serde_json::Value>(&o.stdout).ok(),
+        Ok(o) => {
+            tracing::warn!(
+                "databases: couldn't read {}'s compose files: {}",
+                dir.display(),
+                String::from_utf8_lossy(&o.stderr).lines().last().unwrap_or("")
+            );
+            None
+        }
+        Err(e) => {
+            tracing::warn!("databases: couldn't run compose config in {}: {e}", dir.display());
+            None
+        }
     };
-    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&out.stdout) else {
+    let Some(v) = v else {
         return BTreeMap::new();
     };
     v["services"]
@@ -817,53 +1087,32 @@ async fn dependents(state: &AppState, dir: &Path, files: &[String]) -> BTreeMap<
         .map(|services| {
             services
                 .iter()
-                .filter_map(|(name, s)| {
-                    let deps: Vec<String> = match &s["depends_on"] {
-                        serde_json::Value::Object(m) => m.keys().cloned().collect(),
-                        serde_json::Value::Array(a) => a.iter().filter_map(|d| d.as_str().map(String::from)).collect(),
-                        _ => return None,
+                .map(|(name, s)| {
+                    let depends_on = match &s["depends_on"] {
+                        serde_json::Value::Object(m) => m.clone().into_iter().collect(),
+                        serde_json::Value::Array(a) => a
+                            .iter()
+                            .filter_map(|d| d.as_str())
+                            .map(|d| (d.to_string(), serde_json::json!({"condition": "service_started"})))
+                            .collect(),
+                        _ => BTreeMap::new(),
                     };
-                    Some((name.clone(), deps))
+                    let networks = if s.get("network_mode").is_some_and(|m| !m.is_null()) {
+                        None
+                    } else {
+                        Some(match &s["networks"] {
+                            serde_json::Value::Object(m) => m.keys().cloned().collect(),
+                            serde_json::Value::Array(a) => {
+                                a.iter().filter_map(|n| n.as_str().map(String::from)).collect()
+                            }
+                            _ => vec!["default".to_string()],
+                        })
+                    };
+                    (name.clone(), ServiceInfo { depends_on, networks })
                 })
                 .collect()
         })
         .unwrap_or_default()
-}
-
-/// Connect a container to every network the stack's containers are on.
-async fn join_stack_networks(state: &AppState, container: &str, stack: &str) -> Result<()> {
-    let rt = state.rt().await;
-    let containers = rt.list_containers(false).await?;
-    let mut networks = std::collections::BTreeSet::new();
-    for c in containers
-        .iter()
-        .filter(|c| c.labels.get("com.docker.compose.project").map(String::as_str) == Some(stack))
-    {
-        if let Ok(info) = rt.docker.inspect_container(&c.id, None).await {
-            for n in info
-                .network_settings
-                .and_then(|n| n.networks)
-                .unwrap_or_default()
-                .into_keys()
-            {
-                if n != "host" && n != "none" {
-                    networks.insert(n);
-                }
-            }
-        }
-    }
-    let own: Vec<String> = rt
-        .docker
-        .inspect_container(container, None)
-        .await
-        .ok()
-        .and_then(|i| i.network_settings.and_then(|n| n.networks))
-        .map(|n| n.into_keys().collect())
-        .unwrap_or_default();
-    for n in networks.into_iter().filter(|n| !own.contains(n)) {
-        orca_core::network::NetworkManager::connect(rt.as_ref(), &n, container).await?;
-    }
-    Ok(())
 }
 
 // ---- The Databases page ----
@@ -1067,6 +1316,23 @@ fn check_ids(server: &str, database: &str) -> Result<()> {
     Ok(())
 }
 
+/// Only databases Orca made for a project can be reset, restored or
+/// imported into: not the server's own, nor another tool's.
+async fn check_orca_made(state: &AppState, server: &str, database: &str) -> Result<()> {
+    let known = state
+        .config
+        .lock()
+        .await
+        .databases
+        .databases
+        .get(server)
+        .is_some_and(|m| m.contains_key(database));
+    if !known {
+        anyhow::bail!("{database} on {server} isn't a database Orca made for a project");
+    }
+    Ok(())
+}
+
 fn snapshot_dir(server: &str, database: &str) -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -1135,17 +1401,14 @@ pub async fn snapshot(state: &AppState, server: &str, database: &str, label: Opt
         .unwrap_or_default();
     let name = format!("{stamp}{label}.sql.gz");
     let path = dir.join(&name);
-    let cmd = format!(
-        "set -o pipefail 2>/dev/null; {} | gzip -c",
-        db::dump_cmd(engine, database)?
-    );
+    let cmd = through_file(&db::dump_cmd(engine, database)?, "gzip -c");
     let out = crate::dev::ops::runtime_cli(state, exec_program(state).await)
         .await
         .args(["exec", &container, "sh", "-c", &cmd])
         .output()
         .await
         .context("couldn't run the dump")?;
-    if !out.status.success() || out.stdout.len() < 20 {
+    if !out.status.success() {
         anyhow::bail!(
             "the dump failed: {}",
             String::from_utf8_lossy(&out.stderr)
@@ -1165,14 +1428,28 @@ pub async fn snapshot(state: &AppState, server: &str, database: &str, label: Opt
     })
 }
 
+/// A dump, then what reads it: written to a file in the container first,
+/// so a failed or empty dump fails the whole command in any `sh` (dash has
+/// no pipefail), rather than the reader's success hiding it.
+fn through_file(dump: &str, then: &str) -> String {
+    format!(
+        r#"t=/tmp/orca-dump.$$; trap 'rm -f "$t"' EXIT; {dump} > "$t" || exit 1; [ -s "$t" ] || {{ echo "the dump is empty" >&2; exit 1; }}; {then} "$t""#
+    )
+}
+
 /// Empty the database and load a snapshot into it.
 pub async fn restore(state: &AppState, server: &str, database: &str, snapshot: &str) -> Result<()> {
     check_ids(server, database)?;
     check_snapshot_name(snapshot)?;
     let path = snapshot_dir(server, database).join(snapshot);
     let bytes = std::fs::read(&path).with_context(|| format!("no snapshot {snapshot}"))?;
+    check_orca_made(state, server, database).await?;
     let (container, engine) = server_container(state, server).await?;
     let user = owner_user(state, server, database).await;
+    // What's there now can be had back, or nothing is changed.
+    self::snapshot(state, server, database, Some("before-restore"))
+        .await
+        .context("couldn't take a snapshot of what's there first, so nothing was changed")?;
     crate::dev::data::exec_sh(state, &container, &db::reset_cmd(engine, database, &user)?).await?;
     // Postgres loads as the project's user, so what it creates is theirs.
     let cmd = match engine {
@@ -1229,9 +1506,22 @@ async fn owner_user(state: &AppState, server: &str, database: &str) -> String {
 /// seed command, when it has one. Returns what the seed printed.
 pub async fn reset(state: &AppState, server: &str, database: &str) -> Result<Option<String>> {
     check_ids(server, database)?;
+    check_orca_made(state, server, database).await?;
     let (container, engine) = server_container(state, server).await?;
     let user = owner_user(state, server, database).await;
     crate::dev::data::exec_sh(state, &container, &db::reset_cmd(engine, database, &user)?).await?;
+    // The databases it made itself go too, so the seed starts from nothing.
+    if makes_own(state, server, database).await {
+        let listed = crate::dev::data::exec_sh(state, &container, &db::list_cmd(engine))
+            .await
+            .unwrap_or_default();
+        let prefix = format!("{database}_");
+        for name in listed.lines().filter_map(|l| l.split('\t').next()) {
+            if name.starts_with(&prefix) && is_db_name(name) {
+                crate::dev::data::exec_sh(state, &container, &db::drop_cmd(engine, name)?).await?;
+            }
+        }
+    }
     let owner = state
         .config
         .lock()
@@ -1427,7 +1717,9 @@ fn crossing(from: Engine, to: Engine) -> Option<&'static str> {
         (Engine::Mariadb, Engine::Mysql) => Some(
             r#"-e '/enable the sandbox mode/d' -e 's/utf8mb4_uca1400_[a-z0-9_]*/utf8mb4_0900_ai_ci/g' -e 's/utf8mb3_uca1400_[a-z0-9_]*/utf8mb3_general_ci/g'"#,
         ),
-        (Engine::Mysql, Engine::Mariadb) => Some(r#"-e 's/utf8mb4_0900_[a-z0-9_]*/utf8mb4_unicode_520_ci/g'"#),
+        (Engine::Mysql, Engine::Mariadb) => Some(
+            r#"-e 's/utf8mb4_0900_[a-z0-9_]*/utf8mb4_unicode_520_ci/g' -e 's#/\*!80016 DEFAULT ENCRYPTION=.N. \*/##g'"#,
+        ),
         _ => None,
     }
 }
@@ -1440,6 +1732,8 @@ pub struct Imported {
     /// A snapshot of what the target held before, to go back to.
     pub snapshot_before: Option<String>,
     pub bytes: u64,
+    /// The project's own `<name>_…` databases that came along.
+    pub others: Vec<String>,
 }
 
 /// Copy a database from a project's own container into a database Orca
@@ -1454,6 +1748,7 @@ pub async fn import(
     source_database: Option<&str>,
 ) -> Result<Imported> {
     check_ids(server, database)?;
+    check_orca_made(state, server, database).await?;
     let source = own_services(state)
         .await
         .into_iter()
@@ -1476,11 +1771,7 @@ pub async fn import(
         .map(str::to_string)
         .or(source.database.clone())
         .with_context(|| format!("{source_container} doesn't say which database it holds: give source_database"))?;
-    if from_db.is_empty()
-        || !from_db
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    {
+    if !is_db_name(&from_db) {
         anyhow::bail!("'{from_db}' isn't a database name");
     }
 
@@ -1494,59 +1785,40 @@ pub async fn import(
     }
     let result = async {
         // What's there now can be had back.
-        let before = snapshot(state, server, database, Some("before-import")).await.ok().map(|s| s.name);
+        let before = Some(
+            snapshot(state, server, database, Some("before-import"))
+                .await
+                .context("couldn't take a snapshot of what's there first, so nothing was changed")?
+                .name,
+        );
+        // The source can be read, before the target is emptied.
+        crate::dev::data::exec_sh(state, &source.container, &source_check_cmd(source.engine, &from_db))
+            .await
+            .with_context(|| format!("couldn't read {from_db} in {}", source.container))?;
         let user = owner_user(state, server, database).await;
         crate::dev::data::exec_sh(state, &target, &db::reset_cmd(engine, database, &user)?).await?;
+        copy_database(state, &source, &from_db, &target, engine, database, &user).await?;
 
-        let program = exec_program(state).await;
-        let dump = match source.engine {
-            Engine::Postgres => format!(r#"pg_dump -U "${{POSTGRES_USER:-postgres}}" --no-owner --no-acl -d "{from_db}""#),
-            // Its admin when the container knows the password; else the
-            // app's own user, which can read its database (images started
-            // with a random root password are common).
-            _ => format!(
-                r#"if [ -n "${{MYSQL_ROOT_PASSWORD:-$MARIADB_ROOT_PASSWORD}}" ]; then U=root; P="${{MYSQL_ROOT_PASSWORD:-$MARIADB_ROOT_PASSWORD}}"; else U="${{MYSQL_USER:-${{MARIADB_USER:-root}}}}"; P="${{MYSQL_PASSWORD:-$MARIADB_PASSWORD}}"; fi; $(command -v mysqldump || command -v mariadb-dump) -u"$U" ${{P:+-p"$P"}} --single-transaction --no-tablespaces --triggers "{from_db}""#
-            ),
-        };
-        let load = match engine {
-            Engine::Postgres => format!(r#"{{ echo 'SET ROLE "{user}";'; cat; }} | {}"#, db::restore_cmd(engine, database)?),
-            _ => db::restore_cmd(engine, database)?,
-        };
-        // Between MariaDB and MySQL, the dump is translated on the way.
-        let dump = match crossing(source.engine, engine) {
-            Some(sed) => format!("{{ {dump}; }} | sed {sed}"),
-            None => dump,
-        };
-        let mut src = crate::dev::ops::runtime_cli(state, program)
-            .await
-            .args(["exec", &source.container, "sh", "-c", &dump])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .context("couldn't run the dump")?;
-        let pipe: std::process::Stdio = src.stdout.take().context("no dump output")?.try_into()?;
-        let dst = crate::dev::ops::runtime_cli(state, program)
-            .await
-            .args(["exec", "-i", &target, "sh", "-c", &load])
-            .stdin(pipe)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .context("couldn't run the restore")?;
-        let (src_out, dst_out) = tokio::join!(src.wait_with_output(), dst.wait_with_output());
-        let (src_out, dst_out) = (src_out?, dst_out?);
-        if !src_out.status.success() {
-            anyhow::bail!(
-                "the dump from {} failed: {}",
-                source.container,
-                String::from_utf8_lossy(&src_out.stderr).lines().last().unwrap_or("")
-            );
-        }
-        if !dst_out.status.success() {
-            anyhow::bail!(
-                "loading into {database} failed: {}",
-                String::from_utf8_lossy(&dst_out.stderr).lines().last().unwrap_or("")
-            );
+        // The databases a project makes itself (`<name>_tenant`, with
+        // `privileges: [create]`) come along, under the new name.
+        let mut others = Vec::new();
+        if makes_own(state, server, database).await {
+            let listed =
+                crate::dev::data::exec_sh(state, &source.container, &source_family_cmd(source.engine, &from_db))
+                    .await
+                    .unwrap_or_default();
+            for name in listed.lines().map(str::trim) {
+                let Some(suffix) = name.strip_prefix(&format!("{from_db}_")) else {
+                    continue;
+                };
+                let to = format!("{database}_{suffix}");
+                if suffix.is_empty() || !is_db_name(name) || !is_db_name(&to) {
+                    continue;
+                }
+                crate::dev::data::exec_sh(state, &target, &db::reset_cmd(engine, &to, &user)?).await?;
+                copy_database(state, &source, name, &target, engine, &to, &user).await?;
+                others.push(to);
+            }
         }
         let size = servers_with(state, true)
             .await
@@ -1560,6 +1832,7 @@ pub async fn import(
             database: database.to_string(),
             snapshot_before: before,
             bytes: size,
+            others,
         })
     }
     .await;
@@ -1567,6 +1840,135 @@ pub async fn import(
         let _ = rt.stop_container(&source.container, 20).await;
     }
     result
+}
+
+fn is_db_name(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 64 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// The login a project's own MySQL or MariaDB container can be read with:
+/// its admin when the container knows the password, else the app's own
+/// user, which can read its database (images started with a random root
+/// password are common). Sets `$U` and `$P`.
+const SOURCE_LOGIN: &str = r#"if [ -n "${MYSQL_ROOT_PASSWORD:-$MARIADB_ROOT_PASSWORD}" ]; then U=root; P="${MYSQL_ROOT_PASSWORD:-$MARIADB_ROOT_PASSWORD}"; else U="${MYSQL_USER:-${MARIADB_USER:-root}}"; P="${MYSQL_PASSWORD:-$MARIADB_PASSWORD}"; fi"#;
+
+/// Fails unless the source container's database can be read.
+fn source_check_cmd(engine: Engine, db: &str) -> String {
+    match engine {
+        Engine::Postgres => format!(r#"psql -U "${{POSTGRES_USER:-postgres}}" -d "{db}" -tAc 'SELECT 1' >/dev/null"#),
+        _ => format!(
+            r#"{SOURCE_LOGIN}; $(command -v mysql || command -v mariadb) -u"$U" ${{P:+-p"$P"}} -e 'SELECT 1' "{db}" >/dev/null"#
+        ),
+    }
+}
+
+/// Lists the source container's databases named `<db>_…`.
+fn source_family_cmd(engine: Engine, db: &str) -> String {
+    let pattern = db.replace('_', "\\\\_");
+    match engine {
+        Engine::Postgres => format!(
+            r#"psql -U "${{POSTGRES_USER:-postgres}}" -tAc "SELECT datname FROM pg_database WHERE datname LIKE '{pattern}\\_%'""#
+        ),
+        _ => format!(
+            r#"{SOURCE_LOGIN}; $(command -v mysql || command -v mariadb) -u"$U" ${{P:+-p"$P"}} -N -B -e "SHOW DATABASES LIKE '{pattern}\\_%'""#
+        ),
+    }
+}
+
+/// Stream one database from a project's own container into an (empty)
+/// database on a server.
+async fn copy_database(
+    state: &AppState,
+    source: &OwnService,
+    from_db: &str,
+    target: &str,
+    engine: Engine,
+    database: &str,
+    user: &str,
+) -> Result<()> {
+    let program = exec_program(state).await;
+    let dump = match source.engine {
+        Engine::Postgres => format!(r#"pg_dump -U "${{POSTGRES_USER:-postgres}}" --no-owner --no-acl -d "{from_db}""#),
+        // With its stored routines; their DEFINER is left out, as the user
+        // it names doesn't exist on the new server.
+        _ => format!(
+            r#"{SOURCE_LOGIN}; $(command -v mysqldump || command -v mariadb-dump) -u"$U" ${{P:+-p"$P"}} --single-transaction --no-tablespaces --triggers --routines "{from_db}""#
+        ),
+    };
+    let load = match engine {
+        Engine::Postgres => format!(
+            r#"{{ echo 'SET ROLE "{user}";'; cat; }} | {}"#,
+            db::restore_cmd(engine, database)?
+        ),
+        _ => db::restore_cmd(engine, database)?,
+    };
+    // Between MariaDB and MySQL, the dump is translated on the way.
+    let dump = match source.engine {
+        Engine::Postgres => through_file(&dump, "cat"),
+        _ => through_file(
+            &dump,
+            &format!(
+                "sed -e 's/DEFINER=`[^`]*`@`[^`]*`//g' {}",
+                crossing(source.engine, engine).unwrap_or_default()
+            ),
+        ),
+    };
+    let mut src = crate::dev::ops::runtime_cli(state, program)
+        .await
+        .args(["exec", &source.container, "sh", "-c", &dump])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("couldn't run the dump")?;
+    let pipe: std::process::Stdio = src.stdout.take().context("no dump output")?.try_into()?;
+    let dst = crate::dev::ops::runtime_cli(state, program)
+        .await
+        .args(["exec", "-i", target, "sh", "-c", &load])
+        .stdin(pipe)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("couldn't run the restore")?;
+    let (src_out, dst_out) = tokio::join!(src.wait_with_output(), dst.wait_with_output());
+    let (src_out, dst_out) = (src_out?, dst_out?);
+    if !src_out.status.success() {
+        anyhow::bail!(
+            "the dump of {from_db} from {} failed: {}",
+            source.container,
+            String::from_utf8_lossy(&src_out.stderr).lines().last().unwrap_or("")
+        );
+    }
+    if !dst_out.status.success() {
+        anyhow::bail!(
+            "loading into {database} failed: {}",
+            String::from_utf8_lossy(&dst_out.stderr).lines().last().unwrap_or("")
+        );
+    }
+    Ok(())
+}
+
+/// Whether the project may make databases of its own named `<database>_…`
+/// (`privileges: [create]`): they go with it on import, and on reset.
+async fn makes_own(state: &AppState, server: &str, database: &str) -> bool {
+    let owner = state
+        .config
+        .lock()
+        .await
+        .databases
+        .databases
+        .get(server)
+        .and_then(|m| m.get(database))
+        .cloned();
+    let Some(owner) = owner else {
+        return false;
+    };
+    let Ok(yaml) = OrcaYaml::load(Path::new(&owner.dir)) else {
+        return false;
+    };
+    yaml.requires.all().iter().any(|r| {
+        r.privileges.contains(&db::Privilege::Create)
+            && r.name.clone().unwrap_or_else(|| db::ident(&owner.project, 63)) == database
+    })
 }
 
 // ---- API ----

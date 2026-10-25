@@ -174,7 +174,7 @@ A successful call returns `{"result": ...}`. A failed one returns HTTP 400 with 
 
 ## Tool reference
 
-Orca has 74 agent tools. The same set is available over MCP, the OpenAI-compatible endpoint, direct execution, and to the built-in [AI assistant](/docs/ai-assistant/).
+These are all of Orca's agent tools, available over MCP, the OpenAI-compatible endpoint and direct execution. The built-in [AI assistant](/docs/ai-assistant/) runs tools without asking, so it gets all of them except those that delete data, join a workspace or set up a project; with a local model it gets a smaller set. Over MCP, secrets in results (container environments, passwords in URLs) are blanked out, as they are for the assistant.
 
 ### Containers
 

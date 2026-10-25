@@ -152,7 +152,7 @@ Click **Set up** on a project's card, or **Start** if it's already cloned. Orca 
 
 | Step | What happens |
 |---|---|
-| **Clone the repository** | Runs `git clone` (with `--branch` when the workspace names one) into the project's folder. If the folder already exists, Orca uses it as it is and shows *"Already in …"*. |
+| **Clone the repository** | Runs `git clone` (with `--branch` when the workspace names one) into the project's folder. If the folder already exists and is a checkout of the project's repo (its `origin` is the same repository, written as SSH or HTTPS), Orca uses it as it is and shows *"Already in …"*. A folder of that name holding something else stops setup with *"… is a checkout of …, not of …"* or *"… already exists but isn't a git checkout of …"*: move the folder, or ask for a `path:` for the project in the workspace file. |
 | **Create the .env file** | Creates the `.env` from its template, such as `.env.example`, if the file doesn't exist yet. An existing `.env` is never overwritten. |
 | **Fill in secrets** | Fetches each missing secret with your secret manager's CLI, when it's set up on this machine, and writes it to the `.env`. |
 | **Create its database** | When the project's `orca.yaml` [requires a database](/docs/databases/), creates it and a user for it on the workspace's server (or another, see [Databases](/docs/databases/#how-it-works)) and writes the connection into the `.env`, before the setup command, so migrations find it. Skipped with *"Its orca.yaml requires none"* otherwise. |

@@ -86,7 +86,7 @@ projects:
 name: acme
 ```
 
-Error when missing or blank: *`name` is missing*.
+Errors: *`name` is missing* when missing or blank; *`name` can't contain ':'*.
 
 ## description
 
@@ -123,7 +123,7 @@ gateway:
 |---|---|---|---|
 | `domain` | string | the gateway's current domain | The domain every short hostname gets: `mail` becomes `mail.local.acme.dev`. The landing page is served at the domain itself. |
 | `title` | string | the landing page's current title | The title of the [landing page](/docs/gateway/#the-landing-page), such as `Acme dev`. |
-| `logo` | string | none | A logo beside the title on the landing page and the **Workspace** page: an image file in the workspace repo (SVG, PNG, WebP or JPEG, up to 64 KB), a [built-in icon](/docs/gateway/#icons) or an `https://` URL. Both pages are dark, so use a version with light text. |
+| `logo` | string | none | A logo beside the title on the landing page and the **Workspace** page: an image file in the workspace repo (SVG, PNG, WebP or JPEG, up to 64 KB), a [built-in icon](/docs/gateway/#icons) or an `https://` URL. Both pages are dark, so use a version with light text. A file that's missing, too large, or a symlink to outside the workspace is left out with a warning in the step's log; the rest still applies. |
 | `certificate.cert` | path | none | The certificate in PEM format, with its chain. |
 | `certificate.key` | path | none | Its private key in PEM format. |
 
@@ -285,7 +285,7 @@ Keys use letters, digits, dashes and underscores, at most 63 characters, and don
 | `icon` | string | from its images | The project's icon on the **Workspace** page and the dashboard, and for its routes that don't set their own: a built-in icon, an image file in the workspace repo or an https URL. See [Icons](/docs/gateway/#icons). |
 | `database` | string | a matching server | Where the project's database comes from when its `orca.yaml` requires one: a server under [`databases`](#databases) by name, or `own` for its own database service. See [Choose per project](/docs/databases/#choose-per-project-in-the-workspace). |
 | `group` | string | the project's key | Shows the project with others under one name, such as `oneWebshop` for its backend, frontend and admin: one section on the landing page and the Gateway page, side by side on the dashboard and the **Workspace** page. Up to 60 characters. |
-| `path` | path | the project's key | The folder under `clone_into`. |
+| `path` | path | the project's key | The folder under `clone_into`. Two projects can't share a folder, and `.` (the projects folder itself) isn't allowed. |
 | `branch` | string | the repo's default branch | The branch to check out when cloning. |
 | [`uses`](#uses) | list of strings | `[]` | Shared services to start before the project. |
 | [`setup`](#setup) | string | none | A command run once per machine after cloning. |
@@ -333,7 +333,7 @@ setup: just setup
 
 ### Project routes
 
-The same format as the top-level [`routes`](#routes). On the landing page, a project's routes are grouped under its key.
+The same format as the top-level [`routes`](#routes). On the landing page, a project's routes are grouped under its [`group`](#projects), or its key when it has none.
 
 ```yaml
 routes:
@@ -398,7 +398,9 @@ projects:
         local: https://wiki.acme.dev/shop/install
 ```
 
-They show under the project's name, or its [`group`](#projects) when it has one. A link shows only on the tabs it has a URL for. `local` adds a link to the **Local** tab: a full URL, or a gateway hostname, which then stands in for that hostname's routes on the tab. Entries without a `name` or a URL are left out. A project's own `orca.yaml` can have [links](/docs/orca-yaml/#links) too.
+They show under the project's name, or its [`group`](#projects) when it has one. A link shows only on the tabs it has a URL for. `local` adds a link to the **Local** tab: a full URL, or a gateway hostname, which then stands in for that hostname's routes on the tab. A project's own `orca.yaml` can have [links](/docs/orca-yaml/#links) too.
+
+Errors, each naming the project: *`links` must be a list of {name, &lt;environment&gt;: &lt;url&gt;}*; *links: entry 2 needs a `name`*; *links: entry 2: `prod` must be text*; *links: entry 2: use an environment name, such as local or prod, instead of url*; *links: '…' needs a URL for at least one environment*.
 
 ## Errors
 

@@ -323,7 +323,23 @@ pub fn resync_on_start(state: std::sync::Arc<AppState>) {
             return;
         }
         let config = state.config.lock().await.gateway.clone();
-        if let Err(e) = apply_config(&config).await {
+        // Kubernetes ingress routes, when the gateway proxies Traefik, are
+        // part of its config too.
+        let result = if config.traefik_mode == orca_core::config::TraefikIntegrationMode::GatewayProxiesTraefik {
+            let k8s_routes = crate::api::build_k8s_proxy_routes(&state.k8s, config.traefik_http_port).await;
+            match prepare_certs(&config) {
+                Ok(()) => {
+                    let _ = write_landing_page(&config);
+                    let pushed = push_caddy_config_with_k8s(&config, &k8s_routes).await;
+                    crate::gateway_sync::routes_changed();
+                    pushed
+                }
+                Err(e) => Err(e),
+            }
+        } else {
+            apply_config(&config).await
+        };
+        if let Err(e) = result {
             tracing::warn!("gateway: couldn't update the running gateway's config: {e:#}");
         }
     });
@@ -885,7 +901,7 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
                         "Content-Type": ["text/html; charset=utf-8"],
                         "Cache-Control": ["no-store"]
                     },
-                    "body": down_page(route, &config.domain)
+                    "body": down_page(route, config)
                 }]
             })
         })
@@ -969,7 +985,12 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     let icons_route = serde_json::json!({
         "match": [{"path": [format!("{}*", crate::landing::ICON_PATH)]}],
         "handle": [
-            {"handler": "headers", "response": {"set": {"Cache-Control": ["public, max-age=604800, immutable"]}}},
+            // An SVG opened on its own must not run script on this origin.
+            {"handler": "headers", "response": {"set": {
+                "Cache-Control": ["public, max-age=604800, immutable"],
+                "Content-Security-Policy": ["default-src 'none'; style-src 'unsafe-inline'; sandbox"],
+                "X-Content-Type-Options": ["nosniff"]
+            }}},
             {"handler": "rewrite", "strip_path_prefix": crate::landing::ICON_PATH.trim_end_matches('/')},
             {"handler": "file_server", "root": format!("/certs/{}", crate::landing::ICON_DIR)}
         ]
@@ -993,7 +1014,10 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     // which Docker would otherwise keep growing for the container's life.
     caddy["logging"] = serde_json::json!({
         "logs": {
-            "default": {"exclude": ["http.log.access"]},
+            "default": {"exclude": ["http.log.access", "http.log.error"]},
+            // Errors a route's "isn't running" page answered are logged at
+            // debug level; the Requests tab reads them to say why it failed.
+            "errors": {"include": ["http.log.error"], "level": "DEBUG"},
             "access": {
                 "include": ["http.log.access"],
                 "encoder": {"format": "json"},
@@ -1032,6 +1056,13 @@ fn build_caddy_config(config: &GatewayConfig, k8s_routes: &[(String, String)]) -
     serde_json::to_string_pretty(&caddy).unwrap_or_default()
 }
 
+/// Text for a page Caddy serves as a static response: HTML-escaped, and
+/// with `{` and `}` as entities, since Caddy fills in `{placeholders}` in
+/// those bodies (a route title must not pull in request data or files).
+fn page_text(s: &str) -> String {
+    escape_html(s).replace('{', "&#123;").replace('}', "&#125;")
+}
+
 /// The page shown while an idle-stopped instance starts again.
 fn wake_page(route: &orca_core::config::GatewayRoute) -> String {
     let name = route
@@ -1040,7 +1071,7 @@ fn wake_page(route: &orca_core::config::GatewayRoute) -> String {
         .and_then(|o| o.strip_prefix("dev:"))
         .map(|o| o.split('#').next().unwrap_or(o).replace(':', " / "))
         .unwrap_or_else(|| route.hostname.clone());
-    let name = escape_html(&name);
+    let name = page_text(&name);
     format!(
         r#"<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><title>Starting {name}</title>
 <style>body{{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0e14;color:#e6edf3;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}
@@ -1051,8 +1082,10 @@ fn wake_page(route: &orca_core::config::GatewayRoute) -> String {
 }
 
 /// The page for a route whose service doesn't answer: its name, a button
-/// that starts it in Orca, and a reload as soon as it answers.
-fn down_page(route: &orca_core::config::GatewayRoute, domain: &str) -> String {
+/// that starts it in Orca, and the app as soon as it answers. The container
+/// and port only when the landing page shows them too.
+fn down_page(route: &orca_core::config::GatewayRoute, config: &GatewayConfig) -> String {
+    let domain = &config.domain;
     let host = if route.hostname.contains('.') {
         route.hostname.clone()
     } else {
@@ -1063,9 +1096,21 @@ fn down_page(route: &orca_core::config::GatewayRoute, domain: &str) -> String {
         .title
         .clone()
         .unwrap_or_else(|| crate::landing::default_title(route, &host));
-    let name = escape_html(&name);
-    let target = escape_html(&format!("{}:{}", route.container_name, route.port));
-    let home = escape_html(&format!("https://{}", domain.trim_start_matches("*.")));
+    let name = page_text(&name);
+    let at = if config.landing.show_targets {
+        format!(
+            "Nothing answers at <code>{}</code>. ",
+            page_text(&format!("{}:{}", route.container_name, route.port))
+        )
+    } else {
+        String::new()
+    };
+    let port = if config.https_port == 443 {
+        String::new()
+    } else {
+        format!(":{}", config.https_port)
+    };
+    let home = page_text(&format!("https://{}{port}/", domain.trim_start_matches("*.")));
     format!(
         r##"<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{name} isn't running</title>
 <style>body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0e14;color:#e6edf3;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}
@@ -1074,13 +1119,16 @@ h1{{font-size:20px;font-weight:600;margin:0 0 8px}}p{{color:#8b949e;line-height:
 .btns{{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}}a{{text-decoration:none;font-weight:600;font-size:14px;border-radius:9px;padding:9px 18px}}
 .go{{background:#58a6ff;color:#0a0e14}}.go:hover{{background:#79b8ff}}.alt{{color:#8b949e;border:1px solid rgba(255,255,255,.12)}}.alt:hover{{color:#e6edf3}}
 .wait{{display:none;font-size:13px;color:#8b949e;margin-top:20px}}.wait.on{{display:block}}</style></head>
-<body><div class="box"><div class="dot"></div><h1>{name} isn't running</h1><p>Nothing answers at <code>{target}</code>. Start it in Orca, and this page opens it as soon as it's up.</p>
+<body><div class="box"><div class="dot"></div><h1>{name} isn't running</h1><p>{at}Start it in Orca, and this page opens it as soon as it's up.</p>
 <div class="btns"><a class="go" id="start" href="#">Start in Orca</a><a class="alt" href="{home}">All services</a></div><p class="wait" id="wait">Waiting for it to start…</p></div>
 <script>(function(){{
 var s=document.getElementById('start');s.href='orca://app?do=start&url='+encodeURIComponent(location.href);
 s.addEventListener('click',function(){{document.getElementById('wait').classList.add('on')}});
-function check(){{if(document.hidden)return;fetch(location.href,{{cache:'no-store',redirect:'manual'}}).then(function(r){{if(r.status<502||r.status>504)location.reload()}}).catch(function(){{}})}}
-setInterval(check,3000);
+// Asks with a marker the Requests tab leaves out; opens the page again
+// with a plain GET once it answers, never resending a form.
+var probe=new URL(location.href);probe.searchParams.set('_orca_wait','1');
+function check(){{if(document.hidden)return;fetch(probe.href,{{cache:'no-store',redirect:'manual'}}).then(function(r){{if(r.status<502||r.status>504)location.href=location.href}}).catch(function(){{}})}}
+setInterval(check,5000);
 }})()</script></body></html>"##
     )
 }
@@ -1210,6 +1258,62 @@ mod tests {
             routes,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn the_down_page_keeps_caddy_placeholders_out() {
+        let mut r = make_route("shop.localhost", "shop-web-1", 3000);
+        r.presentation.title = Some("{file./certs/key.pem}{http.request.uri.query.x}".into());
+        let mut c = make_config(vec![r.clone()]);
+        let page = down_page(&r, &c);
+        assert!(!page.contains("{file."), "{page}");
+        assert!(!page.contains("{http."), "{page}");
+        assert!(page.contains("&#123;file./certs/key.pem&#125;"));
+        assert!(page.contains("<code>shop-web-1:3000</code>"));
+        assert!(page.contains(r#"href="https://localhost/""#));
+
+        // "Show container and port" off, and another HTTPS port.
+        c.landing.show_targets = false;
+        c.https_port = 8443;
+        let page = down_page(&r, &c);
+        assert!(!page.contains("shop-web-1"), "{page}");
+        assert!(page.contains(r#"href="https://localhost:8443/""#));
+
+        let mut w = r.clone();
+        w.owner = Some("dev:{env.HOME}".into());
+        assert!(!wake_page(&w).contains("{env."));
+    }
+
+    #[test]
+    fn icons_cannot_run_script_and_handled_errors_stay_logged() {
+        let caddy: serde_json::Value = serde_json::from_str(&build_caddy_config(
+            &make_config(vec![make_route("a.localhost", "a", 80)]),
+            &[],
+        ))
+        .unwrap();
+        let routes = caddy["apps"]["http"]["servers"]["gateway"]["routes"]
+            .as_array()
+            .unwrap();
+        let icons = routes
+            .iter()
+            .find(|r| {
+                r["match"][0]["path"][0]
+                    .as_str()
+                    .is_some_and(|p| p.starts_with("/_orca/icons/"))
+            })
+            .unwrap();
+        let set = &icons["handle"][0]["response"]["set"];
+        assert!(set["Content-Security-Policy"][0].as_str().unwrap().contains("sandbox"));
+        assert_eq!(set["X-Content-Type-Options"][0], "nosniff");
+        let errors = &caddy["logging"]["logs"]["errors"];
+        assert_eq!(errors["include"][0], "http.log.error");
+        assert_eq!(errors["level"], "DEBUG");
+        assert!(
+            caddy["logging"]["logs"]["default"]["exclude"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("http.log.error"))
+        );
     }
 
     fn make_route(hostname: &str, container: &str, port: u16) -> GatewayRoute {

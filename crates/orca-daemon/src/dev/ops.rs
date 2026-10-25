@@ -217,14 +217,27 @@ pub fn compose_files(dir: &Path, from_yaml: Option<Vec<String>>) -> Result<Vec<P
     Ok(files)
 }
 
+/// The project's own `COMPOSE_FILE` in `.env`: not one Orca added for a
+/// database override, and without that override (Orca adds it per start).
 fn compose_file_from_dotenv(dir: &Path) -> Option<Vec<String>> {
     let text = std::fs::read_to_string(dir.join(".env")).ok()?;
     let sep = if cfg!(windows) { ';' } else { ':' };
+    let mut previous = "";
     for line in text.lines() {
         let line = line.trim();
-        if let Some(v) = line.strip_prefix("COMPOSE_FILE=") {
+        let after_note = previous == crate::databases::COMPOSE_FILE_NOTE;
+        previous = line;
+        let unexported = line.strip_prefix("export ").unwrap_or(line).trim_start();
+        if let Some(v) = unexported.strip_prefix("COMPOSE_FILE=") {
+            if after_note {
+                return None;
+            }
             let v = v.trim().trim_matches(['"', '\'']);
-            let list: Vec<String> = v.split(sep).filter(|s| !s.is_empty()).map(str::to_string).collect();
+            let list: Vec<String> = v
+                .split(sep)
+                .filter(|s| !s.is_empty() && !s.ends_with(crate::databases::OVERRIDE_FILE))
+                .map(str::to_string)
+                .collect();
             if !list.is_empty() {
                 return Some(list);
             }

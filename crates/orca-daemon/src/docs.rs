@@ -114,8 +114,13 @@ fn section_of(body: &str, want: &str) -> Option<String> {
     let want = want.to_lowercase();
     let mut out = Vec::new();
     let mut inside = false;
+    let mut fenced = false;
     for line in body.lines() {
-        if let Some(h) = line.strip_prefix("## ") {
+        // A `## ` inside a code block is code, not a heading.
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+        }
+        if let Some(h) = line.strip_prefix("## ").filter(|_| !fenced) {
             if inside {
                 break;
             }
