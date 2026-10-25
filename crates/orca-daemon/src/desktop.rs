@@ -1671,28 +1671,57 @@ async fn switch_cli(target: &Target) -> Result<Option<String>> {
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         return Ok(Some("`docker` now talks to Orca's engine".into()));
     }
-    if cfg!(windows) {
-        return Ok(None);
+    #[cfg(windows)]
+    {
+        // PowerShell's docker: onto Orca's `orca` context, when its
+        // integration (Settings → Engine) made one, from Docker Desktop's
+        // (`desktop-linux`, or `default`: Docker Desktop's pipe on Windows).
+        let _ = target;
+        let Some(docker) = orca_backend_common::wsl::docker_exe().await else {
+            return Ok(None);
+        };
+        let run = |args: &[&str]| {
+            let mut c = tokio::process::Command::new(&docker);
+            c.args(args).creation_flags(0x08000000); // CREATE_NO_WINDOW
+            c
+        };
+        let current = run(&["context", "show"]).output().await?;
+        let current = String::from_utf8_lossy(&current.stdout).trim().to_string();
+        if !["desktop-linux", "default"].contains(&current.as_str())
+            || !run(&["context", "inspect", "orca"]).output().await?.status.success()
+        {
+            return Ok(None);
+        }
+        let out = run(&["context", "use", "orca"]).output().await?;
+        if !out.status.success() {
+            bail!("{}", String::from_utf8_lossy(&out.stderr).trim());
+        }
+        Ok(Some(
+            "`docker` in PowerShell now talks to Orca's engine (context orca)".into(),
+        ))
     }
-    let current = tokio::process::Command::new("docker")
-        .env("PATH", crate::dev::ops::cli_path())
-        .args(["context", "show"])
-        .output()
-        .await?;
-    if String::from_utf8_lossy(&current.stdout).trim() != "desktop-linux" {
-        return Ok(None);
+    #[cfg(not(windows))]
+    {
+        let current = tokio::process::Command::new("docker")
+            .env("PATH", crate::dev::ops::cli_path())
+            .args(["context", "show"])
+            .output()
+            .await?;
+        if String::from_utf8_lossy(&current.stdout).trim() != "desktop-linux" {
+            return Ok(None);
+        }
+        let out = tokio::process::Command::new("docker")
+            .env("PATH", crate::dev::ops::cli_path())
+            .args(["context", "use", "default"])
+            .output()
+            .await?;
+        if !out.status.success() {
+            bail!("{}", String::from_utf8_lossy(&out.stderr).trim());
+        }
+        Ok(Some(
+            "`docker` now talks to the system's engine (context default)".into(),
+        ))
     }
-    let out = tokio::process::Command::new("docker")
-        .env("PATH", crate::dev::ops::cli_path())
-        .args(["context", "use", "default"])
-        .output()
-        .await?;
-    if !out.status.success() {
-        bail!("{}", String::from_utf8_lossy(&out.stderr).trim());
-    }
-    Ok(Some(
-        "`docker` now talks to the system's engine (context default)".into(),
-    ))
 }
 
 /// Quit Docker Desktop, or stop the earlier Docker in the default distro.
