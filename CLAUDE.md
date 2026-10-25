@@ -165,8 +165,8 @@ These issues only reproduce on macOS and need debugging with dev tools:
 - Text overlaps/jumbles when scrolling in modal dialogs
 - **Debug**: Inspect `.monaco-editor` DOM. Check if `.overflow-guard` and `.view-overlays` are positioned correctly. Try `editor.layout()` manually.
 
-### Root cause hypothesis
-All three may be caused by font loading failure in Tauri's WebKit webview on macOS. The FontFace API loads .ttf files but canvas rendering may not pick them up. Compare with the working terminal in `~/projects/hosting/web/controlpanel/src/components/web-terminal.tsx`.
+### Likely root cause (found in v0.64.1)
+Tauri adds a nonce to `index.html`'s inline `<style>` and to the CSP's `style-src`, and with a nonce present browsers ignore `'unsafe-inline'`: every `<style>` element a library adds at runtime was blocked. CodeMirror (the YAML editor: line numbers, no text) and xterm (cursor, font size) both inject them. Reproduced in Chromium with the same CSP. `security.dangerousDisableAssetCspModification: ["style-src"]` in `tauri.conf.json` keeps `style-src` as written. Recheck the three issues above on macOS once that release is installed.
 
 ### How to debug
 ```bash
