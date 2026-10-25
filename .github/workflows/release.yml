@@ -261,6 +261,8 @@ jobs:
     needs: [create-release, build-and-upload]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+
       - name: Generate updater latest.json
         shell: bash
         run: |
@@ -302,6 +304,14 @@ jobs:
             }
           }
           ENDJSON
+
+          # What's new, for the app's update dialog: release-notes/v<version>.md
+          # when the release has one (written before tagging), else nothing.
+          NOTES_FILE="release-notes/v${VERSION}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            jq --rawfile notes "$NOTES_FILE" '. + {notes: $notes}' /tmp/latest.json > /tmp/latest.with-notes.json
+            mv /tmp/latest.with-notes.json /tmp/latest.json
+          fi
 
           gh release upload "v${VERSION}" /tmp/latest.json --repo "${REPO}" --clobber
 

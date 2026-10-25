@@ -2,7 +2,7 @@
 
 ## Architecture
 
-- **Rust workspace** with 7 crates (see `Cargo.toml`)
+- **Rust workspace** with 6 crates plus the Tauri app (see `Cargo.toml`)
 - **Frontend**: SolidJS + TypeScript in `gui/`
 - **Desktop**: Tauri 2 in `src-tauri/`
 - **Daemon**: Axum REST API at `http://127.0.0.1:9477/api/v1/`

@@ -3439,22 +3439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "orca-backend-windows"
-version = "0.65.0"
-dependencies = [
- "anyhow",
- "bollard",
- "dirs",
- "orca-backend-common",
- "orca-core",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "orca-cli"
 version = "0.65.0"
 dependencies = [

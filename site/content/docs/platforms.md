@@ -82,6 +82,7 @@ On Windows, Docker runs in a WSL2 distro named `orca`, which Orca makes and look
 - A folder inside another distro (`\\wsl.localhost\Ubuntu\home\me\app`) is reached through WSL's shared `/mnt/wsl`: Orca bind-mounts that distro's root at `/mnt/wsl/orca/distros/Ubuntu` while it runs. Nothing is installed or written in that distro.
 - WSL stops a distro soon after its last program exits, so the daemon keeps one running in `orca`.
 - Containers reach Windows at `host.docker.internal`. For each gateway route to a dev server on Windows, Orca also relays its port to Windows' `localhost`, so a server that only listens on `127.0.0.1` is reachable too. Windows may ask once whether to let Orca listen on the WSL network.
+- WSL's mirrored networking mode (`networkingMode=mirrored` in `.wslconfig`) is supported only in part: containers reach Windows through the engine's `host-gateway`, and dev servers that listen on `localhost` only aren't relayed. WSL's default NAT mode is fully supported.
 
 ### The docker command on Windows
 

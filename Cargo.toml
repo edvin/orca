@@ -5,7 +5,6 @@ members = [
     "crates/orca-backend-common",
     "crates/orca-backend-native",
     "crates/orca-backend-macos",
-    "crates/orca-backend-windows",
     "crates/orca-daemon",
     "crates/orca-cli",
     "src-tauri",

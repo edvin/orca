@@ -734,7 +734,6 @@ orca/
 │   ├── orca-backend-common/    # Shared bollard + k3s implementation
 │   ├── orca-backend-native/    # Linux: direct Docker/Podman
 │   ├── orca-backend-macos/     # macOS: Lima VM management
-│   ├── orca-backend-windows/   # Windows: WSL2 management
 │   ├── orca-daemon/            # REST API server (axum)
 │   └── orca-cli/               # Command-line interface
 ├── src-tauri/                  # Tauri desktop app shell

@@ -1818,14 +1818,26 @@ async fn move_route(
         "move",
         &[
             ("check", "Check both engines and the space"),
-            ("stop", "Stop what uses the volumes, in Docker Desktop"),
+            (
+                "stop",
+                match req.from {
+                    From::Desktop => "Stop what uses the volumes, in Docker Desktop",
+                    From::Earlier => "Stop what uses the volumes, in the earlier Docker",
+                },
+            ),
             ("images", "Copy the images"),
             ("volumes", "Copy the volumes"),
             ("networks", "Make the networks projects join"),
             ("projects", "Recreate the compose projects"),
             ("verify", "Check everything arrived"),
             ("switch", "Point the docker command at Orca's engine"),
-            ("quit", "Quit Docker Desktop"),
+            (
+                "quit",
+                match req.from {
+                    From::Desktop => "Quit Docker Desktop",
+                    From::Earlier => "Stop the earlier Docker",
+                },
+            ),
         ],
     )
     .await;
