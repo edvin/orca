@@ -402,10 +402,58 @@ fn tls_config() -> std::io::Result<Arc<rustls::ClientConfig>> {
 
 /// A TLS connection to Orca's engine with the daemon's client certificate.
 #[cfg(windows)]
-pub async fn connect_engine() -> std::io::Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
+pub async fn connect_engine() -> std::io::Result<Engine> {
     let tcp = tokio::net::TcpStream::connect(("127.0.0.1", orca_backend_common::wsl::PORT)).await?;
     let name = rustls::pki_types::ServerName::try_from("localhost").expect("valid name");
-    tokio_rustls::TlsConnector::from(tls_config()?).connect(name, tcp).await
+    let tls = tokio_rustls::TlsConnector::from(tls_config()?).connect(name, tcp).await?;
+    Ok(Engine { tls, closing: false })
+}
+
+/// The connection to Orca's engine. Its input ends as with docker's own
+/// CLI over TLS: a close_notify, with the TCP connection left open. WSL's
+/// forwarding of 127.0.0.1 closes the whole connection on a TCP half-close,
+/// so an attached stream (`docker run`) ended before its output came.
+#[cfg(windows)]
+pub struct Engine {
+    tls: tokio_rustls::client::TlsStream<tokio::net::TcpStream>,
+    closing: bool,
+}
+
+#[cfg(windows)]
+impl AsyncRead for Engine {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.tls).poll_read(cx, buf)
+    }
+}
+
+#[cfg(windows)]
+impl AsyncWrite for Engine {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::pin::Pin::new(&mut self.tls).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.tls).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        if !self.closing {
+            self.closing = true;
+            self.tls.get_mut().1.send_close_notify();
+        }
+        std::pin::Pin::new(&mut self.tls).poll_flush(cx)
+    }
 }
 
 /// What a client gets when Orca's engine isn't answering: a reply it shows.
