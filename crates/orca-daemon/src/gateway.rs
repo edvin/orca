@@ -789,9 +789,12 @@ fn host_alias(docker_host: Option<&str>) -> Vec<String> {
 
 /// Get the upstream host address for reaching Traefik from the Caddy container.
 pub fn traefik_upstream_host() -> &'static str {
-    // Windows: k3s runs in Orca's WSL distro, beside the engine, as on Linux.
+    // Windows: k3s runs in Orca's WSL distro, beside the engine, reached
+    // at the engine's own bridge (not docker0, another Docker's there).
     if cfg!(target_os = "macos") {
         "host.docker.internal"
+    } else if cfg!(windows) {
+        orca_backend_common::wsl::BRIDGE_IP
     } else {
         "172.17.0.1" // Docker bridge gateway on Linux
     }

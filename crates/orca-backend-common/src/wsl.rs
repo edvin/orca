@@ -32,6 +32,15 @@ pub const UBUNTU_RELEASE: &str = "26.04";
 pub const IMAGE_BASE: &str = "https://releases.ubuntu.com/26.04/";
 /// Where other distros' roots are bind-mounted, under WSL's shared `/mnt/wsl`.
 pub const DISTROS_DIR: &str = "/mnt/wsl/orca/distros";
+/// The engine's own bridge and the subnets its networks get. Every WSL 2
+/// distro shares one network namespace, so a Docker in the user's own
+/// distro (an earlier Orca's, or their own) has `docker0` and 172.17.0.0/16
+/// too: on the same bridge both engines would hand out the same addresses.
+/// Clear of k3s's 10.42/10.43 and of WSL's NAT range in 172.16.0.0/12.
+pub const BRIDGE: &str = "orca0";
+/// The bridge's own address: the WSL VM, as containers on any network reach it.
+pub const BRIDGE_IP: &str = "10.213.0.1";
+pub const ADDRESS_POOL: &str = "base=10.214.0.0/16,size=24";
 /// Raised when what the distro is made with changes, so an older one can be
 /// offered a rebuild (as `ORCA_VM_GENERATION` on macOS).
 pub const GENERATION: u32 = 1;
@@ -503,13 +512,35 @@ if ! command -v dockerd >/dev/null 2>&1; then
   $APT update
   $APT install docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin
 fi
+# Every WSL distro shares the VM's binfmt_misc entries, Windows' own
+# (WSLInterop) included, and systemd 259's shutdown clears them all when
+# it's mounted: each time this distro stopped, every other distro lost
+# running Windows programs. Unmount it here before then.
+cat > /etc/systemd/system/orca-binfmt-guard.service <<'EOF'
+[Unit]
+Description=Keep systemd-shutdown from clearing the binfmt_misc entries every WSL distro shares
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=-/bin/umount -l /proc/sys/fs/binfmt_misc
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl mask proc-sys-fs-binfmt_misc.automount >/dev/null 2>&1 || ln -sf /dev/null /etc/systemd/system/proc-sys-fs-binfmt_misc.automount
 mkdir -p /etc/systemd/system/docker.service.d
-# dockerd on its socket and on the TLS port. In the unit, not daemon.json,
-# so tools that edit daemon.json (nvidia-ctk) keep their settings.
+# dockerd on its socket and on the TLS port, with a bridge and subnets of
+# its own (see BRIDGE). --live-restore too: with address pools set, dockerd
+# otherwise deletes `docker0` on every restart, another Docker's bridge.
+# In the unit, not daemon.json, so tools that edit daemon.json (nvidia-ctk)
+# keep their settings.
 cat > /etc/systemd/system/docker.service.d/orca.conf <<'EOF'
 [Service]
+ExecStartPre=-/usr/bin/ip link add {BRIDGE} type bridge
+ExecStartPre=-/usr/bin/ip addr add {BRIDGE_IP}/24 dev {BRIDGE}
+ExecStartPre=/usr/bin/ip link set {BRIDGE} up
 ExecStart=
-ExecStart=/usr/bin/dockerd --containerd=/run/containerd/containerd.sock -H unix:///var/run/docker.sock -H tcp://127.0.0.1:{PORT} --tlsverify --tlscacert=/etc/docker/orca/ca.pem --tlscert=/etc/docker/orca/server-cert.pem --tlskey=/etc/docker/orca/server-key.pem
+ExecStart=/usr/bin/dockerd --containerd=/run/containerd/containerd.sock -H unix:///var/run/docker.sock -H tcp://127.0.0.1:{PORT} --tlsverify --tlscacert=/etc/docker/orca/ca.pem --tlscert=/etc/docker/orca/server-cert.pem --tlskey=/etc/docker/orca/server-key.pem --bridge={BRIDGE} --default-address-pool={ADDRESS_POOL} --live-restore
 EOF
 chmod 600 /etc/docker/orca/server-key.pem
 mkdir -p {DISTROS_DIR}
@@ -520,8 +551,8 @@ echo {GENERATION} > /etc/orca-generation
 
 /// Run once systemd is up (after the distro restarted with it): start
 /// Docker, now and on every start.
-pub const START_SCRIPT: &str =
-    "systemctl daemon-reload && systemctl enable containerd docker >/dev/null 2>&1; systemctl restart docker";
+pub const START_SCRIPT: &str = "systemctl daemon-reload && systemctl enable containerd docker orca-binfmt-guard >/dev/null 2>&1; \
+     systemctl start orca-binfmt-guard; systemctl restart docker";
 
 /// Run as root in another distro: bind its root into WSL's shared
 /// `/mnt/wsl`, so the engine can reach folders in it. Undone when WSL shuts
@@ -1385,7 +1416,9 @@ mod tests {
     fn the_setup_script_configures_tls_on_the_port() {
         let s = provision_script();
         assert!(s.contains("-H tcp://127.0.0.1:2376 --tlsverify"));
+        assert!(s.contains("--bridge=orca0 --default-address-pool=base=10.214.0.0/16,size=24 --live-restore"));
         assert!(!s.contains("> /etc/docker/daemon.json"));
         assert!(s.contains("systemd=true"));
+        assert!(s.contains("ExecStop=-/bin/umount -l /proc/sys/fs/binfmt_misc"));
     }
 }
