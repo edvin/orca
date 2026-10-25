@@ -1130,13 +1130,15 @@ mod win {
                     .await?;
                 // In single quotes for PowerShell, a ' doubled (C:\Users\O'Brien).
                 let q = |p: &Path| p.display().to_string().replace('\'', "''");
+                // The zip's dockerd.exe (Windows containers) isn't kept.
                 let script = format!(
                     "$ErrorActionPreference='Stop'; Expand-Archive -Force -LiteralPath '{}' -DestinationPath '{}'; \
-                     Move-Item -Force '{}' '{}'",
+                     Move-Item -Force '{}' '{}'; Remove-Item -Recurse -Force -LiteralPath '{}'",
                     q(&path),
                     q(&dir),
                     q(&dir.join("docker").join("docker.exe")),
-                    q(&dir.join("docker.exe"))
+                    q(&dir.join("docker.exe")),
+                    q(&dir.join("docker"))
                 );
                 let out = powershell(&script).output().await?;
                 anyhow::ensure!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr).trim());
