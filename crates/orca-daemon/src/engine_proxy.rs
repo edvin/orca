@@ -467,6 +467,25 @@ fn engine_down() -> Vec<u8> {
     .into_bytes()
 }
 
+/// The pipe stays a message pipe, which is what tells `docker.exe` it can
+/// send an empty message for stdin's end, but this end reads it as bytes.
+/// Read as messages, one longer than mio's 4 KB read buffer comes back as
+/// an empty read with the 4 KB lost (`ERROR_MORE_DATA`): BuildKit's
+/// streams ended at their first large frame, and large uploads lost data.
+#[cfg(windows)]
+fn byte_reads(
+    pipe: tokio::net::windows::named_pipe::NamedPipeServer,
+) -> std::io::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::Pipes::{PIPE_READMODE_BYTE, SetNamedPipeHandleState};
+    let mode = PIPE_READMODE_BYTE;
+    let ok = unsafe { SetNamedPipeHandleState(pipe.as_raw_handle(), &mode, std::ptr::null(), std::ptr::null()) };
+    if ok == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(pipe)
+}
+
 /// Serve [`PIPE`] for as long as the daemon runs. The pipe has Windows'
 /// default security: other users can't write to it, so only this user (and
 /// administrators) can send requests; remote clients are refused. Message
@@ -483,7 +502,7 @@ pub async fn serve_pipe() {
         o
     };
     let mut server = loop {
-        match options(true).create(PIPE) {
+        match options(true).create(PIPE).and_then(byte_reads) {
             Ok(s) => break s,
             Err(e) => {
                 tracing::warn!("Could not open {PIPE}: {e}");
@@ -497,7 +516,7 @@ pub async fn serve_pipe() {
         }
         // The next instance before handing this one off, so the name never
         // goes away (and can't be taken in between).
-        let next = match options(false).create(PIPE) {
+        let next = match options(false).create(PIPE).and_then(byte_reads) {
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!("Could not open another {PIPE}: {e}");

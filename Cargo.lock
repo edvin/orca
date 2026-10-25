@@ -3536,6 +3536,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "urlencoding",
+ "windows-sys 0.61.2",
  "x509-parser",
 ]
 

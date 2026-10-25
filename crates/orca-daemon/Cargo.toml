@@ -57,4 +57,7 @@ rustls-pemfile = "2"
 [target.'cfg(not(windows))'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Pipes"] }
+
 [dev-dependencies]
