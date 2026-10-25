@@ -4332,6 +4332,7 @@ tr.service-off td { opacity: 0.55; }
 .open-folder-error { font: 12px/1.5 'JetBrains Mono', monospace; color: #f85149; white-space: pre-wrap; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(248, 81, 73, 0.4); background: rgba(248, 81, 73, 0.08); max-height: 160px; overflow: auto; }
 .folder-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .folder-actions.compact { gap: 4px; flex-wrap: nowrap; }
+.stack-folder { display: inline-flex; margin-right: 4px; }
 .folder-actions .btn-icon { width: 28px; height: 25px; padding: 0; display: inline-grid; place-items: center; }
 .folder-actions .btn-icon svg { width: 15px; height: 15px; pointer-events: none; }
 

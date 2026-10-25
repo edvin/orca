@@ -9,6 +9,7 @@ import { usePoller } from "../lib/poller";
 import { containersStore, stacksStore } from "../lib/dockerStore";
 import { formatBytes } from "../lib/format";
 import { openFolderDialog } from "../lib/openFolder";
+import FolderActions from "../components/FolderActions";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import RunContainerDialog from "../components/RunContainerDialog";
@@ -1028,6 +1029,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                       </div>
                     </div>
                     <div class="stack-header-right">
+                      <Show when={group.containers.map((c) => c.labels?.["com.docker.compose.project.working_dir"]).find(Boolean)}>
+                        {(dir) => <span class="stack-folder" onClick={(e) => e.stopPropagation()}><FolderActions path={dir()} compact /></span>}
+                      </Show>
                       <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); props.onNavigate?.(`stack:${group.name}`); }}>
                         Open stack
                       </button>
