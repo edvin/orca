@@ -549,6 +549,46 @@ echo {GENERATION} > /etc/orca-generation
     )
 }
 
+/// What the image's `/etc/wsl-distribution.conf` becomes: `wsl --import`
+/// reads it, and Ubuntu's adds a Start menu entry, a Windows Terminal
+/// profile and a first-run prompt for a user. Without the file WSL adds the
+/// first two anyway, so they're turned off instead.
+pub const DISTRIBUTION_CONF: &str = "[shortcut]\nenabled = false\n\n[windowsterminal]\nenabled = false\n";
+
+/// Turn off the image's Start menu entry and Terminal profile in the
+/// unpacked tar `image` (see [`DISTRIBUTION_CONF`]). The file is rewritten
+/// in place at its own size, padded with a comment, so nothing else in the
+/// image moves.
+pub fn disable_shortcuts<F: std::io::Read + std::io::Write + std::io::Seek>(image: &mut F) -> Result<()> {
+    use std::io::SeekFrom;
+    image.seek(SeekFrom::Start(0))?;
+    let mut found = None;
+    for entry in tar::Archive::new(&mut *image).entries_with_seek()? {
+        let entry = entry?;
+        let path = entry.path()?.to_string_lossy().trim_start_matches("./").to_string();
+        if path == "etc/wsl-distribution.conf" {
+            found = Some((entry.raw_file_position(), entry.size()));
+            break;
+        }
+    }
+    let Some((at, size)) = found else {
+        return Ok(()); // an image without one: nothing to turn off
+    };
+    let mut conf = DISTRIBUTION_CONF.as_bytes().to_vec();
+    anyhow::ensure!(
+        conf.len() as u64 <= size,
+        "the image's wsl-distribution.conf is too short to rewrite"
+    );
+    if (conf.len() as u64) < size {
+        conf.resize(size as usize - 1, b'#');
+        conf.push(b'\n');
+    }
+    image.seek(SeekFrom::Start(at))?;
+    image.write_all(&conf)?;
+    image.flush()?;
+    Ok(())
+}
+
 /// Run once systemd is up (after the distro restarted with it): start
 /// Docker, now and on every start.
 pub const START_SCRIPT: &str = "systemctl daemon-reload && systemctl enable containerd docker orca-binfmt-guard >/dev/null 2>&1; \
@@ -928,7 +968,9 @@ mod win {
                 let mut input = input;
                 std::io::copy(&mut input, &mut out)?;
             }
-            Ok(())
+            drop(out);
+            let mut out = std::fs::OpenOptions::new().read(true).write(true).open(&to)?;
+            disable_shortcuts(&mut out)
         })
         .await??;
         let location = dir.join("distro");
@@ -1374,6 +1416,42 @@ mod tests {
         set_integrated(None);
         assert!(distro_context_script("/mnt/c/certs").contains("host=tcp://127.0.0.1:2376,ca=/mnt/c/certs/ca.pem"));
         assert!(home_bind_script("Ubuntu").contains("mount --rbind '/mnt/wsl/orca/distros/Ubuntu/home' /home"));
+    }
+
+    #[test]
+    fn the_images_shortcuts_are_turned_off_in_place() {
+        let tar_with = |conf: &[u8]| {
+            let mut b = tar::Builder::new(Vec::new());
+            for (path, data) in [("./etc/hostname", &b"ubuntu\n"[..]), ("./etc/wsl-distribution.conf", conf)] {
+                let mut h = tar::Header::new_gnu();
+                h.set_size(data.len() as u64);
+                h.set_mode(0o644);
+                h.set_cksum();
+                b.append_data(&mut h, path, data).unwrap();
+            }
+            b.into_inner().unwrap()
+        };
+        let original = b"[oobe]\ncommand = /usr/lib/wsl/wsl-setup\n\n[shortcut]\nicon = /usr/share/wsl/ubuntu.ico\n\n[windowsterminal]\nProfileTemplate = /usr/share/wsl/terminal-profile.json\n";
+        let before = tar_with(original);
+        let mut image = std::io::Cursor::new(before.clone());
+        disable_shortcuts(&mut image).unwrap();
+        let after = image.into_inner();
+        assert_eq!(after.len(), before.len());
+        let mut a = tar::Archive::new(&after[..]);
+        let files: Vec<(String, String)> = a
+            .entries()
+            .unwrap()
+            .map(|e| {
+                let mut e = e.unwrap();
+                let mut s = String::new();
+                std::io::Read::read_to_string(&mut e, &mut s).unwrap();
+                (e.path().unwrap().to_string_lossy().to_string(), s)
+            })
+            .collect();
+        assert_eq!(files[0].1, "ubuntu\n");
+        assert!(files[1].1.starts_with(DISTRIBUTION_CONF));
+        assert_eq!(files[1].1.len(), original.len());
+        assert!(!files[1].1.contains("oobe"));
     }
 
     #[test]
