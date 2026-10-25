@@ -90,12 +90,10 @@ fn total_memory_mb() -> u64 {
                 "(Get-CimInstance Win32_OperatingSystem).TotalVisibleMemorySize",
             ])
             .output()
+            && let Ok(s) = String::from_utf8(output.stdout)
+            && let Ok(kb) = s.trim().parse::<u64>()
         {
-            if let Ok(s) = String::from_utf8(output.stdout) {
-                if let Ok(kb) = s.trim().parse::<u64>() {
-                    return kb / 1024;
-                }
-            }
+            return kb / 1024;
         }
     }
 

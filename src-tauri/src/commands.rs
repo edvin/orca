@@ -2835,21 +2835,34 @@ pub async fn env_fix_stream(app: tauri::AppHandle, action: String) -> Result<(),
     Ok(())
 }
 
-// --- Docker Desktop Migration ---
+// --- Engine and Docker Desktop (macOS) ---
 
+/// The engine Orca uses (`/engine`) and bringing Docker Desktop's things
+/// over (`/docker-desktop/...`).
 #[tauri::command]
-pub async fn docker_desktop_status() -> Result<serde_json::Value, String> {
-    get_json("/environment/docker-desktop-status").await
-}
-
-#[tauri::command]
-pub async fn switch_to_orca_runtime() -> Result<serde_json::Value, String> {
-    post_json("/environment/switch-to-orca").await
-}
-
-#[tauri::command]
-pub async fn stop_docker_desktop() -> Result<serde_json::Value, String> {
-    post_json("/environment/stop-docker-desktop").await
+pub async fn engine_api(
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let route = path.split('?').next().unwrap_or(&path);
+    if !(route == "/engine"
+        || route == "/engine/integration"
+        || route == "/docker-desktop"
+        || route.starts_with("/docker-desktop/"))
+        || path.contains("..")
+    {
+        return Err("invalid engine API path".into());
+    }
+    // Starting Docker Desktop waits for it; a plan sizes every volume.
+    // Installing a Docker CLI for /engine/integration takes a few minutes too.
+    let secs = if route == "/docker-desktop/start" || route == "/docker-desktop/plan" || route == "/engine/integration"
+    {
+        600
+    } else {
+        120
+    };
+    daemon_call_with_timeout(&method, &path, body, secs).await
 }
 
 // --- Templates ---
@@ -3243,53 +3256,87 @@ pub async fn save_wsl_config(memory: String, processors: String, swap: String) -
     let config_path = std::path::Path::new(&userprofile).join(".wslconfig");
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
-        // Read existing config and preserve non-wsl2 sections
         let existing = if config_path.exists() {
             std::fs::read_to_string(&config_path).map_err(|e| format!("Failed to read .wslconfig: {e}"))?
         } else {
             String::new()
         };
-
-        let mut other_sections = String::new();
-        let mut in_wsl2_section = false;
-        for line in existing.lines() {
-            let trimmed = line.trim();
-            if trimmed.eq_ignore_ascii_case("[wsl2]") {
-                in_wsl2_section = true;
-                continue;
-            }
-            if trimmed.starts_with('[') {
-                in_wsl2_section = false;
-            }
-            if !in_wsl2_section {
-                other_sections.push_str(line);
-                other_sections.push('\n');
-            }
-        }
-
-        // Build new content with [wsl2] section first
-        let mut content = String::from("[wsl2]\n");
-        if !memory.is_empty() {
-            content.push_str(&format!("memory={memory}\n"));
-        }
-        if !processors.is_empty() {
-            content.push_str(&format!("processors={processors}\n"));
-        }
-        if !swap.is_empty() {
-            content.push_str(&format!("swap={swap}\n"));
-        }
-        content.push('\n');
-        content.push_str(other_sections.trim_start());
-
-        std::fs::write(&config_path, content.trim_end_matches('\n'))
-            .map_err(|e| format!("Failed to write .wslconfig: {e}"))?;
-
+        let content = wsl2_with_resources(&existing, &memory, &processors, &swap);
+        std::fs::write(&config_path, content).map_err(|e| format!("Failed to write .wslconfig: {e}"))?;
         Ok(())
     })
     .await
     .map_err(|e| format!("spawn_blocking join failed: {e}"))??;
 
     Ok(())
+}
+
+/// `.wslconfig` with `memory`, `processors` and `swap` in `[wsl2]` set (an
+/// empty one left out), and everything else in it as it was: the user's
+/// other `[wsl2]` keys (`networkingMode`, `nestedVirtualization`, …) and
+/// other sections.
+fn wsl2_with_resources(existing: &str, memory: &str, processors: &str, swap: &str) -> String {
+    let ours = ["memory", "processors", "swap"];
+    let set: Vec<String> = [("memory", memory), ("processors", processors), ("swap", swap)]
+        .iter()
+        .filter(|(_, v)| !v.is_empty())
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut in_wsl2 = false;
+    let mut found = false;
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_wsl2 = trimmed.eq_ignore_ascii_case("[wsl2]");
+            out.push(line.to_string());
+            if in_wsl2 && !found {
+                found = true;
+                out.extend(set.iter().cloned());
+            }
+            continue;
+        }
+        let key = trimmed
+            .split('=')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        if in_wsl2 && ours.contains(&key.as_str()) {
+            continue;
+        }
+        out.push(line.to_string());
+    }
+    if !found {
+        let mut section = vec!["[wsl2]".to_string()];
+        section.extend(set);
+        if !out.is_empty() {
+            section.push(String::new());
+        }
+        out.splice(0..0, section);
+    }
+    let mut text = out.join("\n");
+    text.push('\n');
+    text
+}
+
+#[cfg(test)]
+mod wslconfig_tests {
+    use super::wsl2_with_resources;
+
+    #[test]
+    fn resources_are_set_and_the_rest_is_kept() {
+        let existing = "[wsl2]\nnestedVirtualization=true\nMemory=64GB\nnetworkingMode=mirrored\n\n[experimental]\nautoMemoryReclaim=gradual\n";
+        assert_eq!(
+            wsl2_with_resources(existing, "16GB", "8", ""),
+            "[wsl2]\nmemory=16GB\nprocessors=8\nnestedVirtualization=true\nnetworkingMode=mirrored\n\n[experimental]\nautoMemoryReclaim=gradual\n"
+        );
+        assert_eq!(wsl2_with_resources("", "4GB", "", ""), "[wsl2]\nmemory=4GB\n");
+        assert_eq!(
+            wsl2_with_resources("[experimental]\nx=1\n", "4GB", "", "0"),
+            "[wsl2]\nmemory=4GB\nswap=0\n\n[experimental]\nx=1\n"
+        );
+    }
 }
 
 // --- General Settings ---
@@ -3911,7 +3958,21 @@ pub async fn check_ports(ports: Vec<u16>) -> Result<serde_json::Value, String> {
             Err(_) => conflicts.push(*port),
         }
     }
-    Ok(serde_json::json!({ "conflicts": conflicts }))
+    // Windows: a port another WSL distro holds is taken for Orca's engine
+    // too, and binding here doesn't see it; the daemon checks from WSL.
+    let mut in_wsl = Vec::new();
+    if cfg!(windows)
+        && let Ok(held) = get_json::<serde_json::Value>("/ports/held-in-wsl").await
+        && let Some(held) = held["ports"].as_array()
+    {
+        let held: Vec<u64> = held.iter().filter_map(|p| p.as_u64()).collect();
+        in_wsl = ports
+            .iter()
+            .copied()
+            .filter(|p| held.contains(&u64::from(*p)) && !conflicts.contains(p))
+            .collect();
+    }
+    Ok(serde_json::json!({ "conflicts": conflicts, "in_wsl": in_wsl }))
 }
 
 // --- Remote Host Management ---

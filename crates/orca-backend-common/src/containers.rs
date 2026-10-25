@@ -36,10 +36,16 @@ impl ContainerRuntime for BollardRuntime {
             .volumes
             .iter()
             .map(|v| {
-                if v.read_only {
-                    format!("{}:{}:ro", v.source, v.target)
+                // A Windows folder, as Orca's WSL engine sees it.
+                let source = if cfg!(windows) {
+                    crate::wsl::engine_path(&v.source).unwrap_or_else(|| v.source.clone())
                 } else {
-                    format!("{}:{}", v.source, v.target)
+                    v.source.clone()
+                };
+                if v.read_only {
+                    format!("{source}:{}:ro", v.target)
+                } else {
+                    format!("{source}:{}", v.target)
                 }
             })
             .collect();
@@ -463,7 +469,7 @@ fn summary_to_container(c: &bollard::models::ContainerSummary) -> Container {
         image: c.image.clone().unwrap_or_default(),
         state: c.state.as_deref().map(parse_state).unwrap_or(ContainerState::Dead),
         ports,
-        labels: c.labels.clone().unwrap_or_default(),
+        labels: crate::wsl::host_labels(c.labels.clone().unwrap_or_default()),
         created_at: c.created.map(|t| t.to_string()).unwrap_or_default(),
         exit_code: None,
         error: None,
@@ -592,7 +598,7 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
         image: info.config.as_ref().and_then(|c| c.image.clone()).unwrap_or_default(),
         state,
         ports,
-        labels: info.config.as_ref().and_then(|c| c.labels.clone()).unwrap_or_default(),
+        labels: crate::wsl::host_labels(info.config.as_ref().and_then(|c| c.labels.clone()).unwrap_or_default()),
         created_at: info.created.clone().unwrap_or_default(),
         exit_code: state_info.and_then(|s| s.exit_code),
         error: state_info.and_then(|s| s.error.clone()).filter(|e| !e.is_empty()),

@@ -264,6 +264,7 @@ Paths are relative to `/api/v1`. `{id}` accepts a container or image ID or name.
 | GET, PUT | `/gateway/landing` | Read or update the landing page settings. |
 | GET, PUT | `/gateway/links` | Read or update stack link groups. |
 | GET | `/gateway/port-check` | Check whether the HTTP and HTTPS ports are free. |
+| GET | `/ports/held-in-wsl` | Windows: the ports another WSL distro listens on (taken for Orca's engine too). Empty elsewhere. |
 | GET | `/gateway/traefik-status` | Status of the k3s Traefik integration. |
 | PUT | `/gateway/traefik-mode` | Set how the gateway works with k3s Traefik. |
 | POST | `/gateway/dismiss-suggestion` | Dismiss a route suggestion. |
@@ -380,9 +381,13 @@ Paths are relative to `/api/v1`. `{id}` accepts a container or image ID or name.
 | GET | `/environment/status` | Runtime environment checks. |
 | POST | `/environment/fix` | Run a fix action. |
 | POST | `/environment/fix-stream` | Run a fix action with streamed output. |
-| GET | `/environment/docker-desktop-status` | Whether Docker Desktop is installed or running. |
-| POST | `/environment/switch-to-orca` | Switch the Docker CLI to Orca's runtime. |
-| POST | `/environment/stop-docker-desktop` | Stop Docker Desktop. |
+| GET, PUT | `/engine` | macOS: the engine Orca uses and the others found; set it (`{"kind": "orca"}` or `{"kind": "socket", "path": …}`). |
+| GET | `/docker-desktop` | macOS: whether Docker Desktop is installed and running, what's in it, and whether it was brought over. |
+| GET | `/docker-desktop/plan` | What bringing Docker Desktop's things over would copy, stop and leave. |
+| POST | `/docker-desktop/move` | Bring them over, as a job (`images`, `volumes`, `projects`, `skip`, `switch_cli`, `quit_desktop`). |
+| POST | `/docker-desktop/start` | Open Docker Desktop and wait for its engine. |
+| POST | `/docker-desktop/leave` | Leave Docker Desktop's things where they are. |
+| POST | `/docker-desktop/quit` | Quit Docker Desktop. |
 
 ### AI and settings
 

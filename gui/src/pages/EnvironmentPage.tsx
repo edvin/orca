@@ -1,13 +1,14 @@
 import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth, DockerDesktopStatus } from "../lib/types";
+import type { EnvironmentStatus, HealthCheck, MachineInfo, SystemHealth } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { formatBytes } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirm, confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
-import HelpLink from "../components/HelpLink";
+import DockerDesktopMove from "../components/DockerDesktopMove";
+import { engineApi, isWindows, setupAction } from "../lib/engine";
 
 export default function EnvironmentPage() {
   const [status, setStatus] = createSignal<EnvironmentStatus | null>(null);
@@ -17,11 +18,8 @@ export default function EnvironmentPage() {
   const [machine, setMachine] = createSignal<MachineInfo | null>(null);
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
 
-  // Docker Desktop migration state
-  const [ddStatus, setDdStatus] = createSignal<DockerDesktopStatus | null>(null);
-  const [migrating, setMigrating] = createSignal(false);
-  const [stopDdChecked, setStopDdChecked] = createSignal(false);
-  const [migrationDismissed, setMigrationDismissed] = createSignal(false);
+  // The engine Orca uses (macOS): "Orca", or one picked in Settings.
+  const [engineName, setEngineName] = createSignal<string | null>(null);
 
   const isMacOS = () => navigator.platform.includes("Mac");
 
@@ -59,7 +57,7 @@ export default function EnvironmentPage() {
         invoke("env_status"),
         invoke("get_machine_info"),
         invoke("system_health"),
-        isMacOS() ? invoke("docker_desktop_status") : Promise.resolve(null),
+        engineApi.status(),
       ]);
       if (envRes.status === "fulfilled") {
         setStatus(envRes.value as EnvironmentStatus);
@@ -69,7 +67,7 @@ export default function EnvironmentPage() {
       }
       if (machineRes.status === "fulfilled") setMachine(machineRes.value as MachineInfo);
       if (healthRes.status === "fulfilled") setHealth(healthRes.value as SystemHealth);
-      if (ddRes.status === "fulfilled" && ddRes.value) setDdStatus(ddRes.value as DockerDesktopStatus);
+      if (ddRes.status === "fulfilled" && ddRes.value) setEngineName(ddRes.value.name);
       // If all three failed, show a fallback state so the page isn't stuck on loading
       if (envRes.status === "rejected" && machineRes.status === "rejected" && healthRes.status === "rejected") {
         setHealth({ docker_connected: false, docker_version: null, disk_usage: null, system_resources: null, warnings: ["Could not reach Docker. The setup wizard below will help you get started."] } as SystemHealth);
@@ -95,6 +93,16 @@ export default function EnvironmentPage() {
           "Ubuntu 26.04 with vsock networking. Containers, images, and volumes " +
           "inside it will be lost — you'll re-pull and re-run them.",
         confirmLabel: "Recreate VM",
+      });
+      if (!ok) return;
+    }
+    if (action === "recreate_wsl_engine") {
+      const ok = await confirmDanger({
+        title: "Rebuild Orca's engine?",
+        message:
+          "This deletes Orca's WSL distro and makes it again from Ubuntu's newest WSL image. " +
+          "Containers, images and volumes inside it will be lost. Your own distros aren't touched.",
+        confirmLabel: "Rebuild",
       });
       if (!ok) return;
     }
@@ -222,10 +230,6 @@ export default function EnvironmentPage() {
     }
   };
 
-  const hasDockerDesktop = () => status()?.checks.some(
-    (c) => c.name === "Docker Desktop" && c.status === "Pass" && c.details
-  );
-
   const passCount = () => status()?.checks.filter(c => c.status === "Pass").length || 0;
   const totalCount = () => status()?.checks.length || 0;
 
@@ -283,52 +287,6 @@ export default function EnvironmentPage() {
     }
   };
 
-  const runMigration = async () => {
-    setMigrating(true);
-    try {
-      // Step 1: If Orca runtime isn't available, the user needs to set up Docker first
-      const dd = ddStatus();
-      if (dd && !dd.orca_runtime_available) {
-        showToast("Setting up Orca runtime first...", "info");
-        runFix("setup_docker_macos", "Docker Setup");
-        return;
-      }
-
-      // Step 2: Switch Docker context to lima-orca
-      showToast("Switching to Orca runtime...", "info");
-      const result = await invoke("switch_to_orca_runtime") as { message: string };
-
-      // Step 3: Optionally stop Docker Desktop
-      if (stopDdChecked()) {
-        showToast("Stopping Docker Desktop...", "info");
-        try {
-          await invoke("stop_docker_desktop");
-        } catch (e) {
-          logError(`Failed to stop Docker Desktop: ${e}`);
-        }
-      }
-
-      // Step 4: Restart daemon to pick up new context
-      showToast("Restarting Orca daemon...", "info");
-      try {
-        await invoke("stop_daemon");
-        await new Promise(r => setTimeout(r, 2000));
-        await invoke("start_daemon");
-        await new Promise(r => setTimeout(r, 3000));
-      } catch {
-        // Daemon restart can fail if already stopped
-      }
-
-      showToast(result.message, "success");
-      await refresh();
-    } catch (e) {
-      logError(`Migration failed: ${e}`);
-      showToast(`Migration failed: ${e}`, "error");
-    } finally {
-      setMigrating(false);
-    }
-  };
-
   const runDiagnose = async () => {
     setDiagnoseLog("Testing connection methods...\n\n");
     setDiagnoseRunning(true);
@@ -364,10 +322,7 @@ export default function EnvironmentPage() {
         <div class="page-actions">
           <Show when={!health()?.docker_connected}>
             <button class="btn btn-primary" disabled={actionRunning()} onClick={() => {
-              const action = navigator.platform.includes("Mac") ? "setup_docker_macos"
-                : navigator.platform.includes("Win") ? "install_docker"
-                : "install_docker_linux";
-              runFix(action, "Docker Setup");
+              runFix(setupAction(), "Docker Setup");
             }}>
               Set up Docker
             </button>
@@ -379,6 +334,15 @@ export default function EnvironmentPage() {
               onClick={() => runFix("recreate_lima_orca", "Recreate Docker VM")}
             >
               Recreate VM
+            </button>
+          </Show>
+          <Show when={isWindows()}>
+            <button
+              class="btn"
+              disabled={actionRunning()}
+              onClick={() => runFix("recreate_wsl_engine", "Rebuild Orca's engine")}
+            >
+              Rebuild engine
             </button>
           </Show>
           <button class="btn" onClick={restartDocker} disabled={restartingDocker() || restartingOrca()}>
@@ -414,6 +378,12 @@ export default function EnvironmentPage() {
       >
         {(s) => (
           <div>
+            {/* Docker Desktop's things (and on Windows an earlier Orca's Docker), until brought over or left */}
+            <DockerDesktopMove onSetup={() => runFix(setupAction(), "Docker Setup")} onMoved={refresh} />
+            <Show when={isWindows()}>
+              <DockerDesktopMove from="earlier" onSetup={() => runFix(setupAction(), "Docker Setup")} onMoved={refresh} />
+            </Show>
+
             {/* === READY STATE — only show when daemon can actually reach Docker === */}
             <Show when={health()?.docker_connected === true}>
               {/* Hero status card */}
@@ -444,83 +414,17 @@ export default function EnvironmentPage() {
                   </div>
                   <div style={{ "font-size": "14px", color: "#8b949e", "line-height": "1.5" }}>
                     {platformLabel(s().platform)} {"\u2022"} Runtime: {
-                      isMacOS() && ddStatus()?.active
-                        ? "Docker Desktop"
-                        : isMacOS() && !ddStatus()?.active && ddStatus()?.orca_runtime_available
-                        ? "Orca (Lima)"
+                      isMacOS() || isWindows()
+                        ? engineName() === "Orca" || !engineName()
+                          ? isWindows() ? "Orca (WSL)" : "Orca (Lima)"
+                          : engineName()
                         : s().platform === "linux"
                         ? "Native Docker"
                         : s().suggested_runtime
-                    } {isMacOS() && !ddStatus()?.active && ddStatus()?.orca_runtime_available ? " \u2713" : ""} {"\u2022"} {passCount()}/{totalCount()} checks passed
+                    } {"\u2022"} {passCount()}/{totalCount()} checks passed
                   </div>
                 </div>
               </div>
-
-              {/* Docker Desktop migration card (macOS only) */}
-              <Show when={isMacOS() && ddStatus()?.installed && ddStatus()?.active && !migrationDismissed()}>
-                <div style={{
-                  "margin-bottom": "24px",
-                  background: "linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(139, 92, 246, 0.06) 100%)",
-                  border: "1px solid rgba(88, 166, 255, 0.2)",
-                  "border-radius": "12px",
-                  padding: "28px 32px",
-                }}>
-                  <div style={{ "font-size": "16px", "font-weight": "700", color: "#e6edf3", "margin-bottom": "8px" }}>
-                    Switch to Orca runtime
-                  </div>
-                  <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.6", "margin-bottom": "8px" }}>
-                    Orca is using Docker Desktop's engine. It can run Docker in its own Lima VM instead.{" "}
-                    <HelpLink path="/docs/install/#next-to-docker-desktop" />
-                  </div>
-
-                  <div style={{ "font-size": "12px", color: "#6e7681", "margin-bottom": "16px" }}>
-                    Containers and images in Docker Desktop are not copied over: pull or rebuild them afterwards.
-                  </div>
-
-                  {/* Stop Docker Desktop checkbox */}
-                  <label style={{
-                    display: "flex", "align-items": "center", gap: "8px",
-                    "font-size": "13px", color: "#8b949e", cursor: "pointer",
-                    "margin-bottom": "16px",
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={stopDdChecked()}
-                      onChange={(e) => setStopDdChecked(e.currentTarget.checked)}
-                      style={{ "accent-color": "#58a6ff" }}
-                    />
-                    Also stop Docker Desktop to free resources
-                  </label>
-
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <button
-                      class="btn btn-primary"
-                      disabled={migrating()}
-                      onClick={runMigration}
-                    >
-                      {migrating() ? "Switching..." : "Switch to Orca runtime"}
-                    </button>
-                    <button class="btn" onClick={() => setMigrationDismissed(true)}>
-                      Maybe later
-                    </button>
-                  </div>
-                </div>
-              </Show>
-
-              {/* Docker Desktop note — show only when DD is installed but NOT active (already on Orca) */}
-              <Show when={hasDockerDesktop() && !(isMacOS() && ddStatus()?.active)}>
-                <div style={{
-                  padding: "12px 16px", "margin-bottom": "20px",
-                  background: "rgba(63, 185, 80, 0.06)",
-                  border: "1px solid rgba(63, 185, 80, 0.12)",
-                  "border-radius": "8px",
-                  "font-size": "13px", color: "#8b949e",
-                  display: "flex", "align-items": "center", gap: "8px",
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Using Orca runtime — Docker Desktop is installed but not the active context.
-                </div>
-              </Show>
 
               {/* Health check grid — filter out irrelevant items */}
               <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
@@ -667,7 +571,7 @@ export default function EnvironmentPage() {
                     : s().platform === "macos"
                     ? "Set up a container runtime to get started. Orca uses a lightweight Linux VM via Lima on macOS."
                     : s().platform === "windows"
-                    ? "Set up Docker in WSL2 to get started. Orca manages containers via the Windows Subsystem for Linux."
+                    ? "Orca runs Docker in a WSL distro of its own, made from Ubuntu. Your own distros aren't changed."
                     : "Set up a container runtime to get started. Install Docker or Podman on your system."}
                 </div>
 
@@ -760,8 +664,7 @@ export default function EnvironmentPage() {
                 "font-family": "'JetBrains Mono NF', monospace",
                 "font-size": "12px", "line-height": "1.6",
                 color: "#c9d1d9", "white-space": "pre-wrap",
-                "word-break": "break-all", "max-height": "450px",
-                "min-height": "120px", overflow: "auto",
+                "word-break": "break-all", height: "min(450px, 60vh)", overflow: "auto",
                 background: "#0d1117",
               }}>{diagnoseLog()}</pre>
             </div>
@@ -806,8 +709,7 @@ export default function EnvironmentPage() {
                 "font-family": "'JetBrains Mono NF', monospace",
                 "font-size": "12px", "line-height": "1.6",
                 color: "#c9d1d9", "white-space": "pre-wrap",
-                "word-break": "break-all", "max-height": "500px",
-                "min-height": "150px", overflow: "auto",
+                "word-break": "break-all", height: "min(500px, 60vh)", overflow: "auto",
                 background: "#0d1117",
               }} ref={logRef}>{actionLog()}</pre>
             </div>

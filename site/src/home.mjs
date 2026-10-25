@@ -370,7 +370,7 @@ hooks:
     <div class="faq reveal">
       ${[
         ["Is Orca free for my company?", "Yes. Orca is MIT licensed, for personal and commercial use, with no account and no seat limits."],
-        ["Do I still need Docker Desktop?", "No. On macOS Orca runs Docker in its own Lima VM, on Windows inside WSL2, and on Linux it uses Docker or Podman directly. See <a href=\"/docs/install/\">Install</a> for running it next to an existing Docker setup."],
+        ["Do I still need Docker Desktop?", "No. On macOS Orca runs Docker in its own Lima VM, on Windows inside WSL2, and on Linux it uses Docker or Podman directly. Already on Docker Desktop? Orca brings its images, volumes and compose projects over once: see <a href=\"/docs/docker-desktop/\">Moving from Docker Desktop</a>."],
         ["Does it work with the compose files we already have?", "Yes. Any compose project you start shows up as a stack, and an <code>orca.yaml</code> is optional. Orca doesn't change your compose files; worktree instances use a generated override file instead."],
         ["What does Orca send over the network?", "No analytics or tracking. Orca checks GitHub for updates, pulls from the registries you use, and talks to an AI provider only if you set one up. <a href=\"/docs/security/\">Security and privacy</a> lists the details."],
         ["Which Macs are supported?", "The macOS build is for Apple Silicon."],

@@ -142,6 +142,26 @@ pub fn check_port_availability(
     conflicts
 }
 
+/// Windows: the gateway ports another WSL distro holds. They share one
+/// network with Orca's engine, and [`check_port_availability`] binds on
+/// Windows' side, which doesn't see them.
+pub async fn wsl_port_conflicts(http_port: u16, https_port: u16) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        let held = orca_backend_common::wsl::ports_held_elsewhere().await;
+        [(http_port, "HTTP"), (https_port, "HTTPS")]
+            .into_iter()
+            .filter(|(p, _)| held.contains(p))
+            .map(|(p, what)| format!("Port {p} ({what}) is in use inside WSL (another distro)"))
+            .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (http_port, https_port);
+        Vec::new()
+    }
+}
+
 /// Check if the gateway container is running.
 pub async fn is_running(state: &AppState) -> Result<bool> {
     let rt = state.rt().await;
@@ -179,7 +199,8 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
     }
 
     // Check port availability (warn, don't block — Docker may handle it on some platforms)
-    let conflicts = check_port_availability(config.http_port, config.https_port, None, None);
+    let mut conflicts = check_port_availability(config.http_port, config.https_port, None, None);
+    conflicts.extend(wsl_port_conflicts(config.http_port, config.https_port).await);
     if !conflicts.is_empty() {
         tracing::warn!("Port conflicts detected: {}", conflicts.join(", "));
     }
@@ -518,14 +539,7 @@ fn to_docker_mount_path(path: &std::path::Path) -> String {
     let s = path.to_string_lossy();
     #[cfg(target_os = "windows")]
     {
-        // Convert Windows path like C:\Users\foo to /mnt/c/Users/foo
-        if s.len() >= 3 && s.as_bytes()[1] == b':' {
-            let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
-            let rest = s[2..].replace('\\', "/");
-            return format!("/mnt/{drive}{rest}");
-        }
-        // Already a unix-style path or relative
-        return s.replace('\\', "/");
+        orca_backend_common::wsl::engine_path(&s).unwrap_or_else(|| s.replace('\\', "/"))
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -758,6 +772,19 @@ pub async fn ensure_host_alias(state: &AppState, config: &GatewayConfig) -> Resu
     Ok(())
 }
 
+/// Windows as seen from Orca's WSL distro, found when the engine connects.
+static WINDOWS_HOST_IP: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn set_windows_host_ip(ip: Option<String>) {
+    *WINDOWS_HOST_IP.lock().unwrap() = ip;
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn windows_host_ip() -> Option<String> {
+    WINDOWS_HOST_IP.lock().unwrap().clone()
+}
+
 /// `/etc/hosts` entry that lets the gateway reach this computer as
 /// `host.docker.internal` (host dev servers, Traefik).
 ///
@@ -767,7 +794,15 @@ pub async fn ensure_host_alias(state: &AppState, config: &GatewayConfig) -> Resu
 /// fixed user-network gateway, so pin that. Docker Desktop resolves the name
 /// itself.
 fn host_alias(docker_host: Option<&str>) -> Vec<String> {
-    if cfg!(target_os = "linux") {
+    if cfg!(windows) {
+        // Orca's WSL distro: Windows is WSL's NAT gateway; with mirrored
+        // networking (no gateway found) the engine's own host-gateway.
+        let ip = WINDOWS_HOST_IP.lock().unwrap().clone();
+        vec![format!(
+            "host.docker.internal:{}",
+            ip.as_deref().unwrap_or("host-gateway")
+        )]
+    } else if cfg!(target_os = "linux") {
         vec!["host.docker.internal:host-gateway".to_string()]
     } else if docker_host.is_some_and(|h| h.contains("/.lima/")) {
         vec!["host.docker.internal:192.168.5.2".to_string()]
@@ -778,8 +813,12 @@ fn host_alias(docker_host: Option<&str>) -> Vec<String> {
 
 /// Get the upstream host address for reaching Traefik from the Caddy container.
 pub fn traefik_upstream_host() -> &'static str {
-    if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+    // Windows: k3s runs in Orca's WSL distro, beside the engine, reached
+    // at the engine's own bridge (not docker0, another Docker's there).
+    if cfg!(target_os = "macos") {
         "host.docker.internal"
+    } else if cfg!(windows) {
+        orca_backend_common::wsl::BRIDGE_IP
     } else {
         "172.17.0.1" // Docker bridge gateway on Linux
     }

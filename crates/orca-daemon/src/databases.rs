@@ -10,6 +10,7 @@
 //! the project's own service, an override keeps that service from starting,
 //! without touching the project's compose file.
 
+use orca_backend_common::wsl::OnEngine;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -228,7 +229,7 @@ async fn existing(
 ) -> Option<Source> {
     let dbs = state.config.lock().await.databases.clone();
     for (server, owners) in &dbs.databases {
-        if !owners.get(database).is_some_and(|o| o.project == project) {
+        if owners.get(database).is_none_or(|o| o.project != project) {
             continue;
         }
         if let Some(id) = server.strip_prefix("orca:") {
@@ -860,6 +861,13 @@ fn compose_sep() -> char {
     if cfg!(windows) { ';' } else { ':' }
 }
 
+/// Windows: the separator, said in `.env` with the list Orca adds. Compose
+/// also runs in Linux there (Orca's engine, a WSL distro's `docker`), where
+/// it would split on `:` and take the whole list for one file.
+fn sep_line() -> Option<String> {
+    cfg!(windows).then(|| format!("COMPOSE_PATH_SEPARATOR={}", compose_sep()))
+}
+
 /// Points `.env`'s `COMPOSE_FILE` at the project's compose files and the
 /// override, keeping a `COMPOSE_FILE` the project set itself.
 fn set_compose_file(dir: &Path, files: &[String]) -> Result<()> {
@@ -895,6 +903,9 @@ fn set_compose_file(dir: &Path, files: &[String]) -> Result<()> {
             t.push_str(nl);
         }
         t.push_str(&format!("{nl}{COMPOSE_FILE_NOTE}{nl}COMPOSE_FILE={value}{nl}"));
+        if let Some(sep) = sep_line() {
+            t.push_str(&format!("{sep}{nl}"));
+        }
         t
     };
     if updated != text {
@@ -916,9 +927,14 @@ fn unset_compose_file(dir: &Path) -> Result<()> {
     let sep = compose_sep();
     let lines: Vec<&str> = text.lines().collect();
     let mut out: Vec<String> = Vec::new();
+    let mut ours = false;
     for (i, line) in lines.iter().enumerate() {
         let unexported = line.trim_start();
         let unexported = unexported.strip_prefix("export ").unwrap_or(unexported).trim_start();
+        // The separator that came with the list Orca added goes with it.
+        if std::mem::take(&mut ours) && sep_line().as_deref() == Some(unexported.trim_end()) {
+            continue;
+        }
         let Some(v) = unexported.strip_prefix("COMPOSE_FILE=") else {
             out.push(line.to_string());
             continue;
@@ -928,6 +944,7 @@ fn unset_compose_file(dir: &Path) -> Result<()> {
             if out.last().is_some_and(|l| l.trim().is_empty()) {
                 out.pop();
             }
+            ours = true;
             continue;
         }
         let kept: Vec<&str> = v
@@ -1062,6 +1079,7 @@ async fn services_of(state: &AppState, dir: &Path, files: &[String]) -> BTreeMap
         .await
         .current_dir(dir)
         .args(&args)
+        .on_engine()
         .output()
         .await;
     let v = match out {
@@ -1405,6 +1423,7 @@ pub async fn snapshot(state: &AppState, server: &str, database: &str, label: Opt
     let out = crate::dev::ops::runtime_cli(state, exec_program(state).await)
         .await
         .args(["exec", &container, "sh", "-c", &cmd])
+        .on_engine()
         .output()
         .await
         .context("couldn't run the dump")?;
@@ -1462,6 +1481,7 @@ pub async fn restore(state: &AppState, server: &str, database: &str, snapshot: &
     let mut child = crate::dev::ops::runtime_cli(state, exec_program(state).await)
         .await
         .args(["exec", "-i", &container, "sh", "-c", &cmd])
+        .on_engine()
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
@@ -1915,6 +1935,7 @@ async fn copy_database(
     let mut src = crate::dev::ops::runtime_cli(state, program)
         .await
         .args(["exec", &source.container, "sh", "-c", &dump])
+        .on_engine()
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -1923,6 +1944,7 @@ async fn copy_database(
     let dst = crate::dev::ops::runtime_cli(state, program)
         .await
         .args(["exec", "-i", target, "sh", "-c", &load])
+        .on_engine()
         .stdin(pipe)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
@@ -2211,8 +2233,15 @@ mod tests {
         let main = dir.path().join("docker-compose.yml").to_string_lossy().to_string();
         set_compose_file(dir.path(), std::slice::from_ref(&main)).unwrap();
         let text = std::fs::read_to_string(&env).unwrap();
+        let (sep, sep_line) = if cfg!(windows) {
+            (';', "COMPOSE_PATH_SEPARATOR=;\n")
+        } else {
+            (':', "")
+        };
         assert!(
-            text.contains("COMPOSE_FILE=docker-compose.yml:.orca/databases.override.yaml"),
+            text.contains(&format!(
+                "COMPOSE_FILE=docker-compose.yml{sep}.orca/databases.override.yaml\n{sep_line}"
+            )),
             "{text}"
         );
         // Again, as on every start: unchanged.
@@ -2222,14 +2251,15 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&env).unwrap(), original);
 
         // The project's own COMPOSE_FILE is kept.
-        std::fs::write(&env, "COMPOSE_FILE=a.yml:b.yml\n").unwrap();
+        let own = format!("COMPOSE_FILE=a.yml{sep}b.yml\n");
+        std::fs::write(&env, &own).unwrap();
         set_compose_file(dir.path(), &["a.yml".into(), "b.yml".into()]).unwrap();
         assert_eq!(
             std::fs::read_to_string(&env).unwrap(),
-            "COMPOSE_FILE=a.yml:b.yml:.orca/databases.override.yaml\n"
+            format!("COMPOSE_FILE=a.yml{sep}b.yml{sep}.orca/databases.override.yaml\n")
         );
         unset_compose_file(dir.path()).unwrap();
-        assert_eq!(std::fs::read_to_string(&env).unwrap(), "COMPOSE_FILE=a.yml:b.yml\n");
+        assert_eq!(std::fs::read_to_string(&env).unwrap(), own);
     }
 
     #[test]

@@ -238,12 +238,13 @@ struct BuildKitRecord {
     error: Option<String>,
 }
 
-/// Build the docker command, using WSL prefix on Windows.
+/// Build the docker command: on Windows, in Orca's WSL distro.
 fn docker_command() -> std::process::Command {
     #[cfg(target_os = "windows")]
     {
-        let mut cmd = std::process::Command::new("wsl");
-        cmd.arg("docker");
+        let mut cmd = std::process::Command::new("wsl.exe");
+        cmd.args(["-d", orca_backend_common::wsl::DISTRO, "-u", "root", "--exec", "docker"])
+            .env("WSL_UTF8", "1");
         cmd
     }
     #[cfg(not(target_os = "windows"))]

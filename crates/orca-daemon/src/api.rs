@@ -4,6 +4,7 @@
 // state-changing write when the predicate is false — so allow the lint.
 #![allow(clippy::collapsible_match)]
 
+use orca_backend_common::wsl::OnEngine;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -207,12 +208,18 @@ pub async fn auth_middleware(
     Ok(response)
 }
 
+/// The engine and Docker Desktop routes.
+fn engine_routes() -> Router<Arc<AppState>> {
+    crate::engine::routes()
+}
+
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(crate::dev::routes())
         .merge(crate::workspace::routes())
         .merge(crate::databases::routes())
         .merge(crate::update::routes())
+        .merge(engine_routes())
         .route("/health", get(health))
         .route("/events", get(events_stream))
         // Machines
@@ -400,9 +407,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/environment/status", get(env_status))
         .route("/environment/fix", post(env_fix))
         .route("/environment/fix-stream", post(env_fix_stream))
-        .route("/environment/docker-desktop-status", get(docker_desktop_status))
-        .route("/environment/switch-to-orca", post(switch_to_orca))
-        .route("/environment/stop-docker-desktop", post(stop_docker_desktop))
         // System health
         .route("/system/health", get(system_health))
         .route("/system/host-uid", get(host_uid))
@@ -445,6 +449,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/gateway/app", post(gateway_app_action))
         .route("/gateway/requests", get(gateway_requests))
         .route("/gateway/port-check", get(gateway_port_check))
+        .route("/ports/held-in-wsl", get(ports_held_in_wsl))
         .route("/gateway/links", get(gateway_get_links).put(gateway_update_links))
         .route("/gateway/traefik-status", get(gateway_traefik_status))
         .route("/gateway/traefik-mode", put(gateway_set_traefik_mode))
@@ -3532,6 +3537,7 @@ async fn validate_compose(
         cmd.arg(arg);
     }
     cmd.arg("-f").arg(&validated_str).arg("config").arg("-q");
+    let mut cmd = cmd.on_engine();
     cmd.stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
@@ -4261,7 +4267,8 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
             .env("TERM", "xterm-256color")
             .env("COLORTERM", "truecolor")
             .args([
-                "-u", "root", "--", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--", "sh",
+                "-d", "orca", "-u", "root", "--exec", "k3s", "kubectl", "exec", "-it", &name, "-n", &namespace, "--",
+                "sh",
             ])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -4420,8 +4427,8 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
 
 // --- Environment ---
 
-async fn env_status(State(_state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
-    let status = orca_backend_common::environment::check_environment().await;
+async fn env_status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
+    let status = orca_backend_common::environment::check_environment(other_engine(&state).await.as_deref()).await;
     Ok(Json(status))
 }
 
@@ -4490,19 +4497,21 @@ async fn env_fix_stream(State(state): State<Arc<AppState>>, Json(body): Json<Fix
 
 // --- Docker Desktop Migration ---
 
-async fn docker_desktop_status() -> Result<impl IntoResponse, ApiError> {
-    let status = orca_backend_common::environment::docker_desktop_status().await;
-    Ok(Json(serde_json::json!(status)))
-}
-
-async fn switch_to_orca() -> Result<impl IntoResponse, ApiError> {
-    let message = orca_backend_common::environment::switch_to_orca_runtime().await?;
-    Ok(Json(serde_json::json!({ "message": message })))
-}
-
-async fn stop_docker_desktop() -> Result<impl IntoResponse, ApiError> {
-    orca_backend_common::environment::stop_docker_desktop().await?;
-    Ok(Json(serde_json::json!({ "message": "Docker Desktop stopped" })))
+/// macOS: the socket of the engine Orca uses instead of its own VM, from
+/// `DOCKER_HOST` or Settings. `None` is Orca's VM (and anything off macOS).
+pub(crate) async fn other_engine(state: &AppState) -> Option<String> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    if let Ok(host) = std::env::var("DOCKER_HOST")
+        && let Some(path) = host.strip_prefix("unix://")
+    {
+        return Some(path.to_string());
+    }
+    match state.config.lock().await.engine.clone() {
+        Some(orca_core::config::EngineChoice::Socket { path, .. }) => Some(path),
+        _ => None,
+    }
 }
 
 // --- System Health ---
@@ -4540,6 +4549,10 @@ pub(crate) async fn system_health_report(state: &AppState, refresh: bool) -> orc
         rt.cached_disk_usage()
     };
     let mut health = orca_backend_common::environment::check_system_health(connected, disk).await;
+    #[cfg(windows)]
+    if let Some(w) = crate::host_relay::firewall_warning() {
+        health.warnings.push(w);
+    }
 
     if connected {
         if let Ok(version) = rt.server_version().await {
@@ -4570,9 +4583,8 @@ pub(crate) async fn system_health_report(state: &AppState, refresh: bool) -> orc
         health.docker_connected = false;
 
         // Check if Docker is available via other means
-        let connected = try_docker_connection().await;
-        if let Some((version, _)) = connected {
-            health.docker_version = Some(version);
+        let choice = state.config.lock().await.engine.clone();
+        if crate::engine::reachable(choice.as_ref()).await {
             // Docker IS running but daemon can't connect — show as disconnected
             // with a clear warning
             health
@@ -4634,37 +4646,6 @@ fn nix_gid() -> u32 {
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .and_then(|s| s.trim().parse().ok())
         .unwrap_or(0)
-}
-
-/// Try to connect to Docker via various methods. Returns (version, method) on success.
-async fn try_docker_connection() -> Option<(String, &'static str)> {
-    // Try local defaults (Unix socket on Linux/macOS, named pipe on Windows)
-    if let Ok(docker) = bollard::Docker::connect_with_local_defaults()
-        && docker.ping().await.is_ok()
-    {
-        // Version only for display; this runs on every health poll while
-        // disconnected, so don't ask /version (it leaks in rootless dockerd).
-        return Some((String::new(), "local"));
-    }
-
-    // On Windows, try TCP to WSL Docker
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(docker) = bollard::Docker::connect_with_named_pipe_defaults() {
-            if let Ok(ver) = docker.version().await {
-                return Some((ver.version.unwrap_or_default(), "pipe"));
-            }
-        }
-        if let Ok(docker) =
-            bollard::Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION)
-        {
-            if let Ok(ver) = docker.version().await {
-                return Some((ver.version.unwrap_or_default(), "tcp"));
-            }
-        }
-    }
-
-    None
 }
 
 // --- Templates ---
@@ -7728,8 +7709,11 @@ async fn cleanup(
         } else {
             "docker"
         };
-        match tokio::process::Command::new(runtime_cmd)
+        // Orca's engine, not whatever the user's docker context says.
+        match crate::dev::ops::runtime_cli(&state, runtime_cmd)
+            .await
             .args(["builder", "prune", "-f"])
+            .on_engine()
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -7762,360 +7746,9 @@ async fn cleanup(
 
 // --- Runtime Reconnect ---
 
-/// Helper: extend PATH with common macOS binary locations.
-fn extended_path() -> String {
-    format!(
-        "/opt/homebrew/bin:/usr/local/bin:/opt/homebrew/sbin:/usr/local/sbin:{}",
-        std::env::var("PATH").unwrap_or_default()
-    )
-}
-
-/// Ping a Docker socket and return a client for it if it answers. Pings, not
-/// `GET /version`: that leaks memory in rootless dockerd, and this probes
-/// every socket it finds.
-async fn try_socket_ping(socket_path: &str) -> Option<bollard::Docker> {
-    let docker = bollard::Docker::connect_with_socket(socket_path, 120, bollard::API_DEFAULT_VERSION).ok()?;
-    docker.ping().await.ok()?;
-    Some(docker)
-}
-
-async fn reconnect_runtime(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
-    let mut log = Vec::new();
-    let mut connected_version: Option<String> = None;
-    let mut connected_method: Option<String> = None;
-    let mut connected_docker: Option<bollard::Docker> = None;
-    let mut connected_socket: Option<String> = None;
-
-    log.push("Checking Docker connectivity...".to_string());
-    log.push("".to_string());
-
-    // 1. Check DOCKER_HOST env var
-    match std::env::var("DOCKER_HOST") {
-        Ok(host) => {
-            log.push(format!("DOCKER_HOST: {host}"));
-            if let Some(path) = host.strip_prefix("unix://") {
-                let exists = std::path::Path::new(path).exists();
-                if exists {
-                    match try_socket_ping(path).await {
-                        Some(docker_client) => {
-                            log.push("  Socket exists \u{2713} \u{2192} Docker responds \u{2713}".to_string());
-                            connected_method = Some(format!("DOCKER_HOST ({path})"));
-                            connected_docker = Some(docker_client);
-                            connected_socket = Some(path.to_string());
-                        }
-                        None => log.push("  Socket exists but ping failed".to_string()),
-                    }
-                } else {
-                    log.push(format!("  Socket {path}: not found"));
-                }
-            }
-        }
-        Err(_) => log.push("DOCKER_HOST: not set".to_string()),
-    }
-
-    // 2. Check Docker context
-    let extended = extended_path();
-    match tokio::process::Command::new("docker")
-        .env("PATH", &extended)
-        .args([
-            "context",
-            "inspect",
-            "--format",
-            "{{.Name}} \u{2192} {{.Endpoints.docker.Host}}",
-        ])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output()
-        .await
-    {
-        Ok(out) if out.status.success() => {
-            let ctx = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            log.push(format!("Docker context: {ctx}"));
-            // Try to extract socket path from context
-            if let Some(uri) = ctx.split('\u{2192}').nth(1) {
-                let uri = uri.trim();
-                if let Some(path) = uri.strip_prefix("unix://") {
-                    let exists = std::path::Path::new(path).exists();
-                    if exists && connected_method.is_none() {
-                        if try_socket_ping(path).await.is_some() {
-                            log.push("  Context socket: found \u{2713} \u{2192} Docker responds \u{2713}".to_string());
-                            connected_method = Some(format!("Docker context ({path})"));
-                        } else {
-                            log.push("  Context socket: found but ping failed".to_string());
-                        }
-                    } else if !exists {
-                        log.push(format!("  Context socket {path}: not found (stale context?)"));
-                    }
-                }
-            }
-        }
-        _ => log.push("Docker context: not available".to_string()),
-    }
-    log.push("".to_string());
-
-    // 3. Check all known socket paths
-    let home = std::env::var("HOME").unwrap_or_default();
-    let socket_candidates: Vec<(&str, String)> = vec![
-        ("Standard Docker", "/var/run/docker.sock".to_string()),
-        ("Docker Desktop", format!("{home}/.docker/run/docker.sock")),
-        ("Docker Desktop (alt)", format!("{home}/.docker/desktop/docker.sock")),
-        (
-            "Docker Desktop (legacy)",
-            format!("{home}/Library/Containers/com.docker.docker/Data/docker.raw.sock"),
-        ),
-        ("Lima VM 'orca'", format!("{home}/.lima/orca/sock/docker.sock")),
-        ("Lima VM 'docker'", format!("{home}/.lima/docker/sock/docker.sock")),
-        ("Lima VM 'default'", format!("{home}/.lima/default/sock/docker.sock")),
-        ("Lima VM 'colima'", format!("{home}/.lima/colima/sock/docker.sock")),
-        ("Colima default", format!("{home}/.colima/default/docker.sock")),
-        ("Colima docker", format!("{home}/.colima/docker/docker.sock")),
-    ];
-
-    // Podman sockets
-    let mut podman_candidates: Vec<(&str, String)> = Vec::new();
-    if let Ok(uid) = std::env::var("UID").or_else(|_| {
-        // UID isn't always set; try id -u
-        std::process::Command::new("id")
-            .arg("-u")
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .map_err(|e| e.to_string())
-    }) {
-        podman_candidates.push(("Podman (user)", format!("/run/user/{uid}/podman/podman.sock")));
-    }
-    podman_candidates.push(("Podman (root)", "/run/podman/podman.sock".to_string()));
-
-    for (label, path) in socket_candidates.iter().chain(podman_candidates.iter()) {
-        let exists = std::path::Path::new(path).exists();
-        if exists {
-            match try_socket_ping(path).await {
-                Some(docker_client) => {
-                    log.push(format!(
-                        "Socket {path}: found \u{2713} \u{2192} Docker responds \u{2713}"
-                    ));
-                    if connected_method.is_none() {
-                        connected_method = Some(format!("{label} ({path})"));
-                        connected_docker = Some(docker_client);
-                        connected_socket = Some(path.clone());
-                    }
-                }
-                None => log.push(format!("Socket {path}: found but ping failed")),
-            }
-        } else {
-            log.push(format!("Socket {path}: not found"));
-        }
-    }
-    log.push("".to_string());
-
-    // 4. On macOS, check Lima VMs and try to start if needed
-    #[cfg(target_os = "macos")]
-    if connected_method.is_none() {
-        // Check Lima VMs
-        match tokio::process::Command::new("limactl")
-            .env("PATH", &extended)
-            .args(["list", "--format", "{{.Name}} {{.Status}} {{.Memory}} {{.CPUs}}"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output()
-            .await
-        {
-            Ok(out) if out.status.success() => {
-                let text = String::from_utf8_lossy(&out.stdout);
-                for line in text.lines() {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        let name = parts[0];
-                        let status = parts[1];
-                        let extra = if parts.len() >= 4 {
-                            format!(" ({}, {} CPUs)", parts[2], parts[3])
-                        } else {
-                            String::new()
-                        };
-                        log.push(format!("Lima VM '{name}': {status}{extra}"));
-
-                        if status != "Running" && (name == "orca" || name == "docker") {
-                            log.push(format!("  Starting Lima VM '{name}'..."));
-                            match tokio::process::Command::new("limactl")
-                                .env("PATH", &extended)
-                                .args(["start", name])
-                                .stdout(std::process::Stdio::piped())
-                                .stderr(std::process::Stdio::piped())
-                                .output()
-                                .await
-                            {
-                                Ok(r) if r.status.success() => {
-                                    log.push(format!("  Lima VM '{name}' started successfully"));
-                                    // Wait for socket to appear
-                                    let socket = format!("{home}/.lima/{name}/sock/docker.sock");
-                                    for attempt in 1..=15 {
-                                        if std::path::Path::new(&socket).exists()
-                                            && let Some(docker_client) = try_socket_ping(&socket).await
-                                        {
-                                            log.push(format!("  Socket ready \u{2713} \u{2192} Docker responds \u{2713} (attempt {attempt})"));
-                                            connected_method = Some(format!("Lima VM '{name}' ({socket})"));
-                                            connected_docker = Some(docker_client);
-                                            connected_socket = Some(socket.clone());
-                                            break;
-                                        }
-                                        if attempt <= 14 {
-                                            tokio::time::sleep(Duration::from_secs(2)).await;
-                                        }
-                                    }
-                                    if connected_method.is_none() {
-                                        log.push("  Socket not available after 30s".to_string());
-                                    }
-                                }
-                                Ok(r) => {
-                                    let err = String::from_utf8_lossy(&r.stderr).trim().to_string();
-                                    log.push(format!("  Failed to start: {err}"));
-                                }
-                                Err(e) => log.push(format!("  Failed to start: {e}")),
-                            }
-                            if connected_method.is_some() {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            Ok(_) => log.push("Lima: limactl returned an error".to_string()),
-            Err(_) => log.push("Lima: limactl not found".to_string()),
-        }
-        log.push("".to_string());
-    }
-
-    // Windows-specific checks
-    #[cfg(target_os = "windows")]
-    {
-        log.push("Method: Windows named pipe".to_string());
-        match bollard::Docker::connect_with_named_pipe_defaults() {
-            Ok(docker) => match docker.version().await {
-                Ok(ver) => {
-                    let v = ver.version.unwrap_or_default();
-                    log.push(format!("  Connected! Docker {v}"));
-                    if connected_version.is_none() {
-                        connected_version = Some(v);
-                        connected_method = Some("Windows named pipe".to_string());
-                    }
-                }
-                Err(e) => log.push(format!("  Pipe exists but ping failed: {e}")),
-            },
-            Err(e) => log.push(format!("  Not available: {e}")),
-        }
-
-        log.push("".to_string());
-        log.push("Method: TCP localhost:2375".to_string());
-        match bollard::Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION) {
-            Ok(docker) => match docker.version().await {
-                Ok(ver) => {
-                    let v = ver.version.unwrap_or_default();
-                    log.push(format!("  Connected! Docker {v}"));
-                    if connected_version.is_none() {
-                        connected_version = Some(v);
-                        connected_method = Some("TCP localhost:2375".to_string());
-                    }
-                }
-                Err(e) => log.push(format!("  TCP connection failed: {e}")),
-            },
-            Err(e) => log.push(format!("  Not available: {e}")),
-        }
-
-        if connected_version.is_none() {
-            log.push("".to_string());
-            log.push("Method: Docker via WSL CLI".to_string());
-            match tokio::process::Command::new("wsl")
-                .args(["docker", "version", "--format", "{{.Server.Version}}"])
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output()
-                .await
-            {
-                Ok(out) if out.status.success() => {
-                    let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                    log.push(format!("  Docker {v} is running in WSL"));
-                    log.push("  Attempting to configure TCP listener...".to_string());
-
-                    let configure_result = tokio::process::Command::new("wsl")
-                        .args(["-u", "root", "--", "bash", "-c",
-                            "mkdir -p /etc/systemd/system/docker.service.d && \
-                             echo -e '[Service]\\nExecStart=\\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock' \
-                             > /etc/systemd/system/docker.service.d/override.conf && \
-                             systemctl daemon-reload && service docker restart"])
-                        .output()
-                        .await;
-
-                    match configure_result {
-                        Ok(r) if r.status.success() => {
-                            log.push("  TCP listener configured and Docker restarted!".to_string());
-                            tokio::time::sleep(Duration::from_secs(3)).await;
-                            if let Ok(docker) = bollard::Docker::connect_with_http(
-                                "http://localhost:2375",
-                                120,
-                                bollard::API_DEFAULT_VERSION,
-                            ) {
-                                if let Ok(ver) = docker.version().await {
-                                    let v2 = ver.version.unwrap_or_default();
-                                    log.push(format!("  Connected via TCP! Docker {v2}"));
-                                    connected_version = Some(v2);
-                                    connected_method = Some("TCP (auto-configured WSL)".to_string());
-                                }
-                            }
-                            if connected_version.is_none() {
-                                log.push("  TCP configured but connection still failing.".to_string());
-                            }
-                        }
-                        _ => {
-                            log.push("  Failed to auto-configure TCP listener.".to_string());
-                        }
-                    }
-                }
-                Ok(out) => {
-                    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                    log.push(format!("  Docker not running in WSL: {err}"));
-                }
-                Err(e) => log.push(format!("  WSL not available: {e}")),
-            }
-        }
-    }
-
-    // Hot-swap the runtime if we found a working connection
-    if let Some(docker) = connected_docker {
-        let mut runtime = orca_backend_common::BollardRuntime::new(docker);
-        if let Some(socket) = connected_socket {
-            runtime = runtime.with_socket(socket);
-        }
-        let new_runtime = Arc::new(runtime);
-        // One `/version` for display, cached by the runtime for health checks.
-        if let Ok(ver) = new_runtime.server_version().await {
-            connected_version = ver.version;
-        }
-        state.swap_runtime(new_runtime).await;
-        log.push("".to_string());
-        log.push("\u{2713} Runtime connection updated — Docker is now connected.".to_string());
-    }
-
-    // Summary
-    log.push("".to_string());
-    if let Some(method) = &connected_method {
-        let version = connected_version.as_deref().unwrap_or("(version unknown)");
-        log.push(format!("Result: Docker {version} is reachable via {method}."));
-        log.push("Connected successfully — no restart needed.".to_string());
-        Ok(Json(serde_json::json!({
-            "connected": true,
-            "method": method,
-            "version": version,
-            "log": log,
-        })))
-    } else {
-        log.push("Result: No working Docker connection found.".to_string());
-        log.push("Action: Install a container runtime via System Health, then restart Orca.".to_string());
-        Ok(Json(serde_json::json!({
-            "connected": false,
-            "method": serde_json::Value::Null,
-            "version": serde_json::Value::Null,
-            "log": log,
-        })))
-    }
+/// Find the engine again and connect to it, logging what was tried.
+async fn reconnect_runtime(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(crate::engine::reconnect(&state).await))
 }
 
 // --- Agent APIs (MCP + OpenAI-compatible) ---
@@ -8539,7 +8172,9 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
     let cid = crate::gateway::container_id(&state).await.unwrap_or(None);
     let routes_active = gw.routes.iter().filter(|r| r.enabled).count();
     let port_conflicts = if !running {
-        crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None)
+        let mut c = crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None);
+        c.extend(crate::gateway::wsl_port_conflicts(gw.http_port, gw.https_port).await);
+        c
     } else {
         vec![]
     };
@@ -8565,7 +8200,8 @@ async fn gateway_start(State(state): State<Arc<AppState>>) -> Result<impl IntoRe
     let gw = &config.gateway;
 
     // Check port availability before starting (warning, not blocking)
-    let port_conflicts = crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None);
+    let mut port_conflicts = crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None);
+    port_conflicts.extend(crate::gateway::wsl_port_conflicts(gw.http_port, gw.https_port).await);
     if !port_conflicts.is_empty() {
         tracing::warn!("Port conflicts before gateway start: {}", port_conflicts.join(", "));
     }
@@ -9081,6 +8717,7 @@ async fn compose_project_name(state: &AppState, dir: &std::path::Path) -> Option
         .await
         .current_dir(dir)
         .args(["compose", "config", "--format", "json"])
+        .on_engine()
         .output()
         .await
         .ok()?;
@@ -9184,6 +8821,20 @@ async fn gateway_set_landing(
     Ok(Json(serde_json::json!({ "settings": gateway.landing })))
 }
 
+/// Windows: the ports another WSL distro listens on. They're taken for
+/// Orca's engine too (every distro shares one network), and a check that
+/// binds on Windows doesn't see them. Empty elsewhere.
+async fn ports_held_in_wsl() -> Json<serde_json::Value> {
+    #[cfg(windows)]
+    let ports: Vec<u16> = orca_backend_common::wsl::ports_held_elsewhere()
+        .await
+        .into_iter()
+        .collect();
+    #[cfg(not(windows))]
+    let ports: Vec<u16> = Vec::new();
+    Json(serde_json::json!({ "ports": ports }))
+}
+
 async fn gateway_port_check(
     State(state): State<Arc<AppState>>,
     Query(params): Query<HashMap<String, String>>,
@@ -9208,7 +8859,9 @@ async fn gateway_port_check(
         None
     };
     drop(config);
-    let conflicts = crate::gateway::check_port_availability(http_port, https_port, current_http, current_https);
+    let mut conflicts = crate::gateway::check_port_availability(http_port, https_port, current_http, current_https);
+    // The running gateway's own ports are Orca's distro's, so not counted.
+    conflicts.extend(crate::gateway::wsl_port_conflicts(http_port, https_port).await);
     Ok(Json(serde_json::json!({ "conflicts": conflicts })))
 }
 
@@ -9407,28 +9060,17 @@ async fn ca_certificate() -> Result<impl IntoResponse, ApiError> {
 async fn ca_info() -> Result<impl IntoResponse, ApiError> {
     let (cert_pem, _) = get_or_create_ca().await?;
 
-    let x509 = openssl::x509::X509::from_pem(cert_pem.as_bytes())
+    let (_, pem) = x509_parser::pem::parse_x509_pem(cert_pem.as_bytes())
+        .map_err(|e| anyhow::anyhow!("Failed to parse CA certificate: {e}"))?;
+    let x509 = pem
+        .parse_x509()
         .map_err(|e| anyhow::anyhow!("Failed to parse CA certificate: {e}"))?;
 
-    let subject = x509
-        .subject_name()
-        .entries()
-        .map(|e| {
-            format!(
-                "{}={}",
-                e.object().nid().short_name().unwrap_or("?"),
-                e.data().as_utf8().map(|s| s.to_string()).unwrap_or_default()
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
+    let subject = x509.subject().to_string();
+    let expires = x509.validity().not_after.to_string();
 
-    let expires = x509.not_after().to_string();
-
-    let fingerprint = x509
-        .digest(openssl::hash::MessageDigest::sha256())
-        .map_err(|e| anyhow::anyhow!("Failed to compute fingerprint: {e}"))?;
-    let fingerprint_hex = fingerprint
+    use sha2::Digest;
+    let fingerprint_hex = sha2::Sha256::digest(&pem.contents)
         .iter()
         .map(|b| format!("{b:02X}"))
         .collect::<Vec<_>>()

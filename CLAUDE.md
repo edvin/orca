@@ -2,7 +2,7 @@
 
 ## Architecture
 
-- **Rust workspace** with 7 crates (see `Cargo.toml`)
+- **Rust workspace** with 6 crates plus the Tauri app (see `Cargo.toml`)
 - **Frontend**: SolidJS + TypeScript in `gui/`
 - **Desktop**: Tauri 2 in `src-tauri/`
 - **Daemon**: Axum REST API at `http://127.0.0.1:9477/api/v1/`
@@ -144,6 +144,52 @@ kubectl config set-context orca --cluster=orca --user=orca
 - K8s operations: WSL kubectl on Windows, kube client on Linux/macOS
 - All inline styles matching dark theme (#0a0e14 bg, #e6edf3 text, #58a6ff accent)
 - Template icons are inline SVG strings rendered via innerHTML, not text or emoji
+
+## Windows: Orca's engine in WSL
+
+Orca runs Docker in a WSL distro of its own, `orca` (Ubuntu 26.04's WSL
+image), reached over mutual TLS on `127.0.0.1:2376`; see
+`crates/orca-backend-common/src/wsl.rs`. `docker`/compose run inside the
+distro (`wsl::OnEngine`), `docker.exe` in PowerShell goes through the
+path-rewriting proxy on `\\.\pipe\orca_docker` (`engine_proxy.rs`), and
+`host_relay.rs` lets containers reach dev servers on Windows' localhost.
+Docker Desktop's engine is never used, on any platform (`engine.rs`).
+
+Things that cost time and aren't visible from the code:
+
+- **All WSL 2 distros share one kernel and one network namespace**: one
+  `docker0`, one iptables, one binfmt_misc, one set of listening ports.
+  Anything Orca does in `orca` at that level reaches the user's distros.
+  Don't drop `orca-binfmt-guard.service`, `--bridge=orca0`, the address
+  pool or `--live-restore` from the setup script without reading `53054f8`.
+- **If Windows programs stop running in WSL** (`Exec format error` on any
+  `.exe`), `WSLInterop` was unregistered. A privileged container can put it
+  back: `docker run --rm --privileged --network host alpine sh -c 'mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc; echo ":WSLInterop:M::MZ::/init:P" > /proc/sys/fs/binfmt_misc/register'`
+- **WSL's 127.0.0.1 forwarding doesn't carry a TCP half-close**: it closes
+  the connection. Never `shutdown(Write)` a socket to Orca's engine from
+  Windows; end input with TLS close_notify only (`engine_proxy::Engine`).
+- **A Windows named pipe can't half-close**: the proxy closes the client
+  pipe when the engine ends an attached stream.
+- **mio's named pipes lose data in message read mode** (messages over 4 KB).
+  Keep `byte_reads` on every `orca_docker` instance; the pipe itself stays
+  message mode so `docker.exe` can signal stdin's end.
+- **Tokio sockets are inheritable on Windows.** Bind listeners with
+  `crate::listen` (std), or a `wsl.exe` child holds the port after the
+  daemon exits.
+- **Compose records Linux paths** (`/mnt/c/…`) in its labels; Orca reads
+  them back as Windows paths (`wsl::host_labels`, in `containers.rs`).
+- **Another distro's ports**: `wsl::ports_held_elsewhere()`. Use it in any
+  new port check on Windows; binding on Windows' side doesn't see WSL's.
+- **The undo script**: anything the integrations set up outside Orca also
+  belongs in `wsl::undo_integration_script`, which the uninstaller runs.
+- **Building on Windows**: `cargo build --bin orca-daemon` needs nothing
+  extra. `cargo check -p orca-gui` needs `gui/dist` and
+  `src-tauri/binaries/orca-x86_64-pc-windows-msvc.exe`. Keep clippy clean on
+  Windows: `#[cfg(windows)]` code only fails there. From a Mac,
+  `cargo clippy --target x86_64-pc-windows-gnu -p orca-daemon` (mingw-w64)
+  checks it.
+- `curl.exe` can't test the engine's TLS port (Schannel won't load PEM
+  keys). Use curl in a distro, or `docker --tlsverify -H tcp://127.0.0.1:2376`.
 
 ## Pending macOS Debugging
 

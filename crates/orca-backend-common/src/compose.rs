@@ -70,9 +70,7 @@ async fn run_compose(
     };
 
     let mut cmd = Command::new(program);
-    cmd.current_dir(working_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.current_dir(working_dir);
 
     for arg in &base_args {
         cmd.arg(arg);
@@ -89,6 +87,8 @@ async fn run_compose(
     for arg in args {
         cmd.arg(arg);
     }
+    let mut cmd = crate::wsl::for_engine(cmd);
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     tracing::info!("Running: {program} {} {}", base_args.join(" "), args.join(" "));
 
@@ -96,6 +96,12 @@ async fn run_compose(
 
     let stdout = rewrite_docker_desktop_urls(&String::from_utf8_lossy(&output.stdout));
     let stderr = rewrite_docker_desktop_urls(&String::from_utf8_lossy(&output.stderr));
+    #[cfg(windows)]
+    let stderr = if output.status.success() {
+        stderr
+    } else {
+        crate::wsl::explain_bind_errors(stderr).await
+    };
     let exit_code = output.status.code().unwrap_or(-1);
 
     if !output.status.success() {

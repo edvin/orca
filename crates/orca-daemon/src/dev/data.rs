@@ -1,6 +1,7 @@
 //! Data modes: deciding each shared service's mode for an instance, and
 //! creating, resetting and dropping instance databases in shared servers.
 
+use orca_backend_common::wsl::OnEngine;
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result};
@@ -194,6 +195,7 @@ pub async fn exec_sh(state: &AppState, container: &str, cmd: &str) -> Result<Str
     let out = super::ops::runtime_cli(state, program)
         .await
         .args(["exec", container, "sh", "-c", cmd])
+        .on_engine()
         .output()
         .await
         .with_context(|| format!("could not run {program} exec"))?;

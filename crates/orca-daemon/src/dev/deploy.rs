@@ -198,6 +198,11 @@ pub async fn prepare_with(
     // the same one.
     let _lock = Locks::get().lock("ports").await;
     let needed = override_gen::required_host_ports(&model, &instance_dev, &shared, &profiles)?;
+    // Windows: ports another WSL distro holds, which Windows' own check misses.
+    #[cfg(windows)]
+    let held = orca_backend_common::wsl::ports_held_elsewhere().await;
+    #[cfg(not(windows))]
+    let held = std::collections::BTreeSet::<u16>::new();
     let ports: Vec<PortAssignment> = {
         let cfg = state.config.lock().await;
         let mine = existing_state.as_ref().map(|s| s.ports.clone()).unwrap_or_default();
@@ -219,7 +224,7 @@ pub async fn prepare_with(
             let a = core_dev::state::assign_port(&mine, &svc, port, &taken, |p| {
                 // A port we already hold may be in use by our own running
                 // container; that's fine.
-                mine.iter().any(|m| m.host_port == p) || ops::port_is_free(p)
+                mine.iter().any(|m| m.host_port == p) || (ops::port_is_free(p) && !held.contains(&p))
             })?;
             taken.push(a.host_port);
             out.push(a);

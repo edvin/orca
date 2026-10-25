@@ -410,14 +410,20 @@ dependencies = [
  "futures-core",
  "futures-util",
  "hex",
+ "home",
  "http",
  "http-body-util",
  "hyper",
  "hyper-named-pipe",
+ "hyper-rustls",
  "hyper-util",
  "hyperlocal",
  "log",
  "pin-project-lite",
+ "rustls",
+ "rustls-native-certs 0.8.3",
+ "rustls-pemfile",
+ "rustls-pki-types",
  "serde",
  "serde_derive",
  "serde_json",
@@ -3373,26 +3379,30 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "orca-backend-common"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
  "bollard",
  "chrono",
  "dirs",
+ "flate2",
  "futures-util",
  "k8s-openapi",
  "kube",
  "libc",
  "orca-core",
  "rand 0.8.5",
+ "rcgen",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "sysinfo",
  "tar",
  "tempfile",
+ "time",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -3401,7 +3411,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-macos"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3417,7 +3427,7 @@ dependencies = [
 
 [[package]]
 name = "orca-backend-native"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "bollard",
@@ -3429,24 +3439,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "orca-backend-windows"
-version = "0.65.0"
-dependencies = [
- "anyhow",
- "bollard",
- "dirs",
- "orca-backend-common",
- "orca-core",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "orca-cli"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3464,7 +3458,7 @@ dependencies = [
 
 [[package]]
 name = "orca-core"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3488,7 +3482,7 @@ dependencies = [
 
 [[package]]
 name = "orca-daemon"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -3509,26 +3503,30 @@ dependencies = [
  "rcgen",
  "reqwest 0.12.28",
  "rustls",
+ "rustls-pemfile",
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "subtle",
  "tar",
  "tempfile",
  "time",
  "tokio",
+ "tokio-rustls",
  "tokio-stream",
  "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",
  "urlencoding",
+ "windows-sys 0.61.2",
  "x509-parser",
 ]
 
 [[package]]
 name = "orca-gui"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "cocoa",

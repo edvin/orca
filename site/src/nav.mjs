@@ -2,7 +2,7 @@
 // content/docs/<slug>.md, or one of SHARED_DOCS (kept in the repo's docs/).
 
 export const NAV = [
-  { title: "Getting started", items: ["introduction", "install", "quickstart", "platforms"] },
+  { title: "Getting started", items: ["introduction", "install", "docker-desktop", "quickstart", "platforms"] },
   { title: "Workspaces", items: ["workspaces", "workspaces-join", "workspaces-secrets", "workspaces-create", "workspaces-routes", "workspaces-migrate", "workspaces-reference", "workspaces-troubleshooting"] },
   { title: "Local development", items: ["gateway", "databases", "orca-yaml", "profiles", "worktrees"] },
   { title: "Working with Orca", items: ["containers", "stacks", "images-and-builds", "templates", "kubernetes"] },
