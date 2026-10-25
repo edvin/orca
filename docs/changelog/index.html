@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvn5o78t">
+<link rel="stylesheet" href="/assets/site.css?v=mvnkqucf">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvn5o78t" defer></script>
+<script src="/assets/site.js?v=mvnkqucf" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,52 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.64.0">
+<section class="container releases"><article class="release" id="v0.64.1">
+  <div class="release-meta"><a class="release-tag" href="#v0.64.1">v0.64.1</a><time datetime="2026-10-25T08:36:00Z">October 25, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="editors-and-terminals-render-again"><a class="anchor" href="#editors-and-terminals-render-again" aria-hidden="true" tabindex="-1">#</a>Editors and terminals render again</h2>
+<p>The YAML editors (a stack&#39;s <strong>Compose file</strong> and <strong>orca.yaml</strong> tabs, and the templates&#39; editor) showed line numbers but no text in the desktop app.</p>
+<p>The cause was the app&#39;s security policy. It blocked the styles the editor adds while it runs, although the policy is written to allow them. The terminal adds its styles the same way, so this likely also fixes:</p>
+<ul>
+<li>its invisible cursor on macOS;</li>
+<li>font size changes that didn&#39;t apply.</li>
+</ul>
+<h2 id="find-your-way-around-projects"><a class="anchor" href="#find-your-way-around-projects" aria-hidden="true" tabindex="-1">#</a>Find your way around projects</h2>
+<ul>
+<li><strong>Workspace page:</strong><ul>
+<li>A project&#39;s name (with ›) opens it: its stack page once it has containers, running or not, and before that, its folder&#39;s services, profiles and <code>orca.yaml</code>.</li>
+<li><strong>Check this machine</strong> says what it checks while it runs, and that it only looks.</li>
+<li>The page&#39;s buttons have icons.</li>
+</ul>
+</li>
+<li><strong>Open a folder in your editor, terminal or file manager</strong> from small icon buttons with a tooltip:<ul>
+<li>on workspace projects;</li>
+<li>on each stack on the <strong>Containers</strong> page;</li>
+<li>on the Workspace page and stack page headers.</li>
+</ul>
+</li>
+<li><strong>Gateway page:</strong> its status is one row under the title, on every tab: running, domain, certificate, ports and routes.</li>
+</ul>
+<h2 id="app-catalog-october-2026"><a class="anchor" href="#app-catalog-october-2026" aria-hidden="true" tabindex="-1">#</a>App Catalog, October 2026</h2>
+<ul>
+<li><strong>Current versions:</strong><ul>
+<li>PostgreSQL 18;</li>
+<li>MySQL 9.7 LTS;</li>
+<li>MariaDB 12.3 LTS;</li>
+<li>Redis 8, MongoDB 8 and Valkey 9;</li>
+<li>RabbitMQ 4 and Elasticsearch 9.4.</li>
+</ul>
+</li>
+<li><strong>MinIO</strong> no longer publishes images, and its Docker Hub images were removed in September; the catalog now uses Chainguard&#39;s free build.</li>
+<li><strong>Mailpit</strong> replaces MailHog, which is no longer maintained.</li>
+<li><strong>New:</strong> RustFS, Keycloak, Temporal dev server, ClickHouse, Apache Kafka, Jaeger, Qdrant and pgAdmin.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.64.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.64.0">
   <div class="release-meta"><a class="release-tag" href="#v0.64.0">v0.64.0</a><time datetime="2026-10-25T01:01:10Z">October 25, 2026</time></div>
   <div class="release-body prose">
     
@@ -559,64 +604,6 @@
 <p><strong>Docs:</strong> <a href="https://orca-desktop.com/docs/gateway/#search-and-using-it-as-your-start-page">Search, and using it as your start page</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.52.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.51.0">
-  <div class="release-meta"><a class="release-tag" href="#v0.51.0">v0.51.0</a><time datetime="2026-10-22T22:32:58Z">October 23, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="open-a-folder-its-running"><a class="anchor" href="#open-a-folder-its-running" aria-hidden="true" tabindex="-1">#</a>Open a folder. It&#39;s running.</h2>
-<p>Starting a project you already have is now one step. Click <strong>Open folder</strong> on the dashboard or the Containers page, press ⌘K, or just drop the folder onto Orca&#39;s window.</p>
-<p>Before anything starts, Orca shows you what&#39;s inside: the compose file, its services and profiles, whether there&#39;s an <code>orca.yaml</code>, and whether it&#39;s a git repository. <strong>Start</strong> runs it as a stack and opens its page.</p>
-<ul>
-<li><strong>Git repositories</strong> can be added to <strong>Projects</strong> in the same step, so every worktree can run side by side.</li>
-<li><strong>A folder without a compose file</strong> gets a first <code>compose.yaml</code>, which you can edit before it starts.</li>
-<li><strong>Your files are safe.</strong> Orca never overwrites an existing compose file. The old Compose dialog did: <strong>Validate</strong> replaced the project&#39;s <code>docker-compose.yml</code> with a sample. That dialog is gone.</li>
-</ul>
-<h2 id="jump-to-your-code"><a class="anchor" href="#jump-to-your-code" aria-hidden="true" tabindex="-1">#</a>Jump to your code</h2>
-<p>A stack&#39;s page now shows its HTTPS URLs as buttons, plus <strong>Open in VS Code</strong> (or Cursor, Zed, Windsurf, IntelliJ, PhpStorm) and <strong>Open in Ghostty</strong> (or iTerm, Warp, Terminal), whichever you have, and <strong>Finder</strong>.</p>
-<p>Every service has <strong>Shell</strong>, which opens a terminal inside its container. You&#39;ll also find <strong>Open shell</strong> in each container&#39;s &quot;…&quot; menu.</p>
-<h2 id="⌘k-finds-everything"><a class="anchor" href="#⌘k-finds-everything" aria-hidden="true" tabindex="-1">#</a>⌘K finds everything</h2>
-<p>The command palette now searches as you type:</p>
-<ul>
-<li>stacks</li>
-<li>gateway URLs (Enter opens them in your browser)</li>
-<li>projects</li>
-<li>containers, including a shell in each one</li>
-<li>images</li>
-</ul>
-<p>Its actions do the real thing: <strong>Run a container…</strong>, <strong>Build an image…</strong> and <strong>Add a gateway route…</strong> open their dialogs, and <strong>Open a project folder…</strong> starts right there. Press <code>?</code> for keyboard shortcuts.</p>
-<h2 id="a-dashboard-about-your-apps"><a class="anchor" href="#a-dashboard-about-your-apps" aria-hidden="true" tabindex="-1">#</a>A dashboard about your apps</h2>
-<p>The dashboard leads with <strong>Your apps</strong>: every stack, how many services run, and its URLs, one click away. Stopped stacks get a <strong>Start</strong> button.</p>
-<p>On a fresh install it shows three ways to begin instead: open a project folder, add a git repository, or start from the catalog. The CPU and memory charts now show what your containers use, scaled so the lines actually move.</p>
-<h2 id="easier-to-find-your-way-around"><a class="anchor" href="#easier-to-find-your-way-around" aria-hidden="true" tabindex="-1">#</a>Easier to find your way around</h2>
-<ul>
-<li><strong>Sidebar:</strong> grouped into Develop, Resources, Platform and System. Kubernetes is marked &quot;off&quot; when it isn&#39;t enabled, and Fleet appears once you add a remote host.</li>
-<li><strong>Stacks:</strong> stack names on the Containers page are now links, with an <strong>Open stack</strong> button.</li>
-<li><strong>Container pages:</strong> labelled buttons (Start, Stop, Restart, Expose via gateway, Save as image, Remove) instead of a row of icons.</li>
-<li><strong>Gateway:</strong><ul>
-<li>the two overlapping settings tabs are now one <strong>Settings</strong> tab;</li>
-<li>routes that come from <code>orca.yaml</code> link to <strong>Edit in orca.yaml</strong>;</li>
-<li>stopping the gateway asks first.</li>
-</ul>
-</li>
-<li><strong>Kubernetes:</strong> row actions are tidied into a &quot;…&quot; menu, and stopping Kubernetes asks first.</li>
-<li><strong>Builds:</strong> now has a <strong>Build an image</strong> button.</li>
-<li><strong>Volumes:</strong> the empty page explains what volumes are for and offers <strong>Create volume</strong>.</li>
-<li><strong>Labels:</strong> sentence case throughout, and delete icons stay quiet until you point at them.</li>
-</ul>
-<h2 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h2>
-<ul>
-<li><strong>Kubernetes:</strong> the pod <strong>Restart</strong> action deleted the pod. It now restarts it, and asks first.</li>
-<li><strong>Confirmation buttons:</strong> confirmations for actions like &quot;Stop all containers&quot; no longer show a red <strong>Delete</strong> button; the button names the action.</li>
-<li><strong>Compose wizard:</strong> creating a stack no longer overwrites an existing stack with the same name.</li>
-<li><strong>Docker unreachable:</strong> when Orca can&#39;t reach Docker, Containers and Images now say so, with a button to <strong>System Health</strong>, instead of loading forever or quietly showing stale data.</li>
-<li><strong>Daemon errors:</strong> the &quot;daemon not running&quot; screen shows the actual error, and only points you to a reinstall when the daemon is really missing.</li>
-<li><strong>Charts:</strong> chart axes no longer read &quot;now now now&quot;.</li>
-</ul>
-<p><strong>Docs:</strong> <a href="https://orca-desktop.com/docs/quickstart/">Quickstart</a> · <a href="https://orca-desktop.com/docs/stacks/#open-a-project-folder">Stacks: open a project folder</a> · <a href="https://orca-desktop.com/docs/introduction/#find-your-way-around">Find your way around</a></p>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.51.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
