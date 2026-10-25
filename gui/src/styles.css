@@ -4434,6 +4434,9 @@ tr.service-off td { opacity: 0.55; }
 .ws-card.running { border-color: rgba(63, 185, 80, 0.3); }
 .ws-card-head { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
 .ws-card-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ws-card-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: #e6edf3; cursor: pointer; }
+.ws-card-name:hover { color: #58a6ff; text-decoration: underline; text-underline-offset: 3px; }
+.ws-card-name:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; border-radius: 3px; }
 .ws-state { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid #30363d; color: #8b949e; }
 .ws-state.running { color: #3fb950; border-color: rgba(63, 185, 80, 0.35); }
 .ws-state.cloned { color: #58a6ff; border-color: rgba(88, 166, 255, 0.35); }

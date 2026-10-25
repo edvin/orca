@@ -2,6 +2,7 @@
 // projects with one click (or by asking an AI tool). Secrets are filled in
 // here, from the team's secret manager, never typed into a chat.
 
+import { openFolderDialog } from "../lib/openFolder";
 import { createEffect, createResource, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -322,11 +323,21 @@ function ProjectCard(props: {
   const busy = () => props.job?.status === "running";
   const missing = () => p().secrets.filter((s) => !s.filled);
   const state = () => (p().running ? "running" : p().cloned ? "cloned" : "new");
+  // Its stack page once it has containers, running or not; before that,
+  // what's in its folder (services, profiles, orca.yaml).
+  const open = () => {
+    const s = p().stack;
+    if (s) props.onNavigate?.(`stack:${s}`);
+    else if (p().cloned) void openFolderDialog(p().dir);
+  };
+  const canOpen = () => !!p().stack || p().cloned;
   return (
     <div class="ws-card" id={`ws-project-${p().key}`} classList={{ running: p().running, focused: props.focused }}>
       <div class="ws-card-head">
         <AppIcon src={iconSrc(p().icon)} name={p().key} size={26} />
-        <b>{p().key}</b>
+        <Show when={canOpen()} fallback={<b>{p().key}</b>}>
+          <button class="ws-card-name" onClick={open} title={p().stack ? "Open its stack: services, logs, settings" : "See what's in its folder: services, profiles, orca.yaml"}>{p().key}</button>
+        </Show>
         <Show when={p().group}>{(g) => <span class="ws-card-group" title="Its group in the workspace file">{g()}</span>}</Show>
         <span class={`app-dot ${p().running ? "running" : ""}`} />
         <span class={`ws-state ${state()}`}>{p().running ? "Running" : p().cloned ? "Cloned" : "Not cloned"}</span>
@@ -368,14 +379,13 @@ function ProjectCard(props: {
       </Show>
 
       <div class="ws-card-actions">
-        <Show when={!p().running} fallback={
-          <>
-            <Show when={p().stack}>{(s) => <button class="btn btn-sm" onClick={() => props.onNavigate?.(`stack:${s()}`)}>Open stack</button>}</Show>
-          </>
-        }>
+        <Show when={!p().running}>
           <button class="btn btn-sm btn-primary" disabled={busy()} onClick={() => props.onSetup(false)}>
             {busy() ? "Working…" : p().cloned ? "Start" : "Set up"}
           </button>
+        </Show>
+        <Show when={canOpen()}>
+          <button class="btn btn-sm" onClick={open}>{p().stack ? "Open stack" : "Details"}</button>
         </Show>
         <Show when={p().cloned}><FolderActions path={p().dir} compact /></Show>
         <Show when={p().cloned && p().setup && !busy()}>
