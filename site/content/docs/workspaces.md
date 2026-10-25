@@ -55,7 +55,7 @@ Setting up a project runs seven steps:
 1. **Clone the repository**, or use the checkout that's already there.
 2. **Create the .env file** from the project's template, such as `.env.example`.
 3. **Fill in secrets** from your team's secret manager.
-4. **Create its database**, when its `orca.yaml` [requires one](/docs/databases/): a database and a user of its own on the team's shared server.
+4. **Create its database**, when its `orca.yaml` [requires one](/docs/databases/): a database and a user of its own on the workspace's shared server, which runs on this machine.
 5. **Run the setup command**, such as `just setup`, once per machine.
 6. **Start the shared services it uses**.
 7. **Start the project**, and show its URLs.

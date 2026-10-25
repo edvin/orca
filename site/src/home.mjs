@@ -215,8 +215,8 @@ hooks:
   <div class="container feature-grid reverse">
     <div class="feature-copy reveal">
       <span class="eyebrow">${F.database} Databases</span>
-      <h2>One database server for the whole team</h2>
-      <p>Instead of a MySQL or Postgres container in every project, a project says which database it needs in its <code>orca.yaml</code>, and gets a database and a user of its own on the team's shared server. Or on one Orca runs, when the team has none.</p>
+      <h2>One database server for all your projects</h2>
+      <p>Instead of a MySQL or Postgres container in every project, a project says which database it needs in its <code>orca.yaml</code>, and gets a database and a user of its own on one server per engine on your machine. A workspace sets those servers up the same way for everyone on the team; without one, Orca runs them itself.</p>
       <ul class="checks">
         <li>MySQL, Percona Server, MariaDB or PostgreSQL, in the versions you run in production</li>
         <li>The connection goes into the project's <code>.env</code>; its own database container stays down</li>
@@ -226,7 +226,7 @@ hooks:
       <a class="link-arrow" href="/docs/databases/">How shared databases work ${ICONS.arrow}</a>
     </div>
     <div class="feature-visual reveal">
-      ${windowFrame(shot(SHOTS.databases, "The Databases page: the team's shared MySQL and PostgreSQL servers, and each project's database on them"), "Orca — Databases")}
+      ${windowFrame(shot(SHOTS.databases, "The Databases page: the shared MySQL and PostgreSQL servers on this machine, and each project's database on them"), "Orca — Databases")}
     </div>
   </div>
 </section>

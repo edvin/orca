@@ -4,7 +4,7 @@ nav: Databases
 description: Projects say which database they need in orca.yaml; Orca gives each one a database and a user of its own, on a shared server or its own.
 ---
 
-A project can say in its `orca.yaml` which database it needs, such as "MySQL 8 or newer". Orca then gives it a database and a user of its own on a matching server, writes the connection into the project's `.env`, and can keep the project's own database container from starting. Your team can share one server per engine through its [workspace](/docs/workspaces/), and on a machine without one, Orca runs the server itself.
+A project can say in its `orca.yaml` which database it needs, such as "MySQL 8 or newer". Orca then gives it a database and a user of its own on a matching server, writes the connection into the project's `.env`, and can keep the project's own database container from starting. All your projects can share one server per engine on your machine: a [workspace](/docs/workspaces/) sets those servers up the same way for everyone on the team, and on a machine without one, Orca runs the server itself.
 
 This page is for you when you want fewer database containers on your machine, the same database setup for everyone on a team, or snapshots and resets without remembering `mysqldump` flags.
 
@@ -78,7 +78,7 @@ If `requires:` has a mistake, Orca leaves it out and says why on the stack's **o
 
 ## Shared servers in a workspace
 
-A [workspace](/docs/workspaces/) shares a server by naming a service of its shared compose file under `databases:`:
+A [workspace](/docs/workspaces/) shares a server by naming a service of its shared compose file under `databases:`. Like the workspace's other shared services, the server runs on each developer's own machine and is shared by all the projects there: what the team shares is the setup, not one server everyone connects to.
 
 ```yaml title="orca-workspace.yaml"
 shared:
@@ -217,7 +217,7 @@ Stored routines and views lose their `DEFINER`, as the user it names doesn't exi
 
 With Orca [connected to your AI tool](/docs/agents/), you can ask for the whole move in a sentence:
 
-> We want one shared MySQL and one shared Postgres for the whole team instead of every app running its own database. Consolidate our apps' databases into shared databases defined in the workspace, and move their data over.
+> We want one shared MySQL and one shared Postgres instead of every app running its own database. Consolidate our apps' databases into shared databases defined in the workspace, and move their data over.
 
 The AI tool reads this page through Orca (`orca_docs`), lists every project's own database containers (`find_database_services`), and looks at their compose files and data. It then proposes a plan for you to approve before it changes anything. In our test it noticed on its own that a WordPress site ran on MariaDB 11 while the team asked for MySQL, and asked which to use. Once you say go ahead, it:
 

@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvoe46xi">
+<link rel="stylesheet" href="/assets/site.css?v=mvofr9zm">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvoe46xi" defer></script>
+<script src="/assets/site.js?v=mvofr9zm" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,39 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.65.0">
+<section class="container releases"><article class="release" id="v0.66.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.66.0">v0.66.0</a><time datetime="2026-10-25T23:04:12Z">October 26, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="orca-runs-its-own-engine-everywhere"><a class="anchor" href="#orca-runs-its-own-engine-everywhere" aria-hidden="true" tabindex="-1">#</a>Orca runs its own engine, everywhere</h2>
+<p>Orca no longer uses Docker Desktop&#39;s engine, on any platform:</p>
+<ul>
+<li><strong>macOS</strong>: Docker runs in Orca&#39;s own VM. To use OrbStack, Colima or another engine instead, pick it in <strong>Settings → General → Engine</strong>. If you used one of those with Orca before, Orca keeps using it.</li>
+<li><strong>Windows</strong>: Docker runs in a WSL distro of Orca&#39;s own, <code>orca</code>, made from Ubuntu 26.04. It&#39;s reached only by Orca, over an encrypted connection. Your own distros aren&#39;t changed.</li>
+<li><strong>Linux</strong>: this computer&#39;s Docker or Podman.</li>
+</ul>
+<p><strong>What&#39;s in Docker Desktop stays there until you bring it over.</strong> On System Health, Orca offers to copy Docker Desktop&#39;s images, volumes and compose projects into its engine, once. Each volume is read back and checked, and Docker Desktop&#39;s own data is only read. Or start fresh: projects are created again on their next start. See <a href="https://orca-desktop.com/docs/docker-desktop/">Moving from Docker Desktop</a>.</p>
+<h2 id="windows"><a class="anchor" href="#windows" aria-hidden="true" tabindex="-1">#</a>Windows</h2>
+<ul>
+<li><strong>Setup:</strong> System Health sets up Orca&#39;s engine in a few minutes.</li>
+<li><strong>Earlier Orca&#39;s Docker:</strong> if an earlier Orca installed Docker in your default WSL distro, System Health offers to bring its images, volumes and projects over too.</li>
+<li><strong><code>docker</code> in PowerShell:</strong> turn it on in <strong>Settings → General → Engine</strong>. Windows paths in bind mounts (<code>-v C:\code\app:/app</code>) work, as they did with Docker Desktop.</li>
+<li><strong><code>docker</code> in one of your WSL distros:</strong> turn that on in the same place. Bind mounts from your home folder there work as before.</li>
+<li><strong>Dev servers on Windows:</strong> containers can reach one that only listens on <code>localhost</code>, through <code>host.docker.internal</code>.</li>
+<li><strong>Clearer port errors:</strong> Orca names ports that another WSL distro holds, and refuses to start Kubernetes while another k3s runs in WSL.</li>
+<li><strong>Settings → WSL2 resources:</strong> saving keeps the rest of your <code>.wslconfig</code>.</li>
+</ul>
+<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
+<ul>
+<li><strong>macOS:</strong> Orca no longer restarts its VM on start to re-add a port-forwarding rule it already has. When it does restart the VM for a real config change, it starts your running containers again afterwards.</li>
+<li><strong>System Health:</strong> the setup and repair log opens at its full size.</li>
+<li><strong>The update dialog:</strong> it shows what&#39;s new, like this.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.66.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.65.0">
   <div class="release-meta"><a class="release-tag" href="#v0.65.0">v0.65.0</a><time datetime="2026-10-25T11:16:11Z">October 25, 2026</time></div>
   <div class="release-body prose">
     
@@ -560,58 +592,6 @@
 </ul>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.53.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.52.1">
-  <div class="release-meta"><a class="release-tag" href="#v0.52.1">v0.52.1</a><time datetime="2026-10-22T23:44:40Z">October 23, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="safer-and-more-solid"><a class="anchor" href="#safer-and-more-solid" aria-hidden="true" tabindex="-1">#</a>Safer and more solid</h2>
-<p>We put the last few releases through a round of adversarial reviews: security, backend and app. This release fixes what they found.</p>
-<h3 id="security"><a class="anchor" href="#security" aria-hidden="true" tabindex="-1">#</a>Security</h3>
-<ul>
-<li><strong>Your AI tools&#39; config files stay private.</strong> Connecting Orca to Claude, Cursor, Codex and the others keeps each config file&#39;s permissions, keeps symlinked dotfiles as symlinks, and never loses a change the tool itself made at the same moment.</li>
-<li><strong>Codex&#39;s <code>config.toml</code> keeps its comments</strong>, and Orca writes it as valid TOML.</li>
-<li><strong>More secrets stay on your machine.</strong> Before the built-in assistant sends tool results to a cloud model, Orca now also blanks out:<ul>
-<li>Kubernetes Secret manifests</li>
-<li><code>.env</code>-style command output</li>
-<li>every password in a URL</li>
-<li>keys such as <code>APP_KEY</code> and <code>*_PAT</code></li>
-</ul>
-</li>
-<li><strong>The built-in assistant can&#39;t delete things.</strong> It runs tools without asking, so tools that remove containers, images, volumes, routes or projects, prune, or overwrite <code>orca.yaml</code> aren&#39;t available to it. Do those in Orca, or from an AI tool connected over MCP, which asks you first.</li>
-<li><strong>MCP clients ask before anything that changes state.</strong> Stopping a container, switching profiles, running a command or applying Kubernetes YAML is now marked destructive; only tools that add or start something aren&#39;t.</li>
-<li><strong>The compose file editor only edits YAML files inside the stack&#39;s own folder.</strong></li>
-<li><strong>On Windows, <em>Open in…</em> refuses folder names that the command prompt would run as commands.</strong></li>
-</ul>
-<h3 id="fixes"><a class="anchor" href="#fixes" aria-hidden="true" tabindex="-1">#</a>Fixes</h3>
-<ul>
-<li><strong>Kubernetes port-forwarding works again.</strong> Every connection was refused.</li>
-<li><strong>Opening a folder:</strong><ul>
-<li>It uses the compose files listed in the folder&#39;s <code>orca.yaml</code>.</li>
-<li>It follows Compose&#39;s own rules for project names.</li>
-<li>It warns you when another folder already runs under the same name, instead of replacing it.</li>
-<li>Errors stay on screen, and <strong>Open</strong> tries again after you fix the problem.</li>
-</ul>
-</li>
-<li><strong>A first <code>compose.yaml</code></strong> is no longer refused because an <code>.env</code> file it mentions doesn&#39;t exist yet.</li>
-<li><strong><code>orca mcp</code></strong> answers batched requests and survives unreadable input.</li>
-<li><strong>On Windows, Orca&#39;s own <code>orca</code> command updates</strong> even while an AI tool is running it.</li>
-<li><strong>Gateway settings:</strong> if the gateway won&#39;t start with new settings, Orca puts the previous ones back instead of leaving it stopped.</li>
-<li><strong>In the app:</strong><ul>
-<li><strong>Shell</strong> works on the container you&#39;re already looking at.</li>
-<li>Deploying a stack from the catalog opens its page.</li>
-<li>The assistant settings no longer mix up one provider&#39;s models with another&#39;s.</li>
-<li>The AI window says when no supported AI tool is installed.</li>
-<li>A custom search URL you typed wrong stays in the field so you can fix it.</li>
-<li>⌘K keeps your selection in view.</li>
-<li>A stack page&#39;s URLs refresh by themselves.</li>
-<li>The Ollama container restarts with your computer as intended.</li>
-</ul>
-</li>
-</ul>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.52.1" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
