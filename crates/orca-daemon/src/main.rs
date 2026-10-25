@@ -18,9 +18,13 @@ mod dev;
 mod desktop;
 mod docs;
 mod engine;
+#[cfg(any(windows, test))]
+mod engine_proxy;
 mod folders;
 mod gateway;
 mod gateway_sync;
+#[cfg(any(windows, test))]
+mod host_relay;
 mod landing;
 mod local_ai;
 mod port_probe;
@@ -119,6 +123,12 @@ async fn main() -> anyhow::Result<()> {
     // started since.
     #[cfg(windows)]
     {
+        // docker.exe's way into Orca's engine (its `orca` context).
+        tokio::spawn(engine_proxy::serve_pipe());
+        // The distro whose `docker` uses Orca's engine, for its /home.
+        orca_backend_common::wsl::set_integrated(state.config.lock().await.wsl_integration.distro.clone());
+        // Dev servers on Windows' localhost, for containers.
+        tokio::spawn(host_relay::run(state.clone()));
         let state = state.clone();
         tokio::spawn(async move {
             loop {

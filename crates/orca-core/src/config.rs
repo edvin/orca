@@ -202,6 +202,27 @@ pub struct OrcaConfig {
     /// user's default WSL distro.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub earlier_engine: Option<DockerDesktopMove>,
+    /// Windows: where else `docker` uses Orca's engine.
+    #[serde(default, skip_serializing_if = "WslIntegration::is_empty")]
+    pub wsl_integration: WslIntegration,
+}
+
+/// Windows: `docker` in PowerShell, and in one WSL distro, on Orca's engine.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct WslIntegration {
+    /// The distro whose `docker` uses Orca's engine; its `/home` is at the
+    /// same path in Orca's distro, so bind mounts from it just work.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distro: Option<String>,
+    /// `docker.exe` in PowerShell uses Orca's engine (its `orca` context).
+    pub powershell: bool,
+}
+
+impl WslIntegration {
+    pub fn is_empty(&self) -> bool {
+        self.distro.is_none() && !self.powershell
+    }
 }
 
 /// The Docker engine Orca uses on macOS.
@@ -890,6 +911,7 @@ impl Default for OrcaConfig {
             engine: None,
             docker_desktop: None,
             earlier_engine: None,
+            wsl_integration: WslIntegration::default(),
         }
     }
 }

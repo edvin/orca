@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvnu0goa">
+<link rel="stylesheet" href="/assets/site.css?v=mvnwvqyq">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvnu0goa" defer></script>
+<script src="/assets/site.js?v=mvnwvqyq" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -88,7 +88,13 @@
 <li>Folders on a drive (<code>C:\code\app</code>) are at <code>/mnt/c/code/app</code> in the distro.</li>
 <li>A folder inside another distro (<code>\\wsl.localhost\Ubuntu\home\me\app</code>) is reached through WSL&#39;s shared <code>/mnt/wsl</code>: Orca bind-mounts that distro&#39;s root at <code>/mnt/wsl/orca/distros/Ubuntu</code> while it runs. Nothing is installed or written in that distro.</li>
 <li>WSL stops a distro soon after its last program exits, so the daemon keeps one running in <code>orca</code>.</li>
-<li>Containers reach Windows at <code>host.docker.internal</code>.</li>
+<li>Containers reach Windows at <code>host.docker.internal</code>. For each gateway route to a dev server on Windows, Orca also relays its port to Windows&#39; <code>localhost</code>, so a server that only listens on <code>127.0.0.1</code> is reachable too. Windows may ask once whether to let Orca listen on the WSL network.</li>
+</ul>
+<h3 id="the-docker-command-on-windows"><a class="anchor" href="#the-docker-command-on-windows" aria-hidden="true" tabindex="-1">#</a>The docker command on Windows</h3>
+<p>In <strong>Settings</strong> &gt; <strong>General</strong> &gt; <strong>Engine</strong>, let <code>docker</code> use Orca&#39;s engine:</p>
+<ul>
+<li><strong>PowerShell and Command Prompt.</strong> Orca uses the <code>docker.exe</code> you have, or downloads Docker&#39;s own CLI and compose plugin, and adds a <code>docker context</code> named <code>orca</code>. It reaches the engine through Orca&#39;s named pipe, which rewrites Windows paths in bind mounts (<code>-v C:\code\app:/app</code>) to the engine&#39;s (<code>/mnt/c/code/app</code>), as Docker Desktop does.</li>
+<li><strong>One WSL distro.</strong> Orca installs Docker&#39;s CLI there if it has none (Debian and Ubuntu), and adds a <code>docker</code> context named <code>orca</code>. That distro&#39;s <code>/home</code> is at the same path for the engine, so <code>docker compose up</code> in <code>~/code/app</code> and its bind mounts work as they did with Docker Desktop. Paths outside <code>/home</code> in that distro aren&#39;t shared.</li>
 </ul>
 <p><strong>Rebuild engine</strong> on System Health deletes the distro and makes it again from Ubuntu&#39;s newest image. Containers, images and volumes in it are lost.</p>
 <h3 id="wsl2-resources"><a class="anchor" href="#wsl2-resources" aria-hidden="true" tabindex="-1">#</a>WSL2 resources</h3>
@@ -129,7 +135,7 @@
     </div>
     <nav class="pager" aria-label="Previous and next page"><a class="pager-prev" href="/docs/quickstart/"><span class="pager-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Previous</span><span class="pager-title">Quickstart</span></a><a class="pager-next" href="/docs/workspaces/"><span class="pager-label">Next <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="pager-title">Overview</span></a></nav>
   </article>
-  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#the-daemon">The daemon</a></li><li class="d2"><a href="#macos-a-lima-vm">macOS: a Lima VM</a></li><li class="d3"><a href="#ports">Ports</a></li><li class="d3"><a href="#bind-mounts-and-file-ownership">Bind mounts and file ownership</a></li><li class="d3"><a href="#why-vsock">Why vsock</a></li><li class="d3"><a href="#auto-reconciliation">Auto-reconciliation</a></li><li class="d3"><a href="#vm-resources">VM resources</a></li><li class="d2"><a href="#windows-a-wsl-distro-of-orcas-own">Windows: a WSL distro of Orca's own</a></li><li class="d3"><a href="#wsl2-resources">WSL2 resources</a></li><li class="d2"><a href="#linux-native">Linux: native</a></li><li class="d2"><a href="#which-engine">Which engine</a></li><li class="d3"><a href="#macos">macOS</a></li><li class="d2"><a href="#where-files-live">Where files live</a></li><li class="d2"><a href="#related">Related</a></li></ul></nav></aside>
+  <aside class="docs-toc"><nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#the-daemon">The daemon</a></li><li class="d2"><a href="#macos-a-lima-vm">macOS: a Lima VM</a></li><li class="d3"><a href="#ports">Ports</a></li><li class="d3"><a href="#bind-mounts-and-file-ownership">Bind mounts and file ownership</a></li><li class="d3"><a href="#why-vsock">Why vsock</a></li><li class="d3"><a href="#auto-reconciliation">Auto-reconciliation</a></li><li class="d3"><a href="#vm-resources">VM resources</a></li><li class="d2"><a href="#windows-a-wsl-distro-of-orcas-own">Windows: a WSL distro of Orca's own</a></li><li class="d3"><a href="#the-docker-command-on-windows">The docker command on Windows</a></li><li class="d3"><a href="#wsl2-resources">WSL2 resources</a></li><li class="d2"><a href="#linux-native">Linux: native</a></li><li class="d2"><a href="#which-engine">Which engine</a></li><li class="d3"><a href="#macos">macOS</a></li><li class="d2"><a href="#where-files-live">Where files live</a></li><li class="d2"><a href="#related">Related</a></li></ul></nav></aside>
 </div>
 </main>
 <footer class="site-footer">

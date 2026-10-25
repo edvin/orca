@@ -759,6 +759,11 @@ pub fn set_windows_host_ip(ip: Option<String>) {
     *WINDOWS_HOST_IP.lock().unwrap() = ip;
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn windows_host_ip() -> Option<String> {
+    WINDOWS_HOST_IP.lock().unwrap().clone()
+}
+
 /// `/etc/hosts` entry that lets the gateway reach this computer as
 /// `host.docker.internal` (host dev servers, Traefik).
 ///
@@ -784,7 +789,8 @@ fn host_alias(docker_host: Option<&str>) -> Vec<String> {
 
 /// Get the upstream host address for reaching Traefik from the Caddy container.
 pub fn traefik_upstream_host() -> &'static str {
-    if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+    // Windows: k3s runs in Orca's WSL distro, beside the engine, as on Linux.
+    if cfg!(target_os = "macos") {
         "host.docker.internal"
     } else {
         "172.17.0.1" // Docker bridge gateway on Linux

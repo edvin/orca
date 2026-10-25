@@ -2850,7 +2850,12 @@ pub async fn engine_api(
         return Err("invalid engine API path".into());
     }
     // Starting Docker Desktop waits for it; a plan sizes every volume.
-    let secs = if route == "/docker-desktop/start" || route == "/docker-desktop/plan" { 300 } else { 120 };
+    // Installing a Docker CLI for /engine/integration takes a few minutes too.
+    let secs = if route == "/docker-desktop/start" || route == "/docker-desktop/plan" || route == "/engine/integration" {
+        600
+    } else {
+        120
+    };
     daemon_call_with_timeout(&method, &path, body, secs).await
 }
 

@@ -19,8 +19,12 @@ plan for trying it for real.
 | Reconnect never actually swapped the runtime on Windows | One code path for all platforms (`crates/orca-daemon/src/engine.rs`) |
 
 Key code: `crates/orca-backend-common/src/wsl.rs` (distro creation, setup
-script, TLS certs, path translation, keepalive), `crates/orca-daemon/src/engine.rs`
-(which engine), `crates/orca-daemon/src/desktop.rs` (bringing things over).
+script, TLS certs, path translation, keepalive, PowerShell and distro
+integration), `crates/orca-daemon/src/engine.rs` (which engine),
+`crates/orca-daemon/src/engine_proxy.rs` (the path-rewriting Docker API proxy
+behind `\\.\pipe\orca_docker`), `crates/orca-daemon/src/host_relay.rs`
+(localhost dev servers for containers), `crates/orca-daemon/src/desktop.rs`
+(bringing things over).
 
 ## Before you start
 
@@ -65,7 +69,18 @@ Tick each, and note what happened where it didn't.
 
 ### 4. Gateway and networking
 - [ ] The gateway starts and `https://<app>.localhost` (or your domain) opens from a Windows browser.
-- [ ] A route to a dev server running on Windows itself (`host.docker.internal`) works. If it doesn't, check Windows Firewall for WSL, and whether `.wslconfig` uses `networkingMode=mirrored` (then the alias is `host-gateway`).
+- [ ] A route to a dev server running on Windows itself that listens on **localhost only** (e.g. `npx vite`, port 5173) works: the daemon log says `Relaying <ip>:5173 to Windows' localhost:5173`. Windows may ask to allow Orca on the network once: allow it.
+- [ ] The same for a server listening on all interfaces (the relay steps aside: the port is already reachable).
+- [ ] With `.wslconfig` `networkingMode=mirrored`: what happens? (No NAT gateway, so no relay; the alias falls back to `host-gateway`. Note what works.)
+
+### 4b. `docker` from PowerShell and from a distro
+**Settings → General → Engine:**
+- [ ] Tick **PowerShell and Command Prompt**, **Apply**. Without Docker Desktop installed, it downloads `docker.exe` into `%LOCALAPPDATA%\orca-engine\cli` (on your user PATH; open a new terminal) and the compose plugin into `%USERPROFILE%\.docker\cli-plugins`.
+- [ ] In a new PowerShell: `docker context ls` shows `orca *` (`npipe:////./pipe/orca_docker`); `docker run --rm -v ${PWD}:/w alpine ls /w` lists the current folder (path rewritten by the proxy); `docker run -it --rm alpine sh` gives an interactive shell; `docker compose up` in a project with `./src:/src` works.
+- [ ] Pick your Ubuntu distro, **Apply**: it installs `docker-ce-cli` and the compose plugin there if needed (replacing Docker Desktop's dangling `docker` link), and adds context `orca`.
+- [ ] In Ubuntu: `docker context ls` shows `orca *`; `cd ~/code/app && docker compose up -d` works with bind mounts; `wsl -d orca -- ls /home` shows your Ubuntu home.
+- [ ] Orca's Containers page shows those containers, and stopping the project from Orca works (its folder `/home/<you>/app` is the same path in Orca's distro).
+- [ ] Switching back to **None** sets Ubuntu's context back to `default`.
 
 ### 5. Kubernetes
 - [ ] Enabling Kubernetes installs k3s in `orca` (not in your default distro); pods list; a pod terminal opens.
@@ -88,11 +103,14 @@ On a machine that ran Orca 0.65 or older (Docker in the default distro on 2375):
 
 ## Known gaps to decide on
 
-- **`docker` in your own distros.** With Docker Desktop gone, its `docker` shim in Ubuntu goes too. Orca doesn't yet give your distros a `docker` command pointed at its engine. Options: expose the engine's socket under `/mnt/wsl/orca/` and set `DOCKER_HOST` (bind mounts of `/home/…` paths then need the engine to see them at the same path), or an Orca CLI shim. Needs a decision.
+- **One distro at a time** for `docker`: only its `/home` is shared at the same path. Another distro's paths would need the proxy approach (a per-distro path-rewriting socket) if people need it.
 - **`.wslconfig`.** **Settings → WSL2 resources** (`src-tauri/src/commands.rs` `save_wsl_config`) rewrites the whole `[wsl2]` section; the unused `orca-backend-windows` crate also wrote `networkingMode=mirrored` and friends there. Make sure saving resources doesn't drop keys the user set.
 - **Windows on ARM** isn't covered: Ubuntu only publishes an amd64 WSL image for 26.04 (Orca's Windows build is x64 anyway).
 - `crates/orca-backend-windows` is unused (it was an earlier attempt at a named distro, on Ubuntu 24.04). Delete it once this works.
 
 ## Not Windows: already tested on the Mac
 
-The move itself (images, volumes with owners and modes, networks, compose projects, verification, rerun, interrupted copies) was tested end to end on macOS between two Lima VMs, one standing in for Docker Desktop with the containerd image store. The Ubuntu 26.04 setup script and the mutual-TLS engine port were tested in an Ubuntu 26.04 VM, from the Mac, with Orca's own client.
+- The move itself (images, volumes with owners and modes, networks, compose projects, verification, rerun, interrupted copies) was tested end to end on macOS between two Lima VMs, one standing in for Docker Desktop with the containerd image store.
+- The Ubuntu 26.04 setup script and the mutual-TLS engine port were tested in an Ubuntu 26.04 VM, from the Mac, with Orca's own client.
+- The path-rewriting proxy was tested with the real `docker` CLI and compose through it: binds via `-v` and `--mount`, `run -i` with stdin, `exec`, `logs -f`, a chunked `build`, `cp`, and a compose project with bind mounts and ports.
+- The distro CLI install was tested in Ubuntu 26.04 and Debian 13 containers (also replacing Docker Desktop's dangling link), and the `orca` context against a mutual-TLS dockerd on 127.0.0.1:2376 sharing the network, as WSL distros do.

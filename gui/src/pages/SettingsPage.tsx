@@ -10,6 +10,7 @@ import Spinner from "../components/Spinner";
 import Dropdown from "../components/Dropdown";
 import HelpLink from "../components/HelpLink";
 import EngineSettings from "../components/EngineSettings";
+import WslIntegration from "../components/WslIntegration";
 
 type SettingsTab = "general" | "ai" | "registries" | "remote-hosts" | "auto-deploy" | "schedules" | "maintenance" | "certificates" | "privacy" | "about";
 
@@ -899,7 +900,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
             </Show>
 
             {/* The engine Orca uses — macOS and Linux (Windows runs Orca's own) */}
-            <Show when={!navigator.platform.includes("Win")}>
+            <Show when={!navigator.platform.includes("Win")} fallback={<WslIntegration />}>
               <EngineSettings />
             </Show>
 

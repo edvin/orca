@@ -534,7 +534,93 @@ pub async fn reconnect(state: &AppState) -> serde_json::Value {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/engine", get(status).put(choose))
+        .route("/engine/integration", get(integration).put(set_integration))
         .merge(crate::desktop::routes())
+}
+
+/// Windows: where `docker` uses Orca's engine besides Orca: PowerShell,
+/// and one WSL distro. With the distros there are to pick from.
+async fn integration(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let set = state.config.lock().await.wsl_integration.clone();
+    #[cfg(windows)]
+    {
+        use orca_backend_common::wsl;
+        let running = wsl::running_distros().await;
+        let distros: Vec<serde_json::Value> = wsl::distros()
+            .await
+            .into_iter()
+            .filter(|d| !d.eq_ignore_ascii_case(wsl::DISTRO) && !d.starts_with("docker-desktop"))
+            .map(|d| serde_json::json!({ "name": d, "running": running.contains(&d) }))
+            .collect();
+        Json(serde_json::json!({
+            "distro": set.distro,
+            "powershell": set.powershell,
+            "distros": distros,
+            "docker_exe": wsl::docker_exe().await,
+        }))
+    }
+    #[cfg(not(windows))]
+    Json(serde_json::json!({ "distro": set.distro, "powershell": set.powershell, "distros": [], "docker_exe": null }))
+}
+
+#[derive(serde::Deserialize)]
+#[cfg_attr(not(windows), allow(dead_code))]
+struct SetIntegration {
+    distro: Option<String>,
+    powershell: bool,
+}
+
+/// Change where `docker` uses Orca's engine. Installs what's missing (a
+/// Docker CLI), so it can take a minute; the steps come back as a log.
+async fn set_integration(
+    State(state): State<Arc<AppState>>,
+    Json(want): Json<SetIntegration>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    #[cfg(not(windows))]
+    {
+        let _ = (state, want);
+        Err(ApiError::bad_request("Only on Windows: elsewhere `docker` uses Orca's engine already."))
+    }
+    #[cfg(windows)]
+    {
+        use orca_backend_common::wsl;
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let l = log.clone();
+        let say = move |m: String| l.lock().unwrap().push(m);
+        let have = state.config.lock().await.wsl_integration.clone();
+        if let Some(d) = &want.distro
+            && !wsl::valid_distro_name(d)
+        {
+            return Err(ApiError::bad_request("Not a WSL distro name"));
+        }
+        if have.distro != want.distro {
+            if let Some(old) = &have.distro {
+                wsl::unintegrate(old).await.map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
+            }
+            if let Some(new) = &want.distro {
+                wsl::integrate(new, &say).await.map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
+            }
+        }
+        if have.powershell != want.powershell {
+            if want.powershell {
+                wsl::integrate_powershell(&say)
+                    .await
+                    .map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
+            } else {
+                wsl::unintegrate_powershell().await.ok();
+            }
+        }
+        {
+            let mut cfg = state.config.lock().await;
+            cfg.wsl_integration = orca_core::config::WslIntegration {
+                distro: want.distro.clone(),
+                powershell: want.powershell,
+            };
+            cfg.save()?;
+        }
+        let log = log.lock().unwrap().clone();
+        Ok(Json(serde_json::json!({ "ok": true, "log": log })))
+    }
 }
 
 #[derive(Serialize)]

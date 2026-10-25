@@ -81,7 +81,14 @@ On Windows, Docker runs in a WSL2 distro named `orca`, which Orca makes and look
 - Folders on a drive (`C:\code\app`) are at `/mnt/c/code/app` in the distro.
 - A folder inside another distro (`\\wsl.localhost\Ubuntu\home\me\app`) is reached through WSL's shared `/mnt/wsl`: Orca bind-mounts that distro's root at `/mnt/wsl/orca/distros/Ubuntu` while it runs. Nothing is installed or written in that distro.
 - WSL stops a distro soon after its last program exits, so the daemon keeps one running in `orca`.
-- Containers reach Windows at `host.docker.internal`.
+- Containers reach Windows at `host.docker.internal`. For each gateway route to a dev server on Windows, Orca also relays its port to Windows' `localhost`, so a server that only listens on `127.0.0.1` is reachable too. Windows may ask once whether to let Orca listen on the WSL network.
+
+### The docker command on Windows
+
+In **Settings** > **General** > **Engine**, let `docker` use Orca's engine:
+
+- **PowerShell and Command Prompt.** Orca uses the `docker.exe` you have, or downloads Docker's own CLI and compose plugin, and adds a `docker context` named `orca`. It reaches the engine through Orca's named pipe, which rewrites Windows paths in bind mounts (`-v C:\code\app:/app`) to the engine's (`/mnt/c/code/app`), as Docker Desktop does.
+- **One WSL distro.** Orca installs Docker's CLI there if it has none (Debian and Ubuntu), and adds a `docker` context named `orca`. That distro's `/home` is at the same path for the engine, so `docker compose up` in `~/code/app` and its bind mounts work as they did with Docker Desktop. Paths outside `/home` in that distro aren't shared.
 
 **Rebuild engine** on System Health deletes the distro and makes it again from Ubuntu's newest image. Containers, images and volumes in it are lost.
 

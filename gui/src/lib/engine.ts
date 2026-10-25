@@ -97,7 +97,18 @@ function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   return invoke<T>("engine_api", { method, path, body: body ?? null });
 }
 
+/** Windows: where `docker` uses Orca's engine besides Orca. */
+export interface Integration {
+  distro: string | null;
+  powershell: boolean;
+  distros: { name: string; running: boolean }[];
+  docker_exe: string | null;
+}
+
 export const engineApi = {
+  integration: () => call<Integration>("GET", "/engine/integration"),
+  setIntegration: (want: { distro: string | null; powershell: boolean }) =>
+    call<{ ok: boolean; log: string[] }>("PUT", "/engine/integration", want),
   status: () => call<EngineStatus>("GET", "/engine"),
   choose: (choice: EngineChoice) =>
     call<{ connected: boolean; log: string[] }>("PUT", "/engine", choice),

@@ -78,6 +78,18 @@ pub fn pick_image(sums: &str) -> Option<(String, String)> {
         .map(|(_, name, sha)| (name, sha))
 }
 
+/// The distro whose `docker` uses Orca's engine (see [`home_bind_script`]):
+/// its `/home` is at `/home` in Orca's distro too.
+static INTEGRATED: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+pub fn set_integrated(distro: Option<String>) {
+    *INTEGRATED.write().unwrap() = distro;
+}
+
+pub fn integrated() -> Option<String> {
+    INTEGRATED.read().unwrap().clone()
+}
+
 /// A Windows folder as the engine's distro sees it: `C:\code\app` is
 /// `/mnt/c/code/app`, `\\wsl.localhost\Ubuntu\home\me\app` (or `\\wsl$\…`)
 /// is `/mnt/wsl/orca/distros/Ubuntu/home/me/app`, and a folder in Orca's own
@@ -95,7 +107,12 @@ pub fn engine_path(path: &str) -> Option<String> {
                 return None;
             }
             let inner = inner.trim_end_matches('/');
+            let at_home = inner == "home" || inner.starts_with("home/");
             return Some(if distro.eq_ignore_ascii_case(DISTRO) {
+                format!("/{inner}")
+            } else if at_home && integrated().is_some_and(|d| d.eq_ignore_ascii_case(distro)) {
+                // The integrated distro's /home is at /home: the same paths
+                // its own `docker` sends.
                 format!("/{inner}")
             } else {
                 format!("{DISTROS_DIR}/{distro}/{inner}").trim_end_matches('/').to_string()
@@ -394,6 +411,60 @@ pub fn share_script(distro: &str) -> String {
     format!("mkdir -p '{target}' && (mountpoint -q '{target}' || mount --bind / '{target}')")
 }
 
+/// Run as root in a distro that will use Orca's engine: a Docker CLI with
+/// compose and buildx, from Docker's packages, unless it has one of its own.
+/// Docker Desktop's `docker` (a link into its distro) doesn't count: it goes
+/// with Docker Desktop. Exits 3 without apt (not Debian or Ubuntu).
+pub const DISTRO_CLI_SCRIPT: &str = r#"set -e
+d=$(command -v docker || true)
+if [ -n "$d" ] && ! readlink -f "$d" | grep -q docker-desktop && docker compose version >/dev/null 2>&1; then
+  exit 0
+fi
+command -v apt-get >/dev/null 2>&1 || exit 3
+export DEBIAN_FRONTEND=noninteractive
+. /etc/os-release
+apt-get update -q
+apt-get install -y -q ca-certificates curl
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$ID ${UBUNTU_CODENAME:-$VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list
+apt-get update -q
+apt-get install -y -q docker-ce-cli docker-compose-plugin docker-buildx-plugin
+"#;
+
+/// Run as a distro's own user: a `docker` context `orca` for Orca's engine,
+/// with the client certificate in `certs` (a path in that distro), in use.
+pub fn distro_context_script(certs: &str) -> String {
+    format!(
+        "docker context rm -f orca >/dev/null 2>&1 || true\n\
+         docker context create orca --description \"Orca's engine\" \
+         --docker \"host={host},ca={certs}/ca.pem,cert={certs}/cert.pem,key={certs}/key.pem\" >/dev/null\n\
+         docker context use orca >/dev/null\n",
+        host = address()
+    )
+}
+
+/// Run as a distro's own user to stop using Orca's engine.
+pub const DISTRO_CONTEXT_OFF: &str =
+    "docker context use default >/dev/null 2>&1; docker context rm -f orca >/dev/null 2>&1; true";
+
+/// Run in Orca's distro: the integrated distro's `/home` at `/home`, once
+/// that distro is shared (see [`share_script`]).
+pub fn home_bind_script(distro: &str) -> String {
+    let src = format!("{DISTROS_DIR}/{distro}/home");
+    format!(
+        "[ -d '{src}' ] || exit 0\n\
+         cur=$(findmnt -n -o SOURCE --target /home 2>/dev/null || true)\n\
+         if [ \"$(stat -c %d:%i /home)\" = \"$(stat -c %d:%i '{src}')\" ]; then exit 0; fi\n\
+         mountpoint -q /home && umount -l /home\n\
+         mount --rbind '{src}' /home\n"
+    )
+}
+
+/// Run in Orca's distro: `/home` back to its own.
+pub const HOME_UNBIND: &str = "mountpoint -q /home && umount -l /home; true";
+
 /// Whether `name` is a distro name Orca will put in a command.
 pub fn valid_distro_name(name: &str) -> bool {
     !name.is_empty()
@@ -421,6 +492,19 @@ pub fn wsl_can_install_from_file(version_out: &str) -> bool {
             Some((n.next()??, n.next()??, n.next()?.unwrap_or(0)))
         })
         .is_some_and(|v| v >= (2, 4, 10))
+}
+
+/// The newest `docker-X.Y.Z.zip` in download.docker.com's Windows index.
+pub fn newest_cli_zip(index: &str) -> Option<String> {
+    index
+        .split('"')
+        .filter_map(|s| {
+            let v = s.strip_prefix("docker-")?.strip_suffix(".zip")?;
+            let n: Vec<u32> = v.split('.').map(|p| p.parse().ok()).collect::<Option<_>>()?;
+            (n.len() == 3).then(|| (n, s.to_string()))
+        })
+        .max_by(|a, b| a.0.cmp(&b.0))
+        .map(|(_, s)| s)
 }
 
 // --- Windows: making, starting and reaching the distro --------------------------
@@ -588,6 +672,7 @@ mod win {
                 tracing::debug!("Could not share distro {d} with the engine: {e}");
             }
         }
+        bind_home().await;
     }
 
     /// Make the distro from Ubuntu's newest WSL image, set Docker up in it
@@ -687,6 +772,187 @@ mod win {
             }
             None => anyhow::bail!("Docker didn't answer on 127.0.0.1:{PORT}"),
         }
+    }
+
+    /// The integrated distro's /home at /home in Orca's distro, when it runs.
+    pub async fn bind_home() {
+        if let Some(d) = integrated()
+            && valid_distro_name(&d)
+            && let Err(e) = sh(DISTRO, &home_bind_script(&d), None).await
+        {
+            tracing::debug!("Could not bind {d}'s /home: {e}");
+        }
+    }
+
+    /// Let `distro`'s `docker` use Orca's engine: a Docker CLI if it has
+    /// none, and an `orca` context in use. Its `/home` shows up at `/home`
+    /// in Orca's distro, so bind mounts from it just work.
+    pub async fn integrate(distro: &str, say: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
+        anyhow::ensure!(valid_distro_name(distro), "not a distro name: {distro}");
+        anyhow::ensure!(!distro.eq_ignore_ascii_case(DISTRO), "that is Orca's own distro");
+        say(format!(">>> Checking for a Docker CLI in {distro}"));
+        match sh(distro, DISTRO_CLI_SCRIPT, None).await {
+            Ok(_) => {}
+            Err(e) if e.to_string().contains("exit status: 3") || e.to_string().trim().is_empty() => {
+                anyhow::bail!(
+                    "{distro} has no Docker CLI and no apt to install one with. Install docker (the CLI) \
+                     and docker compose in it, then try again."
+                )
+            }
+            Err(e) => return Err(e.context(format!("installing the Docker CLI in {distro}"))),
+        }
+        let certs = engine_path(&certs_dir().to_string_lossy()).context("the certificates' folder")?;
+        say(format!(">>> Pointing {distro}'s docker at Orca's engine"));
+        let out = wsl()
+            .args(["-d", distro, "--exec", "sh", "-c", &distro_context_script(&certs)])
+            .stdin(Stdio::null())
+            .output()
+            .await?;
+        anyhow::ensure!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+        set_integrated(Some(distro.to_string()));
+        sh(distro, &share_script(distro), None).await.ok();
+        bind_home().await;
+        say(format!("    docker in {distro} now uses Orca's engine (context orca)"));
+        Ok(())
+    }
+
+    /// `distro`'s `docker` back to its own default.
+    pub async fn unintegrate(distro: &str) -> Result<()> {
+        anyhow::ensure!(valid_distro_name(distro), "not a distro name: {distro}");
+        let _ = wsl()
+            .args(["-d", distro, "--exec", "sh", "-c", DISTRO_CONTEXT_OFF])
+            .stdin(Stdio::null())
+            .output()
+            .await;
+        set_integrated(None);
+        sh(DISTRO, HOME_UNBIND, None).await.map(|_| ())
+    }
+
+    fn powershell(script: &str) -> Command {
+        let mut c = Command::new("powershell.exe");
+        c.args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .creation_flags(NO_WINDOW);
+        c
+    }
+
+    /// Where Orca puts a Docker CLI for Windows when there is none.
+    pub fn cli_dir() -> PathBuf {
+        data_dir().join("cli")
+    }
+
+    /// `docker.exe` on the PATH, or the one Orca put in [`cli_dir`].
+    pub async fn docker_exe() -> Option<PathBuf> {
+        let ours = cli_dir().join("docker.exe");
+        if ours.exists() {
+            return Some(ours);
+        }
+        let out = Command::new("where.exe").arg("docker").creation_flags(NO_WINDOW).output().await.ok()?;
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .next()
+            .map(|l| PathBuf::from(l.trim()))
+            .filter(|p| p.exists())
+    }
+
+    /// Let `docker` in PowerShell use Orca's engine: Docker's own CLI and
+    /// compose plugin if there are none, and an `orca` context (through the
+    /// daemon's path-rewriting pipe) in use.
+    pub async fn integrate_powershell(say: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
+        let http = reqwest::Client::new();
+        let docker = match docker_exe().await {
+            Some(d) => d,
+            None => {
+                say(">>> Downloading Docker's CLI for Windows".into());
+                let index = http
+                    .get("https://download.docker.com/win/static/stable/x86_64/")
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .text()
+                    .await?;
+                let zip = newest_cli_zip(&index).context("no Docker CLI on download.docker.com")?;
+                let dir = cli_dir();
+                std::fs::create_dir_all(&dir)?;
+                let path = dir.join(&zip);
+                download(&http, &format!("https://download.docker.com/win/static/stable/x86_64/{zip}"), &path, say)
+                    .await?;
+                let script = format!(
+                    "$ErrorActionPreference='Stop'; Expand-Archive -Force -LiteralPath '{}' -DestinationPath '{}'; \
+                     Move-Item -Force '{}' '{}'",
+                    path.display(),
+                    dir.display(),
+                    dir.join("docker").join("docker.exe").display(),
+                    dir.join("docker.exe").display()
+                );
+                let out = powershell(&script).output().await?;
+                anyhow::ensure!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr).trim());
+                let _ = std::fs::remove_file(&path);
+                // On the user's PATH, after anything already there.
+                let add = format!(
+                    "$p=[Environment]::GetEnvironmentVariable('Path','User'); if (-not ($p -split ';' -contains '{d}')) \
+                     {{ [Environment]::SetEnvironmentVariable('Path', ($p.TrimEnd(';') + ';{d}'), 'User') }}",
+                    d = dir.display()
+                );
+                powershell(&add).output().await?;
+                dir.join("docker.exe")
+            }
+        };
+        let plugins = dirs::home_dir().context("no home folder")?.join(".docker").join("cli-plugins");
+        let compose = plugins.join("docker-compose.exe");
+        let has_compose = Command::new(&docker)
+            .args(["compose", "version"])
+            .creation_flags(NO_WINDOW)
+            .output()
+            .await
+            .is_ok_and(|o| o.status.success());
+        if !has_compose {
+            say(">>> Downloading docker compose".into());
+            std::fs::create_dir_all(&plugins)?;
+            let base = "https://github.com/docker/compose/releases/latest/download/docker-compose-windows-x86_64.exe";
+            let sha = http.get(format!("{base}.sha256")).send().await?.error_for_status()?.text().await?;
+            download(&http, base, &compose, say).await?;
+            let want = sha.split_whitespace().next().unwrap_or_default().to_lowercase();
+            if sha256_file(&compose).await? != want {
+                let _ = std::fs::remove_file(&compose);
+                anyhow::bail!("the compose download doesn't match its checksum; try again");
+            }
+        }
+        say(">>> Adding the docker context orca".into());
+        let run = |args: &[&str]| {
+            let mut c = Command::new(&docker);
+            c.args(args).creation_flags(NO_WINDOW);
+            c
+        };
+        let _ = run(&["context", "rm", "-f", "orca"]).output().await;
+        let out = run(&[
+            "context",
+            "create",
+            "orca",
+            "--description",
+            "Orca's engine",
+            "--docker",
+            "host=npipe:////./pipe/orca_docker",
+        ])
+        .output()
+        .await?;
+        anyhow::ensure!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr).trim());
+        run(&["context", "use", "orca"]).output().await?;
+        say("    docker in PowerShell now uses Orca's engine (context orca)".into());
+        Ok(())
+    }
+
+    /// `docker` in PowerShell back to its default context.
+    pub async fn unintegrate_powershell() -> Result<()> {
+        if let Some(docker) = docker_exe().await {
+            for args in [["context", "use", "default"].as_slice(), &["context", "rm", "-f", "orca"]] {
+                let _ = Command::new(&docker).args(args).creation_flags(NO_WINDOW).output().await;
+            }
+        }
+        Ok(())
     }
 
     /// Delete the distro and everything in it.
@@ -854,6 +1120,30 @@ mod tests {
                 "docker", "compose", "-f", "/mnt/c/code/app/compose.yaml", "up", "-d"
             ]
         );
+    }
+
+    #[test]
+    fn the_integrated_distros_home_is_at_home() {
+        // A name no other test uses: the setting is shared by tests running at once.
+        set_integrated(Some("IntegTest".into()));
+        assert_eq!(engine_path(r"\\wsl.localhost\IntegTest\home\me\app").as_deref(), Some("/home/me/app"));
+        assert_eq!(
+            engine_path(r"\\wsl.localhost\IntegTest\opt\x").as_deref(),
+            Some("/mnt/wsl/orca/distros/IntegTest/opt/x")
+        );
+        assert_eq!(
+            engine_path(r"\\wsl.localhost\Debian\home\me").as_deref(),
+            Some("/mnt/wsl/orca/distros/Debian/home/me")
+        );
+        set_integrated(None);
+        assert!(distro_context_script("/mnt/c/certs").contains("host=tcp://127.0.0.1:2376,ca=/mnt/c/certs/ca.pem"));
+        assert!(home_bind_script("Ubuntu").contains("mount --rbind '/mnt/wsl/orca/distros/Ubuntu/home' /home"));
+    }
+
+    #[test]
+    fn picks_the_newest_windows_cli() {
+        let index = r#"<a href="docker-27.5.1.zip">x</a><a href="docker-29.10.0.zip">y</a><a href="docker-29.9.2.zip">z</a><a href="docker-rootless-extras-29.10.0.zip">r</a>"#;
+        assert_eq!(newest_cli_zip(index).as_deref(), Some("docker-29.10.0.zip"));
     }
 
     #[test]
