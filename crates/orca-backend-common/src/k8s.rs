@@ -1114,6 +1114,14 @@ impl K3sManager {
             }
             send("    WSL2 is available".into()).await;
 
+            // Every WSL distro shares one network: a k3s in another one holds
+            // the ports Orca's needs, and would share its interfaces too.
+            let held = crate::wsl::ports_held_elsewhere().await;
+            if let Some(port) = [6443u16, 10250].into_iter().find(|p| held.contains(p)) {
+                let distro = crate::wsl::distro_running("k3s-server").await;
+                anyhow::bail!(crate::wsl::another_k3s_message(distro.as_deref(), port));
+            }
+
             // Check if k3s is already installed
             let k3s_check = Command::new("wsl")
                 .args(["-d", "orca", "-u", "root", "--exec", "which", "k3s"])

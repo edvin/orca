@@ -683,6 +683,50 @@ pub fn parse_distros(out: &str) -> Vec<String> {
         .collect()
 }
 
+/// The TCP ports listened on in `ss -ltnHp` output, run in Orca's distro,
+/// that something outside it holds. Every WSL distro shares one network
+/// namespace, so `ss` sees all their listeners, but only the processes of
+/// the distro it runs in: a listener with no process is another distro's.
+pub fn ports_held_elsewhere_in(ss: &str) -> std::collections::BTreeSet<u16> {
+    ss.lines()
+        .filter(|l| l.starts_with("LISTEN") && !l.contains("users:("))
+        .filter_map(|l| l.split_whitespace().nth(3)?.rsplit(':').next()?.parse().ok())
+        .collect()
+}
+
+/// What to say about `port` in use inside WSL by another distro.
+pub fn held_elsewhere_message(port: u16) -> String {
+    format!("Port {port} is in use inside WSL (another distro)")
+}
+
+/// The host ports a Docker error couldn't bind: `failed to bind host port
+/// 0.0.0.0:80/tcp: address already in use`.
+pub fn ports_in_bind_errors(text: &str) -> std::collections::BTreeSet<u16> {
+    text.split("failed to bind host port ")
+        .skip(1)
+        .filter_map(|rest| {
+            let addr = rest.split('/').next()?;
+            rest[addr.len()..].starts_with("/tcp: address already in use").then_some(())?;
+            addr.rsplit(':').next()?.parse().ok()
+        })
+        .collect()
+}
+
+/// Why Orca won't enable Kubernetes: another k3s, in `distro` when known,
+/// holds `port` in the network every WSL distro shares.
+pub fn another_k3s_message(distro: Option<&str>, port: u16) -> String {
+    match distro {
+        Some(d) => format!(
+            "Another Kubernetes (k3s) is running in your WSL distro {d}: it holds port {port}, and every WSL \
+             distro shares one network. Stop it to use Orca's: wsl -d {d} -u root -- systemctl disable --now k3s"
+        ),
+        None => format!(
+            "Another Kubernetes (k3s) is running in one of your WSL distros: it holds port {port}, and every \
+             WSL distro shares one network. Stop it to use Orca's."
+        ),
+    }
+}
+
 /// The newest `docker-X.Y.Z.zip` in download.docker.com's Windows index.
 pub fn newest_cli_zip(index: &str) -> Option<String> {
     index
@@ -1266,6 +1310,53 @@ mod win {
         run(&["--unregister", DISTRO]).await.map(|_| ())
     }
 
+    /// The ports another WSL distro listens on (see
+    /// [`ports_held_elsewhere_in`]); empty when Orca's distro isn't running.
+    pub async fn ports_held_elsewhere() -> std::collections::BTreeSet<u16> {
+        if !running_distros().await.iter().any(|d| d.eq_ignore_ascii_case(DISTRO)) {
+            return Default::default();
+        }
+        sh(DISTRO, "ss -ltnHp", None)
+            .await
+            .map(|out| ports_held_elsewhere_in(&out))
+            .unwrap_or_default()
+    }
+
+    /// A compose or Docker error, with a line for each port it couldn't
+    /// bind because another WSL distro holds it.
+    pub async fn explain_bind_errors(text: String) -> String {
+        let ports = ports_in_bind_errors(&text);
+        if ports.is_empty() {
+            return text;
+        }
+        let held = ports_held_elsewhere().await;
+        let mut text = text;
+        for p in ports.intersection(&held) {
+            text.push_str(&format!(
+                "\n{}: stop what listens there in your other WSL distro, or change the port.",
+                held_elsewhere_message(*p)
+            ));
+        }
+        text
+    }
+
+    /// The running distro, other than Orca's, where a process named
+    /// `name` (its `comm`, as `pgrep -x` matches) runs.
+    pub async fn distro_running(name: &str) -> Option<String> {
+        if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+            return None;
+        }
+        for d in running_distros().await {
+            if d.eq_ignore_ascii_case(DISTRO) || d.starts_with("docker-desktop") {
+                continue;
+            }
+            if sh(&d, &format!("pgrep -x {name} >/dev/null"), None).await.is_ok() {
+                return Some(d);
+            }
+        }
+        None
+    }
+
     /// The IP Windows has as seen from the distro (WSL's NAT gateway), for
     /// `host.docker.internal`. `None` with mirrored networking, where
     /// containers reach Windows through the engine's `host-gateway`.
@@ -1526,6 +1617,23 @@ mod tests {
             Some((format!("{base}/buildx-v0.38.1.windows-amd64.exe"), sha.to_string()))
         );
         assert_eq!(windows_buildx(&serde_json::json!({"assets": []})), None);
+    }
+
+    #[test]
+    fn finds_the_ports_another_distro_holds() {
+        let ss = "LISTEN 0      4096          0.0.0.0:80    0.0.0.0:* users:((\"docker-proxy\",pid=1502,fd=8))\n\
+                  LISTEN 0      4096                *:6443        *:*                                       \n\
+                  LISTEN 0      4096        127.0.0.1:2376  0.0.0.0:* users:((\"dockerd\",pid=1227,fd=5))     \n\
+                  LISTEN 0      4096             [::]:8080       [::]:*\n\
+                  LISTEN 0      4096    127.0.0.53%lo:53    0.0.0.0:*\n";
+        assert_eq!(ports_held_elsewhere_in(ss), [53, 6443, 8080].into_iter().collect());
+        assert!(ports_held_elsewhere_in("").is_empty());
+        let err = "Error response from daemon: failed to set up container networking: driver failed programming \
+                   external connectivity on endpoint orca-gateway (3e75): failed to bind host port 0.0.0.0:80/tcp: \
+                   address already in use";
+        assert_eq!(ports_in_bind_errors(err), [80].into_iter().collect());
+        assert!(ports_in_bind_errors("Bind for 0.0.0.0:80 failed: port is already allocated").is_empty());
+        assert!(another_k3s_message(Some("Ubuntu-24.04"), 6443).contains("WSL distro Ubuntu-24.04: it holds port 6443"));
     }
 
     #[test]

@@ -142,6 +142,26 @@ pub fn check_port_availability(
     conflicts
 }
 
+/// Windows: the gateway ports another WSL distro holds. They share one
+/// network with Orca's engine, and [`check_port_availability`] binds on
+/// Windows' side, which doesn't see them.
+pub async fn wsl_port_conflicts(http_port: u16, https_port: u16) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        let held = orca_backend_common::wsl::ports_held_elsewhere().await;
+        [(http_port, "HTTP"), (https_port, "HTTPS")]
+            .into_iter()
+            .filter(|(p, _)| held.contains(p))
+            .map(|(p, what)| format!("Port {p} ({what}) is in use inside WSL (another distro)"))
+            .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (http_port, https_port);
+        Vec::new()
+    }
+}
+
 /// Check if the gateway container is running.
 pub async fn is_running(state: &AppState) -> Result<bool> {
     let rt = state.rt().await;
@@ -179,7 +199,8 @@ pub async fn start(state: &AppState, config: &GatewayConfig) -> Result<String> {
     }
 
     // Check port availability (warn, don't block — Docker may handle it on some platforms)
-    let conflicts = check_port_availability(config.http_port, config.https_port, None, None);
+    let mut conflicts = check_port_availability(config.http_port, config.https_port, None, None);
+    conflicts.extend(wsl_port_conflicts(config.http_port, config.https_port).await);
     if !conflicts.is_empty() {
         tracing::warn!("Port conflicts detected: {}", conflicts.join(", "));
     }

@@ -8166,7 +8166,9 @@ async fn gateway_status(State(state): State<Arc<AppState>>) -> Result<impl IntoR
     let cid = crate::gateway::container_id(&state).await.unwrap_or(None);
     let routes_active = gw.routes.iter().filter(|r| r.enabled).count();
     let port_conflicts = if !running {
-        crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None)
+        let mut c = crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None);
+        c.extend(crate::gateway::wsl_port_conflicts(gw.http_port, gw.https_port).await);
+        c
     } else {
         vec![]
     };
@@ -8192,7 +8194,8 @@ async fn gateway_start(State(state): State<Arc<AppState>>) -> Result<impl IntoRe
     let gw = &config.gateway;
 
     // Check port availability before starting (warning, not blocking)
-    let port_conflicts = crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None);
+    let mut port_conflicts = crate::gateway::check_port_availability(gw.http_port, gw.https_port, None, None);
+    port_conflicts.extend(crate::gateway::wsl_port_conflicts(gw.http_port, gw.https_port).await);
     if !port_conflicts.is_empty() {
         tracing::warn!("Port conflicts before gateway start: {}", port_conflicts.join(", "));
     }
@@ -8836,7 +8839,9 @@ async fn gateway_port_check(
         None
     };
     drop(config);
-    let conflicts = crate::gateway::check_port_availability(http_port, https_port, current_http, current_https);
+    let mut conflicts = crate::gateway::check_port_availability(http_port, https_port, current_http, current_https);
+    // The running gateway's own ports are Orca's distro's, so not counted.
+    conflicts.extend(crate::gateway::wsl_port_conflicts(http_port, https_port).await);
     Ok(Json(serde_json::json!({ "conflicts": conflicts })))
 }
 

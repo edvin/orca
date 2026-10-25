@@ -96,6 +96,12 @@ async fn run_compose(
 
     let stdout = rewrite_docker_desktop_urls(&String::from_utf8_lossy(&output.stdout));
     let stderr = rewrite_docker_desktop_urls(&String::from_utf8_lossy(&output.stderr));
+    #[cfg(windows)]
+    let stderr = if output.status.success() {
+        stderr
+    } else {
+        crate::wsl::explain_bind_errors(stderr).await
+    };
     let exit_code = output.status.code().unwrap_or(-1);
 
     if !output.status.success() {
