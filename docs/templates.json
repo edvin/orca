@@ -711,7 +711,7 @@
     "restart_policy": "unless-stopped",
     "notes": "Workers connect to localhost:7233; the Web UI is at http://localhost:8233. Uses SQLite in a volume: for development, not production.",
     "is_builtin": true,
-    "compose_yaml": "services:\n  temporal:\n    image: temporalio/temporal:latest\n    command: [\"server\", \"start-dev\", \"--ip\", \"0.0.0.0\", \"--db-filename\", \"/data/temporal.db\"]\n    ports:\n      - '7233:7233'\n      - '8233:8233'\n    volumes:\n      - temporal-data:/data\n    restart: unless-stopped\nvolumes:\n  temporal-data:\n"
+    "compose_yaml": "services:\n  temporal:\n    image: temporalio/temporal:latest\n    # The image's own user can't write into a fresh volume.\n    user: \"0:0\"\n    command: [\"server\", \"start-dev\", \"--ip\", \"0.0.0.0\", \"--db-filename\", \"/data/temporal.db\"]\n    ports:\n      - '7233:7233'\n      - '8233:8233'\n    volumes:\n      - temporal-data:/data\n    restart: unless-stopped\nvolumes:\n  temporal-data:\n"
   },
   {
     "id": "clickhouse",
