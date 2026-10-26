@@ -1652,14 +1652,26 @@ mod tests {
         assert_eq!(c("git.example.com/team/dev-workspace"), both);
         assert_eq!(c("https://git.example.com/team/dev-workspace"), both);
         assert_eq!(c(" https://git.example.com/team/dev-workspace/ "), both);
-        assert_eq!(c("https://git.example.com/team/dev-workspace/-/tree/main?ref_type=heads"), both);
-        assert_eq!(c("https://github.com/team/dev-workspace/blob/main/README.md#top"), vec![
-            "git@github.com:team/dev-workspace.git".to_string(),
-            "https://github.com/team/dev-workspace.git".to_string(),
-        ]);
+        assert_eq!(
+            c("https://git.example.com/team/dev-workspace/-/tree/main?ref_type=heads"),
+            both
+        );
+        assert_eq!(
+            c("https://github.com/team/dev-workspace/blob/main/README.md#top"),
+            vec![
+                "git@github.com:team/dev-workspace.git".to_string(),
+                "https://github.com/team/dev-workspace.git".to_string(),
+            ]
+        );
         // Subgroups, and a web port SSH can't use.
-        assert_eq!(c("git.example.com/cio/services/messenger")[0], "git@git.example.com:cio/services/messenger.git");
-        assert_eq!(c("https://git.example.com:8443/team/ws"), vec!["https://git.example.com:8443/team/ws.git".to_string()]);
+        assert_eq!(
+            c("git.example.com/cio/services/messenger")[0],
+            "git@git.example.com:cio/services/messenger.git"
+        );
+        assert_eq!(
+            c("https://git.example.com:8443/team/ws"),
+            vec!["https://git.example.com:8443/team/ws.git".to_string()]
+        );
     }
 
     #[test]
