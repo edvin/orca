@@ -186,7 +186,18 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                 <b>The workspace file has a problem</b>
                 <span>{w().error}</span>
                 <span class="ws-muted">Fix it in {w().path}, then click Update.</span>
-                <button class="btn btn-sm" onClick={() => void update()}>Update</button>
+                <button
+                  class="btn btn-sm"
+                  disabled={jobs()[""]?.status === "running"}
+                  onClick={() => {
+                    // A file fixed in its folder shows at once; the pull and
+                    // apply follow, with the page refreshed when they're done.
+                    void refetch();
+                    void update();
+                  }}
+                >
+                  {jobs()[""]?.status === "running" ? "Updating…" : "Update"}
+                </button>
               </div>
             }>
               <Show when={freshUpdate()}>
