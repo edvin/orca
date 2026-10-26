@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvofr9zm">
+<link rel="stylesheet" href="/assets/site.css?v=mvp9zlg3">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvofr9zm" defer></script>
+<script src="/assets/site.js?v=mvp9zlg3" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -65,6 +65,7 @@
 </ul>
 <h2 id="join-a-workspace"><a class="anchor" href="#join-a-workspace" aria-hidden="true" tabindex="-1">#</a>Join a workspace</h2>
 <p>Open <strong>Workspace</strong> in the sidebar. Paste the workspace&#39;s git URL, such as <code>git@git.acme.dev:devops/dev-workspace.git</code>, and click <strong>Join</strong>.</p>
+<p>The repository&#39;s web address works too, such as <code>https://git.acme.dev/devops/dev-workspace</code> from your browser, or just <code>git.acme.dev/devops/dev-workspace</code>. Orca tries its SSH address first, then HTTPS, and clones the one you have access to.</p>
 <p><figure class="shot"><img src="/assets/screens/workspace-join.webp" alt="Joining a workspace: a field for the git URL and the Join button" loading="lazy" decoding="async"></figure></p>
 <p>Where the workspace goes decides where its projects go: they&#39;re cloned next to it. So Orca suggests your code folder: as you type the URL, it shows where it will clone, such as <em>Clones to <code>~/projects/dev-workspace</code>, next to your 82 checkouts</em>. It looks in the usual places, <code>~/code</code>, <code>~/projects</code>, <code>~/src</code>, <code>~/dev</code>, <code>~/Developer</code> and a few more, and picks the one with the most git checkouts. Without one, it uses <code>~/code</code>. If you already have a copy of the workspace in one of them, Orca joins it where it is.</p>
 <p>To choose yourself, click <strong>Change</strong> and enter a path, such as <code>~/work/dev-workspace</code> or <code>/srv/dev/dev-workspace</code>. With the CLI, <code>orca workspace join &lt;url&gt;</code> makes the same choice, and <code>--folder</code> sets it.</p>

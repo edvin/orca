@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvofr9zm">
+<link rel="stylesheet" href="/assets/site.css?v=mvp9zlg3">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvofr9zm" defer></script>
+<script src="/assets/site.js?v=mvp9zlg3" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,7 +53,23 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.66.0">
+<section class="container releases"><article class="release" id="v0.67.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.67.0">v0.67.0</a><time datetime="2026-10-26T13:10:49Z">October 26, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="join-a-workspace-with-the-address-from-your-browser"><a class="anchor" href="#join-a-workspace-with-the-address-from-your-browser" aria-hidden="true" tabindex="-1">#</a>Join a workspace with the address from your browser</h2>
+<p>The repository&#39;s web address now works for joining a workspace, as well as its git URL. Paste <code>https://git.acme.dev/devops/dev-workspace</code> straight from the browser (even a branch or file page in it), or just <code>git.acme.dev/devops/dev-workspace</code>. Orca tries the repository&#39;s SSH address first, then HTTPS, and clones the one you have access to. This works on the <strong>Workspace</strong> page, with <code>orca workspace join</code> and in <code>orca://</code> links.</p>
+<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
+<ul>
+<li><strong>Ports, tidied:</strong> a run of consecutive ports, such as a TURN server&#39;s 41 relay ports, shows as one range, like <code>49160–49200</code>. The <strong>Containers</strong> list shows at most four ports per container, with the rest behind <strong>+N more</strong>. On a container&#39;s page, port mappings fill the width in a grid instead of one long column.</li>
+<li><strong>The update dialog:</strong> wider, with the release notes formatted instead of shown as raw text.</li>
+<li><strong>A broken workspace file:</strong> <strong>Update</strong> now picks up a fix right away and shows its progress, instead of seeming to do nothing.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.67.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.66.0">
   <div class="release-meta"><a class="release-tag" href="#v0.66.0">v0.66.0</a><time datetime="2026-10-25T23:04:12Z">October 26, 2026</time></div>
   <div class="release-body prose">
     
@@ -540,58 +556,6 @@
 <p><strong>Docs:</strong> <a href="https://orca-desktop.com/docs/agents/#orca-itself">Orca itself</a></p>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.54.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.53.0">
-  <div class="release-meta"><a class="release-tag" href="#v0.53.0">v0.53.0</a><time datetime="2026-10-23T09:48:52Z">October 23, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="workspaces-your-teams-local-setup-in-one-repo"><a class="anchor" href="#workspaces-your-teams-local-setup-in-one-repo" aria-hidden="true" tabindex="-1">#</a>Workspaces: your team&#39;s local setup, in one repo</h2>
-<p>A workspace is a git repo with an <code>orca-workspace.yaml</code>. It describes everything a developer needs to work on your team&#39;s projects locally: the shared services everyone uses, the Docker network they meet on, your own domain and certificate, and every project with its setup steps and secrets. A new developer installs Orca, joins the workspace, and has any project running in minutes. Or they ask Claude to <em>&quot;spin up billing&quot;</em>.</p>
-<ul>
-<li><strong>Join in one step.</strong> Open <strong>Workspace</strong> in the sidebar and paste the repo&#39;s URL. You can also click an <code>orca://workspace?repo=…</code> link from your wiki, or run <code>orca workspace join &lt;url&gt;</code>. Orca then:<ul>
-<li>clones the repo and creates the network;</li>
-<li>serves <code>*.&lt;your domain&gt;</code> with your team&#39;s certificate;</li>
-<li>starts the shared services and adds every route.</li>
-</ul>
-</li>
-<li><strong>Projects are a menu.</strong> Each one shows <strong>Running</strong>, <strong>Cloned</strong> or <strong>Not cloned</strong>. <strong>Set up</strong> runs these steps:<ol>
-<li>Clones the project, or uses the checkout you already have.</li>
-<li>Creates its <code>.env</code> from the template.</li>
-<li>Fills in secrets.</li>
-<li>Runs its setup command once.</li>
-<li>Starts the shared services it uses.</li>
-<li>Starts it and shows its URLs.</li>
-</ol>
-</li>
-<li><strong>Secrets stay in your secret manager.</strong> The workspace file holds references only: <code>passbolt:&lt;id&gt;</code> or <code>op://vault/item/field</code>.<ul>
-<li>Without the manager&#39;s CLI, each missing value comes with a link to open its exact entry.</li>
-<li>With <a href="https://github.com/speatzle/go-passbolt-cli" target="_blank" rel="noopener">go-passbolt-cli</a> or the 1Password CLI set up, <strong>Fill in automatically</strong> fetches them all.</li>
-<li>Values only ever go into the project&#39;s <code>.env</code>, which only your user can read.</li>
-</ul>
-</li>
-<li><strong>AI tools set projects up for you.</strong> With Orca connected over MCP, <em>&quot;set up the CRM&quot;</em> finds the project (<code>workspace_status</code>) and sets it up (<code>setup_project</code>), then gives you its URLs. AI tools are told never to ask for secrets in the chat.</li>
-<li><strong>Always up to date.</strong> Orca pulls the workspace when it starts and applies whatever changed: a new project, a route, a shared service or a renewed certificate. <strong>Update</strong> does it right away. <strong>Leave</strong> puts your gateway&#39;s domain and certificate back as they were.</li>
-<li><strong>Coming from a hand-run reverse proxy?</strong> <code>orca workspace import-haproxy haproxy.cfg</code> turns an HAProxy config into workspace routes, and the gateway now handles what such setups need (below).</li>
-</ul>
-<p><strong>More on the site:</strong> <a href="https://orca-desktop.com/workspaces/">orca-desktop.com/workspaces</a>, and eight new docs pages starting at <a href="https://orca-desktop.com/docs/workspaces/">Workspaces</a>.</p>
-<h2 id="your-apps-grouped"><a class="anchor" href="#your-apps-grouped" aria-hidden="true" tabindex="-1">#</a>Your apps, grouped</h2>
-<p>The dashboard&#39;s <strong>Your apps</strong> now groups your stacks by where they come from: the workspace&#39;s projects first, with its shared services as one compact row of links, then each project&#39;s worktree instances by branch, then everything else. Click a group&#39;s name to fold it. Hover a card to <strong>pin</strong> it to the top or <strong>hide</strong> it.</p>
-<h2 id="gateway"><a class="anchor" href="#gateway" aria-hidden="true" tabindex="-1">#</a>Gateway</h2>
-<ul>
-<li><strong>Hostname patterns.</strong> A route for <code>*-shop</code> matches <code>north-shop</code>, <code>south-shop</code> and every other tenant. A route for <code>*</code> alone catches every hostname under the domain. The most specific route wins.</li>
-<li><strong>WebSocket-only routes.</strong> <code>websocket: true</code> sends only WebSocket connections to a container, so an app&#39;s Reverb or Vite socket can live apart from its pages.</li>
-<li><strong>Path routes that work.</strong> A route with a path no longer matches every request to its hostname, and a longer path wins over a shorter one (<code>/api/admin/*</code> before <code>/api/*</code>).</li>
-<li><strong>A wildcard certificate per pattern</strong> with Orca&#39;s certificate authority, and your own certificate is in place before the gateway&#39;s first start.</li>
-</ul>
-<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
-<ul>
-<li><code>orca workspace join|status|setup|update|leave|import-haproxy</code> on the command line.</li>
-<li>After-start hooks in a stack&#39;s <code>orca.yaml</code> also run for stacks whose compose file is in a subfolder.</li>
-<li>A failing setup command shows the end of its output, wherever the tool printed its error.</li>
-</ul>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.53.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
