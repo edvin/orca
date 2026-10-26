@@ -20,6 +20,8 @@ import { copyToClipboard } from "../lib/clipboard";
 import Breadcrumb from "../components/Breadcrumb";
 import Dropdown from "../components/Dropdown";
 import HelpLink from "../components/HelpLink";
+import PortMappings from "../components/PortMappings";
+import { portGroups } from "../lib/ports";
 import { logError } from "../lib/activityStore";
 
 interface ContainerDetailPageProps {
@@ -506,16 +508,6 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     return data?.command || data?.Config?.Cmd || [];
   };
 
-  const deduplicatePorts = (ports: { host_ip?: string | null; host_port: number; container_port: number; protocol?: string }[]) => {
-    const seen = new Set<string>();
-    return ports.filter((p) => {
-      const key = `${p.host_port}:${p.container_port}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  };
-
   const formatUptime = (createdAt: string | number | undefined | null): string => {
     if (!createdAt) return "-";
     try {
@@ -877,20 +869,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     <div class="card-label">Port mappings</div>
                     <div class="card-value">
                       <Show when={c().ports.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
-                        <For each={deduplicatePorts(c().ports)}>
-                          {(p) => {
-                            const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
-                            return (
-                              <div class="mono" style={{ "line-height": "1.8", "font-size": "12px", display: "flex", "align-items": "center", gap: "6px" }}>
-                                <a href={`${proto}://localhost:${p.host_port}`} target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }} title={`Open ${proto}://localhost:${p.host_port}`}>
-                                  :{p.host_port}
-                                </a>
-                                <span style={{ color: "#484f58" }}>{"\u2192"}</span>
-                                <span style={{ color: "#8b949e" }}>{p.container_port}/{p.protocol || "tcp"}</span>
-                              </div>
-                            );
-                          }}
-                        </For>
+                        <PortMappings groups={portGroups(c().image, c().ports)} />
                       </Show>
                     </div>
                   </div>
@@ -1091,57 +1070,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                   <Show when={c().ports.length > 0} fallback={
                     <div style={{ color: "#8b949e", padding: "8px 0" }}>No ports exposed</div>
                   }>
-                    <div style={{ display: "flex", "flex-wrap": "wrap", gap: "8px", "margin-top": "8px" }}>
-                      <For each={deduplicatePorts(c().ports)}>
-                        {(p) => {
-                          const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
-                          return (
-                            <div style={{
-                              display: "flex",
-                              "align-items": "center",
-                              gap: "10px",
-                              padding: "10px 14px",
-                              background: "rgba(255, 255, 255, 0.03)",
-                              border: "1px solid rgba(255, 255, 255, 0.06)",
-                              "border-radius": "8px",
-                              "min-width": "200px",
-                            }}>
-                              <div style={{ flex: "1" }}>
-                                <div style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "13px" }}>
-                                  <div>
-                                    <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>Host</div>
-                                    <span class="mono" style={{ "font-weight": "600", color: "#e6edf3" }}>{p.host_port}</span>
-                                  </div>
-                                  <span style={{ color: "#484f58", "font-size": "16px" }}>{"\u2192"}</span>
-                                  <div>
-                                    <div style={{ "font-size": "10px", color: "#6e7681", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "2px" }}>Container</div>
-                                    <span class="mono" style={{ color: "#8b949e" }}>{p.container_port}<span style={{ "font-size": "10px", "margin-left": "3px" }}>/{p.protocol || "tcp"}</span></span>
-                                  </div>
-                                </div>
-                                <a
-                                  href={`${proto}://localhost:${p.host_port}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{ color: "#58a6ff", "font-size": "12px", "margin-top": "6px", display: "inline-block" }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {proto}://localhost:{p.host_port} {"\u2197"}
-                                </a>
-                              </div>
-                              <a
-                                href={`${proto}://localhost:${p.host_port}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="btn btn-sm"
-                                style={{ "font-size": "11px", padding: "4px 10px", "flex-shrink": "0" }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                Open
-                              </a>
-                            </div>
-                          );
-                        }}
-                      </For>
+                    <div style={{ "margin-top": "8px" }}>
+                      <PortMappings groups={portGroups(c().image, c().ports)} cards />
                     </div>
                   </Show>
 
