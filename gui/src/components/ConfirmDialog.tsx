@@ -1,4 +1,6 @@
 import { createSignal, Show, onCleanup, onMount } from "solid-js";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { renderMarkdown } from "../lib/markdown";
 
 interface ConfirmOptions {
   title: string;
@@ -6,6 +8,10 @@ interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** Markdown shown below the message, such as release notes. */
+  details?: string;
+  /** The dialog's width; 440px by default. */
+  width?: string;
 }
 
 type PendingConfirm = {
@@ -129,7 +135,7 @@ export default function ConfirmDialog() {
               mouseDownOnOverlay = false;
             }}
           >
-            <div class="modal-dialog" style={{ "max-width": "440px" }} role="dialog" aria-modal="true">
+            <div class="modal-dialog" style={{ "max-width": opts().width ?? "440px", width: opts().width }} role="dialog" aria-modal="true">
               <div class="modal-header">
                 <span class="modal-title">{opts().title}</span>
                 <button class="modal-close" onClick={() => handleResult(false)} aria-label="Close">
@@ -140,6 +146,21 @@ export default function ConfirmDialog() {
                 <p class="selectable" style={{ "line-height": "1.5", "white-space": "pre-wrap" }}>
                   {opts().message}
                 </p>
+                <Show when={opts().details}>
+                  {(md) => (
+                    <div
+                      class="markdown selectable"
+                      // eslint-disable-next-line solid/no-innerhtml -- sanitized by renderMarkdown (DOMPurify)
+                      innerHTML={renderMarkdown(md())}
+                      onClick={(e) => {
+                        const a = (e.target as HTMLElement).closest("a");
+                        if (!a) return;
+                        e.preventDefault();
+                        shellOpen(a.href).catch(() => window.open(a.href, "_blank", "noopener,noreferrer"));
+                      }}
+                    />
+                  )}
+                </Show>
               </div>
               <div class="modal-footer">
                 <button class="btn" onClick={() => handleResult(false)}>

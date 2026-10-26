@@ -4664,3 +4664,30 @@ tr.service-off td { opacity: 0.55; }
 .engine-option input { margin-top: 3px; accent-color: #58a6ff; }
 .engine-sub { display: block; font-size: 12px; color: #8b949e; margin-top: 2px; }
 .engine-tag { font-size: 10.5px; color: #3fb950; background: rgba(63, 185, 80, 0.1); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+
+/* Rendered Markdown, such as release notes in the update dialog. */
+.markdown {
+  line-height: 1.55;
+  color: #c9d1d9;
+}
+.markdown > :first-child { margin-top: 0; }
+.markdown h2, .markdown h3, .markdown h4 {
+  color: #e6edf3;
+  font-size: 15px;
+  font-weight: 600;
+  margin: 18px 0 8px;
+}
+.markdown h4 { font-size: 13px; }
+.markdown p { margin: 0 0 10px; }
+.markdown ul { margin: 0 0 10px; padding-left: 20px; }
+.markdown li { margin: 4px 0; }
+.markdown strong { color: #e6edf3; font-weight: 600; }
+.markdown code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9em;
+  background: rgba(110, 118, 129, 0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.markdown a { color: #58a6ff; text-decoration: none; }
+.markdown a:hover { text-decoration: underline; }

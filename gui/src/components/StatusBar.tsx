@@ -52,7 +52,9 @@ export default function StatusBar(props: StatusBarProps) {
 
     const confirmed = await confirm({
       title: "Update available",
-      message: `Update to Orca Desktop v${info.version}?\n\nThe app will download the update and restart.${info.body ? `\n\nWhat's new:\n${info.body}` : ""}`,
+      message: `Update to Orca Desktop v${info.version}? The app will download the update and restart.`,
+      details: info.body,
+      width: info.body ? "min(720px, 90vw)" : undefined,
       confirmLabel: "Update",
     });
     if (!confirmed) return;
