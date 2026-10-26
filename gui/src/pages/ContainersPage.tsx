@@ -16,6 +16,8 @@ import RunContainerDialog from "../components/RunContainerDialog";
 import Spinner from "../components/Spinner";
 import { SkeletonRow } from "../components/Skeleton";
 import ResourceBar from "../components/ResourceBar";
+import PortLinks from "../components/PortLinks";
+import { portGroups } from "../lib/ports";
 import LastUpdated from "../components/LastUpdated";
 import { useContainerStats } from "../lib/statsStore";
 import { logError } from "../lib/activityStore";
@@ -103,16 +105,6 @@ export default function ContainersPage(props: ContainersPageProps) {
   }));
 
   useRefresh(refresh);
-
-  const deduplicatePorts = (ports: { host_ip?: string | null; host_port: number; container_port: number }[]) => {
-    const seen = new Set<string>();
-    return ports.filter((p) => {
-      const key = `${p.host_port}:${p.container_port}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  };
 
   const suggestHostname = (name: string) => {
     let h = name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
@@ -702,23 +694,7 @@ export default function ContainersPage(props: ContainersPageProps) {
         <td class="mono" style={{ "max-width": "200px" }}>
           <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "align-items": "center" }}>
             {c.ports && c.ports.length > 0 ? (
-              <For each={deduplicatePorts(c.ports)}>
-                {(p) => {
-                  const proto = [443, 8443, 9443].includes(p.host_port) ? "https" : "http";
-                  return (
-                    <a
-                      href={`${proto}://localhost:${p.host_port}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ color: "#58a6ff", "font-size": "12px" }}
-                      title={`Open ${proto}://localhost:${p.host_port}`}
-                    >
-                      {p.host_port}:{p.container_port}
-                    </a>
-                  );
-                }}
-              </For>
+              <PortLinks groups={portGroups(c.image, c.ports)} />
             ) : (
               <span style={{ color: "#484f58" }}>-</span>
             )}
