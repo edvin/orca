@@ -87,7 +87,7 @@ pub(crate) fn git() -> Command {
     if std::env::var_os("GIT_SSH_COMMAND").is_none() {
         cmd.env(
             "GIT_SSH_COMMAND",
-            "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
+            "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15",
         );
     }
     cmd
@@ -158,7 +158,73 @@ pub(crate) fn shell(command: &str, dir: &Path) -> Command {
 
 /// The folder a repo URL clones into by default: `~/code/<name>`.
 fn default_clone_dir(repo: &str) -> PathBuf {
-    suggest_folder(&home(), repo).dir
+    suggest_folder(&home(), &clone_candidates(repo)[0]).dir
+}
+
+/// What to clone for what someone typed. A clone address or a folder is
+/// used as given. A repo's web page (`https://git.example.com/team/ws`, from
+/// the browser, even a branch or file in it) or a bare
+/// `git.example.com/team/ws` gives its SSH address, then its HTTPS one, to
+/// be tried in that order.
+fn clone_candidates(input: &str) -> Vec<String> {
+    let input = input.trim();
+    let as_given = || vec![input.to_string()];
+    let (rest, web) = match input.split_once("://") {
+        Some((scheme, _)) if !scheme.eq_ignore_ascii_case("https") && !scheme.eq_ignore_ascii_case("http") => {
+            return as_given();
+        }
+        Some(_) if input.ends_with(".git") => return as_given(),
+        Some((_, rest)) => (rest, true),
+        None => (input, false),
+    };
+    // `git@host:team/ws.git`, a folder, or `team/ws` (no host).
+    if !web && (rest.contains(['@', ':']) || rest.starts_with(['/', '.', '~'])) {
+        return as_given();
+    }
+    let rest = rest.split(['?', '#']).next().unwrap_or_default();
+    let Some((host, path)) = rest.split_once('/') else {
+        return as_given();
+    };
+    let host = host.rsplit('@').next().unwrap_or(host);
+    if !host.contains('.') {
+        return as_given();
+    }
+    // The repo, not a page in it: GitLab's `/-/…`, GitHub's and Gitea's
+    // `/tree/…`, `/blob/…`, `/src/…`.
+    let mut segments: Vec<&str> = Vec::new();
+    for seg in path.split('/').filter(|s| !s.is_empty()) {
+        if seg == "-" || (segments.len() >= 2 && matches!(seg, "tree" | "blob" | "src" | "commits")) {
+            break;
+        }
+        segments.push(seg);
+    }
+    if segments.len() < 2 {
+        return as_given();
+    }
+    let path = segments.join("/");
+    let path = path.trim_end_matches(".git");
+    let mut out = Vec::new();
+    // SSH can't take a web port (`host:8443`).
+    if !host.contains(':') {
+        out.push(format!("git@{host}:{path}.git"));
+    }
+    out.push(format!("https://{host}/{path}.git"));
+    out
+}
+
+/// The first of `candidates` git can reach, each tried with `git ls-remote`.
+async fn reachable_repo(job: &JobHandle, candidates: &[String]) -> Result<String> {
+    for url in candidates {
+        let mut cmd = git();
+        cmd.args(["ls-remote", "--", url, "HEAD"]);
+        if run_logged(job, cmd, &format!("git ls-remote {url} HEAD")).await.is_ok() {
+            return Ok(url.clone());
+        }
+    }
+    anyhow::bail!(
+        "Couldn't reach the repository as {}. Check the address, and that you have access with your SSH key or a saved login.",
+        candidates.join(" or ")
+    )
 }
 
 /// Folders people commonly keep their checkouts in, under their home, in
@@ -265,7 +331,7 @@ async fn check_machine(State(state): State<Arc<AppState>>) -> Result<impl IntoRe
 
 /// GET /workspace/suggest-folder?repo=…: where joining would clone it.
 async fn suggest_folder_route(Query(q): Query<SuggestQuery>) -> impl IntoResponse {
-    let s = suggest_folder(&home(), q.repo.trim());
+    let s = suggest_folder(&home(), &clone_candidates(&q.repo)[0]);
     Json(serde_json::json!({
         "folder": tilde(&s.dir),
         "parent": tilde(s.dir.parent().unwrap_or(&s.dir)),
@@ -285,7 +351,7 @@ struct JoinBody {
 
 /// POST /workspace/join: clone the workspace and apply it.
 async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) -> Result<impl IntoResponse, ApiError> {
-    let repo = body.repo.trim().to_string();
+    let mut repo = body.repo.trim().to_string();
     if repo.is_empty() || repo.starts_with('-') {
         return Err(ApiError::bad_request("Give the workspace's git URL"));
     }
@@ -341,6 +407,12 @@ async fn join(State(state): State<Arc<AppState>>, Json(body): Json<JoinBody>) ->
         let r: Result<()> = async {
             j.start("clone").await;
             if clone {
+                // A web page's address or `host/team/ws`: whichever of its
+                // clone addresses works.
+                let candidates = clone_candidates(&repo);
+                if candidates.len() > 1 {
+                    repo = reachable_repo(&j, &candidates).await?;
+                }
                 if let Some(parent) = dir.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -1558,6 +1630,38 @@ pub fn spawn(state: Arc<AppState>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn clone_addresses_for_what_was_typed() {
+        let c = super::clone_candidates;
+        let both = vec![
+            "git@git.example.com:team/dev-workspace.git".to_string(),
+            "https://git.example.com/team/dev-workspace.git".to_string(),
+        ];
+        // Clone addresses and folders as given.
+        for given in [
+            "git@git.example.com:team/dev-workspace.git",
+            "ssh://git@git.example.com/team/dev-workspace.git",
+            "https://git.example.com/team/dev-workspace.git",
+            "/Users/me/code/dev-workspace",
+            "~/code/dev-workspace",
+            "team/dev-workspace",
+        ] {
+            assert_eq!(c(given), vec![given.to_string()], "{given}");
+        }
+        // The browser's address, or host/path.
+        assert_eq!(c("git.example.com/team/dev-workspace"), both);
+        assert_eq!(c("https://git.example.com/team/dev-workspace"), both);
+        assert_eq!(c(" https://git.example.com/team/dev-workspace/ "), both);
+        assert_eq!(c("https://git.example.com/team/dev-workspace/-/tree/main?ref_type=heads"), both);
+        assert_eq!(c("https://github.com/team/dev-workspace/blob/main/README.md#top"), vec![
+            "git@github.com:team/dev-workspace.git".to_string(),
+            "https://github.com/team/dev-workspace.git".to_string(),
+        ]);
+        // Subgroups, and a web port SSH can't use.
+        assert_eq!(c("git.example.com/cio/services/messenger")[0], "git@git.example.com:cio/services/messenger.git");
+        assert_eq!(c("https://git.example.com:8443/team/ws"), vec!["https://git.example.com:8443/team/ws.git".to_string()]);
+    }
+
     #[test]
     fn clone_folder_from_repo_url() {
         let home = tempfile::tempdir().unwrap();

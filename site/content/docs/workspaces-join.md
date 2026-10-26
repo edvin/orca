@@ -16,6 +16,8 @@ This page is for developers whose team already has a workspace. It covers joinin
 
 Open **Workspace** in the sidebar. Paste the workspace's git URL, such as `git@git.acme.dev:devops/dev-workspace.git`, and click **Join**.
 
+The repository's web address works too, such as `https://git.acme.dev/devops/dev-workspace` from your browser, or just `git.acme.dev/devops/dev-workspace`. Orca tries its SSH address first, then HTTPS, and clones the one you have access to.
+
 ![Joining a workspace: a field for the git URL and the Join button](/assets/screens/workspace-join.webp)
 
 Where the workspace goes decides where its projects go: they're cloned next to it. So Orca suggests your code folder: as you type the URL, it shows where it will clone, such as *Clones to `~/projects/dev-workspace`, next to your 82 checkouts*. It looks in the usual places, `~/code`, `~/projects`, `~/src`, `~/dev`, `~/Developer` and a few more, and picks the one with the most git checkouts. Without one, it uses `~/code`. If you already have a copy of the workspace in one of them, Orca joins it where it is.
