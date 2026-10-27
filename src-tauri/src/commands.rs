@@ -3457,6 +3457,74 @@ pub async fn start_daemon(app: tauri::AppHandle) -> Result<String, String> {
     Ok("Daemon started".into())
 }
 
+/// The end of Orca's VM's console, read directly so it works while the
+/// daemon is down. `{vm, text}`.
+#[tauri::command]
+pub async fn vm_console() -> serde_json::Value {
+    let vm = orca_core::vm_boot::lima_vm();
+    let text = vm.as_deref().and_then(|vm| orca_core::vm_boot::console_tail(vm, 200));
+    serde_json::json!({ "vm": vm, "text": text })
+}
+
+/// Gather what's known about Orca's engine into a folder, for a person or an
+/// AI tool. Works while the daemon is down.
+#[tauri::command]
+pub async fn vm_diagnosis(problem: String) -> Result<orca_core::vm_boot::Diagnosis, String> {
+    let problem = problem.trim().chars().take(500).collect::<String>();
+    tokio::task::spawn_blocking(move || orca_core::vm_boot::write_diagnosis(&problem, env!("CARGO_PKG_VERSION")))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("Couldn't write the diagnosis: {e}"))
+}
+
+/// Open a terminal running Claude Code or Codex in a diagnosis folder,
+/// with the folder's prompt. macOS only for now (Terminal.app opens a
+/// `.command` file in the user's login shell, so their PATH applies).
+#[tauri::command]
+pub async fn ask_ai_about_engine(tool: String, dir: String) -> Result<(), String> {
+    let (cmd, name) = match tool.as_str() {
+        "claude" => ("claude", "Claude Code"),
+        "codex" => ("codex", "Codex"),
+        _ => return Err(format!("unknown tool {tool}")),
+    };
+    // Only folders `vm_diagnosis` wrote.
+    let base = orca_core::config::OrcaConfig::config_path()
+        .parent()
+        .map(|p| p.join("diagnosis"))
+        .ok_or("no config folder")?;
+    let dir = std::path::PathBuf::from(&dir)
+        .canonicalize()
+        .map_err(|e| format!("{dir}: {e}"))?;
+    if !dir.starts_with(base.canonicalize().unwrap_or(base)) || !dir.join("prompt.txt").is_file() {
+        return Err("Not a diagnosis folder".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let quoted = format!("'{}'", dir.display().to_string().replace('\'', "'\\''"));
+        let script = format!(
+            "#!/bin/zsh -l\ncd {quoted} || exit 1\nif ! command -v {cmd} >/dev/null 2>&1; then\n  echo '{name} ({cmd}) is not installed, or not on your PATH.'\n  echo 'The diagnosis is in this folder: start with README.md.'\n  exec $SHELL -l\nfi\nexec {cmd} \"$(cat prompt.txt)\"\n"
+        );
+        let file = dir.join(format!("ask-{cmd}.command"));
+        std::fs::write(&file, script).map_err(|e| e.to_string())?;
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+        std::process::Command::new("open")
+            .args(["-a", "Terminal"])
+            .arg(&file)
+            .spawn()
+            .map_err(|e| format!("Could not open Terminal: {e}"))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = name;
+        Err(format!(
+            "Open a terminal in {} and run {cmd} with the prompt in prompt.txt",
+            dir.display()
+        ))
+    }
+}
+
 /// Quit the program holding the daemon's port, after the user said so on
 /// the connection screen. Only while it still holds the port: a PID can be
 /// reused by something else in the meantime.

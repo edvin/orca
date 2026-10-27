@@ -360,9 +360,15 @@ async fn find_lima_vm() -> Option<(&'static str, String)> {
 #[cfg(target_os = "macos")]
 async fn lima_start(name: &str) -> Result<(), String> {
     use tokio::process::Command;
+    if orca_core::vm_boot::rescue_running() {
+        return Err("System Health is rescuing the VM".into());
+    }
+    // A boot takes under a minute; Lima's own default waits ten. A VM that
+    // stops at a prompt early in boot would keep the engine "starting" for
+    // half an hour across the recovery tiers below.
     let out = Command::new("limactl")
         .env("PATH", lima_path_env())
-        .args(["start", name])
+        .args(["start", "--timeout", "5m", name])
         .output()
         .await
         .map_err(|e| format!("spawn failed: {e}"))?;
@@ -383,6 +389,10 @@ async fn lima_start(name: &str) -> Result<(), String> {
 #[cfg(target_os = "macos")]
 async fn lima_force_recover(name: &str) {
     use tokio::process::Command;
+    if orca_core::vm_boot::rescue_running() {
+        tracing::info!("Lima VM '{name}': System Health is rescuing it; not stopping it");
+        return;
+    }
     tracing::warn!("Lima VM '{name}': attempting force-stop recovery");
     match Command::new("limactl")
         .env("PATH", lima_path_env())
@@ -605,6 +615,69 @@ async fn ensure_sme_masked(name: &str) {
     }
 }
 
+/// Make the VM repair its filesystem at boot and show its boot on the console
+/// Orca reads, instead of waiting at a prompt nobody sees (see
+/// `orca_core::vm_boot`). Applied live; a no-op once in place. Best-effort.
+#[cfg(target_os = "macos")]
+async fn ensure_boot_safety(name: &str) {
+    use tokio::process::Command;
+    use tokio::time::{Duration, timeout};
+    let script = orca_core::vm_boot::boot_safety_script();
+    let fut = Command::new("limactl")
+        .env("PATH", lima_path_env())
+        .args(["shell", name, "sudo", "sh", "-c", &script])
+        .output();
+    match timeout(Duration::from_secs(90), fut).await {
+        Ok(Ok(o)) if o.status.success() => tracing::debug!("Lima VM '{name}': boot safety ensured"),
+        Ok(Ok(o)) => tracing::warn!(
+            "Lima VM '{name}': ensuring boot safety returned {}: {}",
+            o.status,
+            String::from_utf8_lossy(&o.stderr).trim()
+        ),
+        Ok(Err(e)) => tracing::warn!("Lima VM '{name}': ensuring boot safety failed to spawn: {e}"),
+        Err(_) => tracing::warn!("Lima VM '{name}': ensuring boot safety timed out"),
+    }
+}
+
+/// Start the containers an abrupt VM stop killed: when Docker starts again
+/// it marks them exited with code 255, at that moment (after `since`).
+#[cfg(target_os = "macos")]
+async fn start_killed_containers(docker: &bollard::Docker, since: chrono::DateTime<chrono::Utc>) {
+    let filters = std::collections::HashMap::from([("status".to_string(), vec!["exited".to_string()])]);
+    let Ok(list) = docker
+        .list_containers(Some(bollard::container::ListContainersOptions {
+            all: true,
+            filters,
+            ..Default::default()
+        }))
+        .await
+    else {
+        return;
+    };
+    for c in list {
+        let Some(id) = c.id else { continue };
+        let Ok(info) = docker
+            .inspect_container(&id, None::<bollard::container::InspectContainerOptions>)
+            .await
+        else {
+            continue;
+        };
+        let state = info.state.unwrap_or_default();
+        let killed_now = state.exit_code == Some(255)
+            && state
+                .finished_at
+                .as_deref()
+                .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+                .is_some_and(|t| t >= since);
+        if killed_now {
+            match docker.start_container::<String>(&id, None).await {
+                Ok(()) => tracing::info!("Started {id} again: the VM's abrupt stop had killed it"),
+                Err(e) => tracing::debug!("Could not start {id} again: {e}"),
+            }
+        }
+    }
+}
+
 /// Converge an already-running Lima VM onto the static gvisor-usernet config
 /// (see `orca_static_usernet_script`), applying it live without a recreate.
 ///
@@ -718,7 +791,18 @@ fn lima_vm_from_socket(socket_path: &str) -> Option<String> {
 /// Docker handle in a runtime. Funnels every success path in
 /// `connect_via_lima` so the self-heal can't be forgotten on a new branch.
 #[cfg(target_os = "macos")]
-async fn finalize_lima_runtime(name: &str, docker: bollard::Docker) -> Arc<orca_backend_common::BollardRuntime> {
+async fn finalize_lima_runtime(
+    name: &str,
+    docker: bollard::Docker,
+    started: Option<chrono::DateTime<chrono::Utc>>,
+) -> Arc<orca_backend_common::BollardRuntime> {
+    // Orca started the VM: what ran when it stopped abruptly (a crash, a
+    // power cut; a Mac shutting down stops it properly) comes back, as it
+    // does after Orca's own restarts.
+    if let Some(since) = started {
+        let d = docker.clone();
+        tokio::spawn(async move { start_killed_containers(&d, since).await });
+    }
     // Start again what ran before Orca restarted the VM (restart policies
     // already brought some back; starting a running container is a no-op).
     let before = std::mem::take(&mut *RUNNING_BEFORE_RESTART.lock().unwrap());
@@ -739,6 +823,7 @@ async fn finalize_lima_runtime(name: &str, docker: bollard::Docker) -> Arc<orca_
     tokio::spawn(async move {
         ensure_ip_forward(&vm).await;
         ensure_sme_masked(&vm).await;
+        ensure_boot_safety(&vm).await;
         ensure_static_usernet(&vm).await;
     });
     let home = std::env::var("HOME").unwrap_or_default();
@@ -762,7 +847,7 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
     // the socket — no need to invoke `limactl start`.
     if is_running && !was_reconfigured {
         if let Some(docker) = wait_for_lima_docker(name, 15).await {
-            return Some(finalize_lima_runtime(name, docker).await);
+            return Some(finalize_lima_runtime(name, docker, None).await);
         }
         // Running but socket isn't responsive — fall through to recovery.
         tracing::warn!("Lima VM '{name}' reports Running but Docker socket is unresponsive");
@@ -770,10 +855,12 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
         tracing::info!("Starting Lima VM '{name}'...");
     }
 
+    // Containers killed by the VM stopping are marked exited from here on.
+    let started = chrono::Utc::now();
     match lima_start(name).await {
         Ok(()) => {
             if let Some(docker) = wait_for_lima_docker(name, 15).await {
-                return Some(finalize_lima_runtime(name, docker).await);
+                return Some(finalize_lima_runtime(name, docker, Some(started)).await);
             }
             tracing::warn!("Lima VM '{name}': start succeeded but Docker socket never became responsive");
         }
@@ -790,7 +877,7 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
         Ok(()) => {
             if let Some(docker) = wait_for_lima_docker(name, 15).await {
                 tracing::info!("Lima VM '{name}': recovered after force-stop");
-                return Some(finalize_lima_runtime(name, docker).await);
+                return Some(finalize_lima_runtime(name, docker, Some(started)).await);
             }
             tracing::warn!("Lima VM '{name}': tier-2 start succeeded but socket still down");
         }
@@ -811,7 +898,7 @@ async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> 
         Ok(()) => {
             if let Some(docker) = wait_for_lima_docker(name, 15).await {
                 tracing::info!("Lima VM '{name}': recovered after deep clean");
-                return Some(finalize_lima_runtime(name, docker).await);
+                return Some(finalize_lima_runtime(name, docker, Some(started)).await);
             }
             tracing::error!(
                 "Lima VM '{name}': deep-clean start succeeded but Docker socket never came up. \

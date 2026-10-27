@@ -15,6 +15,7 @@ pub mod mcp_clients;
 pub mod network;
 pub mod runtime;
 pub mod templates;
+pub mod vm_boot;
 pub mod volume;
 pub mod webhook;
 pub mod workspace;

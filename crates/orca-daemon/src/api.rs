@@ -407,6 +407,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/environment/status", get(env_status))
         .route("/environment/fix", post(env_fix))
         .route("/environment/fix-stream", post(env_fix_stream))
+        .route("/environment/vm-console", get(vm_console))
         // System health
         .route("/system/health", get(system_health))
         .route("/system/host-uid", get(host_uid))
@@ -4430,6 +4431,14 @@ async fn handle_k8s_pod_terminal(socket: WebSocket, namespace: String, name: Str
 async fn env_status(State(state): State<Arc<AppState>>) -> Result<impl IntoResponse, ApiError> {
     let status = orca_backend_common::environment::check_environment(other_engine(&state).await.as_deref()).await;
     Ok(Json(status))
+}
+
+/// GET /environment/vm-console: the end of Orca's VM's console (macOS),
+/// where its boot shows. `{vm, text}`; `vm` is null without a Lima VM.
+async fn vm_console() -> Json<serde_json::Value> {
+    let vm = orca_core::vm_boot::lima_vm();
+    let text = vm.as_deref().and_then(|vm| orca_core::vm_boot::console_tail(vm, 200));
+    Json(serde_json::json!({ "vm": vm, "text": text }))
 }
 
 #[derive(Deserialize)]

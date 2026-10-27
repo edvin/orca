@@ -201,16 +201,17 @@ pub fn orca_static_usernet_script() -> String {
     )
 }
 
-/// Full `mode: system` provision script: IPv4 forwarding + SME mask + static
-/// usernet. Idempotent — Lima re-runs `system` provision on every boot, from the
+/// Full `mode: system` provision script: IPv4 forwarding + SME mask + boot
+/// safety (`vm_boot::boot_safety_script`) + static usernet. Idempotent — Lima re-runs `system` provision on every boot, from the
 /// local cidata mount in its own `boot.sh`, *before* and independent of guest
 /// networking (so it still runs on the exact boot where DHCP is hung). Composed
 /// from the shared pieces above so create-time and the daemon self-heals share
 /// one definition.
 fn orca_provision_script() -> String {
     format!(
-        "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n{sme}{net}",
+        "#!/bin/bash\nset -eu\necho 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-orca-forward.conf\n{sme}{boot}{net}",
         sme = ORCA_SME_MASK_SCRIPT,
+        boot = orca_core::vm_boot::boot_safety_script(),
         net = orca_static_usernet_script(),
     )
 }
@@ -1093,6 +1094,13 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             }
         }
         #[cfg(target_os = "macos")]
+        "rescue_lima_orca" => {
+            let Some((vm, status)) = find_lima_vm_for_repair().await else {
+                anyhow::bail!("No Lima VM to rescue");
+            };
+            rescue_lima_vm(&vm, &status, &send, &tx).await?;
+        }
+        #[cfg(target_os = "macos")]
         "repair_lima_orca" => {
             send(">>> Repairing Lima VM\n".into()).await;
             send("    This force-stops the VM, removes stale lock and socket files,\n".into()).await;
@@ -1301,6 +1309,234 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
         }
     }
     Ok(())
+}
+
+/// Whether Orca's VM runs but Linux in it has stayed silent for more than
+/// three minutes (a normal boot takes under one): stuck early in boot.
+async fn lima_boot_stuck(vm: &str) -> bool {
+    let started = std::fs::metadata(orca_core::vm_boot::vm_dir(vm).join("ha.pid")).and_then(|m| m.modified());
+    let booting_for = started.ok().and_then(|t| t.elapsed().ok()).unwrap_or_default();
+    booting_for > std::time::Duration::from_secs(180) && !lima_guest_answers(vm).await
+}
+
+/// Whether Linux in the VM answers `limactl shell` within 20 seconds.
+async fn lima_guest_answers(vm: &str) -> bool {
+    let shell = Command::new("limactl")
+        .env("PATH", extended_path())
+        .args(["shell", "--workdir", "/", vm, "true"])
+        .stdin(Stdio::null())
+        .kill_on_drop(true)
+        .output();
+    matches!(
+        tokio::time::timeout(std::time::Duration::from_secs(20), shell).await,
+        Ok(Ok(o)) if o.status.success()
+    )
+}
+
+/// e2fsck from Homebrew's e2fsprogs (macOS has none of its own).
+#[cfg(target_os = "macos")]
+fn find_e2fsck() -> Option<std::path::PathBuf> {
+    [
+        "/opt/homebrew/opt/e2fsprogs/sbin/e2fsck",
+        "/usr/local/opt/e2fsprogs/sbin/e2fsck",
+    ]
+    .iter()
+    .map(std::path::PathBuf::from)
+    .find(|p| p.is_file())
+}
+
+/// Rescue: for a VM that doesn't boot. Stop it, keep an APFS clone of its
+/// disk, check and repair every ext4 filesystem on it with e2fsck, start it,
+/// and start the containers its abrupt stop killed. The clone is removed
+/// once Docker answers, and kept (with a note) otherwise.
+#[cfg(target_os = "macos")]
+async fn rescue_lima_vm<F, Fut>(
+    vm: &str,
+    status: &str,
+    send: &F,
+    tx: &tokio::sync::mpsc::Sender<String>,
+) -> anyhow::Result<()>
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    use orca_core::vm_boot;
+    let vm = vm.to_string();
+    let Some(_guard) = vm_boot::RescueGuard::take() else {
+        anyhow::bail!("A rescue is running already");
+    };
+    let Some(disk) = vm_boot::disk_path(&vm) else {
+        anyhow::bail!("Can't find the disk of Lima VM '{vm}'");
+    };
+    send(format!(">>> Rescuing Orca's VM '{vm}' ({status})\n")).await;
+    send("    Your containers, images and volumes stay: they're on the disk this checks.\n\n".into()).await;
+
+    send(">>> Step 1/6: Getting e2fsck (Homebrew's e2fsprogs)\n".into()).await;
+    let e2fsck = match find_e2fsck() {
+        Some(p) => p,
+        None => {
+            run_cmd_streaming("brew", &["install", "e2fsprogs"], tx)
+                .await
+                .map_err(|e| anyhow::anyhow!("Installing e2fsprogs failed: {e}"))?;
+            find_e2fsck().ok_or_else(|| anyhow::anyhow!("e2fsck isn't there after installing e2fsprogs"))?
+        }
+    };
+    send(format!("    {}\n", e2fsck.display())).await;
+
+    send(">>> Step 2/6: Stopping the VM\n".into()).await;
+    let _ = run_cmd("limactl", &["stop", "--force", &vm]).await;
+    // The disk must be closed before anything reads or writes it.
+    let mut stopped = false;
+    for _ in 0..30 {
+        let status = run_cmd("limactl", &["list", "--format", "{{.Status}}", &vm])
+            .await
+            .unwrap_or_default();
+        if status.trim() == "Stopped" {
+            stopped = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    if !stopped {
+        anyhow::bail!("The VM didn't stop, so its disk can't be checked safely");
+    }
+    send("    Stopped.\n".into()).await;
+
+    send(">>> Step 3/6: Copying the disk first (an APFS clone: instant, no extra space)\n".into()).await;
+    let backup = disk.with_file_name(format!(
+        "{}.before-rescue",
+        disk.file_name().and_then(|n| n.to_str()).unwrap_or("disk")
+    ));
+    let _ = std::fs::remove_file(&backup);
+    let cloned = run_cmd("cp", &["-c", &disk.to_string_lossy(), &backup.to_string_lossy()])
+        .await
+        .is_ok();
+    if cloned {
+        send(format!("    {}\n", backup.display())).await;
+    } else {
+        send(
+            "    Couldn't clone it (not on APFS?): going on without a copy, as Linux's own boot check would.\n".into(),
+        )
+        .await;
+    }
+
+    send(">>> Step 4/6: Checking and repairing its filesystems\n".into()).await;
+    let parts = vm_boot::partitions(&disk).map_err(|e| anyhow::anyhow!("Reading the disk's partitions: {e}"))?;
+    let ext4: Vec<_> = parts.iter().filter(|p| vm_boot::is_ext4(&disk, p.offset)).collect();
+    if ext4.is_empty() {
+        anyhow::bail!("No Linux filesystem found on {}", disk.display());
+    }
+    for part in ext4 {
+        let label = if part.name.is_empty() {
+            format!("partition {}", part.number)
+        } else {
+            part.name.clone()
+        };
+        send(format!("    {label}:\n")).await;
+        let target = format!("{}?offset={}", disk.display(), part.offset);
+        // 0: clean, 1 and 2: repaired, 4 and up: errors left or failed.
+        let code = match run_cmd_streaming(&e2fsck.to_string_lossy(), &["-f", "-y", &target], tx).await {
+            Ok(()) => 0,
+            Err(e) => e.strip_prefix("exit code ").and_then(|c| c.parse().ok()).unwrap_or(8),
+        };
+        match code {
+            0 => send(format!("    {label} is fine.\n")).await,
+            1 | 2 => send(format!("    {label}: errors repaired.\n")).await,
+            _ => {
+                send(format!("\n    e2fsck couldn't repair {label} (exit code {code}).\n")).await;
+                if cloned {
+                    send(format!("    The disk as it was is kept at {}.\n", backup.display())).await;
+                }
+                send("    Use Ask Claude or Codex on System Health to look into it.\n".into()).await;
+                anyhow::bail!("e2fsck couldn't repair {label}");
+            }
+        }
+    }
+
+    send(">>> Step 5/6: Starting the VM\n".into()).await;
+    let started_at = chrono::Utc::now();
+    if let Err(e) = run_cmd_streaming("limactl", &["start", "--timeout", "5m", &vm], tx).await {
+        send(format!("\n    Start failed: {e}\n")).await;
+        if let Some(console) = vm_boot::console_tail(&vm, 15).filter(|c| !c.trim().is_empty()) {
+            send(format!("    The VM's console ends with:\n{console}\n")).await;
+        }
+        if cloned {
+            send(format!("    The disk as it was is kept at {}.\n", backup.display())).await;
+        }
+        anyhow::bail!("The VM didn't start after the repair");
+    }
+    // So it doesn't stop at a prompt again: repair at boot, console Orca shows.
+    let _ = run_cmd(
+        "limactl",
+        &["shell", &vm, "sudo", "sh", "-c", &vm_boot::boot_safety_script()],
+    )
+    .await;
+
+    send(">>> Step 6/6: Waiting for Docker, then starting what was running\n".into()).await;
+    let socket = vm_boot::vm_dir(&vm).join("sock/docker.sock");
+    let host = format!("unix://{}", socket.display());
+    let mut up = false;
+    for _ in 0..30 {
+        if run_cmd("docker", &["-H", &host, "info", "--format", "{{.ServerVersion}}"])
+            .await
+            .is_ok()
+        {
+            up = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+    if !up {
+        send("    The VM is up but Docker in it doesn't answer yet. Click Diagnose in a minute.\n".into()).await;
+        anyhow::bail!("Docker didn't answer after the rescue");
+    }
+    let restarted = start_killed_containers(&host, started_at).await;
+    send(format!(
+        "    Docker answers. Started {restarted} container(s) the abrupt stop had killed.\n"
+    ))
+    .await;
+    if cloned {
+        let _ = std::fs::remove_file(&backup);
+        send("    Removed the copy of the disk.\n".into()).await;
+    }
+    send("\nRescue complete.\n".into()).await;
+    Ok(())
+}
+
+/// Start the containers an abrupt VM stop killed: Docker marks those exited
+/// with code 255 when it starts again, after `since`. Returns how many.
+#[cfg(target_os = "macos")]
+async fn start_killed_containers(host: &str, since: chrono::DateTime<chrono::Utc>) -> usize {
+    let Ok(ids) = run_cmd("docker", &["-H", host, "ps", "-aq", "--filter", "status=exited"]).await else {
+        return 0;
+    };
+    let ids: Vec<&str> = ids.split_whitespace().collect();
+    if ids.is_empty() {
+        return 0;
+    }
+    let mut args = vec![
+        "-H",
+        host,
+        "inspect",
+        "--format",
+        "{{.Id}} {{.State.ExitCode}} {{.State.FinishedAt}}",
+    ];
+    args.extend(ids);
+    let Ok(out) = run_cmd("docker", &args).await else {
+        return 0;
+    };
+    let mut started = 0;
+    for line in out.lines() {
+        let mut it = line.split_whitespace();
+        let (Some(id), Some("255"), Some(at)) = (it.next(), it.next(), it.next()) else {
+            continue;
+        };
+        let killed_now = chrono::DateTime::parse_from_rfc3339(at).is_ok_and(|t| t >= since);
+        if killed_now && run_cmd("docker", &["-H", host, "start", id]).await.is_ok() {
+            started += 1;
+        }
+    }
+    started
 }
 
 /// Helpers for repair_lima_orca. Mirror the daemon-side logic in
@@ -2002,6 +2238,28 @@ pub async fn check_environment(other_engine: Option<&str>) -> EnvironmentStatus 
                                  same old base and usually won't fix a VPN-blocked VM.)"
                                     .to_string(),
                             ),
+                        });
+                    } else if status == "Running" && lima_boot_stuck(&vm).await {
+                        // Restarting won't help a VM that stops at the same
+                        // prompt on every boot: Rescue checks its disk.
+                        let console = orca_core::vm_boot::console_tail(&vm, 12).unwrap_or_default();
+                        checks.push(HealthCheck {
+                            name: "Docker Runtime".to_string(),
+                            description: format!(
+                                "Orca's VM '{vm}' runs but Linux in it hasn't started. It's usually \
+                                 waiting for a disk check after its disk had errors. Click Rescue to \
+                                 check and repair its disk (your containers and images stay)."
+                            ),
+                            status: CheckStatus::Fail,
+                            fix_action: Some("rescue_lima_orca".to_string()),
+                            details: Some(if console.trim().is_empty() {
+                                "Stops the VM, copies its disk (instantly, no extra space), checks and \
+                                 repairs its filesystems, starts it again and starts the containers that \
+                                 were running. Its console shows nothing yet."
+                                    .to_string()
+                            } else {
+                                format!("The VM's console ends with:\n{console}")
+                            }),
                         });
                     } else {
                         checks.push(HealthCheck {
@@ -2750,7 +3008,16 @@ pub async fn check_system_health(connected: bool, disk: Option<DiskUsage>) -> Sy
         ));
     }
     if let Some(ref res) = resources {
-        if res.disk_usage_percent > 90.0 {
+        // macOS: the VM's disk is a file that grows as it's used. Without room
+        // to grow, its writes fail, Linux sees I/O errors and marks its
+        // filesystem as damaged, and the next boot stops for a disk check.
+        let free_gib = res.disk_free_bytes / (1024 * 1024 * 1024);
+        if cfg!(target_os = "macos") && res.disk_total_bytes > 0 && free_gib < 15 {
+            warnings.push(format!(
+                "Only {free_gib} GB free on this Mac. Orca's VM needs room for its disk to grow: \
+                 when it runs out, the VM's disk fails. Free up space, or prune images."
+            ));
+        } else if res.disk_usage_percent > 90.0 {
             warnings.push("Disk usage is above 90% — consider pruning images".to_string());
         }
         if res.memory_available_bytes < 512 * 1024 * 1024 {

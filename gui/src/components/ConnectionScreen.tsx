@@ -1,5 +1,6 @@
 import { createSignal, createEffect, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import EngineHelp from "./EngineHelp";
 
 interface ConnectionScreenProps {
   status: string; // "connecting" | "disconnected" | "stopped"
@@ -131,6 +132,14 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
             Retry connection
           </button>
         </div>
+
+        <Show when={error()}>
+          {(e) => (
+            <div style={{ width: "100%", "max-width": "640px" }}>
+              <EngineHelp problem={`Orca's daemon doesn't start: ${e()}`} />
+            </div>
+          )}
+        </Show>
 
         <Show when={daemonPath()}>
           <div class="connection-hint">

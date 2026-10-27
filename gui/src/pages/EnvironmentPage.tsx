@@ -8,6 +8,7 @@ import { showToast } from "../components/Toast";
 import { confirm, confirmDanger } from "../components/ConfirmDialog";
 import { logError } from "../lib/activityStore";
 import DockerDesktopMove from "../components/DockerDesktopMove";
+import EngineHelp from "../components/EngineHelp";
 import { engineApi, isWindows, setupAction } from "../lib/engine";
 
 export default function EnvironmentPage() {
@@ -229,6 +230,20 @@ export default function EnvironmentPage() {
       default: return p;
     }
   };
+
+  // A fix button names what it does.
+  const fixLabel = (action: string, fallback: string) =>
+    ({
+      rescue_lima_orca: "Rescue",
+      repair_lima_orca: "Repair",
+      recreate_lima_orca: "Recreate",
+      update_docker_engine: "Update",
+    })[action] ?? fallback;
+  // The engine's own trouble (not "set it up"): System Health offers the
+  // VM's console and AI help with it.
+  const engineTrouble = () =>
+    status()?.checks.some((c) => c.status !== "Pass" && ["rescue_lima_orca", "repair_lima_orca"].includes(c.fix_action ?? ""));
+  const engineStarting = () => health()?.warnings?.some((w) => w.startsWith("Orca's engine is starting"));
 
   const passCount = () => status()?.checks.filter(c => c.status === "Pass").length || 0;
   const totalCount = () => status()?.checks.length || 0;
@@ -457,7 +472,7 @@ export default function EnvironmentPage() {
                             <button class="btn btn-sm" style={{ "font-size": "11px", padding: "2px 8px" }}
                               disabled={actionRunning()}
                               onClick={() => runFix(check.fix_action!, check.name)}
-                            >{check.fix_action === "update_docker_engine" ? "Update" : "Fix"}</button>
+                            >{fixLabel(check.fix_action!, "Fix")}</button>
                           </Show>
                         </div>
                         <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "3px", "line-height": "1.4" }}>
@@ -566,7 +581,9 @@ export default function EnvironmentPage() {
                   {s().ready ? "Docker connection issue" : "Container runtime setup"}
                 </div>
                 <div style={{ "font-size": "14px", color: "var(--text-muted)", "margin-bottom": "24px", "line-height": "1.5" }}>
-                  {s().ready
+                  {engineStarting()
+                    ? "Orca's engine is starting. After a restart its VM can take a few minutes; Orca connects by itself."
+                    : s().ready
                     ? "Docker is installed but Orca can't connect to it. Try restarting the Orca daemon or Docker service."
                     : s().platform === "macos"
                     ? "Set up a container runtime to get started. Orca uses a lightweight Linux VM via Lima on macOS."
@@ -605,9 +622,14 @@ export default function EnvironmentPage() {
                           <div style={{ "font-size": "12px", color: "var(--text-muted)", "margin-top": "2px" }}>
                             {check.status === "Pass" ? check.details || check.description : check.description}
                           </div>
+                          <Show when={check.status !== "Pass" && check.details && check.fix_action !== "setup_docker_macos"}>
+                            <div style={{ "font-size": "11px", color: "#8b949e", "margin-top": "6px", "white-space": "pre-wrap", "font-family": "'JetBrains Mono NF', monospace" }}>
+                              {check.details}
+                            </div>
+                          </Show>
                         </div>
                         <Show when={check.fix_action && check.status !== "Pass"}>
-                          <button class="btn btn-primary" disabled={actionRunning()} onClick={() => runFix(check.fix_action!, check.name)} style={{ "flex-shrink": "0" }}>Install</button>
+                          <button class="btn btn-primary" disabled={actionRunning()} onClick={() => runFix(check.fix_action!, check.name)} style={{ "flex-shrink": "0" }}>{fixLabel(check.fix_action!, "Install")}</button>
                         </Show>
                         <Show when={check.status === "Pass"}>
                           <span style={{ color: "#3fb950", "font-size": "12px", "font-weight": "600", "flex-shrink": "0" }}>Done</span>
@@ -621,6 +643,12 @@ export default function EnvironmentPage() {
                   <div style={{ "margin-top": "16px", "font-size": "13px", color: "var(--text-muted)", "text-align": "center" }}>
                     Or install Docker manually, then click Re-check.
                   </div>
+                </Show>
+                <Show when={engineTrouble() || (engineStarting() && isMacOS())}>
+                  <EngineHelp problem={
+                    s().checks.find((c) => c.status !== "Pass" && c.fix_action)?.description
+                      ?? "Orca's engine doesn't come up."
+                  } />
                 </Show>
               </div>
             </Show>

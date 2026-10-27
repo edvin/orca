@@ -4691,3 +4691,33 @@ tr.service-off td { opacity: 0.55; }
 }
 .markdown a { color: #58a6ff; text-decoration: none; }
 .markdown a:hover { text-decoration: underline; }
+
+/* When Orca's engine doesn't come up: the VM's console and AI help. */
+.engine-help {
+  margin-top: 16px;
+  padding: 16px 18px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  text-align: left;
+}
+.engine-help-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.engine-help-head b { color: #e6edf3; font-size: 13px; font-weight: 600; }
+.engine-help-head span { color: #8b949e; font-size: 12px; line-height: 1.5; }
+.engine-help-console {
+  margin: 0;
+  max-height: 220px;
+  min-height: 60px;
+  overflow: auto;
+  padding: 10px 12px;
+  background: #0a0e14;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  color: #c9d1d9;
+  font-family: "JetBrains Mono NF", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.engine-help-actions { display: flex; flex-wrap: wrap; gap: 8px; }

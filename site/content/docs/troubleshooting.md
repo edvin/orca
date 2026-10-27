@@ -25,12 +25,10 @@ Open **System Health** in the sidebar. Each check shows its status, and a failin
 The app shows **Orca daemon is not running** when it can't reach the daemon on `127.0.0.1:9477`.
 
 1. Click **Start daemon**, then **Retry connection**.
-2. If it doesn't start, read the daemon log (see [Logs](#logs)). The screen also shows where the app looked for the `orca-daemon` binary.
-3. Check whether something else holds port 9477. On macOS and Linux:
-   ```bash
-   lsof -i :9477
-   ```
-   If it's another program, stop it. The daemon reports `Port 127.0.0.1:9477 is already in use by another process` in that case.
+2. If another program holds port 9477, the screen names it with its process ID and offers **Quit** for it, after which Orca starts its daemon. An older Orca daemon that holds the port without answering is quit by Orca itself.
+3. If it still doesn't start, the screen offers [help from an AI tool](#ask-claude-code-or-codex) with everything Orca knows, and the daemon log has the details (see [Logs](#logs)). The screen also shows where the app looked for the `orca-daemon` binary.
+
+The daemon answers as soon as it starts, also while Orca's VM is still booting. System Health then says the engine is starting, and Orca connects by itself when it's up.
 
 The app restarts a crashed daemon by itself, up to 3 times in 10 minutes. After that it leaves it to you, so a daemon that keeps crashing ends up on this screen.
 
@@ -77,6 +75,26 @@ If the VM exists but Docker is unreachable, **Docker Runtime** shows `Lima VM 'o
 
 If repair doesn't help, **Recreate VM** builds a new one. It deletes everything in the old VM.
 
+When a Mac shuts down, the VM shuts down properly with it, and the containers stop as they would with `docker stop`. If the VM stops abruptly instead (it crashed, or the Mac lost power), Docker marks the containers that were running as exited. When Orca then starts the VM, it starts those containers again.
+
+### The VM runs but doesn't start
+
+If the VM runs but Linux in it hasn't started after three minutes, **Docker Runtime** says so and offers **Rescue**. This usually happens after the VM's disk had errors, for example when the Mac ran out of space: Linux then waits at a disk check nobody can see. Rescue:
+
+1. Gets `e2fsck` (Homebrew's `e2fsprogs`) if it's missing.
+2. Stops the VM.
+3. Copies its disk as an APFS clone, which is instant and takes no extra space.
+4. Checks and repairs the disk's Linux filesystems.
+5. Starts the VM and the containers that were running.
+6. Removes the copy once Docker answers. If anything fails, the copy stays next to the disk (`disk.before-rescue`).
+
+Your containers, images and volumes stay: they're on the disk it repairs.
+
+The VM's console shows below, live: what Linux prints while it boots. Orca also sets up the VM to repair its own disk at boot instead of waiting, and to print its boot to that console, so this shouldn't happen twice.
+
+> [!WARNING]
+> The VM's disk is a file that grows as it's used. When the Mac runs out of space, the VM can't write to it and its disk fails. System Health warns when less than 15 GB is free.
+
 ### Behind a VPN
 
 If setup or a restart ends with "The VM started but its network never came up", a mesh VPN (NetBird, Tailscale, WireGuard) or a content filter is in the way.
@@ -88,6 +106,20 @@ If setup or a restart ends with "The VM started but its network never came up", 
 ### Docker Engine Update
 
 If System Health shows **Docker Engine Update**, the Docker Engine in the VM has a memory leak that eventually gets Docker killed. Click **Update**: Orca updates Docker in the VM, restarts it and starts the containers that were running. Containers, images and volumes are kept.
+
+## Ask Claude Code or Codex
+
+When Orca's engine doesn't come up, System Health (and the **Orca daemon is not running** screen) offers **Ask Claude Code** and **Ask Codex**. Orca writes what it knows to a new folder under its config folder (`diagnosis/<time>`):
+
+- its daemon logs;
+- the VM's Lima log, config and console;
+- what runs and how much CPU it uses;
+- free space and the VM's disk layout;
+- a README that explains how Orca's engine fits together.
+
+It then opens Terminal with the tool started in that folder and a first prompt. The prompt asks the tool to find the cause and propose a fix, to ask before changing anything, and never to delete the VM or its disk. **Open what Orca knows** shows the folder, and **Copy prompt** copies the prompt for another tool.
+
+The folder can hold paths and names from your Mac. Check it before you share it.
 
 ## Gateway: port 80 or 443 is in use
 
