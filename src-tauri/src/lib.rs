@@ -218,6 +218,7 @@ pub fn run() {
             commands::list_ai_models,
             commands::ai_local_servers,
             commands::start_daemon,
+            commands::quit_port_holder,
             commands::stop_daemon,
             commands::get_daemon_info,
             commands::check_for_updates,

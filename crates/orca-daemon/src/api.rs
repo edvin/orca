@@ -4581,6 +4581,16 @@ pub(crate) async fn system_health_report(state: &AppState, refresh: bool) -> orc
         // The daemon's connection is dead. Docker might still be running
         // (e.g. in WSL) but the daemon can't reach it.
         health.docker_connected = false;
+        if state.engine_starting.load(std::sync::atomic::Ordering::Relaxed) {
+            health
+                .warnings
+                .retain(|w| !w.contains("not running") && !w.contains("not reachable"));
+            health.warnings.push(
+                "Orca's engine is starting. After a restart its VM can take a few minutes; Orca connects by itself."
+                    .to_string(),
+            );
+            return health;
+        }
 
         // Check if Docker is available via other means
         let choice = state.config.lock().await.engine.clone();

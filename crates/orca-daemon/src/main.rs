@@ -106,10 +106,13 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    // Try to connect to container runtime, but don't fail if unavailable.
-    // The daemon must start even without Docker/Podman so the GUI can
+    // The API starts before the engine is reached: a VM that's slow to boot
+    // (or stuck, and restarted by `engine::connect`) can take minutes, and
+    // the app must be able to say so. Until then the runtime is one that
+    // fails on use, and System Health says the engine is starting. The
+    // daemon must also start without Docker/Podman at all, so the GUI can
     // show the Environment page and help the user install prerequisites.
-    let runtime = connect_runtime(&mut config).await;
+    let runtime = unconnected_runtime();
 
     // Start the Docker event listener. The inner broadcast::Receiver is
     // bound to whichever BollardRuntime we subscribed to. When
@@ -119,41 +122,6 @@ async fn main() -> anyhow::Result<()> {
     let (events_tx, _) = broadcast::channel(256);
     let k8s = Arc::new(orca_backend_common::k8s::K3sManager::from_env());
     let state = Arc::new(AppState::new(config, runtime, k8s, events_tx.clone(), api_token));
-
-    // Windows: keep Orca's WSL distro running (WSL stops a distro soon after
-    // its last process exits) and let the engine reach folders in distros
-    // started since.
-    #[cfg(windows)]
-    {
-        // docker.exe's way into Orca's engine (its `orca` context).
-        tokio::spawn(engine_proxy::serve_pipe());
-        // The distro whose `docker` uses Orca's engine, for its /home.
-        orca_backend_common::wsl::set_integrated(state.config.lock().await.wsl_integration.distro.clone());
-        // Dev servers on Windows' localhost, for containers.
-        tokio::spawn(host_relay::run(state.clone()));
-        let state = state.clone();
-        tokio::spawn(async move {
-            use orca_backend_common::wsl;
-            loop {
-                if state.rt().await.host.as_deref() == Some(wsl::address().as_str()) {
-                    wsl::keep_running().await;
-                    wsl::share_distros().await;
-                    // WSL's NAT address changes when WSL restarts.
-                    gateway::set_windows_host_ip(wsl::windows_ip().await);
-                } else if wsl::exists().await {
-                    // Not connected at startup (a cold WSL takes a while):
-                    // keep trying here, with the API already up.
-                    if let Some(docker) = wsl::connect(90).await {
-                        gateway::set_windows_host_ip(wsl::windows_ip().await);
-                        state.swap_runtime(engine::Endpoint::OrcaWsl.runtime(docker)).await;
-                        tracing::info!("Connected to Orca's engine (WSL distro {})", wsl::DISTRO);
-                        continue;
-                    }
-                }
-                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-            }
-        });
-    }
 
     {
         let state_for_events = state.clone();
@@ -185,15 +153,61 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // Start the scheduled actions runner (checks every 60 seconds)
-    let scheduler_state = state.clone();
-    dev::activity::spawn(state.clone());
-    gateway_sync::spawn(state.clone());
-    gateway::resync_on_start(state.clone());
-    workspace::spawn(state.clone());
-    tokio::spawn(async move {
-        run_scheduler(scheduler_state).await;
-    });
+    // Reach the engine, then start what works with it.
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            if let Some(rt) = connect_runtime(&state).await {
+                state.swap_runtime(rt).await;
+            }
+            state.engine_starting.store(false, std::sync::atomic::Ordering::Relaxed);
+
+            // Windows: keep Orca's WSL distro running (WSL stops a distro soon after
+            // its last process exits) and let the engine reach folders in distros
+            // started since.
+            #[cfg(windows)]
+            {
+                // docker.exe's way into Orca's engine (its `orca` context).
+                tokio::spawn(engine_proxy::serve_pipe());
+                // The distro whose `docker` uses Orca's engine, for its /home.
+                orca_backend_common::wsl::set_integrated(state.config.lock().await.wsl_integration.distro.clone());
+                // Dev servers on Windows' localhost, for containers.
+                tokio::spawn(host_relay::run(state.clone()));
+                let state = state.clone();
+                tokio::spawn(async move {
+                    use orca_backend_common::wsl;
+                    loop {
+                        if state.rt().await.host.as_deref() == Some(wsl::address().as_str()) {
+                            wsl::keep_running().await;
+                            wsl::share_distros().await;
+                            // WSL's NAT address changes when WSL restarts.
+                            gateway::set_windows_host_ip(wsl::windows_ip().await);
+                        } else if wsl::exists().await {
+                            // Not connected at startup (a cold WSL takes a while):
+                            // keep trying here, with the API already up.
+                            if let Some(docker) = wsl::connect(90).await {
+                                gateway::set_windows_host_ip(wsl::windows_ip().await);
+                                state.swap_runtime(engine::Endpoint::OrcaWsl.runtime(docker)).await;
+                                tracing::info!("Connected to Orca's engine (WSL distro {})", wsl::DISTRO);
+                                continue;
+                            }
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                    }
+                });
+            }
+
+            // The scheduled actions runner (checks every 60 seconds).
+            let scheduler_state = state.clone();
+            dev::activity::spawn(state.clone());
+            gateway_sync::spawn(state.clone());
+            gateway::resync_on_start(state.clone());
+            workspace::spawn(state.clone());
+            tokio::spawn(async move {
+                run_scheduler(scheduler_state).await;
+            });
+        });
+    }
 
     let app = Router::new()
         .nest("/api/v1", api::routes())
@@ -262,30 +276,37 @@ async fn main() -> anyhow::Result<()> {
 /// Connect to the engine Orca uses (see `engine::connect`), never Docker
 /// Desktop's; a choice made on this start is saved. Without one, a client
 /// that fails on use: System Health guides the setup.
-async fn connect_runtime(config: &mut orca_core::config::OrcaConfig) -> Arc<orca_backend_common::BollardRuntime> {
+async fn connect_runtime(state: &AppState) -> Option<Arc<orca_backend_common::BollardRuntime>> {
     tracing::info!("Searching for container runtime...");
-    let before = config.engine.clone();
+    let before = state.config.lock().await.engine.clone();
+    let mut choice = before.clone();
     let mut log = Vec::new();
-    let connected = engine::connect(&mut config.engine, &mut log).await;
+    let connected = engine::connect(&mut choice, &mut log).await;
     for line in &log {
         tracing::info!("Engine: {line}");
     }
-    if config.engine != before
-        && let Err(e) = config.save()
-    {
-        tracing::warn!("Could not save the engine choice: {e}");
+    if choice != before {
+        let mut config = state.config.lock().await;
+        config.engine = choice;
+        if let Err(e) = config.save() {
+            tracing::warn!("Could not save the engine choice: {e}");
+        }
     }
     if let Some((rt, method)) = connected {
         let kind = rt.detect_runtime().await;
         tracing::info!("Connected to {kind:?} runtime via {method}");
-        return rt;
+        return Some(rt);
     }
 
     tracing::warn!("No container runtime available");
     tracing::warn!("Daemon will start without runtime — Environment page will guide setup");
+    None
+}
 
-    // A client that fails on use. Not the platform defaults: those reach
-    // Docker Desktop's socket or pipe, which Orca never uses.
+/// A client that fails on use, until the engine is reached. Not the
+/// platform defaults: those reach Docker Desktop's socket or pipe, which
+/// Orca never uses.
+fn unconnected_runtime() -> Arc<orca_backend_common::BollardRuntime> {
     Arc::new(orca_backend_common::BollardRuntime::new(
         bollard::Docker::connect_with_http("http://127.0.0.1:9", 5, bollard::API_DEFAULT_VERSION)
             .expect("a client for an address that never answers"),

@@ -11,6 +11,8 @@ use tokio::process::{Child, Command};
 /// Restarts allowed within [`RESTART_WINDOW`] before the watchdog gives up and
 /// leaves it to the user (the connection screen's Start button).
 const MAX_RESTARTS: usize = 3;
+/// The daemon's port, which the CLI, the MCP server and this app all use.
+pub const PORT: u16 = 9477;
 const RESTART_WINDOW: Duration = Duration::from_secs(600);
 
 /// Manages the daemon process lifecycle.
@@ -109,16 +111,62 @@ impl DaemonManager {
             }
         }
 
+        // Twice at most: an older daemon that holds the port without
+        // answering is quit, and the start tried again.
+        for attempt in 0..2 {
+            let Err(e) = self.spawn_and_wait().await else {
+                return Ok(());
+            };
+            tracing::warn!("{e}");
+            if !self.child_exited() {
+                return Err(format!(
+                    "The daemon is running but hasn't answered yet. It may still be starting: click Retry connection in a moment. Its log is {}",
+                    log_path().display()
+                ));
+            }
+            match port_holder(PORT) {
+                Some(h) if is_daemon(&h.name) && attempt == 0 => {
+                    tracing::warn!(
+                        "An older daemon (PID {}) holds port {PORT} without answering; quitting it",
+                        h.pid
+                    );
+                    quit_process(h.pid).await;
+                }
+                Some(h) => {
+                    return Err(format!(
+                        "Port {PORT} is in use by {} (PID {}), so Orca's daemon can't start.",
+                        h.name, h.pid
+                    ));
+                }
+                None => {
+                    return Err(match last_log_line() {
+                        Some(line) => format!("The daemon stopped right after starting: {line}"),
+                        None => e,
+                    });
+                }
+            }
+        }
+        Err(format!("Port {PORT} is still in use after quitting the older daemon"))
+    }
+
+    /// Whether the daemon this app started has exited.
+    fn child_exited(&self) -> bool {
+        self.child
+            .lock()
+            .ok()
+            .and_then(|mut guard| guard.as_mut().map(|c| c.try_wait().ok().flatten().is_some()))
+            .unwrap_or(true)
+    }
+
+    /// Start the daemon process and wait up to 7.5 seconds for it to answer.
+    async fn spawn_and_wait(&self) -> Result<(), String> {
         let daemon_path = find_daemon_binary();
         tracing::info!("Starting orca-daemon from: {}", daemon_path);
 
         // Log daemon output to a file for debugging
-        let log_dir = orca_core::config::OrcaConfig::config_path()
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+        let log_path = log_path();
+        let log_dir = log_path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
         let _ = std::fs::create_dir_all(&log_dir);
-        let log_path = log_dir.join("daemon.log");
         // Keep the previous run's log: after a crash it says why.
         let _ = std::fs::rename(&log_path, log_dir.join("daemon.prev.log"));
         let log_file = std::fs::File::create(&log_path)
@@ -340,8 +388,172 @@ fn daemon_binary_name() -> &'static str {
     }
 }
 
+/// The daemon's log, beside Orca's config.
+fn log_path() -> PathBuf {
+    orca_core::config::OrcaConfig::config_path()
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("daemon.log")
+}
+
+/// The daemon log's last line, which says why it stopped.
+fn last_log_line() -> Option<String> {
+    let text = std::fs::read_to_string(log_path()).ok()?;
+    text.lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .map(|l| l.trim().to_string())
+}
+
+/// A program listening on a port.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct PortHolder {
+    pub pid: u32,
+    pub name: String,
+}
+
+fn is_daemon(name: &str) -> bool {
+    name.eq_ignore_ascii_case("orca-daemon") || name.eq_ignore_ascii_case("orca-daemon.exe")
+}
+
+/// The program listening on `port` on this computer, if one is.
+pub fn port_holder(port: u16) -> Option<PortHolder> {
+    #[cfg(not(windows))]
+    {
+        // Apps start with a short PATH; lsof is in /usr/sbin on macOS.
+        let lsof = if std::path::Path::new("/usr/sbin/lsof").exists() {
+            "/usr/sbin/lsof"
+        } else {
+            "lsof"
+        };
+        let out = std::process::Command::new(lsof)
+            .args(["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-Fpc"])
+            .output()
+            .ok()?;
+        parse_lsof(&String::from_utf8_lossy(&out.stdout))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let out = std::process::Command::new("netstat")
+            .args(["-ano", "-p", "TCP"])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output()
+            .ok()?;
+        let pid = parse_netstat(&String::from_utf8_lossy(&out.stdout), port)?;
+        let out = std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+            .creation_flags(0x08000000)
+            .output()
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let name = text
+            .split(',')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .trim_matches('"')
+            .to_string();
+        Some(PortHolder {
+            pid,
+            name: if name.is_empty() || name.starts_with("INFO") {
+                format!("process {pid}")
+            } else {
+                name
+            },
+        })
+    }
+}
+
+/// `lsof -Fpc` output: `p<pid>`, then `c<command>`.
+#[cfg_attr(windows, allow(dead_code))]
+fn parse_lsof(text: &str) -> Option<PortHolder> {
+    let mut pid = None;
+    for line in text.lines() {
+        if let Some(p) = line.strip_prefix('p') {
+            pid = p.trim().parse().ok();
+        } else if let (Some(name), Some(pid)) = (line.strip_prefix('c'), pid) {
+            return Some(PortHolder {
+                pid,
+                name: name.trim().to_string(),
+            });
+        }
+    }
+    None
+}
+
+/// The PID listening on `port` in `netstat -ano` output.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn parse_netstat(text: &str, port: u16) -> Option<u32> {
+    text.lines().find_map(|line| {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        match cols.as_slice() {
+            [proto, local, _, state, pid]
+                if proto.eq_ignore_ascii_case("TCP")
+                    && state.eq_ignore_ascii_case("LISTENING")
+                    && local.ends_with(&format!(":{port}")) =>
+            {
+                pid.parse().ok()
+            }
+            _ => None,
+        }
+    })
+}
+
+/// Ask a process to quit, and make it if it hasn't within three seconds.
+pub async fn quit_process(pid: u32) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F"])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output();
+    }
+    #[cfg(not(windows))]
+    {
+        let pid = pid.to_string();
+        let _ = std::process::Command::new("kill").args(["-TERM", &pid]).output();
+        for _ in 0..30 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let alive = std::process::Command::new("kill")
+                .args(["-0", &pid])
+                .output()
+                .is_ok_and(|o| o.status.success());
+            if !alive {
+                return;
+            }
+        }
+        let _ = std::process::Command::new("kill").args(["-KILL", &pid]).output();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+}
+
 /// One client for the local daemon's health checks, reused across calls.
 fn local_client() -> &'static reqwest::Client {
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     CLIENT.get_or_init(reqwest::Client::new)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn port_holder_from_lsof() {
+        assert_eq!(
+            super::parse_lsof("p4242\ncorca-daemon\nf12\n"),
+            Some(super::PortHolder {
+                pid: 4242,
+                name: "orca-daemon".into()
+            })
+        );
+        assert_eq!(super::parse_lsof(""), None);
+    }
+
+    #[test]
+    fn port_holder_from_netstat() {
+        let text = "\nActive Connections\n\n  Proto  Local Address          Foreign Address        State           PID\n  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1012\n  TCP    127.0.0.1:9477         0.0.0.0:0              LISTENING       5120\n  TCP    127.0.0.1:9477         127.0.0.1:50000        ESTABLISHED     5120\n";
+        assert_eq!(super::parse_netstat(text, 9477), Some(5120));
+        assert_eq!(super::parse_netstat(text, 19477), None);
+    }
 }

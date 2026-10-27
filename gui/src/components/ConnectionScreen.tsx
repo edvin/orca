@@ -31,6 +31,24 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
     }
   });
 
+  // "Port 9477 is in use by <name> (PID <pid>)": what holds the port.
+  const holder = () => {
+    const m = error()?.match(/Port \d+ is in use by (.+) \(PID (\d+)\)/);
+    return m ? { name: m[1], pid: Number(m[2]) } : null;
+  };
+
+  const quitHolder = async (pid: number) => {
+    setStarting(true);
+    try {
+      await invoke("quit_port_holder", { pid });
+    } catch (e) {
+      setError(String(e));
+      setStarting(false);
+      return;
+    }
+    await startDaemon();
+  };
+
   const startDaemon = async () => {
     setStarting(true);
     setError(null);
@@ -72,10 +90,23 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
             </div>
             <div style={{ "margin-bottom": "8px" }}>{error()}</div>
             <Show when={/not found|no such file|cannot find|os error 2\b/i.test(error() ?? "")} fallback={
-              <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
-                <p>Click <strong>Retry connection</strong>. If it keeps failing, another program may be using port 9477,
-                  or an older Orca daemon may still be running: quit Orca completely and open it again.</p>
-              </div>
+              <Show when={holder()} fallback={
+                <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
+                  <p>Click <strong>Retry connection</strong>. If it keeps failing, quit Orca completely and open it again.</p>
+                </div>
+              }>
+                {(h) => (
+                  <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
+                    <p style={{ "margin-bottom": "8px" }}>
+                      Orca needs port 9477. Quit <strong>{h().name}</strong> to free it, and Orca starts its daemon again.
+                      If you don't recognise it, look it up in Activity Monitor (or Task Manager) by its PID first.
+                    </p>
+                    <button class="btn btn-sm" disabled={starting()} onClick={() => void quitHolder(h().pid)}>
+                      {starting() ? "Quitting…" : `Quit ${h().name}`}
+                    </button>
+                  </div>
+                )}
+              </Show>
             }>
               <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
                 <p style={{ "margin-bottom": "6px" }}>Orca's daemon (<code>orca-daemon</code>) is missing from this installation. To fix it:</p>

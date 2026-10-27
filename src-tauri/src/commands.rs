@@ -3457,6 +3457,23 @@ pub async fn start_daemon(app: tauri::AppHandle) -> Result<String, String> {
     Ok("Daemon started".into())
 }
 
+/// Quit the program holding the daemon's port, after the user said so on
+/// the connection screen. Only while it still holds the port: a PID can be
+/// reused by something else in the meantime.
+#[tauri::command]
+pub async fn quit_port_holder(pid: u32) -> Result<String, String> {
+    match daemon::port_holder(daemon::PORT) {
+        Some(h) if h.pid == pid => {
+            daemon::quit_process(pid).await;
+            match daemon::port_holder(daemon::PORT) {
+                Some(h) if h.pid == pid => Err(format!("{} (PID {pid}) didn't quit", h.name)),
+                _ => Ok(format!("Quit {}", h.name)),
+            }
+        }
+        _ => Ok("That program no longer holds the port".into()),
+    }
+}
+
 #[tauri::command]
 pub async fn stop_daemon(app: tauri::AppHandle) -> Result<String, String> {
     let dm = app.state::<Arc<daemon::DaemonManager>>();

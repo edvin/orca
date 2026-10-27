@@ -22,6 +22,9 @@ pub struct AppState {
     /// re-subscribe against the new runtime immediately instead of
     /// polling.
     pub swap_notify: Arc<Notify>,
+    /// Set until the daemon's first attempt to reach the engine is over,
+    /// which can take minutes while a VM boots.
+    pub engine_starting: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {
@@ -39,6 +42,7 @@ impl AppState {
             events_tx,
             api_token,
             swap_notify: Arc::new(Notify::new()),
+            engine_starting: std::sync::atomic::AtomicBool::new(true),
         }
     }
 
