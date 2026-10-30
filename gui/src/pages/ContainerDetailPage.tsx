@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onMount, Show, For } from "solid-js";
 import { pendingContainerTab, takeContainerTab } from "../lib/containerTab";
 import { invoke } from "@tauri-apps/api/core";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import type { Container, ContainerStats } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { usePoller } from "../lib/poller";
@@ -331,7 +332,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       const routes = (await invoke("gateway_list_routes")) as Array<{ hostname: string; container_name: string; url: string }>;
       const existing = routes.find((r) => r.container_name === c.name);
       if (existing) {
-        setExistingRoute({ hostname: existing.hostname, url: existing.url });
+        setExistingRoute({ hostname: existing.hostname, url: existing.url || `https://${existing.hostname}` });
         setShowExposeDialog(true);
         return;
       }
@@ -367,7 +368,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
         port,
       });
       showToast(`Exposed ${c.name} at ${fullHostname}`, "success");
-      setShowExposeDialog(false);
+      // stays open on the new route, so its page is one click away
+      setExistingRoute({ hostname: fullHostname, url: `https://${fullHostname}` });
     } catch (err) {
       logError(`Failed to expose container: ${err}`);
       showToast(`Failed to expose: ${err}`, "error");
@@ -1658,14 +1660,15 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
               {(route) => (
                 <div class="modal-body">
                   <p style={{ color: "#c9d1d9", "font-size": "13px", "margin-bottom": "12px" }}>
-                    This container is already exposed via the gateway.
+                    This container is exposed via the gateway.
                   </p>
                   <div class="card" style={{ "margin-bottom": "16px" }}>
                     <div class="card-grid">
                       <span class="card-label">Hostname</span>
                       <span class="card-value mono">{route().hostname}</span>
                       <span class="card-label">URL</span>
-                      <span class="card-value mono" style={{ color: "#58a6ff" }}>{route().url}</span>
+                      <a href={route().url} class="card-value mono" style={{ color: "#58a6ff", "text-decoration": "none" }} title={`Open ${route().url}`}
+                        onClick={(e) => { e.preventDefault(); void shellOpen(route().url); }}>{route().url}</a>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
@@ -1673,6 +1676,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     <button class="btn" style={{ color: "#f85149", "border-color": "#f85149" }} onClick={handleUnexpose}>
                       Remove route
                     </button>
+                    <button class="btn btn-primary" onClick={() => void shellOpen(route().url)}>Open</button>
                   </div>
                 </div>
               )}

@@ -3,6 +3,7 @@ import { openContainerOn } from "../lib/containerTab";
 import DockerUnreachable from "../components/DockerUnreachable";
 import { onIntent } from "../lib/pageIntent";
 import { invoke } from "@tauri-apps/api/core";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import type { Container, ContainerStats, ComposeProject } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { usePoller } from "../lib/poller";
@@ -74,6 +75,8 @@ export default function ContainersPage(props: ContainersPageProps) {
   const [exposeHostname, setExposeHostname] = createSignal("");
   const [exposePort, setExposePort] = createSignal("80");
   const [exposing, setExposing] = createSignal(false);
+  // the gateway's domain (a workspace can set one), for the suffix, preview and new routes
+  const [exposeDomain, setExposeDomain] = createSignal("localhost");
   const [exposeExistingRoutes, setExposeExistingRoutes] = createSignal<Array<{ hostname: string; url: string; port: number }>>([]);
   const [gatewayRoutes, setGatewayRoutes] = createSignal<Array<{ hostname: string; container_name: string; port: number }>>([]);
 
@@ -117,6 +120,12 @@ export default function ContainersPage(props: ContainersPageProps) {
 
   const openExposeDialog = async (c: Container) => {
     try {
+      const s = (await invoke("gateway_status")) as { domain?: string } | null;
+      setExposeDomain(s?.domain || "localhost");
+    } catch {
+      setExposeDomain("localhost");
+    }
+    try {
       const routes = (await invoke("gateway_list_routes")) as Array<{ hostname: string; container_name: string; port: number; url: string }>;
       const existing = routes.filter((r) => r.container_name === c.name);
       setExposeExistingRoutes(existing.map((r) => ({ hostname: r.hostname, url: r.url || `https://${r.hostname}`, port: r.port })));
@@ -140,7 +149,7 @@ export default function ContainersPage(props: ContainersPageProps) {
     const port = parseInt(exposePort(), 10);
     if (!hostname || isNaN(port)) return;
 
-    const fullHostname = hostname.includes(".") ? hostname : `${hostname}.localhost`;
+    const fullHostname = hostname.includes(".") ? hostname : `${hostname}.${exposeDomain()}`;
     setExposing(true);
     try {
       await invoke("gateway_add_route", {
@@ -1253,8 +1262,10 @@ export default function ContainersPage(props: ContainersPageProps) {
                         {(route) => (
                           <div style={{ display: "flex", "align-items": "center", gap: "8px", padding: "8px 12px", background: "rgba(63,185,80,0.06)", border: "1px solid rgba(63,185,80,0.15)", "border-radius": "8px" }}>
                             <span style={{ color: "#3fb950", "font-size": "8px" }}>{"\u25CF"}</span>
-                            <span class="mono" style={{ flex: "1", "font-size": "13px", color: "#58a6ff" }}>{route.hostname}</span>
+                            <a href={route.url} class="mono" style={{ flex: "1", "font-size": "13px", color: "#58a6ff", "text-decoration": "none" }} title={`Open ${route.url}`}
+                              onClick={(e) => { e.preventDefault(); void shellOpen(route.url); }}>{route.hostname}</a>
                             <span style={{ color: "#6e7681", "font-size": "11px" }}>:{route.port}</span>
+                            <button type="button" class="btn btn-sm" onClick={() => void shellOpen(route.url)}>Open</button>
                             <button type="button" class="action-icon" style={{ color: "#f85149", "flex-shrink": "0" }} onClick={() => handleUnexpose(route.hostname)} title="Remove route">
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             </button>
@@ -1283,7 +1294,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                       autofocus
                       style={{ flex: "1" }}
                     />
-                    <span style={{ color: "#8b949e", "font-size": "13px" }}>.localhost</span>
+                    <span style={{ color: "#8b949e", "font-size": "13px" }}>.{exposeDomain()}</span>
                   </div>
                 </div>
                 <div class="form-group">
@@ -1326,7 +1337,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 </div>
                 <Show when={exposeHostname().trim()}>
                   <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "8px" }}>
-                    URL: <span class="mono" style={{ color: "#58a6ff" }}>https://{exposeHostname().includes(".") ? exposeHostname() : `${exposeHostname()}.localhost`}</span>
+                    URL: <span class="mono" style={{ color: "#58a6ff" }}>https://{exposeHostname().includes(".") ? exposeHostname() : `${exposeHostname()}.${exposeDomain()}`}</span>
                   </div>
                 </Show>
               </div>
