@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvvgcatd">
+<link rel="stylesheet" href="/assets/site.css?v=mvvgd21v">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvvgcatd" defer></script>
+<script src="/assets/site.js?v=mvvgd21v" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -57,7 +57,20 @@
   <div class="release-meta"><a class="release-tag" href="#v0.69.0">v0.69.0</a><time datetime="2026-10-30T20:55:26Z">October 30, 2026</time></div>
   <div class="release-body prose">
     
-    <p><strong>Full Changelog</strong>: <a href="https://github.com/edvin/orca/compare/v0.68.0...v0.69.0" target="_blank" rel="noopener">https://github.com/edvin/orca/compare/v0.68.0...v0.69.0</a></p>
+    <h2 id="orcas-vm-macos"><a class="anchor" href="#orcas-vm-macos" aria-hidden="true" tabindex="-1">#</a>Orca&#39;s VM (macOS)</h2>
+<ul>
+<li><strong>Repair no longer hangs:</strong> Repair stopped the VM with a command that waits forever when Lima thinks the VM runs but its host agent is gone. It now stops the VM properly for up to a minute, then by force.</li>
+<li><strong>One start at a time:</strong> when the VM didn&#39;t come up (after the Mac ran out of space, say), Orca&#39;s own recovery and a reconnect from the app could start and stop it at the same moment, and leave it broken. Now only one of them works on the VM at a time, and Repair or Rescue takes over from Orca&#39;s recovery at once.</li>
+<li><strong>A boot underway is left to finish:</strong> when Orca restarts while its VM is booting, it waits for that boot instead of stopping it.</li>
+</ul>
+<h2 id="gateway"><a class="anchor" href="#gateway" aria-hidden="true" tabindex="-1">#</a>Gateway</h2>
+<ul>
+<li><strong>Expose via gateway:</strong> the dialog shows the new route&#39;s address as a link with an <strong>Open</strong> button, and the container&#39;s page stays on it. From the Containers list, the address uses the gateway&#39;s domain instead of always <code>.localhost</code>.</li>
+</ul>
+<h2 id="charts"><a class="anchor" href="#charts" aria-hidden="true" tabindex="-1">#</a>Charts</h2>
+<ul>
+<li><strong>While the window is hidden</strong> Orca reads stats and health slowly instead of not at all, and the charts place readings by time, with a gap where the Mac slept. The high-CPU alert counts 10 seconds above 90 %, not three readings.</li>
+</ul>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.69.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
