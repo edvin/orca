@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvqt0mcr">
+<link rel="stylesheet" href="/assets/site.css?v=mvvgcatd">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvqt0mcr" defer></script>
+<script src="/assets/site.js?v=mvvgcatd" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -90,7 +90,7 @@
 <li><strong>Windows, Docker in Orca&#39;s distro isn&#39;t answering.</strong> <strong>Fix</strong> repairs the <code>orca</code> distro in place: it sets Docker up again and restarts it. Images and volumes are kept.</li>
 </ul>
 <h2 id="macos-the-docker-vm-wont-come-up"><a class="anchor" href="#macos-the-docker-vm-wont-come-up" aria-hidden="true" tabindex="-1">#</a>macOS: the Docker VM won&#39;t come up</h2>
-<p>If the VM exists but Docker is unreachable, <strong>Docker Runtime</strong> shows <code>Lima VM &#39;orca&#39; is … Docker is unreachable</code> with a <strong>Fix</strong> button. It repairs the VM: force-stops it, removes Lima&#39;s stale lock and socket files, starts it again and waits for Docker. Your containers and images are kept.</p>
+<p>If the VM exists but Docker is unreachable, <strong>Docker Runtime</strong> shows <code>Lima VM &#39;orca&#39; is … Docker is unreachable</code> with a <strong>Fix</strong> button. It repairs the VM: force-stops it, removes Lima&#39;s stale lock and socket files, starts it again and waits for Docker. Your containers and images are kept. If Orca is starting the VM by itself at that moment, repair stops that first, and a VM that doesn&#39;t stop within a minute is stopped by force.</p>
 <p>If repair doesn&#39;t help, <strong>Recreate VM</strong> builds a new one. It deletes everything in the old VM.</p>
 <p>When a Mac shuts down, the VM shuts down properly with it, and the containers stop as they would with <code>docker stop</code>. If the VM stops abruptly instead (it crashed, or the Mac lost power), Docker marks the containers that were running as exited. When Orca then starts the VM, it starts those containers again.</p>
 <h3 id="the-vm-runs-but-doesnt-start"><a class="anchor" href="#the-vm-runs-but-doesnt-start" aria-hidden="true" tabindex="-1">#</a>The VM runs but doesn&#39;t start</h3>
