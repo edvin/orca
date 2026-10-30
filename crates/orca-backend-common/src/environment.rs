@@ -343,6 +343,8 @@ pub async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
         current_path
     );
     cmd.env("PATH", &extended);
+    // Dropped (a timeout, below): the command goes too.
+    cmd.kill_on_drop(true);
 
     let child = cmd.spawn().map_err(|e| e.to_string())?;
     let result = child.wait_with_output().await.map_err(|e| e.to_string())?;
@@ -367,6 +369,13 @@ pub async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
             combined
         })
     }
+}
+
+/// [`run_cmd`], given up (and the command killed) after `secs` seconds.
+pub async fn run_cmd_timeout(program: &str, args: &[&str], secs: u64) -> Result<String, String> {
+    tokio::time::timeout(std::time::Duration::from_secs(secs), run_cmd(program, args))
+        .await
+        .unwrap_or_else(|_| Err(format!("no answer in {secs}s")))
 }
 
 /// Run a command and stream its output line by line to a sender.
@@ -1113,15 +1122,13 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                     anyhow::bail!("No Lima VM exists to repair");
                 }
             };
+            let _vm_lock = take_vm_saying(&send).await;
             send(format!(
                 ">>> Step 1/4: Stopping Lima VM '{vm}' (current status: {status})\n"
             ))
             .await;
-            // Graceful stop first, then force — `--force` alone leaves the
-            // VM in a bad state when it's already stopped.
-            let _ = run_cmd("limactl", &["stop", &vm]).await;
-            match run_cmd("limactl", &["stop", "--force", &vm]).await {
-                Ok(_) => send("    Stopped.\n".into()).await,
+            match stop_lima_vm(&vm).await {
+                Ok(()) => send("    Stopped.\n".into()).await,
                 Err(e) => send(format!("    Stop reported: {e}\n")).await,
             }
 
@@ -1129,7 +1136,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             lima_repair_clean(&vm, &send).await;
 
             send(format!(">>> Step 3/4: Starting Lima VM '{vm}'\n")).await;
-            match run_cmd_streaming("limactl", &["start", &vm], &tx).await {
+            match run_cmd_streaming("limactl", &["start", "--timeout", "5m", &vm], &tx).await {
                 Ok(_) => send("    Start command completed.\n".into()).await,
                 Err(e) => {
                     send(format!("\n    Start failed: {e}\n")).await;
@@ -1365,6 +1372,7 @@ where
     let Some(_guard) = vm_boot::RescueGuard::take() else {
         anyhow::bail!("A rescue is running already");
     };
+    let _vm_lock = take_vm_saying(send).await;
     let Some(disk) = vm_boot::disk_path(&vm) else {
         anyhow::bail!("Can't find the disk of Lima VM '{vm}'");
     };
@@ -1384,7 +1392,7 @@ where
     send(format!("    {}\n", e2fsck.display())).await;
 
     send(">>> Step 2/6: Stopping the VM\n".into()).await;
-    let _ = run_cmd("limactl", &["stop", "--force", &vm]).await;
+    let _ = run_cmd_timeout("limactl", &["stop", "--force", &vm], 60).await;
     // The disk must be closed before anything reads or writes it.
     let mut stopped = false;
     for _ in 0..30 {
@@ -1560,6 +1568,37 @@ async fn find_lima_vm_for_repair() -> Option<(String, String)> {
         }
     }
     orca.or(docker)
+}
+
+/// Orca's VM for System Health, saying so when it waits: the daemon's own
+/// recovery lets go at once, another repair or rescue only when it's done.
+#[cfg(target_os = "macos")]
+async fn take_vm_saying<F, Fut>(send: &F) -> orca_core::vm_boot::VmLock
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    use orca_core::vm_boot;
+    if let Some(lock) = vm_boot::try_lock_vm() {
+        return lock;
+    }
+    send("    Orca is starting or repairing the VM already: waiting for that to stop.\n".into()).await;
+    let lock = vm_boot::take_vm().await;
+    send("    Done waiting.\n\n".into()).await;
+    lock
+}
+
+/// Stop the VM: properly for up to a minute, then by force. A plain
+/// `limactl stop` waits forever when the VM's host agent is gone but Lima
+/// still thinks it runs, which is what Repair is for.
+#[cfg(target_os = "macos")]
+async fn stop_lima_vm(vm: &str) -> Result<(), String> {
+    // Graceful first: `--force` alone leaves the VM in a bad state when it's
+    // already stopped.
+    let _ = run_cmd_timeout("limactl", &["stop", vm], 60).await;
+    run_cmd_timeout("limactl", &["stop", "--force", vm], 60)
+        .await
+        .map(|_| ())
 }
 
 #[cfg(target_os = "macos")]
@@ -2419,12 +2458,15 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 let (vm, _) = find_lima_vm_for_repair()
                     .await
                     .ok_or_else(|| anyhow::anyhow!("There is no Docker VM yet. Use Set up Docker first."))?;
-                let _ = run_cmd("limactl", &["stop", &vm]).await;
-                run_cmd("limactl", &["start", &vm]).await.map_err(|e| {
-                    anyhow::anyhow!(
-                        "The Docker VM '{vm}' did not start again.\n\nTry Repair on this page.\n\nError: {e}"
-                    )
-                })?;
+                let _vm_lock = orca_core::vm_boot::take_vm().await;
+                let _ = stop_lima_vm(&vm).await;
+                run_cmd("limactl", &["start", "--timeout", "5m", &vm])
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "The Docker VM '{vm}' did not start again.\n\nTry Repair on this page.\n\nError: {e}"
+                        )
+                    })?;
                 Ok(format!("Docker VM '{vm}' restarted."))
             }
             #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -2787,8 +2829,8 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 .await
                 .ok_or_else(|| anyhow::anyhow!("No Lima VM exists to repair"))?;
             output.push_str(&format!("VM '{vm}' status: {status}\n"));
-            let _ = run_cmd("limactl", &["stop", &vm]).await;
-            let _ = run_cmd("limactl", &["stop", "--force", &vm]).await;
+            let _vm_lock = orca_core::vm_boot::take_vm().await;
+            let _ = stop_lima_vm(&vm).await;
             output.push_str("Stopped.\n");
 
             let home = std::env::var("HOME").unwrap_or_default();
@@ -2812,7 +2854,7 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
             }
             output.push_str("Removed stale state files.\n");
 
-            match run_cmd("limactl", &["start", &vm]).await {
+            match run_cmd("limactl", &["start", "--timeout", "5m", &vm]).await {
                 Ok(o) => output.push_str(&format!("Started:\n{o}\n")),
                 Err(e) => {
                     return Err(anyhow::anyhow!(

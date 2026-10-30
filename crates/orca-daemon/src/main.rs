@@ -369,6 +369,7 @@ async fn lima_start(name: &str) -> Result<(), String> {
     let out = Command::new("limactl")
         .env("PATH", lima_path_env())
         .args(["start", "--timeout", "5m", name])
+        .kill_on_drop(true)
         .output()
         .await
         .map_err(|e| format!("spawn failed: {e}"))?;
@@ -394,11 +395,14 @@ async fn lima_force_recover(name: &str) {
         return;
     }
     tracing::warn!("Lima VM '{name}': attempting force-stop recovery");
-    match Command::new("limactl")
+    let stop = Command::new("limactl")
         .env("PATH", lima_path_env())
         .args(["stop", "--force", name])
-        .output()
+        .kill_on_drop(true)
+        .output();
+    match tokio::time::timeout(std::time::Duration::from_secs(60), stop)
         .await
+        .unwrap_or_else(|_| Err(std::io::Error::other("timed out after 60s")))
     {
         Ok(o) if o.status.success() => tracing::info!("Lima VM '{name}': force-stop succeeded"),
         Ok(o) => tracing::warn!(
@@ -406,7 +410,7 @@ async fn lima_force_recover(name: &str) {
             o.status,
             String::from_utf8_lossy(&o.stderr).trim()
         ),
-        Err(e) => tracing::warn!("Lima VM '{name}': force-stop spawn failed: {e}"),
+        Err(e) => tracing::warn!("Lima VM '{name}': force-stop failed: {e}"),
     }
 
     remove_stale_lima_sockets(name);
@@ -837,8 +841,43 @@ async fn finalize_lima_runtime(
 /// failure, then retry once.
 #[cfg(target_os = "macos")]
 async fn connect_via_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> {
+    use orca_core::vm_boot;
+    // Whoever holds the VM connects when it's up: the daemon's startup, or
+    // the app's reconnect if it came first.
+    let Some(_lock) = vm_boot::try_lock_vm() else {
+        tracing::info!("Orca's VM is being started or repaired already; not starting it again");
+        return None;
+    };
+    // Children are killed when this is dropped (`kill_on_drop`), so System
+    // Health's Repair doesn't wait for a start it's about to undo.
+    tokio::select! {
+        rt = bring_up_lima() => rt,
+        _ = vm_boot::wanted_elsewhere() => {
+            tracing::info!("System Health is working on Orca's VM; recovery stops here");
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+async fn bring_up_lima() -> Option<Arc<orca_backend_common::BollardRuntime>> {
     let (name, status) = find_lima_vm().await?;
     tracing::info!("Found Lima VM '{name}' (status: {status})");
+
+    // A host agent but no Running VM: a start is underway, maybe one a
+    // previous daemon began. Let it finish before stopping anything.
+    if status != "Running" && orca_core::vm_boot::host_agent_running(name) {
+        tracing::info!("Lima VM '{name}': its host agent runs; waiting for the boot underway");
+        // That start began when its host agent did.
+        let started = std::fs::metadata(orca_core::vm_boot::vm_dir(name).join("ha.pid"))
+            .and_then(|m| m.modified())
+            .map(chrono::DateTime::<chrono::Utc>::from)
+            .unwrap_or_else(|_| chrono::Utc::now());
+        if let Some(docker) = wait_for_lima_docker(name, 90).await {
+            return Some(finalize_lima_runtime(name, docker, Some(started)).await);
+        }
+        tracing::warn!("Lima VM '{name}': the boot underway didn't bring Docker up in 3 minutes");
+    }
 
     let is_running = status == "Running";
     let was_reconfigured = reconcile_lima_config(name, is_running).await;

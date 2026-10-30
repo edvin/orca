@@ -71,7 +71,7 @@ Platform-specific cases:
 
 ## macOS: the Docker VM won't come up
 
-If the VM exists but Docker is unreachable, **Docker Runtime** shows `Lima VM 'orca' is … Docker is unreachable` with a **Fix** button. It repairs the VM: force-stops it, removes Lima's stale lock and socket files, starts it again and waits for Docker. Your containers and images are kept.
+If the VM exists but Docker is unreachable, **Docker Runtime** shows `Lima VM 'orca' is … Docker is unreachable` with a **Fix** button. It repairs the VM: force-stops it, removes Lima's stale lock and socket files, starts it again and waits for Docker. Your containers and images are kept. If Orca is starting the VM by itself at that moment, repair stops that first, and a VM that doesn't stop within a minute is stopped by force.
 
 If repair doesn't help, **Recreate VM** builds a new one. It deletes everything in the old VM.
 

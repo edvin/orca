@@ -40,6 +40,56 @@ impl Drop for RescueGuard {
     }
 }
 
+/// One start or stop of the VM at a time. What happened once: the daemon's
+/// startup recovery and the app's reconnect each ran the recovery steps at
+/// the same moment, so one force-stopped the VM the other had just started,
+/// and a deep clean deleted the host agent's logs while a start waited for
+/// them. The VM ended up with no host agent ("Broken").
+static LIFECYCLE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Set while System Health waits for the VM (Repair, Rescue, restart).
+static WANTED: AtomicBool = AtomicBool::new(false);
+
+/// Held while starting, stopping or recovering the VM.
+pub type VmLock = tokio::sync::MutexGuard<'static, ()>;
+
+/// The VM, unless something else is starting or stopping it.
+pub fn try_lock_vm() -> Option<VmLock> {
+    LIFECYCLE.try_lock().ok()
+}
+
+/// The VM for System Health's actions: asks the daemon's own recovery to give
+/// it up (see [`wanted_elsewhere`]), then waits for it.
+pub async fn take_vm() -> VmLock {
+    WANTED.store(true, Ordering::SeqCst);
+    let lock = LIFECYCLE.lock().await;
+    WANTED.store(false, Ordering::SeqCst);
+    lock
+}
+
+/// Resolves once System Health wants the VM: automatic recovery stops then.
+pub async fn wanted_elsewhere() {
+    while !WANTED.load(Ordering::SeqCst) {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+}
+
+/// Whether the VM's host agent runs: a start is underway, or done. One can
+/// outlive the daemon that started it (the app restarts the daemon after a
+/// repair), and stopping it then would cut that boot short.
+pub fn host_agent_running(vm: &str) -> bool {
+    std::fs::read_to_string(vm_dir(vm).join("ha.pid"))
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .is_some_and(|pid| {
+            std::process::Command::new("/bin/kill")
+                .args(["-0", &pid.to_string()])
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success())
+        })
+}
+
 /// Where the guest keeps the setting below.
 pub const BOOT_SAFETY_PATH: &str = "/etc/default/grub.d/98-orca-boot.cfg";
 
@@ -424,6 +474,27 @@ mod tests {
         assert!(is_ext4(&disk, parts[0].offset));
         assert!(!is_ext4(&disk, 0));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn system_health_takes_the_vm_from_recovery() {
+        let recovery = try_lock_vm().expect("free");
+        assert!(try_lock_vm().is_none());
+        let repair = tokio::spawn(take_vm());
+        // Recovery sees it's wanted and lets go.
+        tokio::time::timeout(std::time::Duration::from_secs(5), wanted_elsewhere())
+            .await
+            .unwrap();
+        drop(recovery);
+        let repair = repair.await.unwrap();
+        assert!(!WANTED.load(Ordering::SeqCst));
+        drop(repair);
+        assert!(try_lock_vm().is_some());
+    }
+
+    #[test]
+    fn host_agent_of_a_vm_that_isnt_there() {
+        assert!(!host_agent_running("orca-test-no-such-vm"));
     }
 
     #[test]

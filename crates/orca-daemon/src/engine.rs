@@ -376,7 +376,12 @@ pub async fn connect(
 #[cfg(target_os = "macos")]
 async fn own_engine(log: &mut Vec<String>) -> Option<(Arc<orca_backend_common::BollardRuntime>, String)> {
     log.push("Using Orca's engine (its Lima VM)".into());
-    let rt = crate::connect_via_lima().await?;
+    let Some(rt) = crate::connect_via_lima().await else {
+        if orca_core::vm_boot::try_lock_vm().is_none() {
+            log.push("Orca is starting or repairing its VM: Orca connects by itself when that's done".into());
+        }
+        return None;
+    };
     Some((rt, format!("Orca's VM ({})", orca_socket())))
 }
 
