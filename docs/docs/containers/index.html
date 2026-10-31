@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvvgd21v">
+<link rel="stylesheet" href="/assets/site.css?v=mvwem1e3">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvvgd21v" defer></script>
+<script src="/assets/site.js?v=mvwem1e3" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -64,14 +64,17 @@
 <p>You can also start a container from an image on the <strong>Images</strong> page, or deploy a ready-made app from the <a href="/docs/templates/">App Catalog</a>.</p>
 <h2 id="the-containers-list"><a class="anchor" href="#the-containers-list" aria-hidden="true" tabindex="-1">#</a>The containers list</h2>
 <p><figure class="shot"><img src="/assets/screens/containers.webp" alt="The Containers page with stacks grouped as cards and standalone containers below" loading="lazy" decoding="async"></figure></p>
-<p>The <strong>Containers</strong> page lists every container, with compose projects grouped into stack cards. Each row shows the image, state, ports, current CPU and memory usage, and network I/O.</p>
+<p>The <strong>Containers</strong> page lists your containers, with compose projects grouped into stack cards. Each row shows the container&#39;s name and image, its status, a live CPU graph, memory, its published ports on this computer (click a web port to open it; <strong>+N</strong> lists them all, with the container port each one leads to) and network I/O. A status of <strong>Healthy</strong>, <strong>Unhealthy</strong> or <strong>Starting</strong> comes from the container&#39;s health check.</p>
 <ul>
-<li>Filter with <strong>All</strong>, <strong>Running</strong> and <strong>Stopped</strong>, or search by name with the search box.</li>
-<li>Select rows with the checkboxes to start, stop or delete several containers at once.</li>
-<li><strong>Stop all</strong> stops every running container after a confirmation.</li>
+<li><strong>Running</strong>, <strong>Stopped</strong> and <strong>All</strong> choose what the page shows. It opens on <strong>Running</strong>, and remembers your choice.</li>
+<li><strong>Stacks</strong> groups containers by stack; <strong>List</strong> shows them all in one list, running ones first, each with its stack&#39;s name. This is remembered too.</li>
+<li>The search box matches names, images and stack names. Press Escape to clear it.</li>
+<li>Each stack card has a bar with a segment per container: green when it runs, red when its health check fails, grey when it&#39;s stopped. Click the card to fold it; stacks with nothing running start folded under <strong>All</strong>.</li>
+<li>Select containers with the checkboxes that appear as you point at a row, then start, stop or delete them together.</li>
+<li><strong>Logs</strong> in the page header follows the logs of every running container together, and <strong>Stop all</strong> stops every running container after a confirmation.</li>
 <li>The <strong>More actions</strong> menu (the &quot;…&quot; at the end of a row) has <strong>Restart</strong>, <strong>Logs</strong>, <strong>Open shell</strong>, <strong>Expose via gateway</strong>, <strong>Schedule restarts…</strong>, <strong>Auto-deploy on new image…</strong> and <strong>Remove container</strong>. <strong>Open shell</strong> shows only while the container runs, and opens its page on the <strong>Terminal</strong> tab. A running container has to be stopped before you can remove it.</li>
 </ul>
-<p>Click a stack&#39;s name, or its <strong>Open stack</strong> button, to open its stack page. See <a href="/docs/stacks/">Compose stacks</a>.</p>
+<p>Click a stack&#39;s name, or <strong>Open stack</strong> in its <strong>More actions</strong> menu, to open its stack page. See <a href="/docs/stacks/">Compose stacks</a>.</p>
 <p><strong>Open folder</strong> in the page header starts a project from a folder with a compose file. See <a href="/docs/stacks/#open-a-project-folder">Open a project folder</a>.</p>
 <p>If Orca can&#39;t get the list from Docker, the page shows a <strong>Can&#39;t reach Docker</strong> banner with the error instead of a list that never loads. <strong>Open System Health</strong> shows what&#39;s wrong and can fix it. The <strong>Images</strong> page shows the same banner.</p>
 <h2 id="container-details"><a class="anchor" href="#container-details" aria-hidden="true" tabindex="-1">#</a>Container details</h2>

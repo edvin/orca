@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvvgd21v">
+<link rel="stylesheet" href="/assets/site.css?v=mvwem1e3">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvvgd21v" defer></script>
+<script src="/assets/site.js?v=mvwem1e3" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -59,7 +59,7 @@
     <div class="prose"><p>A stack is a Docker Compose project. Orca shows every compose project on the machine as a stack, whether you started it from Orca or from a terminal, and gives it a page with its services, logs, compose file and <code>orca.yaml</code>.</p>
 <h2 id="how-stacks-are-found"><a class="anchor" href="#how-stacks-are-found" aria-hidden="true" tabindex="-1">#</a>How stacks are found</h2>
 <p>Docker Compose labels every container it creates with the project name, its working directory and its compose files. Orca groups containers by these labels, so any project you start with <code>docker compose up</code> shows up as a stack without extra setup. A project started from several compose files (<code>docker compose -f compose.yaml -f compose.dev.yaml up</code>) works the same way: Orca passes every file to Compose for every command it runs on the stack.</p>
-<p>Stacks appear as cards at the top of the <strong>Containers</strong> page. Each card shows the stack&#39;s services, start and stop buttons, and a <strong>More actions</strong> menu with <strong>Restart</strong>, <strong>Pull images</strong> and <strong>Delete stack</strong>. Click the stack&#39;s name, or <strong>Open stack</strong>, to open its page. The <strong>Your apps</strong> cards on the <strong>Dashboard</strong> list the same stacks with their HTTPS URLs.</p>
+<p>Stacks appear as cards on the <strong>Containers</strong> page. Each card shows the stack&#39;s services, how many of them run, a start or stop button, and a <strong>More actions</strong> menu with <strong>Open stack</strong>, <strong>Restart</strong>, <strong>Pull images</strong> and <strong>Delete stack</strong>. Click the stack&#39;s name, or <strong>Open stack</strong>, to open its page. The <strong>Your apps</strong> cards on the <strong>Dashboard</strong> list the same stacks with their HTTPS URLs.</p>
 <p>The stack status is <strong>Running</strong> when all services run, <strong>Partial</strong> when only some do, and <strong>Stopped</strong> when none do.</p>
 <h2 id="open-a-project-folder"><a class="anchor" href="#open-a-project-folder" aria-hidden="true" tabindex="-1">#</a>Open a project folder</h2>
 <p>To run a project you already have on disk, open its folder. Orca shows what&#39;s in it and starts it as a stack, the same as <code>docker compose up</code> in that folder would.</p>
