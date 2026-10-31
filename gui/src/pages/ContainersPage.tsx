@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, For, Show, createMemo } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, Show, createMemo, type JSX } from "solid-js";
 import { openContainerOn } from "../lib/containerTab";
 import DockerUnreachable from "../components/DockerUnreachable";
 import { onIntent } from "../lib/pageIntent";
@@ -605,8 +605,10 @@ export default function ContainersPage(props: ContainersPageProps) {
     return stack ? `container:${c.id},stack:${stack}` : `container:${c.id}`;
   };
 
-  const MenuIcon = (p: { d: string }) => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" innerHTML={p.d} />
+  const MenuIcon = (p: { children: JSX.Element }) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      {p.children}
+    </svg>
   );
 
   const containerRow = (c: Container, stackName?: string) => {
@@ -717,7 +719,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 onClick={(e) => { e.stopPropagation(); props.onAskAi?.(c.id, c.name, c.image); }}
                 title="Ask AI about this container"
               >
-                <MenuIcon d='<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/>' />
+                <MenuIcon><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></MenuIcon>
               </button>
             </Show>
             <Show
@@ -750,10 +752,10 @@ export default function ContainersPage(props: ContainersPageProps) {
                     onClick={() => { doRestart(c.id, new MouseEvent("click")); setContainerMenuOpen(null); }}
                     disabled={loading() || c.state !== "Running"}
                   >
-                    <MenuIcon d='<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' /> Restart
+                    <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></MenuIcon> Restart
                   </button>
                   <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.(containerPage(c)); setContainerMenuOpen(null); }}>
-                    <MenuIcon d='<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' /> Logs
+                    <MenuIcon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></MenuIcon> Logs
                   </button>
                   <Show when={c.state === "Running"}>
                     <button
@@ -764,17 +766,17 @@ export default function ContainersPage(props: ContainersPageProps) {
                         setContainerMenuOpen(null);
                       }}
                     >
-                      <MenuIcon d='<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>' /> Open shell
+                      <MenuIcon><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></MenuIcon> Open shell
                     </button>
                   </Show>
                   <button class="dropdown-item ctr-menu-item" onClick={() => { openExposeDialog(c); setContainerMenuOpen(null); }}>
-                    <MenuIcon d='<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' /> Expose via gateway
+                    <MenuIcon><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></MenuIcon> Expose via gateway
                   </button>
                   <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.("settings:schedules"); setContainerMenuOpen(null); }}>
-                    <MenuIcon d='<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' /> Schedule restarts…
+                    <MenuIcon><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></MenuIcon> Schedule restarts…
                   </button>
                   <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.("settings:auto-deploy"); setContainerMenuOpen(null); }}>
-                    <MenuIcon d='<polyline points="23 4 23 10 17 10"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>' /> Auto-deploy on new image…
+                    <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></MenuIcon> Auto-deploy on new image…
                   </button>
                   <div class="dropdown-divider" />
                   <button
@@ -787,7 +789,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                     }}
                     disabled={loading() || c.state === "Running"}
                   >
-                    <MenuIcon d='<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' /> Remove container
+                    <MenuIcon><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></MenuIcon> Remove container
                   </button>
                 </div>
               </Show>
@@ -910,17 +912,17 @@ export default function ContainersPage(props: ContainersPageProps) {
                 <Show when={menuOpen() === group.name}>
                   <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>
                     <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.(`stack:${group.name}`); setMenuOpen(null); }}>
-                      <MenuIcon d='<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>' /> Open stack
+                      <MenuIcon><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></MenuIcon> Open stack
                     </button>
                     <button class="dropdown-item ctr-menu-item" onClick={() => { restartStack(group.name); setMenuOpen(null); }}>
-                      <MenuIcon d='<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' /> Restart
+                      <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></MenuIcon> Restart
                     </button>
                     <button class="dropdown-item ctr-menu-item" onClick={() => { pullStack(group.name); setMenuOpen(null); }}>
-                      <MenuIcon d='<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>' /> Pull images
+                      <MenuIcon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></MenuIcon> Pull images
                     </button>
                     <div class="dropdown-divider" />
                     <button class="dropdown-item dropdown-item-danger ctr-menu-item" onClick={() => { deleteStack(group.name); setMenuOpen(null); }}>
-                      <MenuIcon d='<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' /> Delete stack
+                      <MenuIcon><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></MenuIcon> Delete stack
                     </button>
                   </div>
                 </Show>
@@ -956,7 +958,7 @@ export default function ContainersPage(props: ContainersPageProps) {
         <div class="ctr-header-actions">
           <Show when={runningContainers().length >= 2}>
             <button class="btn btn-ghost btn-iconed" onClick={() => setShowMultiLog(true)} title="Follow the logs of all running containers together">
-              <MenuIcon d='<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>' />
+              <MenuIcon><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></MenuIcon>
               Logs
             </button>
           </Show>
@@ -981,11 +983,11 @@ export default function ContainersPage(props: ContainersPageProps) {
             </button>
           </Show>
           <button class="btn btn-ghost btn-iconed" onClick={() => openFolderDialog()} title="Start a project from a folder with a compose file">
-            <MenuIcon d='<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>' />
+            <MenuIcon><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></MenuIcon>
             Open folder
           </button>
           <button class="btn btn-accent btn-iconed" onClick={() => setShowRunDialog(true)} title="Run a container from an image">
-            <MenuIcon d='<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>' />
+            <MenuIcon><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></MenuIcon>
             Run
           </button>
         </div>
@@ -1018,11 +1020,11 @@ export default function ContainersPage(props: ContainersPageProps) {
         </div>
         <div class="segmented ctr-view" role="tablist">
           <button class={viewMode() === "stacks" ? "active" : ""} onClick={() => setViewMode("stacks")} title="Grouped by stack">
-            <MenuIcon d='<rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/>' />
+            <MenuIcon><rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/></MenuIcon>
             Stacks
           </button>
           <button class={viewMode() === "list" ? "active" : ""} onClick={() => setViewMode("list")} title="One list">
-            <MenuIcon d='<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>' />
+            <MenuIcon><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></MenuIcon>
             List
           </button>
         </div>
