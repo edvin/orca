@@ -1,4 +1,4 @@
-import { createSignal, createEffect, on, onMount, onCleanup, For, Show, createMemo } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, For, Show, createMemo } from "solid-js";
 import { openContainerOn } from "../lib/containerTab";
 import DockerUnreachable from "../components/DockerUnreachable";
 import { onIntent } from "../lib/pageIntent";
@@ -21,6 +21,8 @@ import PortLinks from "../components/PortLinks";
 import { portGroups } from "../lib/ports";
 import LastUpdated from "../components/LastUpdated";
 import { useContainerStats } from "../lib/statsStore";
+import { getCpuHistory, getMetricsHistory } from "../lib/metricsStore";
+import Sparkline from "../components/Sparkline";
 import { logError } from "../lib/activityStore";
 import MultiLogViewer from "../components/MultiLogViewer";
 import { closeOnEscape } from "../lib/closeOnEscape";
@@ -36,6 +38,23 @@ interface StackGroup {
   composeProject?: ComposeProject;
 }
 
+function readPref<T extends string>(key: string, allowed: T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    return allowed.includes(v as T) ? (v as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writePref(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // private window or blocked storage: the default applies next time
+  }
+}
+
 export default function ContainersPage(props: ContainersPageProps) {
   // Shared lists, refreshed by Docker events (see lib/dockerStore.ts).
   const containerList = containersStore.use();
@@ -43,7 +62,13 @@ export default function ContainersPage(props: ContainersPageProps) {
   const containers = containerList.list;
   const stacks = stackList.list;
   const [search, setSearch] = createSignal("");
-  const [stateFilter, setStateFilter] = createSignal<"all" | "running" | "stopped">("all");
+  // The filter and the view are remembered: most visits are to see what runs.
+  const [stateFilter, setStateFilter] = createSignal<"all" | "running" | "stopped">(
+    readPref("orca.containers.filter", ["running", "stopped", "all"], "running"),
+  );
+  const [viewMode, setViewMode] = createSignal<"stacks" | "list">(readPref("orca.containers.view", ["stacks", "list"], "stacks"));
+  createEffect(() => writePref("orca.containers.filter", stateFilter()));
+  createEffect(() => writePref("orca.containers.view", viewMode()));
   const lastUpdated = () => {
     const t = containerList.updatedAt();
     return t ? new Date(t) : null;
@@ -55,8 +80,8 @@ export default function ContainersPage(props: ContainersPageProps) {
   onIntent("containers", (a) => { if (a === "run") setShowRunDialog(true); });
   // Stats of all running containers, shared with the dashboard.
   const { stats: inlineStats } = useContainerStats();
-  const [expanded, setExpanded] = createSignal<Set<string>>(new Set(["__standalone__"]));
-  let hasAutoExpanded = false;
+  // Stacks the user opened or closed; the rest follow `openByDefault`.
+  const [toggled, setToggled] = createSignal<Map<string, boolean>>(new Map());
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const [containerMenuOpen, setContainerMenuOpen] = createSignal<string | null>(null);
   closeOnEscape(
@@ -93,19 +118,6 @@ export default function ContainersPage(props: ContainersPageProps) {
       loadGatewayRoutes();
     }
   };
-
-  // Auto-expand stacks with running containers (only on first load)
-  createEffect(on(stackList.loaded, (loaded) => {
-    if (!loaded || hasAutoExpanded) return;
-    hasAutoExpanded = true;
-    const autoExpand = new Set(expanded());
-    for (const stack of stacks()) {
-      if (stack.services.some((s) => s.state === "Running")) {
-        autoExpand.add(stack.name);
-      }
-    }
-    setExpanded(autoExpand);
-  }));
 
   useRefresh(refresh);
 
@@ -480,11 +492,15 @@ export default function ContainersPage(props: ContainersPageProps) {
     (containers() || []).filter((c) => c.state === "Running")
   );
 
-  const toggleExpand = (name: string) => {
-    const next = new Set(expanded());
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    setExpanded(next);
+  // Open unless nothing in it runs, while showing everything: a filter or
+  // a search shows only what matches, so that's open.
+  const openByDefault = (list: Container[]) =>
+    stateFilter() !== "all" || search() !== "" || list.some((c) => c.state === "Running");
+  const isOpen = (name: string, list: Container[]) => toggled().get(name) ?? openByDefault(list);
+  const toggleExpand = (name: string, list: Container[]) => {
+    const next = new Map(toggled());
+    next.set(name, !isOpen(name, list));
+    setToggled(next);
   };
 
   const doAction = async (action: string, id: string, e: MouseEvent) => {
@@ -549,14 +565,21 @@ export default function ContainersPage(props: ContainersPageProps) {
     setStackActionInProgress(null);
   };
 
-  const stateClass = (state: string) => {
-    switch (state) {
-      case "Running": return "state-running";
-      case "Exited": return "state-exited";
-      case "Created": return "state-created";
-      case "Paused": return "state-paused";
-      default: return "state-stopped";
+  // What a container is doing, in a word, and how it should look.
+  const status = (c: Container): { label: string; tone: "ok" | "warn" | "bad" | "off"; pulse?: boolean; title?: string } => {
+    if (c.state === "Running") {
+      if (c.health_status === "unhealthy") {
+        const out = c.health_log?.[0]?.output?.trim();
+        return { label: "Unhealthy", tone: "bad", title: out ? `Unhealthy: ${out}` : "Its health check fails" };
+      }
+      if (c.health_status === "starting") return { label: "Starting", tone: "warn", pulse: true, title: "Health check starting" };
+      if (c.health_status === "healthy") return { label: "Healthy", tone: "ok", title: "Running, health check passes" };
+      return { label: "Running", tone: "ok" };
     }
+    if (c.state === "Paused") return { label: "Paused", tone: "warn" };
+    if (c.state === "Restarting") return { label: "Restarting", tone: "warn", pulse: true };
+    if (c.state === "Created") return { label: "Created", tone: "off", title: "Created, never started" };
+    return { label: c.state || "Stopped", tone: "off" };
   };
 
   const memPercent = (s: ContainerStats) => {
@@ -577,182 +600,136 @@ export default function ContainersPage(props: ContainersPageProps) {
     return c.name;
   };
 
+  const containerPage = (c: Container) => {
+    const stack = c.labels?.["com.docker.compose.project"];
+    return stack ? `container:${c.id},stack:${stack}` : `container:${c.id}`;
+  };
+
+  const MenuIcon = (p: { d: string }) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" innerHTML={p.d} />
+  );
+
   const containerRow = (c: Container, stackName?: string) => {
-    const cStats = () => inlineStats()[c.id];
+    const cStats = () => (c.state === "Running" ? inlineStats()[c.id] : undefined);
+    const st = () => status(c);
+    // The list view names the stack, which the stacks view says in the card.
+    const stackLabel = () => (stackName ? undefined : c.labels?.["com.docker.compose.project"]);
     return (
-      <tr
-        onClick={() =>
-          props.onNavigate?.(
-            stackName
-              ? `container:${c.id},stack:${stackName}`
-              : `container:${c.id}`
-          )
-        }
-        style={{
-          cursor: "pointer",
-          background: selected().has(c.id) ? "rgba(88, 166, 255, 0.06)" : undefined,
-        }}
+      <div
+        class={`ctr-row ${c.state === "Running" ? "" : "ctr-row-off"} ${selected().has(c.id) ? "ctr-row-selected" : ""} ${containerMenuOpen() === c.id ? "ctr-row-menu" : ""}`}
+        onClick={() => props.onNavigate?.(containerPage(c))}
       >
-        <td style={{ width: "36px" }}>
+        <div class="ctr-check">
           <input
             type="checkbox"
             checked={selected().has(c.id)}
             onChange={(e) => toggleSelect(c.id, e as any)}
             onClick={(e) => e.stopPropagation()}
-            style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
+            aria-label={`Select ${c.name}`}
           />
-        </td>
-        <td style={{ "padding-left": stackName ? "44px" : "16px", "white-space": "nowrap" }}>
-          <span class={c.state === "Running" ? "state-indicator-running" : "state-indicator-stopped"}>
-            {c.state === "Running" ? "\u25B6" : "\u25B7"}
+        </div>
+        <div class="ctr-name">
+          <div class="ctr-name-line">
+            <span class="ctr-title" title={c.name}>{shortName(c, stackName)}</span>
+            <For each={routesByContainer().get(c.name) ?? []}>
+              {(route) => (
+                <span
+                  class="ctr-route"
+                  title={`Gateway: https://${route.hostname}. Click to manage`}
+                  onClick={(ev) => { ev.stopPropagation(); openExposeDialog(c); }}
+                >
+                  {route.hostname}
+                </span>
+              )}
+            </For>
+          </div>
+          <div class="ctr-sub" title={c.image}>
+            <Show when={stackLabel()}>{(s) => <span class="ctr-stack-tag">{s()}</span>}</Show>
+            <span class="ctr-image">{c.image.startsWith("sha256:") ? c.image.slice(7, 19) : c.image}</span>
+          </div>
+        </div>
+        <div class="ctr-status">
+          <span class={`ctr-pill ctr-pill-${st().tone} ${st().pulse ? "ctr-pulse" : ""}`} title={st().title ?? st().label}>
+            <span class="ctr-pill-dot" />
+            {st().label}
           </span>
-          <span style={{ "font-weight": "500", "margin-left": "6px" }} title={c.name}>
-            {shortName(c, stackName)}
-          </span>
-          <For each={routesByContainer().get(c.name) ?? []}>
-            {(route) => (
-              <span
-                style={{
-                  "margin-left": "6px",
-                  "font-size": "10px",
-                  color: "#58a6ff",
-                  background: "rgba(88,166,255,0.1)",
-                  border: "1px solid rgba(88,166,255,0.2)",
-                  padding: "1px 6px",
-                  "border-radius": "8px",
-                  "font-family": "monospace",
-                  "white-space": "nowrap",
-                  cursor: "pointer",
-                }}
-                title={`Gateway: https://${route.hostname} — click to manage`}
-                onClick={(ev) => { ev.stopPropagation(); openExposeDialog(c); }}
-              >
-                {route.hostname}
-              </span>
-            )}
-          </For>
-        </td>
-        <td class="mono" style={{ color: "#8b949e", "max-width": "220px", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }} title={c.image}>
-          {c.image.startsWith("sha256:") ? c.image.slice(0, 19) + "..." : c.image}
-        </td>
-        <td>
-          <span class={`state-badge ${stateClass(c.state)}`}>{c.state}</span>
-          <Show when={c.health_status && c.health_status !== "none" && c.health_status !== ""}>
-            <span
-              title={
-                c.health_status === "unhealthy"
-                  ? `Unhealthy${c.health_log?.[0]?.output ? ": " + c.health_log[0].output.trim() : ""}`
-                  : c.health_status === "healthy"
-                  ? "Healthy"
-                  : "Health check starting..."
-              }
-              style={{
-                "margin-left": "6px",
-                "font-size": "10px",
-                color:
-                  c.health_status === "healthy"
-                    ? "#3fb950"
-                    : c.health_status === "unhealthy"
-                    ? "#f85149"
-                    : "#d29922",
-                ...(c.health_status === "starting"
-                  ? { animation: "pulse 1.5s ease-in-out infinite" }
-                  : {}),
-              }}
-            >
-              {"\u25CF"}
-            </span>
-          </Show>
           <Show when={c.restart_count && c.restart_count > 0}>
-            <span
-              title={`Restarted ${c.restart_count} time${c.restart_count === 1 ? "" : "s"}`}
-              style={{
-                "margin-left": "6px",
-                "font-size": "10px",
-                color: "#d29922",
-                "font-weight": "500",
-              }}
-            >
-              {"\u21BB"} {c.restart_count}
+            <span class="ctr-restarts" title={`Restarted ${c.restart_count} time${c.restart_count === 1 ? "" : "s"}`}>
+              {"↻"} {c.restart_count}
             </span>
           </Show>
-        </td>
-        <td>
-          <Show when={c.state === "Running" && cStats()} fallback={
-            <span style={{ color: "#484f58", "font-size": "11px" }}>
-              {c.state === "Running" ? "-" : "\u2014"}
-            </span>
-          }>
+        </div>
+        <div class="ctr-cpu">
+          <Show when={cStats()} fallback={<span class="ctr-none">{c.state === "Running" ? "…" : ""}</span>}>
             {(s) => (
-              <div class="usage-cell">
-                <span class="usage-key">CPU</span>
-                <ResourceBar value={s().cpu_percent} label={`${s().cpu_percent.toFixed(1)}%`} />
-                <span class="usage-key">MEM</span>
-                <Show when={hasRealMemLimit(s())} fallback={
-                  <div class="inline-resource">
-                    <span class="usage-bar-spacer" />
-                    <span class="resource-bar-label">{formatBytes(s().memory_usage_bytes)}</span>
-                  </div>
-                }>
-                  <ResourceBar value={memPercent(s())} label={formatBytes(s().memory_usage_bytes)} />
+              <>
+                <span class="ctr-spark">
+                  <Sparkline
+                    data={getCpuHistory(c.id).slice(-24)}
+                    times={getMetricsHistory(c.id).slice(-24).map((m) => m.timestamp)}
+                    width={52}
+                    height={18}
+                    color={s().cpu_percent > 80 ? "#f85149" : s().cpu_percent > 50 ? "#d29922" : "#58a6ff"}
+                    fillOpacity={0.15}
+                  />
+                </span>
+                <span class="ctr-num">{s().cpu_percent < 10 ? s().cpu_percent.toFixed(1) : Math.round(s().cpu_percent)}%</span>
+              </>
+            )}
+          </Show>
+        </div>
+        <div class="ctr-mem">
+          <Show when={cStats()} fallback={<span class="ctr-none">{c.state === "Running" ? "…" : ""}</span>}>
+            {(s) => (
+              <div class="ctr-mem-inner" title={hasRealMemLimit(s()) ? `${memPercent(s()).toFixed(0)}% of ${formatBytes(s().memory_limit_bytes)}` : undefined}>
+                <span class="ctr-num">{formatBytes(s().memory_usage_bytes)}</span>
+                <Show when={hasRealMemLimit(s())}>
+                  <ResourceBar value={memPercent(s())} showLabel={false} />
                 </Show>
               </div>
             )}
           </Show>
-        </td>
-        <td class="mono" style={{ "max-width": "200px" }}>
-          <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "align-items": "center" }}>
-            {c.ports && c.ports.length > 0 ? (
-              <PortLinks groups={portGroups(c.image, c.ports)} />
-            ) : (
-              <span style={{ color: "#484f58" }}>-</span>
-            )}
-          </div>
-        </td>
-        <td>
-          <Show when={c.state === "Running" && cStats()} fallback={
-            <span style={{ color: "#484f58", "font-size": "11px" }}>{c.state === "Running" ? "-" : "\u2014"}</span>
-          }>
+        </div>
+        <div class="ctr-ports">
+          <Show when={c.ports && c.ports.length > 0}>
+            <PortLinks groups={portGroups(c.image, c.ports)} />
+          </Show>
+        </div>
+        <div class="ctr-net">
+          <Show when={cStats()}>
             {(s) => (
-              <span style={{ "font-size": "11px", color: "#8b949e", "white-space": "nowrap" }}>
-                {"\u2191"}{formatBytes(s().network_tx_bytes)} {"\u2193"}{formatBytes(s().network_rx_bytes)}
+              <span title="Sent and received since the container started">
+                <span class="ctr-net-up">{"↑"}</span>{formatBytes(s().network_tx_bytes)}
+                <br />
+                <span class="ctr-net-down">{"↓"}</span>{formatBytes(s().network_rx_bytes)}
               </span>
             )}
           </Show>
-        </td>
-        <td style={{ "text-align": "right" }}>
+        </div>
+        <div class="ctr-actions" onClick={(e) => e.stopPropagation()}>
           <div class={`action-icons ${actionInProgress() === c.id ? "loading" : ""}`}>
             <Show when={actionInProgress() === c.id}>
               <div class="action-spinner"><Spinner size={14} /></div>
             </Show>
-            <Show when={c.state === "Running"}>
-              <button
-                class="action-icon action-icon-stop"
-                onClick={(e) => doAction("stop_container", c.id, e)}
-                disabled={loading()}
-                title={`Stop ${c.name}`}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
-              </button>
-            </Show>
-            <Show when={c.state !== "Running"}>
-              <button
-                class="action-icon action-icon-start"
-                onClick={(e) => doAction("start_container", c.id, e)}
-                disabled={loading()}
-                title={`Start ${c.name}`}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              </button>
-            </Show>
             <Show when={props.onAskAi}>
               <button
-                class="action-icon"
+                class="action-icon ctr-hover-only"
                 onClick={(e) => { e.stopPropagation(); props.onAskAi?.(c.id, c.name, c.image); }}
                 title="Ask AI about this container"
-                style={{ "font-size": "14px" }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/><path d="M4 3v2"/><path d="M3 4h2"/><path d="M20 19v2"/><path d="M19 20h2"/></svg>
+                <MenuIcon d='<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/>' />
+              </button>
+            </Show>
+            <Show
+              when={c.state === "Running"}
+              fallback={
+                <button class="action-icon action-icon-start" onClick={(e) => doAction("start_container", c.id, e)} disabled={loading()} title={`Start ${c.name}`}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z" /></svg>
+                </button>
+              }
+            >
+              <button class="action-icon action-icon-stop" onClick={(e) => doAction("stop_container", c.id, e)} disabled={loading()} title={`Stop ${c.name}`}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3" /></svg>
               </button>
             </Show>
             <div class="dropdown-wrapper">
@@ -763,137 +740,228 @@ export default function ContainersPage(props: ContainersPageProps) {
                   setContainerMenuOpen(containerMenuOpen() === c.id ? null : c.id);
                 }}
                 title="More actions"
-                style={{ color: "#8b949e" }}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="13" cy="8" r="1.5" /></svg>
               </button>
               <Show when={containerMenuOpen() === c.id}>
                 <div class="dropdown-menu" onClick={(e: MouseEvent) => e.stopPropagation()}>
                   <button
-                    class="dropdown-item"
+                    class="dropdown-item ctr-menu-item"
                     onClick={() => { doRestart(c.id, new MouseEvent("click")); setContainerMenuOpen(null); }}
                     disabled={loading() || c.state !== "Running"}
                   >
-                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Restart</span>
+                    <MenuIcon d='<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' /> Restart
                   </button>
-                  <button
-                    class="dropdown-item"
-                    onClick={() => {
-                      props.onNavigate?.(
-                        stackName
-                          ? `container:${c.id},stack:${stackName}`
-                          : `container:${c.id}`
-                      );
-                      setContainerMenuOpen(null);
-                    }}
-                  >
-                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Logs</span>
+                  <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.(containerPage(c)); setContainerMenuOpen(null); }}>
+                    <MenuIcon d='<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' /> Logs
                   </button>
                   <Show when={c.state === "Running"}>
                     <button
-                      class="dropdown-item"
+                      class="dropdown-item ctr-menu-item"
                       onClick={() => {
                         openContainerOn(c.id, "terminal");
-                        props.onNavigate?.(stackName ? `container:${c.id},stack:${stackName}` : `container:${c.id}`);
+                        props.onNavigate?.(containerPage(c));
                         setContainerMenuOpen(null);
                       }}
                     >
-                      <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg> Open shell</span>
+                      <MenuIcon d='<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>' /> Open shell
                     </button>
                   </Show>
-                  <button
-                    class="dropdown-item"
-                    onClick={() => { openExposeDialog(c); setContainerMenuOpen(null); }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle", "margin-right": "4px" }}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    {" "}Expose via gateway
+                  <button class="dropdown-item ctr-menu-item" onClick={() => { openExposeDialog(c); setContainerMenuOpen(null); }}>
+                    <MenuIcon d='<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' /> Expose via gateway
                   </button>
-                  <button class="dropdown-item" onClick={() => { props.onNavigate?.("settings:schedules"); setContainerMenuOpen(null); }}>
-                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Schedule restarts…</span>
+                  <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.("settings:schedules"); setContainerMenuOpen(null); }}>
+                    <MenuIcon d='<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' /> Schedule restarts…
                   </button>
-                  <button class="dropdown-item" onClick={() => { props.onNavigate?.("settings:auto-deploy"); setContainerMenuOpen(null); }}>
-                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Auto-deploy on new image…</span>
+                  <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.("settings:auto-deploy"); setContainerMenuOpen(null); }}>
+                    <MenuIcon d='<polyline points="23 4 23 10 17 10"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>' /> Auto-deploy on new image…
                   </button>
                   <div class="dropdown-divider" />
                   <button
-                    class="dropdown-item dropdown-item-danger"
+                    class="dropdown-item dropdown-item-danger ctr-menu-item"
                     onClick={async () => {
+                      setContainerMenuOpen(null);
                       if (await confirmDanger("Remove container", `Remove container '${c.name}'? This cannot be undone.`)) {
                         doAction("remove_container", c.id, new MouseEvent("click"));
                       }
-                      setContainerMenuOpen(null);
                     }}
                     disabled={loading() || c.state === "Running"}
                   >
-                    <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Remove container</span>
+                    <MenuIcon d='<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' /> Remove container
                   </button>
                 </div>
               </Show>
             </div>
           </div>
-        </td>
-      </tr>
+        </div>
+      </div>
     );
   };
 
-  return (
-    <div>
-      <div class="page-header">
-        <h1 class="page-title">
-          Containers
-          <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": "400", "margin-left": "8px" }}>
-            {totalCount()}
+  // A stack's containers as one bar: a segment each, in the order of the rows.
+  const HealthBar = (p: { containers: Container[] }) => (
+    <span class="ctr-health" style={{ width: `${Math.min(p.containers.length * 14, 140)}px` }}>
+      <For each={p.containers}>
+        {(c) => <span class={`ctr-health-seg ctr-health-${status(c).tone}`} title={`${c.name}: ${status(c).label}`} />}
+      </For>
+    </span>
+  );
+
+  const stackSummary = (list: Container[]) => {
+    const running = list.filter((c) => c.state === "Running").length;
+    const unhealthy = list.filter((c) => status(c).tone === "bad").length;
+    const parts = [
+      running === 0 ? "Stopped" : running === list.length ? `All ${list.length} running` : `${running} of ${list.length} running`,
+    ];
+    if (unhealthy > 0) parts.push(`${unhealthy} unhealthy`);
+    return parts.join(" · ");
+  };
+
+  const ColumnHeads = () => (
+    <div class="ctr-heads">
+      <span />
+      <span>Name</span>
+      <span>Status</span>
+      <span>CPU</span>
+      <span>Memory</span>
+      <span>Ports</span>
+      <span class="ctr-net">Network</span>
+      <span />
+    </div>
+  );
+
+  // The list view: every container that passes the filters, running first.
+  const flatList = createMemo(() => {
+    const { stackGroups, standalone } = grouped();
+    const all = [...stackGroups.flatMap((g) => g.containers), ...standalone];
+    return applyFilters(all).sort(
+      (a, b) => Number(b.state === "Running") - Number(a.state === "Running") || a.name.localeCompare(b.name),
+    );
+  });
+
+  const nothingShown = () =>
+    viewMode() === "list"
+      ? flatList().length === 0
+      : filteredGroups().stackGroups.length === 0 && filteredGroups().standalone.length === 0;
+
+  const StackCard = (p: { group: StackGroup }) => {
+    const group = p.group;
+    const isExpanded = () => isOpen(group.name, group.containers);
+    const isLoading = () => stackActionInProgress() === group.name;
+    const groupRunning = () => group.containers.filter((c) => c.state === "Running").length;
+    const allRunning = () => group.containers.length > 0 && groupRunning() === group.containers.length;
+    const filteredContainers = () => applyFilters(group.containers);
+    const dir = () => group.containers.map((c) => c.labels?.["com.docker.compose.project.working_dir"]).find(Boolean);
+
+    return (
+      <div class={`ctr-card ${groupRunning() === 0 ? "ctr-card-off" : ""} ${menuOpen() === group.name ? "ctr-card-menu" : ""}`}>
+        <div class="ctr-card-head" onClick={() => toggleExpand(group.name, group.containers)}>
+          <span class={`ctr-chevron ${isExpanded() ? "open" : ""}`}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18" /></svg>
           </span>
-          <LastUpdated timestamp={lastUpdated()} />
-        </h1>
-        <div class="page-actions">
-          <div class="filter-pills">
-            <button
-              class={`filter-pill ${stateFilter() === "all" ? "active" : ""}`}
-              onClick={() => setStateFilter("all")}
-            >
-              All ({totalCount()})
-            </button>
-            <button
-              class={`filter-pill ${stateFilter() === "running" ? "active" : ""}`}
-              onClick={() => setStateFilter("running")}
-            >
-              Running ({runningCount()})
-            </button>
-            <button
-              class={`filter-pill ${stateFilter() === "stopped" ? "active" : ""}`}
-              onClick={() => setStateFilter("stopped")}
-            >
-              Stopped ({stoppedCount()})
-            </button>
-          </div>
-          <div style={{ position: "relative", display: "inline-flex", "align-items": "center" }}>
-            <input
-              class="search-input"
-              type="text"
-              placeholder="Search containers & stacks..."
-              value={search()}
-              onInput={(e) => setSearch(e.currentTarget.value)}
-              style={{ "padding-right": "30px" }}
+          <span class="ctr-check">
+            <CheckboxIndicator
+              state={groupCheckState(filteredContainers())}
+              onClick={(e) => { e.stopPropagation(); toggleGroupSelect(filteredContainers()); }}
             />
-            <Show when={search().length > 0}>
-              <button
-                class="search-clear-btn"
-                onClick={() => setSearch("")}
-                title="Clear search"
-                type="button"
-              >
-                &times;
-              </button>
+          </span>
+          <button
+            class="ctr-card-name"
+            title={`Open ${group.name}: profiles, logs, compose file and orca.yaml`}
+            onClick={(e: MouseEvent) => {
+              e.stopPropagation();
+              props.onNavigate?.(`stack:${group.name}`);
+            }}
+          >
+            {group.name}
+            <svg class="ctr-card-name-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+          </button>
+          <HealthBar containers={group.containers} />
+          <span class={`ctr-card-meta ${allRunning() ? "ctr-card-meta-ok" : ""}`}>{stackSummary(group.containers)}</span>
+          <span class="ctr-card-spacer" />
+          <div class="ctr-card-actions" onClick={(e) => e.stopPropagation()}>
+            <Show when={dir()}>
+              {(d) => <span class="ctr-hover-only"><FolderActions path={d()} compact /></span>}
             </Show>
+            <div class={`action-icons ${isLoading() ? "loading" : ""}`}>
+              <Show when={isLoading()}>
+                <div class="action-spinner"><Spinner size={14} /></div>
+              </Show>
+              <Show
+                when={allRunning()}
+                fallback={
+                  <button class="action-icon action-icon-start" onClick={(e) => doStackAction("start_stack", group.name, e)} disabled={isLoading()} title={`Start ${group.name}`}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z" /></svg>
+                  </button>
+                }
+              >
+                <button class="action-icon action-icon-stop" onClick={(e) => doStackAction("stop_stack", group.name, e)} disabled={isLoading()} title={`Stop ${group.name}`}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3" /></svg>
+                </button>
+              </Show>
+              <div class="dropdown-wrapper">
+                <button
+                  class="action-icon"
+                  onClick={() => setMenuOpen(menuOpen() === group.name ? null : group.name)}
+                  title="More actions"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="13" cy="8" r="1.5" /></svg>
+                </button>
+                <Show when={menuOpen() === group.name}>
+                  <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                    <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.(`stack:${group.name}`); setMenuOpen(null); }}>
+                      <MenuIcon d='<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>' /> Open stack
+                    </button>
+                    <button class="dropdown-item ctr-menu-item" onClick={() => { restartStack(group.name); setMenuOpen(null); }}>
+                      <MenuIcon d='<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>' /> Restart
+                    </button>
+                    <button class="dropdown-item ctr-menu-item" onClick={() => { pullStack(group.name); setMenuOpen(null); }}>
+                      <MenuIcon d='<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>' /> Pull images
+                    </button>
+                    <div class="dropdown-divider" />
+                    <button class="dropdown-item dropdown-item-danger ctr-menu-item" onClick={() => { deleteStack(group.name); setMenuOpen(null); }}>
+                      <MenuIcon d='<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' /> Delete stack
+                    </button>
+                  </div>
+                </Show>
+              </div>
+            </div>
           </div>
+        </div>
+        <Show when={isExpanded() && filteredContainers().length > 0}>
+          <div class="ctr-rows">
+            <For each={filteredContainers()}>{(c) => containerRow(c, group.name)}</For>
+          </div>
+        </Show>
+      </div>
+    );
+  };
+
+  const filterLabel = () => (stateFilter() === "running" ? "running" : "stopped");
+
+  return (
+    <div class={`ctr-page ${selected().size > 0 ? "ctr-selecting" : ""}`}>
+      <div class="ctr-header">
+        <div class="ctr-heading">
+          <h1 class="page-title">Containers</h1>
+          <div class="ctr-counts">
+            <span><span class="ctr-count-dot ctr-count-dot-ok" />{runningCount()} running</span>
+            <span><span class="ctr-count-dot" />{stoppedCount()} stopped</span>
+            <Show when={grouped().stackGroups.length > 0}>
+              <span>{grouped().stackGroups.length} stack{grouped().stackGroups.length === 1 ? "" : "s"}</span>
+            </Show>
+            <LastUpdated timestamp={lastUpdated()} />
+          </div>
+        </div>
+        <div class="ctr-header-actions">
           <Show when={runningContainers().length >= 2}>
-            <button class="btn" onClick={() => setShowMultiLog(true)}>
-              Combined logs
+            <button class="btn btn-ghost btn-iconed" onClick={() => setShowMultiLog(true)} title="Follow the logs of all running containers together">
+              <MenuIcon d='<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>' />
+              Logs
             </button>
           </Show>
           <Show when={runningContainers().length > 0}>
-            <button class="btn" onClick={async () => {
+            <button class="btn btn-ghost btn-iconed btn-ghost-danger" title="Stop every running container" onClick={async () => {
               const running = runningContainers();
               if (!await confirmDanger("Stop all containers", `Stop all ${running.length} running containers?`)) return;
               let stopped = 0;
@@ -908,14 +976,54 @@ export default function ContainersPage(props: ContainersPageProps) {
               showToast(`Stopped ${stopped} container${stopped !== 1 ? "s" : ""}`, "success");
               await refresh();
             }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3" /></svg>
               Stop all
             </button>
           </Show>
-          <button class="btn" onClick={() => openFolderDialog()} title="Start a project from a folder with a compose file">
+          <button class="btn btn-ghost btn-iconed" onClick={() => openFolderDialog()} title="Start a project from a folder with a compose file">
+            <MenuIcon d='<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>' />
             Open folder
           </button>
-          <button class="btn btn-primary" onClick={() => setShowRunDialog(true)}>
+          <button class="btn btn-accent btn-iconed" onClick={() => setShowRunDialog(true)} title="Run a container from an image">
+            <MenuIcon d='<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>' />
             Run
+          </button>
+        </div>
+      </div>
+
+      <div class="ctr-toolbar">
+        <div class="segmented ctr-filter" role="tablist">
+          <button class={stateFilter() === "running" ? "active" : ""} onClick={() => setStateFilter("running")}>
+            Running <span class="ctr-seg-count">{runningCount()}</span>
+          </button>
+          <button class={stateFilter() === "stopped" ? "active" : ""} onClick={() => setStateFilter("stopped")}>
+            Stopped <span class="ctr-seg-count">{stoppedCount()}</span>
+          </button>
+          <button class={stateFilter() === "all" ? "active" : ""} onClick={() => setStateFilter("all")}>
+            All <span class="ctr-seg-count">{totalCount()}</span>
+          </button>
+        </div>
+        <div class="ctr-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+          <input
+            type="text"
+            placeholder="Search names, images, stacks"
+            value={search()}
+            onInput={(e) => setSearch(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setSearch(""); }}
+          />
+          <Show when={search().length > 0}>
+            <button class="ctr-search-clear" onClick={() => setSearch("")} title="Clear search" type="button">&times;</button>
+          </Show>
+        </div>
+        <div class="segmented ctr-view" role="tablist">
+          <button class={viewMode() === "stacks" ? "active" : ""} onClick={() => setViewMode("stacks")} title="Grouped by stack">
+            <MenuIcon d='<rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/>' />
+            Stacks
+          </button>
+          <button class={viewMode() === "list" ? "active" : ""} onClick={() => setViewMode("list")} title="One list">
+            <MenuIcon d='<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>' />
+            List
           </button>
         </div>
       </div>
@@ -927,9 +1035,6 @@ export default function ContainersPage(props: ContainersPageProps) {
         fallback={
           <Show when={lastUpdated() !== null || !!containerList.error()} fallback={
             <table class="table">
-              <thead>
-                <tr><th>Name</th><th>Image</th><th>Status</th><th>Ports</th><th>Actions</th></tr>
-              </thead>
               <tbody>
                 <SkeletonRow columns={5} />
                 <SkeletonRow columns={5} />
@@ -958,226 +1063,67 @@ export default function ContainersPage(props: ContainersPageProps) {
           </Show>
         }
       >
-        <div class="stack-list">
-          {/* Stack groups */}
-          <For each={filteredGroups().stackGroups}>
-            {(group) => {
-              const isExpanded = () => expanded().has(group.name);
-              const isLoading = () => stackActionInProgress() === group.name;
-              const groupRunning = () => group.containers.filter((c) => c.state === "Running").length;
-              const allRunning = () => group.containers.length > 0 && groupRunning() === group.containers.length;
-              const filteredContainers = () => applyFilters(group.containers);
-
-              return (
-                <div class={`stack-card ${allRunning() ? "stack-card-healthy" : ""}`}>
-                  <div class="stack-header" onClick={() => toggleExpand(group.name)}>
-                    <div class="stack-header-left">
-                      <span class={`expand-arrow ${isExpanded() ? "expanded" : ""}`}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                      </span>
-                      <CheckboxIndicator
-                        state={groupCheckState(filteredContainers())}
-                        onClick={(e) => { e.stopPropagation(); toggleGroupSelect(filteredContainers()); }}
-                      />
-                      <div>
-                        <div class="stack-name">
-                          <button
-                            class="stack-link"
-                            title={`Open ${group.name}: profiles, logs, compose file and orca.yaml`}
-                            onClick={(e: MouseEvent) => {
-                              e.stopPropagation();
-                              props.onNavigate?.(`stack:${group.name}`);
-                            }}
-                          >
-                            {group.name}<span class="stack-link-chevron">›</span>
-                          </button>
-                          <span class="service-dots" style={{ "margin-left": "10px", display: "inline-flex" }}>
-                            <For each={group.containers}>
-                              {(c) => (
-                                <span
-                                  class={`service-dot ${
-                                    c.state === "Running"
-                                      ? "service-dot-running"
-                                      : c.state === "Exited"
-                                      ? "service-dot-stopped"
-                                      : "service-dot-other"
-                                  }`}
-                                  title={`${c.name}: ${c.state}`}
-                                />
-                              )}
-                            </For>
-                          </span>
-                        </div>
-                        <div class="stack-meta">
-                          {groupRunning()}/{group.containers.length} running
-                        </div>
-                      </div>
-                    </div>
-                    <div class="stack-header-right">
-                      <Show when={group.containers.map((c) => c.labels?.["com.docker.compose.project.working_dir"]).find(Boolean)}>
-                        {(dir) => <span class="stack-folder" onClick={(e) => e.stopPropagation()}><FolderActions path={dir()} compact /></span>}
-                      </Show>
-                      <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); props.onNavigate?.(`stack:${group.name}`); }}>
-                        Open stack
-                      </button>
-                      <div class={`action-icons ${isLoading() ? "loading" : ""}`} style={{ "margin-right": "4px" }}>
-                        <Show when={isLoading()}>
-                          <div class="action-spinner"><Spinner size={14} /></div>
-                        </Show>
-                        <Show when={allRunning()}>
-                          <button
-                            class="action-icon action-icon-stop"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              doStackAction("stop_stack", group.name, e);
-                            }}
-                            disabled={isLoading()}
-                            title="Stop stack"
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
-                          </button>
-                        </Show>
-                        <Show when={!allRunning()}>
-                          <button
-                            class="action-icon action-icon-start"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              doStackAction("start_stack", group.name, e);
-                            }}
-                            disabled={isLoading()}
-                            title="Start stack"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                          </button>
-                        </Show>
-                        <div class="dropdown-wrapper">
-                          <button
-                            class="action-icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMenuOpen(menuOpen() === group.name ? null : group.name);
-                            }}
-                            title="More actions"
-                            style={{ color: "#8b949e" }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
-                          </button>
-                          <Show when={menuOpen() === group.name}>
-                            <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                              <button class="dropdown-item" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { restartStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Restart</button>
-                              <button class="dropdown-item" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { pullStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Pull images</button>
-                              <div class="dropdown-divider" />
-                              <button class="dropdown-item dropdown-item-danger" style={{ display: "flex", "align-items": "center", gap: "8px" }} onClick={() => { deleteStack(group.name); setMenuOpen(null); }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete stack</button>
-                            </div>
-                          </Show>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Show when={isExpanded()}>
-                    <div class="stack-services">
-                      <table class="table">
-                        <thead>
-                          <tr>
-                            <th style={{ width: "36px" }}>
-                              <CheckboxIndicator
-                                state={groupCheckState(filteredContainers())}
-                                onClick={() => toggleGroupSelect(filteredContainers())}
-                              />
-                            </th>
-                            <th>Name</th>
-                            <th>Image</th>
-                            <th>State</th>
-                            <th>Usage</th>
-                            <th>Ports</th>
-                            <th>Net I/O</th>
-                            <th style={{ "text-align": "right" }}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <For each={filteredContainers()}>
-                            {(c) => containerRow(c, group.name)}
-                          </For>
-                        </tbody>
-                      </table>
-                    </div>
-                  </Show>
-                </div>
-              );
-            }}
-          </For>
-
-          {/* Standalone containers */}
-          <Show when={filteredGroups().standalone.length > 0}>
-            <div class="stack-card">
-              <div class="stack-header" onClick={() => toggleExpand("__standalone__")}>
-                <div class="stack-header-left">
-                  <span class={`expand-arrow ${expanded().has("__standalone__") ? "expanded" : ""}`}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  </span>
-                  <CheckboxIndicator
-                    state={groupCheckState(filteredGroups().standalone)}
-                    onClick={(e) => { e.stopPropagation(); toggleGroupSelect(filteredGroups().standalone); }}
-                  />
-                  <div>
-                    <div class="stack-name">
-                      Standalone
-                      <span class="service-dots" style={{ "margin-left": "10px", display: "inline-flex" }}>
-                        <For each={filteredGroups().standalone}>
-                          {(c) => (
-                            <span
-                              class={`service-dot ${
-                                c.state === "Running"
-                                  ? "service-dot-running"
-                                  : c.state === "Exited"
-                                  ? "service-dot-stopped"
-                                  : "service-dot-other"
-                              }`}
-                              title={`${c.name}: ${c.state}`}
-                            />
-                          )}
-                        </For>
-                      </span>
-                    </div>
-                    <div class="stack-meta">
-                      {filteredGroups().standalone.filter((c) => c.state === "Running").length}/{filteredGroups().standalone.length} running
-                    </div>
-                  </div>
+        <Show
+          when={!nothingShown()}
+          fallback={
+            <div class="ctr-nothing">
+              <Show
+                when={search()}
+                fallback={
+                  <>
+                    <p>No {filterLabel()} containers.</p>
+                    <button class="btn btn-ghost" onClick={() => setStateFilter("all")}>Show all {totalCount()}</button>
+                  </>
+                }
+              >
+                <p>Nothing matches “{search()}”{stateFilter() === "all" ? "" : ` among the ${filterLabel()} containers`}.</p>
+                <Show when={stateFilter() !== "all"}>
+                  <button class="btn btn-ghost" onClick={() => setStateFilter("all")}>Search all {totalCount()}</button>
+                </Show>
+              </Show>
+            </div>
+          }
+        >
+          <ColumnHeads />
+          <Show
+            when={viewMode() === "stacks"}
+            fallback={
+              <div class="ctr-card">
+                <div class="ctr-rows ctr-rows-flat">
+                  <For each={flatList()}>{(c) => containerRow(c)}</For>
                 </div>
               </div>
+            }
+          >
+            <div class="ctr-cards">
+              <For each={filteredGroups().stackGroups}>{(group) => <StackCard group={group} />}</For>
 
-              <Show when={expanded().has("__standalone__")}>
-                <div class="stack-services">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: "36px" }}>
-                          <CheckboxIndicator
-                            state={groupCheckState(filteredGroups().standalone)}
-                            onClick={() => toggleGroupSelect(filteredGroups().standalone)}
-                          />
-                        </th>
-                        <th>Name</th>
-                        <th>Image</th>
-                        <th>State</th>
-                        <th>Usage</th>
-                        <th>Ports</th>
-                        <th>Net I/O</th>
-                        <th style={{ "text-align": "right" }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <For each={filteredGroups().standalone}>
-                        {(c) => containerRow(c)}
-                      </For>
-                    </tbody>
-                  </table>
+              <Show when={filteredGroups().standalone.length > 0}>
+                <div class="ctr-card">
+                  <div class="ctr-card-head" onClick={() => toggleExpand("__standalone__", filteredGroups().standalone)}>
+                    <span class={`ctr-chevron ${isOpen("__standalone__", filteredGroups().standalone) ? "open" : ""}`}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18" /></svg>
+                    </span>
+                    <span class="ctr-check">
+                      <CheckboxIndicator
+                        state={groupCheckState(filteredGroups().standalone)}
+                        onClick={(e) => { e.stopPropagation(); toggleGroupSelect(filteredGroups().standalone); }}
+                      />
+                    </span>
+                    <span class="ctr-card-name ctr-card-name-plain">Standalone</span>
+                    <HealthBar containers={filteredGroups().standalone} />
+                    <span class="ctr-card-meta">{stackSummary(filteredGroups().standalone)}</span>
+                  </div>
+                  <Show when={isOpen("__standalone__", filteredGroups().standalone)}>
+                    <div class="ctr-rows">
+                      <For each={filteredGroups().standalone}>{(c) => containerRow(c)}</For>
+                    </div>
+                  </Show>
                 </div>
               </Show>
             </div>
           </Show>
-        </div>
+        </Show>
       </Show>
 
       {/* Floating batch action bar */}
@@ -1212,14 +1158,14 @@ export default function ContainersPage(props: ContainersPageProps) {
             )}
           </Show>
           <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStart} disabled={!!batchDeleteProgress()}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Selected
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start
           </button>
           <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStop} disabled={!!batchDeleteProgress()}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg> Stop Selected
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg> Stop
           </button>
           <button class="btn btn-sm btn-danger" onClick={batchDelete} disabled={!!batchDeleteProgress()} style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            {batchDeleteProgress() ? "Deleting..." : "Delete selected"}
+            {batchDeleteProgress() ? "Deleting..." : "Delete"}
           </button>
           <button class="btn btn-sm" onClick={() => setSelected(new Set<string>())} disabled={!!batchDeleteProgress()}>
             Clear

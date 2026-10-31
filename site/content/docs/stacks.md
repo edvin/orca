@@ -10,7 +10,7 @@ A stack is a Docker Compose project. Orca shows every compose project on the mac
 
 Docker Compose labels every container it creates with the project name, its working directory and its compose files. Orca groups containers by these labels, so any project you start with `docker compose up` shows up as a stack without extra setup. A project started from several compose files (`docker compose -f compose.yaml -f compose.dev.yaml up`) works the same way: Orca passes every file to Compose for every command it runs on the stack.
 
-Stacks appear as cards at the top of the **Containers** page. Each card shows the stack's services, start and stop buttons, and a **More actions** menu with **Restart**, **Pull images** and **Delete stack**. Click the stack's name, or **Open stack**, to open its page. The **Your apps** cards on the **Dashboard** list the same stacks with their HTTPS URLs.
+Stacks appear as cards on the **Containers** page. Each card shows the stack's services, how many of them run, a start or stop button, and a **More actions** menu with **Open stack**, **Restart**, **Pull images** and **Delete stack**. Click the stack's name, or **Open stack**, to open its page. The **Your apps** cards on the **Dashboard** list the same stacks with their HTTPS URLs.
 
 The stack status is **Running** when all services run, **Partial** when only some do, and **Stopped** when none do.
 

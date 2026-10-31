@@ -313,7 +313,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("03 - Container detail", async ({ page }) => {
     await navigateTo(page, "Containers");
-    const row = page.locator("tr").filter({ has: page.locator("text=Running") }).first();
+    const row = page.locator(".ctr-row").filter({ hasText: "Running" }).first();
     if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
       await row.click();
       await waitForPageLoad(page);
@@ -324,7 +324,7 @@ test.describe("Orca Desktop Screenshots", () => {
   test("04 - Container logs", async ({ page }) => {
     await navigateTo(page, "Containers");
     // Click a running container (look for "Running" badge)
-    const runningRow = page.locator("tr").filter({ has: page.locator("text=Running") }).first();
+    const runningRow = page.locator(".ctr-row").filter({ hasText: "Running" }).first();
     if (await runningRow.isVisible({ timeout: 3000 }).catch(() => false)) {
       await runningRow.click();
       await waitForPageLoad(page);
@@ -339,7 +339,7 @@ test.describe("Orca Desktop Screenshots", () => {
 
   test("05 - Container files", async ({ page }) => {
     await navigateTo(page, "Containers");
-    const row = page.locator("tr").filter({ has: page.locator("text=Running") }).first();
+    const row = page.locator(".ctr-row").filter({ hasText: "Running" }).first();
     if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
       await row.click();
       await waitForPageLoad(page);

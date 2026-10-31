@@ -36,14 +36,17 @@ You can also start a container from an image on the **Images** page, or deploy a
 
 ![The Containers page with stacks grouped as cards and standalone containers below](/assets/screens/containers.webp)
 
-The **Containers** page lists every container, with compose projects grouped into stack cards. Each row shows the image, state, ports, current CPU and memory usage, and network I/O.
+The **Containers** page lists your containers, with compose projects grouped into stack cards. Each row shows the container's name and image, its status, a live CPU graph, memory, its published ports on this computer (click a web port to open it; **+N** lists them all, with the container port each one leads to) and network I/O. A status of **Healthy**, **Unhealthy** or **Starting** comes from the container's health check.
 
-- Filter with **All**, **Running** and **Stopped**, or search by name with the search box.
-- Select rows with the checkboxes to start, stop or delete several containers at once.
-- **Stop all** stops every running container after a confirmation.
+- **Running**, **Stopped** and **All** choose what the page shows. It opens on **Running**, and remembers your choice.
+- **Stacks** groups containers by stack; **List** shows them all in one list, running ones first, each with its stack's name. This is remembered too.
+- The search box matches names, images and stack names. Press Escape to clear it.
+- Each stack card has a bar with a segment per container: green when it runs, red when its health check fails, grey when it's stopped. Click the card to fold it; stacks with nothing running start folded under **All**.
+- Select containers with the checkboxes that appear as you point at a row, then start, stop or delete them together.
+- **Logs** in the page header follows the logs of every running container together, and **Stop all** stops every running container after a confirmation.
 - The **More actions** menu (the "…" at the end of a row) has **Restart**, **Logs**, **Open shell**, **Expose via gateway**, **Schedule restarts…**, **Auto-deploy on new image…** and **Remove container**. **Open shell** shows only while the container runs, and opens its page on the **Terminal** tab. A running container has to be stopped before you can remove it.
 
-Click a stack's name, or its **Open stack** button, to open its stack page. See [Compose stacks](/docs/stacks/).
+Click a stack's name, or **Open stack** in its **More actions** menu, to open its stack page. See [Compose stacks](/docs/stacks/).
 
 **Open folder** in the page header starts a project from a folder with a compose file. See [Open a project folder](/docs/stacks/#open-a-project-folder).
 
