@@ -226,13 +226,22 @@ hooks:
       { name: "Docker Compose", description: "docker compose is available", status: "Pass", fix_action: null, details: "v5.1.4" },
       { name: "Gateway ports", description: "Ports 80 and 443 are free for the gateway", status: "Pass", fix_action: null, details: null },
     ] },
-    get_machine_info: { name: "orca", status: "Running", cpus: 4, memory_gb: 12, disk_gb: 100, os: "Ubuntu 26.04" },
+    get_machine_info: { name: "orca", state: "Running", backend: "Lima", config: { name: "orca", cpus: 4, memory_mb: 12288, disk_gb: 100, runtime: "docker", mounts: [] } },
     get_version: "0.50.0",
     get_active_host: { id: null, name: "Local", url: "http://127.0.0.1:9477/api/v1", is_remote: false },
     list_remote_hosts: [], probe_all_hosts: [{ id: null, name: "Local", online: true, version: "0.50.0" }],
     list_containers: containers, list_stacks: stacks, list_images: images,
     list_volumes: ["shop_pgdata", "shop_redis", "sso_pgdata", "website_mysql", "telemetry_grafana", "telemetry_prometheus"].map((n) => ({ name: n, driver: "local", mountpoint: `/var/lib/docker/volumes/${n}/_data`, labels: {}, created_at: new Date().toISOString() })),
     list_networks: ["bridge", "shop_default", "sso_default", "website_default", "telemetry_default", "orca-gateway"].map((n, i) => ({ id: hex(64), name: n, driver: "bridge", subnet: `172.${18 + i}.0.0/16`, gateway: `172.${18 + i}.0.1`, labels: {} })),
+    network_topology: [
+      ["shop_default", (c) => c.labels["com.docker.compose.project"] === "shop"],
+      ["shop-feature-checkout_default", (c) => c.labels["com.docker.compose.project"] === "shop-feature-checkout"],
+      ["sso_default", (c) => c.labels["com.docker.compose.project"] === "sso"],
+      ["website_default", (c) => c.labels["com.docker.compose.project"] === "website"],
+      ["telemetry_default", (c) => c.labels["com.docker.compose.project"] === "telemetry"],
+      ["orca-gateway", (c) => ["orca-gateway", "shop-web-1", "shop-api-1", "sso-keycloak-1", "website-wordpress-1"].includes(c.name)],
+    ].map(([name, has], i) => ({ id: hex(64), name, driver: "bridge", subnet: `172.${18 + i}.0.0/16`, gateway: `172.${18 + i}.0.1`,
+      containers: containers.filter((c) => c.state === "Running" && has(c)).map((c, j) => ({ id: c.id, name: c.name, ip: `172.${18 + i}.0.${j + 2}` })) })),
     system_health: {
       docker_connected: true, docker_version: "29.9.1",
       disk_usage: { images_size_bytes: 7.6e9, containers_size_bytes: 3.1e8, volumes_size_bytes: 2.4e9, build_cache_size_bytes: 1.9e9, total_size_bytes: 1.22e10, reclaimable_bytes: 2.1e9, computed_at: now },
@@ -454,6 +463,16 @@ const SHOTS = {
   },
   async worktrees(page) {
     await nav(page, "Worktrees");
+    return { clip: content };
+  },
+  async networks(page) {
+    await nav(page, "Networks");
+    return { clip: content };
+  },
+  async "system-health"(page) {
+    await nav(page, "System Health");
+    await page.waitForTimeout(2500);
+   
     return { clip: content };
   },
   async "container-detail"(page) {

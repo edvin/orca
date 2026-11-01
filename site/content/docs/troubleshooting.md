@@ -8,7 +8,11 @@ Most problems show up on the **System Health** page, and most of them have a but
 
 ## Start with System Health
 
-Open **System Health** in the sidebar. Each check shows its status, and a failing check has a **Fix** button that runs the repair and streams its output in a dialog. The buttons at the top:
+Open **System Health** in the sidebar. Each check shows its status, and a failing check has a **Fix** button that runs the repair and streams its output in a dialog.
+
+![System Health with every check passing: the Docker runtime, Orca's VM, Compose and the gateway's ports](/assets/screens/system-health.webp)
+
+The buttons at the top:
 
 | Button | What it does |
 |---|---|
