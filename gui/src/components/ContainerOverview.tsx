@@ -126,7 +126,8 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
       if (!r) return null;
       // "/api/*" serves under /api/
       const path = (r.path ?? "").replace(/\*$/, "");
-      return { hostname: `${r.hostname}${path.replace(/\/$/, "")}`, url: r.url || `https://${r.hostname}${path}`, port: r.port };
+      // The daemon's url is the hostname's; the path comes on top.
+      return { hostname: `${r.hostname}${path.replace(/\/$/, "")}`, url: `${r.url || `https://${r.hostname}`}${path}`, port: r.port };
     } catch {
       return null;
     }

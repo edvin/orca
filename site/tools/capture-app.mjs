@@ -140,7 +140,7 @@ function installMock(templates) {
     { hostname: "sso.localhost", container_name: "sso-keycloak-1", port: 8080, enabled: true, owner: "label:sso-keycloak-1", presentation: { title: "Keycloak" } },
     { hostname: "website.localhost", container_name: "website-wordpress-1", port: 80, enabled: true, owner: "stack:website" },
     { hostname: "grafana.localhost", container_name: "telemetry-grafana-1", port: 3000, enabled: true },
-  ].map((r) => ({ ...r, url: `https://${r.hostname}${(r.path ?? "").replace(/\*$/, "")}` }));
+  ].map((r) => ({ ...r, url: `https://${r.hostname}` }));
 
   const orcaYaml = `# Acme shop: how Orca runs it. https://orca-desktop.com/docs/orca-yaml/
 gateway:
@@ -645,7 +645,7 @@ async function nav(page, label) {
 }
 async function openStack(page) {
   await nav(page, "Containers");
-  await page.locator(".stack-link", { hasText: /^shop›?$/ }).first().click();
+  await page.locator(".ctr-card-name", { hasText: /^shop$/ }).first().click();
   await page.waitForTimeout(2200);
 }
 
