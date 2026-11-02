@@ -830,6 +830,7 @@ async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
             to_route(r, format!("{OWNER}{}:{key}", file.name), group, p.icon.as_ref())
         }));
     }
+    let wanted = merge_duplicate_routes(wanted);
     let n = wanted.len();
     // Each project's links, under the same name as its routes.
     let links: Vec<orca_core::config::StackLinkGroup> = file
@@ -880,6 +881,36 @@ async fn sync_routes(state: &AppState, file: &WorkspaceFile) -> Result<usize> {
     }
     crate::gateway_sync::routes_changed();
     Ok(n)
+}
+
+/// One route per hostname, path and kind. A workspace file that lists the
+/// same route twice gets it once; the first one's target wins. A route with
+/// `websocket: true` is a different route (only WebSocket connections take
+/// it), so it stays beside the plain one.
+fn merge_duplicate_routes(routes: Vec<GatewayRoute>) -> Vec<GatewayRoute> {
+    let mut out: Vec<GatewayRoute> = Vec::with_capacity(routes.len());
+    for r in routes {
+        match out
+            .iter()
+            .find(|o| o.hostname == r.hostname && o.path == r.path && o.websocket == r.websocket)
+        {
+            Some(first) => {
+                if first.container_name != r.container_name || first.port != r.port {
+                    tracing::warn!(
+                        "workspace: {}{} is listed twice, for {}:{} and {}:{}; using the first",
+                        r.hostname,
+                        r.path.as_deref().unwrap_or(""),
+                        first.container_name,
+                        first.port,
+                        r.container_name,
+                        r.port
+                    );
+                }
+            }
+            None => out.push(r),
+        }
+    }
+    out
 }
 
 /// POST /workspace/leave: forget the workspace and remove its routes. The
@@ -1630,6 +1661,32 @@ pub fn spawn(state: Arc<AppState>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_route_listed_twice_is_one_route() {
+        let route = |host: &str, port: u16, websocket: bool| orca_core::config::GatewayRoute {
+            hostname: host.into(),
+            container_name: "assistant".into(),
+            port,
+            enabled: true,
+            path: None,
+            owner: Some("workspace:team:ai".into()),
+            sleeping: false,
+            websocket,
+            presentation: Default::default(),
+        };
+        let merged = super::merge_duplicate_routes(vec![
+            route("*-ai.example.dev", 8090, false),
+            route("*-ai.example.dev", 8090, false),
+            route("*-ai.example.dev", 8090, true),
+            route("*-mcp.example.dev", 8080, false),
+        ]);
+        // The plain route once, the WebSocket-only one beside it.
+        assert_eq!(merged.len(), 3);
+        assert!(!merged[0].websocket);
+        assert!(merged[1].websocket);
+        assert_eq!(merged[2].hostname, "*-mcp.example.dev");
+    }
+
     #[test]
     fn clone_addresses_for_what_was_typed() {
         let c = super::clone_candidates;

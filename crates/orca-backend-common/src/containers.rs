@@ -478,7 +478,19 @@ fn summary_to_container(c: &bollard::models::ContainerSummary) -> Container {
         finished_at: None,
         command: None,
         env: None,
-        mounts: None,
+        // What each container mounts, so a volume can say who uses it.
+        mounts: c.mounts.as_ref().map(|ms| {
+            ms.iter()
+                .map(|m| ContainerMount {
+                    source: m.source.clone().unwrap_or_default(),
+                    destination: m.destination.clone().unwrap_or_default(),
+                    mode: m.mode.clone().unwrap_or_default(),
+                    rw: m.rw.unwrap_or(false),
+                    name: m.name.clone(),
+                    kind: m.typ.map(|t| t.to_string()),
+                })
+                .collect()
+        }),
         memory_limit: None,
         cpu_limit: None,
         restart_policy: None,
@@ -528,6 +540,8 @@ fn inspect_to_container(info: &bollard::models::ContainerInspectResponse) -> Con
                 destination: m.destination.clone().unwrap_or_default(),
                 mode: m.mode.clone().unwrap_or_default(),
                 rw: m.rw.unwrap_or(false),
+                name: m.name.clone(),
+                kind: m.typ.map(|t| t.to_string()),
             })
             .collect()
     });

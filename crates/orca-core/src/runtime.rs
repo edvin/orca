@@ -76,6 +76,12 @@ pub struct ContainerMount {
     pub destination: String,
     pub mode: String,
     pub rw: bool,
+    /// The volume's name, for a volume mount.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// "volume", "bind", "tmpfs"…
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

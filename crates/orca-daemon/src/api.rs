@@ -1412,7 +1412,9 @@ async fn start_build_endpoint(
 }
 
 async fn get_build(Path(id): Path<String>) -> Result<impl IntoResponse, ApiError> {
-    let history = crate::build_manager::load_history();
+    // Orca's own builds and BuildKit's others (docker build, compose): the
+    // list shows both, so opening one has to find both.
+    let history = crate::build_manager::load_merged_history().await;
     let record = history
         .into_iter()
         .find(|r| r.id == id)
@@ -3151,7 +3153,11 @@ async fn volume_containers(
             c.mounts.as_ref().is_some_and(|mounts| {
                 mounts
                     .iter()
-                    .any(|m| m.source == name || m.source.ends_with(&format!("/{name}")))
+                    .any(|m| {
+                        m.name.as_deref() == Some(name.as_str())
+                            || m.source == name
+                            || m.source.ends_with(&format!("/{name}/_data"))
+                    })
             })
         })
         .collect();

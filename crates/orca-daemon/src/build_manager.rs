@@ -453,8 +453,14 @@ pub async fn fetch_buildkit_logs(build_id: &str) -> Option<String> {
     if !build_id.starts_with("bk-") {
         return None;
     }
-    // Recover the original ref from the sanitized ID.
-    let build_ref = build_id.strip_prefix("bk-").unwrap_or(build_id);
+    // The ID is "bk-" and BuildKit's "builder/node/ref" with the slashes
+    // made dashes; `buildx history logs` finds a build by the ref alone.
+    let build_ref = build_id
+        .strip_prefix("bk-")
+        .unwrap_or(build_id)
+        .rsplit('-')
+        .next()
+        .unwrap_or_default();
 
     // Guard against flag-injection: a ref of `--help` or `-v` becomes a
     // docker-buildx option. Require a restricted identifier character set
@@ -483,7 +489,9 @@ pub async fn fetch_buildkit_logs(build_id: &str) -> Option<String> {
                 .ok()?;
 
             if output.status.success() {
-                Some(String::from_utf8_lossy(&output.stdout).to_string())
+                // buildx writes the log to stderr (it's progress output).
+                let out = if output.stdout.is_empty() { &output.stderr } else { &output.stdout };
+                Some(String::from_utf8_lossy(out).to_string())
             } else {
                 None
             }
