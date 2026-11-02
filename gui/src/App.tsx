@@ -671,7 +671,7 @@ export default function App() {
                   onNavigate={(p) => navigate(p)}
                 />
               )}
-              {page() === "networks" && <NetworksPage />}
+              {page() === "networks" && <NetworksPage onNavigate={(p) => navigate(p)} />}
               {page() === "gateway" && <GatewayPage onNavigate={(p) => navigate(p)} />}
               {page() === "projects" && <ProjectsPage onNavigate={(p) => navigate(p)} />}
               {page() === "workspace" && <WorkspacePage onNavigate={(p) => navigate(p)} />}

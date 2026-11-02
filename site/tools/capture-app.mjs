@@ -240,6 +240,7 @@ hooks:
       ["website_default", (c) => c.labels["com.docker.compose.project"] === "website"],
       ["telemetry_default", (c) => c.labels["com.docker.compose.project"] === "telemetry"],
       ["orca-gateway", (c) => ["orca-gateway", "shop-web-1", "shop-api-1", "sso-keycloak-1", "website-wordpress-1"].includes(c.name)],
+      ["bridge", () => false], ["host", () => false], ["none", () => false],
     ].map(([name, has], i) => ({ id: hex(64), name, driver: "bridge", subnet: `172.${18 + i}.0.0/16`, gateway: `172.${18 + i}.0.1`,
       containers: containers.filter((c) => c.state === "Running" && has(c)).map((c, j) => ({ id: c.id, name: c.name, ip: `172.${18 + i}.0.${j + 2}` })) })),
     system_health: {
@@ -465,8 +466,12 @@ const SHOTS = {
     await nav(page, "Worktrees");
     return { clip: content };
   },
-  async networks(page) {
+  async "network-map"(page) {
     await nav(page, "Networks");
+    await page.locator(".segmented button", { hasText: "Map" }).click();
+    await page.waitForTimeout(1500);
+    await page.locator(".netmap-card", { hasText: "orca-gateway" }).locator(".netmap-head").hover();
+    await page.waitForTimeout(600);
     return { clip: content };
   },
   async "system-health"(page) {

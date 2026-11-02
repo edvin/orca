@@ -167,7 +167,9 @@ Click a volume to see its mount point and labels, which containers use it, and i
 
 The **Networks** page lists networks with their driver, subnet and gateway. **Create network** makes a new network with the `bridge`, `host`, `macvlan`, `ipvlan` or `none` driver.
 
-Click **Topology** to switch to a graph of networks and the containers connected to them.
+Switch to **Map** to see every network in use as a card with the containers on it, each with its IP address. Containers on a Compose project's own network are named without the project's prefix. A container on more than one network has a dashed outline and a dot in the colour of each other network it's on. Hover it to see where else it is: Orca draws a link to each of its other networks and fades the rest. Hover a network to trace every container it shares with other networks. Click a container to open it. Networks with no containers, such as `host` and `none`, are listed below the map. Orca remembers whether you last used the list or the map.
+
+![The network map with the gateway network hovered: links run from its containers to their own stacks' networks](/assets/screens/network-map.webp)
 
 ## Related
 

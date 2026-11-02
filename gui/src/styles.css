@@ -4729,3 +4729,66 @@ tr.service-off td { opacity: 0.55; }
 
 .ctr-nothing { text-align: center; padding: 56px 16px; color: #8b949e; border: 1px dashed rgba(255, 255, 255, 0.08); border-radius: 10px; }
 .ctr-nothing p { margin: 0 0 12px; font-size: 13.5px; }
+
+/* ── Network map (Networks › Map) ─────────────────────────────────────── */
+.netmap { position: relative; }
+.netmap-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; font-size: 12.5px; color: #8b949e; }
+.netmap-bar strong { color: #e6edf3; font-weight: 600; font-variant-numeric: tabular-nums; }
+.netmap-bar-sep { width: 3px; height: 3px; border-radius: 50%; background: #484f58; }
+.netmap-bar-bridge strong { color: #79c0ff; }
+.netmap-hint { margin-left: auto; color: #6e7681; font-size: 12px; }
+
+.netmap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+
+.netmap-card {
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--net) 7%, #0f141b) 0%, #0f141b 64px);
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 14px 14px 12px;
+  transition: opacity 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.netmap-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--net); opacity: 0.85; }
+.netmap-focused .netmap-card { opacity: 0.32; }
+.netmap-focused .netmap-card.netmap-lit { opacity: 1; border-color: color-mix(in srgb, var(--net) 45%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--net) 18%, transparent), 0 8px 28px -10px color-mix(in srgb, var(--net) 45%, transparent); }
+/* Links run above the cards and under their contents. */
+.netmap-head, .netmap-chips { position: relative; z-index: 2; }
+
+.netmap-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.netmap-swatch { flex: none; width: 10px; height: 10px; margin-top: 4px; border-radius: 3px; background: var(--net); box-shadow: 0 0 10px color-mix(in srgb, var(--net) 70%, transparent); }
+.netmap-title { flex: 1; min-width: 0; }
+.netmap-name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #e6edf3; overflow-wrap: anywhere; }
+.netmap-tag { flex: none; font-size: 10.5px; font-weight: 500; padding: 1px 7px; border-radius: 8px; color: color-mix(in srgb, var(--net) 80%, #e6edf3); background: color-mix(in srgb, var(--net) 14%, transparent); }
+.netmap-meta { margin-top: 3px; font-family: var(--font-mono); font-size: 11px; color: #6e7681; }
+.netmap-count { flex: none; min-width: 26px; padding: 2px 8px; border-radius: 10px; text-align: center; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: #c9d1d9; background: rgba(255, 255, 255, 0.06); }
+
+.netmap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.netmap-chip {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  padding: 5px 9px; border-radius: 7px; cursor: pointer; font: inherit; text-align: left;
+  background: #151b23; border: 1px solid rgba(255, 255, 255, 0.07); color: #c9d1d9;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.netmap-chip:hover { background: #1b222c; border-color: rgba(255, 255, 255, 0.16); color: #e6edf3; }
+.netmap-chip-name { font-size: 12.5px; font-weight: 500; overflow-wrap: anywhere; }
+.netmap-chip-ip { font-family: var(--font-mono); font-size: 10.5px; color: #6e7681; white-space: nowrap; }
+.netmap-chip-also { display: inline-flex; gap: 3px; }
+.netmap-dot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 1.5px #0f141b; }
+.netmap-chip-shared { border-style: dashed; border-color: rgba(255, 255, 255, 0.14); }
+.netmap-chip.netmap-chip-lit {
+  color: #fff; border-style: solid; border-color: color-mix(in srgb, var(--net) 70%, transparent);
+  background: color-mix(in srgb, var(--net) 16%, #0f141b); box-shadow: 0 0 14px -2px color-mix(in srgb, var(--net) 60%, transparent);
+}
+/* Faded while something else is traced, so links read as passing under them. */
+.netmap-focused .netmap-chip:not(.netmap-chip-lit) { opacity: 0.38; }
+.netmap-chip-lit .netmap-chip-ip { color: color-mix(in srgb, var(--net) 60%, #c9d1d9); }
+
+.netmap-empty { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 16px; font-size: 12px; color: #6e7681; }
+.netmap-empty-name { font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border-radius: 6px; border: 1px dashed rgba(255, 255, 255, 0.1); color: #8b949e; }
+
+.netmap-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 1; }
+.netmap-link, .netmap-link-glow { fill: none; stroke: var(--link); stroke-linecap: round; }
+.netmap-link { stroke-width: 1.75; stroke-dasharray: 6 5; animation: netmap-flow 0.9s linear infinite; }
+.netmap-link-glow { stroke-width: 7; opacity: 0.16; }
+.netmap-link-end { fill: var(--link); filter: drop-shadow(0 0 4px var(--link)); }
+.netmap-links g { animation: modal-fade-in 0.18s ease-out; }
+@keyframes netmap-flow { to { stroke-dashoffset: -11; } }
+@media (prefers-reduced-motion: reduce) { .netmap-link { animation: none; } }

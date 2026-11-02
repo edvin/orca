@@ -477,7 +477,7 @@ On every startup, the Orca daemon checks the Lima VM config and automatically ap
 | ![Images](screenshots/06-images.png) | ![Kubernetes](screenshots/10-kubernetes.png) |
 | **Images** — Pull, build, scan, tag, layers | **Kubernetes** — Pods, deployments, services, helm |
 | ![Networks](screenshots/09-networks.png) | ![App Catalog](screenshots/16-app-catalog.png) |
-| **Networks** — Subnets, gateways, connected containers | **App Catalog** — One-click templates |
+| **Networks** — A map of which containers connect which networks | **App Catalog** — One-click templates |
 | ![Settings AI](screenshots/20-settings-ai.png) | ![System Health](screenshots/17-system-health.png) |
 | **AI & agents** — 5 providers, MCP server | **System Health** — Diagnostics and setup |
 

@@ -367,14 +367,11 @@ test.describe("Orca Desktop Screenshots", () => {
     await screenshot(page, "08-networks");
   });
 
-  test("09 - Network topology", async ({ page }) => {
+  test("09 - Network map", async ({ page }) => {
     await navigateTo(page, "Networks");
-    const btn = page.getByText("Topology", { exact: true }).first();
-    if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await btn.click();
-      await waitForPageLoad(page);
-      await screenshot(page, "09-network-topology");
-    }
+    await page.locator(".segmented button", { hasText: "Map" }).click();
+    await waitForPageLoad(page);
+    await screenshot(page, "09-networks");
   });
 
   test("10 - Kubernetes", async ({ page }) => {
