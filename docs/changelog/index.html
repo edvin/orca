@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mvxuyi0d">
+<link rel="stylesheet" href="/assets/site.css?v=mvz5n0ys">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mvxuyi0d" defer></script>
+<script src="/assets/site.js?v=mvz5n0ys" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -31,7 +31,7 @@
     <div class="header-actions">
       <button class="search-trigger" type="button" data-search-open aria-label="Search the docs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search docs</span><kbd>⌘K</kbd></button>
       <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode"><span class="when-dark"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="when-light"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span></button>
-      <a class="icon-btn gh-btn" href="https://github.com/edvin/orca" target="_blank" rel="noopener" aria-label="Orca on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span class="gh-stars">27</span></a>
+      <a class="icon-btn gh-btn" href="https://github.com/edvin/orca" target="_blank" rel="noopener" aria-label="Orca on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg><span class="gh-stars">29</span></a>
       <a class="btn btn-primary btn-sm header-cta" href="/download/">Download</a>
       <button class="icon-btn menu-btn" type="button" aria-label="Open menu" aria-expanded="false" data-menu-open><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     </div>
@@ -53,7 +53,23 @@
     <p>Every Orca release, newest first. Orca updates itself, so you get these as they ship.</p>
   </div>
 </section>
-<section class="container releases"><article class="release" id="v0.70.0">
+<section class="container releases"><article class="release" id="v0.71.0">
+  <div class="release-meta"><a class="release-tag" href="#v0.71.0">v0.71.0</a><time datetime="2026-11-02T11:07:08Z">November 2, 2026</time></div>
+  <div class="release-body prose">
+    
+    <h2 id="a-network-map"><a class="anchor" href="#a-network-map" aria-hidden="true" tabindex="-1">#</a>A network map</h2>
+<ul>
+<li><strong>See how containers connect:</strong> <strong>Map</strong> on the <strong>Networks</strong> page shows each network in use as a card with its containers, their full names and IP addresses. <strong>List</strong> is still there, and Orca remembers which you used last.</li>
+<li><strong>Containers on several networks</strong> have a dashed outline and a dot in the colour of each other network they&#39;re on.</li>
+<li><strong>Hover to trace:</strong> point at a container to draw a link to each of its other networks; point at a network to see every container it shares with others. Everything else fades.</li>
+<li><strong>Click a container</strong> to open its page.</li>
+<li><strong>Less clutter:</strong> networks with no containers, such as <code>host</code> and <code>none</code>, are listed below the map instead of taking up cards.</li>
+</ul>
+
+    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.71.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
+  </div>
+</article>
+<article class="release" id="v0.70.0">
   <div class="release-meta"><a class="release-tag" href="#v0.70.0">v0.70.0</a><time datetime="2026-10-31T12:53:57Z">October 31, 2026</time></div>
   <div class="release-body prose">
     
@@ -501,34 +517,6 @@
 </ul>
 
     <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.58.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
-  </div>
-</article>
-<article class="release" id="v0.57.0">
-  <div class="release-meta"><a class="release-tag" href="#v0.57.0">v0.57.0</a><time datetime="2026-10-24T08:48:46Z">October 24, 2026</time></div>
-  <div class="release-body prose">
-    
-    <h2 id="your-teams-logo-on-the-start-page"><a class="anchor" href="#your-teams-logo-on-the-start-page" aria-hidden="true" tabindex="-1">#</a>Your team&#39;s logo on the start page</h2>
-<p>A workspace can now put its logo in the gateway start page&#39;s top bar, next to its title, and on the <strong>Workspace</strong> page. Add <code>gateway.logo</code> to the workspace file: an image in the workspace repo, a built-in icon or an https URL. Leaving the workspace puts back the start page&#39;s previous title and logo.</p>
-<h2 id="my-links"><a class="anchor" href="#my-links" aria-hidden="true" tabindex="-1">#</a>My links</h2>
-<p>Your own cards at the top of the start page: your sprint board, a staging admin, anything you open every day. Add them on the Gateway page&#39;s <strong>Landing page</strong> tab. They&#39;re kept on your computer only.</p>
-<h2 id="projects-you-havent-set-up-yet"><a class="anchor" href="#projects-you-havent-set-up-yet" aria-hidden="true" tabindex="-1">#</a>Projects you haven&#39;t set up yet</h2>
-<p>The start page now shows a workspace&#39;s projects that aren&#39;t on your computer yet, as dashed cards marked <strong>Not set up</strong>. Clicking one opens Orca at that project, ready to set up with one click.</p>
-<h2 id="what-changed-in-the-workspace"><a class="anchor" href="#what-changed-in-the-workspace" aria-hidden="true" tabindex="-1">#</a>What changed in the workspace</h2>
-<p>When Orca pulls new changes to your workspace, the <strong>Workspace</strong> page lists them: <em>Workspace updated: Add Gravity, Renew the certificate</em>.</p>
-<h2 id="search-the-web-from-the-start-page"><a class="anchor" href="#search-the-web-from-the-start-page" aria-hidden="true" tabindex="-1">#</a>Search the web from the start page</h2>
-<p>The start page&#39;s search box now searches Google when no service matches, without setting it up first. Pick another engine, or turn it off, on the <strong>Landing page</strong> tab.</p>
-<h2 id="joining-puts-things-where-your-code-is"><a class="anchor" href="#joining-puts-things-where-your-code-is" aria-hidden="true" tabindex="-1">#</a>Joining puts things where your code is</h2>
-<p>When you join a workspace, Orca suggests the folder where your git checkouts already are, such as <code>~/projects</code>, and shows where the workspace and its projects will go. If you already have a copy of the workspace there, Orca joins it where it is.</p>
-<h2 id="worktrees"><a class="anchor" href="#worktrees" aria-hidden="true" tabindex="-1">#</a>Worktrees</h2>
-<p>The <strong>Projects</strong> page is now called <strong>Worktrees</strong>, so it&#39;s no longer confused with a workspace&#39;s projects. Its page is much more compact: your repositories are listed right away. Paths starting with <code>~/</code> now work when you add one.</p>
-<h2 id="less-to-read"><a class="anchor" href="#less-to-read" aria-hidden="true" tabindex="-1">#</a>Less to read</h2>
-<p>Pages say what they&#39;re for in one line, with a <strong>How it works</strong> link to the docs, instead of paragraphs of explanation. This covers the Gateway, Kubernetes, Settings, container and stack pages, the worktree setup wizard and more.</p>
-<h2 id="also"><a class="anchor" href="#also" aria-hidden="true" tabindex="-1">#</a>Also</h2>
-<ul>
-<li>The note about switching from Docker Desktop now says correctly that containers and images aren&#39;t copied over.</li>
-</ul>
-
-    <p class="release-link"><a href="https://github.com/edvin/orca/releases/tag/v0.57.0" target="_blank" rel="noopener">Downloads and full changelog on GitHub</a></p>
   </div>
 </article></section>
 
