@@ -165,6 +165,8 @@ The daemon checks schedules every minute. The list shows each schedule as **Acti
 
 The **Volumes** page shows what each volume is for. A compose project's volume is shown by its name in the compose file, such as `pgdata`, with the project beside it. Under the name is where it's mounted, and in which container: `/var/lib/postgresql/data in postgres-1`. A volume Docker made without a name reads **Anonymous volume**, with the start of its ID, so its container and path are what tell you what it holds. Volumes no container mounts are marked **Unused**.
 
+![The Volumes page: each volume with the container that mounts it and where](/assets/screens/volumes.webp)
+
 The summary at the top counts the volumes, those in use and those unused, with how much space the unused ones take. **All**, **In use** and **Unused** filter the list, and the search box matches volume names, containers, images and paths. Sizes come from Docker's disk usage, which takes a moment on a busy engine; the refresh button measures them again. **Create volume** makes a new volume with a name, driver and optional labels.
 
 Click a volume to open its page. **Overview** shows its project, mount point, size and creation date, and the containers that use it, each with the path it's mounted at and whether it's read-write. Click one to open it. On the **Files** tab, Orca reads the volume through a temporary Alpine container, so it works whether or not a container is using the volume. **Remove** works once no container uses the volume.
