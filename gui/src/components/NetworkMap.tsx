@@ -9,22 +9,34 @@ export interface TopologyNetwork {
   containers: Array<{ id: string; name: string; ip: string }>;
 }
 
-const COLORS = ["#58a6ff", "#3fb950", "#bc8cff", "#f0883e", "#39c5cf", "#f778ba", "#e3b341", "#a5d6ff"];
+export const NETWORK_COLORS = ["#58a6ff", "#3fb950", "#bc8cff", "#f0883e", "#39c5cf", "#f778ba", "#e3b341", "#a5d6ff"];
 
 type Focus = { kind: "net" | "ctr"; id: string } | null;
 type Link = { d: string; color: string; x1: number; y1: number; x2: number; y2: number };
 
 /** "shop-web-1" in shop_default reads "web-1": the network already says which stack. */
-function chipLabel(net: TopologyNetwork, name: string): string {
+export function chipLabel(net: { name: string }, name: string): string {
   const stack = net.name.endsWith("_default") ? net.name.slice(0, -"_default".length) : null;
   return stack && name.startsWith(`${stack}-`) && name.length > stack.length + 1 ? name.slice(stack.length + 1) : name;
 }
 
-function tag(net: TopologyNetwork): string | null {
+export function tag(net: { name: string }): string | null {
   if (net.name === "orca-gateway") return "Gateway";
   if (net.name === "bridge") return "Docker default";
   if (net.name.endsWith("_default")) return "Compose";
   return null;
+}
+
+/** Networks with containers, busiest first: the order the map and list colour them in. */
+export function usedNetworks<T extends TopologyNetwork>(networks: T[]): T[] {
+  return networks
+    .filter((n) => n.containers.length > 0)
+    .sort((a, b) => b.containers.length - a.containers.length || a.name.localeCompare(b.name));
+}
+
+/** Each network in use's colour, by name; the same on the map and in the list. */
+export function networkColors(networks: TopologyNetwork[]): Map<string, string> {
+  return new Map(usedNetworks(networks).map((n, i) => [n.name, NETWORK_COLORS[i % NETWORK_COLORS.length]]));
 }
 
 /**
@@ -37,12 +49,9 @@ export default function NetworkMap(props: { networks: TopologyNetwork[]; onOpenC
   const [links, setLinks] = createSignal<Link[]>([]);
   let wrap: HTMLDivElement | undefined;
 
-  const used = () =>
-    props.networks
-      .filter((n) => n.containers.length > 0)
-      .sort((a, b) => b.containers.length - a.containers.length || a.name.localeCompare(b.name));
+  const used = () => usedNetworks(props.networks);
   const empty = () => props.networks.filter((n) => n.containers.length === 0).sort((a, b) => a.name.localeCompare(b.name));
-  const color = (netId: string) => COLORS[Math.max(0, used().findIndex((n) => n.id === netId)) % COLORS.length];
+  const color = (netId: string) => NETWORK_COLORS[Math.max(0, used().findIndex((n) => n.id === netId)) % NETWORK_COLORS.length];
 
   // Container id -> the networks it's on.
   const netsOf = () => {

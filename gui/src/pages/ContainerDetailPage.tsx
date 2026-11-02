@@ -6,21 +6,18 @@ import type { Container, ContainerStats } from "../lib/types";
 import { useRefresh } from "../lib/useRefresh";
 import { usePoller } from "../lib/poller";
 import { containersStore } from "../lib/dockerStore";
-import { formatBytes, formatTimestamp } from "../lib/format";
+import { formatBytes, splitImage } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import LogViewer from "../components/LogViewer";
 import XTerminal from "../components/XTerminal";
-import CopyButton from "../components/CopyButton";
 import Spinner from "../components/Spinner";
-import ResourceBar from "../components/ResourceBar";
-import Sparkline from "../components/Sparkline";
-import TimeChart from "../components/TimeChart";
-import { recordMetrics, getCpuHistory, getMemoryHistory, getMetricsHistory } from "../lib/metricsStore";
+import { recordMetrics } from "../lib/metricsStore";
 import { copyToClipboard } from "../lib/clipboard";
 import Breadcrumb from "../components/Breadcrumb";
 import Dropdown from "../components/Dropdown";
 import HelpLink from "../components/HelpLink";
+import ContainerOverview from "../components/ContainerOverview";
 import PortMappings from "../components/PortMappings";
 import { portGroups } from "../lib/ports";
 import { logError } from "../lib/activityStore";
@@ -70,6 +67,8 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
   // / POST body all use the user's actual configured domain rather than
   // hardcoding ".localhost".
   const [exposeDomain, setExposeDomain] = createSignal("localhost");
+  // Bumped after exposing or unexposing, so the overview re-reads the routes.
+  const [routesVersion, setRoutesVersion] = createSignal(0);
 
   // Commit dialog state
   const [showCommitDialog, setShowCommitDialog] = createSignal(false);
@@ -370,6 +369,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       showToast(`Exposed ${c.name} at ${fullHostname}`, "success");
       // stays open on the new route, so its page is one click away
       setExistingRoute({ hostname: fullHostname, url: `https://${fullHostname}` });
+      setRoutesVersion((v) => v + 1);
     } catch (err) {
       logError(`Failed to expose container: ${err}`);
       showToast(`Failed to expose: ${err}`, "error");
@@ -385,6 +385,7 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       showToast(`Route ${route.hostname} removed`, "success");
       setShowExposeDialog(false);
       setExistingRoute(null);
+      setRoutesVersion((v) => v + 1);
     } catch (err) {
       logError(`Failed to remove route: ${err}`);
       showToast(`Failed to remove: ${err}`, "error");
@@ -486,11 +487,6 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     }
   };
 
-  const memPercent = (s: ContainerStats) => {
-    if (!s.memory_limit_bytes || s.memory_limit_bytes === 0) return 0;
-    return (s.memory_usage_bytes / s.memory_limit_bytes) * 100;
-  };
-
   const getContainerEnv = (): string[] => {
     const data = inspectData();
     if (!data) return [];
@@ -502,43 +498,6 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
     const data = inspectData();
     if (!data) return [];
     return data?.mounts || data?.Mounts || [];
-  };
-
-  const getContainerCommand = (): string[] => {
-    const data = inspectData();
-    if (!data) return [];
-    return data?.command || data?.Config?.Cmd || [];
-  };
-
-  const formatUptime = (createdAt: string | number | undefined | null): string => {
-    if (!createdAt) return "-";
-    try {
-      let created: Date;
-      if (typeof createdAt === "number") {
-        created = new Date(createdAt < 1e12 ? createdAt * 1000 : createdAt);
-      } else {
-        // Try parsing as number first (string "1234567890")
-        const num = Number(createdAt);
-        if (!isNaN(num) && num > 1e8) {
-          created = new Date(num < 1e12 ? num * 1000 : num);
-        } else {
-          created = new Date(createdAt);
-        }
-      }
-      if (isNaN(created.getTime())) return "-";
-      const now = new Date();
-      const diff = now.getTime() - created.getTime();
-      if (diff < 0) return "-";
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      if (days > 0) return `${days}d ${hours}h`;
-      if (hours > 0) return `${hours}h ${minutes}m`;
-      if (minutes > 0) return `${minutes}m`;
-      return "< 1m";
-    } catch {
-      return "-";
-    }
   };
 
   return (
@@ -578,6 +537,10 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     style={{ cursor: "pointer" }}
                   >
                     {c().name}
+                    <span class={`state-badge detail-state ${stateClass(c().state)}`}>
+                      <Show when={c().state === "Running"}><span class="detail-state-dot" /></Show>
+                      {c().state}{c().state === "Running" && c().health_status === "healthy" ? " · Healthy" : c().state === "Running" && c().health_status === "unhealthy" ? " · Unhealthy" : ""}
+                    </span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "margin-left": "6px", "vertical-align": "middle", opacity: "0.6" }}><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                   </div>
                 }>
@@ -606,37 +569,40 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
                     <button class="btn" style={{ padding: "4px 12px", "font-size": "12px" }} onClick={() => setRenaming(false)}>Cancel</button>
                   </div>
                 </Show>
-                <div class="detail-page-image">{c().image}</div>
+                <div class="detail-page-image" title={c().image}>
+                  <button class="image-ref" onClick={() => props.onNavigate?.(`image:${c().image.split("@")[0]}`)} title={`${c().image}\nShow it on the Images page`}>
+                    <Show when={splitImage(c().image).from}><span class="image-ref-from">{splitImage(c().image).from}/</span></Show>
+                    <span class="image-ref-name">{splitImage(c().image).name}</span>
+                    <Show when={splitImage(c().image).digest}><span class="image-ref-from">@{splitImage(c().image).digest}</span></Show>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
               </div>
-
-              <span class={`state-badge ${stateClass(c().state)}`}>
-                {c().state}
-              </span>
 
               <div class="detail-page-actions container-actions">
                 <Show when={actionInProgress()}>
                   <Spinner size={14} />
                 </Show>
                 <Show when={c().state !== "Running"}>
-                  <button class="btn btn-sm btn-primary" onClick={() => doAction("start_container")} disabled={actionInProgress()}>
-                    ▶ Start
+                  <button class="btn btn-sm btn-primary btn-iconed" onClick={() => doAction("start_container")} disabled={actionInProgress()}>
+                    <svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" /></svg>Start
                   </button>
                 </Show>
                 <Show when={c().state === "Running"}>
-                  <button class="btn btn-sm" onClick={() => doAction("stop_container")} disabled={actionInProgress()}>
-                    ■ Stop
+                  <button class="btn btn-sm btn-iconed" onClick={() => doAction("stop_container")} disabled={actionInProgress()}>
+                    <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" /></svg>Stop
                   </button>
-                  <button class="btn btn-sm" onClick={doRestart} disabled={actionInProgress()}>
-                    ⟳ Restart
+                  <button class="btn btn-sm btn-iconed" onClick={doRestart} disabled={actionInProgress()}>
+                    <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-3-6.2M20 4v5h-5" /></svg>Restart
                   </button>
                 </Show>
-                <button class="btn btn-sm" onClick={openExposeDialog} disabled={actionInProgress()}
+                <button class="btn btn-sm btn-iconed" onClick={openExposeDialog} disabled={actionInProgress()}
                   title="Give this container an https://….localhost address through the gateway">
-                  Expose via gateway
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></svg>Expose via gateway
                 </button>
-                <button class="btn btn-sm" onClick={() => setShowCommitDialog(true)} disabled={actionInProgress()}
+                <button class="btn btn-sm btn-iconed" onClick={() => setShowCommitDialog(true)} disabled={actionInProgress()}
                   title="Save the container's current file system as a new image">
-                  Save as image
+                  <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg>Save as image
                 </button>
                 <Show when={c().state !== "Running"}>
                   <button class="btn btn-sm btn-danger-outline" onClick={doRemove} disabled={actionInProgress()}>
@@ -708,318 +674,19 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
       {/* Tab content */}
       <div class="detail-tab-content">
         {/* Overview tab */}
-        <Show when={activeTab() === "overview"}>
-          <div class="detail-overview">
-            {/* Stat cards */}
-            <div class="detail-stats-row">
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">CPU</div>
-                <Show when={stats()} fallback={
-                  <div class="detail-stat-value" style={{ color: "#484f58" }}>
-                    {container()?.state === "Running" ? "-" : "N/A"}
-                  </div>
-                }>
-                  {(s) => (
-                    <>
-                      <div class="detail-stat-value">{s().cpu_percent.toFixed(1)}%</div>
-                      <div class="detail-stat-bar">
-                        <ResourceBar
-                          value={s().cpu_percent}
-                          label=""
-                        />
-                      </div>
-                      <div class="detail-stat-sparkline">
-                        <Sparkline
-                          data={getCpuHistory(props.containerId)}
-                          times={getMetricsHistory(props.containerId).map((m) => m.timestamp)}
-                          width={120}
-                          height={28}
-                          color="#58a6ff"
-                          max={100}
-                        />
-                      </div>
-                    </>
-                  )}
-                </Show>
-              </div>
-
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">Memory</div>
-                <Show when={stats()} fallback={
-                  <div class="detail-stat-value" style={{ color: "#484f58" }}>
-                    {container()?.state === "Running" ? "-" : "N/A"}
-                  </div>
-                }>
-                  {(s) => {
-                    const hasLimit = memPercent(s()) > 1;
-                    return (
-                    <>
-                      <div class="detail-stat-value">
-                        {formatBytes(s().memory_usage_bytes)}
-                        <Show when={hasLimit}>
-                          <span class="detail-stat-secondary">
-                            {" / "}{formatBytes(s().memory_limit_bytes)}
-                          </span>
-                        </Show>
-                      </div>
-                      <Show when={hasLimit}>
-                        <div class="detail-stat-bar">
-                          <ResourceBar
-                            value={memPercent(s())}
-                            label=""
-                          />
-                        </div>
-                      </Show>
-                      <div class="detail-stat-sparkline">
-                        <Sparkline
-                          data={getMemoryHistory(props.containerId)}
-                          times={getMetricsHistory(props.containerId).map((m) => m.timestamp)}
-                          width={120}
-                          height={28}
-                          color="#a371f7"
-                          max={100}
-                        />
-                      </div>
-                    </>
-                  );}}
-                </Show>
-              </div>
-
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">Network I/O</div>
-                <Show when={stats()} fallback={
-                  <div class="detail-stat-value" style={{ color: "#484f58" }}>
-                    {container()?.state === "Running" ? "-" : "N/A"}
-                  </div>
-                }>
-                  {(s) => (
-                    <div class="detail-stat-value" style={{ "font-size": "16px" }}>
-                      <span style={{ color: "#58a6ff" }}>{"\u2193"}</span> {formatBytes(s().network_rx_bytes)}
-                      <span style={{ color: "#8b949e", margin: "0 6px" }}>/</span>
-                      <span style={{ color: "#f0883e" }}>{"\u2191"}</span> {formatBytes(s().network_tx_bytes)}
-                    </div>
-                  )}
-                </Show>
-              </div>
-
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">Uptime</div>
-                <Show when={container()} fallback={
-                  <div class="detail-stat-value" style={{ color: "#484f58" }}>-</div>
-                }>
-                  {(c) => (
-                    <div class="detail-stat-value">
-                      {c().state === "Running"
-                        ? formatUptime(inspectData()?.started_at || inspectData()?.State?.StartedAt || c().created_at)
-                        : "Stopped"}
-                    </div>
-                  )}
-                </Show>
-              </div>
-            </div>
-
-            {/* Resource history charts */}
-            <Show when={container()?.state === "Running" && getMetricsHistory(props.containerId).length > 2}>
-              <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "16px", "margin-bottom": "20px" }}>
-                <div class="card" style={{ padding: "16px" }}>
-                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px", "font-weight": 500 }}>CPU usage</div>
-                  <TimeChart
-                    data={getMetricsHistory(props.containerId).map((s) => ({ time: s.timestamp, value: s.cpu }))}
-                    height={120}
-                    color="#58a6ff"
-                    unit="%"
-                  />
-                </div>
-                <div class="card" style={{ padding: "16px" }}>
-                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "8px", "font-weight": 500 }}>Memory usage</div>
-                  <TimeChart
-                    data={getMetricsHistory(props.containerId).map((s) => ({ time: s.timestamp, value: s.memory }))}
-                    height={120}
-                    color="#a371f7"
-                    formatValue={(v) => formatBytes(v)}
-                  />
-                </div>
-              </div>
-            </Show>
-
-            {/* Container info grid */}
-            <Show when={container()}>
-              {(c) => (<>
-                <div class="detail-info-section">
-                  <h3 class="detail-section-title">Container info</h3>
-                  <div class="card-grid">
-                    <div class="card-label">Container ID</div>
-                    <div class="card-value mono" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                      {c().id}
-                      <CopyButton text={c().id} label="Copy full container ID" />
-                    </div>
-
-                    <div class="card-label">Image</div>
-                    <div class="card-value mono">{c().image}</div>
-
-                    <div class="card-label">Created</div>
-                    <div class="card-value">{formatTimestamp(c().created_at)}</div>
-
-                    <div class="card-label">State</div>
-                    <div class="card-value">
-                      <span class={`state-badge ${stateClass(c().state)}`}>{c().state}</span>
-                    </div>
-
-                    <div class="card-label">Command</div>
-                    <div class="card-value mono" style={{ "font-size": "12px" }}>
-                      {getContainerCommand().join(" ") || "-"}
-                    </div>
-
-                    <div class="card-label">Port mappings</div>
-                    <div class="card-value">
-                      <Show when={c().ports.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
-                        <PortMappings groups={portGroups(c().image, c().ports)} />
-                      </Show>
-                    </div>
-                  </div>
-
-                  {/* Restart Policy & Restart Count */}
-                  <div style={{ display: "flex", "align-items": "center", gap: "12px", "margin-top": "16px" }}>
-                    <Show when={c().restart_policy && c().restart_policy !== "no"}>
-                      <span style={{
-                        display: "inline-flex",
-                        "align-items": "center",
-                        padding: "3px 10px",
-                        "border-radius": "12px",
-                        "font-size": "11px",
-                        "font-weight": "500",
-                        background: "rgba(88, 166, 255, 0.1)",
-                        color: "#58a6ff",
-                        border: "1px solid rgba(88, 166, 255, 0.2)",
-                      }}>
-                        Restart: {c().restart_policy}
-                      </span>
-                    </Show>
-                    <Show when={c().restart_count !== undefined && c().restart_count !== null && c().restart_count! > 0}>
-                      <span style={{
-                        "font-size": "12px",
-                        color: "#d29922",
-                      }}>
-                        Restarted {c().restart_count} {c().restart_count === 1 ? "time" : "times"}
-                      </span>
-                    </Show>
-                  </div>
-                </div>
-
-                {/* Health Check Section */}
-                <Show when={inspectData()}>
-                  <div class="detail-info-section">
-                    <h3 class="detail-section-title">Health</h3>
-                    <Show when={inspectData()?.health_status && inspectData()?.health_status !== "none" && inspectData()?.health_status !== ""}
-                      fallback={
-                        <div style={{ color: "#484f58", "font-size": "13px", padding: "8px 0" }}>
-                          No health check configured
-                        </div>
-                      }
-                    >
-                      <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
-                        {/* Health status badge */}
-                        <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-                          <span style={{
-                            display: "inline-flex",
-                            "align-items": "center",
-                            gap: "6px",
-                            padding: "4px 12px",
-                            "border-radius": "12px",
-                            "font-size": "12px",
-                            "font-weight": "600",
-                            background:
-                              inspectData()?.health_status === "healthy"
-                                ? "rgba(63, 185, 80, 0.15)"
-                                : inspectData()?.health_status === "unhealthy"
-                                ? "rgba(248, 81, 73, 0.15)"
-                                : "rgba(210, 153, 34, 0.15)",
-                            color:
-                              inspectData()?.health_status === "healthy"
-                                ? "#3fb950"
-                                : inspectData()?.health_status === "unhealthy"
-                                ? "#f85149"
-                                : "#d29922",
-                            border: `1px solid ${
-                              inspectData()?.health_status === "healthy"
-                                ? "rgba(63, 185, 80, 0.3)"
-                                : inspectData()?.health_status === "unhealthy"
-                                ? "rgba(248, 81, 73, 0.3)"
-                                : "rgba(210, 153, 34, 0.3)"
-                            }`,
-                          }}>
-                            <span style={{ "font-size": "10px" }}>{"\u25CF"}</span>
-                            {inspectData()?.health_status === "healthy"
-                              ? "Healthy"
-                              : inspectData()?.health_status === "unhealthy"
-                              ? "Unhealthy"
-                              : "Starting"}
-                          </span>
-                        </div>
-
-                        {/* Health check log table */}
-                        <Show when={inspectData()?.health_log && inspectData()?.health_log.length > 0}>
-                          <div style={{ "overflow-x": "auto" }}>
-                            <table style={{
-                              width: "100%",
-                              "border-collapse": "collapse",
-                              "font-size": "12px",
-                            }}>
-                              <thead>
-                                <tr style={{ "border-bottom": "1px solid rgba(255,255,255,0.06)" }}>
-                                  <th style={{ padding: "6px 10px", "text-align": "left", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Time</th>
-                                  <th style={{ padding: "6px 10px", "text-align": "center", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Exit code</th>
-                                  <th style={{ padding: "6px 10px", "text-align": "left", color: "#8b949e", "font-weight": "500", "font-size": "11px" }}>Output</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <For each={inspectData()?.health_log || []}>
-                                  {(entry: { output: string; exit_code: number; started_at: string; finished_at: string }) => (
-                                    <tr style={{ "border-bottom": "1px solid rgba(255,255,255,0.03)" }}>
-                                      <td style={{
-                                        padding: "6px 10px",
-                                        color: "#8b949e",
-                                        "white-space": "nowrap",
-                                        "font-size": "11px",
-                                      }}>
-                                        {entry.started_at ? formatTimestamp(entry.started_at) : "-"}
-                                      </td>
-                                      <td style={{
-                                        padding: "6px 10px",
-                                        "text-align": "center",
-                                        color: entry.exit_code === 0 ? "#3fb950" : "#f85149",
-                                        "font-weight": "600",
-                                      }}>
-                                        {entry.exit_code}
-                                      </td>
-                                      <td style={{
-                                        padding: "6px 10px",
-                                        color: "#e6edf3",
-                                        "max-width": "400px",
-                                        overflow: "hidden",
-                                        "text-overflow": "ellipsis",
-                                        "white-space": "nowrap",
-                                        "font-family": "monospace",
-                                        "font-size": "11px",
-                                      }}
-                                        title={entry.output?.trim() || ""}
-                                      >
-                                        {entry.output?.trim() || "-"}
-                                      </td>
-                                    </tr>
-                                  )}
-                                </For>
-                              </tbody>
-                            </table>
-                          </div>
-                        </Show>
-                      </div>
-                    </Show>
-                  </div>
-                </Show>
-              </>)}
-            </Show>
-          </div>
+        <Show when={activeTab() === "overview" && container()}>
+          {(c) => (
+            <ContainerOverview
+              container={c()}
+              stats={stats()}
+              inspect={inspectData()}
+              onTab={(tab) => switchTab(tab)}
+              onExpose={openExposeDialog}
+              onOpenStack={(s) => props.onNavigate?.(`stack:${s}`)}
+              onOpenImage={(ref) => props.onNavigate?.(`image:${ref}`)}
+              routesVersion={routesVersion()}
+            />
+          )}
         </Show>
 
         {/* Logs tab */}
@@ -1564,42 +1231,53 @@ export default function ContainerDetailPage(props: ContainerDetailPageProps) {
           onMouseDown={(e) => { (e.currentTarget as any).__mdOverlay = (e.target as HTMLElement).classList.contains("modal-overlay"); }}
           onClick={(e) => { if ((e.currentTarget as any).__mdOverlay && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowCommitDialog(false); (e.currentTarget as any).__mdOverlay = false; }}
         >
-          <div class="modal-dialog" style={{ "max-width": "460px" }}>
+          <div class="modal-dialog" style={{ width: "560px", "max-width": "92vw" }}>
             <div class="modal-header">
-              <span class="modal-title">Save as image</span>
+              <div class="modal-head-main">
+                <span class="modal-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg></span>
+                <div>
+                  <h2 class="modal-title">Save as image</h2>
+                  <div class="modal-subtitle">A new image with this container's files as they are now.</div>
+                </div>
+              </div>
               <button class="modal-close" onClick={() => setShowCommitDialog(false)}>{"\u00d7"}</button>
             </div>
-            <div class="modal-body">
-              <p style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "16px" }}>
-                Create a new image from this container's current state.
-              </p>
-              <div class="form-group" style={{ "margin-bottom": "12px" }}>
-                <label class="form-label">Repository</label>
-                <input
-                  class="form-input"
-                  type="text"
-                  placeholder="e.g. myapp"
-                  value={commitRepo()}
-                  onInput={(e) => setCommitRepo(e.currentTarget.value)}
-                />
+            <form onSubmit={(e) => { e.preventDefault(); if (commitRepo().trim() && !committing()) void doCommit(); }}>
+              <div class="modal-body">
+                <div class="form-row">
+                  <div class="form-group" style={{ flex: 2 }}>
+                    <label class="form-label">Repository</label>
+                    <input
+                      class="form-input mono"
+                      type="text"
+                      placeholder="myapp"
+                      value={commitRepo()}
+                      onInput={(e) => setCommitRepo(e.currentTarget.value)}
+                      autofocus
+                    />
+                  </div>
+                  <div class="form-group" style={{ flex: 1 }}>
+                    <label class="form-label">Tag</label>
+                    <input
+                      class="form-input mono"
+                      type="text"
+                      placeholder="latest"
+                      value={commitTag()}
+                      onInput={(e) => setCommitTag(e.currentTarget.value)}
+                    />
+                  </div>
+                </div>
+                <span class="form-hint">
+                  It appears on the Images page as <span class="mono">{commitRepo().trim() || "myapp"}:{commitTag().trim() || "latest"}</span>.
+                </span>
               </div>
-              <div class="form-group" style={{ "margin-bottom": "16px" }}>
-                <label class="form-label">Tag</label>
-                <input
-                  class="form-input"
-                  type="text"
-                  placeholder="latest"
-                  value={commitTag()}
-                  onInput={(e) => setCommitTag(e.currentTarget.value)}
-                />
-              </div>
-              <div style={{ display: "flex", gap: "8px", "justify-content": "flex-end" }}>
-                <button class="btn" onClick={() => setShowCommitDialog(false)} disabled={committing()}>Cancel</button>
-                <button class="btn btn-primary" onClick={doCommit} disabled={committing() || !commitRepo().trim()}>
+              <div class="modal-footer">
+                <button type="button" class="btn" onClick={() => setShowCommitDialog(false)} disabled={committing()}>Cancel</button>
+                <button type="submit" class="btn btn-primary" disabled={committing() || !commitRepo().trim()}>
                   {committing() ? "Saving..." : "Save as image"}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       </Show>

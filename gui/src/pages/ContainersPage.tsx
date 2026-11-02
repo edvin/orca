@@ -140,7 +140,9 @@ export default function ContainersPage(props: ContainersPageProps) {
     try {
       const routes = (await invoke("gateway_list_routes")) as Array<{ hostname: string; container_name: string; port: number; url: string }>;
       const existing = routes.filter((r) => r.container_name === c.name);
-      setExposeExistingRoutes(existing.map((r) => ({ hostname: r.hostname, url: r.url || `https://${r.hostname}`, port: r.port })));
+      setExposeExistingRoutes(existing
+        .filter((r, i) => existing.findIndex((x) => x.hostname === r.hostname) === i)
+        .map((r) => ({ hostname: r.hostname, url: r.url || `https://${r.hostname}`, port: r.port })));
     } catch {
       setExposeExistingRoutes([]);
     }
@@ -345,6 +347,8 @@ export default function ContainersPage(props: ContainersPageProps) {
     const map = new Map<string, Array<{ hostname: string; container_name: string; port: number }>>();
     for (const r of gatewayRoutes()) {
       const list = map.get(r.container_name);
+      // A hostname with a plain and a WebSocket-only route is one address.
+      if (list?.some((x) => x.hostname === r.hostname)) continue;
       if (list) list.push(r);
       else map.set(r.container_name, [r]);
     }

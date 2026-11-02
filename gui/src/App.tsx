@@ -386,6 +386,9 @@ export default function App() {
       setDetailId(target.split(":").slice(1).join(":"));
       setBreadcrumbStack(null);
       setPage("stack-detail");
+    } else if (target.startsWith("image:")) {
+      setDetailId(`find:${target.slice("image:".length)}`);
+      setPage("images");
     } else if (target === "images:pull") {
       setDetailId("pull"); // Signal to ImagesPage to open pull dialog
       setPage("images");
@@ -660,7 +663,8 @@ export default function App() {
                   onNavigate={(p) => navigate(p)}
                 />
               )}
-              {page() === "images" && <ImagesPage autoOpenPull={detailId() === "pull"} onPullOpened={() => setDetailId(null)} onNavigate={(p) => navigate(p)} />}
+              {page() === "images" && <ImagesPage autoOpenPull={detailId() === "pull"} onPullOpened={() => setDetailId(null)}
+                find={detailId()?.startsWith("find:") ? detailId()!.slice(5) : null} onFound={() => setDetailId(null)} onNavigate={(p) => navigate(p)} />}
               {page() === "builds" && <BuildsPage onNavigate={(p) => navigate(p)} onAskAi={(tag, error, logTail) => aiApi?.askAboutBuild(tag, error, logTail)} />}
               {page() === "volumes" && <VolumesPage onNavigate={(p) => navigate(p)} />}
               {page() === "databases" && <DatabasesPage onNavigate={(p) => navigate(p)} />}

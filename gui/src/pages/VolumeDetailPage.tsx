@@ -1,8 +1,10 @@
 import { createSignal, onMount, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { Volume, Container } from "../lib/types";
+import type { Volume } from "../lib/types";
+import { containersStore } from "../lib/dockerStore";
+import { isAnonymous, volumeStack, volumeTitle, volumeUsers } from "../lib/volumes";
 import { useRefresh } from "../lib/useRefresh";
-import { formatTimestamp } from "../lib/format";
+import { formatBytes, formatTimestamp } from "../lib/format";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
 import CopyButton from "../components/CopyButton";
@@ -16,7 +18,7 @@ interface VolumeDetailPageProps {
   onNavigate?: (target: string) => void;
 }
 
-type DetailTab = "overview" | "containers" | "files";
+type DetailTab = "overview" | "files";
 
 interface FileEntry {
   name: string;
@@ -30,8 +32,9 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
   const [volume, setVolume] = createSignal<Volume | null>(null);
   const [activeTab, setActiveTab] = createSignal<DetailTab>("overview");
   const [_loading, setLoading] = createSignal(false);
-  const [containers, setContainers] = createSignal<Container[]>([]);
-  const [containersLoading, setContainersLoading] = createSignal(false);
+  const allContainers = containersStore.use();
+  const users = () => volumeUsers(allContainers.list()).get(props.volumeName) ?? [];
+  const [size, setSize] = createSignal<number | undefined>(undefined);
 
   // File browser state
   const [files, setFiles] = createSignal<FileEntry[]>([]);
@@ -53,16 +56,6 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
   };
 
   useRefresh(fetchVolume);
-
-  const fetchContainers = async () => {
-    setContainersLoading(true);
-    try {
-      const result = (await invoke("volume_containers", { name: props.volumeName })) as Container[];
-      setContainers(result);
-    } catch {
-    }
-    setContainersLoading(false);
-  };
 
   const fetchFiles = async (path?: string) => {
     setFilesLoading(true);
@@ -106,13 +99,15 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
     setLoading(true);
     await fetchVolume();
     setLoading(false);
+    try {
+      const r = (await invoke("volume_sizes", { refresh: false })) as { sizes: Record<string, number> };
+      setSize(r?.sizes?.[props.volumeName]);
+    } catch { /* sizes are optional */ }
   });
 
   const switchTab = (tab: DetailTab) => {
     setActiveTab(tab);
-    if (tab === "containers") {
-      fetchContainers();
-    }
+    if (tab === "files" && !fileBrowsingStarted()) startBrowsing();
   };
 
   const [removing, setRemoving] = createSignal(false);
@@ -189,15 +184,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
     }
   };
 
-  const stateClass = (state: string) => {
-    switch (state) {
-      case "Running": return "state-running";
-      case "Exited": return "state-exited";
-      case "Created": return "state-created";
-      case "Paused": return "state-paused";
-      default: return "state-stopped";
-    }
-  };
+
 
   return (
     <div class="detail-page">
@@ -205,7 +192,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       <Breadcrumb
         items={[
           { label: "Volumes", onClick: () => props.onBack() },
-          { label: props.volumeName },
+          { label: volume() ? volumeTitle(volume()!) : props.volumeName.slice(0, 24) },
         ]}
       />
 
@@ -219,32 +206,29 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
           {(v) => (
             <>
               <div class="detail-page-info">
-                <div class="detail-page-name">{v().name}</div>
+                <div class="detail-page-name">
+                  {volumeTitle(v())}
+                  <Show when={volumeStack(v())}><span class="nl-tag nl-tag-compose">{volumeStack(v())}</span></Show>
+                  <span class={`state-badge detail-state ${users().length ? "state-running" : "vl-tag-unused"}`}>
+                    {users().length ? `In use by ${users().length}` : "Unused"}
+                  </span>
+                </div>
+                <div class="detail-page-image selectable">{v().name}</div>
               </div>
-
-              <span class="state-badge" style={{
-                background: "rgba(88, 166, 255, 0.15)",
-                color: "#58a6ff",
-                border: "1px solid rgba(88, 166, 255, 0.3)",
-              }}>
-                {v().driver}
-              </span>
-
               <div class="detail-page-actions">
-                <button
-                  class="btn btn-sm"
-                  onClick={exportFileListing}
-                  title="Export file listing as text"
-                >
-                  Export listing
+                <button class="btn btn-sm btn-iconed" onClick={() => switchTab("files")}>
+                  <svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z" /></svg>Browse files
+                </button>
+                <button class="btn btn-sm btn-iconed" onClick={exportFileListing} title="Save a list of the volume's files as text">
+                  <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg>Export listing
                 </button>
                 <button
-                  class="btn btn-sm btn-danger"
+                  class="btn btn-sm btn-danger-outline btn-iconed"
                   onClick={doRemove}
-                  disabled={removing()}
-                  style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}
+                  disabled={removing() || users().length > 0}
+                  title={users().length ? "Containers use this volume; remove them first" : "Delete the volume and its data"}
                 >
-                  <Show when={removing()}><Spinner size={12} /></Show>
+                  <Show when={removing()} fallback={<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>}><Spinner size={12} /></Show>
                   {removing() ? "Removing..." : "Remove"}
                 </button>
               </div>
@@ -262,12 +246,6 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
           Overview
         </button>
         <button
-          class={`detail-tab-item ${activeTab() === "containers" ? "active" : ""}`}
-          onClick={() => switchTab("containers")}
-        >
-          Containers
-        </button>
-        <button
           class={`detail-tab-item ${activeTab() === "files" ? "active" : ""}`}
           onClick={() => switchTab("files")}
         >
@@ -281,95 +259,86 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
         <Show when={activeTab() === "overview"}>
           <Show when={volume()} fallback={<Spinner />}>
             {(v) => (
-              <div class="detail-section">
-                <div class="card-grid">
-                  <div class="card-label">Name</div>
-                  <div class="card-value">{v().name}</div>
-
-                  <div class="card-label">Driver</div>
-                  <div class="card-value">{v().driver}</div>
-
-                  <div class="card-label">Mount point</div>
-                  <div class="card-value" style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                    <span class="mono" style={{ "font-size": "12px" }}>{v().mountpoint}</span>
-                    <CopyButton text={v().mountpoint} />
+              <div class="cov">
+                <div class="cov-ctx">
+                  <div class="cov-ctx-cell">
+                    <div class="cov-badge" style={{ "--accent": volumeStack(v()) ? "#bc8cff" : "#58a6ff" }}>
+                      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+                    </div>
+                    <div class="cov-min">
+                      <div class="cov-lbl">{volumeStack(v()) ? "Stack" : "Volume"}</div>
+                      <Show when={volumeStack(v())} fallback={
+                        <div class="cov-big">{isAnonymous(v().name) ? "Anonymous" : "Named volume"}</div>
+                      }>
+                        <button class="cov-big cov-link" onClick={() => props.onNavigate?.(`stack:${volumeStack(v())}`)}>{volumeStack(v())}</button>
+                      </Show>
+                      <div class="cov-sub">
+                        {volumeStack(v())
+                          ? `Compose volume "${v().labels["com.docker.compose.volume"] ?? volumeTitle(v())}"`
+                          : isAnonymous(v().name) ? "Made by Docker for a container's VOLUME" : `Driver ${v().driver}`}
+                      </div>
+                    </div>
                   </div>
+                  <div class="cov-ctx-cell">
+                    <div class="cov-min">
+                      <div class="cov-lbl">Mount point <span class="cov-lbl-note">inside Docker's VM</span></div>
+                      <div class="cov-row" style={{ gap: "6px" }}>
+                        <span class="cov-big mono selectable cov-ellipsis" title={v().mountpoint}>{v().mountpoint}</span>
+                        <CopyButton text={v().mountpoint} />
+                      </div>
+                      <div class="cov-sub">Driver {v().driver}</div>
+                    </div>
+                  </div>
+                  <div class="cov-ctx-cell">
+                    <div class="cov-min">
+                      <div class="cov-lbl">Size</div>
+                      <div class="cov-big">{size() !== undefined ? formatBytes(size()!) : "–"}</div>
+                      <div class="cov-sub">Created {formatTimestamp(v().created_at)}</div>
+                    </div>
+                  </div>
+                </div>
 
-                  <div class="card-label">Created</div>
-                  <div class="card-value">{formatTimestamp(v().created_at)}</div>
-
-                  <Show when={Object.keys(v().labels).length > 0}>
-                    <div class="card-label">Labels</div>
-                    <div class="card-value">
-                      <For each={Object.entries(v().labels)}>
-                        {([k, val]) => (
-                          <div class="mono" style={{ "line-height": "1.6", "font-size": "11px" }}>
-                            <span style={{ color: "#58a6ff" }}>{k}</span>
-                            {val ? `=${val}` : <span style={{ color: "#484f58" }}> (empty)</span>}
-                          </div>
+                <div class="vd-body">
+                  <div class="cov-row cov-between" style={{ "margin-bottom": "10px" }}>
+                    <span class="cov-lbl">Used by</span>
+                    <Show when={users().length}><span class="cov-sub">{users().length} {users().length === 1 ? "container" : "containers"}</span></Show>
+                  </div>
+                  <Show when={users().length > 0} fallback={
+                    <div class="vd-empty">
+                      <b>No container mounts this volume.</b>
+                      <span>Its data stays until you remove it. Browse its files to see what it holds.</span>
+                      <button class="btn btn-sm" onClick={() => switchTab("files")}>Browse files</button>
+                    </div>
+                  }>
+                    <div class="vd-users">
+                      <For each={users()}>
+                        {(u) => (
+                          <button class="vd-user" onClick={() => props.onNavigate?.(`container:${u.container.id}`)}>
+                            <span class={`vd-dot ${u.container.state === "Running" ? "on" : ""}`} title={u.container.state} />
+                            <span class="cov-min">
+                              <span class="vd-user-name">{u.container.name}</span>
+                              <span class="vd-user-image mono">{u.container.image}</span>
+                            </span>
+                            <span class="vd-user-path">
+                              <span class="mono">{u.destination}</span>
+                              <span class={u.rw ? "vd-rw" : "vd-ro"}>{u.rw ? "read-write" : "read-only"}</span>
+                            </span>
+                          </button>
                         )}
                       </For>
+                    </div>
+                  </Show>
+
+                  <Show when={Object.keys(v().labels).length > 0}>
+                    <div class="cov-lbl" style={{ margin: "18px 0 8px" }}>Labels</div>
+                    <div class="nl-labels" style={{ "margin-top": "0" }}>
+                      <For each={Object.entries(v().labels)}>{([k, val]) => <span class="nl-label mono selectable">{k}={val}</span>}</For>
                     </div>
                   </Show>
                 </div>
               </div>
             )}
           </Show>
-        </Show>
-
-        {/* Containers Tab */}
-        <Show when={activeTab() === "containers"}>
-          <div class="detail-section">
-            <Show when={containersLoading()}>
-              <Spinner />
-            </Show>
-            <Show when={!containersLoading()}>
-              <Show when={containers().length > 0} fallback={
-                <div class="empty" style={{ padding: "40px 0" }}>
-                  <p class="empty-title">No containers use this volume</p>
-                  <p>This volume is not mounted by any container</p>
-                </div>
-              }>
-                <table class="table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Image</th>
-                      <th>State</th>
-                      <th>Mount path</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={containers()}>
-                      {(c) => {
-                        const mount = () => {
-                          const mounts = (c as any).mounts || [];
-                          const m = mounts.find((m: any) =>
-                            m.source === props.volumeName ||
-                            m.source?.endsWith?.(`/${props.volumeName}`)
-                          );
-                          return m?.destination || "-";
-                        };
-                        return (
-                          <tr
-                            onClick={() => props.onNavigate?.(`container:${c.id}`)}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <td style={{ "font-weight": "500" }}>{c.name}</td>
-                            <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{c.image}</td>
-                            <td>
-                              <span class={`state-badge ${stateClass(c.state)}`}>{c.state}</span>
-                            </td>
-                            <td class="mono" style={{ "font-size": "12px", color: "#8b949e" }}>{mount()}</td>
-                          </tr>
-                        );
-                      }}
-                    </For>
-                  </tbody>
-                </table>
-              </Show>
-            </Show>
-          </div>
         </Show>
 
         {/* Files Tab */}

@@ -49,6 +49,17 @@ function installMock(templates) {
     ["telemetry", "loki", "grafana/loki:3.5", "Exited", []],
     ["orca-gateway", "caddy", "caddy:2.10-alpine", "Running", [port(80), port(443)]],
   ];
+  // Which volume each service mounts, and where.
+  const ANON = "9f2c41d7e0b84a6c5d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c";
+  const VOLUME_MOUNTS = {
+    "shop-postgres": [["shop_pgdata", "/var/lib/postgresql/data"]],
+    "shop-redis": [["shop_redis", "/data"]],
+    "sso-postgres": [["sso_pgdata", "/var/lib/postgresql/data"]],
+    "website-mysql": [["website_mysql", "/var/lib/mysql"]],
+    "website-wordpress": [[ANON, "/var/www/html"]],
+    "telemetry-grafana": [["telemetry_grafana", "/var/lib/grafana"]],
+    "telemetry-prometheus": [["telemetry_prometheus", "/prometheus"]],
+  };
   const containers = DEF.map(([project, service, image, state, ports, extra = {}], i) => {
     const working = project === "shop-feature-checkout" ? `${HOME}/shop-feature-checkout` : `${HOME}/${project}`;
     return {
@@ -70,6 +81,8 @@ function installMock(templates) {
       health_status: extra.health ?? null,
       restart_policy: "unless-stopped",
       restart_count: 0,
+      mounts: (VOLUME_MOUNTS[`${project}-${service}`] ?? []).map(([name, destination]) => ({
+        source: `/var/lib/docker/volumes/${name}/_data`, destination, mode: "z", rw: true, name, kind: "volume" })),
     };
   });
   const byName = Object.fromEntries(containers.map((c) => [c.name, c]));
@@ -231,7 +244,15 @@ hooks:
     get_active_host: { id: null, name: "Local", url: "http://127.0.0.1:9477/api/v1", is_remote: false },
     list_remote_hosts: [], probe_all_hosts: [{ id: null, name: "Local", online: true, version: "0.50.0" }],
     list_containers: containers, list_stacks: stacks, list_images: images,
-    list_volumes: ["shop_pgdata", "shop_redis", "sso_pgdata", "website_mysql", "telemetry_grafana", "telemetry_prometheus"].map((n) => ({ name: n, driver: "local", mountpoint: `/var/lib/docker/volumes/${n}/_data`, labels: {}, created_at: new Date().toISOString() })),
+    list_volumes: [...["shop_pgdata", "shop_redis", "sso_pgdata", "website_mysql", "telemetry_grafana", "telemetry_prometheus", "shop_uploads_old"].map((n) => {
+      const [project, ...rest] = n.split("_");
+      return { name: n, driver: "local", mountpoint: `/var/lib/docker/volumes/${n}/_data`,
+        labels: { "com.docker.compose.project": project, "com.docker.compose.volume": rest.join("_"), "com.docker.compose.version": "2.39.1" },
+        created_at: new Date(Date.now() - 86400e3 * (n.length % 9 + 1)).toISOString() };
+    }), { name: ANON, driver: "local", mountpoint: `/var/lib/docker/volumes/${ANON}/_data`, labels: {}, created_at: new Date(Date.now() - 86400e3 * 12).toISOString() },
+    { name: "b81e0c4f2a9d6e3b7c5a1f8e0d2c4b6a9e7f1d3c5b8a0e2f4d6c8b1a3e5f7d9c", driver: "local", mountpoint: "/var/lib/docker/volumes/b81e…/_data", labels: {}, created_at: new Date(Date.now() - 86400e3 * 40).toISOString() }],
+    volume_sizes: { sizes: { shop_pgdata: 412e6, shop_redis: 8.4e6, sso_pgdata: 96e6, website_mysql: 231e6, telemetry_grafana: 41e6, telemetry_prometheus: 1.84e9, shop_uploads_old: 2.6e9,
+      [ANON]: 118e6, b81e0c4f2a9d6e3b7c5a1f8e0d2c4b6a9e7f1d3c5b8a0e2f4d6c8b1a3e5f7d9c: 310e6 } },
     list_networks: ["bridge", "shop_default", "sso_default", "website_default", "telemetry_default", "orca-gateway"].map((n, i) => ({ id: hex(64), name: n, driver: "bridge", subnet: `172.${18 + i}.0.0/16`, gateway: `172.${18 + i}.0.1`, labels: {} })),
     network_topology: [
       ["shop_default", (c) => c.labels["com.docker.compose.project"] === "shop"],
@@ -422,7 +443,10 @@ hooks:
         return { ...c, exit_code: 0, oom_killed: false, started_at: new Date(Date.now() - 3 * 3600e3).toISOString(),
           command: c.name.includes("web") ? "npm run dev" : "php artisan serve --host=0.0.0.0 --port=8080",
           env: ["APP_ENV=local", "APP_URL=https://shop.localhost", "DB_HOST=postgres", "REDIS_HOST=redis", "PUSHER_HOST=shop.localhost"],
-          mounts: [{ source: "/Users/alex/code/shop", destination: "/app", mode: "rw", type: "bind" }], health_log: [] };
+          mounts: [{ source: "/Users/alex/code/shop", destination: "/app", mode: "rw", type: "bind" }],
+          health_status: c.health_status ?? "healthy",
+          health_log: Array.from({ length: 20 }, (_, i) => ({ output: i === 6 ? "curl: (7) Failed to connect to localhost port 8080" : "OK", exit_code: i === 6 ? 1 : 0,
+            started_at: new Date(Date.now() - (20 - i) * 10e3).toISOString(), finished_at: new Date(Date.now() - (20 - i) * 10e3 + 40).toISOString() })) };
       }
       if (cmd in R) return R[cmd];
       if (cmd in K8S) return K8S[cmd];
@@ -464,6 +488,26 @@ const SHOTS = {
   },
   async worktrees(page) {
     await nav(page, "Worktrees");
+    return { clip: content };
+  },
+  async volumes(page) {
+    await nav(page, "Volumes");
+    await page.waitForTimeout(800);
+    return { clip: content };
+  },
+  async "volume-detail"(page) {
+    await nav(page, "Volumes");
+    await page.waitForTimeout(800);
+    await page.locator(".vl-row", { hasText: "pgdata" }).first().locator(".nl-name").click();
+    await page.waitForTimeout(1200);
+    return { clip: content };
+  },
+  async networks(page) {
+    await nav(page, "Networks");
+    await page.locator(".segmented button", { hasText: "List" }).click();
+    await page.waitForTimeout(1200);
+    await page.locator(".nl-row", { hasText: "orca-gateway" }).locator(".nl-name").click();
+    await page.waitForTimeout(500);
     return { clip: content };
   },
   async "network-map"(page) {

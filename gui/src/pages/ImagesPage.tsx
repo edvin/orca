@@ -21,6 +21,9 @@ import { logError } from "../lib/activityStore";
 interface ImagesPageProps {
   autoOpenPull?: boolean;
   onPullOpened?: () => void;
+  /** Open with the list filtered to this image (from a container's page). */
+  find?: string | null;
+  onFound?: () => void;
   onNavigate?: (target: string) => void;
 }
 
@@ -134,6 +137,13 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   // Auto-open pull dialog if requested (e.g. from Cmd+K → Pull Image)
   // Uses createEffect so it works even when already on the images page
+  createEffect(() => {
+    if (props.find) {
+      setSearch(props.find);
+      props.onFound?.();
+    }
+  });
+
   createEffect(() => {
     if (props.autoOpenPull) {
       setShowPull(true);

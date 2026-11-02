@@ -75,7 +75,9 @@ When you pull an image from a registry with saved credentials, Orca uses them au
 
 ## The Builds page
 
-The **Builds** page lists builds with their status, tag, duration, start time and source. Use **All**, **In progress**, **Success** and **Failed** to filter. The summary at the top shows the total number of builds, success rate, failures and average duration; open **Analytics** for builds per day over the last seven days and the most built images.
+The **Builds** page shows a card per image and target, with its latest run on top: whether it succeeded, when it ran and how long it took, or the error when it failed. A bar per run (the last twelve, oldest first) shows at a glance whether an image builds reliably; click one to open that run. The arrow at the end of a card lists every run.
+
+**All**, **Running**, **Succeeded** and **Failed** filter the runs, and the search box finds an image or folder. The summary at the top counts the builds and images, the failures of the last 24 hours, and when the last build ran. **Analytics**, below the list, shows builds per day over the last seven days and the most built images, for builds Orca ran.
 
 The source tells you where a build came from:
 
@@ -84,7 +86,7 @@ The source tells you where a build came from:
 | **Manual** | Started from the Images page or from a build target. |
 | **URL** | Started with **Build from URL**. |
 | **Scheduled** | Started by a [scheduled build](#scheduled-builds). |
-| **External** | Built outside Orca, read from BuildKit's build history (`docker buildx history`). |
+| **External** | Built outside Orca, with `docker build`, compose or buildx, read from BuildKit's build history (`docker buildx history`). Their cards are marked **CLI**, and you can open them and read their logs like any other build. |
 
 ### Build details and cache insights
 
@@ -102,7 +104,7 @@ Click **Build from URL** and enter a **Source URL**: a Git repository such as `h
 
 ### Compare two builds
 
-Click **Compare**, select two builds and click **Compare selected**. The comparison shows both builds side by side, with status, duration, start time, source and Dockerfile, and lists any build args that changed. **View both logs** shows the two build logs next to each other.
+Click **Compare runs**, pick two runs from the cards and click **Compare**. The comparison shows both builds side by side, with status, duration, start time, source and Dockerfile, and lists any build args that changed. **View both logs** shows the two build logs next to each other.
 
 ## Build targets
 

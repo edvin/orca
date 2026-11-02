@@ -69,3 +69,17 @@ export function certExpiry(iso: string | null | undefined): { text: string; leve
   if (days <= 30) return { text: `expires in ${days} day${days === 1 ? "" : "s"} (${date})`, level: "warn" };
   return { text: `until ${date}`, level: "ok" };
 }
+
+/**
+ * An image reference split for display: "registry.example.com/team/app/api:dev@sha256:…"
+ * reads "api:dev", with "registry.example.com/team/app" as where it's from.
+ */
+export function splitImage(ref: string): { name: string; from: string | null; digest: string | null } {
+  const [withoutDigest, digest] = ref.split("@");
+  const slash = withoutDigest.lastIndexOf("/");
+  let from = slash >= 0 ? withoutDigest.slice(0, slash) : null;
+  const name = slash >= 0 ? withoutDigest.slice(slash + 1) : withoutDigest;
+  // Docker Hub's official images: "docker.io/library/postgres" is just postgres.
+  if (from === "library" || from === "docker.io/library" || from === "docker.io") from = null;
+  return { name: name || ref, from, digest: digest ? digest.replace(/^sha256:/, "").slice(0, 12) : null };
+}

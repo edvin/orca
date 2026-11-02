@@ -4,7 +4,6 @@ import type { BuildRecord, BuildStats, BuildTarget, BuildComparison, CacheAnalys
 import { useRefresh } from "../lib/useRefresh";
 import { showToast } from "../components/Toast";
 import { confirmDanger } from "../components/ConfirmDialog";
-import { SkeletonRow } from "../components/Skeleton";
 import HelpLink from "../components/HelpLink";
 import { requestIntent } from "../lib/pageIntent";
 import "../styles/polish-b.css";
@@ -92,6 +91,8 @@ export default function BuildsPage(props: BuildsPageProps) {
   const [buildingTargets, setBuildingTargets] = createSignal<Set<string>>(new Set());
   const [buildingAll, setBuildingAll] = createSignal(false);
   const [analyticsOpen, setAnalyticsOpen] = createSignal(false);
+  const [query, setQuery] = createSignal("");
+  const [expandedGroup, setExpandedGroup] = createSignal<string | null>(null);
 
   // Compare mode state
   const [compareMode, setCompareMode] = createSignal(false);
@@ -203,11 +204,7 @@ export default function BuildsPage(props: BuildsPageProps) {
     return "#f85149";
   };
 
-  const successRate = () => {
-    const s = stats();
-    if (!s || s.total_builds === 0) return "--";
-    return Math.round((s.success_count / s.total_builds) * 100) + "%";
-  };
+
 
   // -- Compare functions --
   const toggleCompareSelect = (id: string, e: MouseEvent) => {
@@ -879,203 +876,155 @@ export default function BuildsPage(props: BuildsPageProps) {
   };
 
   // -- List View --
+  // One card per image and target ("shop/.docker (test)"), its runs inside.
+  const groups = () => {
+    const q = query().trim().toLowerCase();
+    const byTag = new Map<string, BuildRecord[]>();
+    for (const b of filtered()) {
+      if (q && !`${b.tag} ${b.context_path}`.toLowerCase().includes(q)) continue;
+      const key = b.tag || b.context_path || "(untagged)";
+      byTag.set(key, [...(byTag.get(key) ?? []), b]);
+    }
+    // builds() is newest first, so each group's first run is its latest.
+    return [...byTag.entries()].map(([key, runs]) => ({ key, runs, latest: runs[0] }));
+  };
+  const splitTag = (tag: string) => {
+    const m = tag.match(/^(.*?)(?:\s+\(([^)]+)\))?$/);
+    const name = m?.[1] ?? tag;
+    const slash = name.indexOf("/");
+    return { project: slash > 0 ? name.slice(0, slash) : name, path: slash > 0 ? name.slice(slash + 1) : "", target: m?.[2] ?? null };
+  };
+  const failedRecently = () => builds().filter((b) => b.status === "failed" && Date.now() - new Date(b.started_at).getTime() < 86400e3).length;
+  const lastBuild = () => builds()[0];
+
+  const runRow = (b: BuildRecord) => (
+    <div class="bl-run" classList={{ "bl-run-picked": compareSelected().includes(b.id) }}
+      onClick={(e) => (compareMode() ? toggleCompareSelect(b.id, e) : void selectBuild(b.id))}>
+      <Show when={compareMode()}>
+        <span class="bl-check" classList={{ on: compareSelected().includes(b.id) }} />
+      </Show>
+      <span class={`bl-status bl-${b.status}`} title={b.status.replace("_", " ")}>{statusIcon(b.status)}</span>
+      <span class="bl-run-when">{relativeTime(b.started_at)}<span class="bl-dim"> · {new Date(b.started_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></span>
+      <span class="bl-run-dur">{formatDuration(b.duration_secs)}</span>
+      <span class="bl-run-src">{sourceLabel(b.source)}</span>
+      <span class="bl-run-err" title={b.error ?? ""}>{b.error ?? ""}</span>
+      <Show when={b.source !== "external"}>
+        <button class="action-icon action-icon-delete" title="Delete this build's record" onClick={(e) => deleteBuild(b.id, e)}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        </button>
+      </Show>
+    </div>
+  );
+
   const renderList = () => (
     <div>
-      {/* Stats summary */}
-      <Show when={stats()}>
-        {(s) => (
-          <div style={{
-            display: "flex",
-            gap: "16px",
-            "margin-bottom": "16px",
-            "flex-wrap": "wrap",
-          }}>
-            <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Total builds</div>
-              <div style={{ "font-size": "20px", "font-weight": "600" }}>{s().total_builds}</div>
-            </div>
-            <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Success rate</div>
-              <div style={{ "font-size": "20px", "font-weight": "600", color: "#3fb950" }}>{successRate()}</div>
-            </div>
-            <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Failed</div>
-              <div style={{ "font-size": "20px", "font-weight": "600", color: s().failure_count > 0 ? "#f85149" : undefined }}>{s().failure_count}</div>
-            </div>
-            <div class="card" style={{ padding: "12px 16px", flex: "1", "min-width": "120px" }}>
-              <div style={{ color: "#8b949e", "font-size": "12px" }}>Avg duration</div>
-              <div style={{ "font-size": "20px", "font-weight": "600" }}>{formatDuration(s().avg_duration_secs)}</div>
-            </div>
+      <Show when={builds().length > 0}>
+        <div class="nl-summary">
+          <div><span class="nl-k">Builds</span><b>{builds().length}</b></div>
+          <div><span class="nl-k">Images</span><b>{new Set(builds().map((b) => b.tag || b.context_path)).size}</b></div>
+          <div><span class="nl-k">Failed today</span><b class={failedRecently() ? "bl-bad" : ""}>{failedRecently()}</b></div>
+          <div><span class="nl-k">Last build</span><b>{lastBuild() ? relativeTime(lastBuild()!.started_at) : "–"}</b>
+            <Show when={lastBuild()}><span class={`bl-status bl-${lastBuild()!.status}`}>{statusIcon(lastBuild()!.status)}</span></Show>
           </div>
-        )}
+        </div>
       </Show>
 
-      {/* Analytics expandable section */}
-      {renderAnalytics()}
-
-      {/* Filter tabs + Compare button */}
-      <div style={{ display: "flex", "align-items": "center", gap: "4px", "margin-bottom": "16px" }}>
-        <For each={["all", "in_progress", "success", "failed"] as FilterTab[]}>
-          {(tab) => (
-            <button
-              class={`btn ${filter() === tab ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setFilter(tab)}
-              style={{ padding: "6px 14px", "font-size": "13px" }}
-            >
-              {tab === "all" ? "All" : tab === "in_progress" ? "In progress" : tab === "success" ? "Success" : "Failed"}
-            </button>
-          )}
-        </For>
+      <div class="vl-toolbar">
+        <div class="segmented" role="tablist">
+          <For each={["all", "in_progress", "success", "failed"] as FilterTab[]}>
+            {(tab) => (
+              <button class={filter() === tab ? "active" : ""} onClick={() => setFilter(tab)}>
+                {tab === "all" ? "All" : tab === "in_progress" ? "Running" : tab === "success" ? "Succeeded" : "Failed"}
+              </button>
+            )}
+          </For>
+        </div>
+        <input class="form-input vl-search" type="search" placeholder="Find a build by image or folder"
+          value={query()} onInput={(e) => setQuery(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }} />
         <div style={{ "margin-left": "auto", display: "flex", gap: "8px", "align-items": "center" }}>
-          <Show when={compareMode() && compareSelected().length === 2}>
-            <button
-              class="btn btn-primary"
-              onClick={runComparison}
-              disabled={compareLoading()}
-              style={{ "font-size": "13px", padding: "6px 14px" }}
-            >
-              {compareLoading() ? "Comparing..." : "Compare selected"}
-            </button>
-          </Show>
-          <Show when={compareMode() && compareSelected().length < 2 && compareSelected().length > 0}>
-            <span style={{ color: "#8b949e", "font-size": "12px" }}>
-              Select {2 - compareSelected().length} more
+          <Show when={compareMode()}>
+            <span class="bl-dim" style={{ "font-size": "12px" }}>
+              {compareSelected().length < 2 ? `Pick ${2 - compareSelected().length} more ${compareSelected().length ? "run" : "runs"}` : "Two runs picked"}
             </span>
           </Show>
-          <button
-            class={`btn ${compareMode() ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => compareMode() ? exitCompareMode() : setCompareMode(true)}
-            style={{ "font-size": "13px", padding: "6px 14px" }}
-          >
-            {compareMode() ? "Cancel compare" : "Compare"}
+          <Show when={compareMode() && compareSelected().length === 2}>
+            <button class="btn btn-primary" onClick={runComparison} disabled={compareLoading()}>
+              {compareLoading() ? "Comparing..." : "Compare"}
+            </button>
+          </Show>
+          <button class="btn" onClick={() => compareMode() ? exitCompareMode() : setCompareMode(true)}
+            title="Compare two runs: what changed, and what was cached">
+            {compareMode() ? "Cancel" : "Compare runs"}
           </button>
         </div>
       </div>
 
-      {/* Table */}
-      <Show when={filtered().length > 0} fallback={
-        <Show when={loaded()} fallback={
-          <div class="card" style={{ overflow: "hidden" }}>
-            <table class="data-table" style={{ width: "100%", "border-collapse": "collapse" }}>
-              <thead>
-                <tr><th>Status</th><th>Tag</th><th>Duration</th><th>Started</th><th>Source</th><th>Actions</th></tr>
-              </thead>
-              <tbody>
-                <SkeletonRow columns={6} />
-                <SkeletonRow columns={6} />
-                <SkeletonRow columns={6} />
-                <SkeletonRow columns={6} />
-              </tbody>
-            </table>
-          </div>
-        }>
-          <div class="empty">
-            <p class="empty-title">No builds yet</p>
-            <p>History, logs and timings of image builds, including builds from the CLI. <HelpLink path="/docs/images-and-builds/#the-builds-page" /></p>
-            <div class="empty-actions">
-              <button class="btn btn-primary" onClick={startBuild}>
-                Build an image
-              </button>
+      <Show when={groups().length > 0} fallback={
+        <Show when={loaded()} fallback={<div class="nl"><For each={[0, 1, 2, 3]}>{() => <div class="nl-row nl-skeleton" />}</For></div>}>
+          <Show when={builds().length > 0} fallback={
+            <div class="empty">
+              <p class="empty-title">No builds yet</p>
+              <p>History, logs and timings of image builds, including builds from the CLI. <HelpLink path="/docs/images-and-builds/" /></p>
+              <div class="empty-actions">
+                <button class="btn btn-primary" onClick={startBuild}>Build an image</button>
+              </div>
             </div>
-          </div>
+          }>
+            <div class="nl-hint" style={{ padding: "24px 4px" }}>No builds match.</div>
+          </Show>
         </Show>
       }>
-        <div class="card" style={{ overflow: "hidden" }}>
-          <table class="data-table" style={{ width: "100%", "border-collapse": "collapse" }}>
-            <thead>
-              <tr>
-                <Show when={compareMode()}>
-                  <th style={{ width: "36px", "text-align": "center" }} />
-                </Show>
-                <th style={{ width: "40px", "text-align": "center" }}>Status</th>
-                <th>Tag</th>
-                <th>Duration</th>
-                <th>Started</th>
-                <th>Source</th>
-                <th style={{ width: "100px" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <For each={filtered()}>
-                {(build) => (
-                  <tr
-                    onClick={() => compareMode() ? toggleCompareSelect(build.id, new MouseEvent("click")) : selectBuild(build.id)}
-                    style={{ cursor: "pointer" }}
-                    class="table-row-hover"
-                  >
-                    <Show when={compareMode()}>
-                      <td style={{ "text-align": "center" }} onClick={(e) => toggleCompareSelect(build.id, e)}>
-                        <div style={{
-                          width: "16px",
-                          height: "16px",
-                          border: `2px solid ${compareSelected().includes(build.id) ? "#58a6ff" : "#30363d"}`,
-                          "border-radius": "3px",
-                          background: compareSelected().includes(build.id) ? "#58a6ff" : "transparent",
-                          display: "inline-flex",
-                          "align-items": "center",
-                          "justify-content": "center",
-                          transition: "all 0.15s",
-                        }}>
-                          <Show when={compareSelected().includes(build.id)}>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                          </Show>
-                        </div>
-                      </td>
-                    </Show>
-                    <td style={{ "text-align": "center" }}>
-                      <span style={{
-                        color: statusColor(build.status),
-                        "font-size": "16px",
-                        "font-weight": "bold",
-                      }} title={build.status.replace("_", " ")}>
-                        {statusIcon(build.status)}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
-                        <span style={{ "font-weight": "500" }}>{build.tag || "(untagged)"}</span>
-                        <Show when={build.source === "external"}>
-                          <span style={{
-                            "font-size": "10px",
-                            padding: "1px 6px",
-                            "border-radius": "4px",
-                            background: "rgba(136, 132, 216, 0.15)",
-                            color: "#a78bfa",
-                            border: "1px solid rgba(136, 132, 216, 0.3)",
-                            "white-space": "nowrap",
-                          }}>External</span>
-                        </Show>
+        <div class="nl">
+          <For each={groups()}>
+            {(g) => {
+              const t = () => splitTag(g.key);
+              const open = () => compareMode() || expandedGroup() === g.key;
+              const failed = () => g.runs.filter((r) => r.status === "failed").length;
+              return (
+                <div class="nl-row bl-group" classList={{ "nl-open": open() }} style={{ "--net": statusColor(g.latest.status) }}>
+                  <div class="bl-main" role="button" tabindex="0"
+                    onClick={() => (compareMode() ? setExpandedGroup(g.key) : void selectBuild(g.latest.id))}
+                    onKeyDown={(e) => { if (e.key === "Enter") void selectBuild(g.latest.id); }}>
+                    <span class={`bl-badge bl-${g.latest.status}`}>{statusIcon(g.latest.status)}</span>
+                    <div class="nl-title">
+                      <div class="nl-name">
+                        {t().project}
+                        <Show when={t().target}><span class="nl-tag nl-tag-compose">{t().target}</span></Show>
+                        <Show when={g.latest.source === "external"}><span class="nl-tag" title="Built outside Orca: docker build, compose or buildx">CLI</span></Show>
                       </div>
-                      <div style={{ color: "#8b949e", "font-size": "12px" }}>{build.context_path}</div>
-                    </td>
-                    <td style={{ color: "#8b949e" }}>{formatDuration(build.duration_secs)}</td>
-                    <td style={{ color: "#8b949e" }}>{relativeTime(build.started_at)}</td>
-                    <td style={{ color: "#8b949e" }}>{sourceLabel(build.source)}</td>
-                    <td>
-                      <div style={{ display: "flex", gap: "4px" }}>
-                        <button
-                          class="btn btn-ghost btn-sm"
-                          onClick={(e) => { e.stopPropagation(); selectBuild(build.id); }}
-                          title="View"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>
-                        <button
-                          class="btn btn-ghost btn-sm"
-                          onClick={(e) => deleteBuild(build.id, e)}
-                          title="Delete"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                        </button>
+                      <div class="nl-meta">
+                        <Show when={t().path}><span class="mono">{t().path}</span> · </Show>
+                        {g.latest.status === "failed" && g.latest.error ? <span class="bl-bad">{g.latest.error}</span> : <>Last built {relativeTime(g.latest.started_at)}{g.latest.duration_secs !== undefined ? ` in ${formatDuration(g.latest.duration_secs)}` : ""}</>}
                       </div>
-                    </td>
-                  </tr>
-                )}
-              </For>
-            </tbody>
-          </table>
+                    </div>
+                    <div class="bl-history" title={`Last ${Math.min(12, g.runs.length)} runs, oldest first`}>
+                      <For each={g.runs.slice(0, 12).reverse()}>
+                        {(r) => <i class={`bl-${r.status}`} onClick={(e) => { e.stopPropagation(); if (!compareMode()) void selectBuild(r.id); }} title={`${r.status.replace("_", " ")} · ${relativeTime(r.started_at)}`} />}
+                      </For>
+                    </div>
+                    <div class="vl-size">
+                      <b>{g.runs.length} {g.runs.length === 1 ? "run" : "runs"}</b>
+                      <span>{failed() ? `${failed()} failed` : "all succeeded"}</span>
+                    </div>
+                    <button class="bl-expand" title={open() ? "Hide runs" : "Show every run"}
+                      onClick={(e) => { e.stopPropagation(); setExpandedGroup(open() ? null : g.key); }}>
+                      <svg class="nl-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                    </button>
+                  </div>
+                  <Show when={open()}>
+                    <div class="bl-runs">
+                      <For each={g.runs}>{(b) => runRow(b)}</For>
+                    </div>
+                  </Show>
+                </div>
+              );
+            }}
+          </For>
         </div>
       </Show>
+
+      {/* Analytics for Orca's own builds */}
+      <div style={{ "margin-top": "16px" }}>{renderAnalytics()}</div>
     </div>
   );
 

@@ -15,6 +15,7 @@ Click **Run** on the **Containers** page to open the **Run container** dialog. *
 | **Image** | The image to run, for example `nginx:latest`. Type a Docker Hub image name and Orca suggests its most recent tags. |
 | **Name** | Optional container name. Docker picks one if you leave it empty. |
 | **Port mappings** | `host:container` pairs, separated by commas or new lines, for example `8080:80, 5432:5432`. |
+| **Network** | The network to attach the container to. |
 | **Environment variables** | One `KEY=value` per line. |
 
 Open **Advanced options** for the rest:
@@ -23,7 +24,6 @@ Open **Advanced options** for the rest:
 |---|---|
 | **Command override** | Replaces the image's default command. |
 | **Volume mounts** | `host:container` pairs, one per line. |
-| **Network** | The network to attach the container to. |
 | **Restart policy** | **No**, **Always**, **Unless stopped** or **On failure**. |
 | **CPU limit** | Cores, for example `0.5`. |
 | **Memory** | A memory limit, for example `512m`. |
@@ -60,13 +60,17 @@ Click a container to open its detail page. The header has **Start** (or **Stop**
 
 ### Overview and stats
 
-**Overview** shows live CPU, memory, network I/O and uptime. While the container runs, Orca also draws **CPU usage** and **Memory usage** charts from the readings it has collected since you opened the app.
+**Overview** starts with where the container sits: its stack (click it to open the stack), its image with the published ports, the networks it's on and its gateway address, and the Docker engine it runs on.
 
-Below the charts you find the container ID, image, creation time, state, command and port mappings, and how many times the container has restarted.
+**Live usage** shows CPU, memory, network and uptime, read every three seconds while the container runs. CPU and network draw what Orca has read since you opened the app, and memory shows how much of its limit, or of the engine's memory, the container uses. Below them are the bytes it has read from and written to disk.
+
+On the left are the health check (see below), the restart policy, whether the container is exposed via the gateway, and its resource limits; click one to change it. At the bottom are the container ID and command, buttons to its **Logs**, **Terminal**, **Files** and **Inspect** tabs, and, when it serves a web page, a button that opens it.
+
+Under the container's name, the image reads as its short name, such as `api:dev`, with the registry dimmed. Click it to find the image on the **Images** page.
 
 ### Health checks
 
-If the image or your run options define a health check, the **Health** section shows the current status (healthy, unhealthy or starting) and a table of recent checks with their time, exit code and output. A container without a health check shows **No health check configured**.
+If the image or your run options define a health check, **Health check** shows the current status (healthy, unhealthy or starting) and a bar per recent check: green when it passed, red when it failed. Point at one for its time, exit code and output.
 
 ### Logs
 
@@ -159,13 +163,15 @@ The daemon checks schedules every minute. The list shows each schedule as **Acti
 
 ## Volumes
 
-The **Volumes** page lists volumes with their driver, size and creation date. **Create volume** makes a new volume with a name, driver and optional labels. When there are no volumes yet, the empty page has the same button.
+The **Volumes** page shows what each volume is for. A compose project's volume is shown by its name in the compose file, such as `pgdata`, with the project beside it. Under the name is where it's mounted, and in which container: `/var/lib/postgresql/data in postgres-1`. A volume Docker made without a name reads **Anonymous volume**, with the start of its ID, so its container and path are what tell you what it holds. Volumes no container mounts are marked **Unused**.
 
-Click a volume to see its mount point and labels, which containers use it, and its files. On the **Files** tab, **Browse files** reads the volume through a temporary Alpine container, so it works whether or not a container is using the volume.
+The summary at the top counts the volumes, those in use and those unused, with how much space the unused ones take. **All**, **In use** and **Unused** filter the list, and the search box matches volume names, containers, images and paths. Sizes come from Docker's disk usage, which takes a moment on a busy engine; the refresh button measures them again. **Create volume** makes a new volume with a name, driver and optional labels.
+
+Click a volume to open its page. **Overview** shows its project, mount point, size and creation date, and the containers that use it, each with the path it's mounted at and whether it's read-write. Click one to open it. On the **Files** tab, Orca reads the volume through a temporary Alpine container, so it works whether or not a container is using the volume. **Remove** works once no container uses the volume.
 
 ## Networks
 
-The **Networks** page lists networks with their driver, subnet and gateway. **Create network** makes a new network with the `bridge`, `host`, `macvlan`, `ipvlan` or `none` driver.
+The **Networks** page shows a card per network: its name and kind (**Compose**, **Gateway**, **Custom** or **Docker default**), driver, subnet and gateway, and the containers on it. Networks in use come first. The summary at the top counts the networks, those in use, the containers connected and the containers on more than one network. Click a card for the network's full ID and labels, and every container on it with its IP address. **Remove** shows on empty networks you made, when you point at them. **Create network** makes a new network with the `bridge` (the usual choice), `macvlan` or `ipvlan` driver. Docker has one `host` and one `none` network already; it doesn't allow more.
 
 Switch to **Map** to see every network in use as a card with the containers on it, each with its IP address. Containers on a Compose project's own network are named without the project's prefix. A container on more than one network has a dashed outline and a dot in the colour of each other network it's on. Hover it to see where else it is: Orca draws a link to each of its other networks and fades the rest. Hover a network to trace every container it shares with other networks. Click a container to open it. Networks with no containers, such as `host` and `none`, are listed below the map. Orca remembers whether you last used the list or the map.
 

@@ -197,6 +197,12 @@ async function injectTauriBridge(page: Page) {
             stack_links: [],
           }),
           gateway_get_links: () => Promise.resolve([]),
+          // Builds
+          list_builds: () => fetchJson(DAEMON + "/builds"),
+          get_build_stats: () => fetchJson(DAEMON + "/builds/stats"),
+          list_build_targets: () => fetchJson(DAEMON + "/builds/targets"),
+          get_build: () => fetchJson(DAEMON + "/builds/" + encodeURIComponent(args.id)),
+          get_build_logs: () => fetch(DAEMON + "/builds/" + encodeURIComponent(args.id) + "/logs", { headers: AUTH }).then(r => r.text()),
           gateway_check_ports: () => Promise.resolve({ conflicts: [] }),
         };
 
@@ -360,6 +366,13 @@ test.describe("Orca Desktop Screenshots", () => {
   test("07 - Volumes", async ({ page }) => {
     await navigateTo(page, "Volumes");
     await screenshot(page, "07-volumes");
+  });
+
+  test("07b - Builds", async ({ page }) => {
+    await navigateTo(page, "Builds");
+    // BuildKit's history comes from `docker buildx history ls`: seconds.
+    await page.locator(".bl-group").first().waitFor({ timeout: 45000 }).catch(() => {});
+    await screenshot(page, "07b-builds");
   });
 
   test("08 - Networks", async ({ page }) => {

@@ -237,9 +237,15 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
 
   return (
     <div class="modal-overlay" data-own-escape onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
-      <div class="modal-dialog">
+      <div class="modal-dialog" style={{ width: "760px", "max-width": "92vw" }}>
         <div class="modal-header">
-          <h2 class="modal-title">Run container</h2>
+          <div class="modal-head-main">
+            <span class="modal-icon"><svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z" /><path d="M3 7l9 5 9-5M12 12v10" /></svg></span>
+            <div>
+              <h2 class="modal-title">Run container</h2>
+              <div class="modal-subtitle">Orca pulls the image if it isn't here yet, then creates and starts the container.</div>
+            </div>
+          </div>
           <Show when={stage() === "form" || stage() === "error"}>
             <button class="modal-close" onClick={() => props.onClose()}>{"\u00d7"}</button>
           </Show>
@@ -356,16 +362,27 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                 </div>
               </div>
 
-              <div class="form-group">
-                <label class="form-label">Port mappings</label>
-                <input
-                  class="form-input mono"
-                  type="text"
-                  placeholder="8080:80, 5432:5432"
-                  value={ports()}
-                  onInput={(e) => setPorts(e.currentTarget.value)}
-                />
-                <span class="form-hint">host:container — comma or newline separated</span>
+              <div class="form-row">
+                <div class="form-group" style={{ flex: 2 }}>
+                  <label class="form-label">Port mappings</label>
+                  <input
+                    class="form-input mono"
+                    type="text"
+                    placeholder="8080:80, 5432:5432"
+                    value={ports()}
+                    onInput={(e) => setPorts(e.currentTarget.value)}
+                  />
+                  <span class="form-hint">host:container, separated by commas</span>
+                </div>
+                <div class="form-group" style={{ flex: 1 }}>
+                  <label class="form-label">Network</label>
+                  <Dropdown
+                    value={network()}
+                    options={availableNetworks()}
+                    onChange={(v) => setNetwork(v)}
+                  />
+                </div>
+
               </div>
 
               <div class="form-group">
@@ -375,8 +392,9 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                   placeholder={"KEY=value\nDATABASE_URL=postgres://..."}
                   value={env()}
                   onInput={(e) => setEnv(e.currentTarget.value)}
-                  rows={2}
+                  rows={3}
                 />
+                <span class="form-hint">One KEY=value per line</span>
               </div>
 
               <button
@@ -389,8 +407,9 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
               </button>
 
               <Show when={showAdvanced()}>
+                <div class="form-section">
                 <div class="form-group">
-                  <label class="form-label">Command override</label>
+                  <label class="form-label">Command override <span class="form-label-note">replaces the image's command</span></label>
                   <input
                     class="form-input mono"
                     type="text"
@@ -410,15 +429,6 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                     rows={2}
                   />
                   <span class="form-hint">host:container, one per line</span>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Network</label>
-                  <Dropdown
-                    value={network()}
-                    options={availableNetworks()}
-                    onChange={(v) => setNetwork(v)}
-                  />
                 </div>
 
                 <div class="form-row">
@@ -458,12 +468,16 @@ export default function RunContainerDialog(props: RunContainerDialogProps) {
                     />
                   </div>
                 </div>
+                </div>
               </Show>
             </div>
 
             <div class="modal-footer">
+              <span class="modal-footer-note">Only the image is required.</span>
               <button type="button" class="btn" onClick={() => props.onClose()}>Cancel</button>
-              <button type="submit" class="btn btn-primary" disabled={!image().trim()}>Run</button>
+              <button type="submit" class="btn btn-primary btn-iconed" disabled={!image().trim()}>
+                <svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" /></svg>Run
+              </button>
             </div>
           </form>
         </Show>

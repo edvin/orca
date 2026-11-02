@@ -12,6 +12,17 @@ export interface Container {
   health_status?: string;  // "healthy" | "unhealthy" | "starting" | "none" | null
   health_log?: Array<{ output: string; exit_code: number; started_at: string; finished_at: string }>;
   restart_count?: number;
+  /** What it mounts; volume mounts carry the volume's name. */
+  mounts?: ContainerMount[];
+}
+
+export interface ContainerMount {
+  source: string;
+  destination: string;
+  mode: string;
+  rw: boolean;
+  name?: string;
+  kind?: string;
 }
 
 export interface PortMapping {
