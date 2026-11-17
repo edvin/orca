@@ -239,11 +239,13 @@ jobs:
           TARGET="target/${{ matrix.platform.target }}/release"
           UPLOAD_FILES=""
 
-          # Find bundle artifacts
+          # Find bundle artifacts. The .deb bundler leaves its staging folder
+          # next to the package (bundle/deb/<name>/, with control.tar.gz and
+          # data.tar.gz in it): nothing in there is a release file.
           if [ -d "$TARGET/bundle" ]; then
             while IFS= read -r f; do
               UPLOAD_FILES="$UPLOAD_FILES \"$f\""
-            done < <(find "$TARGET/bundle" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" -o -name "*-setup.exe" -o -name "*.tar.gz" \) 2>/dev/null)
+            done < <(find "$TARGET/bundle" -type f -not -path "*/bundle/deb/*/*" \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.msi" -o -name "*.sig" -o -name "*latest.json" -o -name "*-setup.exe" -o -name "*.tar.gz" \) 2>/dev/null)
           fi
 
           # Standalone daemon binaries are uploaded by the daemon-package workflow
@@ -317,3 +319,14 @@ jobs:
 
       - name: Publish release
         run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
+
+  # The desktop .deb goes to the apt repository only once the release is out,
+  # so `apt upgrade` never brings a version the release page doesn't have.
+  publish-apt:
+    name: Publish to apt
+    needs: publish-release
+    uses: ./.github/workflows/desktop-apt.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets:
+      CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}

@@ -1,0 +1,79 @@
+name: Publish orca-desktop to apt
+
+# Pushes the desktop app's .deb from a published GitHub release to Orca's apt
+# repository on Cloudsmith (the one orca-daemon is in), so an apt install of
+# the app updates with `apt upgrade`.
+#
+# The Release workflow calls this once a release is published. Run it by hand
+# to publish a release from before this existed, or to retry a failed push.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v0.72.0
+        required: true
+        type: string
+    secrets:
+      CLOUDSMITH_API_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v0.72.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Push .deb to Cloudsmith
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the .deb from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*_amd64.deb' --dir release
+
+      - name: Check the package
+        id: deb
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          shopt -s nullglob
+          files=(release/*_amd64.deb)
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "::error::Expected one amd64 .deb in release $TAG, found ${#files[@]}"
+            exit 1
+          fi
+
+          package=$(dpkg-deb -f "${files[0]}" Package)
+          version=$(dpkg-deb -f "${files[0]}" Version)
+          arch=$(dpkg-deb -f "${files[0]}" Architecture)
+          echo "Found $package $version ($arch)"
+
+          # Whatever goes in here is what `apt upgrade` installs: refuse
+          # anything that isn't this release's desktop package.
+          if [ "$package" != "orca-desktop" ] || [ "v$version" != "$TAG" ] || [ "$arch" != "amd64" ]; then
+            echo "::error::Expected orca-desktop ${TAG#v} (amd64), found $package $version ($arch)"
+            exit 1
+          fi
+
+          # The release asset is named after the app ("Orca.Desktop_…");
+          # the repository gets the package's own name.
+          deb="${package}_${version}_${arch}.deb"
+          mv "${files[0]}" "$deb"
+          echo "file=$deb" >> "$GITHUB_OUTPUT"
+
+      - name: Push to Cloudsmith
+        env:
+          CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+          DEB_FILE: ${{ steps.deb.outputs.file }}
+        run: |
+          pip install cloudsmith-cli
+          cloudsmith push deb edvin/orca/any-distro/any-version "$DEB_FILE" \
+            --api-key "$CLOUDSMITH_API_KEY" \
+            --republish
