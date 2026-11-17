@@ -341,7 +341,7 @@ hooks:
     <div class="platforms">
       <div class="platform reveal" data-os-card="mac"><div class="platform-icon">${ICONS.apple}</div><h3>macOS</h3><p>A lightweight Linux VM with Lima and Apple's Virtualization framework, VirtioFS mounts that keep file permissions, and ports forwarded to your Mac.</p><span class="yours">Your platform</span></div>
       <div class="platform reveal" data-os-card="windows"><div class="platform-icon">${ICONS.windows}</div><h3>Windows</h3><p>Docker inside WSL2, installed and configured for you, with memory, CPU and swap settings in the app.</p><span class="yours">Your platform</span></div>
-      <div class="platform reveal" data-os-card="linux"><div class="platform-icon">${ICONS.linux}</div><h3>Linux</h3><p>Talks to Docker or Podman directly, with no VM in between. AppImage and .deb packages.</p><span class="yours">Your platform</span></div>
+      <div class="platform reveal" data-os-card="linux"><div class="platform-icon">${ICONS.linux}</div><h3>Linux</h3><p>Talks to Docker or Podman directly, with no VM in between. AppImage and .deb packages, and an apt repository for Debian and Ubuntu.</p><span class="yours">Your platform</span></div>
     </div>
     <div class="server-line reveal">
       <div><strong>Servers too.</strong> Install the daemon on any Linux server and add it to Orca.</div>

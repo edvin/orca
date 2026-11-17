@@ -513,7 +513,7 @@ The daemon talks to Docker/Podman via the standard API (bollard). On macOS it ma
 Just download and launch Orca Desktop — it handles everything else:
 
 1. **Download** from [Releases](https://github.com/edvin/orca/releases)
-2. **Run** the installer (Windows: setup .exe, macOS: .dmg for Apple Silicon, Linux: AppImage or .deb)
+2. **Run** the installer (Windows: setup .exe, macOS: .dmg for Apple Silicon, Linux: AppImage or .deb, or [install with apt](#install-with-apt))
 3. **Orca Desktop checks your environment** and installs anything missing:
 
 | Platform | What Orca Desktop sets up for you |
@@ -525,6 +525,19 @@ Just download and launch Orca Desktop — it handles everything else:
 No manual setup required. The System Health page guides you through any needed steps with one-click fix buttons.
 
 4. **Open a project folder**: click **Open folder** on the dashboard (or drop a folder onto the window), pick a folder with a `compose.yaml`, and click **Start**. Orca runs it as a stack and shows its URLs.
+
+### Install with apt
+
+On Debian and Ubuntu, Orca Desktop is in the apt repository, so it updates with the rest of your system:
+
+```bash
+curl -1sLf 'https://dl.cloudsmith.io/public/edvin/orca/setup.deb.sh' | sudo bash
+sudo apt install orca-desktop
+```
+
+The package is built for x86_64 and needs Ubuntu 24.04 or Debian 13, or newer. Every release is published to the repository.
+
+**Updates:** Standard apt — `sudo apt update && sudo apt upgrade`
 
 ### Manage Remote Servers
 
@@ -857,6 +870,7 @@ This triggers the release workflow which:
 4. Signs all update artifacts with the project's signing key
 5. Uploads `latest.json` for the Tauri auto-updater
 6. Publishes the release
+7. Pushes the desktop `.deb` to the apt repository
 
 **Auto-updates:** Users with Orca Desktop installed receive update notifications automatically. The app checks `https://github.com/edvin/orca/releases/latest/download/latest.json` on startup and can download + install updates with signature verification.
 
@@ -864,7 +878,7 @@ This triggers the release workflow which:
 
 | Platform | Installer | Auto-update |
 |----------|-----------|-------------|
-| Linux | `.AppImage`, `.deb` | AppImage self-updates |
+| Linux | `.AppImage`, `.deb` (also in the apt repository) | AppImage self-updates; an apt install updates with `apt upgrade` |
 | macOS | `.dmg` | App bundle updates |
 | Windows | `.exe` (NSIS) | Exe self-updates |
 

@@ -46,8 +46,8 @@ export function downloadPage(ctx) {
   <div class="dl-card" data-os-card="linux">
     <div class="platform-icon">${ICONS.linux}</div>
     <h2>Linux</h2>
-    <p>x86-64. Talks to Docker or Podman directly. The AppImage updates itself.</p>
-    <div class="dl-actions">${fileBtn(appimage, "AppImage", true, "amd64\\.AppImage$")}${fileBtn(deb, ".deb", false, "amd64\\.deb$")}</div>
+    <p>x86-64. Talks to Docker or Podman directly. The AppImage updates itself, and the apt package updates with your system.</p>
+    <div class="dl-actions">${fileBtn(appimage, "AppImage", true, "amd64\\.AppImage$")}${fileBtn(deb, ".deb", false, "amd64\\.deb$")}<a class="btn" href="/docs/install/#install-with-apt">apt</a></div>
     <span class="yours">Your platform</span>
   </div>
 </section>

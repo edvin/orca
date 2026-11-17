@@ -15,12 +15,25 @@ Get the latest release from GitHub: [github.com/edvin/orca/releases/latest](http
 | macOS (Apple Silicon) | `.dmg` | Disk image with the signed and notarized app. Drag **Orca Desktop** to Applications. |
 | Windows (x64) | `-setup.exe` | Installer. It also adds the install folder to your user `PATH`, so the `orca` CLI works in any new terminal. |
 | Linux (x86_64) | `.AppImage` | Portable app. Make it executable and run it. |
-| Linux (x86_64) | `.deb` | Package for Debian and Ubuntu. It depends on `libwebkit2gtk-4.1-0` and `libssl3`. |
+| Linux (x86_64) | `.deb` | Package for Debian and Ubuntu, also in Orca's apt repository: see [Install with apt](#install-with-apt). It depends on `libwebkit2gtk-4.1-0` and `libssl3`. |
 
 Each download bundles the Orca daemon (`orca-daemon`) and the `orca` CLI. The app starts the daemon for you and stops it when you quit.
 
 > [!NOTE]
 > Release builds of the desktop app are made for Apple Silicon Macs, x64 Windows and x86_64 Linux. There is no Intel Mac build.
+
+### Install with apt
+
+On Debian and Ubuntu you can install Orca from its apt repository instead of downloading the `.deb`. New versions then arrive with your system updates.
+
+```bash
+curl -1sLf 'https://dl.cloudsmith.io/public/edvin/orca/setup.deb.sh' | sudo bash
+sudo apt install orca-desktop
+```
+
+The first command adds Orca's apt repository, hosted on Cloudsmith, and its signing key. The second installs the same package as the `.deb` on the release page. It is built for x86_64 and needs Ubuntu 24.04 or Debian 13, or newer.
+
+If you installed the downloaded `.deb` before, run the same two commands: apt keeps it up to date from then on.
 
 ## First start
 
@@ -75,6 +88,12 @@ You don't have to uninstall Docker Desktop first.
 
 Orca checks for a new version 5 seconds after it starts and then every hour. When one is available, the status bar at the bottom shows **Update available: v…**. Click it, confirm with **Update**, and Orca downloads the release, stops its daemon, installs the update and restarts. Updates are signed, and the app verifies the signature before installing.
 
+If you [installed with apt](#install-with-apt), new versions come with your system's packages instead:
+
+```bash
+sudo apt update && sudo apt upgrade
+```
+
 **Settings** > **Privacy & security** > **Network connections** lists the update check along with every other connection Orca makes.
 
 ## Uninstall
@@ -112,7 +131,7 @@ wsl --unregister orca
 
 ### Linux
 
-Delete the AppImage, or remove the `.deb` package with your package manager. Then delete `~/.config/orca` (settings, API token, CA) and `~/.local/share/orca` if you want a clean slate. Docker or Podman stay installed.
+Delete the AppImage, or remove the package with `sudo apt remove orca-desktop`. Then delete `~/.config/orca` (settings, API token, CA) and `~/.local/share/orca` if you want a clean slate. Docker or Podman stay installed.
 
 On every platform the gateway runs as a container named `orca-gateway`. Remove it with `docker rm -f orca-gateway` if it's still there.
 
