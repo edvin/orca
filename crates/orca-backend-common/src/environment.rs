@@ -171,26 +171,24 @@ pub fn engine_has_rootless_leak(version: &str) -> bool {
 }
 
 /// Docker Engine version inside Orca's Lima VM when it is rootless and has the
-/// `/version` leak, i.e. when the "Update Docker Engine" fix applies. Uses
-/// `docker info`, which doesn't hit `/version`.
+/// `/version` leak, i.e. when the "Update Docker Engine" fix applies. Asks
+/// the VM's socket for `/info`, which doesn't hit `/version` and doesn't need
+/// a `docker` command on this Mac.
 #[cfg(target_os = "macos")]
 async fn lima_engine_needing_update(vm: &str) -> Option<String> {
     let home = std::env::var("HOME").ok()?;
-    let host = format!("unix://{home}/.lima/{vm}/sock/docker.sock");
-    let out = run_cmd(
-        "docker",
-        &[
-            "-H",
-            &host,
-            "info",
-            "--format",
-            "{{.ServerVersion}}|{{json .SecurityOptions}}",
-        ],
-    )
-    .await
-    .ok()?;
-    let (version, security) = out.trim().split_once('|')?;
-    (security.contains("name=rootless") && engine_has_rootless_leak(version)).then(|| version.to_string())
+    let docker = engine_at(&format!("{home}/.lima/{vm}/sock/docker.sock")).await?;
+    let info = tokio::time::timeout(std::time::Duration::from_secs(5), docker.info())
+        .await
+        .ok()?
+        .ok()?;
+    let version = info.server_version?;
+    let rootless = info
+        .security_options
+        .unwrap_or_default()
+        .iter()
+        .any(|o| o.contains("name=rootless"));
+    (rootless && engine_has_rootless_leak(&version)).then_some(version)
 }
 
 pub fn orca_static_usernet_script() -> String {
@@ -1523,8 +1521,10 @@ async fn engine_at(socket: &str) -> Option<bollard::Docker> {
 /// answers there (see [`engine_at`]).
 async fn engine_version_at(socket: &str) -> Option<String> {
     let docker = engine_at(socket).await?;
-    let version = match tokio::time::timeout(std::time::Duration::from_secs(5), docker.version()).await {
-        Ok(Ok(v)) => v.version.unwrap_or_default(),
+    // `/info`, not `/version`: rootless dockerd before 29.9.1 leaks memory on
+    // every `/version` (see `BollardRuntime::server_version`).
+    let version = match tokio::time::timeout(std::time::Duration::from_secs(5), docker.info()).await {
+        Ok(Ok(info)) => info.server_version.unwrap_or_default(),
         _ => String::new(),
     };
     // It answered `_ping`: it runs, even if it doesn't say its version.
