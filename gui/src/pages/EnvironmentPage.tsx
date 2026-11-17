@@ -238,6 +238,7 @@ export default function EnvironmentPage() {
       repair_lima_orca: "Repair",
       recreate_lima_orca: "Recreate",
       update_docker_engine: "Update",
+      setup_docker_cli: "Set up",
     })[action] ?? fallback;
   // The engine's own trouble (not "set it up"): System Health offers the
   // VM's console and AI help with it.
