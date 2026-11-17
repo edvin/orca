@@ -490,7 +490,11 @@ pub async fn fetch_buildkit_logs(build_id: &str) -> Option<String> {
 
             if output.status.success() {
                 // buildx writes the log to stderr (it's progress output).
-                let out = if output.stdout.is_empty() { &output.stderr } else { &output.stdout };
+                let out = if output.stdout.is_empty() {
+                    &output.stderr
+                } else {
+                    &output.stdout
+                };
                 Some(String::from_utf8_lossy(out).to_string())
             } else {
                 None

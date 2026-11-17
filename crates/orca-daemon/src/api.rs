@@ -3151,13 +3151,11 @@ async fn volume_containers(
         .into_iter()
         .filter(|c| {
             c.mounts.as_ref().is_some_and(|mounts| {
-                mounts
-                    .iter()
-                    .any(|m| {
-                        m.name.as_deref() == Some(name.as_str())
-                            || m.source == name
-                            || m.source.ends_with(&format!("/{name}/_data"))
-                    })
+                mounts.iter().any(|m| {
+                    m.name.as_deref() == Some(name.as_str())
+                        || m.source == name
+                        || m.source.ends_with(&format!("/{name}/_data"))
+                })
             })
         })
         .collect();

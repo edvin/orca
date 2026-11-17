@@ -1063,12 +1063,8 @@ impl OrcaConfig {
             }
             // Docker Hub has several canonical names.
             let docker_hub_aliases = ["docker.io", "index.docker.io", "registry-1.docker.io"];
-            if docker_hub_aliases.iter().any(|a| a.eq_ignore_ascii_case(&registry))
+            docker_hub_aliases.iter().any(|a| a.eq_ignore_ascii_case(&registry))
                 && docker_hub_aliases.iter().any(|a| a.eq_ignore_ascii_case(normalized))
-            {
-                return true;
-            }
-            false
         })
     }
 

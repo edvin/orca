@@ -2355,12 +2355,9 @@ pub async fn check_environment(other_engine: Option<&str>) -> EnvironmentStatus 
 fn finish_environment(platform: String, checks: Vec<HealthCheck>) -> EnvironmentStatus {
     // Environment is ready if a container runtime is available
     // Docker Desktop counts only if it's actually installed (has details)
-    let ready = checks.iter().any(|c| {
-        if c.name.contains("Runtime") && c.status == CheckStatus::Pass {
-            return true;
-        }
-        false
-    });
+    let ready = checks
+        .iter()
+        .any(|c| c.name.contains("Runtime") && c.status == CheckStatus::Pass);
 
     let suggested = if checks
         .iter()

@@ -1453,11 +1453,12 @@ pub(crate) async fn api(
         .header("content-type", "application/json")
         .body(axum::body::Body::from(body.map(|b| b.to_string()).unwrap_or_default()))
         .map_err(|e| e.to_string())?;
+    // The router can't fail: its error type is Infallible.
     let response = crate::api::routes()
         .with_state(state.clone())
         .oneshot(request)
         .await
-        .map_err(|e| e.to_string())?;
+        .unwrap_or_else(|never| match never {});
     let status = response.status();
     let bytes = axum::body::to_bytes(response.into_body(), 16 * 1024 * 1024)
         .await
