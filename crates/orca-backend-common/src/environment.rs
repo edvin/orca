@@ -1200,32 +1200,21 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 send(format!("    VM '{vm}' is {status}. Start it (or Repair it) first.\n")).await;
                 anyhow::bail!("VM '{vm}' is not running");
             }
+            // Through the VM's socket, not the `docker` command: the check that
+            // offers this shows on a Mac without one too.
             let home = std::env::var("HOME").unwrap_or_default();
-            let host = format!("unix://{home}/.lima/{vm}/sock/docker.sock");
-            let docker = |args: &[&str]| {
-                let mut all: Vec<String> = vec!["-H".into(), host.clone()];
-                all.extend(args.iter().map(|a| a.to_string()));
-                all
-            };
-            let run_docker = |args: Vec<String>| async move {
-                let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-                run_cmd("docker", &refs).await
-            };
+            let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
 
             send(format!(
                 ">>> Step 1/4: Noting which containers are running in VM '{vm}'\n"
             ))
             .await;
-            let running: Vec<String> = run_docker(docker(&["ps", "-q", "--no-trunc"]))
-                .await
-                .map(|o| {
-                    o.lines()
-                        .map(str::trim)
-                        .filter(|l| !l.is_empty())
-                        .map(String::from)
-                        .collect()
-                })
-                .unwrap_or_default();
+            // Not knowing what runs would leave it stopped after the restart:
+            // don't update then.
+            let Some(running) = running_container_ids(&socket).await else {
+                send("    Docker in the VM doesn't answer. Nothing was changed; try Repair first.\n".into()).await;
+                anyhow::bail!("Docker in VM '{vm}' doesn't answer");
+            };
             send(format!(
                 "    {} running; they'll be started again afterwards.\n",
                 running.len()
@@ -1255,8 +1244,8 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             }
             let mut version = None;
             for _ in 0..30 {
-                if let Ok(v) = run_docker(docker(&["info", "--format", "{{.ServerVersion}}"])).await {
-                    version = Some(v.trim().to_string());
+                if let Some(v) = engine_version_at(&socket).await {
+                    version = Some(v);
                     break;
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1268,13 +1257,14 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             send(format!("    Docker Engine {version} is running.\n")).await;
 
             send(">>> Step 4/4: Starting the containers that were running\n".into()).await;
-            let now_running: Vec<String> = run_docker(docker(&["ps", "-q", "--no-trunc"]))
-                .await
-                .map(|o| o.lines().map(|l| l.trim().to_string()).collect())
-                .unwrap_or_default();
+            let Some(engine) = engine_at(&socket).await else {
+                send("    Docker stopped answering. Try Repair.\n".into()).await;
+                anyhow::bail!("Docker stopped answering after the update");
+            };
+            let now_running = running_container_ids(&socket).await.unwrap_or_default();
             let mut failed = 0;
             for id in running.iter().filter(|id| !now_running.contains(id)) {
-                if let Err(e) = run_docker(docker(&["start", id])).await {
+                if let Err(e) = engine.start_container::<String>(id, None).await {
                     failed += 1;
                     send(format!("    {}: {e}\n", &id[..12.min(id.len())])).await;
                 }
@@ -1533,6 +1523,21 @@ async fn engine_version_at(socket: &str) -> Option<String> {
     } else {
         version.trim().to_string()
     })
+}
+
+/// The IDs of the containers running on the engine at `socket`, or `None`
+/// when it doesn't answer (so "none run" and "couldn't ask" differ).
+#[cfg(target_os = "macos")]
+async fn running_container_ids(socket: &str) -> Option<Vec<String>> {
+    let docker = engine_at(socket).await?;
+    let running = docker
+        .list_containers(Some(bollard::container::ListContainersOptions::<String> {
+            all: false,
+            ..Default::default()
+        }))
+        .await
+        .ok()?;
+    Some(running.into_iter().filter_map(|c| c.id).collect())
 }
 
 /// Start the containers an abrupt VM stop killed: Docker marks those exited
