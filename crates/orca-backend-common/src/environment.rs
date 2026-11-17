@@ -1048,22 +1048,8 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             if std::path::Path::new(&socket_path).exists() {
                 send(format!("    Docker socket: {socket_path}\n")).await;
 
-                // Remove stale contexts, create fresh one pointing to the correct socket
-                let _ = run_cmd("docker", &["context", "rm", "-f", "lima"]).await;
-                let _ = run_cmd("docker", &["context", "rm", "-f", "lima-orca"]).await;
-                let _ = run_cmd("docker", &["context", "rm", "-f", "lima-docker"]).await;
-                let _ = run_cmd(
-                    "docker",
-                    &[
-                        "context",
-                        "create",
-                        "lima-orca",
-                        "--docker",
-                        &format!("host=unix://{socket_path}"),
-                    ],
-                )
-                .await;
-                let _ = run_cmd("docker", &["context", "use", "lima-orca"]).await;
+                let cli = host_docker_cli().unwrap_or_else(|| "docker".to_string());
+                let _ = configure_lima_context(&cli, &socket_path).await;
                 send("    Docker context 'lima-orca' configured.\n".into()).await;
             } else {
                 send(format!("    Warning: Docker socket not found at {socket_path}\n")).await;
@@ -1166,6 +1152,90 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 send("    The VM started but Docker inside it isn't responding.\n".into()).await;
                 send("    Try again, or use the 'Recreate VM' button on the System Health page.\n".into()).await;
                 anyhow::bail!("VM started but Docker socket never became reachable");
+            }
+        }
+        #[cfg(target_os = "macos")]
+        "setup_docker_cli" => {
+            send(">>> Setting up the docker command for Orca's engine\n".into()).await;
+            send("    The VM, containers and images are not touched.\n\n".into()).await;
+            let Some((vm, _)) = find_lima_vm_for_repair().await else {
+                send("    No Orca VM found. Use 'Set up Docker' first.\n".into()).await;
+                anyhow::bail!("No Lima VM to point the docker command at");
+            };
+            let missing = host_docker_cli_missing(&vm).await.unwrap_or_default();
+            if missing.is_empty() {
+                send("    Nothing is missing.\n".into()).await;
+                return Ok(());
+            }
+            send(format!("    Missing: {}\n", missing.join(", "))).await;
+
+            let no_cli = missing.contains(&"the docker command");
+            let no_compose = no_cli || missing.contains(&"docker compose");
+            let no_buildx = no_cli || missing.contains(&"docker buildx");
+            if no_cli || no_compose || no_buildx {
+                send(">>> Step 1/2: Installing with Homebrew\n".into()).await;
+                if run_cmd("brew", &["--version"]).await.is_err() {
+                    send("    Homebrew isn't installed. Install it from https://brew.sh, then try again.\n".into())
+                        .await;
+                    anyhow::bail!("Homebrew is required to install the docker command");
+                }
+                let mut packages = Vec::new();
+                if no_cli {
+                    packages.push("docker");
+                }
+                if no_compose {
+                    packages.push("docker-compose");
+                }
+                if no_buildx {
+                    packages.push("docker-buildx");
+                }
+                send(format!("    brew install {}\n", packages.join(" "))).await;
+                if let Err(e) = run_cmd_streaming("brew", &[&["install"][..], &packages].concat(), &tx).await {
+                    send(format!("\n    brew install failed: {e}\n")).await;
+                    anyhow::bail!("brew install failed: {e}");
+                }
+                // Docker finds its plugins in ~/.docker/cli-plugins. A link there
+                // may still point into an uninstalled Docker.app: replace it.
+                let home = std::env::var("HOME").unwrap_or_default();
+                let plugins = format!("{home}/.docker/cli-plugins");
+                let _ = std::fs::create_dir_all(&plugins);
+                for (wanted, formula, bin) in [
+                    (no_compose, "docker-compose", "docker-compose"),
+                    (no_buildx, "docker-buildx", "docker-buildx"),
+                ] {
+                    if !wanted {
+                        continue;
+                    }
+                    if let Ok(prefix) = run_cmd("brew", &["--prefix", formula]).await {
+                        let target = format!("{}/bin/{bin}", prefix.trim());
+                        let link = format!("{plugins}/{bin}");
+                        let _ = std::fs::remove_file(&link);
+                        match std::os::unix::fs::symlink(&target, &link) {
+                            Ok(()) => send(format!("    Linked {link}\n")).await,
+                            Err(e) => send(format!("    Couldn't link {link}: {e}\n")).await,
+                        }
+                    }
+                }
+            }
+
+            send(">>> Step 2/2: Pointing the lima-orca context at Orca's engine\n".into()).await;
+            let Some(cli) = host_docker_cli() else {
+                send("    The docker command still isn't there.\n".into()).await;
+                anyhow::bail!("docker command not found after installing it");
+            };
+            let socket = orca_core::vm_boot::vm_dir(&vm).join("sock/docker.sock");
+            if let Err(e) = configure_lima_context(&cli, &socket.to_string_lossy()).await {
+                send(format!("    Couldn't set up the context: {e}\n")).await;
+                anyhow::bail!("docker context setup failed: {e}");
+            }
+            send("    Context 'lima-orca' is in use.\n".into()).await;
+
+            match host_docker_cli_missing(&vm).await {
+                None => send("\n    The docker command works with Orca's engine.\n".into()).await,
+                Some(still) => {
+                    send(format!("\n    Still missing: {}\n", still.join(", "))).await;
+                    anyhow::bail!("Still missing: {}", still.join(", "));
+                }
             }
         }
         #[cfg(target_os = "macos")]
@@ -1576,6 +1646,116 @@ async fn start_killed_containers(socket: &str, since: chrono::DateTime<chrono::U
         }
     }
     started
+}
+
+/// The `docker` command on this computer, looked for where the daemon's
+/// compose and build runs look for it (`dev::ops::cli_path`): Homebrew's,
+/// /usr/local/bin, Docker Desktop's and Rancher Desktop's user folders, PATH.
+pub fn host_docker_cli() -> Option<String> {
+    if cfg!(windows) {
+        return None;
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut dirs: Vec<String> = vec![
+        "/opt/homebrew/bin".into(),
+        "/usr/local/bin".into(),
+        format!("{home}/.docker/bin"),
+        format!("{home}/.rd/bin"),
+    ];
+    if let Ok(path) = std::env::var("PATH") {
+        dirs.extend(path.split(':').map(String::from));
+    }
+    dirs.into_iter()
+        .map(|d| std::path::Path::new(&d).join("docker"))
+        // A link into an uninstalled Docker.app still exists as a link: follow it.
+        .find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file()))
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Point `cli`'s `lima-orca` context at the engine on `socket` and use it:
+/// setup's last step, and the Docker CLI check's fix. Stale contexts from
+/// older setups (`lima`, `lima-docker`) go.
+async fn configure_lima_context(cli: &str, socket: &str) -> Result<(), String> {
+    let _ = run_cmd(cli, &["context", "rm", "-f", "lima"]).await;
+    let _ = run_cmd(cli, &["context", "rm", "-f", "lima-orca"]).await;
+    let _ = run_cmd(cli, &["context", "rm", "-f", "lima-docker"]).await;
+    run_cmd(
+        cli,
+        &[
+            "context",
+            "create",
+            "lima-orca",
+            "--description",
+            "Orca Lima runtime",
+            "--docker",
+            &format!("host=unix://{socket}"),
+        ],
+    )
+    .await?;
+    run_cmd(cli, &["context", "use", "lima-orca"]).await.map(|_| ())
+}
+
+/// What's missing for the `docker` command on this Mac to work with Orca's
+/// engine in VM `vm`: the command itself, its compose and buildx plugins, or
+/// the `lima-orca` context on the VM's socket. `None` when nothing is.
+#[cfg(target_os = "macos")]
+async fn host_docker_cli_missing(vm: &str) -> Option<Vec<&'static str>> {
+    let Some(cli) = host_docker_cli() else {
+        return Some(vec!["the docker command"]);
+    };
+    let mut missing = Vec::new();
+    if run_cmd(&cli, &["compose", "version"]).await.is_err() {
+        missing.push("docker compose");
+    }
+    if run_cmd(&cli, &["buildx", "version"]).await.is_err() {
+        missing.push("docker buildx");
+    }
+    let socket = orca_core::vm_boot::vm_dir(vm).join("sock/docker.sock");
+    let want = format!("unix://{}", socket.display());
+    let host = run_cmd(
+        &cli,
+        &[
+            "context",
+            "inspect",
+            "lima-orca",
+            "--format",
+            "{{.Endpoints.docker.Host}}",
+        ],
+    )
+    .await;
+    if host.as_deref().map(str::trim) != Ok(want.as_str()) {
+        missing.push("the lima-orca context");
+    }
+    (!missing.is_empty()).then_some(missing)
+}
+
+/// System Health's "Docker CLI" check, when Orca's engine runs in VM `vm`:
+/// only shown when something is missing.
+#[cfg(target_os = "macos")]
+async fn check_host_docker_cli(vm: &str) -> Option<HealthCheck> {
+    let missing = host_docker_cli_missing(vm).await?;
+    let no_cli = missing == ["the docker command"];
+    Some(HealthCheck {
+        name: "Docker CLI".to_string(),
+        description: if no_cli {
+            "Orca's engine runs, but there's no `docker` command on this Mac (Docker Desktop's \
+             uninstaller removes its own). Compose stacks, builds and `docker` in Terminal need it."
+                .to_string()
+        } else {
+            format!(
+                "Orca's engine runs, but the `docker` command on this Mac is missing {}.",
+                missing.join(", ")
+            )
+        },
+        status: CheckStatus::Warning,
+        fix_action: Some("setup_docker_cli".to_string()),
+        details: Some(
+            "Installs docker, docker-compose and docker-buildx with Homebrew where missing, and \
+             points the `lima-orca` context at Orca's engine. The VM, containers and images are \
+             not touched."
+                .to_string(),
+        ),
+    })
 }
 
 /// Helpers for repair_lima_orca. Mirror the daemon-side logic in
@@ -2248,6 +2428,14 @@ pub async fn check_environment(other_engine: Option<&str>) -> EnvironmentStatus 
                             )),
                         });
                     }
+                    // The engine runs, but the `docker` command on this Mac may be
+                    // gone (Docker Desktop's uninstaller takes its own along), and
+                    // Orca runs it for compose stacks and builds.
+                    if let Some((vm, _)) = find_lima_vm_for_repair().await
+                        && let Some(check) = check_host_docker_cli(&vm).await
+                    {
+                        checks.push(check);
+                    }
                 }
             } else {
                 // Distinguish "Lima VM exists but not running" (offer Repair)
@@ -2904,6 +3092,24 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                 output
             };
             let (run, output) = tokio::join!(Box::pin(run_fix_streaming("update_docker_engine", tx)), collect);
+            run?;
+            Ok(output)
+        }
+        #[cfg(target_os = "macos")]
+        "setup_docker_cli" => {
+            // Same steps as the streaming path, with the output collected.
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(256);
+            let collect = async move {
+                let mut output = String::new();
+                while let Some(line) = rx.recv().await {
+                    output.push_str(&line);
+                    if !line.ends_with('\n') {
+                        output.push('\n');
+                    }
+                }
+                output
+            };
+            let (run, output) = tokio::join!(Box::pin(run_fix_streaming("setup_docker_cli", tx)), collect);
             run?;
             Ok(output)
         }
