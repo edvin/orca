@@ -58,9 +58,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # 1.99.1, not stable: tauri-build 2.5 works out the target folder from
+      # OUT_DIR, which Cargo 1.100 moved (build/<package>/<hash>/out). Its
+      # sidecar copy then lands on the daemon's own build folder and the
+      # build script panics, on Linux and macOS. Back to stable once Tauri is
+      # on a tauri-build that copes with the new layout.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.99.1"
           targets: ${{ matrix.platform.target }}
 
       - name: Cache cargo
