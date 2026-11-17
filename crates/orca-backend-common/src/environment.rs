@@ -171,26 +171,24 @@ pub fn engine_has_rootless_leak(version: &str) -> bool {
 }
 
 /// Docker Engine version inside Orca's Lima VM when it is rootless and has the
-/// `/version` leak, i.e. when the "Update Docker Engine" fix applies. Uses
-/// `docker info`, which doesn't hit `/version`.
+/// `/version` leak, i.e. when the "Update Docker Engine" fix applies. Asks
+/// the VM's socket for `/info`, which doesn't hit `/version` and doesn't need
+/// a `docker` command on this Mac.
 #[cfg(target_os = "macos")]
 async fn lima_engine_needing_update(vm: &str) -> Option<String> {
     let home = std::env::var("HOME").ok()?;
-    let host = format!("unix://{home}/.lima/{vm}/sock/docker.sock");
-    let out = run_cmd(
-        "docker",
-        &[
-            "-H",
-            &host,
-            "info",
-            "--format",
-            "{{.ServerVersion}}|{{json .SecurityOptions}}",
-        ],
-    )
-    .await
-    .ok()?;
-    let (version, security) = out.trim().split_once('|')?;
-    (security.contains("name=rootless") && engine_has_rootless_leak(version)).then(|| version.to_string())
+    let docker = engine_at(&format!("{home}/.lima/{vm}/sock/docker.sock")).await?;
+    let info = tokio::time::timeout(std::time::Duration::from_secs(5), docker.info())
+        .await
+        .ok()?
+        .ok()?;
+    let version = info.server_version?;
+    let rootless = info
+        .security_options
+        .unwrap_or_default()
+        .iter()
+        .any(|o| o.contains("name=rootless"));
+    (rootless && engine_has_rootless_leak(&version)).then_some(version)
 }
 
 pub fn orca_static_usernet_script() -> String {
@@ -1152,20 +1150,7 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
             let mut ok = false;
             for i in 0..15 {
-                if std::path::Path::new(&socket).exists()
-                    && run_cmd(
-                        "docker",
-                        &[
-                            "-H",
-                            &format!("unix://{socket}"),
-                            "info",
-                            "--format",
-                            "{{.ServerVersion}}",
-                        ],
-                    )
-                    .await
-                    .is_ok()
-                {
+                if engine_at(&socket).await.is_some() {
                     ok = true;
                     break;
                 }
@@ -1215,32 +1200,21 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 send(format!("    VM '{vm}' is {status}. Start it (or Repair it) first.\n")).await;
                 anyhow::bail!("VM '{vm}' is not running");
             }
+            // Through the VM's socket, not the `docker` command: the check that
+            // offers this shows on a Mac without one too.
             let home = std::env::var("HOME").unwrap_or_default();
-            let host = format!("unix://{home}/.lima/{vm}/sock/docker.sock");
-            let docker = |args: &[&str]| {
-                let mut all: Vec<String> = vec!["-H".into(), host.clone()];
-                all.extend(args.iter().map(|a| a.to_string()));
-                all
-            };
-            let run_docker = |args: Vec<String>| async move {
-                let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-                run_cmd("docker", &refs).await
-            };
+            let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
 
             send(format!(
                 ">>> Step 1/4: Noting which containers are running in VM '{vm}'\n"
             ))
             .await;
-            let running: Vec<String> = run_docker(docker(&["ps", "-q", "--no-trunc"]))
-                .await
-                .map(|o| {
-                    o.lines()
-                        .map(str::trim)
-                        .filter(|l| !l.is_empty())
-                        .map(String::from)
-                        .collect()
-                })
-                .unwrap_or_default();
+            // Not knowing what runs would leave it stopped after the restart:
+            // don't update then.
+            let Some(running) = running_container_ids(&socket).await else {
+                send("    Docker in the VM doesn't answer. Nothing was changed; try Repair first.\n".into()).await;
+                anyhow::bail!("Docker in VM '{vm}' doesn't answer");
+            };
             send(format!(
                 "    {} running; they'll be started again afterwards.\n",
                 running.len()
@@ -1270,8 +1244,8 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             }
             let mut version = None;
             for _ in 0..30 {
-                if let Ok(v) = run_docker(docker(&["info", "--format", "{{.ServerVersion}}"])).await {
-                    version = Some(v.trim().to_string());
+                if let Some(v) = engine_version_at(&socket).await {
+                    version = Some(v);
                     break;
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1283,13 +1257,14 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
             send(format!("    Docker Engine {version} is running.\n")).await;
 
             send(">>> Step 4/4: Starting the containers that were running\n".into()).await;
-            let now_running: Vec<String> = run_docker(docker(&["ps", "-q", "--no-trunc"]))
-                .await
-                .map(|o| o.lines().map(|l| l.trim().to_string()).collect())
-                .unwrap_or_default();
+            let Some(engine) = engine_at(&socket).await else {
+                send("    Docker stopped answering. Try Repair.\n".into()).await;
+                anyhow::bail!("Docker stopped answering after the update");
+            };
+            let now_running = running_container_ids(&socket).await.unwrap_or_default();
             let mut failed = 0;
             for id in running.iter().filter(|id| !now_running.contains(id)) {
-                if let Err(e) = run_docker(docker(&["start", id])).await {
+                if let Err(e) = engine.start_container::<String>(id, None).await {
                     failed += 1;
                     send(format!("    {}: {e}\n", &id[..12.min(id.len())])).await;
                 }
@@ -1482,13 +1457,10 @@ where
 
     send(">>> Step 6/6: Waiting for Docker, then starting what was running\n".into()).await;
     let socket = vm_boot::vm_dir(&vm).join("sock/docker.sock");
-    let host = format!("unix://{}", socket.display());
+    let socket = socket.to_string_lossy().to_string();
     let mut up = false;
     for _ in 0..30 {
-        if run_cmd("docker", &["-H", &host, "info", "--format", "{{.ServerVersion}}"])
-            .await
-            .is_ok()
-        {
+        if engine_at(&socket).await.is_some() {
             up = true;
             break;
         }
@@ -1498,7 +1470,7 @@ where
         send("    The VM is up but Docker in it doesn't answer yet. Click Diagnose in a minute.\n".into()).await;
         anyhow::bail!("Docker didn't answer after the rescue");
     }
-    let restarted = start_killed_containers(&host, started_at).await;
+    let restarted = start_killed_containers(&socket, started_at).await;
     send(format!(
         "    Docker answers. Started {restarted} container(s) the abrupt stop had killed.\n"
     ))
@@ -1511,36 +1483,95 @@ where
     Ok(())
 }
 
+/// A client for the engine on the unix socket at `socket`, if one answers
+/// there. Talks to the socket directly, so it doesn't need a `docker` CLI on
+/// this computer, nor a context: after Docker Desktop is uninstalled there
+/// may be neither, while Orca's engine runs fine.
+async fn engine_at(socket: &str) -> Option<bollard::Docker> {
+    #[cfg(unix)]
+    {
+        let path = socket.strip_prefix("unix://").unwrap_or(socket);
+        if !std::path::Path::new(path).exists() {
+            return None;
+        }
+        let docker = bollard::Docker::connect_with_socket(path, 10, bollard::API_DEFAULT_VERSION).ok()?;
+        match tokio::time::timeout(std::time::Duration::from_secs(3), docker.ping()).await {
+            Ok(Ok(_)) => Some(docker),
+            _ => None,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = socket;
+        None
+    }
+}
+
+/// The server version of the engine on the unix socket at `socket`, if one
+/// answers there (see [`engine_at`]).
+async fn engine_version_at(socket: &str) -> Option<String> {
+    let docker = engine_at(socket).await?;
+    // `/info`, not `/version`: rootless dockerd before 29.9.1 leaks memory on
+    // every `/version` (see `BollardRuntime::server_version`).
+    let version = match tokio::time::timeout(std::time::Duration::from_secs(5), docker.info()).await {
+        Ok(Ok(info)) => info.server_version.unwrap_or_default(),
+        _ => String::new(),
+    };
+    // It answered `_ping`: it runs, even if it doesn't say its version.
+    Some(if version.trim().is_empty() {
+        "unknown".to_string()
+    } else {
+        version.trim().to_string()
+    })
+}
+
+/// The IDs of the containers running on the engine at `socket`, or `None`
+/// when it doesn't answer (so "none run" and "couldn't ask" differ).
+#[cfg(target_os = "macos")]
+async fn running_container_ids(socket: &str) -> Option<Vec<String>> {
+    let docker = engine_at(socket).await?;
+    let running = docker
+        .list_containers(Some(bollard::container::ListContainersOptions::<String> {
+            all: false,
+            ..Default::default()
+        }))
+        .await
+        .ok()?;
+    Some(running.into_iter().filter_map(|c| c.id).collect())
+}
+
 /// Start the containers an abrupt VM stop killed: Docker marks those exited
 /// with code 255 when it starts again, after `since`. Returns how many.
 #[cfg(target_os = "macos")]
-async fn start_killed_containers(host: &str, since: chrono::DateTime<chrono::Utc>) -> usize {
-    let Ok(ids) = run_cmd("docker", &["-H", host, "ps", "-aq", "--filter", "status=exited"]).await else {
+async fn start_killed_containers(socket: &str, since: chrono::DateTime<chrono::Utc>) -> usize {
+    let Some(docker) = engine_at(socket).await else {
         return 0;
     };
-    let ids: Vec<&str> = ids.split_whitespace().collect();
-    if ids.is_empty() {
-        return 0;
-    }
-    let mut args = vec![
-        "-H",
-        host,
-        "inspect",
-        "--format",
-        "{{.Id}} {{.State.ExitCode}} {{.State.FinishedAt}}",
-    ];
-    args.extend(ids);
-    let Ok(out) = run_cmd("docker", &args).await else {
+    let options = bollard::container::ListContainersOptions::<String> {
+        all: true,
+        filters: std::collections::HashMap::from([("status".to_string(), vec!["exited".to_string()])]),
+        ..Default::default()
+    };
+    let Ok(exited) = docker.list_containers(Some(options)).await else {
         return 0;
     };
     let mut started = 0;
-    for line in out.lines() {
-        let mut it = line.split_whitespace();
-        let (Some(id), Some("255"), Some(at)) = (it.next(), it.next(), it.next()) else {
+    for id in exited.into_iter().filter_map(|c| c.id) {
+        let Ok(inspect) = docker.inspect_container(&id, None).await else {
             continue;
         };
-        let killed_now = chrono::DateTime::parse_from_rfc3339(at).is_ok_and(|t| t >= since);
-        if killed_now && run_cmd("docker", &["-H", host, "start", id]).await.is_ok() {
+        let Some(state) = inspect.state else {
+            continue;
+        };
+        if state.exit_code != Some(255) {
+            continue;
+        }
+        let killed_now = state
+            .finished_at
+            .as_deref()
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .is_some_and(|t| t >= since);
+        if killed_now && docker.start_container::<String>(&id, None).await.is_ok() {
             started += 1;
         }
     }
@@ -2119,28 +2150,25 @@ pub async fn check_environment(other_engine: Option<&str>) -> EnvironmentStatus 
         }
         "macos" => {
             if let Some(sock) = other_engine {
-                let host = format!("unix://{}", sock.trim_start_matches("unix://"));
-                checks.push(
-                    match run_cmd("docker", &["-H", &host, "info", "--format", "{{.ServerVersion}}"]).await {
-                        Ok(version) => HealthCheck {
-                            name: "Docker Runtime".to_string(),
-                            description: "The engine picked in Settings is running".to_string(),
-                            status: CheckStatus::Pass,
-                            fix_action: None,
-                            details: Some(format!("Server version: {} at {sock}", version.trim())),
-                        },
-                        Err(_) => HealthCheck {
-                            name: "Docker Runtime".to_string(),
-                            description: format!(
-                                "The engine picked in Settings isn't answering at {sock}. Start it, \
-                                 or switch to Orca's engine in Settings."
-                            ),
-                            status: CheckStatus::Fail,
-                            fix_action: None,
-                            details: None,
-                        },
+                checks.push(match engine_version_at(sock).await {
+                    Some(version) => HealthCheck {
+                        name: "Docker Runtime".to_string(),
+                        description: "The engine picked in Settings is running".to_string(),
+                        status: CheckStatus::Pass,
+                        fix_action: None,
+                        details: Some(format!("Server version: {version} at {sock}")),
                     },
-                );
+                    None => HealthCheck {
+                        name: "Docker Runtime".to_string(),
+                        description: format!(
+                            "The engine picked in Settings isn't answering at {sock}. Start it, \
+                                 or switch to Orca's engine in Settings."
+                        ),
+                        status: CheckStatus::Fail,
+                        fix_action: None,
+                        details: None,
+                    },
+                });
                 return finish_environment(platform.clone(), checks);
             }
             // Orca's own VM: the CLI's context may point at Docker Desktop,
@@ -2149,21 +2177,8 @@ pub async fn check_environment(other_engine: Option<&str>) -> EnvironmentStatus 
             if let Ok(home) = std::env::var("HOME") {
                 for vm in &["orca", "docker"] {
                     let socket = format!("{home}/.lima/{vm}/sock/docker.sock");
-                    if std::path::Path::new(&socket).exists()
-                        && let Ok(version) = run_cmd(
-                            "docker",
-                            &[
-                                "-H",
-                                &format!("unix://{socket}"),
-                                "info",
-                                "--format",
-                                "{{.ServerVersion}}",
-                            ],
-                        )
-                        .await
-                        && !version.trim().is_empty()
-                    {
-                        docker_running = Some(version.trim().to_string());
+                    if let Some(version) = engine_version_at(&socket).await {
+                        docker_running = Some(version);
                         break;
                     }
                 }
