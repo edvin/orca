@@ -12,15 +12,17 @@ jobs:
   build-deb:
     strategy:
       matrix:
+        # Pinned, not ubuntu-latest: the daemon can need a glibc as new as
+        # the image it's built on, and apt upgrades servers to it.
         include:
           - arch: x86_64
             target: x86_64-unknown-linux-gnu
             deb_arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
           - arch: aarch64
             target: aarch64-unknown-linux-gnu
             deb_arch: arm64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
 
     runs-on: ${{ matrix.runner }}
     steps:

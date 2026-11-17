@@ -43,8 +43,11 @@ jobs:
       fail-fast: false
       matrix:
         platform:
+          # Pinned, not ubuntu-latest: a binary can need a glibc as new as
+          # the image it's built on, and apt upgrades everyone to it. Built
+          # on 24.04, it runs on Ubuntu 24.04 and Debian 13.
           - name: Linux
-            os: ubuntu-latest
+            os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
           - name: macOS (Apple Silicon)
             os: macos-latest
