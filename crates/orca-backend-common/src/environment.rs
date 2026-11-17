@@ -709,24 +709,16 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 .await
                 .ok()
                 .and_then(|s| parse_lima_version(&s));
-            let docker_cli_installed = run_cmd("docker", &["--version"]).await.is_ok();
-            let compose_installed = run_cmd("docker", &["compose", "version"]).await.is_ok();
-            let buildx_installed = run_cmd("docker", &["buildx", "version"]).await.is_ok();
+            // Homebrew's docker, compose and buildx also where Docker Desktop's
+            // answer: they leave with Docker Desktop, and Orca runs them.
+            let cli_needs = docker_cli_needs().await;
 
             {
                 let mut packages = Vec::new();
                 if lima_version.is_none() {
                     packages.push("lima");
                 }
-                if !docker_cli_installed {
-                    packages.push("docker");
-                }
-                if !compose_installed {
-                    packages.push("docker-compose");
-                }
-                if !buildx_installed {
-                    packages.push("docker-buildx");
-                }
+                packages.extend(cli_needs.formulae());
 
                 if packages.is_empty() {
                     send("    Lima, Docker CLI, Compose, and Buildx already installed.\n".into()).await;
@@ -739,38 +731,9 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                         anyhow::bail!("Failed to install Lima/Docker via Homebrew: {e}");
                     }
 
-                    // Set up docker-compose as a CLI plugin (docker compose v2)
-                    if !compose_installed {
-                        send("    Configuring Docker Compose plugin...\n".into()).await;
-                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-                        let plugins_dir = format!("{home}/.docker/cli-plugins");
-                        let _ = std::fs::create_dir_all(&plugins_dir);
-                        // Find the brew-installed docker-compose binary and symlink it
-                        if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-compose"]).await {
-                            let bin = format!("{}/bin/docker-compose", prefix.trim());
-                            let link = format!("{plugins_dir}/docker-compose");
-                            #[cfg(unix)]
-                            let _ = std::os::unix::fs::symlink(&bin, &link);
-                            #[cfg(not(unix))]
-                            let _ = (bin, link);
-                            send("    Docker Compose plugin linked.\n".into()).await;
-                        }
-                    }
-
-                    // Set up docker-buildx as a CLI plugin
-                    if !buildx_installed {
-                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-                        let plugins_dir = format!("{home}/.docker/cli-plugins");
-                        let _ = std::fs::create_dir_all(&plugins_dir);
-                        if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-buildx"]).await {
-                            let bin = format!("{}/bin/docker-buildx", prefix.trim());
-                            let link = format!("{plugins_dir}/docker-buildx");
-                            #[cfg(unix)]
-                            let _ = std::os::unix::fs::symlink(&bin, &link);
-                            #[cfg(not(unix))]
-                            let _ = (bin, link);
-                            send("    Docker Buildx plugin linked.\n".into()).await;
-                        }
+                    // Compose and buildx as CLI plugins (`docker compose`, `docker buildx`)
+                    for line in link_brew_plugins(&cli_needs.plugins()).await {
+                        send(format!("    {line}\n")).await;
                     }
 
                     send("    Installation complete.\n".into()).await;
@@ -1196,25 +1159,13 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 }
                 // Docker finds its plugins in ~/.docker/cli-plugins. A link there
                 // may still point into an uninstalled Docker.app: replace it.
-                let home = std::env::var("HOME").unwrap_or_default();
-                let plugins = format!("{home}/.docker/cli-plugins");
-                let _ = std::fs::create_dir_all(&plugins);
-                for (wanted, formula, bin) in [
-                    (no_compose, "docker-compose", "docker-compose"),
-                    (no_buildx, "docker-buildx", "docker-buildx"),
-                ] {
-                    if !wanted {
-                        continue;
-                    }
-                    if let Ok(prefix) = run_cmd("brew", &["--prefix", formula]).await {
-                        let target = format!("{}/bin/{bin}", prefix.trim());
-                        let link = format!("{plugins}/{bin}");
-                        let _ = std::fs::remove_file(&link);
-                        match std::os::unix::fs::symlink(&target, &link) {
-                            Ok(()) => send(format!("    Linked {link}\n")).await,
-                            Err(e) => send(format!("    Couldn't link {link}: {e}\n")).await,
-                        }
-                    }
+                let needs = DockerCliNeeds {
+                    cli: no_cli,
+                    compose: no_compose,
+                    buildx: no_buildx,
+                };
+                for line in link_brew_plugins(&needs.plugins()).await {
+                    send(format!("    {line}\n")).await;
                 }
             }
 
@@ -1670,6 +1621,115 @@ pub fn host_docker_cli() -> Option<String> {
         // A link into an uninstalled Docker.app still exists as a link: follow it.
         .find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file()))
         .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Whether `path` leads into Docker Desktop's app: then it goes when Docker
+/// Desktop is uninstalled, and Orca shouldn't depend on it.
+fn from_docker_desktop(path: &std::path::Path) -> bool {
+    std::fs::canonicalize(path).is_ok_and(|p| p.to_string_lossy().contains("/Docker.app/"))
+}
+
+/// What setup installs from Homebrew for the `docker` command: whatever is
+/// missing, and whatever only Docker Desktop provides. Checking only that
+/// `docker --version` works let a Mac with Docker Desktop keep Desktop's
+/// command, which its uninstaller then takes away.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+struct DockerCliNeeds {
+    cli: bool,
+    compose: bool,
+    buildx: bool,
+}
+
+impl DockerCliNeeds {
+    /// The Homebrew formulae for what's needed.
+    fn formulae(&self) -> Vec<&'static str> {
+        [
+            (self.cli, "docker"),
+            (self.compose, "docker-compose"),
+            (self.buildx, "docker-buildx"),
+        ]
+        .into_iter()
+        .filter_map(|(needed, f)| needed.then_some(f))
+        .collect()
+    }
+
+    /// The plugins to link into ~/.docker/cli-plugins.
+    fn plugins(&self) -> Vec<&'static str> {
+        [(self.compose, "docker-compose"), (self.buildx, "docker-buildx")]
+            .into_iter()
+            .filter_map(|(needed, p)| needed.then_some(p))
+            .collect()
+    }
+}
+
+async fn docker_cli_needs() -> DockerCliNeeds {
+    let all = DockerCliNeeds {
+        cli: true,
+        compose: true,
+        buildx: true,
+    };
+    // Homebrew on Intel Macs links into /usr/local/bin, where Docker Desktop's
+    // links are too, and installing over them fails: there only what's
+    // missing counts, as before.
+    let replace_desktop = run_cmd("brew", &["--prefix"])
+        .await
+        .is_ok_and(|p| p.trim() != "/usr/local");
+    let cli = host_docker_cli().filter(|c| !(replace_desktop && from_docker_desktop(std::path::Path::new(c))));
+    let Some(cli) = cli else {
+        return all;
+    };
+    if run_cmd(&cli, &["--version"]).await.is_err() {
+        return all;
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let plugin_needed = |sub: &'static str| {
+        let cli = cli.clone();
+        let home = home.clone();
+        async move {
+            let user = std::path::Path::new(&home).join(format!(".docker/cli-plugins/docker-{sub}"));
+            let desktop = std::path::Path::new("/Applications/Docker.app/Contents/Resources/cli-plugins")
+                .join(format!("docker-{sub}"));
+            run_cmd(&cli, &[sub, "version"]).await.is_err()
+                || (replace_desktop
+                    && (from_docker_desktop(&user)
+                        // No plugin of the user's own while Docker Desktop has
+                        // one: it's most likely Desktop's that answers.
+                        || (std::fs::symlink_metadata(&user).is_err() && desktop.exists())))
+        }
+    };
+    DockerCliNeeds {
+        cli: false,
+        compose: plugin_needed("compose").await,
+        buildx: plugin_needed("buildx").await,
+    }
+}
+
+/// Link Homebrew's `plugins` (`docker-compose`, `docker-buildx`) into
+/// ~/.docker/cli-plugins, replacing what's there: often a link into
+/// Docker.app. Returns a line per plugin, for the log.
+async fn link_brew_plugins(plugins: &[&str]) -> Vec<String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    let dir = format!("{home}/.docker/cli-plugins");
+    let _ = std::fs::create_dir_all(&dir);
+    let mut said = Vec::new();
+    for plugin in plugins {
+        let Ok(prefix) = run_cmd("brew", &["--prefix", plugin]).await else {
+            said.push(format!("Couldn't find Homebrew's {plugin}"));
+            continue;
+        };
+        let target = format!("{}/bin/{plugin}", prefix.trim());
+        let link = format!("{dir}/{plugin}");
+        let _ = std::fs::remove_file(&link);
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(&target, &link);
+        #[cfg(not(unix))]
+        let linked: std::io::Result<()> = Err(std::io::Error::other("no symlinks here"));
+        said.push(match linked {
+            Ok(()) => format!("Linked {link}"),
+            Err(e) => format!("Couldn't link {link}: {e}"),
+        });
+    }
+    said
 }
 
 /// Point `cli`'s `lima-orca` context at the engine on `socket` and use it:
@@ -2891,23 +2951,15 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
 
             // Install Lima + Docker CLI + Docker Compose + Buildx
             let lima_ok = run_cmd("limactl", &["--version"]).await.is_ok();
-            let docker_ok = run_cmd("docker", &["--version"]).await.is_ok();
-            let compose_ok = run_cmd("docker", &["compose", "version"]).await.is_ok();
-            let buildx_ok = run_cmd("docker", &["buildx", "version"]).await.is_ok();
+            // Homebrew's docker, compose and buildx also where Docker Desktop's
+            // answer (see `docker_cli_needs`).
+            let cli_needs = docker_cli_needs().await;
             {
                 let mut pkgs: Vec<&str> = Vec::new();
                 if !lima_ok {
                     pkgs.push("lima");
                 }
-                if !docker_ok {
-                    pkgs.push("docker");
-                }
-                if !compose_ok {
-                    pkgs.push("docker-compose");
-                }
-                if !buildx_ok {
-                    pkgs.push("docker-buildx");
-                }
+                pkgs.extend(cli_needs.formulae());
                 if pkgs.is_empty() {
                     output.push_str("Lima, Docker CLI, Compose, and Buildx: installed\n");
                 } else {
@@ -2916,35 +2968,9 @@ pub async fn run_fix(action: &str) -> anyhow::Result<String> {
                         Ok(o) => output.push_str(&format!("{o}\n")),
                         Err(e) => output.push_str(&format!("brew install failed: {e}\n")),
                     }
-                    // Link docker-compose as CLI plugin
-                    if !compose_ok {
-                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-                        let plugins_dir = format!("{home}/.docker/cli-plugins");
-                        let _ = std::fs::create_dir_all(&plugins_dir);
-                        if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-compose"]).await {
-                            let bin = format!("{}/bin/docker-compose", prefix.trim());
-                            let link = format!("{plugins_dir}/docker-compose");
-                            let _ = std::fs::remove_file(&link);
-                            #[cfg(unix)]
-                            let _ = std::os::unix::fs::symlink(&bin, &link);
-                            #[cfg(not(unix))]
-                            let _ = (bin, link);
-                        }
-                    }
-                    // Link docker-buildx as CLI plugin
-                    if !buildx_ok {
-                        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-                        let plugins_dir = format!("{home}/.docker/cli-plugins");
-                        let _ = std::fs::create_dir_all(&plugins_dir);
-                        if let Ok(prefix) = run_cmd("brew", &["--prefix", "docker-buildx"]).await {
-                            let bin = format!("{}/bin/docker-buildx", prefix.trim());
-                            let link = format!("{plugins_dir}/docker-buildx");
-                            let _ = std::fs::remove_file(&link);
-                            #[cfg(unix)]
-                            let _ = std::os::unix::fs::symlink(&bin, &link);
-                            #[cfg(not(unix))]
-                            let _ = (bin, link);
-                        }
+                    // Compose and buildx as CLI plugins
+                    for line in link_brew_plugins(&cli_needs.plugins()).await {
+                        output.push_str(&format!("{line}\n"));
                     }
                 }
             }
@@ -3370,6 +3396,48 @@ async fn get_gpu_info() -> Option<GpuInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn links_into_docker_desktop() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = dir.path().join("Docker.app/Contents/Resources/bin");
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::write(app.join("docker"), "").unwrap();
+        std::fs::write(dir.path().join("docker-brew"), "").unwrap();
+
+        let to_desktop = dir.path().join("docker");
+        std::os::unix::fs::symlink(app.join("docker"), &to_desktop).unwrap();
+        assert!(from_docker_desktop(&to_desktop));
+
+        let to_brew = dir.path().join("docker-other");
+        std::os::unix::fs::symlink(dir.path().join("docker-brew"), &to_brew).unwrap();
+        assert!(!from_docker_desktop(&to_brew));
+
+        // A link left behind by an uninstalled Docker.app leads nowhere.
+        let dangling = dir.path().join("docker-gone");
+        std::os::unix::fs::symlink(dir.path().join("Gone.app/docker"), &dangling).unwrap();
+        assert!(!from_docker_desktop(&dangling));
+    }
+
+    #[test]
+    fn docker_cli_needs_formulae_and_plugins() {
+        let none = DockerCliNeeds::default();
+        assert!(none.formulae().is_empty() && none.plugins().is_empty());
+        let compose = DockerCliNeeds {
+            compose: true,
+            ..Default::default()
+        };
+        assert_eq!(compose.formulae(), ["docker-compose"]);
+        assert_eq!(compose.plugins(), ["docker-compose"]);
+        let all = DockerCliNeeds {
+            cli: true,
+            compose: true,
+            buildx: true,
+        };
+        assert_eq!(all.formulae(), ["docker", "docker-compose", "docker-buildx"]);
+        assert_eq!(all.plugins(), ["docker-compose", "docker-buildx"]);
+    }
 
     #[test]
     fn rootless_leak_versions() {
