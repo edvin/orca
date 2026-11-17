@@ -728,7 +728,21 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                         run_cmd_streaming("brew", &[&["install"][..], &packages.to_vec()].concat(), &tx).await;
                     if let Err(e) = install_result {
                         send(format!("\n    brew install failed: {e}\n")).await;
-                        anyhow::bail!("Failed to install Lima/Docker via Homebrew: {e}");
+                        // Next to Docker Desktop, Homebrew's docker can fail on
+                        // files Desktop's cask linked (shell completions, say).
+                        // With Lima there and Desktop's docker answering, carry
+                        // on with Desktop's: the Docker CLI check offers Set up
+                        // once Docker Desktop is gone.
+                        if run_cmd("limactl", &["--version"]).await.is_ok() && docker_cli_answers().await {
+                            send(
+                                "    Docker Desktop's docker still works, so setup carries on with it.\n    \
+                                 Once Docker Desktop is gone, System Health offers to set up Homebrew's.\n"
+                                    .into(),
+                            )
+                            .await;
+                        } else {
+                            anyhow::bail!("Failed to install Lima/Docker via Homebrew: {e}");
+                        }
                     }
 
                     // Compose and buildx as CLI plugins (`docker compose`, `docker buildx`)
@@ -1174,12 +1188,23 @@ pub async fn run_fix_streaming(action: &str, tx: tokio::sync::mpsc::Sender<Strin
                 send("    The docker command still isn't there.\n".into()).await;
                 anyhow::bail!("docker command not found after installing it");
             };
-            let socket = orca_core::vm_boot::vm_dir(&vm).join("sock/docker.sock");
-            if let Err(e) = configure_lima_context(&cli, &socket.to_string_lossy()).await {
-                send(format!("    Couldn't set up the context: {e}\n")).await;
-                anyhow::bail!("docker context setup failed: {e}");
+            // Only when the context is what's missing (asked again now that
+            // there's a docker command to ask): whoever keeps another context
+            // in use on purpose isn't switched.
+            let context_missing = host_docker_cli_missing(&vm)
+                .await
+                .is_some_and(|m| m.contains(&"the lima-orca context"));
+            if context_missing {
+                let socket = orca_core::vm_boot::vm_dir(&vm).join("sock/docker.sock");
+                if let Err(e) = configure_lima_context(&cli, &socket.to_string_lossy()).await {
+                    send(format!("    Couldn't set up the context: {e}\n")).await;
+                    anyhow::bail!("docker context setup failed: {e}");
+                }
+                send("    Context 'lima-orca' is in use.\n".into()).await;
+            } else {
+                send("    lima-orca already points at Orca's engine; the context in use is left as it is.\n".into())
+                    .await;
             }
-            send("    Context 'lima-orca' is in use.\n".into()).await;
 
             match host_docker_cli_missing(&vm).await {
                 None => send("\n    The docker command works with Orca's engine.\n".into()).await,
@@ -1662,6 +1687,15 @@ impl DockerCliNeeds {
     }
 }
 
+/// Whether some `docker` command on this computer answers, Docker Desktop's
+/// included.
+async fn docker_cli_answers() -> bool {
+    match host_docker_cli() {
+        Some(cli) => run_cmd(&cli, &["--version"]).await.is_ok(),
+        None => false,
+    }
+}
+
 async fn docker_cli_needs() -> DockerCliNeeds {
     let all = DockerCliNeeds {
         cli: true,
@@ -1719,6 +1753,12 @@ async fn link_brew_plugins(plugins: &[&str]) -> Vec<String> {
         };
         let target = format!("{}/bin/{plugin}", prefix.trim());
         let link = format!("{dir}/{plugin}");
+        // `brew --prefix` names the path even when the formula isn't installed
+        // (its install failed, say): keep a link that works, such as Desktop's.
+        if !std::path::Path::new(&target).exists() {
+            said.push(format!("Homebrew's {plugin} isn't installed; left {link} as it is"));
+            continue;
+        }
         let _ = std::fs::remove_file(&link);
         #[cfg(unix)]
         let linked = std::os::unix::fs::symlink(&target, &link);
