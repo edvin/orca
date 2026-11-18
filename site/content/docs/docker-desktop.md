@@ -53,6 +53,14 @@ Docker Desktop's images and volumes are only read. Before copying, Orca stops th
 
 If something doesn't come over, the summary says what and why, and it is still in Docker Desktop. Run it again: what came over already is skipped, a volume that stopped half way is copied again, and a project is only recreated once all its volumes arrived. Volumes and projects that were in Orca's engine already are left as they are.
 
+## Uninstalling Docker Desktop
+
+Once your things are in Orca's engine you can uninstall Docker Desktop. Orca's engine keeps running.
+
+On macOS, Docker Desktop's uninstaller removes the `docker` command it installed, and the `lima-orca` context goes with `~/.docker` if you delete that folder too. Orca runs `docker` for compose stacks and builds, so **System Health** then shows a **Docker CLI** check. **Set up** installs `docker`, `docker-compose` and `docker-buildx` with Homebrew where they're missing, and points the `lima-orca` context at Orca's engine. The VM, containers and images aren't touched.
+
+A new setup avoids this: next to Docker Desktop, Orca installs Homebrew's `docker`, compose and buildx as well.
+
 ## Start fresh instead
 
 Choose **Start fresh, don't bring anything**. Orca's engine starts empty: projects are created again when you start them, images are pulled again, and volumes start empty. You can still bring things over later from **System Health**.

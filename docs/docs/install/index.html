@@ -18,9 +18,9 @@
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/assets/img/logo-tile.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=mwki1e6n">
+<link rel="stylesheet" href="/assets/site.css?v=mwly0g0j">
 <script>(function(){try{var t=localStorage.getItem("theme");if(!t)t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})()</script>
-<script src="/assets/site.js?v=mwki1e6n" defer></script>
+<script src="/assets/site.js?v=mwly0g0j" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -72,7 +72,7 @@
 <p>Orca runs Docker in a small Linux VM managed by <a href="https://lima-vm.io" target="_blank" rel="noopener">Lima</a>. Setup does this, in five steps:</p>
 <ol>
 <li>Installs Homebrew if it&#39;s missing.</li>
-<li>Installs Lima, the Docker CLI, Docker Compose and Docker Buildx with Homebrew (only the ones you don&#39;t have). Lima older than 2.0 is upgraded.</li>
+<li>Installs Lima, the Docker CLI, Docker Compose and Docker Buildx with Homebrew: the ones you don&#39;t have, and the ones only Docker Desktop provides, since those leave when Docker Desktop is uninstalled. Lima older than 2.0 is upgraded.</li>
 <li>Creates a VM named <code>orca</code> on Ubuntu 26.04 LTS using Apple&#39;s Virtualization.framework. The first time this downloads the Linux image and takes a few minutes.</li>
 <li>Starts the VM and checks that it is reachable.</li>
 <li>Creates a Docker context named <code>lima-orca</code> and switches to it, so the <code>docker</code> command in your terminal talks to the same engine as Orca.</li>

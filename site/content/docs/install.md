@@ -45,7 +45,7 @@ When Orca starts, it looks for a working container runtime. If it finds one, you
 Orca runs Docker in a small Linux VM managed by [Lima](https://lima-vm.io). Setup does this, in five steps:
 
 1. Installs Homebrew if it's missing.
-2. Installs Lima, the Docker CLI, Docker Compose and Docker Buildx with Homebrew (only the ones you don't have). Lima older than 2.0 is upgraded.
+2. Installs Lima, the Docker CLI, Docker Compose and Docker Buildx with Homebrew: the ones you don't have, and the ones only Docker Desktop provides, since those leave when Docker Desktop is uninstalled. Lima older than 2.0 is upgraded.
 3. Creates a VM named `orca` on Ubuntu 26.04 LTS using Apple's Virtualization.framework. The first time this downloads the Linux image and takes a few minutes.
 4. Starts the VM and checks that it is reachable.
 5. Creates a Docker context named `lima-orca` and switches to it, so the `docker` command in your terminal talks to the same engine as Orca.
