@@ -7,6 +7,7 @@ import Dropdown from "../Dropdown";
 import HelpLink from "../HelpLink";
 import type { BuildM, HookM, LinkGroupM, LinkM } from "./model";
 import type { StudioService } from "./RoutesSection";
+import { t } from "../../lib/i18n";
 
 const label = { "font-size": "11px", color: "#8b949e", "margin-bottom": "4px", display: "block" } as const;
 const intro = { color: "#8b949e", "font-size": "13px", "line-height": "1.5" } as const;
@@ -28,7 +29,7 @@ export function LinksSection(props: { groups: LinkGroupM[]; projectName: string;
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
       <p style={intro}>
-        Links per environment: <span class="mono">local</span> takes a gateway hostname (<span class="mono">shop/admin</span>), the others full URLs.{" "}
+        {t("Links per environment:")} <span class="mono">{t("local")}</span> {t("takes a gateway hostname (")}<span class="mono">{t("shop/admin")}</span>{t("), the others full URLs.")}{" "}
         <HelpLink path="/docs/orca-yaml/#links" />
       </p>
       <Index each={props.groups}>
@@ -36,11 +37,11 @@ export function LinksSection(props: { groups: LinkGroupM[]; projectName: string;
           <div class="card" style={{ padding: "12px 14px", display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div style={{ display: "flex", gap: "10px", "align-items": "end" }}>
               <label style={{ flex: "1", "max-width": "320px" }}>
-                <span style={label}>Group</span>
+                <span style={label}>{t("Group")}</span>
                 <input class="form-input" value={g().group} onInput={(e) => setGroup(gi, { ...g(), group: e.currentTarget.value })} />
               </label>
               <span style={{ flex: "1" }} />
-              <button class="btn btn-sm" onClick={() => props.onChange(removeAt(props.groups, gi))}>Remove group</button>
+              <button class="btn btn-sm" onClick={() => props.onChange(removeAt(props.groups, gi))}>{t("Remove group")}</button>
             </div>
             <Index each={g().links}>
               {(l, li) => {
@@ -50,21 +51,21 @@ export function LinksSection(props: { groups: LinkGroupM[]; projectName: string;
                   <div style={{ display: "flex", "flex-direction": "column", gap: "6px", "padding-top": "10px", "border-top": "1px solid #21262d" }}>
                     <div style={{ display: "flex", gap: "10px", "align-items": "end" }}>
                       <label style={{ flex: "1", "max-width": "320px" }}>
-                        <span style={label}>Name</span>
-                        <input class="form-input" value={l().name} placeholder="Storefront" onInput={(e) => setLink({ name: e.currentTarget.value })} />
+                        <span style={label}>{t("Name")}</span>
+                        <input class="form-input" value={l().name} placeholder={t("Storefront")} onInput={(e) => setLink({ name: e.currentTarget.value })} />
                       </label>
                       <span style={{ flex: "1" }} />
-                      <RemoveButton title="Remove link" onClick={() => setGroup(gi, { ...g(), links: removeAt(g().links, li) })} />
+                      <RemoveButton title={t("Remove link")} onClick={() => setGroup(gi, { ...g(), links: removeAt(g().links, li) })} />
                     </div>
                     <Index each={l().urls}>
                       {(u, ui) => (
                         <div style={{ display: "grid", "grid-template-columns": "140px 1fr auto", gap: "8px", "align-items": "center" }}>
-                          <input class="form-input" value={u()[0]} placeholder="staging" aria-label="Environment"
+                          <input class="form-input" value={u()[0]} placeholder={t("staging")} aria-label={t("Environment")}
                             onInput={(e) => setLink({ urls: replaceAt(l().urls, ui, [e.currentTarget.value, u()[1]]) })} />
-                          <input class="form-input mono" value={u()[1]} aria-label="URL"
+                          <input class="form-input mono" value={u()[1]} aria-label={t("URL")}
                             placeholder={u()[0] === "local" ? `${props.projectName.toLowerCase()}/admin` : `https://${u()[0] || "staging"}.example.com`}
                             onInput={(e) => setLink({ urls: replaceAt(l().urls, ui, [u()[0], e.currentTarget.value]) })} />
-                          <RemoveButton title="Remove environment" onClick={() => setLink({ urls: removeAt(l().urls, ui) })} />
+                          <RemoveButton title={t("Remove environment")} onClick={() => setLink({ urls: removeAt(l().urls, ui) })} />
                         </div>
                       )}
                     </Index>
@@ -73,22 +74,21 @@ export function LinksSection(props: { groups: LinkGroupM[]; projectName: string;
                         const used = new Set(l().urls.map(([k]) => k));
                         const next = ["local", "staging", "production"].find((k) => !used.has(k)) ?? "";
                         setLink({ urls: [...l().urls, [next, ""]] });
-                      }}>+ Environment</button>
+                      }}>{t("+ Environment")}</button>
                     </div>
                   </div>
                 );
               }}
             </Index>
             <div>
-              <button class="btn btn-sm" onClick={() => setGroup(gi, { ...g(), links: [...g().links, { name: "", urls: [["local", ""]] }] })}>+ Link</button>
+              <button class="btn btn-sm" onClick={() => setGroup(gi, { ...g(), links: [...g().links, { name: "", urls: [["local", ""]] }] })}>{t("+ Link")}</button>
             </div>
           </div>
         )}
       </Index>
       <div>
         <button class="btn btn-sm" onClick={() => props.onChange([...props.groups, { group: props.projectName, links: [{ name: "", urls: [["local", ""]] }] }])}>
-          + Link group
-        </button>
+          {t("+ Link group")}</button>
       </div>
     </div>
   );
@@ -99,23 +99,23 @@ export function HooksSection(props: { hooks: HookM[]; services: StudioService[];
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
       <p style={intro}>
-        Run in a service's container after every start from Orca, so make them safe to repeat: <span class="mono">--force</span>, <span class="mono">|| true</span>, <span class="mono">IF NOT EXISTS</span>.{" "}
+        {t("Run in a service's container after every start from Orca, so make them safe to repeat:")} <span class="mono">{t("--force")}</span>, <span class="mono">{t("|| true")}</span>, <span class="mono">{t("IF NOT EXISTS")}</span>.{" "}
         <HelpLink path="/docs/orca-yaml/#hooks" />
       </p>
       <Index each={props.hooks}>
         {(h, i) => (
           <div style={{ display: "grid", "grid-template-columns": "180px 1fr auto", gap: "8px", "align-items": "center" }}>
-            <Dropdown value={h().service} placeholder="Service"
+            <Dropdown value={h().service} placeholder={t("Service")}
               options={[...options(), ...(h().service && !props.services.some((s) => s.name === h().service) ? [{ value: h().service, label: `${h().service} (not running)` }] : [])]}
               onChange={(v) => props.onChange(replaceAt(props.hooks, i, { ...h(), service: v }))} />
-            <input class="form-input mono" value={h().command} placeholder="php artisan migrate --force"
+            <input class="form-input mono" value={h().command} placeholder={t("php artisan migrate --force")}
               onInput={(e) => props.onChange(replaceAt(props.hooks, i, { ...h(), command: e.currentTarget.value }))} />
-            <RemoveButton title="Remove command" onClick={() => props.onChange(removeAt(props.hooks, i))} />
+            <RemoveButton title={t("Remove command")} onClick={() => props.onChange(removeAt(props.hooks, i))} />
           </div>
         )}
       </Index>
       <div>
-        <button class="btn btn-sm" onClick={() => props.onChange([...props.hooks, { service: props.services[0]?.name ?? "", command: "" }])}>+ Command</button>
+        <button class="btn btn-sm" onClick={() => props.onChange([...props.hooks, { service: props.services[0]?.name ?? "", command: "" }])}>{t("+ Command")}</button>
       </div>
     </div>
   );
@@ -125,36 +125,36 @@ export function BuildsSection(props: { builds: BuildM[]; services: StudioService
   const set = (i: number, b: BuildM) => props.onChange(replaceAt(props.builds, i, b));
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
-      <p style={intro}>Images to build from this project, on the Builds page. Paths are relative to the folder with orca.yaml.</p>
+      <p style={intro}>{t("Images to build from this project, on the Builds page. Paths are relative to the folder with orca.yaml.")}</p>
       <Index each={props.builds}>
         {(b, i) => (
           <div class="card" style={{ padding: "12px 14px", display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fit, minmax(150px, 1fr)) auto", gap: "10px", "align-items": "end" }}>
-              <label><span style={label}>Name</span>
-                <input class="form-input" value={b().name} placeholder="web" onInput={(e) => set(i, { ...b(), name: e.currentTarget.value })} /></label>
-              <label><span style={label}>Context</span>
-                <input class="form-input mono" value={b().context} placeholder="./web" onInput={(e) => set(i, { ...b(), context: e.currentTarget.value })} /></label>
-              <label><span style={label}>Dockerfile</span>
-                <input class="form-input mono" value={b().dockerfile} placeholder="Dockerfile" onInput={(e) => set(i, { ...b(), dockerfile: e.currentTarget.value })} /></label>
-              <label><span style={label}>Tag</span>
-                <input class="form-input mono" value={b().tag} placeholder="shop-web:dev" onInput={(e) => set(i, { ...b(), tag: e.currentTarget.value })} /></label>
-              <RemoveButton title="Remove build" onClick={() => props.onChange(removeAt(props.builds, i))} />
+              <label><span style={label}>{t("Name")}</span>
+                <input class="form-input" value={b().name} placeholder={t("web")} onInput={(e) => set(i, { ...b(), name: e.currentTarget.value })} /></label>
+              <label><span style={label}>{t("Context")}</span>
+                <input class="form-input mono" value={b().context} placeholder={t("./web")} onInput={(e) => set(i, { ...b(), context: e.currentTarget.value })} /></label>
+              <label><span style={label}>{t("Dockerfile")}</span>
+                <input class="form-input mono" value={b().dockerfile} placeholder={t("Dockerfile")} onInput={(e) => set(i, { ...b(), dockerfile: e.currentTarget.value })} /></label>
+              <label><span style={label}>{t("Tag")}</span>
+                <input class="form-input mono" value={b().tag} placeholder={t("shop-web:dev")} onInput={(e) => set(i, { ...b(), tag: e.currentTarget.value })} /></label>
+              <RemoveButton title={t("Remove build")} onClick={() => props.onChange(removeAt(props.builds, i))} />
             </div>
             <Show when={b().args.length > 0}>
-              <span style={{ ...label, "margin-bottom": "0" }}>Build args</span>
+              <span style={{ ...label, "margin-bottom": "0" }}>{t("Build args")}</span>
             </Show>
             <Index each={b().args}>
               {(a, ai) => (
                 <div style={{ display: "grid", "grid-template-columns": "200px 1fr auto", gap: "8px", "align-items": "center" }}>
-                  <input class="form-input mono" value={a()[0]} placeholder="NODE_VERSION" aria-label="Arg name"
+                  <input class="form-input mono" value={a()[0]} placeholder={t("NODE_VERSION")} aria-label={t("Arg name")}
                     onInput={(e) => set(i, { ...b(), args: replaceAt(b().args, ai, [e.currentTarget.value, a()[1]]) })} />
-                  <input class="form-input mono" value={a()[1]} placeholder="22" aria-label="Arg value"
+                  <input class="form-input mono" value={a()[1]} placeholder={t("22")} aria-label={t("Arg value")}
                     onInput={(e) => set(i, { ...b(), args: replaceAt(b().args, ai, [a()[0], e.currentTarget.value]) })} />
-                  <RemoveButton title="Remove arg" onClick={() => set(i, { ...b(), args: removeAt(b().args, ai) })} />
+                  <RemoveButton title={t("Remove arg")} onClick={() => set(i, { ...b(), args: removeAt(b().args, ai) })} />
                 </div>
               )}
             </Index>
-            <div><button style={linkBtn} onClick={() => set(i, { ...b(), args: [...b().args, ["", ""]] })}>+ Build arg</button></div>
+            <div><button style={linkBtn} onClick={() => set(i, { ...b(), args: [...b().args, ["", ""]] })}>{t("+ Build arg")}</button></div>
           </div>
         )}
       </Index>
@@ -162,7 +162,7 @@ export function BuildsSection(props: { builds: BuildM[]; services: StudioService
         <button class="btn btn-sm" onClick={() => {
           const s = props.services[0]?.name ?? "app";
           props.onChange([...props.builds, { name: s, context: ".", dockerfile: "", tag: `${s}:dev`, args: [] }]);
-        }}>+ Build target</button>
+        }}>{t("+ Build target")}</button>
       </div>
     </div>
   );

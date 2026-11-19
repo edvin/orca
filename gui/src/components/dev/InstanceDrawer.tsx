@@ -11,6 +11,7 @@ import { confirm, confirmDanger } from "../ConfirmDialog";
 import { DataModePicker, JobSteps, StatusDot, YamlView } from "./DevBits";
 import { usePoller } from "../../lib/poller";
 import HelpLink from "../HelpLink";
+import { t } from "../../lib/i18n";
 
 type Tab = "overview" | "logs" | "env" | "data" | "override" | "settings";
 
@@ -64,27 +65,27 @@ export default function InstanceDrawer(props: Props) {
             <div class="dev-card-sub" style={{ "flex-wrap": "nowrap" }}>
               <span style={{ "flex-shrink": 0 }}>{props.inst.branch ?? `detached ${props.inst.head ?? ""}`} ·</span>
               <span class="mono dev-path" title={props.inst.path}><span>{tildify(props.inst.path)}</span></span>
-              <button class="dev-icon-btn" title="Open folder" onClick={() => invoke("reveal_path", { path: props.inst.path }).catch((e) => showToast(String(e), "error"))}>
+              <button class="dev-icon-btn" title={t("Open folder")} onClick={() => invoke("reveal_path", { path: props.inst.path }).catch((e) => showToast(String(e), "error"))}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></svg>
               </button>
             </div>
           </div>
           <div style={{ display: "flex", gap: "6px", "flex-shrink": 0 }}>
             <Show when={props.inst.status !== "orphaned"}>
-              <Show when={live()} fallback={<button class="btn btn-sm btn-primary" disabled={busy()} onClick={props.onStart}>Start…</button>}>
-                <button class="btn btn-sm" disabled={busy()} onClick={props.onRestart} title="Rebuild from this worktree's code and restart">Rebuild</button>
-                <button class="btn btn-sm" disabled={busy()} onClick={props.onStop}>Stop</button>
+              <Show when={live()} fallback={<button class="btn btn-sm btn-primary" disabled={busy()} onClick={props.onStart}>{t("Start…")}</button>}>
+                <button class="btn btn-sm" disabled={busy()} onClick={props.onRestart} title={t("Rebuild from this worktree's code and restart")}>{t("Rebuild")}</button>
+                <button class="btn btn-sm" disabled={busy()} onClick={props.onStop}>{t("Stop")}</button>
               </Show>
             </Show>
-            <button class="btn btn-sm btn-outline" disabled={busy()} onClick={props.onRemove} title="Delete containers, volumes, images and generated files">Remove</button>
-            <button class="modal-close" onClick={props.onClose} title="Close (Esc)">×</button>
+            <button class="btn btn-sm btn-outline" disabled={busy()} onClick={props.onRemove} title={t("Delete containers, volumes, images and generated files")}>{t("Remove")}</button>
+            <button class="modal-close" onClick={props.onClose} title={t("Close (Esc)")}>×</button>
           </div>
         </div>
         <div class="detail-tab-bar" style={{ padding: "0 14px", "margin-top": "10px" }}>
           <For each={tabs}>
-            {(t) => (
-              <button class={`detail-tab-item ${tab() === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
-                {t.label}
+            {(tx) => (
+              <button class={`detail-tab-item ${tab() === tx.id ? "active" : ""}`} onClick={() => setTab(tx.id)}>
+                {tx.label}
               </button>
             )}
           </For>
@@ -155,8 +156,7 @@ function Overview(props: Props) {
           </div>
           <Show when={lastJob()!.status === "failed" && (props.inst.status === "running" || props.inst.status === "partial")}>
             <div class="form-hint" style={{ "margin-bottom": "6px" }}>
-              This attempt failed, but the instance kept running as it was before.
-            </div>
+              {t("This attempt failed, but the instance kept running as it was before.")}</div>
           </Show>
           <JobSteps steps={lastJob()!.steps} />
           <Show when={lastJob()!.error}>
@@ -164,8 +164,7 @@ function Overview(props: Props) {
           </Show>
           <Show when={(lastJob()!.log?.length ?? 0) > 0}>
             <button class="btn btn-sm btn-outline" style={{ "margin-top": "8px" }} onClick={() => setShowLog(!showLog())}>
-              {showLog() ? "Hide" : "Show"} full output ({lastJob()!.log.length} lines)
-            </button>
+              {showLog() ? "Hide" : "Show"} {t("full output (")}{lastJob()!.log.length} {t("lines)")}</button>
             <Show when={showLog()}>
               <pre class="dev-code" style={{ "max-height": "320px", "margin-top": "8px" }}>{lastJob()!.log.join("\n")}</pre>
             </Show>
@@ -175,7 +174,7 @@ function Overview(props: Props) {
 
       <Show when={urls().length > 0 || props.inst.ports.length > 0}>
         <div class="dev-section">
-          <div class="dev-section-title">Reach it</div>
+          <div class="dev-section-title">{t("Reach it")}</div>
           <table class="dev-table">
             <tbody>
               <For each={urls()}>
@@ -184,8 +183,8 @@ function Overview(props: Props) {
                     <td style={{ width: "120px", color: "#8b949e" }}>{u.service}</td>
                     <td class="mono">{u.url}</td>
                     <td style={{ "text-align": "right" }}>
-                      <button class="btn btn-sm" onClick={() => shellOpen(u.url).catch(() => {})}>Open</button>{" "}
-                      <button class="btn btn-sm btn-outline" onClick={() => copyToClipboard(u.url)}>Copy</button>
+                      <button class="btn btn-sm" onClick={() => shellOpen(u.url).catch(() => {})}>{t("Open")}</button>{" "}
+                      <button class="btn btn-sm btn-outline" onClick={() => copyToClipboard(u.url)}>{t("Copy")}</button>
                     </td>
                   </tr>
                 )}
@@ -194,9 +193,9 @@ function Overview(props: Props) {
                 {(p) => (
                   <tr>
                     <td style={{ color: "#8b949e" }}>{p.service} :{p.container_port}</td>
-                    <td class="mono">localhost:{p.host_port}</td>
+                    <td class="mono">{t("localhost:")}{p.host_port}</td>
                     <td style={{ "text-align": "right" }}>
-                      <button class="btn btn-sm btn-outline" onClick={() => copyToClipboard(`localhost:${p.host_port}`)}>Copy</button>
+                      <button class="btn btn-sm btn-outline" onClick={() => copyToClipboard(`localhost:${p.host_port}`)}>{t("Copy")}</button>
                     </td>
                   </tr>
                 )}
@@ -204,17 +203,16 @@ function Overview(props: Props) {
             </tbody>
           </table>
           <div class="form-hint" style={{ "margin-top": "6px" }}>
-            Host ports stay the same for this worktree across restarts.
-          </div>
+            {t("Host ports stay the same for this worktree across restarts.")}</div>
         </div>
       </Show>
 
       <Show when={props.inst.services.length > 0}>
         <div class="dev-section">
-          <div class="dev-section-title">Services</div>
+          <div class="dev-section-title">{t("Services")}</div>
           <table class="dev-table">
             <thead>
-              <tr><th>Service</th><th>State</th><th>Container</th><th>Image</th></tr>
+              <tr><th>{t("Service")}</th><th>{t("State")}</th><th>{t("Container")}</th><th>{t("Image")}</th></tr>
             </thead>
             <tbody>
               <For each={props.inst.services}>
@@ -242,15 +240,13 @@ function Overview(props: Props) {
       </Show>
 
       <div class="dev-section">
-        <div class="dev-section-title">Use it from your tools and agents</div>
+        <div class="dev-section-title">{t("Use it from your tools and agents")}</div>
         <div class="dev-explainer" style={{ "margin-bottom": "0", display: "block" }}>
           <div>
-            URLs, ports and connection strings for this instance are in{" "}
+            {t("URLs, ports and connection strings for this instance are in")}{" "}
             <a href="#" class="mono" style={{ color: "#58a6ff" }} onClick={(e) => { e.preventDefault(); copyToClipboard(envPath()); }}>
-              .orca/env
-            </a>{" "}
-            inside the worktree (git ignores the folder).
-          </div>
+              {t(".orca/env")}</a>{" "}
+            {t("inside the worktree (git ignores the folder).")}</div>
           <pre class="dev-code" style={{ "margin-top": "10px" }}>{`cd ${tildify(props.inst.path)}
 orca up          # start or rebuild this worktree's instance
 orca status      # URLs, ports and service states
@@ -324,9 +320,8 @@ function Logs(props: { project: DevProject; inst: DevInstance }) {
         />
         <label style={{ display: "flex", gap: "6px", "align-items": "center", "font-size": "12px", color: "#c9d1d9", cursor: "pointer" }}>
           <input type="checkbox" checked={follow()} onChange={(e) => setFollow(e.currentTarget.checked)} />
-          Follow
-        </label>
-        <button class="btn btn-sm btn-outline" onClick={load}>Refresh</button>
+          {t("Follow")}</label>
+        <button class="btn btn-sm btn-outline" onClick={load}>{t("Refresh")}</button>
       </div>
       <Show when={error()}>
         <div class="dev-error">{error()}</div>
@@ -375,30 +370,27 @@ function Generated(props: { project: DevProject; inst: DevInstance }) {
         <div class="dev-error">{error()}</div>
       </Show>
       <Show when={!plan() && !error()}>
-        <div style={{ color: "#8b949e", "font-size": "12px" }}>Reading compose files…</div>
+        <div style={{ color: "#8b949e", "font-size": "12px" }}>{t("Reading compose files…")}</div>
       </Show>
       <Show when={plan()}>
         <div class="dev-explainer">
           <div>
-            Orca never edits your compose files. It adds{" "}
-            <b>{plan()!.resolved_mode ? ".orca/compose.resolved.yaml" : ".orca/compose.override.yaml"}</b> on top of{" "}
-            <span class="mono">{plan()!.compose_files.map((f) => f.split("/").pop()).join(", ")}</span> and runs them as compose
-            project <span class="mono">{plan()!.compose_project}</span>. <span style={{ color: "#7ee787" }}>Green comments</span>{" "}
-            say why each line is there; <span style={{ color: "#ffa657" }}>!reset</span> removes a value from your file and{" "}
-            <span style={{ color: "#ffa657" }}>!override</span> replaces it.
-          </div>
+            {t("Orca never edits your compose files. It adds")}{" "}
+            <b>{plan()!.resolved_mode ? ".orca/compose.resolved.yaml" : ".orca/compose.override.yaml"}</b> {t("on top of")}{" "}
+            <span class="mono">{plan()!.compose_files.map((f) => f.split("/").pop()).join(", ")}</span> {t("and runs them as compose project")}<span class="mono">{plan()!.compose_project}</span>. <span style={{ color: "#7ee787" }}>{t("Green comments")}</span>{" "}
+            {t("say why each line is there;")} <span style={{ color: "#ffa657" }}>{t("!reset")}</span> {t("removes a value from your file and")}{" "}
+            <span style={{ color: "#ffa657" }}>{t("!override")}</span> {t("replaces it.")}</div>
         </div>
         <div class="dev-section">
           <div class="dev-section-title">
             {plan()!.resolved_mode ? "compose.resolved.yaml" : "compose.override.yaml"}
-            <button class="btn btn-sm btn-outline" style={{ "margin-left": "auto" }} onClick={() => copyToClipboard(plan()!.plan.override_yaml)}>Copy</button>
+            <button class="btn btn-sm btn-outline" style={{ "margin-left": "auto" }} onClick={() => copyToClipboard(plan()!.plan.override_yaml)}>{t("Copy")}</button>
           </div>
           <YamlView text={plan()!.plan.override_yaml} />
         </div>
         <div class="dev-section">
           <div class="dev-section-title">
-            .orca/env
-            <button class="btn btn-sm btn-outline" style={{ "margin-left": "auto" }} onClick={() => copyToClipboard(plan()!.plan.env_file)}>Copy</button>
+            {t(".orca/env")}<button class="btn btn-sm btn-outline" style={{ "margin-left": "auto" }} onClick={() => copyToClipboard(plan()!.plan.env_file)}>{t("Copy")}</button>
           </div>
           <pre class="dev-code">{plan()!.plan.env_file}</pre>
         </div>
@@ -451,7 +443,7 @@ function Settings(props: { project: DevProject; inst: DevInstance; onRenamed: (n
   return (
     <>
       <div class="dev-section">
-        <div class="dev-section-title">Name</div>
+        <div class="dev-section-title">{t("Name")}</div>
         <input
           class="form-input mono"
           style={{ width: "320px" }}
@@ -466,10 +458,10 @@ function Settings(props: { project: DevProject; inst: DevInstance; onRenamed: (n
         </div>
       </div>
       <div class="dev-section">
-        <div class="dev-section-title">Hostnames</div>
-        <Show when={exposed().length > 0} fallback={<div class="form-hint">Nothing in this instance opens in a browser.</div>}>
+        <div class="dev-section-title">{t("Hostnames")}</div>
+        <Show when={exposed().length > 0} fallback={<div class="form-hint">{t("Nothing in this instance opens in a browser.")}</div>}>
           <table class="dev-table">
-            <thead><tr><th style={{ width: "120px" }}>Service</th><th>Hostname</th></tr></thead>
+            <thead><tr><th style={{ width: "120px" }}>{t("Service")}</th><th>{t("Hostname")}</th></tr></thead>
             <tbody>
               <For each={exposed()}>
                 {(e) => (
@@ -490,11 +482,10 @@ function Settings(props: { project: DevProject; inst: DevInstance; onRenamed: (n
             </tbody>
           </table>
           <div class="form-hint" style={{ "margin-top": "6px" }}>
-            Leave empty to use the project's pattern. Overrides are stored by Orca for this worktree, not in orca.yaml.
-          </div>
+            {t("Leave empty to use the project's pattern. Overrides are stored by Orca for this worktree, not in orca.yaml.")}</div>
         </Show>
       </div>
-      <button class="btn btn-primary" disabled={saving()} onClick={save}>Save</button>
+      <button class="btn btn-primary" disabled={saving()} onClick={save}>{t("Save")}</button>
     </>
   );
 }
@@ -537,33 +528,30 @@ function Env(props: { project: DevProject; inst: DevInstance }) {
       <Show when={plan()}>
         <div class="dev-explainer">
           <div>
-            Containers reach services by name; your machine uses the URLs and ports in <span class="mono">.orca/env</span>. Values Orca set are marked.{" "}
+            {t("Containers reach services by name; your machine uses the URLs and ports in")} <span class="mono">{t(".orca/env")}</span>{t(". Values Orca set are marked.")}{" "}
             <HelpLink path="/docs/worktrees/#environment-and-orcaenv" />
           </div>
         </div>
         <div class="dev-section">
           <div class="dev-section-title">
-            From your machine · .orca/env
-            <span style={{ "margin-left": "auto", display: "flex", gap: "6px" }}>
-              <button class="btn btn-sm btn-outline" onClick={() => copyToClipboard(plan()!.plan.env_file)}>Copy .env</button>
-              <button class="btn btn-sm btn-outline" onClick={() => copyToClipboard(exports())}>Copy as exports</button>
+            {t("From your machine · .orca/env")}<span style={{ "margin-left": "auto", display: "flex", gap: "6px" }}>
+              <button class="btn btn-sm btn-outline" onClick={() => copyToClipboard(plan()!.plan.env_file)}>{t("Copy .env")}</button>
+              <button class="btn btn-sm btn-outline" onClick={() => copyToClipboard(exports())}>{t("Copy as exports")}</button>
             </span>
           </div>
           <pre class="dev-code">{plan()!.plan.env_file}</pre>
         </div>
         <div class="dev-section">
           <div class="dev-section-title">
-            Inside containers
-            <label style={{ "margin-left": "auto", display: "flex", gap: "6px", "align-items": "center", "text-transform": "none", "letter-spacing": 0, "font-weight": 400, cursor: "pointer" }}>
+            {t("Inside containers")}<label style={{ "margin-left": "auto", display: "flex", gap: "6px", "align-items": "center", "text-transform": "none", "letter-spacing": 0, "font-weight": 400, cursor: "pointer" }}>
               <input type="checkbox" checked={reveal()} onChange={(e) => setReveal(e.currentTarget.checked)} />
-              Show secrets
-            </label>
+              {t("Show secrets")}</label>
           </div>
           <For each={Object.entries(plan()!.plan.service_env)}>
             {([svc, vars]) => (
               <div style={{ "margin-bottom": "14px" }}>
                 <div style={{ "font-weight": 600, "font-size": "13px", color: "#e6edf3", "margin-bottom": "4px" }}>{svc}</div>
-                <Show when={vars.length > 0} fallback={<div class="form-hint">No environment variables.</div>}>
+                <Show when={vars.length > 0} fallback={<div class="form-hint">{t("No environment variables.")}</div>}>
                   <table class="dev-table">
                     <tbody>
                       <For each={vars}>
@@ -575,7 +563,7 @@ function Env(props: { project: DevProject; inst: DevInstance }) {
                             </td>
                             <td style={{ width: "70px", "text-align": "right" }}>
                               <Show when={v.source === "orca"}>
-                                <span class="dev-chip dev-chip-accent" style={{ "font-size": "10px", padding: "1px 7px" }} title={v.why ?? ""}>Orca</span>
+                                <span class="dev-chip dev-chip-accent" style={{ "font-size": "10px", padding: "1px 7px" }} title={v.why ?? ""}>{t("Orca")}</span>
                               </Show>
                             </td>
                           </tr>
@@ -653,7 +641,7 @@ function Data(props: { project: DevProject; inst: DevInstance }) {
     try {
       const job = await devApi.dataReset(props.project.id, props.inst.name, c.service);
       const done = await followJob(job.id, () => {});
-      if (done.status === "succeeded") showToast(`${c.tenant} was reset`, "success");
+      if (done.status === "succeeded") showToast(t("{value1} was reset", { value1: c.tenant }), "success");
       else showToast(done.error ?? "Reset failed", "error");
       await load();
     } catch (e) {
@@ -669,7 +657,7 @@ function Data(props: { project: DevProject; inst: DevInstance }) {
         <div class="dev-error">{error()}</div>
       </Show>
       <Show when={info() && info()!.length === 0}>
-        <div class="form-hint">This project has no shared services, so every instance has all its data to itself.</div>
+        <div class="form-hint">{t("This project has no shared services, so every instance has all its data to itself.")}</div>
       </Show>
       <For each={info() ?? []}>
         {(c) => (
@@ -684,7 +672,7 @@ function Data(props: { project: DevProject; inst: DevInstance }) {
             <div style={{ display: "flex", gap: "12px", "align-items": "center", "margin-top": "10px", "font-size": "12px", color: "#8b949e" }}>
               <Show when={c.mode === "own-database" && c.tenant}>
                 <span>
-                  Database <span class="mono" style={{ color: "#e6edf3" }}>{c.kind === "redis" ? `DB ${c.tenant}` : c.tenant}</span>
+                  {t("Database")} <span class="mono" style={{ color: "#e6edf3" }}>{c.kind === "redis" ? `DB ${c.tenant}` : c.tenant}</span>
                   {c.size != null
                     ? ` · ${c.kind === "redis" ? `${c.size} keys` : c.kind === "rabbitmq" ? `${c.size} queues` : bytes(c.size)}`
                     : " · created on next start"}
@@ -697,13 +685,11 @@ function Data(props: { project: DevProject; inst: DevInstance }) {
               </Show>
               <Show when={c.mode === "shared" && c.shared_db}>
                 <span>
-                  Uses <span class="mono" style={{ color: "#e6edf3" }}>{c.kind === "redis" ? "DB 0" : c.kind === "rabbitmq" ? `vhost ${c.shared_db}` : c.shared_db}</span>
-                  {c.shared_size != null && c.kind !== "redis" && c.kind !== "rabbitmq" ? ` · ${bytes(c.shared_size)}` : ""} with every other worktree.
-                  Changes here are seen everywhere.
-                </span>
+                  {t("Uses")} <span class="mono" style={{ color: "#e6edf3" }}>{c.kind === "redis" ? "DB 0" : c.kind === "rabbitmq" ? `vhost ${c.shared_db}` : c.shared_db}</span>
+                  {c.shared_size != null && c.kind !== "redis" && c.kind !== "rabbitmq" ? ` · ${bytes(c.shared_size)}` : ""} {t("with every other worktree. Changes here are seen everywhere.")}</span>
               </Show>
               <Show when={c.mode === "own-server"}>
-                <span>Runs as a {c.service} container inside this instance, with its own volume.</span>
+                <span>{t("Runs as a")} {c.service} {t("container inside this instance, with its own volume.")}</span>
               </Show>
             </div>
           </div>

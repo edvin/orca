@@ -11,6 +11,7 @@ import { useHealth } from "../lib/healthStore";
 import { formatBytes, formatTimestamp, splitImage } from "../lib/format";
 import { portGroups, portText } from "../lib/ports";
 import CopyButton from "./CopyButton";
+import { t } from "../lib/i18n";
 
 type HealthEntry = { output: string; exit_code: number; started_at: string; finished_at: string };
 
@@ -65,7 +66,7 @@ function Spark(props: { data: number[]; color: string; max?: number; id: string 
     return { line, area: `${line} L300 34 L0 34 Z`, last: pts[pts.length - 1] };
   });
   return (
-    <Show when={path()} fallback={<div class="cov-spark-empty">Collecting readings…</div>}>
+    <Show when={path()} fallback={<div class="cov-spark-empty">{t("Collecting readings…")}</div>}>
       {(p) => (
         <svg class="cov-spark" viewBox="0 0 300 34" preserveAspectRatio="none" aria-hidden="true">
           <defs>
@@ -180,9 +181,9 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
                 <svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z" /><path d="M3 7l9 5 9-5M12 12v10" /></svg>
               </div>
               <div>
-                <div class="cov-lbl">Container</div>
-                <div class="cov-big">Standalone</div>
-                <div class="cov-sub">Not part of a stack</div>
+                <div class="cov-lbl">{t("Container")}</div>
+                <div class="cov-big">{t("Standalone")}</div>
+                <div class="cov-sub">{t("Not part of a stack")}</div>
               </div>
             </>
           }>
@@ -190,11 +191,10 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
               <>
                 <div class="cov-badge" style={{ "--accent": accentOf(s()) }}>{s()[0]?.toUpperCase()}</div>
                 <div class="cov-min">
-                  <div class="cov-lbl">Stack</div>
-                  <button class="cov-big cov-link" onClick={() => props.onOpenStack?.(s())} title="Open the stack">{s()}</button>
+                  <div class="cov-lbl">{t("Stack")}</div>
+                  <button class="cov-big cov-link" onClick={() => props.onOpenStack?.(s())} title={t("Open the stack")}>{s()}</button>
                   <div class="cov-sub" style={{ color: accentOf(s()) }}>
-                    Compose · {stackMembers().filter((x) => x.state === "Running").length} of {stackMembers().length} running
-                  </div>
+                    {t("Compose ·")} {stackMembers().filter((x) => x.state === "Running").length} {t("of")} {stackMembers().length} {t("running")}</div>
                 </div>
               </>
             )}
@@ -203,7 +203,7 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
 
         <div class="cov-ctx-cell">
           <div class="cov-min">
-            <div class="cov-lbl">Image <span class="cov-lbl-note">Created {formatTimestamp(c().created_at)}</span></div>
+            <div class="cov-lbl">{t("Image")} <span class="cov-lbl-note">{t("Created")} {formatTimestamp(c().created_at)}</span></div>
             <button class="cov-big mono cov-link cov-ellipsis cov-image" title={`${c().image}\nShow it on the Images page`}
               onClick={() => props.onOpenImage?.(c().image.split("@")[0])}>
               {splitImage(c().image).name}
@@ -229,11 +229,11 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
 
         <div class="cov-ctx-cell">
           <div class="cov-min">
-            <div class="cov-lbl">Engine</div>
+            <div class="cov-lbl">{t("Engine")}</div>
             <div class="cov-big">{health()?.docker_version ? `Docker ${health()!.docker_version}` : "Docker"}</div>
             <div class="cov-sub">
               {host()?.is_remote ? `On ${host()!.name}` : "On this computer"}
-              <Show when={props.stats && running() && !memLimited()}> · {formatBytes(props.stats!.memory_limit_bytes)} memory</Show>
+              <Show when={props.stats && running() && !memLimited()}> · {formatBytes(props.stats!.memory_limit_bytes)} {t("memory")}</Show>
             </div>
           </div>
         </div>
@@ -243,12 +243,12 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
         {/* How it's set up */}
         <div class="cov-box">
           <div class="cov-row cov-between">
-            <span class="cov-lbl">Health check</span>
-            <Show when={hasHealth() && healthLog().length}><span class="cov-sub">last {healthLog().length} checks</span></Show>
+            <span class="cov-lbl">{t("Health check")}</span>
+            <Show when={hasHealth() && healthLog().length}><span class="cov-sub">{t("last")} {healthLog().length} {t("checks")}</span></Show>
           </div>
           <Show when={hasHealth()} fallback={
             <div class="cov-health-none">
-              <span class="cov-sub">No health check. Orca can only tell whether the process runs.</span>
+              <span class="cov-sub">{t("No health check. Orca can only tell whether the process runs.")}</span>
             </div>
           }>
             <div class="cov-health-state" style={{ color: healthColor() }}>
@@ -269,7 +269,7 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
           <button class="cov-opt" onClick={() => props.onTab("resources")}>
             <span class={`cov-state ${restartPolicy() !== "no" ? "on" : ""}`} />
             <span class="cov-min">
-              <b>Restart policy</b>
+              <b>{t("Restart policy")}</b>
               <span class="cov-sub">
                 {restartPolicy() === "no" ? "Not restarted by Docker" : restartPolicy()}
                 {" · "}{restarts() === 0 ? "never restarted" : `restarted ${restarts()} ${restarts() === 1 ? "time" : "times"}`}
@@ -286,7 +286,7 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
           <button class="cov-opt" onClick={() => props.onTab("resources")}>
             <span class={`cov-state ${memLimited() || (c().cpu_limit ?? 0) > 0 ? "on" : ""}`} />
             <span class="cov-min">
-              <b>Resource limits</b>
+              <b>{t("Resource limits")}</b>
               <span class="cov-sub">
                 {memLimited() ? `${formatBytes(c().memory_limit!)} memory` : "No memory limit"}
                 {" · "}{(c().cpu_limit ?? 0) > 0 ? `${c().cpu_limit} CPUs` : "no CPU limit"}
@@ -298,15 +298,15 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
         {/* Live usage */}
         <div class="cov-box">
           <div class="cov-row cov-between cov-mhead">
-            <h3>Live usage</h3>
-            <Show when={running()} fallback={<span class="cov-sub">The container is {c().state.toLowerCase()}</span>}>
-              <span class="cov-live"><span class="cov-live-dot" />Every 3 s</span>
+            <h3>{t("Live usage")}</h3>
+            <Show when={running()} fallback={<span class="cov-sub">{t("The container is")} {c().state.toLowerCase()}</span>}>
+              <span class="cov-live"><span class="cov-live-dot" />{t("Every 3 s")}</span>
             </Show>
           </div>
 
           <div class="cov-tiles">
             <div class="cov-tile">
-              <div class="cov-lbl">CPU <span class="cov-lbl-note">· {(c().cpu_limit ?? 0) > 0 ? `limit ${c().cpu_limit} CPUs` : "100% is one core"}</span></div>
+              <div class="cov-lbl">{t("CPU")} <span class="cov-lbl-note">· {(c().cpu_limit ?? 0) > 0 ? `limit ${c().cpu_limit} CPUs` : "100% is one core"}</span></div>
               <div class="cov-val">
                 <Show when={props.stats && running()} fallback="–">{props.stats!.cpu_percent.toFixed(1)}<small>%</small></Show>
               </div>
@@ -316,16 +316,16 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
             </div>
 
             <div class="cov-tile cov-hot">
-              <div class="cov-lbl">Memory <span class="cov-lbl-note">· {memLimited() ? `limit ${formatBytes(c().memory_limit!)}` : "no limit"}</span></div>
+              <div class="cov-lbl">{t("Memory")} <span class="cov-lbl-note">· {memLimited() ? `limit ${formatBytes(c().memory_limit!)}` : "no limit"}</span></div>
               <Show when={props.stats && running()} fallback={<div class="cov-val">–</div>}>
                 <div class="cov-val cov-blue">{num(formatBytes(props.stats!.memory_usage_bytes)).n}<small>{num(formatBytes(props.stats!.memory_usage_bytes)).u}</small></div>
-                <div class="cov-sub">{memPct().toFixed(1)}% of {memLimited() ? "its limit" : `the engine's ${formatBytes(props.stats!.memory_limit_bytes)}`}</div>
+                <div class="cov-sub">{memPct().toFixed(1)}{t("% of")} {memLimited() ? "its limit" : `the engine's ${formatBytes(props.stats!.memory_limit_bytes)}`}</div>
                 <Gauge pct={memPct()} color={memPct() > 90 ? "#f85149" : memPct() > 70 ? "#e3b341" : "#bc8cff"} label={`${Math.round(memPct())}%`} />
               </Show>
             </div>
 
             <div class="cov-tile">
-              <div class="cov-lbl">Network <Show when={networks()?.length}><span class="cov-lbl-note">· {networks()!.join(", ")}</span></Show></div>
+              <div class="cov-lbl">{t("Network")} <Show when={networks()?.length}><span class="cov-lbl-note">· {networks()!.join(", ")}</span></Show></div>
               <Show when={props.stats && running()} fallback={<div class="cov-val">–</div>}>
                 <div class="cov-val">
                   <span class="cov-arrow" style={{ color: "#58a6ff" }}>↓</span>{num(formatBytes(props.stats!.network_rx_bytes)).n}<small>{num(formatBytes(props.stats!.network_rx_bytes)).u}</small>
@@ -333,15 +333,14 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
                 </div>
                 <Spark id="net" data={history().slice(1).map((h, i) => Math.max(0, h.networkRx - history()[i].networkRx + h.networkTx - history()[i].networkTx))} color="#39c5cf" />
                 <div class="cov-sub">
-                  <Show when={rate(history(), "networkRx") !== null} fallback="Received and sent since it started">
-                    in {formatBytes(rate(history(), "networkRx")!)}/s · out {formatBytes(rate(history(), "networkTx")!)}/s
-                  </Show>
+                  <Show when={rate(history(), "networkRx") !== null} fallback={t("Received and sent since it started")}>
+                    {t("in")} {formatBytes(rate(history(), "networkRx")!)}{t("/s · out")} {formatBytes(rate(history(), "networkTx")!)}{t("/s")}</Show>
                 </div>
               </Show>
             </div>
 
             <div class="cov-tile cov-hot">
-              <div class="cov-lbl">Uptime <Show when={started() && running()}><span class="cov-lbl-note">· started {started()!.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></Show></div>
+              <div class="cov-lbl">{t("Uptime")} <Show when={started() && running()}><span class="cov-lbl-note">{t("· started")} {started()!.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></Show></div>
               <div class={`cov-val ${running() ? "cov-blue" : ""}`}>{running() ? since(started() ?? parseTime(c().created_at)) : "Stopped"}</div>
               <Show when={running()}>
                 <svg class="cov-timeline" viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true">
@@ -350,20 +349,20 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
               </Show>
               <div class="cov-sub">
                 {restarts() === 0 ? "No restarts" : `${restarts()} ${restarts() === 1 ? "restart" : "restarts"}`}
-                <Show when={!running() && props.inspect?.exit_code !== undefined && props.inspect?.exit_code !== null}> · exit code {props.inspect.exit_code}</Show>
+                <Show when={!running() && props.inspect?.exit_code !== undefined && props.inspect?.exit_code !== null}> {t("· exit code")} {props.inspect.exit_code}</Show>
               </div>
             </div>
           </div>
 
           <div class="cov-strip">
-            <span><span class="cov-k">Disk I/O</span>
+            <span><span class="cov-k">{t("Disk I/O")}</span>
               <Show when={props.stats && running()} fallback={<b>–</b>}>
-                <b>{num(formatBytes(props.stats!.block_read_bytes)).n}</b><u>{num(formatBytes(props.stats!.block_read_bytes)).u} read</u>
-                <b class="cov-gap">{num(formatBytes(props.stats!.block_write_bytes)).n}</b><u>{num(formatBytes(props.stats!.block_write_bytes)).u} written</u>
+                <b>{num(formatBytes(props.stats!.block_read_bytes)).n}</b><u>{num(formatBytes(props.stats!.block_read_bytes)).u} {t("read")}</u>
+                <b class="cov-gap">{num(formatBytes(props.stats!.block_write_bytes)).n}</b><u>{num(formatBytes(props.stats!.block_write_bytes)).u} {t("written")}</u>
               </Show>
             </span>
             <Show when={props.stats && running() && (c().cpu_limit ?? 0) > 0}>
-              <span class="cov-meter-wrap"><span class="cov-k">CPU of its limit</span>
+              <span class="cov-meter-wrap"><span class="cov-k">{t("CPU of its limit")}</span>
                 <span class="cov-meter"><span style={{ width: `${Math.min(100, Math.max(1, props.stats!.cpu_percent / c().cpu_limit!))}%` }} /></span>
                 <b>{(props.stats!.cpu_percent / c().cpu_limit!).toFixed(1)}%</b>
               </span>
@@ -375,30 +374,26 @@ export default function ContainerOverview(props: ContainerOverviewProps) {
 
       {/* Details */}
       <div class="cov-details">
-        <div><span class="cov-k">ID</span><span class="mono selectable cov-ellipsis">{c().id.slice(0, 12)}</span><CopyButton text={c().id} label="Copy full container ID" /></div>
-        <div class="cov-min"><span class="cov-k">Command</span><span class="mono selectable cov-ellipsis" title={command()}>{command() || "–"}</span></div>
+        <div><span class="cov-k">{t("ID")}</span><span class="mono selectable cov-ellipsis">{c().id.slice(0, 12)}</span><CopyButton text={c().id} label={t("Copy full container ID")} /></div>
+        <div class="cov-min"><span class="cov-k">{t("Command")}</span><span class="mono selectable cov-ellipsis" title={command()}>{command() || "–"}</span></div>
       </div>
 
       <div class="cov-foot">
         <button class="btn btn-iconed cov-ghost" onClick={() => props.onTab("logs")}>
-          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>Logs
-        </button>
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>{t("Logs")}</button>
         <Show when={running()}>
           <button class="btn btn-iconed cov-ghost" onClick={() => props.onTab("terminal")}>
-            <svg viewBox="0 0 24 24"><path d="M4 17l6-5-6-5M12 19h8" /></svg>Terminal
-          </button>
+            <svg viewBox="0 0 24 24"><path d="M4 17l6-5-6-5M12 19h8" /></svg>{t("Terminal")}</button>
           <button class="btn btn-iconed cov-ghost" onClick={() => props.onTab("files")}>
-            <svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z" /></svg>Files
-          </button>
+            <svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z" /></svg>{t("Files")}</button>
         </Show>
         <button class="btn btn-iconed cov-ghost" onClick={() => props.onTab("inspect")}>
-          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M21 21l-5-5" /></svg>Inspect
-        </button>
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M21 21l-5-5" /></svg>{t("Inspect")}</button>
         <span class="cov-spacer" />
         <Show when={running() && openUrl()}>
           <button class="btn btn-primary btn-iconed" onClick={() => void shellOpen(openUrl()!)}>
             <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6" /></svg>
-            Open {openUrl()!.replace(/^https?:\/\//, "")}
+            {t("Open")} {openUrl()!.replace(/^https?:\/\//, "")}
           </button>
         </Show>
       </div>

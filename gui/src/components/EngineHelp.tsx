@@ -7,6 +7,7 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { showToast } from "./Toast";
+import { t } from "../lib/i18n";
 
 interface Diagnosis {
   dir: string;
@@ -32,8 +33,8 @@ export default function EngineHelp(props: { problem: string }) {
   };
   onMount(() => {
     void poll();
-    const t = setInterval(() => { if (!document.hidden) void poll(); }, 2000);
-    onCleanup(() => clearInterval(t));
+    const tx = setInterval(() => { if (!document.hidden) void poll(); }, 2000);
+    onCleanup(() => clearInterval(tx));
   });
 
   // A fresh diagnosis each time: what Orca knows now.
@@ -72,7 +73,7 @@ export default function EngineHelp(props: { problem: string }) {
     try {
       const d = diagnosis() ?? (await diagnose());
       await navigator.clipboard.writeText(`${d.prompt}\n\nThe folder: ${d.dir}`);
-      showToast("Copied: paste it into Claude, Codex or another AI tool", "success");
+      showToast(t("Copied: paste it into Claude, Codex or another AI tool"), "success");
     } catch (e) {
       showToast(String(e), "error");
     }
@@ -82,19 +83,17 @@ export default function EngineHelp(props: { problem: string }) {
     <div class="engine-help">
       <Show when={vm()}>
         <div class="engine-help-head">
-          <b>The VM's console</b>
-          <span>Where its boot shows, live. Empty: Linux in it hasn't printed anything yet.</span>
+          <b>{t("The VM's console")}</b>
+          <span>{t("Where its boot shows, live. Empty: Linux in it hasn't printed anything yet.")}</span>
         </div>
         <pre class="engine-help-console selectable" ref={(el) => (consoleEl = el)}>
           {consoleText()?.trim() ? consoleText() : "(nothing on the console)"}
         </pre>
       </Show>
       <div class="engine-help-head" style={{ "margin-top": vm() ? "14px" : "0" }}>
-        <b>Ask an AI tool</b>
+        <b>{t("Ask an AI tool")}</b>
         <span>
-          Orca writes what it knows (its logs, the VM's logs, config and console, what runs, free space) to a folder and
-          starts the tool there. It asks before changing anything.
-        </span>
+          {t("Orca writes what it knows (its logs, the VM's logs, config and console, what runs, free space) to a folder and starts the tool there. It asks before changing anything.")}</span>
       </div>
       <div class="engine-help-actions">
         <Show when={isMac}>
@@ -108,7 +107,7 @@ export default function EngineHelp(props: { problem: string }) {
         <button class="btn btn-sm" disabled={!!busy()} onClick={() => void openFolder()}>
           {busy() === "folder" ? "Gathering…" : "Open what Orca knows"}
         </button>
-        <button class="btn btn-sm" disabled={!!busy()} onClick={() => void copyPrompt()}>Copy prompt</button>
+        <button class="btn btn-sm" disabled={!!busy()} onClick={() => void copyPrompt()}>{t("Copy prompt")}</button>
       </div>
     </div>
   );

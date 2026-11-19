@@ -6,6 +6,7 @@ import { createResource, createSignal, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import HelpLink from "./HelpLink";
+import { t } from "../lib/i18n";
 
 interface ClientStatus {
   id: string;
@@ -43,9 +44,9 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
     setBusy(c.id);
     try {
       const next = await invoke<string>("mcp_connect", { client: c.id });
-      showToast(`${c.name} is connected to Orca. ${next}`, "success");
+      showToast(t("{value1} is connected to Orca. {next}", { value1: c.name, next: next }), "success");
     } catch (e) {
-      showToast(`Could not connect ${c.name}: ${e}`, "error");
+      showToast(t("Could not connect {value1}: {e}", { value1: c.name, e: e }), "error");
     }
     setBusy(null);
     await refetch();
@@ -54,7 +55,7 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
     setBusy(c.id);
     try {
       await invoke("mcp_disconnect", { client: c.id });
-      showToast(`Removed Orca from ${c.name}`, "info");
+      showToast(t("Removed Orca from {value1}", { value1: c.name }), "info");
     } catch (e) {
       showToast(String(e), "error");
     }
@@ -62,7 +63,7 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
     await refetch();
   };
   const copy = (text: string, what: string) =>
-    navigator.clipboard.writeText(text).then(() => showToast(`${what} copied`, "success"), () => {});
+    navigator.clipboard.writeText(text).then(() => showToast(t("{what} copied", { what: what }), "success"), () => {});
 
   const visible = () => (clients() ?? []).filter((c) => !props.compact || c.detected || c.connected);
   const manualJson = () => JSON.stringify({ mcpServers: { orca: { command: command() ?? "orca", args: ["mcp"] } } }, null, 2);
@@ -71,9 +72,9 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
     <div class="ai-connect">
       <div class="ai-connect-head">
         <div>
-          <div class="ai-connect-title">Connect your AI tools</div>
+          <div class="ai-connect-title">{t("Connect your AI tools")}</div>
           <div class="ai-connect-sub">
-            Lets Claude and other AI tools run, inspect and fix what runs here. No API key needed.{" "}
+            {t("Lets Claude and other AI tools run, inspect and fix what runs here. No API key needed.")}{" "}
             <HelpLink path="/docs/agents/" />
           </div>
         </div>
@@ -103,7 +104,7 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
                   </button>
                 }>
                   <span class="ai-client-check" title={c.after_connect ?? ""}>✓</span>
-                  <button class="btn btn-sm" disabled={busy() === c.id} onClick={() => void disconnect(c)}>Disconnect</button>
+                  <button class="btn btn-sm" disabled={busy() === c.id} onClick={() => void disconnect(c)}>{t("Disconnect")}</button>
                 </Show>
               </div>
             );
@@ -113,7 +114,7 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
 
       <Show when={!props.compact}>
         <div class="ai-connect-try">
-          <div class="ai-connect-label">Then ask, for example</div>
+          <div class="ai-connect-label">{t("Then ask, for example")}</div>
           <div class="ai-prompts">
             <For each={PROMPTS}>{(p) => <button class="ai-prompt" onClick={() => copy(p, "Prompt")}>“{p}”</button>}</For>
           </div>
@@ -124,13 +125,11 @@ export default function ConnectAiTools(props: { compact?: boolean }) {
         </button>
         <Show when={showManual()}>
           <div class="ai-connect-manual">
-            <p>Any MCP client that starts stdio servers can run Orca. No token needed:</p>
+            <p>{t("Any MCP client that starts stdio servers can run Orca. No token needed:")}</p>
             <pre class="mono">{manualJson()}</pre>
-            <button class="btn btn-sm" onClick={() => copy(manualJson(), "Config")}>Copy</button>
+            <button class="btn btn-sm" onClick={() => copy(manualJson(), "Config")}>{t("Copy")}</button>
             <p class="ai-connect-note">
-              From a terminal: <span class="mono">orca mcp install</span> connects every tool it finds. Add
-              <span class="mono"> --host &lt;name&gt;</span> to the command to manage a remote host instead.
-            </p>
+              {t("From a terminal:")} <span class="mono">{t("orca mcp install")}</span> {t("connects every tool it finds. Add")}<span class="mono"> {t("--host <name>")}</span> {t("to the command to manage a remote host instead.")}</p>
           </div>
         </Show>
       </Show>

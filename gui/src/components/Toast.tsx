@@ -1,5 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
 import { logError } from "../lib/activityStore";
+import { t } from "../lib/i18n";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -30,12 +31,12 @@ const MAX_VISIBLE = 5;
 const pendingTimeouts = new Map<number, ReturnType<typeof setTimeout>>();
 
 function dismissToast(id: number) {
-  const t = pendingTimeouts.get(id);
-  if (t !== undefined) {
-    clearTimeout(t);
+  const tx = pendingTimeouts.get(id);
+  if (tx !== undefined) {
+    clearTimeout(tx);
     pendingTimeouts.delete(id);
   }
-  setToasts((prev) => prev.filter((t) => t.id !== id));
+  setToasts((prev) => prev.filter((tx1) => tx1.id !== id));
 }
 
 export function showToast(
@@ -51,9 +52,9 @@ export function showToast(
     while (next.length > MAX_VISIBLE) {
       const dropped = next.shift();
       if (dropped) {
-        const t = pendingTimeouts.get(dropped.id);
-        if (t !== undefined) {
-          clearTimeout(t);
+        const tx2 = pendingTimeouts.get(dropped.id);
+        if (tx2 !== undefined) {
+          clearTimeout(tx2);
           pendingTimeouts.delete(dropped.id);
         }
       }
@@ -62,7 +63,7 @@ export function showToast(
   });
   const handle = setTimeout(() => {
     pendingTimeouts.delete(id);
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts((prev) => prev.filter((tx3) => tx3.id !== id));
   }, type === "error" ? 8000 : 4000);
   pendingTimeouts.set(id, handle);
 
@@ -98,7 +99,7 @@ function CopyToastButton(props: { message: string }) {
   };
 
   return (
-    <button class="toast-copy" onClick={handleCopy} title="Copy error message">
+    <button class="toast-copy" onClick={handleCopy} title={t("Copy error message")}>
       {copied()
         ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>}

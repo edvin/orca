@@ -7,6 +7,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import HelpLink from "../components/HelpLink";
 import { requestIntent } from "../lib/pageIntent";
 import "../styles/polish-b.css";
+import { t } from "../lib/i18n";
 
 interface BuildsPageProps {
   onNavigate?: (target: string) => void;
@@ -141,7 +142,7 @@ export default function BuildsPage(props: BuildsPageProps) {
       setBuildDetail(detail);
       setBuildLogs(logs || "");
     } catch (e) {
-      showToast(`Failed to load build: ${e}`, "error");
+      showToast(t("Failed to load build: {e}", { e: e }), "error");
     } finally {
       setLogsLoading(false);
     }
@@ -149,17 +150,17 @@ export default function BuildsPage(props: BuildsPageProps) {
 
   const deleteBuild = async (id: string, e?: MouseEvent) => {
     e?.stopPropagation();
-    if (!await confirmDanger("Delete build", "Delete this build record and its logs?")) return;
+    if (!await confirmDanger(t("Delete build"), "Delete this build record and its logs?")) return;
     try {
       await invoke("delete_build", { id });
-      showToast("Build deleted", "success");
+      showToast(t("Build deleted"), "success");
       if (selectedBuild() === id) {
         setSelectedBuild(null);
         setBuildDetail(null);
       }
       await refresh();
     } catch (err) {
-      showToast(`Failed to delete build: ${err}`, "error");
+      showToast(t("Failed to delete build: {err}", { err: err }), "error");
     }
   };
 
@@ -177,20 +178,20 @@ export default function BuildsPage(props: BuildsPageProps) {
 
   const submitUrlBuild = async () => {
     const url = urlInput().trim();
-    if (!url) { showToast("URL is required", "error"); return; }
+    if (!url) { showToast(t("URL is required"), "error"); return; }
     setUrlBuilding(true);
     try {
       await invoke("build_from_url", {
         sourceUrl: url,
         tag: urlTag().trim() || null,
       });
-      showToast("Build started from URL", "success");
+      showToast(t("Build started from URL"), "success");
       setShowUrlDialog(false);
       setUrlInput("");
       setUrlTag("");
       await refresh();
     } catch (err) {
-      showToast(`Build from URL failed: ${err}`, "error");
+      showToast(t("Build from URL failed: {err}", { err: err }), "error");
     } finally {
       setUrlBuilding(false);
     }
@@ -226,7 +227,7 @@ export default function BuildsPage(props: BuildsPageProps) {
       const result = await invoke("compare_builds", { id1: sel[0], id2: sel[1] }) as BuildComparison;
       setComparison(result);
     } catch (e) {
-      showToast(`Comparison failed: ${e}`, "error");
+      showToast(t("Comparison failed: {e}", { e: e }), "error");
     } finally {
       setCompareLoading(false);
     }
@@ -243,7 +244,7 @@ export default function BuildsPage(props: BuildsPageProps) {
       ]);
       setCompareLogs({ log1: log1 || "", log2: log2 || "" });
     } catch (e) {
-      showToast(`Failed to load logs: ${e}`, "error");
+      showToast(t("Failed to load logs: {e}", { e: e }), "error");
     } finally {
       setCompareLogsLoading(false);
     }
@@ -305,18 +306,16 @@ export default function BuildsPage(props: BuildsPageProps) {
           >
             <path d="m9 18 6-6-6-6"/>
           </svg>
-          Analytics
-        </button>
+          {t("Analytics")}</button>
 
         <Show when={analyticsOpen()}>
           <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "16px" }}>
             {/* Builds per day */}
             <div>
               <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "10px", "font-weight": "500" }}>
-                Builds per Day (Last 7 Days)
-              </div>
+                {t("Builds per Day (Last 7 Days)")}</div>
               <Show when={(s.builds_per_day || []).length > 0} fallback={
-                <div style={{ color: "#484f58", "font-size": "13px" }}>No data</div>
+                <div style={{ color: "#484f58", "font-size": "13px" }}>{t("No data")}</div>
               }>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <For each={s.builds_per_day || []}>
@@ -354,10 +353,9 @@ export default function BuildsPage(props: BuildsPageProps) {
             {/* Most built images + avg duration */}
             <div>
               <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "10px", "font-weight": "500" }}>
-                Most built images
-              </div>
+                {t("Most built images")}</div>
               <Show when={(s.most_built || []).length > 0} fallback={
-                <div style={{ color: "#484f58", "font-size": "13px" }}>No data</div>
+                <div style={{ color: "#484f58", "font-size": "13px" }}>{t("No data")}</div>
               }>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <For each={(s.most_built || []).slice(0, 5)}>
@@ -407,8 +405,7 @@ export default function BuildsPage(props: BuildsPageProps) {
 
               <Show when={(s.avg_duration_by_tag || []).length > 0}>
                 <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "8px", "margin-top": "16px", "font-weight": "500" }}>
-                  Avg Build Time by Image
-                </div>
+                  {t("Avg Build Time by Image")}</div>
                 <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
                   <For each={s.avg_duration_by_tag || []}>
                     {(item) => (
@@ -463,7 +460,7 @@ export default function BuildsPage(props: BuildsPageProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "20px" }}>
-            <h2 style={{ margin: "0", "font-size": "18px" }}>Build comparison</h2>
+            <h2 style={{ margin: "0", "font-size": "18px" }}>{t("Build comparison")}</h2>
             <button class="btn btn-ghost" onClick={closeComparison} style={{ "font-size": "18px", padding: "4px 8px" }}>
               {"\u00d7"}
             </button>
@@ -486,11 +483,11 @@ export default function BuildsPage(props: BuildsPageProps) {
                     <span style={{ "font-weight": "600", "font-size": "14px" }}>{b.tag || "(untagged)"}</span>
                   </div>
                   <div style={{ "font-size": "12px", color: "#8b949e", display: "flex", "flex-direction": "column", gap: "4px" }}>
-                    <div>Status: <span style={{ color: statusColor(b.status) }}>{b.status.replace("_", " ")}</span></div>
-                    <div>Duration: <span style={{ color: "#e6edf3" }}>{formatDuration(b.duration_secs)}</span></div>
-                    <div>Started: <span style={{ color: "#e6edf3" }}>{relativeTime(b.started_at)}</span></div>
-                    <div>Source: <span style={{ color: "#e6edf3" }}>{sourceLabel(b.source)}</span></div>
-                    <div>Dockerfile: <span style={{ color: "#e6edf3" }}>{b.dockerfile}</span></div>
+                    <div>{t("Status:")} <span style={{ color: statusColor(b.status) }}>{b.status.replace("_", " ")}</span></div>
+                    <div>{t("Duration:")} <span style={{ color: "#e6edf3" }}>{formatDuration(b.duration_secs)}</span></div>
+                    <div>{t("Started:")} <span style={{ color: "#e6edf3" }}>{relativeTime(b.started_at)}</span></div>
+                    <div>{t("Source:")} <span style={{ color: "#e6edf3" }}>{sourceLabel(b.source)}</span></div>
+                    <div>{t("Dockerfile:")} <span style={{ color: "#e6edf3" }}>{b.dockerfile}</span></div>
                   </div>
                 </div>
               )}
@@ -508,14 +505,14 @@ export default function BuildsPage(props: BuildsPageProps) {
               "font-size": "13px",
               color: "#d29922",
             }}>
-              Dockerfile path changed: <span style={{ color: "#e6edf3" }}>{b1.dockerfile}</span> {"\u2192"} <span style={{ color: "#e6edf3" }}>{b2.dockerfile}</span>
+              {t("Dockerfile path changed:")} <span style={{ color: "#e6edf3" }}>{b1.dockerfile}</span> {"\u2192"} <span style={{ color: "#e6edf3" }}>{b2.dockerfile}</span>
             </div>
           </Show>
 
           {/* Build args diff */}
           <Show when={comp.args_diff.length > 0}>
             <div style={{ "margin-bottom": "16px" }}>
-              <div style={{ "font-weight": "600", "font-size": "14px", "margin-bottom": "10px" }}>Build args changes</div>
+              <div style={{ "font-weight": "600", "font-size": "14px", "margin-bottom": "10px" }}>{t("Build args changes")}</div>
               <div style={{
                 background: "#0d1117",
                 border: "1px solid #21262d",
@@ -550,7 +547,7 @@ export default function BuildsPage(props: BuildsPageProps) {
           </Show>
 
           <Show when={comp.args_diff.length === 0}>
-            <div style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "16px" }}>No build args differences.</div>
+            <div style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "16px" }}>{t("No build args differences.")}</div>
           </Show>
 
           {/* Logs */}
@@ -568,7 +565,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             {(logs) => (
               <div style={{ display: "grid", "grid-template-columns": "1fr 1fr", gap: "12px", "margin-top": "8px" }}>
                 <div>
-                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "6px" }}>Build 1 Log ({b1.tag || b1.id.slice(0, 8)})</div>
+                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "6px" }}>{t("Build 1 Log (")}{b1.tag || b1.id.slice(0, 8)})</div>
                   <pre style={{
                     background: "#0d1117",
                     border: "1px solid #21262d",
@@ -587,7 +584,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                   }}>{logs().log1 || "No logs"}</pre>
                 </div>
                 <div>
-                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "6px" }}>Build 2 Log ({b2.tag || b2.id.slice(0, 8)})</div>
+                  <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "6px" }}>{t("Build 2 Log (")}{b2.tag || b2.id.slice(0, 8)})</div>
                   <pre style={{
                     background: "#0d1117",
                     border: "1px solid #21262d",
@@ -627,8 +624,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             style={{ display: "inline-flex", "align-items": "center", gap: "6px", padding: "6px 12px" }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
-            Back to list
-          </button>
+            {t("Back to list")}</button>
         </div>
 
         {/* Metadata card */}
@@ -655,20 +651,18 @@ export default function BuildsPage(props: BuildsPageProps) {
                     color: "#a78bfa",
                     border: "1px solid rgba(136, 132, 216, 0.3)",
                     "white-space": "nowrap",
-                  }}>External</span>
+                  }}>{t("External")}</span>
                 </Show>
               </div>
               <div style={{ color: "#8b949e", "font-size": "13px" }}>
-                Build {detail.id}
+                {t("Build")} {detail.id}
               </div>
             </div>
             <div style={{ "margin-left": "auto", display: "flex", gap: "8px" }}>
               <button class="btn btn-ghost" onClick={() => rebuild(detail)}>
-                Rebuild
-              </button>
+                {t("Rebuild")}</button>
               <button class="btn btn-danger" onClick={() => deleteBuild(detail.id)}>
-                Delete
-              </button>
+                {t("Delete")}</button>
             </div>
           </div>
 
@@ -708,8 +702,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                   }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
-                  Ask AI
-                </button>
+                  {t("Ask AI")}</button>
               </Show>
             </div>
           </Show>
@@ -726,7 +719,7 @@ export default function BuildsPage(props: BuildsPageProps) {
               "align-items": "center",
               gap: "12px",
             }}>
-              <span style={{ color: "#f85149", "font-size": "13px" }}>This build failed.</span>
+              <span style={{ color: "#f85149", "font-size": "13px" }}>{t("This build failed.")}</span>
               <button
                 class="btn"
                 onClick={askAiAboutBuild}
@@ -744,8 +737,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
-                Ask AI to Debug
-              </button>
+                {t("Ask AI to Debug")}</button>
             </div>
           </Show>
 
@@ -755,40 +747,40 @@ export default function BuildsPage(props: BuildsPageProps) {
             gap: "12px",
           }}>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Status</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("Status")}</div>
               <div style={{ color: statusColor(detail.status), "font-weight": "500" }}>
                 {detail.status.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
               </div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Duration</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("Duration")}</div>
               <div>{formatDuration(detail.duration_secs)}</div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Started</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("Started")}</div>
               <div>{relativeTime(detail.started_at)}</div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Source</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("Source")}</div>
               <div>{sourceLabel(detail.source)}</div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Context path</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("Context path")}</div>
               <div style={{ "word-break": "break-all", "font-size": "13px" }}>{detail.context_path}</div>
             </div>
             <div>
-              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Dockerfile</div>
+              <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("Dockerfile")}</div>
               <div style={{ "font-size": "13px" }}>{detail.dockerfile}</div>
             </div>
             <Show when={detail.image_id}>
               <div>
-                <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Image ID</div>
+                <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("Image ID")}</div>
                 <div style={{ "font-family": "monospace", "font-size": "12px" }}>{detail.image_id!.slice(0, 12)}</div>
               </div>
             </Show>
             <Show when={Object.keys(detail.build_args).length > 0}>
               <div>
-                <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>Build args</div>
+                <div style={{ color: "#8b949e", "font-size": "12px", "margin-bottom": "4px" }}>{t("Build args")}</div>
                 <div style={{ "font-size": "13px" }}>
                   <For each={Object.entries(detail.build_args)}>
                     {([k, v]) => <div><span style={{ color: "#58a6ff" }}>{k}</span>={v}</div>}
@@ -807,7 +799,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             const color = cacheColor(ca);
             return (
               <div class="card" style={{ padding: "16px", "margin-bottom": "16px" }}>
-                <div style={{ "font-weight": "600", "margin-bottom": "10px" }}>Cache insights</div>
+                <div style={{ "font-weight": "600", "margin-bottom": "10px" }}>{t("Cache insights")}</div>
                 <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
                   <div style={{
                     flex: "1",
@@ -825,7 +817,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                     }} />
                   </div>
                   <span style={{ color, "font-size": "13px", "font-weight": "500", "white-space": "nowrap" }}>
-                    Cache: {ca.cached_steps}/{ca.total_steps} steps cached ({pct}%)
+                    {t("Cache:")} {ca.cached_steps}/{ca.total_steps} {t("steps cached (")}{pct}%)
                   </span>
                 </div>
               </div>
@@ -836,19 +828,17 @@ export default function BuildsPage(props: BuildsPageProps) {
         {/* Build log */}
         <div class="card" style={{ padding: "16px" }}>
           <div style={{ "font-weight": "600", "margin-bottom": "12px", display: "flex", "align-items": "center", gap: "8px" }}>
-            Build log
-            <Show when={detail.log_lines > 0}>
+            {t("Build log")}<Show when={detail.log_lines > 0}>
               <span style={{ color: "#8b949e", "font-weight": "400", "font-size": "12px" }}>
-                ({detail.log_lines} lines)
-              </span>
+                ({detail.log_lines} {t("lines)")}</span>
             </Show>
           </div>
           <Show when={logsLoading()}>
-            <div style={{ color: "#8b949e", padding: "20px", "text-align": "center" }}>Loading logs...</div>
+            <div style={{ color: "#8b949e", padding: "20px", "text-align": "center" }}>{t("Loading logs...")}</div>
           </Show>
           <Show when={!logsLoading()}>
             <Show when={buildLogs()} fallback={
-              <div style={{ color: "#8b949e", padding: "20px", "text-align": "center" }}>No logs available</div>
+              <div style={{ color: "#8b949e", padding: "20px", "text-align": "center" }}>{t("No logs available")}</div>
             }>
               <pre style={{
                 background: "#0d1117",
@@ -909,7 +899,7 @@ export default function BuildsPage(props: BuildsPageProps) {
       <span class="bl-run-src">{sourceLabel(b.source)}</span>
       <span class="bl-run-err" title={b.error ?? ""}>{b.error ?? ""}</span>
       <Show when={b.source !== "external"}>
-        <button class="action-icon action-icon-delete" title="Delete this build's record" onClick={(e) => deleteBuild(b.id, e)}>
+        <button class="action-icon action-icon-delete" title={t("Delete this build's record")} onClick={(e) => deleteBuild(b.id, e)}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
         </button>
       </Show>
@@ -920,10 +910,10 @@ export default function BuildsPage(props: BuildsPageProps) {
     <div>
       <Show when={builds().length > 0}>
         <div class="nl-summary">
-          <div><span class="nl-k">Builds</span><b>{builds().length}</b></div>
-          <div><span class="nl-k">Images</span><b>{new Set(builds().map((b) => b.tag || b.context_path)).size}</b></div>
-          <div><span class="nl-k">Failed today</span><b class={failedRecently() ? "bl-bad" : ""}>{failedRecently()}</b></div>
-          <div><span class="nl-k">Last build</span><b>{lastBuild() ? relativeTime(lastBuild()!.started_at) : "–"}</b>
+          <div><span class="nl-k">{t("Builds")}</span><b>{builds().length}</b></div>
+          <div><span class="nl-k">{t("Images")}</span><b>{new Set(builds().map((b) => b.tag || b.context_path)).size}</b></div>
+          <div><span class="nl-k">{t("Failed today")}</span><b class={failedRecently() ? "bl-bad" : ""}>{failedRecently()}</b></div>
+          <div><span class="nl-k">{t("Last build")}</span><b>{lastBuild() ? relativeTime(lastBuild()!.started_at) : "–"}</b>
             <Show when={lastBuild()}><span class={`bl-status bl-${lastBuild()!.status}`}>{statusIcon(lastBuild()!.status)}</span></Show>
           </div>
         </div>
@@ -939,7 +929,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             )}
           </For>
         </div>
-        <input class="form-input vl-search" type="search" placeholder="Find a build by image or folder"
+        <input class="form-input vl-search" type="search" placeholder={t("Find a build by image or folder")}
           value={query()} onInput={(e) => setQuery(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }} />
         <div style={{ "margin-left": "auto", display: "flex", gap: "8px", "align-items": "center" }}>
           <Show when={compareMode()}>
@@ -953,7 +943,7 @@ export default function BuildsPage(props: BuildsPageProps) {
             </button>
           </Show>
           <button class="btn" onClick={() => compareMode() ? exitCompareMode() : setCompareMode(true)}
-            title="Compare two runs: what changed, and what was cached">
+            title={t("Compare two runs: what changed, and what was cached")}>
             {compareMode() ? "Cancel" : "Compare runs"}
           </button>
         </div>
@@ -963,21 +953,21 @@ export default function BuildsPage(props: BuildsPageProps) {
         <Show when={loaded()} fallback={<div class="nl"><For each={[0, 1, 2, 3]}>{() => <div class="nl-row nl-skeleton" />}</For></div>}>
           <Show when={builds().length > 0} fallback={
             <div class="empty">
-              <p class="empty-title">No builds yet</p>
-              <p>History, logs and timings of image builds, including builds from the CLI. <HelpLink path="/docs/images-and-builds/" /></p>
+              <p class="empty-title">{t("No builds yet")}</p>
+              <p>{t("History, logs and timings of image builds, including builds from the CLI.")} <HelpLink path="/docs/images-and-builds/" /></p>
               <div class="empty-actions">
-                <button class="btn btn-primary" onClick={startBuild}>Build an image</button>
+                <button class="btn btn-primary" onClick={startBuild}>{t("Build an image")}</button>
               </div>
             </div>
           }>
-            <div class="nl-hint" style={{ padding: "24px 4px" }}>No builds match.</div>
+            <div class="nl-hint" style={{ padding: "24px 4px" }}>{t("No builds match.")}</div>
           </Show>
         </Show>
       }>
         <div class="nl">
           <For each={groups()}>
             {(g) => {
-              const t = () => splitTag(g.key);
+              const tx = () => splitTag(g.key);
               const open = () => compareMode() || expandedGroup() === g.key;
               const failed = () => g.runs.filter((r) => r.status === "failed").length;
               return (
@@ -988,13 +978,13 @@ export default function BuildsPage(props: BuildsPageProps) {
                     <span class={`bl-badge bl-${g.latest.status}`}>{statusIcon(g.latest.status)}</span>
                     <div class="nl-title">
                       <div class="nl-name">
-                        {t().project}
-                        <Show when={t().target}><span class="nl-tag nl-tag-compose">{t().target}</span></Show>
-                        <Show when={g.latest.source === "external"}><span class="nl-tag" title="Built outside Orca: docker build, compose or buildx">CLI</span></Show>
+                        {tx().project}
+                        <Show when={tx().target}><span class="nl-tag nl-tag-compose">{tx().target}</span></Show>
+                        <Show when={g.latest.source === "external"}><span class="nl-tag" title={t("Built outside Orca: docker build, compose or buildx")}>{t("CLI")}</span></Show>
                       </div>
                       <div class="nl-meta">
-                        <Show when={t().path}><span class="mono">{t().path}</span> · </Show>
-                        {g.latest.status === "failed" && g.latest.error ? <span class="bl-bad">{g.latest.error}</span> : <>Last built {relativeTime(g.latest.started_at)}{g.latest.duration_secs !== undefined ? ` in ${formatDuration(g.latest.duration_secs)}` : ""}</>}
+                        <Show when={tx().path}><span class="mono">{tx().path}</span> · </Show>
+                        {g.latest.status === "failed" && g.latest.error ? <span class="bl-bad">{g.latest.error}</span> : <>{t("Last built")} {relativeTime(g.latest.started_at)}{g.latest.duration_secs !== undefined ? ` in ${formatDuration(g.latest.duration_secs)}` : ""}</>}
                       </div>
                     </div>
                     <div class="bl-history" title={`Last ${Math.min(12, g.runs.length)} runs, oldest first`}>
@@ -1032,10 +1022,10 @@ export default function BuildsPage(props: BuildsPageProps) {
     setBuildingTargets((prev) => { const s = new Set(prev); s.add(name); return s; });
     try {
       await invoke("start_build_target", { name });
-      showToast(`Build started: ${name}`, "success");
+      showToast(t("Build started: {name}", { name: name }), "success");
       await refresh();
     } catch (e) {
-      showToast(`Build failed: ${e}`, "error");
+      showToast(t("Build failed: {e}", { e: e }), "error");
     } finally {
       setBuildingTargets((prev) => { const s = new Set(prev); s.delete(name); return s; });
     }
@@ -1048,9 +1038,9 @@ export default function BuildsPage(props: BuildsPageProps) {
     for (const target of targets) {
       try {
         await invoke("start_build_target", { name: target.name });
-        showToast(`Build started: ${target.name}`, "success");
+        showToast(t("Build started: {value1}", { value1: target.name }), "success");
       } catch (e) {
-        showToast(`Build failed for ${target.name}: ${e}`, "error");
+        showToast(t("Build failed for {value1}: {e}", { value1: target.name, e: e }), "error");
       }
     }
     await refresh();
@@ -1062,7 +1052,7 @@ export default function BuildsPage(props: BuildsPageProps) {
     <Show when={buildTargets().length > 0}>
       <div style={{ "margin-bottom": "16px" }}>
         <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "12px" }}>
-          <h2 style={{ "font-size": "16px", "font-weight": "600", margin: "0" }}>Build targets</h2>
+          <h2 style={{ "font-size": "16px", "font-weight": "600", margin: "0" }}>{t("Build targets")}</h2>
           <button
             class="btn btn-primary btn-sm"
             onClick={buildAllTargets}
@@ -1075,11 +1065,11 @@ export default function BuildsPage(props: BuildsPageProps) {
           <table class="data-table" style={{ width: "100%", "border-collapse": "collapse" }}>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Tag</th>
-                <th>Context</th>
-                <th>Dockerfile</th>
-                <th style={{ width: "100px" }}>Actions</th>
+                <th>{t("Name")}</th>
+                <th>{t("Tag")}</th>
+                <th>{t("Context")}</th>
+                <th>{t("Dockerfile")}</th>
+                <th style={{ width: "100px" }}>{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1114,38 +1104,36 @@ export default function BuildsPage(props: BuildsPageProps) {
   return (
     <div class="page-container">
       <div class="page-header">
-        <h1>Builds</h1>
+        <h1>{t("Builds")}</h1>
         <div class="builds-header-actions">
           <button class="btn" onClick={() => setShowUrlDialog(true)}>
-            Build from URL
-          </button>
+            {t("Build from URL")}</button>
           <button class="btn btn-primary" onClick={startBuild}>
-            Build an image
-          </button>
+            {t("Build an image")}</button>
         </div>
       </div>
 
       {/* Build from URL dialog */}
       <Show when={showUrlDialog()}>
         <div class="card" style={{ padding: "20px", "margin-bottom": "16px" }}>
-          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Build from URL</div>
+          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>{t("Build from URL")}</div>
           <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div class="form-group">
-              <label class="form-label">Source URL</label>
+              <label class="form-label">{t("Source URL")}</label>
               <input
                 class="form-input"
                 type="text"
-                placeholder="https://github.com/user/repo.git or Dockerfile URL"
+                placeholder={t("https://github.com/user/repo.git or Dockerfile URL")}
                 value={urlInput()}
                 onInput={(e) => setUrlInput(e.currentTarget.value)}
               />
             </div>
             <div class="form-group">
-              <label class="form-label">Tag (optional)</label>
+              <label class="form-label">{t("Tag (optional)")}</label>
               <input
                 class="form-input"
                 type="text"
-                placeholder="myapp:latest"
+                placeholder={t("myapp:latest")}
                 value={urlTag()}
                 onInput={(e) => setUrlTag(e.currentTarget.value)}
               />
@@ -1162,8 +1150,7 @@ export default function BuildsPage(props: BuildsPageProps) {
                 class="btn btn-ghost"
                 onClick={() => { setShowUrlDialog(false); setUrlInput(""); setUrlTag(""); }}
               >
-                Cancel
-              </button>
+                {t("Cancel")}</button>
             </div>
           </div>
         </div>

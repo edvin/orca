@@ -9,6 +9,7 @@ import { showToast } from "./Toast";
 import Spinner from "./Spinner";
 import HelpLink from "./HelpLink";
 import { workspaceApi, type WorkspaceProject, type WorkspaceSecret } from "../lib/workspace";
+import { t } from "../lib/i18n";
 
 const PROVIDER: Record<string, string> = { passbolt: "Passbolt", "1password": "1Password" };
 
@@ -36,8 +37,8 @@ export default function SecretsDialog(props: {
     try {
       const r = await workspaceApi.fetchSecrets(props.project.key);
       setSecrets(r.secrets);
-      if (r.filled.length) showToast(`Filled in ${r.filled.join(", ")}`, "success");
-      for (const f of r.failed) showToast(`${f.name}: ${f.error}`, "error");
+      if (r.filled.length) showToast(t("Filled in {value1}", { value1: r.filled.join(", ") }), "success");
+      for (const f of r.failed) showToast(t("{value1}: {value2}", { value1: f.name, value2: f.error }), "error");
       if (r.secrets.every((s) => s.filled)) props.onSaved(true);
     } catch (e) {
       showToast(String(e), "error");
@@ -62,20 +63,19 @@ export default function SecretsDialog(props: {
     <div class="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy()) props.onClose(); }}>
       <div class="modal-dialog secrets-dialog">
         <div class="modal-header">
-          <h2 class="modal-title">Secrets for {props.project.key}</h2>
+          <h2 class="modal-title">{t("Secrets for")} {props.project.key}</h2>
           <button class="modal-close" onClick={props.onClose}>×</button>
         </div>
         <div class="modal-body">
           <p class="secrets-intro">
-            These go into <span class="mono">{props.project.dir.split(/[\\/]/).pop()}/{envFile()}</span> on this computer and nowhere else.
-            Open each one in your secret manager, copy the value and paste it here.{" "}
+            {t("These go into")} <span class="mono">{props.project.dir.split(/[\\/]/).pop()}/{envFile()}</span> {t("on this computer and nowhere else. Open each one in your secret manager, copy the value and paste it here.")}{" "}
             <HelpLink path="/docs/workspaces-secrets/#fill-in-secrets-by-hand" />
           </p>
           <Show when={canFetch()}>
             <div class="secrets-fetch">
-              <span>Your secret manager's command-line tool is set up on this computer.</span>
+              <span>{t("Your secret manager's command-line tool is set up on this computer.")}</span>
               <button class="btn btn-sm btn-primary" disabled={fetching()} onClick={() => void fetchAll()}>
-                {fetching() ? <><Spinner size={12} /> Fetching…</> : "Fill in automatically"}
+                {fetching() ? <><Spinner size={12} /> {t("Fetching…")}</> : "Fill in automatically"}
               </button>
             </div>
           </Show>
@@ -86,14 +86,14 @@ export default function SecretsDialog(props: {
                   <div class="secret-head">
                     <b class="mono">{s.name}</b>
                     <span class="secret-provider">{PROVIDER[s.provider] ?? s.provider}</span>
-                    <Show when={s.filled}><span class="secret-ok">✓ in {envFile()}</span></Show>
+                    <Show when={s.filled}><span class="secret-ok">{t("✓ in")} {envFile()}</span></Show>
                     <span class="secret-spacer" />
                     <Show when={s.link} fallback={
-                      <button class="btn btn-sm" title="Copy the reference" onClick={() => navigator.clipboard.writeText(s.reference).then(() => showToast("Reference copied", "success"), () => {})}>
+                      <button class="btn btn-sm" title={t("Copy the reference")} onClick={() => navigator.clipboard.writeText(s.reference).then(() => showToast(t("Reference copied"), "success"), () => {})}>
                         <span class="mono">{s.reference}</span>
                       </button>
                     }>
-                      {(link) => <button class="btn btn-sm" onClick={() => void open(link())}>Open in {PROVIDER[s.provider]} ↗</button>}
+                      {(link) => <button class="btn btn-sm" onClick={() => void open(link())}>{t("Open in")} {PROVIDER[s.provider]} ↗</button>}
                     </Show>
                   </div>
                   <input
@@ -110,7 +110,7 @@ export default function SecretsDialog(props: {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn" onClick={props.onClose} disabled={busy()}>Later</button>
+          <button class="btn" onClick={props.onClose} disabled={busy()}>{t("Later")}</button>
           <button class="btn btn-primary" disabled={busy() || typed().length === 0} onClick={() => void save()}>
             {busy() ? "Saving…" : missing().every((m) => values()[m.name]?.trim()) ? "Save and start" : "Save"}
           </button>

@@ -2,6 +2,7 @@ import { createSignal, For, onMount, Show } from "solid-js";
 import { engineApi, type EngineStatus } from "../lib/engine";
 import { showToast } from "./Toast";
 import { confirm } from "./ConfirmDialog";
+import { t } from "../lib/i18n";
 
 /**
  * Settings → Engine (macOS): Orca's own VM, or another engine such as
@@ -56,14 +57,13 @@ export default function EngineSettings() {
     <Show when={status()}>
       {(s) => (
         <div class="settings-section">
-          <h2 class="settings-section-title">Engine</h2>
+          <h2 class="settings-section-title">{t("Engine")}</h2>
           <p style={{ "font-size": "12px", color: "#8b949e", margin: "0 0 10px" }}>
-            Where Orca runs containers. Docker Desktop's engine isn't used: bring what's in it over on System Health.
-          </p>
+            {t("Where Orca runs containers. Docker Desktop's engine isn't used: bring what's in it over on System Health.")}</p>
           <div class="card" style={{ padding: "14px 16px", display: "flex", "flex-direction": "column", gap: "10px" }}>
             <Show when={s().from_env}>
               <div style={{ "font-size": "12px", color: "#d29922" }}>
-                Orca's daemon was started with DOCKER_HOST, which wins over the choice here: {s().socket}
+                {t("Orca's daemon was started with DOCKER_HOST, which wins over the choice here:")} {s().socket}
               </div>
             </Show>
             <label class="engine-option">
@@ -73,15 +73,14 @@ export default function EngineSettings() {
                   when={s().platform === "macos"}
                   fallback={
                     <>
-                      <b>This computer's Docker or Podman</b> <span class="engine-tag">Recommended</span>
-                      <span class="engine-sub">The first of the usual sockets that answers. {s().socket ? `Now: ${s().socket}.` : ""}</span>
+                      <b>{t("This computer's Docker or Podman")}</b> <span class="engine-tag">{t("Recommended")}</span>
+                      <span class="engine-sub">{t("The first of the usual sockets that answers.")} {s().socket ? `Now: ${s().socket}.` : ""}</span>
                     </>
                   }
                 >
-                  <b>Orca's engine</b> <span class="engine-tag">Recommended</span>
+                  <b>{t("Orca's engine")}</b> <span class="engine-tag">{t("Recommended")}</span>
                   <span class="engine-sub">
-                    Docker in Orca's own Lima VM: its VM settings, networking fixes and Kubernetes.
-                    {s().orca_vm ? ` VM ${s().orca_vm!.name}: ${s().orca_vm!.status}.` : " Not set up yet: System Health sets it up."}
+                    {t("Docker in Orca's own Lima VM: its VM settings, networking fixes and Kubernetes.")}{s().orca_vm ? ` VM ${s().orca_vm!.name}: ${s().orca_vm!.status}.` : " Not set up yet: System Health sets it up."}
                   </span>
                 </Show>
               </span>
@@ -111,15 +110,14 @@ export default function EngineSettings() {
             <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
               <input
                 class="form-input"
-                placeholder="Another engine's socket, e.g. /Users/me/.colima/work/docker.sock"
+                placeholder={t("Another engine's socket, e.g. /Users/me/.colima/work/docker.sock")}
                 value={custom()}
                 onInput={(e) => setCustom(e.currentTarget.value)}
                 style={{ flex: "1" }}
                 disabled={saving()}
               />
               <button class="btn" disabled={saving() || !custom().trim()} onClick={() => choose(custom().trim())}>
-                Use
-              </button>
+                {t("Use")}</button>
             </div>
           </div>
         </div>

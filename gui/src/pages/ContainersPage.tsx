@@ -26,6 +26,7 @@ import Sparkline from "../components/Sparkline";
 import { logError } from "../lib/activityStore";
 import MultiLogViewer from "../components/MultiLogViewer";
 import { closeOnEscape } from "../lib/closeOnEscape";
+import { t } from "../lib/i18n";
 
 interface ContainersPageProps {
   onNavigate?: (page: string) => void;
@@ -70,8 +71,8 @@ export default function ContainersPage(props: ContainersPageProps) {
   createEffect(() => writePref("orca.containers.filter", stateFilter()));
   createEffect(() => writePref("orca.containers.view", viewMode()));
   const lastUpdated = () => {
-    const t = containerList.updatedAt();
-    return t ? new Date(t) : null;
+    const tx = containerList.updatedAt();
+    return tx ? new Date(tx) : null;
   };
   const [loading, setLoading] = createSignal(false);
   const [actionInProgress, setActionInProgress] = createSignal<string | null>(null);
@@ -171,14 +172,14 @@ export default function ContainersPage(props: ContainersPageProps) {
         containerName: c.name,
         port,
       });
-      showToast(`Exposed ${c.name} at ${fullHostname}`, "success");
+      showToast(t("Exposed {value1} at {fullHostname}", { value1: c.name, fullHostname: fullHostname }), "success");
       // Add to existing routes list and clear the form for another
       setExposeExistingRoutes([...exposeExistingRoutes(), { hostname: fullHostname, url: `https://${fullHostname}`, port }]);
       setExposeHostname("");
       setExposePort(c.ports?.length > 0 ? String(c.ports[0].container_port) : "80");
     } catch (err) {
       logError(`Failed to expose container: ${err}`);
-      showToast(`Failed to expose: ${err}`, "error");
+      showToast(t("Failed to expose: {err}", { err: err }), "error");
     }
     setExposing(false);
   };
@@ -186,11 +187,11 @@ export default function ContainersPage(props: ContainersPageProps) {
   const handleUnexpose = async (hostname: string) => {
     try {
       await invoke("gateway_remove_route", { hostname });
-      showToast(`Route ${hostname} removed`, "success");
+      showToast(t("Route {hostname} removed", { hostname: hostname }), "success");
       setExposeExistingRoutes(exposeExistingRoutes().filter((r) => r.hostname !== hostname));
     } catch (err) {
       logError(`Failed to remove route: ${err}`);
-      showToast(`Failed to remove: ${err}`, "error");
+      showToast(t("Failed to remove: {err}", { err: err }), "error");
     }
   };
 
@@ -215,11 +216,11 @@ export default function ContainersPage(props: ContainersPageProps) {
     setStackActionInProgress(name);
     try {
       await invoke("restart_stack", { name });
-      showToast("Stack restarted", "success");
+      showToast(t("Stack restarted"), "success");
       setTimeout(refresh, 500);
     } catch (err) {
       logError(`Failed to restart stack: ${err}`, `Stack "${name}"`);
-      showToast(`Restart failed: ${err}`, "error");
+      showToast(t("Restart failed: {err}", { err: err }), "error");
     }
     setStackActionInProgress(null);
   };
@@ -233,27 +234,27 @@ export default function ContainersPage(props: ContainersPageProps) {
         if (!output.success) {
           showToast(`Pull failed: ${output.stderr || "Unknown error"}`, "error");
         } else {
-          showToast("Images pulled successfully", "success");
+          showToast(t("Images pulled successfully"), "success");
         }
       }
       setTimeout(refresh, 500);
     } catch (err) {
       logError(`Failed to pull stack images: ${err}`, `Stack "${name}"`);
-      showToast(`Pull failed: ${err}`, "error");
+      showToast(t("Pull failed: {err}", { err: err }), "error");
     }
     setStackActionInProgress(null);
   };
 
   const deleteStack = async (name: string) => {
-    if (!await confirmDanger("Delete stack", `Delete stack "${name}"? This will stop and remove all containers in the stack.`)) return;
+    if (!await confirmDanger(t("Delete stack"), `Delete stack "${name}"? This will stop and remove all containers in the stack.`)) return;
     setStackActionInProgress(name);
     try {
       await invoke("compose_down", { name });
-      showToast(`Stack "${name}" removed`, "success");
+      showToast(t("Stack \"{name}\" removed", { name: name }), "success");
       await refresh();
     } catch (err) {
       logError(`Failed to delete stack: ${err}`, `Stack "${name}"`);
-      showToast(`Failed to delete stack: ${err}`, "error");
+      showToast(t("Failed to delete stack: {err}", { err: err }), "error");
     }
     setStackActionInProgress(null);
   };
@@ -420,7 +421,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       return c && c.state !== "Running";
     });
     if (ids.length === 0) {
-      showToast("No stopped containers selected", "info");
+      showToast(t("No stopped containers selected"), "info");
       return;
     }
     let started = 0;
@@ -443,7 +444,7 @@ export default function ContainersPage(props: ContainersPageProps) {
       return c && c.state === "Running";
     });
     if (ids.length === 0) {
-      showToast("No running containers selected", "info");
+      showToast(t("No running containers selected"), "info");
       return;
     }
     let stopped = 0;
@@ -465,7 +466,7 @@ export default function ContainersPage(props: ContainersPageProps) {
     if (ids.length === 0) return;
     const count = ids.length;
     if (!await confirmDanger(
-      "Delete containers",
+      t("Delete containers"),
       `Delete ${count} selected container${count !== 1 ? "s" : ""}? This cannot be undone.`
     )) return;
     setBatchDeleteProgress({ done: 0, total: count });
@@ -513,11 +514,11 @@ export default function ContainersPage(props: ContainersPageProps) {
     setActionInProgress(id);
     try {
       await invoke(action, { id });
-      showToast(`Container ${action.replace("_container", "")} successful`, "success");
+      showToast(t("Container {value1} successful", { value1: action.replace("_container", "") }), "success");
       await refresh();
     } catch (err) {
       logError(`Failed to ${action.replace("_container", "")} container: ${err}`, `Container ${id}`);
-      showToast(`${action} failed: ${err}`, "error");
+      showToast(t("{action} failed: {err}", { action: action, err: err }), "error");
     }
     setLoading(false);
     setActionInProgress(null);
@@ -530,11 +531,11 @@ export default function ContainersPage(props: ContainersPageProps) {
     try {
       await invoke("stop_container", { id });
       await invoke("start_container", { id });
-      showToast("Container restart successful", "success");
+      showToast(t("Container restart successful"), "success");
       await refresh();
     } catch (err) {
       logError(`Failed to restart container: ${err}`, `Container ${id}`);
-      showToast(`Restart failed: ${err}`, "error");
+      showToast(t("Restart failed: {err}", { err: err }), "error");
     }
     setLoading(false);
     setActionInProgress(null);
@@ -551,19 +552,19 @@ export default function ContainersPage(props: ContainersPageProps) {
         if (output.success === false) {
           showToast(`Stack ${label} failed: ${output.stderr || output.stdout || "Check container logs for details"}`, "error");
         } else {
-          showToast(`Stack ${label} completed`, "success");
+          showToast(t("Stack {label} completed", { label: label }), "success");
         }
       } else {
-        showToast(`Stack ${label} completed`, "success");
+        showToast(t("Stack {label} completed", { label: label }), "success");
       }
       setTimeout(refresh, 500);
     } catch (err) {
       const errStr = String(err);
       logError(`Failed to ${label} stack: ${errStr}`, `Stack "${name}"`);
       if (errStr.includes("compose file") || errStr.includes("not found")) {
-        showToast(`Stack ${label} failed: No compose file found. This stack was auto-detected from container labels.`, "error");
+        showToast(t("Stack {label} failed: No compose file found. This stack was auto-detected from container labels.", { label: label }), "error");
       } else {
-        showToast(`Stack ${label} failed: ${errStr}`, "error");
+        showToast(t("Stack {label} failed: {errStr}", { label: label, errStr: errStr }), "error");
       }
     }
     setStackActionInProgress(null);
@@ -704,7 +705,7 @@ export default function ContainersPage(props: ContainersPageProps) {
         <div class="ctr-net">
           <Show when={cStats()}>
             {(s) => (
-              <span title="Sent and received since the container started">
+              <span title={t("Sent and received since the container started")}>
                 <span class="ctr-net-up">{"↑"}</span>{formatBytes(s().network_tx_bytes)}
                 <br />
                 <span class="ctr-net-down">{"↓"}</span>{formatBytes(s().network_rx_bytes)}
@@ -721,7 +722,7 @@ export default function ContainersPage(props: ContainersPageProps) {
               <button
                 class="action-icon ctr-hover-only"
                 onClick={(e) => { e.stopPropagation(); props.onAskAi?.(c.id, c.name, c.image); }}
-                title="Ask AI about this container"
+                title={t("Ask AI about this container")}
               >
                 <MenuIcon><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></MenuIcon>
               </button>
@@ -745,7 +746,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                   e.stopPropagation();
                   setContainerMenuOpen(containerMenuOpen() === c.id ? null : c.id);
                 }}
-                title="More actions"
+                title={t("More actions")}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="13" cy="8" r="1.5" /></svg>
               </button>
@@ -756,11 +757,9 @@ export default function ContainersPage(props: ContainersPageProps) {
                     onClick={() => { doRestart(c.id, new MouseEvent("click")); setContainerMenuOpen(null); }}
                     disabled={loading() || c.state !== "Running"}
                   >
-                    <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></MenuIcon> Restart
-                  </button>
+                    <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></MenuIcon> {t("Restart")}</button>
                   <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.(containerPage(c)); setContainerMenuOpen(null); }}>
-                    <MenuIcon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></MenuIcon> Logs
-                  </button>
+                    <MenuIcon><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></MenuIcon> {t("Logs")}</button>
                   <Show when={c.state === "Running"}>
                     <button
                       class="dropdown-item ctr-menu-item"
@@ -770,31 +769,26 @@ export default function ContainersPage(props: ContainersPageProps) {
                         setContainerMenuOpen(null);
                       }}
                     >
-                      <MenuIcon><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></MenuIcon> Open shell
-                    </button>
+                      <MenuIcon><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></MenuIcon> {t("Open shell")}</button>
                   </Show>
                   <button class="dropdown-item ctr-menu-item" onClick={() => { openExposeDialog(c); setContainerMenuOpen(null); }}>
-                    <MenuIcon><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></MenuIcon> Expose via gateway
-                  </button>
+                    <MenuIcon><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></MenuIcon> {t("Expose via gateway")}</button>
                   <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.("settings:schedules"); setContainerMenuOpen(null); }}>
-                    <MenuIcon><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></MenuIcon> Schedule restarts…
-                  </button>
+                    <MenuIcon><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></MenuIcon> {t("Schedule restarts…")}</button>
                   <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.("settings:auto-deploy"); setContainerMenuOpen(null); }}>
-                    <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></MenuIcon> Auto-deploy on new image…
-                  </button>
+                    <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></MenuIcon> {t("Auto-deploy on new image…")}</button>
                   <div class="dropdown-divider" />
                   <button
                     class="dropdown-item dropdown-item-danger ctr-menu-item"
                     onClick={async () => {
                       setContainerMenuOpen(null);
-                      if (await confirmDanger("Remove container", `Remove container '${c.name}'? This cannot be undone.`)) {
+                      if (await confirmDanger(t("Remove container"), `Remove container '${c.name}'? This cannot be undone.`)) {
                         doAction("remove_container", c.id, new MouseEvent("click"));
                       }
                     }}
                     disabled={loading() || c.state === "Running"}
                   >
-                    <MenuIcon><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></MenuIcon> Remove container
-                  </button>
+                    <MenuIcon><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></MenuIcon> {t("Remove container")}</button>
                 </div>
               </Show>
             </div>
@@ -826,12 +820,12 @@ export default function ContainersPage(props: ContainersPageProps) {
   const ColumnHeads = () => (
     <div class="ctr-heads">
       <span />
-      <span>Name</span>
-      <span>Status</span>
-      <span>CPU</span>
-      <span>Memory</span>
-      <span>Ports</span>
-      <span class="ctr-net">Network</span>
+      <span>{t("Name")}</span>
+      <span>{t("Status")}</span>
+      <span>{t("CPU")}</span>
+      <span>{t("Memory")}</span>
+      <span>{t("Ports")}</span>
+      <span class="ctr-net">{t("Network")}</span>
       <span />
     </div>
   );
@@ -909,25 +903,21 @@ export default function ContainersPage(props: ContainersPageProps) {
                 <button
                   class="action-icon"
                   onClick={() => setMenuOpen(menuOpen() === group.name ? null : group.name)}
-                  title="More actions"
+                  title={t("More actions")}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="13" cy="8" r="1.5" /></svg>
                 </button>
                 <Show when={menuOpen() === group.name}>
                   <div class="dropdown-menu" onClick={(e) => e.stopPropagation()}>
                     <button class="dropdown-item ctr-menu-item" onClick={() => { props.onNavigate?.(`stack:${group.name}`); setMenuOpen(null); }}>
-                      <MenuIcon><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></MenuIcon> Open stack
-                    </button>
+                      <MenuIcon><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></MenuIcon> {t("Open stack")}</button>
                     <button class="dropdown-item ctr-menu-item" onClick={() => { restartStack(group.name); setMenuOpen(null); }}>
-                      <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></MenuIcon> Restart
-                    </button>
+                      <MenuIcon><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></MenuIcon> {t("Restart")}</button>
                     <button class="dropdown-item ctr-menu-item" onClick={() => { pullStack(group.name); setMenuOpen(null); }}>
-                      <MenuIcon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></MenuIcon> Pull images
-                    </button>
+                      <MenuIcon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></MenuIcon> {t("Pull images")}</button>
                     <div class="dropdown-divider" />
                     <button class="dropdown-item dropdown-item-danger ctr-menu-item" onClick={() => { deleteStack(group.name); setMenuOpen(null); }}>
-                      <MenuIcon><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></MenuIcon> Delete stack
-                    </button>
+                      <MenuIcon><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></MenuIcon> {t("Delete stack")}</button>
                   </div>
                 </Show>
               </div>
@@ -949,27 +939,26 @@ export default function ContainersPage(props: ContainersPageProps) {
     <div class={`ctr-page ${selected().size > 0 ? "ctr-selecting" : ""}`}>
       <div class="ctr-header">
         <div class="ctr-heading">
-          <h1 class="page-title">Containers</h1>
+          <h1 class="page-title">{t("Containers")}</h1>
           <div class="ctr-counts">
-            <span><span class="ctr-count-dot ctr-count-dot-ok" />{runningCount()} running</span>
-            <span><span class="ctr-count-dot" />{stoppedCount()} stopped</span>
+            <span><span class="ctr-count-dot ctr-count-dot-ok" />{runningCount()} {t("running")}</span>
+            <span><span class="ctr-count-dot" />{stoppedCount()} {t("stopped")}</span>
             <Show when={grouped().stackGroups.length > 0}>
-              <span>{grouped().stackGroups.length} stack{grouped().stackGroups.length === 1 ? "" : "s"}</span>
+              <span>{grouped().stackGroups.length} {t("stack")}{grouped().stackGroups.length === 1 ? "" : "s"}</span>
             </Show>
             <LastUpdated timestamp={lastUpdated()} />
           </div>
         </div>
         <div class="ctr-header-actions">
           <Show when={runningContainers().length >= 2}>
-            <button class="btn btn-ghost btn-iconed" onClick={() => setShowMultiLog(true)} title="Follow the logs of all running containers together">
+            <button class="btn btn-ghost btn-iconed" onClick={() => setShowMultiLog(true)} title={t("Follow the logs of all running containers together")}>
               <MenuIcon><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></MenuIcon>
-              Logs
-            </button>
+              {t("Logs")}</button>
           </Show>
           <Show when={runningContainers().length > 0}>
-            <button class="btn btn-ghost btn-iconed btn-ghost-danger" title="Stop every running container" onClick={async () => {
+            <button class="btn btn-ghost btn-iconed btn-ghost-danger" title={t("Stop every running container")} onClick={async () => {
               const running = runningContainers();
-              if (!await confirmDanger("Stop all containers", `Stop all ${running.length} running containers?`)) return;
+              if (!await confirmDanger(t("Stop all containers"), `Stop all ${running.length} running containers?`)) return;
               let stopped = 0;
               for (const c of running) {
                 try {
@@ -983,54 +972,49 @@ export default function ContainersPage(props: ContainersPageProps) {
               await refresh();
             }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3" /></svg>
-              Stop all
-            </button>
+              {t("Stop all")}</button>
           </Show>
-          <button class="btn btn-ghost btn-iconed" onClick={() => openFolderDialog()} title="Start a project from a folder with a compose file">
+          <button class="btn btn-ghost btn-iconed" onClick={() => openFolderDialog()} title={t("Start a project from a folder with a compose file")}>
             <MenuIcon><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></MenuIcon>
-            Open folder
-          </button>
-          <button class="btn btn-accent btn-iconed" onClick={() => setShowRunDialog(true)} title="Run a container from an image">
+            {t("Open folder")}</button>
+          <button class="btn btn-accent btn-iconed" onClick={() => setShowRunDialog(true)} title={t("Run a container from an image")}>
             <MenuIcon><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></MenuIcon>
-            Run
-          </button>
+            {t("Run")}</button>
         </div>
       </div>
 
       <div class="ctr-toolbar">
         <div class="segmented ctr-filter" role="tablist">
           <button class={stateFilter() === "running" ? "active" : ""} onClick={() => setStateFilter("running")}>
-            Running <span class="ctr-seg-count">{runningCount()}</span>
+            {t("Running")} <span class="ctr-seg-count">{runningCount()}</span>
           </button>
           <button class={stateFilter() === "stopped" ? "active" : ""} onClick={() => setStateFilter("stopped")}>
-            Stopped <span class="ctr-seg-count">{stoppedCount()}</span>
+            {t("Stopped")} <span class="ctr-seg-count">{stoppedCount()}</span>
           </button>
           <button class={stateFilter() === "all" ? "active" : ""} onClick={() => setStateFilter("all")}>
-            All <span class="ctr-seg-count">{totalCount()}</span>
+            {t("All")} <span class="ctr-seg-count">{totalCount()}</span>
           </button>
         </div>
         <div class="ctr-search">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           <input
             type="text"
-            placeholder="Search names, images, stacks"
+            placeholder={t("Search names, images, stacks")}
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setSearch(""); }}
           />
           <Show when={search().length > 0}>
-            <button class="ctr-search-clear" onClick={() => setSearch("")} title="Clear search" type="button">&times;</button>
+            <button class="ctr-search-clear" onClick={() => setSearch("")} title={t("Clear search")} type="button">&times;</button>
           </Show>
         </div>
         <div class="segmented ctr-view" role="tablist">
-          <button class={viewMode() === "stacks" ? "active" : ""} onClick={() => setViewMode("stacks")} title="Grouped by stack">
+          <button class={viewMode() === "stacks" ? "active" : ""} onClick={() => setViewMode("stacks")} title={t("Grouped by stack")}>
             <MenuIcon><rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/></MenuIcon>
-            Stacks
-          </button>
-          <button class={viewMode() === "list" ? "active" : ""} onClick={() => setViewMode("list")} title="One list">
+            {t("Stacks")}</button>
+          <button class={viewMode() === "list" ? "active" : ""} onClick={() => setViewMode("list")} title={t("One list")}>
             <MenuIcon><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></MenuIcon>
-            List
-          </button>
+            {t("List")}</button>
         </div>
       </div>
 
@@ -1052,18 +1036,15 @@ export default function ContainersPage(props: ContainersPageProps) {
           }>
             <div class="empty">
               <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg></div>
-              <p class="empty-title">No containers yet</p>
-              <p>Open a project folder with a compose file, start an app from the catalog, or run any image.</p>
+              <p class="empty-title">{t("No containers yet")}</p>
+              <p>{t("Open a project folder with a compose file, start an app from the catalog, or run any image.")}</p>
               <div class="empty-actions">
                 <button class="btn btn-primary" onClick={() => openFolderDialog()}>
-                  Open a project folder
-                </button>
+                  {t("Open a project folder")}</button>
                 <button class="btn" onClick={() => props.onNavigate?.("templates")}>
-                  Browse the catalog
-                </button>
+                  {t("Browse the catalog")}</button>
                 <button class="btn" onClick={() => setShowRunDialog(true)}>
-                  Run a container
-                </button>
+                  {t("Run a container")}</button>
               </div>
             </div>
           </Show>
@@ -1077,14 +1058,14 @@ export default function ContainersPage(props: ContainersPageProps) {
                 when={search()}
                 fallback={
                   <>
-                    <p>No {filterLabel()} containers.</p>
-                    <button class="btn btn-ghost" onClick={() => setStateFilter("all")}>Show all {totalCount()}</button>
+                    <p>{t("No")} {filterLabel()} {t("containers.")}</p>
+                    <button class="btn btn-ghost" onClick={() => setStateFilter("all")}>{t("Show all")} {totalCount()}</button>
                   </>
                 }
               >
-                <p>Nothing matches “{search()}”{stateFilter() === "all" ? "" : ` among the ${filterLabel()} containers`}.</p>
+                <p>{t("Nothing matches “")}{search()}”{stateFilter() === "all" ? "" : ` among the ${filterLabel()} containers`}.</p>
                 <Show when={stateFilter() !== "all"}>
-                  <button class="btn btn-ghost" onClick={() => setStateFilter("all")}>Search all {totalCount()}</button>
+                  <button class="btn btn-ghost" onClick={() => setStateFilter("all")}>{t("Search all")} {totalCount()}</button>
                 </Show>
               </Show>
             </div>
@@ -1116,7 +1097,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                         onClick={(e) => { e.stopPropagation(); toggleGroupSelect(filteredGroups().standalone); }}
                       />
                     </span>
-                    <span class="ctr-card-name ctr-card-name-plain">Standalone</span>
+                    <span class="ctr-card-name ctr-card-name-plain">{t("Standalone")}</span>
                     <HealthBar containers={filteredGroups().standalone} />
                     <span class="ctr-card-meta">{stackSummary(filteredGroups().standalone)}</span>
                   </div>
@@ -1154,28 +1135,24 @@ export default function ContainersPage(props: ContainersPageProps) {
         }}>
           <Show when={batchDeleteProgress()} fallback={
             <span style={{ "font-size": "13px", color: "#e6edf3" }}>
-              {selected().size} container{selected().size !== 1 ? "s" : ""} selected
-            </span>
+              {selected().size} {t("container")}{selected().size !== 1 ? "s" : ""} {t("selected")}</span>
           }>
             {(p) => (
               <span style={{ "font-size": "13px", color: "#e6edf3", display: "inline-flex", "align-items": "center", gap: "8px" }}>
-                <Spinner size={12} /> Deleting containers... ({p().done}/{p().total})
+                <Spinner size={12} /> {t("Deleting containers... (")}{p().done}/{p().total})
               </span>
             )}
           </Show>
           <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStart} disabled={!!batchDeleteProgress()}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start
-          </button>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> {t("Start")}</button>
           <button class="btn btn-sm" style={{ display: "inline-flex", "align-items": "center", gap: "6px" }} onClick={batchStop} disabled={!!batchDeleteProgress()}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg> Stop
-          </button>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg> {t("Stop")}</button>
           <button class="btn btn-sm btn-danger" onClick={batchDelete} disabled={!!batchDeleteProgress()} style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
             {batchDeleteProgress() ? "Deleting..." : "Delete"}
           </button>
           <button class="btn btn-sm" onClick={() => setSelected(new Set<string>())} disabled={!!batchDeleteProgress()}>
-            Clear
-          </button>
+            {t("Clear")}</button>
         </div>
       </Show>
 
@@ -1200,7 +1177,7 @@ export default function ContainersPage(props: ContainersPageProps) {
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setExposeContainer(null); }}>
           <div class="modal-dialog">
             <div class="modal-header">
-              <h2 class="modal-title">Expose via gateway</h2>
+              <h2 class="modal-title">{t("Expose via gateway")}</h2>
               <button class="modal-close" onClick={() => setExposeContainer(null)}>{"\u00d7"}</button>
             </div>
             <form onSubmit={handleExpose}>
@@ -1208,7 +1185,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                 {/* Existing routes for this container */}
                 <Show when={exposeExistingRoutes().length > 0}>
                   <div style={{ "margin-bottom": "16px" }}>
-                    <label class="form-label">Active routes</label>
+                    <label class="form-label">{t("Active routes")}</label>
                     <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
                       <For each={exposeExistingRoutes()}>
                         {(route) => (
@@ -1217,8 +1194,8 @@ export default function ContainersPage(props: ContainersPageProps) {
                             <a href={route.url} class="mono" style={{ flex: "1", "font-size": "13px", color: "#58a6ff", "text-decoration": "none" }} title={`Open ${route.url}`}
                               onClick={(e) => { e.preventDefault(); void shellOpen(route.url); }}>{route.hostname}</a>
                             <span style={{ color: "#6e7681", "font-size": "11px" }}>:{route.port}</span>
-                            <button type="button" class="btn btn-sm" onClick={() => void shellOpen(route.url)}>Open</button>
-                            <button type="button" class="action-icon" style={{ color: "#f85149", "flex-shrink": "0" }} onClick={() => handleUnexpose(route.hostname)} title="Remove route">
+                            <button type="button" class="btn btn-sm" onClick={() => void shellOpen(route.url)}>{t("Open")}</button>
+                            <button type="button" class="action-icon" style={{ color: "#f85149", "flex-shrink": "0" }} onClick={() => handleUnexpose(route.hostname)} title={t("Remove route")}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             </button>
                           </div>
@@ -1231,16 +1208,16 @@ export default function ContainersPage(props: ContainersPageProps) {
                 {/* Add new route form */}
                 <Show when={exposeExistingRoutes().length > 0}>
                   <div style={{ "border-top": "1px solid #21262d", "padding-top": "16px", "margin-bottom": "8px" }}>
-                    <label class="form-label" style={{ "font-size": "13px", "font-weight": "600" }}>Add another route</label>
+                    <label class="form-label" style={{ "font-size": "13px", "font-weight": "600" }}>{t("Add another route")}</label>
                   </div>
                 </Show>
                 <div class="form-group">
-                  <label class="form-label">Hostname <span style={{ color: "#f85149" }}>*</span></label>
+                  <label class="form-label">{t("Hostname")} <span style={{ color: "#f85149" }}>*</span></label>
                   <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
                     <input
                       class="form-input"
                       type="text"
-                      placeholder="myapp"
+                      placeholder={t("myapp")}
                       value={exposeHostname()}
                       onInput={(e) => setExposeHostname(e.currentTarget.value)}
                       autofocus
@@ -1250,7 +1227,7 @@ export default function ContainersPage(props: ContainersPageProps) {
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Container port <span style={{ color: "#f85149" }}>*</span></label>
+                  <label class="form-label">{t("Container port")} <span style={{ color: "#f85149" }}>*</span></label>
                   <Show when={exposeContainer()!.ports.length > 0}>
                     <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "margin-bottom": "8px" }}>
                       <For each={[...new Set(exposeContainer()!.ports.map((p) => p.container_port))]}>
@@ -1283,18 +1260,18 @@ export default function ContainersPage(props: ContainersPageProps) {
                     onInput={(e) => setExposePort(e.currentTarget.value)}
                     min="1"
                     max="65535"
-                    placeholder="8080"
+                    placeholder={t("8080")}
                   />
-                  <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>The port your app listens on inside the container</p>
+                  <p style={{ "font-size": "11px", color: "#6e7681", "margin-top": "4px" }}>{t("The port your app listens on inside the container")}</p>
                 </div>
                 <Show when={exposeHostname().trim()}>
                   <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "8px" }}>
-                    URL: <span class="mono" style={{ color: "#58a6ff" }}>https://{exposeHostname().includes(".") ? exposeHostname() : `${exposeHostname()}.${exposeDomain()}`}</span>
+                    {t("URL:")} <span class="mono" style={{ color: "#58a6ff" }}>{t("https://")}{exposeHostname().includes(".") ? exposeHostname() : `${exposeHostname()}.${exposeDomain()}`}</span>
                   </div>
                 </Show>
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn" onClick={() => setExposeContainer(null)} disabled={exposing()}>Close</button>
+                <button type="button" class="btn" onClick={() => setExposeContainer(null)} disabled={exposing()}>{t("Close")}</button>
                 <button type="submit" class="btn btn-primary" disabled={exposing() || !exposeHostname().trim()}>
                   {exposing() ? "Exposing..." : "Add route"}
                 </button>

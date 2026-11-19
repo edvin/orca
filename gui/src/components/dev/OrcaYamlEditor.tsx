@@ -13,6 +13,7 @@ import { openDocs } from "../HelpLink";
 import OrcaYamlStudio from "../orcayaml/OrcaYamlStudio";
 import { DataSection, ProfilesSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";
+import { t } from "../../lib/i18n";
 
 interface Props {
   project: DevProject;
@@ -120,7 +121,7 @@ export default function OrcaYamlEditor(props: Props) {
       // YAML → form: only when the YAML parses.
       const r = await devApi.validateYaml(props.project.id, text());
       if (!r.validation.ok || !r.validation.dev) {
-        showToast("Fix the YAML error before switching to the form.", "error");
+        showToast(t("Fix the YAML error before switching to the form."), "error");
         return;
       }
       setDev(structuredClone(r.validation.dev));
@@ -135,7 +136,7 @@ export default function OrcaYamlEditor(props: Props) {
         view() !== "form"
           ? await devApi.writeYaml(props.project.id, { text: text() })
           : await devApi.writeYaml(props.project.id, { dev: unwrap(dev) });
-      showToast(`Saved ${r.path.split("/").pop()}`, "success");
+      showToast(t("Saved {value1}", { value1: r.path.split("/").pop() }), "success");
       setDirty(false);
       props.onSaved();
     } catch (e) {
@@ -167,7 +168,7 @@ export default function OrcaYamlEditor(props: Props) {
       <div class="modal-dialog dev-wizard" onClick={(e) => e.stopPropagation()}>
         <div class="modal-header">
           <div>
-            <div class="modal-title">orca.yaml</div>
+            <div class="modal-title">{t("orca.yaml")}</div>
             <div class="mono" style={{ "font-size": "11.5px", color: "#8b949e", "margin-top": "3px" }}>{analysis()?.orca_yaml.path}</div>
           </div>
           <button
@@ -175,28 +176,26 @@ export default function OrcaYamlEditor(props: Props) {
             style={{ "margin-left": "auto", "margin-right": "10px" }}
             onClick={() => void openDocs("/docs/orca-yaml/")}
           >
-            Reference
-          </button>
+            {t("Reference")}</button>
           <div class="dev-seg" style={{ "margin-right": "12px" }}>
-            <button classList={{ active: view() === "form" }} onClick={() => switchView("form")}>Worktrees</button>
-            <button classList={{ active: view() === "project" }} onClick={() => switchView("project")}>Routes, links…</button>
-            <button classList={{ active: view() === "yaml" }} onClick={() => switchView("yaml")}>YAML</button>
+            <button classList={{ active: view() === "form" }} onClick={() => switchView("form")}>{t("Worktrees")}</button>
+            <button classList={{ active: view() === "project" }} onClick={() => switchView("project")}>{t("Routes, links…")}</button>
+            <button classList={{ active: view() === "yaml" }} onClick={() => switchView("yaml")}>{t("YAML")}</button>
           </div>
           <button class="modal-close" onClick={props.onClose}>×</button>
         </div>
-        <Show when={analysis()} fallback={<div style={{ padding: "40px", color: "#8b949e", "text-align": "center" }}>Loading…</div>}>
+        <Show when={analysis()} fallback={<div style={{ padding: "40px", color: "#8b949e", "text-align": "center" }}>{t("Loading…")}</div>}>
           <div class="dev-wizard-body" style={{ "grid-template-columns": "1fr 340px" }}>
             <div class="dev-wizard-main">
               <Show when={view() === "form"}>
-                <FormSection title="Shared or per worktree"><SharedSection {...section()} /></FormSection>
-                <FormSection title="Data"><DataSection {...section()} /></FormSection>
-                <FormSection title="Reach"><ReachSection {...section()} /></FormSection>
-                <FormSection title="Profiles and setup commands"><ProfilesSection {...section()} /></FormSection>
+                <FormSection title={t("Shared or per worktree")}><SharedSection {...section()} /></FormSection>
+                <FormSection title={t("Data")}><DataSection {...section()} /></FormSection>
+                <FormSection title={t("Reach")}><ReachSection {...section()} /></FormSection>
+                <FormSection title={t("Profiles and setup commands")}><ProfilesSection {...section()} /></FormSection>
               </Show>
               <Show when={view() === "project"}>
                 <p style={{ color: "#8b949e", "font-size": "12px", "margin": "0 0 12px", "line-height": "1.5" }}>
-                  For the project as it runs from its own folder. Worktree instances get their hostnames from the Worktrees view (Reach).
-                </p>
+                  {t("For the project as it runs from its own folder. Worktree instances get their hostnames from the Worktrees view (Reach).")}</p>
                 <OrcaYamlStudio
                   noYamlTab
                   text={studioSeed()}
@@ -204,8 +203,8 @@ export default function OrcaYamlEditor(props: Props) {
                   domain={analysis()!.hostnames.domain}
                   projectName={props.project.root.split("/").filter(Boolean).pop() ?? props.project.id}
                   height="calc(100vh - 340px)"
-                  onChange={(t) => {
-                    setText(t);
+                  onChange={(tx) => {
+                    setText(tx);
                     setDirty(true);
                     scheduleCheck();
                   }}
@@ -216,8 +215,8 @@ export default function OrcaYamlEditor(props: Props) {
                   <YamlEditor
                     value={text()}
                     height="100%"
-                    onChange={(t) => {
-                      setText(t);
+                    onChange={(tx1) => {
+                      setText(tx1);
                       setDirty(true);
                       scheduleCheck();
                     }}
@@ -233,7 +232,7 @@ export default function OrcaYamlEditor(props: Props) {
               </Show>
             </div>
             <div class="dev-wizard-side">
-              <div class="dev-preview-title">Dry run</div>
+              <div class="dev-preview-title">{t("Dry run")}</div>
               <Dropdown
                 value={dryInstance()}
                 options={props.project.instances.map((i) => ({ value: i.name, label: `as worktree "${i.name}"` }))}
@@ -248,7 +247,7 @@ export default function OrcaYamlEditor(props: Props) {
               </Show>
               <Show when={dry()}>
                 <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "6px" }}>
-                  Runs {dry()!.plan.running_services.join(", ") || "nothing"}
+                  {t("Runs")} {dry()!.plan.running_services.join(", ") || "nothing"}
                 </div>
                 <div class="dev-card-links" style={{ "margin-bottom": "10px" }}>
                   <For each={instanceUrls(dry()!.plan.routes.map((r) => ({ service: r.service, hostname: r.hostname, path: r.path, url: r.url })))}>
@@ -261,7 +260,7 @@ export default function OrcaYamlEditor(props: Props) {
                   <For each={dry()!.plan.host_ports}>
                     {(p) => (
                       <div class="dev-link dev-link-port" style={{ cursor: "default" }}>
-                        <span class="dev-link-text">localhost:{p.host_port}</span>
+                        <span class="dev-link-text">{t("localhost:")}{p.host_port}</span>
                         <span class="dev-link-svc">{p.service} :{p.container_port}</span>
                       </div>
                     )}
@@ -278,12 +277,11 @@ export default function OrcaYamlEditor(props: Props) {
           </div>
           <div class="modal-footer">
             <Show when={dirty()}>
-              <span style={{ "font-size": "12px", color: "#d29922", "margin-right": "auto" }}>Unsaved changes</span>
+              <span style={{ "font-size": "12px", color: "#d29922", "margin-right": "auto" }}>{t("Unsaved changes")}</span>
             </Show>
-            <button class="btn" onClick={props.onClose}>Close</button>
+            <button class="btn" onClick={props.onClose}>{t("Close")}</button>
             <button class="btn btn-primary" disabled={saving() || !dirty() || (view() !== "form" && !!yamlError())} onClick={save}>
-              Save
-            </button>
+              {t("Save")}</button>
           </div>
         </Show>
       </div>

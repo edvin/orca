@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import { type PortGroup, portText } from "../lib/ports";
+import { t } from "../lib/i18n";
 
 const DOT: Record<PortGroup["kind"], string> = {
   web: "#58a6ff",
@@ -71,8 +72,7 @@ export default function PortChips(props: { groups: PortGroup[]; max?: number }) 
           title={rest().map((g) => `${portText(g)}${g.label ? ` ${g.label}` : ""}`).join(", ")}
           style={{ color: "#8b949e", "font-size": "11px", padding: "1px 6px", border: "1px solid #30363d", "border-radius": "4px", "white-space": "nowrap" }}
         >
-          +{rest().length} more
-        </span>
+          +{rest().length} {t("more")}</span>
       </Show>
     </div>
   );

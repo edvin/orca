@@ -10,6 +10,7 @@ import { logError } from "../lib/activityStore";
 import DockerDesktopMove from "../components/DockerDesktopMove";
 import EngineHelp from "../components/EngineHelp";
 import { engineApi, isWindows, setupAction } from "../lib/engine";
+import { t } from "../lib/i18n";
 
 export default function EnvironmentPage() {
   const [status, setStatus] = createSignal<EnvironmentStatus | null>(null);
@@ -191,14 +192,14 @@ export default function EnvironmentPage() {
   const closeActionDialog = async () => {
     setActionDialogOpen(false);
     if (actionSuccess()) {
-      showToast("Restarting Orca daemon to reconnect to Docker...", "info");
+      showToast(t("Restarting Orca daemon to reconnect to Docker..."), "info");
       try {
         await invoke("stop_daemon");
         await new Promise(r => setTimeout(r, 2000));
         await invoke("start_daemon");
         await new Promise(r => setTimeout(r, 3000));
       } catch {}
-      showToast("Daemon restarted", "success");
+      showToast(t("Daemon restarted"), "success");
     }
     await refresh();
   };
@@ -261,16 +262,16 @@ export default function EnvironmentPage() {
   const _restartOrcaDaemon = async () => {
     setRestartingOrca(true);
     try {
-      showToast("Restarting Orca daemon...", "info");
+      showToast(t("Restarting Orca daemon..."), "info");
       await invoke("stop_daemon");
       await new Promise(r => setTimeout(r, 1500));
       await invoke("start_daemon");
       await new Promise(r => setTimeout(r, 2000));
-      showToast("Orca daemon restarted", "success");
+      showToast(t("Orca daemon restarted"), "success");
       await refresh();
     } catch (e) {
       logError(`Failed to restart Orca daemon: ${e}`);
-      showToast(`Restart failed: ${e}`, "error");
+      showToast(t("Restart failed: {e}", { e: e }), "error");
     } finally {
       setRestartingOrca(false);
     }
@@ -279,7 +280,7 @@ export default function EnvironmentPage() {
   const restartDocker = async () => {
     setRestartingDocker(true);
     try {
-      showToast("Restarting Docker and Orca daemon...", "info");
+      showToast(t("Restarting Docker and Orca daemon..."), "info");
 
       // Restart Docker through the daemon while it still runs: the Lima VM
       // on macOS, Docker in WSL2 on Windows, the docker service on Linux.
@@ -293,11 +294,11 @@ export default function EnvironmentPage() {
       try { await invoke("start_daemon"); } catch {}
       await new Promise(r => setTimeout(r, 3000));
 
-      showToast("Docker and Orca daemon restarted", "success");
+      showToast(t("Docker and Orca daemon restarted"), "success");
       await refresh();
     } catch (e) {
       logError(`Failed to restart Docker: ${e}`);
-      showToast(`Docker restart failed: ${e}`, "error");
+      showToast(t("Docker restart failed: {e}", { e: e }), "error");
     } finally {
       setRestartingDocker(false);
     }
@@ -334,14 +335,13 @@ export default function EnvironmentPage() {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">System Health</h1>
+        <h1 class="page-title">{t("System Health")}</h1>
         <div class="page-actions">
           <Show when={!health()?.docker_connected}>
             <button class="btn btn-primary" disabled={actionRunning()} onClick={() => {
               runFix(setupAction(), "Docker Setup");
             }}>
-              Set up Docker
-            </button>
+              {t("Set up Docker")}</button>
           </Show>
           <Show when={navigator.platform.includes("Mac")}>
             <button
@@ -349,8 +349,7 @@ export default function EnvironmentPage() {
               disabled={actionRunning()}
               onClick={() => runFix("recreate_lima_orca", "Recreate Docker VM")}
             >
-              Recreate VM
-            </button>
+              {t("Recreate VM")}</button>
           </Show>
           <Show when={isWindows()}>
             <button
@@ -358,15 +357,13 @@ export default function EnvironmentPage() {
               disabled={actionRunning()}
               onClick={() => runFix("recreate_wsl_engine", "Rebuild Orca's engine")}
             >
-              Rebuild engine
-            </button>
+              {t("Rebuild engine")}</button>
           </Show>
           <button class="btn" onClick={restartDocker} disabled={restartingDocker() || restartingOrca()}>
             {restartingDocker() ? "Restarting..." : "Restart Docker & Orca"}
           </button>
           <button class="btn" onClick={runDiagnose}>
-            Diagnose
-          </button>
+            {t("Diagnose")}</button>
           <button class="btn" onClick={refresh} disabled={loading()}>
             {loading() ? "Checking..." : "Re-check"}
           </button>
@@ -375,9 +372,9 @@ export default function EnvironmentPage() {
 
       <Show when={!status() && statusError()}>
         <div class="card" style={{ "max-width": "800px", "margin-bottom": "16px", "border-color": "rgba(248,81,73,0.4)" }}>
-          <div style={{ color: "#f85149", "font-weight": "600", "font-size": "14px", "margin-bottom": "6px" }}>System Health could not load</div>
+          <div style={{ color: "#f85149", "font-weight": "600", "font-size": "14px", "margin-bottom": "6px" }}>{t("System Health could not load")}</div>
           <div style={{ color: "#c9d1d9", "font-size": "13px" }}>{statusError()}</div>
-          <button class="btn btn-sm" style={{ "margin-top": "10px" }} onClick={() => void refresh()}>Try again</button>
+          <button class="btn btn-sm" style={{ "margin-top": "10px" }} onClick={() => void refresh()}>{t("Try again")}</button>
         </div>
       </Show>
       <Show
@@ -426,10 +423,9 @@ export default function EnvironmentPage() {
                 </div>
                 <div style={{ flex: "1" }}>
                   <div style={{ "font-size": "20px", "font-weight": "700", color: "#e6edf3", "margin-bottom": "4px" }}>
-                    All systems operational
-                  </div>
+                    {t("All systems operational")}</div>
                   <div style={{ "font-size": "14px", color: "#8b949e", "line-height": "1.5" }}>
-                    {platformLabel(s().platform)} {"\u2022"} Runtime: {
+                    {platformLabel(s().platform)} {"\u2022"} {t("Runtime:")} {
                       isMacOS() || isWindows()
                         ? engineName() === "Orca" || !engineName()
                           ? isWindows() ? "Orca (WSL)" : "Orca (Lima)"
@@ -437,8 +433,7 @@ export default function EnvironmentPage() {
                         : s().platform === "linux"
                         ? "Native Docker"
                         : s().suggested_runtime
-                    } {"\u2022"} {passCount()}/{totalCount()} checks passed
-                  </div>
+                    } {"\u2022"} {passCount()}/{totalCount()} {t("checks passed")}</div>
                 </div>
               </div>
 
@@ -523,21 +518,20 @@ export default function EnvironmentPage() {
             <Show when={s().ready && (machine() || health())}>
               <div style={{ "margin-top": "24px" }}>
                 <div style={{ "font-size": "13px", "font-weight": "600", color: "#8b949e", "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "12px" }}>
-                  System info
-                </div>
+                  {t("System info")}</div>
                 <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}>
                   <Show when={machine()}>
                     {(m) => (
                       <div style={{ background: "rgba(22, 27, 34, 0.5)", border: "1px solid rgba(255,255,255,0.06)", "border-radius": "10px", padding: "16px 18px" }}>
-                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>Runtime</div>
+                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>{t("Runtime")}</div>
                         <div class="card-grid" style={{ "font-size": "12px" }}>
-                          <span class="card-label">Backend</span>
+                          <span class="card-label">{t("Backend")}</span>
                           <span class="card-value">{m().backend} · {m().config.runtime}</span>
-                          <span class="card-label">State</span>
+                          <span class="card-label">{t("State")}</span>
                           <span class={`state-badge ${m().state === "Running" ? "state-running" : "state-stopped"}`}>{m().state}</span>
-                          <span class="card-label">CPUs</span>
+                          <span class="card-label">{t("CPUs")}</span>
                           <span class="card-value">{m().config.cpus}</span>
-                          <span class="card-label">Memory</span>
+                          <span class="card-label">{t("Memory")}</span>
                           <span class="card-value">{formatBytes(m().config.memory_mb * 1024 * 1024)}</span>
                         </div>
                       </div>
@@ -546,13 +540,13 @@ export default function EnvironmentPage() {
                   <Show when={health()?.system_resources}>
                     {(res) => (
                       <div style={{ background: "rgba(22, 27, 34, 0.5)", border: "1px solid rgba(255,255,255,0.06)", "border-radius": "10px", padding: "16px 18px" }}>
-                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>Resources</div>
+                        <div style={{ "font-weight": "600", "font-size": "13px", "margin-bottom": "10px" }}>{t("Resources")}</div>
                         <div class="card-grid" style={{ "font-size": "12px" }}>
-                          <span class="card-label">Memory</span>
+                          <span class="card-label">{t("Memory")}</span>
                           <span class="card-value">
                             {formatBytes(res().memory_total_bytes - res().memory_available_bytes)} / {formatBytes(res().memory_total_bytes)}
                           </span>
-                          <span class="card-label">Disk</span>
+                          <span class="card-label">{t("Disk")}</span>
                           <span class="card-value">
                             {formatBytes(res().disk_total_bytes - res().disk_free_bytes)} / {formatBytes(res().disk_total_bytes)}
                             <span style={{ color: "#6e7681", "margin-left": "4px" }}>({res().disk_usage_percent.toFixed(0)}%)</span>
@@ -633,7 +627,7 @@ export default function EnvironmentPage() {
                           <button class="btn btn-primary" disabled={actionRunning()} onClick={() => runFix(check.fix_action!, check.name)} style={{ "flex-shrink": "0" }}>{fixLabel(check.fix_action!, "Install")}</button>
                         </Show>
                         <Show when={check.status === "Pass"}>
-                          <span style={{ color: "#3fb950", "font-size": "12px", "font-weight": "600", "flex-shrink": "0" }}>Done</span>
+                          <span style={{ color: "#3fb950", "font-size": "12px", "font-weight": "600", "flex-shrink": "0" }}>{t("Done")}</span>
                         </Show>
                       </div>
                     )}
@@ -642,8 +636,7 @@ export default function EnvironmentPage() {
 
                 <Show when={s().checks.filter(c => c.fix_action && c.status !== "Pass").length === 0 && !s().ready}>
                   <div style={{ "margin-top": "16px", "font-size": "13px", color: "var(--text-muted)", "text-align": "center" }}>
-                    Or install Docker manually, then click Re-check.
-                  </div>
+                    {t("Or install Docker manually, then click Re-check.")}</div>
                 </Show>
                 <Show when={engineTrouble() || (engineStarting() && isMacOS())}>
                   <EngineHelp problem={
@@ -668,14 +661,14 @@ export default function EnvironmentPage() {
               <span class="modal-title">
                 <Show when={diagnoseRunning()} fallback={
                   <Show when={diagnoseResult()} fallback={
-                    <Show when={diagnoseResult() === false} fallback={<span>Connection diagnostics</span>}>
-                      <span style={{ color: "#f85149" }}>Connection failed</span>
+                    <Show when={diagnoseResult() === false} fallback={<span>{t("Connection diagnostics")}</span>}>
+                      <span style={{ color: "#f85149" }}>{t("Connection failed")}</span>
                     </Show>
                   }>
-                    <span style={{ color: "#3fb950" }}>Connection available</span>
+                    <span style={{ color: "#3fb950" }}>{t("Connection available")}</span>
                   </Show>
                 }>
-                  <span>Testing connections...</span>
+                  <span>{t("Testing connections...")}</span>
                 </Show>
               </span>
               <Show when={!diagnoseRunning()}>
@@ -699,8 +692,8 @@ export default function EnvironmentPage() {
             </div>
             <div class="modal-footer">
               <Show when={!diagnoseRunning()}>
-                <button class="btn" onClick={() => setDiagnoseOpen(false)}>Close</button>
-                <button class="btn btn-primary" onClick={runDiagnose}>Retry</button>
+                <button class="btn" onClick={() => setDiagnoseOpen(false)}>{t("Close")}</button>
+                <button class="btn btn-primary" onClick={runDiagnose}>{t("Retry")}</button>
               </Show>
             </div>
           </div>
@@ -715,12 +708,12 @@ export default function EnvironmentPage() {
               <span class="modal-title">
                 <Show when={actionRunning()} fallback={
                   <Show when={actionSuccess()} fallback={
-                    <span style={{ color: "#f85149" }}>{"\u2717"} {actionName()} failed</span>
+                    <span style={{ color: "#f85149" }}>{"\u2717"} {actionName()} {t("failed")}</span>
                   }>
-                    <span style={{ color: "#3fb950" }}>{"\u2713"} {actionName()} complete</span>
+                    <span style={{ color: "#3fb950" }}>{"\u2713"} {actionName()} {t("complete")}</span>
                   </Show>
                 }>
-                  <span>Installing {actionName()}...</span>
+                  <span>{t("Installing")} {actionName()}...</span>
                 </Show>
               </span>
               <Show when={!actionRunning()}>
@@ -744,10 +737,10 @@ export default function EnvironmentPage() {
             </div>
             <div class="modal-footer">
               <Show when={!actionRunning()}>
-                <button class="btn btn-primary" onClick={closeActionDialog}>Close</button>
+                <button class="btn btn-primary" onClick={closeActionDialog}>{t("Close")}</button>
               </Show>
               <Show when={actionRunning()}>
-                <span style={{ "font-size": "12px", color: "var(--text-muted)" }}>This may take several minutes...</span>
+                <span style={{ "font-size": "12px", color: "var(--text-muted)" }}>{t("This may take several minutes...")}</span>
               </Show>
             </div>
           </div>

@@ -12,6 +12,7 @@ import { orcaCompletions } from "../dev/OrcaYamlEditor";
 import { read, write, type Model } from "./model";
 import RoutesSection, { type RouteStatus, type StudioService } from "./RoutesSection";
 import { BuildsSection, HooksSection, LinksSection } from "./Sections";
+import { t } from "../../lib/i18n";
 
 export type { RouteStatus, StudioService };
 
@@ -58,8 +59,8 @@ export default function OrcaYamlStudio(props: Props) {
   const [check, setCheck] = createSignal<Validation | null>(null);
   const [saving, setSaving] = createSignal(false);
 
-  const reparse = (t: string) => {
-    const r = read(t);
+  const reparse = (tx: string) => {
+    const r = read(tx);
     if ("model" in r) {
       setModel(r.model);
       setParseError(null);
@@ -68,10 +69,10 @@ export default function OrcaYamlStudio(props: Props) {
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(timer));
-  const validateSoon = (t: string) => {
+  const validateSoon = (tx1: string) => {
     clearTimeout(timer);
     timer = setTimeout(() => {
-      invoke<Validation>("validate_orca_yaml", { text: t })
+      invoke<Validation>("validate_orca_yaml", { text: tx1 })
         .then(setCheck)
         .catch(() => setCheck(null));
     }, 350);
@@ -80,15 +81,15 @@ export default function OrcaYamlStudio(props: Props) {
   createEffect(
     on(
       () => props.text,
-      (t, prev) => {
+      (tx2, prev) => {
         // A refetch of the file just saved: keep any edits made since.
-        if (prev !== undefined && t === base()) return;
-        setText(t);
-        setBase(t);
-        reparse(t);
-        validateSoon(t);
+        if (prev !== undefined && tx2 === base()) return;
+        setText(tx2);
+        setBase(tx2);
+        reparse(tx2);
+        validateSoon(tx2);
         // A file the form can't read opens on its text.
-        if (!props.noYamlTab && !("model" in read(t))) setTab("yaml");
+        if (!props.noYamlTab && !("model" in read(tx2))) setTab("yaml");
       },
     ),
   );
@@ -97,17 +98,17 @@ export default function OrcaYamlStudio(props: Props) {
 
   const editSection = (section: "gateway" | "links" | "hooks" | "builds", m: Model) => {
     setModel(m);
-    const t = write(text(), section, m);
-    setText(t);
-    props.onChange?.(t);
-    validateSoon(t);
+    const tx3 = write(text(), section, m);
+    setText(tx3);
+    props.onChange?.(tx3);
+    validateSoon(tx3);
   };
 
-  const onYaml = (t: string) => {
-    setText(t);
-    reparse(t);
-    props.onChange?.(t);
-    validateSoon(t);
+  const onYaml = (tx4: string) => {
+    setText(tx4);
+    reparse(tx4);
+    props.onChange?.(tx4);
+    validateSoon(tx4);
   };
 
   const save = async () => {
@@ -143,18 +144,18 @@ export default function OrcaYamlStudio(props: Props) {
     <div class="orca-studio" style={{ display: "flex", "flex-direction": "column", gap: "12px", "min-height": "0" }}>
       <div style={{ display: "flex", "align-items": "center", gap: "10px", "flex-wrap": "wrap" }}>
         <div class="dev-seg">
-          <TabButton id="routes" label="Routes" count={counts().routes} />
-          <TabButton id="links" label="Links" count={counts().links} />
-          <TabButton id="hooks" label="Setup commands" count={counts().hooks} />
-          <TabButton id="builds" label="Builds" count={counts().builds} />
-          <Show when={!props.noYamlTab}><TabButton id="yaml" label="YAML" /></Show>
+          <TabButton id="routes" label={t("Routes")} count={counts().routes} />
+          <TabButton id="links" label={t("Links")} count={counts().links} />
+          <TabButton id="hooks" label={t("Setup commands")} count={counts().hooks} />
+          <TabButton id="builds" label={t("Builds")} count={counts().builds} />
+          <Show when={!props.noYamlTab}><TabButton id="yaml" label={t("YAML")} /></Show>
         </div>
         <span style={{ flex: "1" }} />
         <Status check={check()} parseError={parseError()} onShow={() => { if (!props.noYamlTab) setTab("yaml"); }} />
         {props.actions}
         <Show when={props.onSave}>
           <Show when={props.onDiscard}>
-            <button class="btn btn-sm" onClick={() => props.onDiscard?.()}>Discard</button>
+            <button class="btn btn-sm" onClick={() => props.onDiscard?.()}>{t("Discard")}</button>
           </Show>
           <button class="btn btn-sm btn-primary" disabled={saving() || !dirty() || blocked()} onClick={() => void save()}
             title={blocked() ? "Fix the error first" : undefined}>
@@ -171,9 +172,9 @@ export default function OrcaYamlStudio(props: Props) {
 
       <Show when={tab() !== "yaml" && parseError()}>
         <div style={{ padding: "12px 14px", background: "rgba(248,81,73,0.08)", border: "1px solid rgba(248,81,73,0.35)", "border-radius": "8px", "font-size": "13px", color: "#e6edf3" }}>
-          The form needs a file it can read: {parseError()}{" "}
+          {t("The form needs a file it can read:")} {parseError()}{" "}
           <Show when={!props.noYamlTab}>
-            <button class="btn btn-sm" style={{ "margin-left": "8px" }} onClick={() => setTab("yaml")}>Fix it in YAML</button>
+            <button class="btn btn-sm" style={{ "margin-left": "8px" }} onClick={() => setTab("yaml")}>{t("Fix it in YAML")}</button>
           </Show>
         </div>
       </Show>
@@ -215,7 +216,7 @@ function Status(props: { check: Validation | null; parseError: string | null; on
           {props.check?.line ? `Line ${props.check.line}: ` : ""}{props.check?.error ?? props.parseError}
         </button>
       }>
-        <Show when={(props.check?.warnings.length ?? 0) > 0} fallback={<span style={{ ...style, color: "#3fb950" }}>Valid</span>}>
+        <Show when={(props.check?.warnings.length ?? 0) > 0} fallback={<span style={{ ...style, color: "#3fb950" }}>{t("Valid")}</span>}>
           <span style={{ ...style, color: "#d29922" }} title={props.check!.warnings.join("\n")}>
             {props.check!.warnings.length === 1 ? "1 entry skipped" : `${props.check!.warnings.length} entries skipped`}
           </span>

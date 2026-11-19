@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
 import "@xterm/xterm/css/xterm.css";
+import { t } from "../lib/i18n";
 
 // Hard cap on how much data we're willing to have queued in the WebSocket
 // send buffer before we drop further input. Browsers will eventually kill
@@ -48,7 +49,7 @@ export default function K8sTerminal(props: K8sTerminalProps) {
       if (!backpressureWarned) {
         backpressureWarned = true;
         showToast(
-          "Terminal is overloaded — dropping input. Wait for the remote end to catch up.",
+          t("Terminal is overloaded — dropping input. Wait for the remote end to catch up."),
           "error",
         );
         const checkDrain = () => {
@@ -217,13 +218,13 @@ export default function K8sTerminal(props: K8sTerminalProps) {
     <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
       <div class="log-header">
         <div class="log-header-left">
-          <span class="log-title">Pod Terminal: {props.podName}</span>
+          <span class="log-title">{t("Pod Terminal:")} {props.podName}</span>
         </div>
         <div class="log-header-right">
           <div style={{ display: "flex", "align-items": "center", gap: "1px", background: "#21262d", "border-radius": "4px", padding: "0 2px" }}>
-            <button class="action-icon" onClick={() => changeFontSize(-1)} title="Decrease font size" style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>&minus;</button>
+            <button class="action-icon" onClick={() => changeFontSize(-1)} title={t("Decrease font size")} style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>&minus;</button>
             <span style={{ "font-size": "10px", color: "#8b949e", "min-width": "24px", "text-align": "center" }}>{fontSize()}</span>
-            <button class="action-icon" onClick={() => changeFontSize(1)} title="Increase font size" style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>+</button>
+            <button class="action-icon" onClick={() => changeFontSize(1)} title={t("Increase font size")} style={{ "font-size": "14px", "font-weight": "700", width: "24px" }}>+</button>
           </div>
         </div>
       </div>

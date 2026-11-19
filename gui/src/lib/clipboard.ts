@@ -1,9 +1,10 @@
 import { showToast } from "../components/Toast";
+import { t } from "./i18n";
 
 export async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text);
-    showToast("Copied!", "success");
+    showToast(t("Copied!"), "success");
   } catch {
     // Fallback for non-HTTPS contexts
     try {
@@ -15,9 +16,9 @@ export async function copyToClipboard(text: string) {
       textarea.select();
       document.execCommand("copy");
       document.body.removeChild(textarea);
-      showToast("Copied!", "success");
+      showToast(t("Copied!"), "success");
     } catch {
-      showToast("Failed to copy to clipboard", "error");
+      showToast(t("Failed to copy to clipboard"), "error");
     }
   }
 }

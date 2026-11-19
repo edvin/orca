@@ -9,6 +9,7 @@ import { YamlView } from "./DevBits";
 import HelpLink from "../HelpLink";
 import { DataSection, ProfilesSection, ReachSection, SharedSection, TopologyPreview } from "./SetupSections";
 import type { SectionProps } from "./SetupSections";
+import { t } from "../../lib/i18n";
 
 interface Props {
   project: DevProject;
@@ -64,9 +65,9 @@ export default function SetupWizard(props: Props) {
       <div class="modal-dialog dev-wizard" onClick={(e) => e.stopPropagation()}>
         <div class="modal-header">
           <div>
-            <div class="modal-title">Set up {props.project.id} for worktrees</div>
+            <div class="modal-title">{t("Set up")} {props.project.id} {t("for worktrees")}</div>
             <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "3px" }}>
-              Saved as the <span class="mono">dev:</span> section of orca.yaml, so teammates and every worktree get the same setup.{" "}
+              {t("Saved as the")} <span class="mono">{t("dev:")}</span> {t("section of orca.yaml, so teammates and every worktree get the same setup.")}{" "}
               <HelpLink path="/docs/worktrees/#the-setup-wizard" />
             </div>
           </div>
@@ -76,7 +77,7 @@ export default function SetupWizard(props: Props) {
           <div class="dev-error" style={{ margin: "16px" }}>{error()}</div>
         </Show>
         <Show when={!analysis() && !error()}>
-          <div style={{ padding: "40px", color: "#8b949e", "text-align": "center" }}>Reading the compose file…</div>
+          <div style={{ padding: "40px", color: "#8b949e", "text-align": "center" }}>{t("Reading the compose file…")}</div>
         </Show>
         <Show when={analysis()}>
           <div class="dev-wizard-body">
@@ -119,12 +120,12 @@ export default function SetupWizard(props: Props) {
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" onClick={props.onClose}>Cancel</button>
+            <button class="btn" onClick={props.onClose}>{t("Cancel")}</button>
             <Show when={step() > 0}>
-              <button class="btn" onClick={() => go(step() - 1)}>Back</button>
+              <button class="btn" onClick={() => go(step() - 1)}>{t("Back")}</button>
             </Show>
             <Show when={step() < STEPS.length - 1}>
-              <button class="btn btn-primary" onClick={() => go(step() + 1)}>Next</button>
+              <button class="btn btn-primary" onClick={() => go(step() + 1)}>{t("Next")}</button>
             </Show>
           </div>
         </Show>
@@ -156,7 +157,7 @@ function Review(props: SectionProps & { project: DevProject; onSaved: () => void
       const r = await devApi.writeYaml(props.projectId, { dev: unwrap(props.dev), gitignore_local: gitignore() });
       if (snippet()) await devApi.addAgentsSnippet(props.projectId);
       if (adopt() && props.analysis.adoption) await devApi.adopt(props.projectId, props.analysis.adoption.project);
-      showToast(`Saved ${r.path.split("/").pop()}. Commit it so every worktree and teammate gets this setup.`, "success");
+      showToast(t("Saved {value1}. Commit it so every worktree and teammate gets this setup.", { value1: r.path.split("/").pop() }), "success");
       props.onSaved();
       props.onClose();
     } catch (e) {
@@ -171,17 +172,13 @@ function Review(props: SectionProps & { project: DevProject; onSaved: () => void
   return (
     <div>
       <p class="dev-step-intro">
-        This is what Orca writes to <span class="mono">orca.yaml</span> in the main checkout. Only settings that differ from the
-        defaults are written; other sections of the file are kept.
-      </p>
+        {t("This is what Orca writes to")} <span class="mono">{t("orca.yaml")}</span> {t("in the main checkout. Only settings that differ from the defaults are written; other sections of the file are kept.")}</p>
       <Show when={error()}>
         <div class="dev-error">{error()}</div>
       </Show>
       <Show when={props.analysis.orca_yaml.has_comments}>
         <div class="dev-warning" style={{ "margin-bottom": "10px" }}>
-          Your orca.yaml has comments, and saving from here rewrites the file without them. To keep them, edit the YAML
-          directly in the orca.yaml editor instead.
-        </div>
+          {t("Your orca.yaml has comments, and saving from here rewrites the file without them. To keep them, edit the YAML directly in the orca.yaml editor instead.")}</div>
       </Show>
       <Show when={yaml()}>
         <YamlView text={yaml()!} style={{ "max-height": "300px" }} />
@@ -190,16 +187,15 @@ function Review(props: SectionProps & { project: DevProject; onSaved: () => void
         <label class="dev-check">
           <input type="checkbox" checked={gitignore()} onChange={(e) => setGitignore(e.currentTarget.checked)} />
           <span>
-            Add <span class="mono">orca.local.yaml</span> to .gitignore, for personal settings that shouldn't be committed.
-          </span>
+            {t("Add")} <span class="mono">{t("orca.local.yaml")}</span> {t("to .gitignore, for personal settings that shouldn't be committed.")}</span>
         </label>
         <Show when={!props.analysis.agents_file.has_snippet}>
           <label class="dev-check">
             <input type="checkbox" checked={snippet()} onChange={(e) => setSnippet(e.currentTarget.checked)} />
             <span>
-              Tell coding agents how to run the app: add a short section to <span class="mono">{agentsName()}</span>
-              {props.analysis.agents_file.exists ? "" : " (new file)"} about <span class="mono">orca up</span> and{" "}
-              <span class="mono">.orca/env</span>.
+              {t("Tell coding agents how to run the app: add a short section to")} <span class="mono">{agentsName()}</span>
+              {props.analysis.agents_file.exists ? "" : " (new file)"} {t("about")} <span class="mono">{t("orca up")}</span> {t("and")}{" "}
+              <span class="mono">{t(".orca/env")}</span>.
             </span>
           </label>
         </Show>
@@ -208,17 +204,13 @@ function Review(props: SectionProps & { project: DevProject; onSaved: () => void
             <label class="dev-check">
               <input type="checkbox" checked={adopt()} onChange={(e) => setAdopt(e.currentTarget.checked)} />
               <span>
-                Keep the data from your existing stack <b>{a().project}</b>: Orca stops its containers
-                {a().running ? " (they're running now)" : ""} and the shared services take over its volumes
-                {a().volumes.length ? ` (${a().volumes.join(", ")})` : ""}. Nothing is deleted.
-              </span>
+                {t("Keep the data from your existing stack")} <b>{a().project}</b>{t(": Orca stops its containers")}{a().running ? " (they're running now)" : ""} {t("and the shared services take over its volumes")}{a().volumes.length ? ` (${a().volumes.join(", ")})` : ""}{t(". Nothing is deleted.")}</span>
             </label>
           )}
         </Show>
       </div>
       <button class="btn btn-primary btn-lg" disabled={saving() || !yaml()} onClick={save}>
-        Save orca.yaml
-      </button>
+        {t("Save orca.yaml")}</button>
     </div>
   );
 }

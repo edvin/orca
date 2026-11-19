@@ -10,6 +10,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import { logError, logInfo } from "../lib/activityStore";
 import { sanitizeSvg } from "../lib/sanitize";
 import "../styles/polish-a.css";
+import { t } from "../lib/i18n";
 
 // Categories are derived dynamically from loaded templates
 
@@ -27,7 +28,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const [search, setSearch] = createSignal("");
   // Dynamic categories derived from loaded templates
   const categories = createMemo(() => {
-    const cats = new Set(templates().map(t => t.category));
+    const cats = new Set(templates().map(tx => tx.category));
     return ["All", ...Array.from(cats).sort()];
   });
 
@@ -94,7 +95,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       const results = (await invoke("search_images", { query: q, limit: 50 })) as ImageSearchResult[];
       setHubResults(results);
     } catch (e: any) {
-      showToast(`Docker Hub search failed: ${e}`, "error");
+      showToast(t("Docker Hub search failed: {e}", { e: e }), "error");
     } finally {
       setHubLoading(false);
     }
@@ -104,9 +105,9 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     setHubPulling((prev) => new Set([...prev, name]));
     try {
       await invoke("pull_image", { reference: name });
-      showToast(`Pulled ${name} successfully`, "success");
+      showToast(t("Pulled {name} successfully", { name: name }), "success");
     } catch (e: any) {
-      showToast(`Failed to pull ${name}: ${e}`, "error");
+      showToast(t("Failed to pull {name}: {e}", { name: name, e: e }), "error");
     } finally {
       setHubPulling((prev) => {
         const next = new Set(prev);
@@ -133,7 +134,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       const result = (await invoke("list_templates")) as AppTemplate[];
       setTemplates(result);
     } catch {
-      showToast("Failed to load templates", "error");
+      showToast(t("Failed to load templates"), "error");
     }
   };
 
@@ -144,12 +145,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const filtered = () => {
     const cat = category();
     const q = search().toLowerCase().trim();
-    let items = cat === "All" ? templates() : templates().filter((t) => t.category === cat);
+    let items = cat === "All" ? templates() : templates().filter((tx1) => tx1.category === cat);
     if (q) {
-      items = items.filter((t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q) ||
-        t.image.toLowerCase().includes(q)
+      items = items.filter((tx2) =>
+        tx2.name.toLowerCase().includes(q) ||
+        tx2.description.toLowerCase().includes(q) ||
+        tx2.image.toLowerCase().includes(q)
       );
     }
     return items;
@@ -158,9 +159,9 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const groupedByCategory = () => {
     const items = filtered();
     const groups: Record<string, AppTemplate[]> = {};
-    for (const t of items) {
-      if (!groups[t.category]) groups[t.category] = [];
-      groups[t.category].push(t);
+    for (const tx3 of items) {
+      if (!groups[tx3.category]) groups[tx3.category] = [];
+      groups[tx3.category].push(tx3);
     }
     return groups;
   };
@@ -323,7 +324,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
     const hosts = Array.from(selectedHosts());
     if (hosts.length === 0) {
-      showToast("Select at least one host to deploy to.", "error");
+      showToast(t("Select at least one host to deploy to."), "error");
       return;
     }
 
@@ -369,7 +370,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 ...(here.length > 0 ? [`${ports(here)} already in use.`] : []),
                 ...(inWsl.length > 0 ? [`${ports(inWsl)} in use inside WSL (another distro).`] : []),
               ];
-              showToast(`${parts.join(" ")} Change the port mappings and try again.`, "error");
+              showToast(t("{value1} Change the port mappings and try again.", { value1: parts.join(" ") }), "error");
               return;
             }
           } catch { /* port check failed, proceed anyway */ }
@@ -412,10 +413,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               const gwConfig = (await invoke("gateway_get_config")) as any;
               const domain = gwConfig?.domain || "localhost";
               const urls = gwRoutes.map((r) => `${r.hostname}.${domain}`).join(", ");
-              showToast(`Gateway: ${urls}`, "success");
+              showToast(t("Gateway: {urls}", { urls: urls }), "success");
             } catch {
               const urls = gwRoutes.map((r) => r.hostname).join(", ");
-              showToast(`Gateway routes registered: ${urls}`, "info");
+              showToast(t("Gateway routes registered: {urls}", { urls: urls }), "info");
             }
           }
           // Suggest gateway if running but no routes were auto-registered
@@ -423,7 +424,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             try {
               const gwStatus = (await invoke("gateway_status")) as any;
               if (gwStatus?.running) {
-                showToast("Expose this stack via the Gateway?", "info", {
+                showToast(t("Expose this stack via the Gateway?"), "info", {
                   label: "Open gateway",
                   onClick: () => props.onNavigate?.("gateway"),
                 });
@@ -503,7 +504,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         logInfo("Multi-host deploy", `${template.name} → ${result.successes}/${result.total} hosts succeeded`);
       } else {
         const failedHosts = result.results.filter((r) => !r.success).map((r) => `${r.host_name}: ${r.error}`);
-        showToast(`Deployed ${result.successes}/${result.total}, ${result.failures} failed:\n${failedHosts.join("\n")}`, result.successes > 0 ? "info" : "error");
+        showToast(t("Deployed {value1}/{value2}, {value3} failed: {value4}", { value1: result.successes, value2: result.total, value3: result.failures, value4: failedHosts.join("\n") }), result.successes > 0 ? "info" : "error");
         logError(`Multi-host deploy partial failure`, `${template.name}: ${result.successes}/${result.total} succeeded. Failures: ${failedHosts.join("; ")}`);
       }
     } catch (e: any) {
@@ -553,7 +554,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
 
   const saveTemplate = async () => {
     if (!editorName() || !editorImage()) {
-      showToast("Name and image are required", "error");
+      showToast(t("Name and image are required"), "error");
       return;
     }
     setEditorSaving(true);
@@ -576,10 +577,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       await invoke("save_user_template", { template });
       setEditorOpen(false);
       await refreshTemplates();
-      showToast(`Template "${template.name}" saved`, "success");
+      showToast(t("Template \"{value1}\" saved", { value1: template.name }), "success");
     } catch (e: any) {
       logError(`Failed to save template: ${e}`, `Template "${editorName()}"`);
-      showToast(`Failed to save template: ${e}`, "error");
+      showToast(t("Failed to save template: {e}", { e: e }), "error");
     } finally {
       setEditorSaving(false);
     }
@@ -595,10 +596,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
     try {
       await invoke("delete_user_template", { id: template.id });
       await refreshTemplates();
-      showToast(`Template "${template.name}" deleted`, "success");
+      showToast(t("Template \"{value1}\" deleted", { value1: template.name }), "success");
     } catch (e: any) {
       logError(`Failed to delete template: ${e}`, `Template "${template.name}"`);
-      showToast(`Failed to delete: ${e}`, "error");
+      showToast(t("Failed to delete: {e}", { e: e }), "error");
     }
   };
 
@@ -606,25 +607,25 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const PortEditor = (props: { ports: () => PortEntry[]; update: typeof updatePort; add: typeof addPort; remove: typeof removePort }) => (
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-        <label class="form-label" style={{ margin: 0 }}>Port mappings</label>
-        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
+        <label class="form-label" style={{ margin: 0 }}>{t("Port mappings")}</label>
+        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>{t("+ Add")}</button>
       </div>
       <Show when={props.ports().length > 0} fallback={
-        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No port mappings. Add one to expose a container port to the host (e.g., 8080:80).</div>
+        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>{t("No port mappings. Add one to expose a container port to the host (e.g., 8080:80).")}</div>
       }>
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>
-            <span style={{ flex: "1" }}>Host port</span>
-            <span style={{ flex: "1" }}>Container port</span>
+            <span style={{ flex: "1" }}>{t("Host port")}</span>
+            <span style={{ flex: "1" }}>{t("Container port")}</span>
             <span style={{ width: "28px" }} />
           </div>
           <Index each={props.ports()}>
             {(port, i) => (
               <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-                <input class="form-input" style={{ flex: "1" }} value={port().host} onInput={(e) => props.update(i, "host", e.currentTarget.value)} placeholder="8080" />
+                <input class="form-input" style={{ flex: "1" }} value={port().host} onInput={(e) => props.update(i, "host", e.currentTarget.value)} placeholder={t("8080")} />
                 <span style={{ color: "#484f58" }}>:</span>
-                <input class="form-input" style={{ flex: "1" }} value={port().container} onInput={(e) => props.update(i, "container", e.currentTarget.value)} placeholder="80" />
-                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <input class="form-input" style={{ flex: "1" }} value={port().container} onInput={(e) => props.update(i, "container", e.currentTarget.value)} placeholder={t("80")} />
+                <button class="action-icon" onClick={() => props.remove(i)} title={t("Remove")} style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </Index>
@@ -636,25 +637,25 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const EnvEditor = (props: { env: () => EnvEntry[]; update: typeof updateEnv; add: typeof addEnv; remove: typeof removeEnv; showWarning?: boolean }) => (
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-        <label class="form-label" style={{ margin: 0 }}>Environment variables</label>
-        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
+        <label class="form-label" style={{ margin: 0 }}>{t("Environment variables")}</label>
+        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>{t("+ Add")}</button>
       </div>
       <Show when={props.env().length > 0} fallback={
-        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No environment variables. Add KEY=VALUE pairs to configure the application.</div>
+        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>{t("No environment variables. Add KEY=VALUE pairs to configure the application.")}</div>
       }>
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>
-            <span style={{ flex: "2" }}>Variable</span>
-            <span style={{ flex: "3" }}>Value</span>
+            <span style={{ flex: "2" }}>{t("Variable")}</span>
+            <span style={{ flex: "3" }}>{t("Value")}</span>
             <span style={{ width: "28px" }} />
           </div>
           <Index each={props.env()}>
             {(entry, i) => (
               <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-                <input class="form-input" style={{ flex: "2", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={entry().key} onInput={(e) => props.update(i, "key", e.currentTarget.value)} placeholder="KEY" />
+                <input class="form-input" style={{ flex: "2", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={entry().key} onInput={(e) => props.update(i, "key", e.currentTarget.value)} placeholder={t("KEY")} />
                 <span style={{ color: "#484f58" }}>=</span>
-                <input class="form-input" style={{ flex: "3", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} type={entry().key.toLowerCase().includes("password") || entry().key.toLowerCase().includes("secret") ? "password" : "text"} value={entry().value} onInput={(e) => props.update(i, "value", e.currentTarget.value)} placeholder="value" />
-                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <input class="form-input" style={{ flex: "3", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} type={entry().key.toLowerCase().includes("password") || entry().key.toLowerCase().includes("secret") ? "password" : "text"} value={entry().value} onInput={(e) => props.update(i, "value", e.currentTarget.value)} placeholder={t("value")} />
+                <button class="action-icon" onClick={() => props.remove(i)} title={t("Remove")} style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </Index>
@@ -662,8 +663,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       </Show>
       <Show when={props.showWarning}>
         <span class="form-hint" style={{"color":"#d29922","margin-top":"6px","display":"block"}}>
-          {"\u26a0"} Contains default passwords — change before production use!
-        </span>
+          {"\u26a0"} {t("Contains default passwords — change before production use!")}</span>
       </Show>
     </div>
   );
@@ -671,25 +671,25 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   const VolumeEditor = (props: { volumes: () => VolumeEntry[]; update: typeof updateVolume; add: typeof addVolume; remove: typeof removeVolume }) => (
     <div class="form-group">
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "6px" }}>
-        <label class="form-label" style={{ margin: 0 }}>Volumes</label>
-        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>+ Add</button>
+        <label class="form-label" style={{ margin: 0 }}>{t("Volumes")}</label>
+        <button class="btn btn-sm" onClick={() => props.add()} style={{ "font-size": "11px", padding: "2px 8px" }}>{t("+ Add")}</button>
       </div>
       <Show when={props.volumes().length > 0} fallback={
-        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>No volumes. Add one to persist data (e.g., data:/var/lib/myapp).</div>
+        <div style={{ "font-size": "12px", color: "#484f58", padding: "8px 0" }}>{t("No volumes. Add one to persist data (e.g., data:/var/lib/myapp).")}</div>
       }>
         <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
           <div style={{ display: "flex", gap: "8px", "font-size": "11px", color: "#484f58", "padding-left": "2px" }}>
-            <span style={{ flex: "1" }}>Host Path / Volume</span>
-            <span style={{ flex: "1" }}>Container path</span>
+            <span style={{ flex: "1" }}>{t("Host Path / Volume")}</span>
+            <span style={{ flex: "1" }}>{t("Container path")}</span>
             <span style={{ width: "28px" }} />
           </div>
           <Index each={props.volumes()}>
             {(vol, i) => (
               <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-                <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol().source} onInput={(e) => props.update(i, "source", e.currentTarget.value)} placeholder="volume-name" />
+                <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol().source} onInput={(e) => props.update(i, "source", e.currentTarget.value)} placeholder={t("volume-name")} />
                 <span style={{ color: "#484f58" }}>:</span>
-                <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol().target} onInput={(e) => props.update(i, "target", e.currentTarget.value)} placeholder="/data" />
-                <button class="action-icon" onClick={() => props.remove(i)} title="Remove" style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <input class="form-input" style={{ flex: "1", "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} value={vol().target} onInput={(e) => props.update(i, "target", e.currentTarget.value)} placeholder={t("/data")} />
+                <button class="action-icon" onClick={() => props.remove(i)} title={t("Remove")} style={{ width: "28px", height: "28px", "flex-shrink": "0", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
               </div>
             )}
           </Index>
@@ -725,8 +725,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       <div class="template-desc">{props.template.description}</div>
       <Show when={!props.template.is_builtin}>
         <div style={{ position: "absolute", top: "8px", right: "8px", display: "flex", gap: "4px" }}>
-          <button class="action-icon" title="Edit" onClick={(e) => { e.stopPropagation(); openEditTemplate(props.template); }} style={{ "font-size": "12px", width: "24px", height: "24px" }}>{"\u270E"}</button>
-          <button class="action-icon" title="Delete" onClick={(e) => { e.stopPropagation(); deleteTemplate(props.template); }} style={{ width: "24px", height: "24px", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+          <button class="action-icon" title={t("Edit")} onClick={(e) => { e.stopPropagation(); openEditTemplate(props.template); }} style={{ "font-size": "12px", width: "24px", height: "24px" }}>{"\u270E"}</button>
+          <button class="action-icon" title={t("Delete")} onClick={(e) => { e.stopPropagation(); deleteTemplate(props.template); }} style={{ width: "24px", height: "24px", color: "#f85149" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
         </div>
       </Show>
     </div>
@@ -736,30 +736,29 @@ export default function TemplatesPage(props: TemplatesPageProps) {
   return (
     <div>
       <div class="page-header">
-        <h1 class="page-title">App Catalog</h1>
+        <h1 class="page-title">{t("App Catalog")}</h1>
         <Show when={activeTab() === "curated"}>
           <div class="page-actions">
             <input
               class="search-input"
               type="text"
-              placeholder="Search templates..."
+              placeholder={t("Search templates...")}
               value={search()}
               onInput={(e) => setSearch(e.currentTarget.value)}
             />
             <button class="btn" onClick={async () => {
               try {
                 await invoke("refresh_templates");
-                showToast("Catalog refreshed", "success");
+                showToast(t("Catalog refreshed"), "success");
                 refreshTemplates();
-              } catch (e) { showToast(`Refresh failed: ${e}`, "error"); }
-            }} title="Refresh community catalog">
+              } catch (e) { showToast(t("Refresh failed: {e}", { e: e }), "error"); }
+            }} title={t("Refresh community catalog")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
-            <button class="btn btn-primary" onClick={openCreateTemplate}>Create template</button>
+            <button class="btn btn-primary" onClick={openCreateTemplate}>{t("Create template")}</button>
             <a href="https://github.com/edvin/orca/issues/new?template=app-template.yml" target="_blank" rel="noopener noreferrer"
               class="btn" style={{ "font-size": "12px", "text-decoration": "none" }}>
-              Contribute template
-            </a>
+              {t("Contribute template")}</a>
           </div>
         </Show>
       </div>
@@ -770,8 +769,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           class={`filter-pill ${activeTab() === "curated" ? "active" : ""}`}
           onClick={() => setActiveTab("curated")}
         >
-          Curated
-        </button>
+          {t("Curated")}</button>
         <button
           class={`filter-pill ${activeTab() === "dockerhub" ? "active" : ""}`}
           onClick={() => {
@@ -779,14 +777,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             if (!hubSearched()) searchDockerHub("");
           }}
         >
-          Docker Hub
-        </button>
+          {t("Docker Hub")}</button>
       </div>
 
       {/* Curated tab content */}
       <Show when={activeTab() === "curated"}>
         {/* Category filter chips: one row that wraps, never a label */}
-        <div class="category-chips" role="group" aria-label="Categories">
+        <div class="category-chips" role="group" aria-label={t("Categories")}>
           <For each={categories()}>
             {(cat) => (
               <button
@@ -829,7 +826,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           <input
             class="search-input"
             type="text"
-            placeholder="Search Docker Hub..."
+            placeholder={t("Search Docker Hub...")}
             value={hubQuery()}
             onInput={(e) => setHubQuery(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Enter") searchDockerHub(); }}
@@ -843,14 +840,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
         <Show when={hubLoading() && hubResults().length === 0}>
           <div style={{ "text-align": "center", padding: "48px 0", color: "#8b949e" }}>
             <Spinner size={24} />
-            <div style={{ "margin-top": "12px" }}>Searching Docker Hub...</div>
+            <div style={{ "margin-top": "12px" }}>{t("Searching Docker Hub...")}</div>
           </div>
         </Show>
 
         <Show when={!hubLoading() && hubSearched() && hubResults().length === 0}>
           <div style={{ "text-align": "center", padding: "48px 0", color: "#8b949e" }}>
-            No results found
-          </div>
+            {t("No results found")}</div>
         </Show>
 
         <div class="template-grid">
@@ -867,19 +863,19 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                       {result.name}
                     </div>
                     <Show when={result.official}>
-                      <span style={{ background: "#1f6feb", color: "#fff", "font-size": "10px", padding: "1px 6px", "border-radius": "4px", "flex-shrink": "0", "font-weight": "600" }}>Official</span>
+                      <span style={{ background: "#1f6feb", color: "#fff", "font-size": "10px", padding: "1px 6px", "border-radius": "4px", "flex-shrink": "0", "font-weight": "600" }}>{t("Official")}</span>
                     </Show>
                   </div>
                   <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "10px", flex: "1", overflow: "hidden", display: "-webkit-box", "-webkit-line-clamp": "3", "-webkit-box-orient": "vertical" }}>
                     {result.description || "No description"}
                   </div>
                   <div style={{ display: "flex", "align-items": "center", gap: "12px", "font-size": "11px", color: "#8b949e", "margin-bottom": "10px" }}>
-                    <span title="Stars" style={{ display: "flex", "align-items": "center", gap: "3px" }}>
+                    <span title={t("Stars")} style={{ display: "flex", "align-items": "center", gap: "3px" }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                       {result.stars.toLocaleString()}
                     </span>
                     <Show when={result.pulls}>
-                      <span title="Pulls" style={{ display: "flex", "align-items": "center", gap: "3px" }}>
+                      <span title={t("Pulls")} style={{ display: "flex", "align-items": "center", gap: "3px" }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         {formatPulls(result.pulls)}
                       </span>
@@ -892,7 +888,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                       disabled={isPulling()}
                       onClick={() => pullHubImage(result.name)}
                     >
-                      {isPulling() ? <><Spinner size={12} />{" "}Pulling...</> : "Pull"}
+                      {isPulling() ? <><Spinner size={12} />{" "}{t("Pulling...")}</> : "Pull"}
                     </button>
                     <a
                       href={hubUrl}
@@ -902,7 +898,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                       style={{ "text-decoration": "none", "text-align": "center" }}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      Hub {"\u2197"}
+                      {t("Hub")} {"\u2197"}
                     </a>
                   </div>
                 </div>
@@ -918,13 +914,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           <div class="modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={handleOverlayClick}>
             <div class="modal-dialog" style={{ "max-width": "620px" }}>
               <div class="modal-header">
-                <span class="modal-title">Deploy {template().name}</span>
+                <span class="modal-title">{t("Deploy")} {template().name}</span>
                 <button class="modal-close" onClick={() => closeDeploy()}>{"\u00d7"}</button>
               </div>
               <div class="modal-body">
                 <Show when={hostOptions().length > 1}>
                   <div class="form-group">
-                    <label class="form-label">Deploy to</label>
+                    <label class="form-label">{t("Deploy to")}</label>
                     <div style={{ display: "flex", "flex-wrap": "wrap", gap: "8px", "margin-top": "4px" }}>
                       <For each={hostOptions()}>
                         {(opt) => {
@@ -975,16 +971,14 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                   />
                   <Show when={nameConflict()}>
                     <span class="form-hint" style={{ color: "#f85149" }}>
-                      A container named "{deployName()}" already exists
-                    </span>
+                      {t("A container named \"")}{deployName()}{t("\" already exists")}</span>
                   </Show>
                 </div>
                 <Show when={deployComposeYaml()} fallback={
                   <>
                     <div class="form-group">
                       <label class="form-label">
-                        Image
-                        <Show when={imageRegistryLink(template().image)}>
+                        {t("Image")}<Show when={imageRegistryLink(template().image)}>
                           {(link) => (
                             <a href={link().url} target="_blank" rel="noopener noreferrer" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
                               {link().label} {"\u2197"}
@@ -1001,10 +995,9 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                 }>
                   <div style={{ background: "rgba(88,166,255,0.08)", border: "1px solid rgba(88,166,255,0.3)", "border-radius": "6px", padding: "8px 12px", "margin-bottom": "12px", "font-size": "12px", color: "#58a6ff", display: "flex", "align-items": "center", gap: "6px" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-                    This template deploys a multi-service stack via docker-compose
-                  </div>
+                    {t("This template deploys a multi-service stack via docker-compose")}</div>
                   <div class="form-group">
-                    <label class="form-label">Compose YAML</label>
+                    <label class="form-label">{t("Compose YAML")}</label>
                     <textarea
                       class="form-input"
                       value={deployComposeYaml()}
@@ -1020,13 +1013,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                       }}
                       spellcheck={false}
                     />
-                    <span class="form-hint">Passwords set to "changeme" will be auto-generated on deploy</span>
+                    <span class="form-hint">{t("Passwords set to \"changeme\" will be auto-generated on deploy")}</span>
                   </div>
                 </Show>
                 {/* User input fields from generated_env */}
                 <Show when={deployTarget()?.generated_env && Object.entries(deployTarget()!.generated_env!).some(([_, v]) => v.type === "user_input")}>
                   <div class="form-group">
-                    <label class="form-label">Configuration</label>
+                    <label class="form-label">{t("Configuration")}</label>
                     <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
                       <For each={Object.entries(deployTarget()?.generated_env || {}).filter(([_, v]) => v.type === "user_input")}>
                         {([key, val]) => (
@@ -1047,13 +1040,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                         )}
                       </For>
                     </div>
-                    <span class="form-hint">Other settings (secrets, network config) are auto-generated</span>
+                    <span class="form-hint">{t("Other settings (secrets, network config) are auto-generated")}</span>
                   </div>
                 </Show>
 
                 <Show when={template().notes}>
                   <div class="form-group">
-                    <label class="form-label">Notes</label>
+                    <label class="form-label">{t("Notes")}</label>
                     <div style={{"font-size":"12px","color":"#8b949e","background":"#0d1117","padding":"10px","border-radius":"6px","border":"1px solid #21262d"}}>
                       {template().notes}
                     </div>
@@ -1066,7 +1059,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                     <Spinner size={12} />{" "}{deployStatus()}
                   </span>
                 </Show>
-                <button class="btn" onClick={() => closeDeploy()} disabled={deploying()}>Cancel</button>
+                <button class="btn" onClick={() => closeDeploy()} disabled={deploying()}>{t("Cancel")}</button>
                 <button class="btn btn-primary" onClick={() => doDeploy()} disabled={deploying()}>
                   {deploying() ? "Deploying..." : (deployComposeYaml() ? "Deploy stack" : "Deploy")}
                 </button>
@@ -1087,15 +1080,15 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             <div class="modal-body">
               <div style={{ display: "flex", gap: "12px" }}>
                 <div class="form-group" style={{ width: "60px", "flex-shrink": "0" }}>
-                  <label class="form-label">Icon</label>
+                  <label class="form-label">{t("Icon")}</label>
                   <input class="form-input" value={editorIcon()} onInput={(e) => setEditorIcon(e.currentTarget.value)} style={{ "text-align": "center", "font-size": "20px", padding: "4px" }} />
                 </div>
                 <div class="form-group" style={{ flex: "1" }}>
-                  <label class="form-label">Name <span style={{ color: "#f85149" }}>*</span></label>
-                  <input class="form-input" value={editorName()} onInput={(e) => setEditorName(e.currentTarget.value)} placeholder="My template" />
+                  <label class="form-label">{t("Name")} <span style={{ color: "#f85149" }}>*</span></label>
+                  <input class="form-input" value={editorName()} onInput={(e) => setEditorName(e.currentTarget.value)} placeholder={t("My template")} />
                 </div>
                 <div class="form-group" style={{ width: "150px", "flex-shrink": "0" }}>
-                  <label class="form-label">Category</label>
+                  <label class="form-label">{t("Category")}</label>
                   <Dropdown
                     value={editorCategory()}
                     options={categories().filter((c: string) => c !== "All").map((cat: string) => ({ value: cat, label: cat }))}
@@ -1105,13 +1098,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               </div>
 
               <div class="form-group">
-                <label class="form-label">Description</label>
-                <input class="form-input" value={editorDesc()} onInput={(e) => setEditorDesc(e.currentTarget.value)} placeholder="Short description" />
+                <label class="form-label">{t("Description")}</label>
+                <input class="form-input" value={editorDesc()} onInput={(e) => setEditorDesc(e.currentTarget.value)} placeholder={t("Short description")} />
               </div>
 
               <div class="form-group">
-                <label class="form-label">Docker image <span style={{ color: "#f85149" }}>*</span></label>
-                <input class="form-input" value={editorImage()} onInput={(e) => setEditorImage(e.currentTarget.value)} placeholder="nginx:alpine" style={{ "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} />
+                <label class="form-label">{t("Docker image")} <span style={{ color: "#f85149" }}>*</span></label>
+                <input class="form-input" value={editorImage()} onInput={(e) => setEditorImage(e.currentTarget.value)} placeholder={t("nginx:alpine")} style={{ "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px" }} />
               </div>
 
               <PortEditor ports={editorPorts} update={updateEditorPort} add={addEditorPort} remove={removeEditorPort} />
@@ -1119,12 +1112,12 @@ export default function TemplatesPage(props: TemplatesPageProps) {
               <VolumeEditor volumes={editorVolumes} update={updateEditorVolume} add={addEditorVolume} remove={removeEditorVolume} />
 
               <div class="form-group">
-                <label class="form-label">Notes</label>
-                <textarea class="form-textarea" value={editorNotes()} onInput={(e) => setEditorNotes(e.currentTarget.value)} placeholder="Connection info, setup tips..." rows={2} />
+                <label class="form-label">{t("Notes")}</label>
+                <textarea class="form-textarea" value={editorNotes()} onInput={(e) => setEditorNotes(e.currentTarget.value)} placeholder={t("Connection info, setup tips...")} rows={2} />
               </div>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => setEditorOpen(false)}>Cancel</button>
+              <button class="btn" onClick={() => setEditorOpen(false)}>{t("Cancel")}</button>
               <button class="btn btn-primary" onClick={saveTemplate} disabled={editorSaving()}>
                 {editorSaving() ? "Saving..." : editorIsNew() ? "Create" : "Save"}
               </button>
@@ -1185,8 +1178,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                           <Show when={step.type === "link" && step.url}>
                             <button class="btn btn-sm" style={{ gap: "6px" }} onClick={() => { shellOpen(step.url!); toggleStep(); }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                              Open
-                            </button>
+                              {t("Open")}</button>
                           </Show>
 
                           {/* View logs action */}
@@ -1205,12 +1197,11 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                                   }
                                 }
                               } catch {}
-                              showToast(`Navigate to stack "${setupGuideStackName()}" and find the ${step.service} service`, "info");
+                              showToast(t("Navigate to stack \"{value1}\" and find the {value2} service", { value1: setupGuideStackName(), value2: step.service }), "info");
                               toggleStep();
                             }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                              View logs
-                            </button>
+                              {t("View logs")}</button>
                           </Show>
 
                           {/* Restart service action */}
@@ -1228,13 +1219,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                                   if (svc?.id) {
                                     await invoke("stop_container", { id: svc.id });
                                     await invoke("start_container", { id: svc.id });
-                                    showToast(`${step.service} restarted`, "success");
+                                    showToast(t("{value1} restarted", { value1: step.service }), "success");
                                     toggleStep();
                                   } else {
-                                    showToast(`Could not find ${step.service} container — try restarting the stack manually`, "error");
+                                    showToast(t("Could not find {value1} container — try restarting the stack manually", { value1: step.service }), "error");
                                   }
                                 } catch (e) {
-                                  showToast(`Restart failed: ${e}`, "error");
+                                  showToast(t("Restart failed: {e}", { e: e }), "error");
                                 } finally {
                                   setRestartingService(null);
                                 }
@@ -1262,19 +1253,19 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                                       const stack = stacks.find((s: any) => s.name === setupGuideStackName());
                                       const svc = stack?.services?.find((s: any) => s.service === step.service || s.name?.includes(step.service));
                                       if (!svc?.id) {
-                                        showToast(`Could not find ${step.service} container`, "error");
+                                        showToast(t("Could not find {value1} container", { value1: step.service }), "error");
                                         return;
                                       }
                                       const result = (await invoke("exec_container", { id: svc.id, command: step.command, workdir: null })) as any;
                                       setExecOutput({ ...execOutput(), [i()]: result });
                                       if (result.exit_code === 0) {
-                                        showToast("Command completed successfully", "success");
+                                        showToast(t("Command completed successfully"), "success");
                                         toggleStep();
                                       } else {
-                                        showToast(`Command exited with code ${result.exit_code}`, "error");
+                                        showToast(t("Command exited with code {value1}", { value1: result.exit_code }), "error");
                                       }
                                     } catch (e) {
-                                      showToast(`Exec failed: ${e}`, "error");
+                                      showToast(t("Exec failed: {e}", { e: e }), "error");
                                     } finally {
                                       setExecRunning({ ...execRunning(), [i()]: false });
                                     }
@@ -1310,14 +1301,13 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                                   setShowSetupGuide(false);
                                   props.onNavigate?.(`container:${svc.id}`);
                                 } else {
-                                  showToast(`Could not find ${step.service} container`, "error");
+                                  showToast(t("Could not find {value1} container", { value1: step.service }), "error");
                                 }
                               } catch {}
                               toggleStep();
                             }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                              Open terminal
-                            </button>
+                              {t("Open terminal")}</button>
                           </Show>
 
                           {/* Set env var */}
@@ -1342,10 +1332,10 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                                   try {
                                     await invoke("update_stack_env", { name: setupGuideStackName(), key: step.env_key, value: val });
                                     setEnvSaved({ ...envSaved(), [step.env_key!]: true });
-                                    showToast(`${step.env_key} saved to .env`, "success");
+                                    showToast(t("{value1} saved to .env", { value1: step.env_key }), "success");
                                     toggleStep();
                                   } catch (e) {
-                                    showToast(`Failed to save: ${e}`, "error");
+                                    showToast(t("Failed to save: {e}", { e: e }), "error");
                                   } finally {
                                     setEnvSaving({ ...envSaving(), [step.env_key!]: false });
                                   }
@@ -1364,8 +1354,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
             </div>
             <div class="modal-footer" style={{ "justify-content": "flex-end" }}>
               <button class="btn btn-primary" onClick={() => { setShowSetupGuide(false); props.onNavigate?.(`stack:${setupGuideStackName()}`); }}>
-                Done
-              </button>
+                {t("Done")}</button>
             </div>
           </div>
         </div>

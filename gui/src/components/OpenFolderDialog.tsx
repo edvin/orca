@@ -10,6 +10,7 @@ import Spinner from "./Spinner";
 import FolderActions, { isRemoteHost } from "./FolderActions";
 import { closeFolderDialog, openFolderTarget } from "../lib/openFolder";
 import { devApi } from "../lib/dev";
+import { t } from "../lib/i18n";
 
 interface FolderInfo {
   path: string;
@@ -61,8 +62,8 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
   };
 
   // A dropped file stands for its folder (the daemon takes the file's folder).
-  createEffect(on(openFolderTarget, (t) => {
-    if (t) open(t);
+  createEffect(on(openFolderTarget, (tx) => {
+    if (tx) open(tx);
   }));
 
   const choose = async () => {
@@ -87,7 +88,7 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
         await devApi.addProject(f.path).catch(() => {});
       }
       await invoke("compose_deploy_path", { path: f.path });
-      showToast(`${f.name} is starting`, "success");
+      showToast(t("{value1} is starting", { value1: f.name }), "success");
       closeFolderDialog();
       props.onNavigate(`stack:${f.name}`);
     } catch (e) {
@@ -101,25 +102,25 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
     <div class="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div class="modal-dialog open-folder">
         <div class="modal-header">
-          <h2 class="modal-title">Open a project folder</h2>
+          <h2 class="modal-title">{t("Open a project folder")}</h2>
           <button class="modal-close" onClick={close}>×</button>
         </div>
         <div class="modal-body">
           <Show when={info()} fallback={
             <div class="open-folder-pick">
-              <p>Pick a folder with a compose file (<span class="mono">compose.yaml</span> or <span class="mono">docker-compose.yml</span>). Orca shows what's in it and starts it as a stack.</p>
+              <p>{t("Pick a folder with a compose file (")}<span class="mono">{t("compose.yaml")}</span> {t("or")} <span class="mono">{t("docker-compose.yml")}</span>{t("). Orca shows what's in it and starts it as a stack.")}</p>
               <Show when={!remote()}>
                 <button class="btn btn-primary btn-lg" onClick={() => void choose()} disabled={info.loading}>
                   {info.loading ? "Looking…" : "Choose a folder…"}
                 </button>
-                <div class="open-folder-or">or paste a path, or drop a folder onto Orca's window</div>
+                <div class="open-folder-or">{t("or paste a path, or drop a folder onto Orca's window")}</div>
               </Show>
               <Show when={remote()}>
-                <div class="open-folder-or">You're managing a remote host: give the folder's path on that machine.</div>
+                <div class="open-folder-or">{t("You're managing a remote host: give the folder's path on that machine.")}</div>
               </Show>
               <form class="assistant-row" onSubmit={(e) => { e.preventDefault(); if (typed().trim()) open(typed().trim()); }}>
-                <input class="form-input mono" placeholder="/path/to/project" value={typed()} onInput={(e) => setTyped(e.currentTarget.value)} />
-                <button class="btn" type="submit" disabled={!typed().trim() || info.loading}>Open</button>
+                <input class="form-input mono" placeholder={t("/path/to/project")} value={typed()} onInput={(e) => setTyped(e.currentTarget.value)} />
+                <button class="btn" type="submit" disabled={!typed().trim() || info.loading}>{t("Open")}</button>
               </form>
             </div>
           }>
@@ -130,48 +131,46 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
                     <div class="open-folder-name">{f().name}</div>
                     <div class="mono open-folder-path">{f().display_path ?? f().path}</div>
                   </div>
-                  <button class="btn btn-sm" onClick={() => { setError(""); setPath(""); setTyped(""); }} disabled={busy()}>Another folder</button>
+                  <button class="btn btn-sm" onClick={() => { setError(""); setPath(""); setTyped(""); }} disabled={busy()}>{t("Another folder")}</button>
                 </div>
 
                 <Show when={f().stack}>
                   {(stack) => (
                     <div class="open-folder-note ok">
-                      This folder already runs in Orca as <b>{stack()}</b>.
-                      <button class="btn btn-sm" onClick={() => { closeFolderDialog(); props.onNavigate(`stack:${stack()}`); }}>Show it</button>
+                      {t("This folder already runs in Orca as")} <b>{stack()}</b>.
+                      <button class="btn btn-sm" onClick={() => { closeFolderDialog(); props.onNavigate(`stack:${stack()}`); }}>{t("Show it")}</button>
                     </div>
                   )}
                 </Show>
 
                 <Show when={f().compose_files.length > 0} fallback={
                   <div class="open-folder-create">
-                    <div class="open-folder-note">There's no compose file here yet. Orca creates <span class="mono">compose.yaml</span> with this, and starts it:</div>
+                    <div class="open-folder-note">{t("There's no compose file here yet. Orca creates")} <span class="mono">{t("compose.yaml")}</span> {t("with this, and starts it:")}</div>
                     <textarea class="form-textarea mono" rows={8} spellcheck={false} value={starter()} onInput={(e) => setStarter(e.currentTarget.value)} />
                   </div>
                 }>
                   <div class="open-folder-facts">
-                    <div><span>Compose</span><b class="mono">{f().compose_files.join(", ")}</b></div>
+                    <div><span>{t("Compose")}</span><b class="mono">{f().compose_files.join(", ")}</b></div>
                     <Show when={f().services.length > 0}>
-                      <div><span>Services</span><div class="open-folder-chips"><For each={f().services}>{(s) => <span class="chip">{s}</span>}</For></div></div>
+                      <div><span>{t("Services")}</span><div class="open-folder-chips"><For each={f().services}>{(s) => <span class="chip">{s}</span>}</For></div></div>
                     </Show>
                     <Show when={f().profiles.length > 0}>
-                      <div><span>Profiles</span><div class="open-folder-chips"><For each={f().profiles}>{(p) => <span class="chip muted">{p}</span>}</For><em>pick which run on the stack's page</em></div></div>
+                      <div><span>{t("Profiles")}</span><div class="open-folder-chips"><For each={f().profiles}>{(p) => <span class="chip muted">{p}</span>}</For><em>{t("pick which run on the stack's page")}</em></div></div>
                     </Show>
-                    <div><span>orca.yaml</span>{f().orca_yaml ? <b>Found: its routes and setup commands apply</b> : <em>None. Add routes later from the stack's orca.yaml tab</em>}</div>
+                    <div><span>{t("orca.yaml")}</span>{f().orca_yaml ? <b>{t("Found: its routes and setup commands apply")}</b> : <em>{t("None. Add routes later from the stack's orca.yaml tab")}</em>}</div>
                   </div>
                 </Show>
 
                 <Show when={f().git}>
                   <label class="open-folder-check">
                     <input type="checkbox" checked={addProject()} onChange={(e) => setAddProject(e.currentTarget.checked)} />
-                    <span>Also add it to <b>Worktrees</b>, so each git worktree of it can run side by side</span>
+                    <span>{t("Also add it to")} <b>{t("Worktrees")}</b>{t(", so each git worktree of it can run side by side")}</span>
                   </label>
                 </Show>
 
                 <Show when={f().conflict && !f().stack}>
                   <div class="open-folder-error">
-                    Another folder, {f().conflict}, already runs as the stack “{f().name}”. Starting this one would replace it. Stop
-                    that stack first, or rename this folder.
-                  </div>
+                    {t("Another folder,")} {f().conflict}{t(", already runs as the stack “")}{f().name}{t("”. Starting this one would replace it. Stop that stack first, or rename this folder.")}</div>
                 </Show>
                 <Show when={f().error}>
                   <div class="open-folder-error">{f().error}</div>
@@ -186,9 +185,9 @@ export default function OpenFolderDialog(props: { onNavigate: (target: string) =
         </div>
         <Show when={info()}>
           <div class="modal-footer">
-            <button class="btn" onClick={close} disabled={busy()}>Cancel</button>
+            <button class="btn" onClick={close} disabled={busy()}>{t("Cancel")}</button>
             <button class="btn btn-primary" disabled={busy() || !!info()?.error || (!!info()?.conflict && !info()?.stack)} onClick={() => void start()}>
-              {busy() ? <><Spinner size={12} /> Starting…</> : info()?.stack ? "Start again" : info()?.compose_files.length ? "Start" : "Create and start"}
+              {busy() ? <><Spinner size={12} /> {t("Starting…")}</> : info()?.stack ? "Start again" : info()?.compose_files.length ? "Start" : "Create and start"}
             </button>
           </div>
         </Show>

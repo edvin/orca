@@ -4,6 +4,7 @@
 
 import { createResource, createSignal, Show } from "solid-js";
 import { desktopApi, engineApi, isWindows, type DesktopStatus } from "../lib/engine";
+import { t } from "../lib/i18n";
 
 let closed = false;
 
@@ -43,11 +44,11 @@ export default function DesktopNudge(props: { onNavigate?: (page: string) => voi
       <div class="ai-nudge">
         <span class="ai-nudge-icon">⇄</span>
         <div class="ai-nudge-text">
-          <b>What's in {waiting()} stays there</b>
-          <span>Orca runs its own engine. Bring the images, volumes and projects over, or start fresh.</span>
+          <b>{t("What's in")} {waiting()} {t("stays there")}</b>
+          <span>{t("Orca runs its own engine. Bring the images, volumes and projects over, or start fresh.")}</span>
         </div>
-        <button class="btn btn-sm btn-primary" onClick={() => props.onNavigate?.("environment")}>Bring them over</button>
-        <button class="ai-nudge-close" title="Not now" onClick={close}>×</button>
+        <button class="btn btn-sm btn-primary" onClick={() => props.onNavigate?.("environment")}>{t("Bring them over")}</button>
+        <button class="ai-nudge-close" title={t("Not now")} onClick={close}>×</button>
       </div>
     </Show>
   );

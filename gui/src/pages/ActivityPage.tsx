@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getEvents, clearEvents, markAllRead } from "../lib/activityStore";
 import type { ActivityEvent } from "../lib/activityStore";
 import { usePoller } from "../lib/poller";
+import { t } from "../lib/i18n";
 
 function relativeTime(date: Date): string {
   const now = Date.now();
@@ -64,10 +65,10 @@ export default function ActivityPage() {
   return (
     <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
       <div class="page-header">
-        <h1 class="page-title">Activity</h1>
+        <h1 class="page-title">{t("Activity")}</h1>
         <div class="page-actions">
           <Show when={getEvents().length > 0}>
-            <button class="btn btn-sm" onClick={clearEvents}>Clear</button>
+            <button class="btn btn-sm" onClick={clearEvents}>{t("Clear")}</button>
           </Show>
         </div>
       </div>
@@ -77,8 +78,8 @@ export default function ActivityPage() {
         when={getEvents().length > 0}
         fallback={
           <div class="empty" style={{ padding: "20px 0" }}>
-            <div class="empty-title">No activity yet</div>
-            <p>Errors and events will appear here as they happen.</p>
+            <div class="empty-title">{t("No activity yet")}</div>
+            <p>{t("Errors and events will appear here as they happen.")}</p>
           </div>
         }
       >
@@ -124,10 +125,9 @@ export default function ActivityPage() {
           "font-weight": "600",
           color: "#8b949e",
         }}>
-          <span>Daemon log</span>
+          <span>{t("Daemon log")}</span>
           <button class="btn btn-sm" onClick={fetchDaemonLog} disabled={logLoading()} style={{ "font-size": "11px", padding: "2px 8px" }}>
-            Refresh
-          </button>
+            {t("Refresh")}</button>
         </div>
         <pre
           ref={logRef}

@@ -6,6 +6,7 @@ import { confirmDanger } from "../components/ConfirmDialog";
 import { showToast } from "../components/Toast";
 import type { RemoteHost, HostStatus } from "../lib/types";
 import { usePoller } from "../lib/poller";
+import { t } from "../lib/i18n";
 
 // Module-level signal — persists across navigation
 const [lastSeen, setLastSeen] = createSignal<Record<string, number>>({});
@@ -233,11 +234,11 @@ export default function FleetPage(props: FleetPageProps) {
     const selected = selectedHosts();
     const toRemove = hosts().filter(h => selected.has(h.id) && h.id !== null);
     if (toRemove.length === 0) {
-      showToast("Cannot remove local host", "error");
+      showToast(t("Cannot remove local host"), "error");
       return;
     }
     const ok = await confirmDanger(
-      "Remove selected hosts",
+      t("Remove selected hosts"),
       `Remove ${toRemove.length} host${toRemove.length !== 1 ? "s" : ""} from fleet? This only removes the configuration — it does not stop remote daemons.`
     );
     if (!ok) return;
@@ -246,7 +247,7 @@ export default function FleetPage(props: FleetPageProps) {
       try {
         await invoke("remove_remote_host", { id: host.id });
       } catch (e) {
-        showToast(`Failed to remove ${host.name}: ${e}`, "error");
+        showToast(t("Failed to remove {value1}: {e}", { value1: host.name, e: e }), "error");
       }
     }
     setSelectedHosts(new Set<string | null>());
@@ -283,7 +284,7 @@ export default function FleetPage(props: FleetPageProps) {
       const result = await invoke("compare_hosts", { hostIds }) as any;
       setCompareData(result);
     } catch (e) {
-      showToast(`Compare failed: ${e}`, "error");
+      showToast(t("Compare failed: {e}", { e: e }), "error");
       setCompareOpen(false);
     } finally {
       setCompareLoading(false);
@@ -336,24 +337,20 @@ export default function FleetPage(props: FleetPageProps) {
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", "margin-bottom": "16px" }}>
         <div>
           <h1 style={{ margin: "0 0 4px 0", "font-size": "22px", "font-weight": "600", color: "#e6edf3" }}>
-            Fleet
-          </h1>
+            {t("Fleet")}</h1>
           <span style={{ color: "#8b949e", "font-size": "13px" }}>
-            {onlineCount()} of {hosts().length} hosts online
-            <Show when={totalRunning() > 0}>
-              {" "}&middot; {totalRunning()} containers running across fleet
-            </Show>
+            {onlineCount()} {t("of")} {hosts().length} {t("hosts online")}<Show when={totalRunning() > 0}>
+              {" "}&middot; {totalRunning()} {t("containers running across fleet")}</Show>
           </span>
         </div>
         <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
           <Show when={probeProgress()}>
             <span style={{ color: "#8b949e", "font-size": "12px" }}>
-              Checking {Math.min(probeProgress()!.current + BATCH_SIZE, probeProgress()!.total)}/{probeProgress()!.total} hosts...
-            </span>
+              {t("Checking")} {Math.min(probeProgress()!.current + BATCH_SIZE, probeProgress()!.total)}/{probeProgress()!.total} {t("hosts...")}</span>
           </Show>
           <Show when={!probeProgress() && lastUpdated()}>
             <span style={{ color: "#484f58", "font-size": "12px" }}>
-              Updated {lastUpdated()!.toLocaleTimeString()}
+              {t("Updated")} {lastUpdated()!.toLocaleTimeString()}
             </span>
           </Show>
           <button
@@ -384,8 +381,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: probeProgress() ? "0.5" : "1",
             }}
           >
-            Test all
-          </button>
+            {t("Test all")}</button>
         </div>
       </div>
 
@@ -397,8 +393,7 @@ export default function FleetPage(props: FleetPageProps) {
           "border-radius": "8px", "margin-bottom": "12px",
         }}>
           <span style={{ color: "#8b949e", "font-size": "13px", "margin-right": "4px" }}>
-            {selectedHosts().size} selected
-          </span>
+            {selectedHosts().size} {t("selected")}</span>
           <button
             onClick={selectAll}
             style={{
@@ -407,8 +402,7 @@ export default function FleetPage(props: FleetPageProps) {
               color: "#e6edf3", cursor: "pointer",
             }}
           >
-            Select all
-          </button>
+            {t("Select all")}</button>
           <button
             onClick={deselectAll}
             style={{
@@ -417,8 +411,7 @@ export default function FleetPage(props: FleetPageProps) {
               color: "#e6edf3", cursor: "pointer",
             }}
           >
-            Deselect all
-          </button>
+            {t("Deselect all")}</button>
           <div style={{ flex: "1" }} />
           <button
             onClick={probeSelected}
@@ -430,8 +423,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: selectedHosts().size === 0 ? "0.5" : "1",
             }}
           >
-            Test selected
-          </button>
+            {t("Test selected")}</button>
           <button
             onClick={openCompare}
             disabled={selectedHosts().size !== 2}
@@ -443,8 +435,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: selectedHosts().size !== 2 ? "0.5" : "1",
             }}
           >
-            Compare
-          </button>
+            {t("Compare")}</button>
           <button
             onClick={removeSelected}
             disabled={selectedHosts().size === 0}
@@ -455,8 +446,7 @@ export default function FleetPage(props: FleetPageProps) {
               opacity: selectedHosts().size === 0 ? "0.5" : "1",
             }}
           >
-            Remove selected
-          </button>
+            {t("Remove selected")}</button>
         </div>
       </Show>
 
@@ -473,8 +463,7 @@ export default function FleetPage(props: FleetPageProps) {
               "border-color": activeTag() === null ? "#8b949e" : "#30363d",
             }}
           >
-            All
-          </button>
+            {t("All")}</button>
           <For each={allTags()}>
             {(tag) => {
               const c = tagColor(tag);
@@ -501,10 +490,9 @@ export default function FleetPage(props: FleetPageProps) {
       {/* Version mismatch warning */}
       <Show when={versionMismatch()}>
         <div style={{ padding: "10px 16px", background: "rgba(210, 169, 34, 0.1)", border: "1px solid rgba(210, 169, 34, 0.2)", "border-radius": "8px", "font-size": "12px", color: "#d29922", "margin-bottom": "12px" }}>
-          <div style={{ "font-weight": 600, "margin-bottom": "4px" }}>Version mismatch detected</div>
+          <div style={{ "font-weight": 600, "margin-bottom": "4px" }}>{t("Version mismatch detected")}</div>
           <div style={{ color: "#8b949e" }}>
-            Some hosts are running different daemon versions. To upgrade, SSH into each host and run:
-          </div>
+            {t("Some hosts are running different daemon versions. To upgrade, SSH into each host and run:")}</div>
           <code style={{ display: "block", "margin-top": "6px", padding: "6px 10px", background: "#0d1117", "border-radius": "4px", color: "#e6edf3", "font-size": "12px" }}>
             sudo apt update && sudo apt upgrade orca-daemon
           </code>
@@ -610,8 +598,7 @@ export default function FleetPage(props: FleetPageProps) {
                       "letter-spacing": "0.5px",
                     }}
                   >
-                    Local
-                  </span>
+                    {t("Local")}</span>
                 </Show>
               </div>
 
@@ -647,15 +634,13 @@ export default function FleetPage(props: FleetPageProps) {
               {/* Checking state */}
               <Show when={host.checking}>
                 <div style={{ color: "#8b949e", "font-size": "13px", "font-style": "italic" }}>
-                  Checking...
-                </div>
+                  {t("Checking...")}</div>
               </Show>
 
               {/* Offline error */}
               <Show when={!host.checking && !host.online}>
                 <div style={{ color: "#f85149", "font-size": "13px" }}>
-                  Offline
-                  <Show when={host.error}>
+                  {t("Offline")}<Show when={host.error}>
                     <span style={{ color: "#8b949e", "font-size": "12px", display: "block", "margin-top": "4px", "word-break": "break-all" }}>
                       {host.error}
                     </span>
@@ -664,7 +649,7 @@ export default function FleetPage(props: FleetPageProps) {
                     const key = host.id || "__local__";
                     const ts = lastSeen()[key];
                     return <Show when={ts}><span style={{ color: "#8b949e", "font-size": "12px", display: "block", "margin-top": "4px" }}>
-                        Last seen {relativeTime(ts)}
+                        {t("Last seen")} {relativeTime(ts)}
                       </span></Show>;
                   })()}
                 </div>
@@ -675,9 +660,9 @@ export default function FleetPage(props: FleetPageProps) {
                 {/* Version */}
                 <Show when={host.version}>
                   <div style={{ color: "#8b949e", "font-size": "13px", "margin-bottom": "4px" }}>
-                    Orca {host.version}
+                    {t("Orca")} {host.version}
                     <Show when={host.docker_connected === false}>
-                      <span style={{ color: "#d29922", "margin-left": "8px" }}>(Docker disconnected)</span>
+                      <span style={{ color: "#d29922", "margin-left": "8px" }}>{t("(Docker disconnected)")}</span>
                     </Show>
                   </div>
                 </Show>
@@ -693,10 +678,10 @@ export default function FleetPage(props: FleetPageProps) {
                 <Show when={host.cpu_count != null || host.memory_total != null}>
                   <div style={{ display: "flex", gap: "16px", "margin-bottom": "8px", color: "#c9d1d9", "font-size": "13px" }}>
                     <Show when={host.cpu_count != null}>
-                      <span>{host.cpu_count} CPU</span>
+                      <span>{host.cpu_count} {t("CPU")}</span>
                     </Show>
                     <Show when={host.memory_total != null}>
-                      <span>{formatBytes(host.memory_total!)} RAM</span>
+                      <span>{formatBytes(host.memory_total!)} {t("RAM")}</span>
                     </Show>
                   </div>
                 </Show>
@@ -705,7 +690,7 @@ export default function FleetPage(props: FleetPageProps) {
                 <Show when={host.disk_usage_percent != null}>
                   <div style={{ "margin-bottom": "10px" }}>
                     <div style={{ display: "flex", "justify-content": "space-between", "font-size": "12px", color: "#8b949e", "margin-bottom": "4px" }}>
-                      <span>Disk</span>
+                      <span>{t("Disk")}</span>
                       <span>{host.disk_usage_percent!.toFixed(1)}%</span>
                     </div>
                     <div style={{ height: "4px", background: "#21262d", "border-radius": "2px", overflow: "hidden" }}>
@@ -730,14 +715,12 @@ export default function FleetPage(props: FleetPageProps) {
                         {host.containers_running ?? 0}
                       </span>
                       <span style={{ color: "#8b949e" }}>
-                        {" "}/ {host.containers_total} containers
-                      </span>
+                        {" "}/ {host.containers_total} {t("containers")}</span>
                     </span>
                   </Show>
                   <Show when={host.images_total != null}>
                     <span style={{ color: "#8b949e" }}>
-                      {host.images_total} images
-                    </span>
+                      {host.images_total} {t("images")}</span>
                   </Show>
                 </div>
               </Show>
@@ -837,8 +820,7 @@ function CompareModal(props: CompareModalProps) {
           padding: "16px 24px", "border-bottom": "1px solid #21262d",
         }}>
           <h2 style={{ margin: 0, "font-size": "16px", "font-weight": 600, color: "#e6edf3" }}>
-            Host comparison
-          </h2>
+            {t("Host comparison")}</h2>
           <button
             onClick={() => props.onClose()}
             style={{
@@ -854,8 +836,7 @@ function CompareModal(props: CompareModalProps) {
         <div style={{ flex: "1", "overflow-y": "auto", padding: "20px 24px" }}>
           <Show when={props.loading}>
             <div style={{ "text-align": "center", color: "#8b949e", padding: "40px 0" }}>
-              Fetching data from hosts...
-            </div>
+              {t("Fetching data from hosts...")}</div>
           </Show>
 
           <Show when={!props.loading && hosts().length === 2}>
@@ -931,7 +912,7 @@ function HostColumn(props: HostColumnProps) {
         </span>
         <Show when={health()?.docker_version}>
           <span style={{ "font-size": "11px", color: "#484f58" }}>
-            Docker {health().docker_version}
+            {t("Docker")} {health().docker_version}
           </span>
         </Show>
       </div>
@@ -946,8 +927,8 @@ function HostColumn(props: HostColumnProps) {
               padding: "6px 12px", background: "#0d1117", "border-radius": "6px",
               border: "1px solid #21262d", "font-size": "12px",
             }}>
-              <span style={{ color: "#8b949e" }}>CPU </span>
-              <span style={{ color: "#e6edf3", "font-weight": 600 }}>{res().cpu_count} cores</span>
+              <span style={{ color: "#8b949e" }}>{t("CPU")} </span>
+              <span style={{ color: "#e6edf3", "font-weight": 600 }}>{res().cpu_count} {t("cores")}</span>
             </div>
           </Show>
           <Show when={res().memory_total_bytes}>
@@ -955,9 +936,9 @@ function HostColumn(props: HostColumnProps) {
               padding: "6px 12px", background: "#0d1117", "border-radius": "6px",
               border: "1px solid #21262d", "font-size": "12px",
             }}>
-              <span style={{ color: "#8b949e" }}>RAM </span>
+              <span style={{ color: "#8b949e" }}>{t("RAM")} </span>
               <span style={{ color: "#e6edf3", "font-weight": 600 }}>
-                {formatBytes(res().memory_available_bytes || 0)} free / {formatBytes(res().memory_total_bytes)}
+                {formatBytes(res().memory_available_bytes || 0)} {t("free /")} {formatBytes(res().memory_total_bytes)}
               </span>
             </div>
           </Show>
@@ -966,7 +947,7 @@ function HostColumn(props: HostColumnProps) {
               padding: "6px 12px", background: "#0d1117", "border-radius": "6px",
               border: "1px solid #21262d", "font-size": "12px",
             }}>
-              <span style={{ color: "#8b949e" }}>Disk </span>
+              <span style={{ color: "#8b949e" }}>{t("Disk")} </span>
               <span style={{
                 color: res().disk_usage_percent > 90 ? "#f85149" : res().disk_usage_percent > 75 ? "#d29922" : "#e6edf3",
                 "font-weight": 600,
@@ -984,12 +965,11 @@ function HostColumn(props: HostColumnProps) {
           "font-size": "12px", "font-weight": 600, color: "#8b949e",
           "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "8px",
         }}>
-          Containers ({containers().length})
+          {t("Containers (")}{containers().length})
         </div>
         <Show when={containers().length === 0}>
           <div style={{ color: "#484f58", "font-size": "12px", "font-style": "italic" }}>
-            No containers
-          </div>
+            {t("No containers")}</div>
         </Show>
         <For each={containers()}>
           {(c: any) => {
@@ -1019,8 +999,7 @@ function HostColumn(props: HostColumnProps) {
                     padding: "0 5px", "border-radius": "3px",
                     background: "rgba(210, 169, 34, 0.12)", "flex-shrink": "0",
                   }}>
-                    unique
-                  </span>
+                    {t("unique")}</span>
                 </Show>
               </div>
             );
@@ -1034,12 +1013,11 @@ function HostColumn(props: HostColumnProps) {
           "font-size": "12px", "font-weight": 600, color: "#8b949e",
           "text-transform": "uppercase", "letter-spacing": "0.5px", "margin-bottom": "8px",
         }}>
-          Images ({images().length})
+          {t("Images (")}{images().length})
         </div>
         <Show when={images().length === 0}>
           <div style={{ color: "#484f58", "font-size": "12px", "font-style": "italic" }}>
-            No images
-          </div>
+            {t("No images")}</div>
         </Show>
         <For each={images()}>
           {(img: any) => {
@@ -1066,8 +1044,7 @@ function HostColumn(props: HostColumnProps) {
                     padding: "0 5px", "border-radius": "3px",
                     background: "rgba(210, 169, 34, 0.12)", "flex-shrink": "0",
                   }}>
-                    unique
-                  </span>
+                    {t("unique")}</span>
                 </Show>
               </div>
             );

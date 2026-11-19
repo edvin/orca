@@ -3,6 +3,7 @@
 // and when starting a worktree instance.
 
 import { For, Show } from "solid-js";
+import { t } from "../lib/i18n";
 
 function Chip(props: { name: string; state?: string | null; dim?: boolean }) {
   return (
@@ -29,8 +30,8 @@ export default function ProfileCards(props: {
     <div class="profiles-grid">
       <div class="profile-card always">
         <div class="profile-card-head">
-          <span class="profile-name">Always</span>
-          <span style={{ color: "#8b949e", "font-size": "12px" }}>{props.always.length} service{props.always.length === 1 ? "" : "s"}</span>
+          <span class="profile-name">{t("Always")}</span>
+          <span style={{ color: "#8b949e", "font-size": "12px" }}>{props.always.length} {t("service")}{props.always.length === 1 ? "" : "s"}</span>
         </div>
         <div class="profile-chips">
           <For each={props.always}>{(s) => <Chip name={s} state={state(s)} />}</For>

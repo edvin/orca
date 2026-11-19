@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import DOMPurify from "dompurify";
 import type { AiResponse, AiContext } from "../lib/types";
 import ConnectAiTools from "./ConnectAiTools";
+import { t } from "../lib/i18n";
 
 /** Standalone AI chat window — rendered when the app loads with #ai hash */
 
@@ -222,15 +223,14 @@ export default function AiWindow() {
             <path d="M4 3v2"/><path d="M3 4h2"/>
             <path d="M20 19v2"/><path d="M19 20h2"/>
           </svg>
-          Orca Desktop AI
-        </div>
+          {t("Orca Desktop AI")}</div>
         <div style={{ display: "flex", "align-items": "center", gap: "2px" }}>
           <Show when={messages().length > 0}>
             <button
               class="ai-window-header-btn"
               onClick={() => compactHistory()}
               disabled={loading() || messages().length < 6}
-              title="Compact conversation history"
+              title={t("Compact conversation history")}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             </button>
@@ -238,7 +238,7 @@ export default function AiWindow() {
               class="ai-window-header-btn"
               onClick={() => { setMessages([]); setPendingContext(null); }}
               disabled={loading()}
-              title="Clear conversation"
+              title={t("Clear conversation")}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
@@ -256,10 +256,9 @@ export default function AiWindow() {
       <div class="ai-window-messages">
         <Show when={hasCredentials() === false}>
           <div class="ai-window-onboard">
-            <div class="ai-window-onboard-title">Ask Claude about Orca</div>
+            <div class="ai-window-onboard-title">{t("Ask Claude about Orca")}</div>
             <div class="ai-window-onboard-sub">
-              Connect the AI tool you already use. It can then see and manage everything here: no API key, no token.
-            </div>
+              {t("Connect the AI tool you already use. It can then see and manage everything here: no API key, no token.")}</div>
             <Show when={claudeQuestion()}>
               {(q) => (
                 <div class="ai-window-question">
@@ -272,8 +271,7 @@ export default function AiWindow() {
             </Show>
             <ConnectAiTools compact />
             <button class="ai-connect-more" onClick={() => void openSettings()}>
-              Or chat right here with a model on this computer →
-            </button>
+              {t("Or chat right here with a model on this computer →")}</button>
           </div>
         </Show>
 
@@ -284,10 +282,9 @@ export default function AiWindow() {
               <path d="M4 3v2"/><path d="M3 4h2"/>
               <path d="M20 19v2"/><path d="M19 20h2"/>
             </svg>
-            <div style={{ "font-size": "15px", "font-weight": "600", "margin-top": "12px" }}>Ask me anything</div>
+            <div style={{ "font-size": "15px", "font-weight": "600", "margin-top": "12px" }}>{t("Ask me anything")}</div>
             <div style={{ "font-size": "13px", color: "#6e7681", "margin-top": "6px", "line-height": "1.5" }}>
-              I can help with containers, images, networking, and troubleshooting.
-            </div>
+              {t("I can help with containers, images, networking, and troubleshooting.")}</div>
           </div>
         </Show>
 
@@ -339,7 +336,7 @@ export default function AiWindow() {
               <span>{ctx().container_name}</span>
               <span style={{ color: "#6e7681", "font-size": "11px" }}>{ctx().image}</span>
             </div>
-            <button class="ai-context-dismiss" onClick={() => setPendingContext(null)} title="Clear context">{"\u00d7"}</button>
+            <button class="ai-context-dismiss" onClick={() => setPendingContext(null)} title={t("Clear context")}>{"\u00d7"}</button>
           </div>
         )}
       </Show>

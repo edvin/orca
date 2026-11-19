@@ -4,6 +4,7 @@
 
 import { createResource, createSignal, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { t } from "../lib/i18n";
 
 const DISMISSED = "orca.aiNudgeDismissed";
 
@@ -29,11 +30,11 @@ export default function AiNudge(props: { onNavigate?: (page: string) => void }) 
       <div class="ai-nudge">
         <span class="ai-nudge-icon">✦</span>
         <div class="ai-nudge-text">
-          <b>Run Orca from {found().slice(0, 2).join(" or ")}</b>
-          <span>Ask it to start projects, read logs or fix a failing container. One click, no tokens.</span>
+          <b>{t("Run Orca from")} {found().slice(0, 2).join(" or ")}</b>
+          <span>{t("Ask it to start projects, read logs or fix a failing container. One click, no tokens.")}</span>
         </div>
-        <button class="btn btn-sm btn-primary" onClick={() => props.onNavigate?.("settings:ai")}>Connect</button>
-        <button class="ai-nudge-close" title="Don't show again" onClick={dismiss}>×</button>
+        <button class="btn btn-sm btn-primary" onClick={() => props.onNavigate?.("settings:ai")}>{t("Connect")}</button>
+        <button class="ai-nudge-close" title={t("Don't show again")} onClick={dismiss}>×</button>
       </div>
     </Show>
   );

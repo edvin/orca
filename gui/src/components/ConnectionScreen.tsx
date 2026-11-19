@@ -1,6 +1,7 @@
 import { createSignal, createEffect, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import EngineHelp from "./EngineHelp";
+import { t } from "../lib/i18n";
 
 interface ConnectionScreenProps {
   status: string; // "connecting" | "disconnected" | "stopped"
@@ -68,40 +69,35 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
 
   return (
     <div class="connection-screen">
-      <img src="/icon.png" class="connection-icon" alt="Orca" />
+      <img src="/icon.png" class="connection-icon" alt={t("Orca")} />
 
       <Show when={props.status === "connecting"}>
         <div class="connection-spinner" />
-        <h2 class="connection-title">Starting Orca...</h2>
+        <h2 class="connection-title">{t("Starting Orca...")}</h2>
         <p class="connection-subtitle">
-          Connecting to the Orca daemon and Docker runtime.
-        </p>
+          {t("Connecting to the Orca daemon and Docker runtime.")}</p>
       </Show>
 
       <Show when={props.status !== "connecting"}>
-        <h2 class="connection-title">Orca daemon is not running</h2>
+        <h2 class="connection-title">{t("Orca daemon is not running")}</h2>
         <p class="connection-subtitle">
-          The Orca daemon manages your containers and must be running for Orca Desktop to work.
-        </p>
+          {t("The Orca daemon manages your containers and must be running for Orca Desktop to work.")}</p>
 
         <Show when={error()}>
           <div class="connection-error">
             <div style={{ "font-weight": "600", "margin-bottom": "6px" }}>
-              Failed to start daemon
-            </div>
+              {t("Failed to start daemon")}</div>
             <div style={{ "margin-bottom": "8px" }}>{error()}</div>
             <Show when={/not found|no such file|cannot find|os error 2\b/i.test(error() ?? "")} fallback={
               <Show when={holder()} fallback={
                 <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
-                  <p>Click <strong>Retry connection</strong>. If it keeps failing, quit Orca completely and open it again.</p>
+                  <p>{t("Click")} <strong>{t("Retry connection")}</strong>{t(". If it keeps failing, quit Orca completely and open it again.")}</p>
                 </div>
               }>
                 {(h) => (
                   <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
                     <p style={{ "margin-bottom": "8px" }}>
-                      Orca needs port 9477. Quit <strong>{h().name}</strong> to free it, and Orca starts its daemon again.
-                      If you don't recognise it, look it up in Activity Monitor (or Task Manager) by its PID first.
-                    </p>
+                      {t("Orca needs port 9477. Quit")} <strong>{h().name}</strong> {t("to free it, and Orca starts its daemon again. If you don't recognise it, look it up in Activity Monitor (or Task Manager) by its PID first.")}</p>
                     <button class="btn btn-sm" disabled={starting()} onClick={() => void quitHolder(h().pid)}>
                       {starting() ? "Quitting…" : `Quit ${h().name}`}
                     </button>
@@ -110,10 +106,10 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
               </Show>
             }>
               <div style={{ "margin-top": "8px", "line-height": "1.7", "font-size": "12px" }}>
-                <p style={{ "margin-bottom": "6px" }}>Orca's daemon (<code>orca-daemon</code>) is missing from this installation. To fix it:</p>
+                <p style={{ "margin-bottom": "6px" }}>{t("Orca's daemon (")}<code>orca-daemon</code>{t(") is missing from this installation. To fix it:")}</p>
                 <ol style={{ margin: "0", "padding-left": "18px" }}>
-                  <li>Download Orca again from <a href="https://orca-desktop.com/download/" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>orca-desktop.com/download</a> and reinstall it.</li>
-                  <li>Then click <strong>Retry connection</strong>.</li>
+                  <li>{t("Download Orca again from")} <a href="https://orca-desktop.com/download/" target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff" }}>{t("orca-desktop.com/download")}</a> {t("and reinstall it.")}</li>
+                  <li>{t("Then click")} <strong>{t("Retry connection")}</strong>.</li>
                 </ol>
               </div>
             </Show>
@@ -129,8 +125,7 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
             {starting() ? "Starting..." : "Start daemon"}
           </button>
           <button class="btn" onClick={() => props.onRetry()}>
-            Retry connection
-          </button>
+            {t("Retry connection")}</button>
         </div>
 
         <Show when={error()}>
@@ -143,7 +138,7 @@ export default function ConnectionScreen(props: ConnectionScreenProps) {
 
         <Show when={daemonPath()}>
           <div class="connection-hint">
-            Looking for daemon at: <code>{daemonPath()}</code>
+            {t("Looking for daemon at:")} <code>{daemonPath()}</code>
           </div>
         </Show>
       </Show>

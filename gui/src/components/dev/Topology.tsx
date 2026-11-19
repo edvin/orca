@@ -4,6 +4,7 @@ import { For, Show } from "solid-js";
 import { DATA_MODE_LABEL, STATUS_META, instanceUrls } from "../../lib/dev";
 import type { DevInstance, DevProject } from "../../lib/dev";
 import { StatusDot } from "./DevBits";
+import { t } from "../../lib/i18n";
 
 interface Props {
   project: DevProject;
@@ -23,9 +24,9 @@ export default function Topology(props: Props) {
     <div class="dev-topo">
       <div class="dev-topo-gateway" classList={{ "dev-topo-on": !!gw()?.running }}>
         <StatusDot color={gw()?.running ? "#3fb950" : "#6e7681"} />
-        <b>Gateway</b>
+        <b>{t("Gateway")}</b>
         <span>
-          HTTPS hostnames for every instance{gw() && gw()!.https_port !== 443 ? ` · port ${gw()!.https_port}` : ""}
+          {t("HTTPS hostnames for every instance")}{gw() && gw()!.https_port !== 443 ? ` · port ${gw()!.https_port}` : ""}
         </span>
       </div>
 
@@ -51,7 +52,7 @@ export default function Topology(props: Props) {
                       <StatusDot color={s.state.toLowerCase() === "running" ? "#3fb950" : "#6e7681"} />
                       {s.name}
                       <Show when={i.data_modes?.[s.name] === "own-server"}>
-                        <span class="dev-topo-tag">own server</span>
+                        <span class="dev-topo-tag">{t("own server")}</span>
                       </Show>
                     </div>
                   )}
@@ -75,7 +76,7 @@ export default function Topology(props: Props) {
 
       <Show when={props.project.shared.length > 0}>
         <div class="dev-topo-shared">
-          <div class="dev-topo-shared-label">Shared · runs once</div>
+          <div class="dev-topo-shared-label">{t("Shared · runs once")}</div>
           <div style={{ display: "flex", gap: "10px", "flex-wrap": "wrap", "justify-content": "center" }}>
             <For each={props.project.shared}>
               {(s) => (
@@ -86,8 +87,7 @@ export default function Topology(props: Props) {
                     {
                       instances().filter((i) => live(i) && (i.data_modes?.[s.name] ?? "shared") !== "own-server").length
                     }{" "}
-                    connected
-                  </span>
+                    {t("connected")}</span>
                 </div>
               )}
             </For>

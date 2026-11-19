@@ -7,6 +7,7 @@ import { createSignal, For, Index, Show } from "solid-js";
 import Dropdown from "../Dropdown";
 import HelpLink from "../HelpLink";
 import { fullHost, type RouteM } from "./model";
+import { t } from "../../lib/i18n";
 
 export interface StudioService {
   name: string;
@@ -79,7 +80,7 @@ export default function RoutesSection(props: {
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
       <p style={{ ...muted, "font-size": "13px", "line-height": "1.5" }}>
-        Each route gives a service an HTTPS hostname through the gateway. WebSockets work with no setup.{" "}
+        {t("Each route gives a service an HTTPS hostname through the gateway. WebSockets work with no setup.")}{" "}
         <HelpLink path="/docs/orca-yaml/#gateway" />
       </p>
 
@@ -87,22 +88,19 @@ export default function RoutesSection(props: {
       <Show when={pusher() && !pusherRouted()}>
         <div class="card" style={{ display: "flex", gap: "12px", "align-items": "center", "flex-wrap": "wrap", "border-color": "rgba(88,166,255,0.35)" }}>
           <div style={{ flex: "1", "min-width": "260px" }}>
-            <div style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "600" }}>Route Pusher traffic to {pusher()!.name}</div>
+            <div style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "600" }}>{t("Route Pusher traffic to")} {pusher()!.name}</div>
             <div style={{ ...muted, "margin-top": "3px", "line-height": "1.5" }}>
-              Laravel Echo and pusher-js connect to <span class="mono">/app/…</span> on the page's own hostname. One route sends just
-              that path to {pusher()!.name}; everything else on {fullHost(mainHost(), props.domain)} keeps going to the app.
-            </div>
+              {t("Laravel Echo and pusher-js connect to")} <span class="mono">{t("/app/…")}</span> {t("on the page's own hostname. One route sends just that path to")}{pusher()!.name}{t("; everything else on")} {fullHost(mainHost(), props.domain)} {t("keeps going to the app.")}</div>
           </div>
           <button class="btn btn-sm btn-primary"
             onClick={() => add({ hostname: mainHost(), service: pusher()!.name, port: pusher()!.ports[0] ?? 6001, path: "/app/*" })}>
-            Add /app/* route
-          </button>
+            {t("Add /app/* route")}</button>
         </div>
       </Show>
 
       <Show when={unrouted().length > 0}>
         <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "align-items": "center" }}>
-          <span style={muted}>Without a route:</span>
+          <span style={muted}>{t("Without a route:")}</span>
           <For each={unrouted()}>
             {(s) => (
               <button class="btn btn-sm"
@@ -127,22 +125,22 @@ export default function RoutesSection(props: {
             <div class="card" style={{ padding: "12px 14px", display: "flex", "flex-direction": "column", gap: "10px" }}>
               <div style={{ display: "grid", "grid-template-columns": "minmax(160px,1.4fr) minmax(130px,1fr) 110px minmax(110px,0.8fr) auto", gap: "10px", "align-items": "end" }}>
                 <label>
-                  <span style={label}>Hostname</span>
+                  <span style={label}>{t("Hostname")}</span>
                   <input class="form-input" value={r().hostname} placeholder={slug()} onInput={(e) => update(i(), { hostname: e.currentTarget.value })} />
                 </label>
                 <div>
-                  <span style={label}>Service</span>
-                  <Dropdown value={r().service} placeholder="Pick a service"
+                  <span style={label}>{t("Service")}</span>
+                  <Dropdown value={r().service} placeholder={t("Pick a service")}
                     options={[...props.services.map((s) => ({ value: s.name, label: s.name })),
                       ...(r().service && !props.services.some((s) => s.name === r().service) ? [{ value: r().service, label: `${r().service} (not running)` }] : [])]}
                     onChange={(v) => update(i(), { service: v, port: r().port ?? webPort(props.services.find((s) => s.name === v) ?? { name: v, ports: [] }) ?? null })} />
                 </div>
                 <div>
-                  <span style={label}>Port</span>
+                  <span style={label}>{t("Port")}</span>
                   <Show when={ports().length > 0 && !customPort().has(i()) && (r().port === null || ports().includes(r().port!))}
-                    fallback={<input class="form-input" type="number" min="1" max="65535" value={r().port ?? ""} placeholder="3000"
+                    fallback={<input class="form-input" type="number" min="1" max="65535" value={r().port ?? ""} placeholder={t("3000")}
                       onInput={(e) => update(i(), { port: e.currentTarget.value ? Number(e.currentTarget.value) : null })} />}>
-                    <Dropdown value={r().port ? String(r().port) : ""} placeholder="Port"
+                    <Dropdown value={r().port ? String(r().port) : ""} placeholder={t("Port")}
                       options={[...ports().map((p) => ({ value: String(p), label: String(p) })), { value: "other", label: "Other…" }]}
                       onChange={(v) => {
                         if (v === "other") setCustomPort((s) => toggle(s, i()));
@@ -151,10 +149,10 @@ export default function RoutesSection(props: {
                   </Show>
                 </div>
                 <label>
-                  <span style={label}>Path</span>
-                  <input class="form-input" value={r().path ?? ""} placeholder="All paths" onInput={(e) => update(i(), { path: e.currentTarget.value || undefined })} />
+                  <span style={label}>{t("Path")}</span>
+                  <input class="form-input" value={r().path ?? ""} placeholder={t("All paths")} onInput={(e) => update(i(), { path: e.currentTarget.value || undefined })} />
                 </label>
-                <button class="action-icon action-icon-delete" title="Remove route" style={{ color: "#f85149", "margin-bottom": "6px" }} onClick={() => remove(i())}>
+                <button class="action-icon action-icon-delete" title={t("Remove route")} style={{ color: "#f85149", "margin-bottom": "6px" }} onClick={() => remove(i())}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                 </button>
               </div>
@@ -167,7 +165,7 @@ export default function RoutesSection(props: {
                     </span>
                   )}
                 </Show>
-                <Show when={r().hidden}><span style={muted}>Hidden from the landing page</span></Show>
+                <Show when={r().hidden}><span style={muted}>{t("Hidden from the landing page")}</span></Show>
                 <button class="btn-link" style={{ "margin-left": "auto", color: "#58a6ff", background: "none", border: "none", cursor: "pointer", padding: "0", "font-size": "12px" }}
                   onClick={() => setOpen((s) => toggle(s, i()))}>
                   {open().has(i()) ? "Hide landing page details" : `Landing page${r().title ? `: ${r().title}` : ""}`}
@@ -175,18 +173,17 @@ export default function RoutesSection(props: {
               </div>
               <Show when={open().has(i())}>
                 <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", "padding-top": "4px", "border-top": "1px solid #21262d" }}>
-                  <label><span style={label}>Title</span>
-                    <input class="form-input" value={r().title ?? ""} placeholder="From the hostname" onInput={(e) => update(i(), { title: e.currentTarget.value || undefined })} /></label>
-                  <label><span style={label}>Group</span>
+                  <label><span style={label}>{t("Title")}</span>
+                    <input class="form-input" value={r().title ?? ""} placeholder={t("From the hostname")} onInput={(e) => update(i(), { title: e.currentTarget.value || undefined })} /></label>
+                  <label><span style={label}>{t("Group")}</span>
                     <input class="form-input" value={r().group ?? ""} placeholder={props.projectName} onInput={(e) => update(i(), { group: e.currentTarget.value || undefined })} /></label>
-                  <label style={{ "grid-column": "1 / -1" }}><span style={label}>Description</span>
-                    <input class="form-input" value={r().description ?? ""} placeholder="What it is, in a few words" onInput={(e) => update(i(), { description: e.currentTarget.value || undefined })} /></label>
-                  <label><span style={label}>Icon URL</span>
-                    <input class="form-input" value={r().icon ?? ""} placeholder="https://…/logo.png" onInput={(e) => update(i(), { icon: e.currentTarget.value || undefined })} /></label>
+                  <label style={{ "grid-column": "1 / -1" }}><span style={label}>{t("Description")}</span>
+                    <input class="form-input" value={r().description ?? ""} placeholder={t("What it is, in a few words")} onInput={(e) => update(i(), { description: e.currentTarget.value || undefined })} /></label>
+                  <label><span style={label}>{t("Icon URL")}</span>
+                    <input class="form-input" value={r().icon ?? ""} placeholder={t("https://…/logo.png")} onInput={(e) => update(i(), { icon: e.currentTarget.value || undefined })} /></label>
                   <label style={{ display: "flex", "align-items": "center", gap: "8px", "font-size": "13px", color: "#c9d1d9", "padding-top": "18px" }}>
                     <input type="checkbox" checked={!!r().hidden} onChange={(e) => update(i(), { hidden: e.currentTarget.checked || undefined })} />
-                    Hide from the landing page
-                  </label>
+                    {t("Hide from the landing page")}</label>
                 </div>
               </Show>
             </div>
@@ -196,8 +193,7 @@ export default function RoutesSection(props: {
 
       <div>
         <button class="btn btn-sm" onClick={() => add({ hostname: props.routes.length === 0 ? slug() : "", service: props.services[0]?.name ?? "", port: props.services[0] ? webPort(props.services[0]) ?? null : null })}>
-          + Add route
-        </button>
+          {t("+ Add route")}</button>
       </div>
     </div>
   );

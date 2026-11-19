@@ -6,6 +6,7 @@ import { addEvent } from "./lib/activityStore";
 import { lazy } from "solid-js";
 import { openFolderDialog, openFolderTarget } from "./lib/openFolder";
 import { requestWorkspaceJoin, requestWorkspaceSetup } from "./lib/workspace";
+import { t } from "./lib/i18n";
 const AiWindow = lazy(() => import("./components/AiWindow"));
 // Pages load on first visit: together with xterm and CodeMirror they made
 // one 1.6 MB bundle that was parsed before the first paint.
@@ -90,9 +91,9 @@ export default function App() {
           fleetStatusCount[key] = (fleetStatusCount[key] || 0) + 1;
           if (fleetStatusCount[key] >= 2) {
             if (host.online) {
-              showToast(`${host.name} is back online`, "success");
+              showToast(t("{value1} is back online", { value1: host.name }), "success");
             } else {
-              showToast(`${host.name} is offline`, "error");
+              showToast(t("{value1} is offline", { value1: host.name }), "error");
             }
             fleetStatusCount[key] = 0;
             lastFleetStatus[key] = host.online;
@@ -316,7 +317,7 @@ export default function App() {
           const verb = action === "start" ? "Starting" : action === "stop" ? "Stopping" : "";
           const key = `${action}:${target}`;
           if (verb && appActionsInFlight.has(key)) {
-            showToast(`Already ${verb.toLowerCase()} ${appHost}…`, "info");
+            showToast(t("Already {value1} {appHost}…", { value1: verb.toLowerCase(), appHost: appHost }), "info");
             break;
           }
           if (verb) appActionsInFlight.add(key);
@@ -326,7 +327,7 @@ export default function App() {
               message: `A link asked Orca to stop the project that serves ${appHost}.`,
               confirmLabel: "Stop project",
             })) break;
-            if (verb) showToast(`${verb} ${appHost}…`, "info");
+            if (verb) showToast(t("{verb} {appHost}…", { verb: verb, appHost: appHost }), "info");
             const res = await invoke("gateway_app_action", { url: target, action }) as { stack: string };
             navigate(`stack:${res.stack}`);
             if (verb) showToast(`${res.stack} ${action === "start" ? "started" : "stopped"}`, "success");
@@ -524,7 +525,7 @@ export default function App() {
         addEvent({ type: "container.started", title: `Container '${containerLabel}' started`, severity: "success" });
       } else if (eventType === "image.pulled" || eventType === "pull" || eventType === "ImagePulled") {
         addEvent({ type: "image.pulled", title: `Image pulled: ${reference}`, severity: "success" });
-        showToast(`Image pulled: ${reference}`, "success");
+        showToast(t("Image pulled: {reference}", { reference: reference }), "success");
       } else if (eventType === "DevInstance" || eventType === "dev.instance") {
         const who =
           data.source === "mcp" ? "An agent" :
@@ -624,14 +625,14 @@ export default function App() {
       <Titlebar daemonStatus={daemonStatus()} onNavigate={(p) => navigate(p)} />
       {daemonStatus() === "connecting" ? (
         <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "calc(100vh - 40px)", gap: "16px" }}>
-          <img src="/orca-logo-full.png" alt="Orca" style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
+          <img src="/orca-logo-full.png" alt={t("Orca")} style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
           <div style={{ color: "#8b949e", "font-size": "14px" }}>{startupStep()}</div>
         </div>
       ) : daemonStatus() !== "running" && daemonStatus() !== "reconnecting" ? (
         <ConnectionScreen status={daemonStatus()} onRetry={checkDaemon} />
       ) : !environmentChecked() ? (
         <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "calc(100vh - 40px)", gap: "16px" }}>
-          <img src="/orca-logo-full.png" alt="Orca" style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
+          <img src="/orca-logo-full.png" alt={t("Orca")} style={{ width: "80px", height: "80px", "border-radius": "18px", opacity: "0.8" }} />
           <div style={{ color: "#8b949e", "font-size": "14px" }}>{startupStep()}</div>
         </div>
       ) : (

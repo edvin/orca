@@ -1,6 +1,7 @@
 import { onMount } from "solid-js";
 import { logError } from "../lib/activityStore";
 import { showToast } from "./Toast";
+import { t } from "../lib/i18n";
 
 interface AiAssistantProps {
   onNavigate?: (page: string) => void;
@@ -44,13 +45,13 @@ export async function openAiWindow() {
     // Listen for creation errors
     win.once("tauri://error", (e) => {
       logError(`AI window creation failed: ${JSON.stringify(e.payload)}`);
-      showToast(`Failed to open AI window: ${JSON.stringify(e.payload)}`, "error");
+      showToast(t("Failed to open AI window: {value1}", { value1: JSON.stringify(e.payload) }), "error");
     });
 
   } catch (e) {
     const msg = String(e);
     logError(`Failed to open AI window: ${msg}`);
-    showToast(`Failed to open AI window: ${msg}`, "error");
+    showToast(t("Failed to open AI window: {msg}", { msg: msg }), "error");
   }
 }
 

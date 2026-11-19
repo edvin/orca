@@ -1,6 +1,7 @@
 import { createSignal, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { copyToClipboard } from "../lib/clipboard";
+import { t } from "../lib/i18n";
 
 interface ExecTerminalProps {
   containerId: string;
@@ -101,19 +102,17 @@ export default function ExecTerminal(props: ExecTerminalProps) {
   return (
     <div class="exec-terminal">
       <div class="exec-header">
-        <span class="exec-title">Exec: {props.containerName}</span>
+        <span class="exec-title">{t("Exec:")} {props.containerName}</span>
         <div class="btn-group">
           <button
             class="btn btn-sm"
             onClick={copyLastOutput}
             disabled={history().length === 0}
-            title="Copy last command output"
+            title={t("Copy last command output")}
           >
-            Copy output
-          </button>
+            {t("Copy output")}</button>
           <button class="btn btn-sm" onClick={() => props.onClose()}>
-            Close
-          </button>
+            {t("Close")}</button>
         </div>
       </div>
       <div class="exec-output" ref={outputEl}>
@@ -125,15 +124,14 @@ export default function ExecTerminal(props: ExecTerminalProps) {
               </div>
               <pre class="exec-result">{entry.output}</pre>
               {entry.exitCode !== 0 && (
-                <div class="exec-exit-code">exit code: {entry.exitCode}</div>
+                <div class="exec-exit-code">{t("exit code:")} {entry.exitCode}</div>
               )}
             </div>
           )}
         </For>
         {history().length === 0 && (
           <div style={{ color: "#8b949e", padding: "8px 0" }}>
-            Run commands inside the container. Try: ls, pwd, env, cat /etc/os-release
-          </div>
+            {t("Run commands inside the container. Try: ls, pwd, env, cat /etc/os-release")}</div>
         )}
       </div>
       <div class="exec-input-bar">

@@ -5,6 +5,7 @@ import { LogBuffer, FilteredView, createFrameBatcher } from "../lib/logBuffer";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { copyToClipboard } from "../lib/clipboard";
+import { t } from "../lib/i18n";
 
 // Cap the combined in-memory buffer so following many containers at once
 // can't grow unbounded.
@@ -414,11 +415,9 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
         >
           <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
             <span style={{ "font-weight": "600", color: "#e6edf3", "font-size": "14px" }}>
-              Combined logs
-            </span>
+              {t("Combined logs")}</span>
             <span style={{ "font-size": "12px", color: "#8b949e" }}>
-              {filteredEntries().length} lines from {props.containers.length} containers
-            </span>
+              {filteredEntries().length} {t("lines from")} {props.containers.length} {t("containers")}</span>
           </div>
           <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
             <div style={{ display: "inline-flex", "align-items": "center", gap: "4px" }}>
@@ -426,7 +425,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
                 class="search-input"
                 style={{ width: "240px", "font-size": "12px" }}
                 type="text"
-                placeholder="Filter logs..."
+                placeholder={t("Filter logs...")}
                 value={filter()}
                 onInput={(e) => setFilter(e.currentTarget.value)}
               />
@@ -442,23 +441,21 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
                 title={caseSensitive() ? "Case sensitive" : "Case insensitive"}
                 style={toggleBtnStyle(caseSensitive())}
               >
-                Aa
-              </button>
+                {t("Aa")}</button>
             </div>
             <button
               class={`btn btn-sm ${autoScroll() ? "btn-primary" : ""}`}
               onClick={() => setAutoScroll(!autoScroll())}
               style={{ "font-size": "12px" }}
             >
-              Auto-scroll
-            </button>
-            <button class="action-icon" onClick={copyAll} title="Copy all logs">
+              {t("Auto-scroll")}</button>
+            <button class="action-icon" onClick={copyAll} title={t("Copy all logs")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             </button>
-            <button class="action-icon" onClick={refreshLogs} title="Refresh">
+            <button class="action-icon" onClick={refreshLogs} title={t("Refresh")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
             </button>
-            <button class="action-icon" onClick={() => props.onClose()} title="Close">
+            <button class="action-icon" onClick={() => props.onClose()} title={t("Close")}>
               {"\u2715"}
             </button>
           </div>
@@ -520,8 +517,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
           when={!loading() || entryCount() > 0}
           fallback={
             <div style={{ padding: "24px", color: "#8b949e", "text-align": "center" }}>
-              Loading logs...
-            </div>
+              {t("Loading logs...")}</div>
           }
         >
           <VirtualLogList
@@ -541,8 +537,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
             onScrolled={setAutoScroll}
             empty={
               <div style={{ padding: "24px", color: "#8b949e", "text-align": "center" }}>
-                (no log output)
-              </div>
+                {t("(no log output)")}</div>
             }
             renderRow={(seq) => {
               const entry = buffer.at(seq);
@@ -555,7 +550,7 @@ export default function MultiLogViewer(props: MultiLogViewerProps) {
                   <span
                     class="multi-log-text"
                     // eslint-disable-next-line solid/no-innerhtml -- highlightLine produces pre-escaped HTML with safe <mark> tags
-                    innerHTML={hasAnsi(entry.line) ? ansiToHtml(entry.line, (t) => highlightLine(t, highlightRegex())) : highlightLine(entry.line, highlightRegex())}
+                    innerHTML={hasAnsi(entry.line) ? ansiToHtml(entry.line, (tx) => highlightLine(tx, highlightRegex())) : highlightLine(entry.line, highlightRegex())}
                   />
                 </div>
               );

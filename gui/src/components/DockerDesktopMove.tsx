@@ -6,6 +6,7 @@ import { confirm } from "./ConfirmDialog";
 import { showToast } from "./Toast";
 import { JobSteps } from "./dev/DevBits";
 import HelpLink from "./HelpLink";
+import { t } from "../lib/i18n";
 
 /**
  * Docker Desktop on the System Health page: Orca runs its own engine, so
@@ -128,7 +129,7 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
   const quit = async () => {
     try {
       await desktopApi.quit(from());
-      showToast(`${src()} stopped`, "success");
+      showToast(t("{value1} stopped", { value1: src() }), "success");
       await refresh();
     } catch (e) {
       showToast(String(e), "error");
@@ -174,9 +175,9 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
         <div class="ddm-note">
           <Show
             when={status()!.outcome === "moved"}
-            fallback={<>What's in {src()} was left there.</>}
+            fallback={<>{t("What's in")} {src()} {t("was left there.")}</>}
           >
-            Brought over from {src()} on {when(status()!.moved_at)}.
+            {t("Brought over from")} {src()} {t("on")} {when(status()!.moved_at)}.
           </Show>{" "}
           {from() === "desktop" ? "Orca never uses Docker Desktop's engine." : ""}
           <button class="btn btn-sm" onClick={() => (status()!.running ? loadPlan() : setOpen(true))}>
@@ -191,43 +192,41 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
           <div class="ddm-lead">
             <Show
               when={from() === "desktop"}
-              fallback={<>An earlier Orca ran Docker in your own WSL distro; Orca now runs it {ownEngine()}. </>}
+              fallback={<>{t("An earlier Orca ran Docker in your own WSL distro; Orca now runs it")} {ownEngine()}. </>}
             >
-              Orca runs Docker {ownEngine()}, not in Docker Desktop's.{" "}
+              {t("Orca runs Docker")} {ownEngine()}{t(", not in Docker Desktop's.")}{" "}
             </Show>
-            What's in {src()} stays there until you bring it over: images, volumes and compose projects,
-            copied once and checked.{" "}
+            {t("What's in")} {src()} {t("stays there until you bring it over: images, volumes and compose projects, copied once and checked.")}{" "}
             <HelpLink path="/docs/docker-desktop/" />
           </div>
 
           {/* 1. Orca's engine first. */}
           <Show when={!status()!.orca_ready && !job()}>
             <div class="ddm-step">
-              Set up Orca's engine first (a few minutes). {src()} isn't touched.
-            </div>
+              {t("Set up Orca's engine first (a few minutes).")} {src()} {t("isn't touched.")}</div>
             <div class="ddm-actions">
-              <button class="btn btn-primary" onClick={() => props.onSetup()}>Set up Orca's engine</button>
+              <button class="btn btn-primary" onClick={() => props.onSetup()}>{t("Set up Orca's engine")}</button>
               <Show
                 when={!status()!.outcome}
-                fallback={<button class="btn" onClick={() => setOpen(false)}>Close</button>}
+                fallback={<button class="btn" onClick={() => setOpen(false)}>{t("Close")}</button>}
               >
-                <button class="btn" onClick={startFresh}>Start fresh, don't bring anything</button>
+                <button class="btn" onClick={startFresh}>{t("Start fresh, don't bring anything")}</button>
               </Show>
             </div>
           </Show>
 
           {/* 2. The source has to run to read what's in it. */}
           <Show when={status()!.orca_ready && !status()!.running && !job()}>
-            <div class="ddm-step">{src()} isn't running. Start it to see what can come over.</div>
+            <div class="ddm-step">{src()} {t("isn't running. Start it to see what can come over.")}</div>
             <div class="ddm-actions">
               <button class="btn btn-primary" disabled={busy() === "start"} onClick={startDesktop}>
                 {busy() === "start" ? `Starting ${src()}...` : `Start ${src()}`}
               </button>
               <Show
                 when={!status()!.outcome}
-                fallback={<button class="btn" onClick={() => setOpen(false)}>Close</button>}
+                fallback={<button class="btn" onClick={() => setOpen(false)}>{t("Close")}</button>}
               >
-                <button class="btn" onClick={startFresh}>Start fresh, don't bring anything</button>
+                <button class="btn" onClick={startFresh}>{t("Start fresh, don't bring anything")}</button>
               </Show>
             </div>
           </Show>
@@ -237,8 +236,7 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
             <Show when={status()!.counts}>
               {(c) => (
                 <div class="ddm-step">
-                  {src()} has {c().containers} containers, {c().images} images and {c().volumes} volumes.
-                </div>
+                  {src()} {t("has")} {c().containers} {t("containers,")} {c().images} {t("images and")} {c().volumes} {t("volumes.")}</div>
               )}
             </Show>
             <Show when={planError()}>
@@ -250,9 +248,9 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
               </button>
               <Show
                 when={!status()!.outcome}
-                fallback={<button class="btn" onClick={() => setOpen(false)}>Close</button>}
+                fallback={<button class="btn" onClick={() => setOpen(false)}>{t("Close")}</button>}
               >
-                <button class="btn" onClick={startFresh}>Start fresh, don't bring anything</button>
+                <button class="btn" onClick={startFresh}>{t("Start fresh, don't bring anything")}</button>
               </Show>
             </div>
           </Show>
@@ -265,57 +263,56 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
                 <div>
                   <div class="ddm-chips">
                     <span class="ddm-chip">
-                      <b>{toCopy().images.length}</b> images · {formatBytes(total(toCopy().images.map((i) => i.size)))}
+                      <b>{toCopy().images.length}</b> {t("images ·")} {formatBytes(total(toCopy().images.map((i) => i.size)))}
                     </span>
                     <span class="ddm-chip">
-                      <b>{toCopy().volumes.length}</b> volumes · {formatBytes(total(toCopy().volumes.map((v) => v.size)))}
+                      <b>{toCopy().volumes.length}</b> {t("volumes ·")} {formatBytes(total(toCopy().volumes.map((v) => v.size)))}
                     </span>
-                    <span class="ddm-chip"><b>{toCopy().projects.length}</b> compose projects</span>
+                    <span class="ddm-chip"><b>{toCopy().projects.length}</b> {t("compose projects")}</span>
                     <Show when={p.networks.length > 0}>
-                      <span class="ddm-chip"><b>{p.networks.length}</b> networks</span>
+                      <span class="ddm-chip"><b>{p.networks.length}</b> {t("networks")}</span>
                     </Show>
                   </div>
                   <div class={shortSpace() ? "ddm-error" : "ddm-muted"}>
-                    Needs about {formatBytes(needed())}
-                    <Show when={p.bytes_free !== null}>; Orca's engine has {formatBytes(p.bytes_free!)} free</Show>.
-                    <Show when={shortSpace()}> Free some space, or leave the images out: they can be pulled again.</Show>
+                    {t("Needs about")} {formatBytes(needed())}
+                    <Show when={p.bytes_free !== null}>{t("; Orca's engine has")} {formatBytes(p.bytes_free!)} {t("free")}</Show>.
+                    <Show when={shortSpace()}> {t("Free some space, or leave the images out: they can be pulled again.")}</Show>
                   </div>
 
                   <details class="ddm-list">
-                    <summary>Images ({p.images.length})</summary>
+                    <summary>{t("Images (")}{p.images.length})</summary>
                     <For each={p.images}>
                       {(i) => (
                         <div class="ddm-row">
                           <span class="ddm-mono">{i.tags[0] ?? i.digests[0]}</span>
-                          <Show when={i.tags.length > 1}><span class="ddm-muted">+{i.tags.length - 1} tags</span></Show>
+                          <Show when={i.tags.length > 1}><span class="ddm-muted">+{i.tags.length - 1} {t("tags")}</span></Show>
                           <span class="ddm-muted">{formatBytes(i.size)}</span>
-                          <Show when={i.in_orca}><span class="ddm-badge">in Orca already</span></Show>
+                          <Show when={i.in_orca}><span class="ddm-badge">{t("in Orca already")}</span></Show>
                         </div>
                       )}
                     </For>
                   </details>
                   <details class="ddm-list">
-                    <summary>Volumes ({p.volumes.length})</summary>
+                    <summary>{t("Volumes (")}{p.volumes.length})</summary>
                     <For each={p.volumes}>
                       {(v) => (
                         <div class="ddm-row">
                           <span class="ddm-mono">{v.name}</span>
                           <Show when={v.size !== null}><span class="ddm-muted">{formatBytes(v.size!)}</span></Show>
-                          <Show when={v.in_orca === "done"}><span class="ddm-badge">copied before</span></Show>
-                          <Show when={v.in_orca === "theirs"}><span class="ddm-badge">in Orca already: left as it is</span></Show>
-                          <Show when={v.in_orca === "partial"}><span class="ddm-badge">half copied: copied again</span></Show>
+                          <Show when={v.in_orca === "done"}><span class="ddm-badge">{t("copied before")}</span></Show>
+                          <Show when={v.in_orca === "theirs"}><span class="ddm-badge">{t("in Orca already: left as it is")}</span></Show>
+                          <Show when={v.in_orca === "partial"}><span class="ddm-badge">{t("half copied: copied again")}</span></Show>
                           <Show when={v.note}><span class="ddm-muted">{v.note}</span></Show>
                         </div>
                       )}
                     </For>
                     <Show when={p.anonymous_volumes > 0}>
                       <div class="ddm-muted">
-                        {p.anonymous_volumes} anonymous volumes (made by containers for themselves) stay: compose makes new ones.
-                      </div>
+                        {p.anonymous_volumes} {t("anonymous volumes (made by containers for themselves) stay: compose makes new ones.")}</div>
                     </Show>
                   </details>
                   <details class="ddm-list" open>
-                    <summary>Compose projects ({p.projects.length})</summary>
+                    <summary>{t("Compose projects (")}{p.projects.length})</summary>
                     <For each={p.projects}>
                       {(x) => (
                         <label class="ddm-row ddm-project">
@@ -328,10 +325,9 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
                           <span class="ddm-name">{x.name}</span>
                           <span class="ddm-muted ddm-mono" title={x.dir}>{x.dir}</span>
                           <span class="ddm-muted">
-                            {x.services.filter((s) => s.running).length}/{x.services.length} running
-                          </span>
-                          <Show when={x.in_orca}><span class="ddm-badge">in Orca already</span></Show>
-                          <Show when={x.problem}><span class="ddm-warn">{x.problem}: not recreated</span></Show>
+                            {x.services.filter((s) => s.running).length}/{x.services.length} {t("running")}</span>
+                          <Show when={x.in_orca}><span class="ddm-badge">{t("in Orca already")}</span></Show>
+                          <Show when={x.problem}><span class="ddm-warn">{x.problem}{t(": not recreated")}</span></Show>
                         </label>
                       )}
                     </For>
@@ -339,25 +335,21 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
 
                   <Show when={p.to_stop.length > 0}>
                     <div class="ddm-muted">
-                      First stops {p.to_stop.length} running containers in {src()}, so databases are copied at
-                      rest: {p.to_stop.join(", ")}. Its images and volumes aren't changed.
-                    </div>
+                      {t("First stops")} {p.to_stop.length} {t("running containers in")} {src()}{t(", so databases are copied at rest:")}{p.to_stop.join(", ")}{t(". Its images and volumes aren't changed.")}</div>
                   </Show>
                   <Show when={p.standalone.length > 0}>
                     <div class="ddm-muted">
-                      Containers outside compose aren't recreated ({p.standalone.join(", ")}); their images and
-                      volumes still come over.
-                    </div>
+                      {t("Containers outside compose aren't recreated (")}{p.standalone.join(", ")}{t("); their images and volumes still come over.")}</div>
                   </Show>
 
                   <div class="ddm-options">
-                    <label><input type="checkbox" checked={images()} onChange={(e) => setImages(e.currentTarget.checked)} /> Images</label>
-                    <label><input type="checkbox" checked={volumes()} onChange={(e) => setVolumes(e.currentTarget.checked)} /> Volumes</label>
-                    <label><input type="checkbox" checked={projects()} onChange={(e) => setProjects(e.currentTarget.checked)} /> Compose projects</label>
+                    <label><input type="checkbox" checked={images()} onChange={(e) => setImages(e.currentTarget.checked)} /> {t("Images")}</label>
+                    <label><input type="checkbox" checked={volumes()} onChange={(e) => setVolumes(e.currentTarget.checked)} /> {t("Volumes")}</label>
+                    <label><input type="checkbox" checked={projects()} onChange={(e) => setProjects(e.currentTarget.checked)} /> {t("Compose projects")}</label>
                     <Show when={!navigator.platform.includes("Win")}>
-                      <label><input type="checkbox" checked={switchCli()} onChange={(e) => setSwitchCli(e.currentTarget.checked)} /> Point the <code>docker</code> command at Orca's engine</label>
+                      <label><input type="checkbox" checked={switchCli()} onChange={(e) => setSwitchCli(e.currentTarget.checked)} /> {t("Point the")} <code>docker</code> {t("command at Orca's engine")}</label>
                     </Show>
-                    <label><input type="checkbox" checked={quitDesktop()} onChange={(e) => setQuitDesktop(e.currentTarget.checked)} /> {from() === "desktop" ? "Quit Docker Desktop" : `Stop ${src()}`} when done</label>
+                    <label><input type="checkbox" checked={quitDesktop()} onChange={(e) => setQuitDesktop(e.currentTarget.checked)} /> {from() === "desktop" ? "Quit Docker Desktop" : `Stop ${src()}`} {t("when done")}</label>
                   </div>
 
                   <div class="ddm-actions">
@@ -369,9 +361,9 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
                       {nothingToMove() ? "Everything is in Orca already" : "Bring them over"}
                     </button>
                     <Show when={!status()!.outcome}>
-                      <button class="btn" onClick={startFresh}>Start fresh instead</button>
+                      <button class="btn" onClick={startFresh}>{t("Start fresh instead")}</button>
                     </Show>
-                    <button class="btn" onClick={() => { setPlan(null); setOpen(false); }}>Cancel</button>
+                    <button class="btn" onClick={() => { setPlan(null); setOpen(false); }}>{t("Cancel")}</button>
                   </div>
                 </div>
               );
@@ -388,24 +380,22 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
                 </Show>
                 <Show when={j().status === "failed"}>
                   <div class="ddm-error">{j().error}</div>
-                  <div class="ddm-muted">Nothing in {src()} was removed. Fix the cause and try again: what came over already is kept.</div>
+                  <div class="ddm-muted">{t("Nothing in")} {src()} {t("was removed. Fix the cause and try again: what came over already is kept.")}</div>
                 </Show>
                 <Show when={j().status === "succeeded" && outcome()}>
                   {(o) => (
                     <div>
                       <div class="ddm-done">
-                        Brought over {o().images + o().images_pulled} images, {o().volumes} volumes and {o().projects} compose projects.
-                      </div>
+                        {t("Brought over")} {o().images + o().images_pulled} {t("images,")} {o().volumes} {t("volumes and")} {o().projects} {t("compose projects.")}</div>
                       <Show when={o().problems.length > 0}>
                         <div class="ddm-error">
-                          These didn't come over and are still only in {src()}:
+                          {t("These didn't come over and are still only in")} {src()}:
                           <ul><For each={o().problems}>{(m) => <li>{m}</li>}</For></ul>
-                          Try again to retry them.
-                        </div>
+                          {t("Try again to retry them.")}</div>
                       </Show>
                       <Show when={o().left.length > 0}>
                         <details class="ddm-list">
-                          <summary>Not recreated ({o().left.length})</summary>
+                          <summary>{t("Not recreated (")}{o().left.length})</summary>
                           <For each={o().left}>{(m) => <div class="ddm-row ddm-muted">{m}</div>}</For>
                         </details>
                       </Show>
@@ -414,9 +404,9 @@ export default function DockerDesktopMove(props: { from?: MoveFrom; onSetup: () 
                 </Show>
                 <Show when={j().status !== "running"}>
                   <div class="ddm-actions">
-                    <button class="btn btn-primary" onClick={() => { setJob(null); setPlan(null); setOpen(false); void refresh(); }}>Done</button>
+                    <button class="btn btn-primary" onClick={() => { setJob(null); setPlan(null); setOpen(false); void refresh(); }}>{t("Done")}</button>
                     <Show when={j().status !== "succeeded" || (outcome()?.problems.length ?? 0) > 0}>
-                      <button class="btn" onClick={() => { setJob(null); void loadPlan(); }}>Try again</button>
+                      <button class="btn" onClick={() => { setJob(null); void loadPlan(); }}>{t("Try again")}</button>
                     </Show>
                     <Show when={status()?.running}>
                       <button class="btn" onClick={quit}>{from() === "desktop" ? "Quit Docker Desktop" : `Stop ${src()}`}</button>

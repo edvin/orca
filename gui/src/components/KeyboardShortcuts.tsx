@@ -1,4 +1,5 @@
 import { For, onMount, onCleanup } from "solid-js";
+import { t } from "../lib/i18n";
 
 interface ShortcutGroup {
   title: string;
@@ -95,8 +96,7 @@ export default function KeyboardShortcuts(props: KeyboardShortcutsProps) {
           "margin-bottom": "20px",
         }}>
           <h2 style={{ margin: "0", "font-size": "16px", "font-weight": "600", color: "#e6edf3" }}>
-            Keyboard shortcuts
-          </h2>
+            {t("Keyboard shortcuts")}</h2>
           <button
             onClick={() => props.onClose()}
             style={{

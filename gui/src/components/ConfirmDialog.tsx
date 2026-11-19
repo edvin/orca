@@ -1,6 +1,7 @@
 import { createSignal, Show, onCleanup, onMount } from "solid-js";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { renderMarkdown } from "../lib/markdown";
+import { t } from "../lib/i18n";
 
 interface ConfirmOptions {
   title: string;
@@ -138,7 +139,7 @@ export default function ConfirmDialog() {
             <div class="modal-dialog" style={{ "max-width": opts().width ?? "440px", width: opts().width }} role="dialog" aria-modal="true">
               <div class="modal-header">
                 <span class="modal-title">{opts().title}</span>
-                <button class="modal-close" onClick={() => handleResult(false)} aria-label="Close">
+                <button class="modal-close" onClick={() => handleResult(false)} aria-label={t("Close")}>
                   {"\u00d7"}
                 </button>
               </div>

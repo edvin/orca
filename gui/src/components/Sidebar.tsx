@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Page } from "../App";
 import type { RemoteHost } from "../lib/types";
 import { containersStore, imagesStore } from "../lib/dockerStore";
+import { t } from "../lib/i18n";
 
 interface SidebarProps {
   currentPage: string;
@@ -264,7 +265,7 @@ export default function Sidebar(props: SidebarProps) {
                     <span class="nav-icon">{icons[item.id]?.()}</span>
                     <span class="nav-label">{item.label}</span>
                     <Show when={!collapsed() && item.id === "kubernetes" && k8sOff()}>
-                      <span class="nav-off">off</span>
+                      <span class="nav-off">{t("off")}</span>
                     </Show>
                     <Show when={!collapsed() && badgeFor(item.id)}>
                       {(count) => <span class="nav-badge">{count()}</span>}
@@ -280,7 +281,7 @@ export default function Sidebar(props: SidebarProps) {
                   title={collapsed() ? "Fleet" : undefined}
                 >
                   <span class="nav-icon">{icons.fleet()}</span>
-                  <span class="nav-label">Fleet</span>
+                  <span class="nav-label">{t("Fleet")}</span>
                 </button>
               </Show>
             </div>
@@ -295,7 +296,7 @@ export default function Sidebar(props: SidebarProps) {
           title={collapsed() ? "Settings" : undefined}
         >
           <span class="nav-icon">{icons.settings()}</span>
-          <span class="nav-label">Settings</span>
+          <span class="nav-label">{t("Settings")}</span>
         </button>
       </nav>
 
