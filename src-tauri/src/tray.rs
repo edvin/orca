@@ -15,7 +15,7 @@ fn build_menu(app: &AppHandle, instances: &[(String, Vec<String>)]) -> tauri::Re
         items.push(Box::new(MenuItem::with_id(
             app,
             "instances-title",
-            &crate::menu_i18n::tr("Running instances"),
+            crate::menu_i18n::tr("Running instances"),
             false,
             None::<&str>,
         )?));
@@ -51,14 +51,14 @@ fn build_menu(app: &AppHandle, instances: &[(String, Vec<String>)]) -> tauri::Re
     items.push(Box::new(MenuItem::with_id(
         app,
         "show",
-        &crate::menu_i18n::tr("Show Orca"),
+        crate::menu_i18n::tr("Show Orca"),
         true,
         None::<&str>,
     )?));
     items.push(Box::new(MenuItem::with_id(
         app,
         "hide",
-        &crate::menu_i18n::tr("Hide Window"),
+        crate::menu_i18n::tr("Hide Window"),
         true,
         None::<&str>,
     )?));
@@ -66,7 +66,7 @@ fn build_menu(app: &AppHandle, instances: &[(String, Vec<String>)]) -> tauri::Re
     items.push(Box::new(MenuItem::with_id(
         app,
         "quit",
-        &crate::menu_i18n::tr("Quit Orca"),
+        crate::menu_i18n::tr("Quit Orca"),
         true,
         None::<&str>,
     )?));

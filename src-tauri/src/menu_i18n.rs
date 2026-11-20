@@ -31,9 +31,7 @@ include!(concat!(env!("OUT_DIR"), "/native_locales.rs"));
 
 /// Directory the GUI and the native side share for locale state.
 fn locale_dir() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("orca")
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("orca")
 }
 
 fn locale_file() -> PathBuf {
@@ -180,10 +178,7 @@ mod tests {
         // translating, which no runtime assertion would catch.
         for (code, table) in NATIVE_LOCALES {
             for (source, _) in table.iter() {
-                assert!(
-                    !source.is_empty(),
-                    "{code} has an empty source key"
-                );
+                assert!(!source.is_empty(), "{code} has an empty source key");
                 assert!(
                     !source.contains("\\\""),
                     "{code} key still contains an escape: {source}"

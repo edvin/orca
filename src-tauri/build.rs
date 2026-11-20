@@ -90,7 +90,10 @@ fn generate_native_locales() {
         }
     }
     for (code, _) in &files {
-        println!("cargo:rerun-if-changed={}", locales_dir.join(format!("{code}.json")).display());
+        println!(
+            "cargo:rerun-if-changed={}",
+            locales_dir.join(format!("{code}.json")).display()
+        );
     }
     // Deterministic output regardless of directory iteration order.
     codes.sort();
@@ -98,10 +101,7 @@ fn generate_native_locales() {
     let mut tables = String::new();
     for (code, raw) in &files {
         let entries = parse_flat_json(raw);
-        tables.push_str(&format!(
-            "    ({code:?}, &[\n",
-            code = code
-        ));
+        tables.push_str(&format!("    ({code:?}, &[\n", code = code));
         // Sorted for a stable generated file.
         let mut pairs: Vec<&(String, String)> = entries.iter().collect();
         pairs.sort();
@@ -122,11 +122,7 @@ fn generate_native_locales() {
          /// Locale codes present on disk, for validation and diagnostics.\n\
          pub(crate) static NATIVE_LOCALE_CODES: &[&str] = &[{codes}];\n",
         tables = tables,
-        codes = codes
-            .iter()
-            .map(|c| format!("{c:?}"))
-            .collect::<Vec<_>>()
-            .join(", ")
+        codes = codes.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>().join(", ")
     );
 
     std::fs::write(&out_path, generated).expect("write native_locales.rs");
