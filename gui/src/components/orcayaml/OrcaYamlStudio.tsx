@@ -133,7 +133,7 @@ export default function OrcaYamlStudio(props: Props) {
 
   const TabButton = (p: { id: Tab; label: string; count?: number }) => (
     <button classList={{ active: tab() === p.id }} onClick={() => setTab(p.id)}>
-      {p.label}
+      {t(p.label)}
       <Show when={p.count}><span style={{ "margin-left": "6px", opacity: 0.6 }}>{p.count}</span></Show>
     </button>
   );

@@ -90,13 +90,13 @@ export default function SetupWizard(props: Props) {
                     onClick={() => go(i())}
                   >
                     <span class="num">{visited().has(i()) && step() !== i() ? "✓" : i() + 1}</span>
-                    {s.title}
+                    {t(s.title)}
                   </button>
                 )}
               </For>
             </div>
             <div class="dev-wizard-main">
-              <h3>{STEPS[step()].title}</h3>
+              <h3>{t(STEPS[step()].title)}</h3>
               <Switch>
                 <Match when={STEPS[step()].id === "shared"}>
                   <SharedSection {...section()} />

@@ -37,7 +37,7 @@ export function JobSteps(props: { steps: JobStep[] }) {
         {(s) => (
           <div class={`dev-step dev-step-${s.status}`}>
             <StepIcon status={s.status} />
-            <span class="dev-step-label">{s.label}</span>
+            <span class="dev-step-label">{t(s.label)}</span>
             <Show when={s.detail && s.status !== "failed"}>
               <span class="dev-step-detail" title={s.detail ?? ""}>{s.detail}</span>
             </Show>
@@ -62,7 +62,7 @@ export function JobProgress(props: { steps: JobStep[] }) {
       <Show when={current()}>
         <div class="dev-progress-label">
           <span class="dev-step-spinner" />
-          {current()!.label}
+          {t(current()!.label)}
           <span style={{ color: "#6e7681", "margin-left": "auto" }}>
             {doneCount()}/{props.steps.length}
           </span>

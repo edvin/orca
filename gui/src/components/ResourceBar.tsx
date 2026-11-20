@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 interface ResourceBarProps {
   value: number;     // percentage 0-100
   label?: string;
@@ -25,7 +26,7 @@ export default function ResourceBar(props: ResourceBarProps) {
         />
       </div>
       {props.showLabel !== false && props.label && (
-        <span class="resource-bar-label">{props.label}</span>
+        <span class="resource-bar-label">{t(props.label)}</span>
       )}
     </div>
   );

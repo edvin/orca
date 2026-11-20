@@ -996,7 +996,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                           </button>
                         </span>
                         <Show when={route.presentation?.title}>
-                          <div style={{ color: "#8b949e", "font-size": "11.5px", "margin-top": "2px" }}>{route.presentation!.title}</div>
+                          <div style={{ color: "#8b949e", "font-size": "11.5px", "margin-top": "2px" }}>{t(route.presentation!.title)}</div>
                         </Show>
                         <Show when={route.presentation?.hidden}>
                           <span title={t("Not shown on the landing page")} style={{ "margin-left": "8px", "font-size": "10px", color: "#6e7681" }}>{t("hidden")}</span>
@@ -1004,7 +1004,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                         <Show when={routeSource(route)}>
                           {(src) => (
                             <span title={src().title} style={{ "margin-left": "8px", "font-size": "10px", "font-weight": "600", color: "#8b949e", border: "1px solid #30363d", "border-radius": "4px", padding: "1px 5px", "white-space": "nowrap" }}>
-                              {src().label}
+                              {t(src().label)}
                             </span>
                           )}
                         </Show>
@@ -1042,7 +1042,7 @@ export default function GatewayPage(props: GatewayPageProps) {
                         <Show when={ownerLink(route)}>
                           {(link) => (
                             <button class="gw-owner-link" title={link().title} onClick={() => props.onNavigate?.(link().target)}>
-                              {link().label}
+                              {t(link().label)}
                             </button>
                           )}
                         </Show>

@@ -61,7 +61,7 @@ export default function PortChips(props: { groups: PortGroup[]; max?: number }) 
             </Show>
             <Show when={g.label}>
               <span style={{ color: g.kind === "web" ? "#e6edf3" : "#8b949e", "max-width": "160px", overflow: "hidden", "text-overflow": "ellipsis" }}>
-                {g.label}
+                {t(g.label)}
               </span>
             </Show>
           </span>

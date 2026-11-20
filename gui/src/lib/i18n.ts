@@ -195,7 +195,12 @@ export function syncNativeLocale(locale: Locale): void {
  *
  * `t("Container {name} started", { name })` performs `{param}` interpolation.
  */
-export function t(text: string, params?: Record<string, unknown>): string {
+export function t(text: string | undefined | null, params?: Record<string, unknown>): string {
+  // Optional fields reach here straight from data objects (`{t(item.hint)}`
+  // where `hint` is `string | undefined`). A missing value must render as
+  // nothing rather than the text "undefined", and must not force every call site
+  // to write `item.hint ?? ""`.
+  if (text === undefined || text === null) return "";
   const dict = DICTIONARIES[locale()];
   let out = dict?.[text] ?? text;
   if (params) {

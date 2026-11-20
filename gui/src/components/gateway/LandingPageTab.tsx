@@ -78,8 +78,8 @@ function Toggle(props: { on: boolean; onChange: (on: boolean) => void; label: st
   return (
     <div class="settings-row">
       <div class="settings-row-left">
-        <span class="settings-label">{props.label}</span>
-        <span class="settings-description">{props.hint}</span>
+        <span class="settings-label">{t(props.label)}</span>
+        <span class="settings-description">{t(props.hint)}</span>
       </div>
       <div class="settings-toggle" role="switch" aria-checked={props.on} tabIndex={0}
         onClick={() => props.onChange(!props.on)}
@@ -305,7 +305,7 @@ export default function LandingPageTab(props: Props) {
                               {titleOf(r)}
                               <Show when={hidden()}><span style={{ ...muted, "font-weight": "400", "margin-left": "8px" }}>{t("Hidden from the page")}</span></Show>
                             </div>
-                            <Show when={r.presentation?.description}><div style={{ color: "#a8b3bf", "font-size": "12px", "margin-top": "2px" }}>{r.presentation!.description}</div></Show>
+                            <Show when={r.presentation?.description}><div style={{ color: "#a8b3bf", "font-size": "12px", "margin-top": "2px" }}>{t(r.presentation!.description)}</div></Show>
                             <div class="mono" style={{ color: "#58a6ff", "font-size": "11.5px", "margin-top": "3px", "word-break": "break-all" }}>{r.hostname}{r.path ?? ""}</div>
                           </div>
                           <Show when={source} fallback={
@@ -359,7 +359,7 @@ function MyLinks(props: { links: LandingLink[]; saving: boolean; onSave: (links:
           <For each={props.links}>
             {(l, i) => (
               <div class="my-link">
-                <b>{l.title}</b>
+                <b>{t(l.title)}</b>
                 <span class="mono" title={l.url}>{l.url.replace(/^https?:\/\//, "")}</span>
                 <button class="icon-btn" title={t("Move up")} disabled={i() === 0 || props.saving} onClick={() => move(i(), -1)}>↑</button>
                 <button class="icon-btn" title={t("Move down")} disabled={i() === props.links.length - 1 || props.saving} onClick={() => move(i(), 1)}>↓</button>

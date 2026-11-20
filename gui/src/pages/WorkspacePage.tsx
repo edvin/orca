@@ -219,7 +219,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                   <Show when={w().logo}>{(src) => <img class="ws-logo" src={src()} alt="" />}</Show>
                   <div>
                     <div class="ws-name">{w().name}</div>
-                    <Show when={w().description}><div class="ws-desc">{w().description}</div></Show>
+                    <Show when={w().description}><div class="ws-desc">{t(w().description)}</div></Show>
                   </div>
                 </div>
                 <div class="ws-facts">
@@ -258,7 +258,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                         <div class={`ws-check-row ${c.status}`}>
                           <span class="ws-check-mark">{c.status === "ok" ? "✓" : c.status === "warn" ? "!" : "✕"}</span>
                           <div>
-                            <div><b>{c.label}</b> <span class="ws-muted">{c.detail}</span></div>
+                            <div><b>{t(c.label)}</b> <span class="ws-muted">{c.detail}</span></div>
                             <Show when={c.fix}>{(f) => <div class="ws-check-fix">{f()}</div>}</Show>
                           </div>
                         </div>
@@ -286,7 +286,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                     {(u) => (
                       <button class="app-url app-url-icon" title={u.url} onClick={() => void openUrl(u.url)}>
                         <Show when={iconSrc(u.icon)}>{(src) => <img src={src()} alt="" />}</Show>
-                        {u.title} ↗
+                        {t(u.title)} ↗
                       </button>
                     )}
                   </For>
@@ -371,7 +371,7 @@ function ProjectCard(props: {
         <span class={`app-dot ${p().running ? "running" : ""}`} />
         <span class={`ws-state ${state()}`}>{p().running ? "Running" : p().cloned ? "Cloned" : "Not cloned"}</span>
       </div>
-      <Show when={p().description}><div class="ws-card-desc">{p().description}</div></Show>
+      <Show when={p().description}><div class="ws-card-desc">{t(p().description)}</div></Show>
       <div class="ws-card-repo mono" title={p().repo}>{p().repo}</div>
       <For each={props.databases ?? []}>
         {(r) => (

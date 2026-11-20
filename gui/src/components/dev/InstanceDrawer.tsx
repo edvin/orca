@@ -85,7 +85,7 @@ export default function InstanceDrawer(props: Props) {
           <For each={tabs}>
             {(tx) => (
               <button class={`detail-tab-item ${tab() === tx.id ? "active" : ""}`} onClick={() => setTab(tx.id)}>
-                {tx.label}
+                {t(tx.label)}
               </button>
             )}
           </For>

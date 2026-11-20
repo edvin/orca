@@ -91,7 +91,7 @@ export default function ActivityPage() {
                   {eventIcon(event.type)}
                 </div>
                 <div class="activity-event-body">
-                  <div class="activity-event-title">{event.title}</div>
+                  <div class="activity-event-title">{t(event.title)}</div>
                   <Show when={event.detail}>
                     <div style={{ "font-size": "11px", color: "#6e7681", "margin-top": "2px" }}>{event.detail}</div>
                   </Show>

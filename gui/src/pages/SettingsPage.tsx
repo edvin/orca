@@ -1197,7 +1197,7 @@ export default function SettingsPage(props: SettingsPageProps = {}) {
                       {(preset, i) => (
                         <>
                           <button class="btn btn-sm" style={{ padding: "2px 8px", "font-size": "11px" }} onClick={() => applyPreset(preset)}>
-                            {preset.label}
+                            {t(preset.label)}
                           </button>
                           {i() < REGISTRY_PRESETS.length - 1 ? " " : ""}
                         </>

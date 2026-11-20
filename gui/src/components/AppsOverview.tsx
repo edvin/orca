@@ -185,7 +185,7 @@ export default function AppsOverview(props: {
         onClick={() => props.onNavigate?.(`stack:${s.name}`)} title={`${a.sub ? `${a.sub} · ` : ""}Open ${s.name} in Orca: its containers, logs and settings`}>
         <div class="app-card-head">
           <AppIcon src={iconSrc(a.icon) || stackIcon(s, props.routes)} name={a.title} size={26} />
-          <b title={a.title}>{a.title}</b>
+          <b title={a.title}>{t(a.title)}</b>
           <Show when={pinned.has(s.name)}><span class="app-card-pinned" title={t("Pinned to the top")}>{ICON.pin()}</span></Show>
           <span class={`app-dot ${s.status.toLowerCase()}`} />
           <span class="app-card-count">{running(s)}/{s.services.length}</span>
@@ -231,7 +231,7 @@ export default function AppsOverview(props: {
           {(u) => (
             <button class="app-url app-url-icon" title={`Open ${u.url}`} onClick={(e) => { e.stopPropagation(); void openUrl(u.url); }}>
               <Show when={iconSrc(u.icon)}>{(src) => <img src={src()} alt="" />}</Show>
-              {u.title}
+              {t(u.title)}
             </button>
           )}
         </For>
@@ -287,7 +287,7 @@ export default function AppsOverview(props: {
                 <Show when={g.title && groups().length > 1}>
                   <button class="apps-group-head" onClick={() => folded.toggle(g.key)}>
                     <span class="apps-group-chevron" classList={{ folded: folded.has(g.key) }}>{ICON.chevron()}</span>
-                    <b>{g.title}</b>
+                    <b>{t(g.title)}</b>
                     <Show when={g.sub}><span class="apps-group-sub">{g.sub}</span></Show>
                     <span class="apps-group-count">
                       {g.apps.filter((a) => a.stack.status === "Running" || a.stack.status === "Partial").length}/{g.apps.length} {t("running")}</span>

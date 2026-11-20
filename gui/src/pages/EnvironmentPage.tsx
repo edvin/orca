@@ -472,7 +472,7 @@ export default function EnvironmentPage() {
                           </Show>
                         </div>
                         <div style={{ "font-size": "12px", color: "#8b949e", "margin-top": "3px", "line-height": "1.4" }}>
-                          {check.description}
+                          {t(check.description)}
                         </div>
                         <Show when={check.details}>
                           <div style={{

@@ -138,7 +138,7 @@ export default function ConfirmDialog() {
           >
             <div class="modal-dialog" style={{ "max-width": opts().width ?? "440px", width: opts().width }} role="dialog" aria-modal="true">
               <div class="modal-header">
-                <span class="modal-title">{opts().title}</span>
+                <span class="modal-title">{t(opts().title)}</span>
                 <button class="modal-close" onClick={() => handleResult(false)} aria-label={t("Close")}>
                   {"\u00d7"}
                 </button>

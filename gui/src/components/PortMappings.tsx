@@ -54,7 +54,7 @@ export default function PortMappings(props: { groups: PortGroup[]; cards?: boole
                   <span style={{ color: "#484f58" }}>{"→"}</span>
                   <span style={{ color: "#8b949e" }}>{containerText(g)}/{g.protocol}</span>
                   <Show when={g.label}>
-                    <span style={{ color: "#6e7681", "font-family": "inherit", overflow: "hidden", "text-overflow": "ellipsis" }}>{g.label}</span>
+                    <span style={{ color: "#6e7681", "font-family": "inherit", overflow: "hidden", "text-overflow": "ellipsis" }}>{t(g.label)}</span>
                   </Show>
                 </div>
               }

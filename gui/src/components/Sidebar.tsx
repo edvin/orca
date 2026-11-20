@@ -252,7 +252,7 @@ export default function Sidebar(props: SidebarProps) {
           {(group) => (
             <div class="nav-group">
               <Show when={group.title}>
-                <div class="nav-group-title">{group.title}</div>
+                <div class="nav-group-title">{t(group.title ?? "")}</div>
               </Show>
               <For each={group.items}>
                 {(item) => (
@@ -260,10 +260,10 @@ export default function Sidebar(props: SidebarProps) {
                     class={`nav-item ${props.currentPage === item.id ? "active" : ""}`}
                     classList={{ "nav-item-off": item.id === "kubernetes" && k8sOff() }}
                     onClick={() => props.onNavigate(item.id)}
-                    title={collapsed() ? item.label : item.id === "kubernetes" && k8sOff() ? "Kubernetes is off. Turn it on from this page." : undefined}
+                    title={collapsed() ? t(item.label) : item.id === "kubernetes" && k8sOff() ? t("Kubernetes is off. Turn it on from this page.") : undefined}
                   >
                     <span class="nav-icon">{icons[item.id]?.()}</span>
-                    <span class="nav-label">{item.label}</span>
+                    <span class="nav-label">{t(item.label)}</span>
                     <Show when={!collapsed() && item.id === "kubernetes" && k8sOff()}>
                       <span class="nav-off">{t("off")}</span>
                     </Show>

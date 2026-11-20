@@ -124,7 +124,7 @@ export default function KeyboardShortcuts(props: KeyboardShortcutsProps) {
                 "letter-spacing": "0.5px",
                 "margin-bottom": "8px",
               }}>
-                {group.title}
+                {t(group.title)}
               </div>
               <For each={group.shortcuts}>
                 {(shortcut) => (
@@ -135,7 +135,7 @@ export default function KeyboardShortcuts(props: KeyboardShortcutsProps) {
                     padding: "6px 0",
                   }}>
                     <span style={{ "font-size": "13px", color: "#c9d1d9" }}>
-                      {shortcut.description}
+                      {t(shortcut.description)}
                     </span>
                     <div style={{ display: "flex", gap: "4px" }}>
                       <For each={shortcut.keys}>

@@ -94,7 +94,7 @@ function Gauge(props: { pct: number; color: string; label: string }) {
       <circle cx="50" cy="50" r={r} fill="none" stroke={props.color} stroke-width="6" stroke-linecap="round"
         stroke-dasharray={`${fill()} ${c}`} transform="rotate(135 50 50)" style={{ filter: `drop-shadow(0 0 4px ${props.color})` }} />
       <circle cx="50" cy="50" r="24" fill="#0e131a" stroke="#273140" />
-      <text x="50" y="54" fill="#8b97a6" font-size="11" text-anchor="middle">{props.label}</text>
+      <text x="50" y="54" fill="#8b97a6" font-size="11" text-anchor="middle">{t(props.label)}</text>
     </svg>
   );
 }

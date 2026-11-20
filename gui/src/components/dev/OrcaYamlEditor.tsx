@@ -292,7 +292,7 @@ export default function OrcaYamlEditor(props: Props) {
 function FormSection(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
     <div style={{ "margin-bottom": "28px", "padding-bottom": "8px", "border-bottom": "1px solid #21262d" }}>
-      <h3>{props.title}</h3>
+      <h3>{t(props.title)}</h3>
       {props.children}
     </div>
   );

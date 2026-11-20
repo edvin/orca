@@ -1123,7 +1123,7 @@ spec:
                   class={`dropdown-item ${item.danger ? "dropdown-item-danger" : ""}`}
                   onClick={item.onClick}
                 >
-                  {item.label}
+                  {t(item.label)}
                 </button>
               </>
             )}
@@ -1416,7 +1416,7 @@ spec:
                 class={`tab-item ${tab() === tx.id ? "active" : ""}`}
                 onClick={() => setTab(tx.id)}
               >
-                {tx.label}
+                {t(tx.label)}
               </button>
             )}
           </For>
@@ -1435,7 +1435,7 @@ spec:
             when={pods().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.pods.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.pods.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.pods.desc}</div>
               </div>
             }
@@ -1520,7 +1520,7 @@ spec:
             when={deployments().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.deployments.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.deployments.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.deployments.desc}</div>
               </div>
             }
@@ -1686,7 +1686,7 @@ spec:
             when={daemonSets().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.daemonsets.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.daemonsets.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.daemonsets.desc}</div>
               </div>
             }
@@ -1772,7 +1772,7 @@ spec:
             when={statefulSets().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.statefulsets.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.statefulsets.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.statefulsets.desc}</div>
               </div>
             }
@@ -1877,7 +1877,7 @@ spec:
             when={replicaSets().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.replicasets.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.replicasets.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.replicasets.desc}</div>
               </div>
             }
@@ -1963,7 +1963,7 @@ spec:
             when={services().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.services.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.services.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.services.desc}</div>
               </div>
             }
@@ -2206,7 +2206,7 @@ spec:
             when={ingresses().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.ingresses.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.ingresses.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.ingresses.desc}</div>
               </div>
             }
@@ -2418,7 +2418,7 @@ spec:
             when={events().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.events.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.events.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.events.desc}</div>
               </div>
             }
@@ -2637,7 +2637,7 @@ spec:
               when={helmReleases().length > 0}
               fallback={
                 <div class="empty-state-tab">
-                  <div class="empty-state-tab-title">{emptyMessages.helm.title}</div>
+                  <div class="empty-state-tab-title">{t(emptyMessages.helm.title)}</div>
                   <div class="empty-state-tab-desc">
                     {t("Click \"Install Chart\" above or use")} <code style={{ background: "#0d1117", padding: "2px 6px", "border-radius": "4px" }}>helm install</code> {t("CLI to add releases.")}</div>
                 </div>
@@ -2697,7 +2697,7 @@ spec:
             when={cronJobs().length > 0 || jobs().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.jobs.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.jobs.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.jobs.desc}</div>
               </div>
             }
@@ -2887,7 +2887,7 @@ spec:
             when={crds().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.crds.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.crds.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.crds.desc}</div>
               </div>
             }
@@ -2949,7 +2949,7 @@ spec:
             when={deployments().length > 0 || services().length > 0 || pods().length > 0}
             fallback={
               <div class="empty-state-tab">
-                <div class="empty-state-tab-title">{emptyMessages.topology.title}</div>
+                <div class="empty-state-tab-title">{t(emptyMessages.topology.title)}</div>
                 <div class="empty-state-tab-desc">{emptyMessages.topology.desc}</div>
               </div>
             }

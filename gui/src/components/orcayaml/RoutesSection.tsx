@@ -161,7 +161,7 @@ export default function RoutesSection(props: {
                 <Show when={st()}>
                   {(s) => (
                     <span style={{ color: STATUS[s().status].color, "font-weight": "600" }}>
-                      {STATUS[s().status].label}<Show when={s().detail}><span style={{ ...muted, "font-weight": "400" }}> · {s().detail}</span></Show>
+                      {t(STATUS[s().status].label)}<Show when={s().detail}><span style={{ ...muted, "font-weight": "400" }}> · {s().detail}</span></Show>
                     </span>
                   )}
                 </Show>

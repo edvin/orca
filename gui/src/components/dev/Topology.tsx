@@ -45,7 +45,7 @@ export default function Topology(props: Props) {
                   <StatusDot color={STATUS_META[i.status].color} />
                   {i.name}
                 </div>
-                <div class="dev-topo-inst-status">{STATUS_META[i.status].label}</div>
+                <div class="dev-topo-inst-status">{t(STATUS_META[i.status].label)}</div>
                 <For each={i.services}>
                   {(s) => (
                     <div class="dev-topo-svc">

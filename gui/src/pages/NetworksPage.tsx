@@ -314,7 +314,7 @@ export default function NetworksPage(props: { onNavigate?: (page: string) => voi
                           <span class="choice-dot" />
                           <span>
                             <span class="choice-title">{d.value}<Show when={d.recommended}><small>{t("Usual")}</small></Show></span>
-                            <span class="choice-desc" style={{ display: "block" }}>{d.description}</span>
+                            <span class="choice-desc" style={{ display: "block" }}>{t(d.description)}</span>
                           </span>
                         </button>
                       )}

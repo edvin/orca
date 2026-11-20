@@ -658,7 +658,7 @@ export default function ContainersPage(props: ContainersPageProps) {
         <div class="ctr-status">
           <span class={`ctr-pill ctr-pill-${st().tone} ${st().pulse ? "ctr-pulse" : ""}`} title={st().title ?? st().label}>
             <span class="ctr-pill-dot" />
-            {st().label}
+            {t(st().label)}
           </span>
           <Show when={c.restart_count && c.restart_count > 0}>
             <span class="ctr-restarts" title={`Restarted ${c.restart_count} time${c.restart_count === 1 ? "" : "s"}`}>

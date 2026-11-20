@@ -267,7 +267,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
                         <Show when={cmd.img} fallback={cmd.icon}>{(src) => <img class="command-item-img" src={src()} alt="" />}</Show>
                       </span>
                       <span class="command-item-name">{cmd.name}</span>
-                      <Show when={cmd.hint}><span class="command-item-hint">{cmd.hint}</span></Show>
+                      <Show when={cmd.hint}><span class="command-item-hint">{t(cmd.hint)}</span></Show>
                       <Show when={cmd.shortcut}>
                         <span class="command-item-shortcut">{cmd.shortcut}</span>
                       </Show>

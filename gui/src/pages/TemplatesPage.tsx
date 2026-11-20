@@ -722,7 +722,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
       {/* eslint-disable-next-line solid/no-innerhtml */}
       <div class="template-icon" style={{ background: colors().bg, color: colors().color, "border-color": colors().border }} innerHTML={safeIcon()} />
       <div class="template-name">{props.template.name}</div>
-      <div class="template-desc">{props.template.description}</div>
+      <div class="template-desc">{t(props.template.description)}</div>
       <Show when={!props.template.is_builtin}>
         <div style={{ position: "absolute", top: "8px", right: "8px", display: "flex", gap: "4px" }}>
           <button class="action-icon" title={t("Edit")} onClick={(e) => { e.stopPropagation(); openEditTemplate(props.template); }} style={{ "font-size": "12px", width: "24px", height: "24px" }}>{"\u270E"}</button>
@@ -948,7 +948,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                                 onChange={() => toggleHost(opt.value)}
                                 style={{ "accent-color": "#58a6ff" }}
                               />
-                              {opt.label}
+                              {t(opt.label)}
                             </label>
                           );
                         }}
@@ -981,7 +981,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                         {t("Image")}<Show when={imageRegistryLink(template().image)}>
                           {(link) => (
                             <a href={link().url} target="_blank" rel="noopener noreferrer" style={{ "font-size": "11px", "margin-left": "8px", color: "#58a6ff", "font-weight": "400" }}>
-                              {link().label} {"\u2197"}
+                              {t(link().label)} {"\u2197"}
                             </a>
                           )}
                         </Show>
@@ -1132,7 +1132,7 @@ export default function TemplatesPage(props: TemplatesPageProps) {
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setShowSetupGuide(false); }}>
           <div class="modal-dialog" style={{ "max-width": "600px", overflow: "auto" }}>
             <div class="modal-header">
-              <h2 class="modal-title">{setupGuide()!.title}</h2>
+              <h2 class="modal-title">{t(setupGuide()!.title)}</h2>
               <button class="modal-close" onClick={() => { setShowSetupGuide(false); props.onNavigate?.(`stack:${setupGuideStackName()}`); }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
@@ -1171,8 +1171,8 @@ export default function TemplatesPage(props: TemplatesPageProps) {
                         </div>
                         {/* Step content */}
                         <div style={{ flex: "1", "min-width": "0" }}>
-                          <div style={{ "font-size": "14px", "font-weight": "600", "margin-bottom": "4px", color: isChecked() ? "#8b949e" : "#e6edf3", "text-decoration": isChecked() ? "line-through" : "none" }}>{step.title}</div>
-                          <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.5", "margin-bottom": step.type && step.type !== "info" ? "10px" : "0" }}>{step.description}</div>
+                          <div style={{ "font-size": "14px", "font-weight": "600", "margin-bottom": "4px", color: isChecked() ? "#8b949e" : "#e6edf3", "text-decoration": isChecked() ? "line-through" : "none" }}>{t(step.title)}</div>
+                          <div style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.5", "margin-bottom": step.type && step.type !== "info" ? "10px" : "0" }}>{t(step.description)}</div>
 
                           {/* Link action */}
                           <Show when={step.type === "link" && step.url}>

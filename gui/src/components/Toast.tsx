@@ -131,7 +131,7 @@ export default function ToastContainer() {
                       dismissToast(toast.id);
                     }}
                   >
-                    {action().label}
+                    {t(action().label)}
                   </button>
                 )}
               </Show>

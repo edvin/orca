@@ -1,4 +1,5 @@
 import { JSX, Show } from "solid-js";
+import { t } from "../lib/i18n";
 
 interface SortableHeaderProps {
   label: string;
@@ -19,7 +20,7 @@ export default function SortableHeader(props: SortableHeaderProps) {
       style={{ "text-align": props.align || "left", cursor: "pointer", ...props.style }}
       onClick={() => props.onSort(props.field)}
     >
-      {props.label}
+      {t(props.label)}
       <Show when={isActive()}>
         <span class="sort-indicator">
           {props.currentDirection === "asc" ? " \u25B2" : " \u25BC"}

@@ -58,7 +58,7 @@ export default function FolderActions(props: { path: string; compact?: boolean }
           {(a) => (
             <Show when={props.compact} fallback={
               <button class="btn btn-sm" title={`Open ${props.path} in ${a.label}`} onClick={() => void open(a)}>
-                {t("Open in")} {a.label}
+                {t("Open in")} {t(a.label)}
               </button>
             }>
               <button class="btn btn-sm btn-icon" data-tip={`Open in ${a.label}`} aria-label={`Open in ${a.label}`}

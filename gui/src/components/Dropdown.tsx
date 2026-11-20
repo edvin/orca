@@ -1,5 +1,6 @@
 import { createSignal, For, Show, onMount, onCleanup } from "solid-js";
 import { closeOnEscape } from "../lib/closeOnEscape";
+import { t } from "../lib/i18n";
 
 interface DropdownOption {
   value: string;
@@ -56,7 +57,7 @@ export default function Dropdown(props: DropdownProps) {
                   setOpen(false);
                 }}
               >
-                {opt.label}
+                {t(opt.label)}
               </div>
             )}
           </For>

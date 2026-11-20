@@ -214,7 +214,7 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
                     </div>
                     <div class="db-server-actions">
                       <Show when={adminTool(s)}>
-                        {(tx2) => <button class="btn btn-sm" onClick={() => void openUrl(tx2().url)}>{t("Open")} {tx2().title} ↗</button>}
+                        {(tx2) => <button class="btn btn-sm" onClick={() => void openUrl(tx2().url)}>{t("Open")} {t(tx2().title)} ↗</button>}
                       </Show>
                       <Show when={s.source === "orca"}>
                         <Show when={s.running} fallback={
@@ -364,7 +364,7 @@ function Field(props: { label: string; value: string; secret?: boolean }) {
   const [shown, setShown] = createSignal(!props.secret);
   return (
     <div class="db-field">
-      <span class="db-field-label">{props.label}</span>
+      <span class="db-field-label">{t(props.label)}</span>
       <span class="mono db-field-value" title={shown() ? props.value : undefined}>{shown() ? props.value : "••••••••••••"}</span>
       <Show when={props.secret}>
         <button class="btn btn-sm" onClick={() => setShown(!shown())}>{shown() ? "Hide" : "Show"}</button>

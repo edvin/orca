@@ -248,7 +248,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
               </div>
 
               <span class={`state-badge ${statusConfig(s().status).class}`}>
-                {statusConfig(s().status).label}
+                {t(statusConfig(s().status).label)}
               </span>
 
               <div class={`detail-page-actions action-icons ${actionInProgress() ? "loading" : ""}`}>

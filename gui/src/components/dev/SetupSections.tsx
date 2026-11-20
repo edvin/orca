@@ -78,8 +78,8 @@ export function SharedSection(props: SectionProps) {
       }}
     >
       <div class="dev-dropzone-title">
-        {p.title}
-        <span>{p.hint}</span>
+        {t(p.title)}
+        <span>{t(p.hint)}</span>
       </div>
       <For each={column(p.shared)} fallback={<div class="dev-dropzone-empty">{t("Drag services here")}</div>}>
         {(svc) => (
@@ -318,7 +318,7 @@ export function HostnamePicker(props: SectionProps) {
               <span class="dev-radio" />
               <span style={{ "min-width": 0 }}>
                 <div class="dev-option-title">
-                  {o.title}
+                  {t(o.title)}
                   <Show when={o.style === advice()?.recommended}>
                     <span style={{ color: "#3fb950", "font-weight": 400 }}> {t("· recommended")}</span>
                   </Show>
@@ -650,7 +650,7 @@ function HookLines(props: { label: string; lines: string[]; onChange: (lines: st
   return (
     <div style={{ "margin-top": "6px" }}>
       <Show when={props.label}>
-        <div class="form-hint" style={{ "margin-bottom": "4px" }}>{props.label}</div>
+        <div class="form-hint" style={{ "margin-bottom": "4px" }}>{t(props.label)}</div>
       </Show>
       <textarea
         class="form-input mono"

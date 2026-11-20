@@ -308,7 +308,7 @@ export default function Titlebar(props: TitlebarProps) {
                           {event.severity === "error" ? "\u2717" : "\u26A0"}
                         </div>
                         <div class="activity-event-body">
-                          <div class="activity-event-title">{event.title}</div>
+                          <div class="activity-event-title">{t(event.title)}</div>
                           <Show when={event.detail}>
                             <div class="activity-event-detail">{event.detail}</div>
                           </Show>
